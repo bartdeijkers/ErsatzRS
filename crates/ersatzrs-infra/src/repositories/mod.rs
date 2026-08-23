@@ -24,7 +24,7 @@ mod template;
 mod troubleshooting;
 mod watermark;
 
-pub use addon_media_list::SqliteAddonMediaListRepository;
+pub use addon_media_list::{project_one_pending_detail_batch, SqliteAddonMediaListRepository};
 pub use admin_settings::SqliteAdminSettingsRepository;
 pub use artwork::SqliteArtworkRepository;
 pub use block::SqliteBlockRepository;

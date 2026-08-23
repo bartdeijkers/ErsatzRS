@@ -16,7 +16,9 @@ use ersatzrs_addon_contract::{
     validate_addon_id, AddonOperationError, MAX_OPERATION_ERROR_MESSAGE_BYTES,
     OPERATION_CODE_FAILED,
 };
-use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListItemAvailability, RemoteStreamLiveness,
+};
 use ersatzrs_ffmpeg::{FfmpegCommand, InputFile};
 
 use crate::addons::{
@@ -45,6 +47,11 @@ pub struct RemoteStreamDefinition {
     pub addon: Option<String>,
     pub duration: Option<String>,
     pub fallback_query: Option<String>,
+    /// Authoritative provider-neutral playback behavior. `None` is retained
+    /// only while adapting a legacy definition.
+    #[serde(default)]
+    pub liveness: Option<RemoteStreamLiveness>,
+    /// Compatibility mirror for legacy YAML and callers.
     pub is_live: bool,
     pub title: Option<String>,
     pub original_title: Option<String>,
@@ -131,6 +138,8 @@ pub enum RemoteStreamSource {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedRemoteStream {
     pub source: RemoteStreamSource,
+    pub liveness: RemoteStreamLiveness,
+    /// Compatibility projection; true only when `liveness` is live.
     pub is_live: bool,
     pub configured_duration: Option<String>,
     pub fallback_query: Option<String>,
@@ -331,10 +340,87 @@ impl Drop for RemoteStreamProducerPipe {
 pub fn parse_remote_stream_definition(
     yaml: &str,
 ) -> Result<RemoteStreamDefinition, RemoteStreamError> {
-    let definition: RemoteStreamDefinition = serde_yaml::from_str(yaml)
+    let raw: serde_yaml::Value = serde_yaml::from_str(yaml)
         .map_err(|error| RemoteStreamError::Definition(error.to_string()))?;
+    let legacy_was_explicit = raw
+        .as_mapping()
+        .is_some_and(|mapping| mapping.contains_key("is_live"));
+    let mut definition: RemoteStreamDefinition = serde_yaml::from_value(raw)
+        .map_err(|error| RemoteStreamError::Definition(error.to_string()))?;
+    if let Some(liveness) = definition.liveness {
+        if legacy_was_explicit
+            && RemoteStreamLiveness::from_legacy(Some(definition.is_live), None) != liveness
+        {
+            return Err(RemoteStreamError::Definition(
+                "liveness contradicts legacy is_live".to_owned(),
+            ));
+        }
+    } else if legacy_was_explicit {
+        definition.liveness = Some(RemoteStreamLiveness::from_legacy(
+            Some(definition.is_live),
+            None,
+        ));
+    }
+    let liveness = definition.effective_liveness()?;
+    definition.is_live = liveness.legacy_is_live();
     validate_definition(&definition)?;
     Ok(definition)
+}
+
+impl RemoteStreamDefinition {
+    /// Resolve the new discriminator or conservatively adapt a legacy row.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a configured duration cannot be decoded.
+    pub fn effective_liveness(&self) -> Result<RemoteStreamLiveness, RemoteStreamError> {
+        if let Some(liveness) = self.liveness {
+            return Ok(liveness);
+        }
+        if self.is_live {
+            return Ok(RemoteStreamLiveness::Live);
+        }
+        let has_positive_duration = self
+            .duration
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(duration_is_positive)
+            .transpose()?
+            .unwrap_or(false);
+        Ok(if has_positive_duration {
+            RemoteStreamLiveness::Finite
+        } else {
+            RemoteStreamLiveness::Unknown
+        })
+    }
+}
+
+/// Decode the authoritative database discriminator and verify its legacy
+/// `IsLive` projection.
+///
+/// # Errors
+///
+/// Returns an error for an unknown discriminator or a drifting mirror.
+pub fn decode_persisted_liveness(
+    value: i64,
+    legacy_is_live: bool,
+) -> Result<RemoteStreamLiveness, RemoteStreamError> {
+    let liveness = match value {
+        0 => RemoteStreamLiveness::Unknown,
+        1 => RemoteStreamLiveness::Finite,
+        2 => RemoteStreamLiveness::Live,
+        _ => {
+            return Err(RemoteStreamError::Definition(format!(
+                "stored liveness discriminator {value} is invalid"
+            )))
+        }
+    };
+    if liveness.legacy_is_live() != legacy_is_live {
+        return Err(RemoteStreamError::Definition(
+            "stored liveness and legacy IsLive mirror disagree".to_owned(),
+        ));
+    }
+    Ok(liveness)
 }
 
 /// Resolve a direct URL source.
@@ -352,7 +438,7 @@ pub fn resolve_remote_stream(
             "add-on source requires the installed add-on resolver".to_owned(),
         ));
     }
-    resolve_remote_stream_source(definition, None)
+    resolve_remote_stream_source(definition, None, false)
 }
 
 /// Resolve a URL through an installed, enabled add-on when `addon:` is set.
@@ -364,6 +450,29 @@ pub async fn resolve_remote_stream_with_addons(
     pool: &DbPool,
     definition: &RemoteStreamDefinition,
     runtime: &AddonRuntimeContext,
+) -> Result<ResolvedRemoteStream, RemoteStreamError> {
+    resolve_remote_stream_with_addons_mode(pool, definition, runtime, false).await
+}
+
+/// Resolve a source for scanner persistence without admitting unknown
+/// liveness to playback.
+///
+/// # Errors
+///
+/// Returns an error when the definition or installed add-on is unavailable.
+pub async fn resolve_remote_stream_for_scan_with_addons(
+    pool: &DbPool,
+    definition: &RemoteStreamDefinition,
+    runtime: &AddonRuntimeContext,
+) -> Result<ResolvedRemoteStream, RemoteStreamError> {
+    resolve_remote_stream_with_addons_mode(pool, definition, runtime, true).await
+}
+
+async fn resolve_remote_stream_with_addons_mode(
+    pool: &DbPool,
+    definition: &RemoteStreamDefinition,
+    runtime: &AddonRuntimeContext,
+    allow_unknown: bool,
 ) -> Result<ResolvedRemoteStream, RemoteStreamError> {
     validate_definition(definition)?;
     let command = if let Some(addon_id) = trimmed(definition.addon.as_ref()) {
@@ -383,12 +492,13 @@ pub async fn resolve_remote_stream_with_addons(
     } else {
         None
     };
-    resolve_remote_stream_source(definition, command)
+    resolve_remote_stream_source(definition, command, allow_unknown)
 }
 
 fn resolve_remote_stream_source(
     definition: &RemoteStreamDefinition,
     addon_command: Option<RemoteStreamCommand>,
+    allow_unknown: bool,
 ) -> Result<ResolvedRemoteStream, RemoteStreamError> {
     let url = trimmed(definition.url.as_ref())
         .ok_or_else(|| RemoteStreamError::Definition("url is required".to_owned()))?;
@@ -397,12 +507,17 @@ fn resolve_remote_stream_source(
         || RemoteStreamSource::Url(url.to_owned()),
         RemoteStreamSource::Addon,
     );
-    let is_live = definition.is_live
-        || matches!(&source, RemoteStreamSource::Url(url)
-            if url_scheme(url).is_some_and(|scheme| scheme.eq_ignore_ascii_case("rtsp")));
+    let liveness = definition.effective_liveness()?;
+    if liveness == RemoteStreamLiveness::Unknown && !allow_unknown {
+        return Err(RemoteStreamError::Definition(
+            "playback behavior is unknown; classify the source as finite or live before playback"
+                .to_owned(),
+        ));
+    }
     Ok(ResolvedRemoteStream {
         source,
-        is_live,
+        liveness,
+        is_live: liveness.legacy_is_live(),
         configured_duration: definition.duration.clone(),
         fallback_query: definition.fallback_query.clone(),
         uses_addon,
@@ -459,9 +574,11 @@ pub fn remote_url_input_options(url: &str, is_live: bool) -> Vec<String> {
 pub fn remote_stream_input_file(stream: &ResolvedRemoteStream) -> InputFile {
     match &stream.source {
         RemoteStreamSource::Url(url) => {
-            let input = InputFile::video(url.clone())
-                .with_input_options(remote_url_input_options(url, stream.is_live));
-            if stream.is_live {
+            let input = InputFile::video(url.clone()).with_input_options(remote_url_input_options(
+                url,
+                stream.liveness == RemoteStreamLiveness::Live,
+            ));
+            if stream.liveness == RemoteStreamLiveness::Live {
                 input.without_readrate()
             } else {
                 input
@@ -473,7 +590,7 @@ pub fn remote_stream_input_file(stream: &ResolvedRemoteStream) -> InputFile {
             // equally opaque so FFmpeg can probe streamable MP4, WebM, MPEG-TS,
             // and other supported containers from their bytes.
             let input = InputFile::video("pipe:0").with_seek_after_input();
-            if stream.is_live {
+            if stream.liveness == RemoteStreamLiveness::Live {
                 input.without_readrate()
             } else {
                 input
@@ -487,6 +604,20 @@ pub fn remote_stream_producer(stream: &ResolvedRemoteStream) -> Option<&RemoteSt
     match &stream.source {
         RemoteStreamSource::Addon(command) => Some(command),
         RemoteStreamSource::Url(_) => None,
+    }
+}
+
+/// Keep finite sources seekable while always opening a live source at its
+/// current producer boundary.
+#[must_use]
+pub fn remote_stream_playback_start(
+    stream: Option<&ResolvedRemoteStream>,
+    requested: std::time::Duration,
+) -> std::time::Duration {
+    if stream.is_some_and(|stream| stream.liveness == RemoteStreamLiveness::Live) {
+        std::time::Duration::ZERO
+    } else {
+        requested
     }
 }
 
@@ -1267,6 +1398,25 @@ fn validate_duration(value: &str) -> Result<(), RemoteStreamError> {
     Ok(())
 }
 
+fn duration_is_positive(value: &str) -> Result<bool, RemoteStreamError> {
+    validate_duration(value)?;
+    let mut parts = value.split(':');
+    let hours = parts
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or_default();
+    let minutes = parts
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or_default();
+    let seconds = parts.next().unwrap_or_default();
+    let (seconds, fraction) = seconds.split_once('.').unwrap_or((seconds, ""));
+    Ok(hours > 0
+        || minutes > 0
+        || seconds.parse::<u64>().unwrap_or_default() > 0
+        || fraction.chars().any(|character| character != '0'))
+}
+
 fn invalid_duration() -> Result<(), RemoteStreamError> {
     Err(RemoteStreamError::Definition(
         "duration must use HH:MM:SS[.fraction]".to_owned(),
@@ -1593,12 +1743,13 @@ content_rating: PG
     }
 
     #[test]
-    fn rtsp_is_always_live_and_http_live_reconnects_at_eof() {
+    fn explicit_live_source_and_http_live_reconnect_at_eof() {
         let rtsp = RemoteStreamDefinition {
             url: Some("rtsp://camera.test/live".to_owned()),
             addon: None,
             duration: None,
             fallback_query: None,
+            liveness: Some(RemoteStreamLiveness::Live),
             is_live: false,
             title: None,
             plot: None,
@@ -1629,6 +1780,7 @@ content_rating: PG
                 working_directory: PathBuf::from("streams"),
                 environment: BTreeMap::new(),
             }),
+            liveness: RemoteStreamLiveness::Finite,
             is_live: false,
             configured_duration: None,
             fallback_query: None,
@@ -1644,11 +1796,41 @@ content_rating: PG
     }
 
     #[test]
+    fn live_playback_starts_at_zero_without_input_readrate() {
+        let requested = std::time::Duration::from_secs(47);
+        let live = ResolvedRemoteStream {
+            source: RemoteStreamSource::Url("https://example.test/live.m3u8".to_owned()),
+            liveness: RemoteStreamLiveness::Live,
+            is_live: true,
+            configured_duration: None,
+            fallback_query: None,
+            uses_addon: false,
+        };
+        let finite = ResolvedRemoteStream {
+            liveness: RemoteStreamLiveness::Finite,
+            is_live: false,
+            ..live.clone()
+        };
+
+        assert_eq!(
+            remote_stream_playback_start(Some(&live), requested),
+            std::time::Duration::ZERO
+        );
+        assert_eq!(
+            remote_stream_playback_start(Some(&finite), requested),
+            requested
+        );
+        assert!(!remote_stream_input_file(&live).allow_readrate);
+        assert!(remote_stream_input_file(&finite).allow_readrate);
+    }
+
+    #[test]
     fn redacts_credentials_and_query_parameters_from_ffmpeg_output() {
         let stream = ResolvedRemoteStream {
             source: RemoteStreamSource::Url(
                 "https://user:secret@example.test/live.m3u8?token=hidden".to_owned(),
             ),
+            liveness: RemoteStreamLiveness::Live,
             is_live: true,
             configured_duration: None,
             fallback_query: None,
@@ -1682,6 +1864,7 @@ content_rating: PG
                     ),
                 ]),
             }),
+            liveness: RemoteStreamLiveness::Finite,
             is_live: false,
             configured_duration: None,
             fallback_query: None,
@@ -1713,6 +1896,7 @@ content_rating: PG
                     operation_url.to_owned(),
                 )]),
             }),
+            liveness: RemoteStreamLiveness::Finite,
             is_live: false,
             configured_duration: None,
             fallback_query: None,
@@ -1733,6 +1917,7 @@ content_rating: PG
                     "/run/secrets/token".to_owned(),
                 )]),
             }),
+            liveness: RemoteStreamLiveness::Finite,
             is_live: false,
             configured_duration: None,
             fallback_query: None,

@@ -1,6 +1,7 @@
 # Add-on media-list contract reference
 
-`media-list.list.v1` through `media-list.list.v4` enumerate one
+`media-list.list.v1` through `media-list.list.v5` define the frozen list and
+item record schemas. Their original one-shot compatibility path enumerates one
 provider-selected list through an enabled add-on. The host invokes the add-on
 with positional operation `list`, sets
 `ERSATZRS_MEDIA_LIST_URL` to the configured source hyperlink, and applies a
@@ -51,6 +52,89 @@ Provider executables remain responsible for complete extraction. In particular,
 the official YouTube-compatible package runs the updateable `yt-dlp` binary for
 the full playlist/video JSON and uses Deno only to translate that result to v4;
 the mapper and host do not duplicate yt-dlp's provider logic.
+
+Version 5 adds one provider-neutral `liveness` field for Remote Stream items.
+It is `unknown`, `finite`, or `live`. Older versions adapt conservatively:
+legacy true means live, a positive duration means finite, and false, omitted,
+or null without a positive duration remains unknown. Non-Remote-Stream items
+must not publish a liveness value.
+
+## Resumable import orchestration
+
+An add-on may additionally declare `media-list.import.v1` and at least one
+supported `media-list.list.vN` capability. The import capability changes how
+work is transported and checkpointed; it does not define a second item schema.
+The host selects the highest common list schema and invokes the package with
+positional operation `discover` or `enrich`. Each invocation receives one
+strict JSON document on standard input and emits bounded UTF-8 NDJSON.
+
+### Discover
+
+One `discover` request has these fields:
+
+| Field | Type | Requirement |
+|---|---|---|
+| `source_url` | string | Canonical validated source URL; 1 to 8,192 UTF-8 bytes. |
+| `record_capability` | string | Supported frozen `media-list.list.v1` through `media-list.list.v5` schema. |
+| `cursor` | string or null | Opaque continuation value; 1 to 4,096 UTF-8 bytes without control characters. Omitted on the first page. |
+| `limits.max_items` | positive integer | Host-selected page cap, at most 250. |
+| `limits.max_output_bytes` | positive integer | Host-selected output cap, at most 4 MiB. |
+
+The first NDJSON line is a `page` control record:
+
+| Field | Type | Requirement |
+|---|---|---|
+| `record_type` | string | Exactly `page`. |
+| `complete` | boolean | `true` only for the final page. |
+| `next_cursor` | string or null | Required when `complete` is false and omitted when it is true. |
+| `total_hint` | non-negative integer or null | Presentation hint only; at most 10,000 and never proof of completeness. |
+| `revision_token` | string or null | Stable provider revision, 1 to 384 UTF-8 bytes without control characters. |
+
+The first page then emits exactly one list record before up to 250 item stubs.
+Continuation pages emit item records only. Discover retains every overview
+field the provider already exposes, but it must not open an item-detail page as
+a fallback. The host rejects duplicate identities or ranks, cursor loops,
+no-progress pages, changing revision tokens, output beyond 4 MiB, and more than
+10,000 items. Each page invocation has a 45-second deadline and commits only
+after validation. Without a revision token, the host verifies a second complete
+overview pass before making the draft publishable.
+
+### Enrich
+
+One `enrich` request has these fields:
+
+| Field | Type | Requirement |
+|---|---|---|
+| `source_url` | string | The same validated list source URL. |
+| `record_capability` | string | The selected frozen list-record schema. |
+| `provider_id` | string | Identity of exactly one committed overview item. |
+| `overview_fingerprint` | string | Non-empty fingerprint of the committed overview stub; at most 384 UTF-8 bytes. |
+| `item` | item record | The committed stub; its `provider_id` must match the request. |
+
+The first output line is an `outcome` control record. `complete` and
+`unavailable` require exactly one following item record with the requested
+identity; an unavailable result must also set item availability to
+`unavailable`. `transient_failure` and `permanent_failure` require a bounded
+lowercase diagnostic `code` and carry no item, so a failed detail request can
+never erase the published overview. Only a transient failure may set
+`retry_after_seconds`, capped at 86,400. Each invocation has a 45-second
+deadline and a 1 MiB output cap; serialized requests are capped at 512 KiB.
+
+The list detail policy is `automatic` by default or explicitly `manual_only`.
+Automatic enrichment starts only after the verified overview has been
+published. Manual-only lists retain overview metadata and offer the same
+per-item Fetch details action before or after publication. Both paths use one
+atomic claim and the same provider-host limiter. The global Add-ons settings
+**Minimum detail wait** and **Maximum detail wait** accept positive whole
+seconds, default to 2 and 16, and require minimum no greater than maximum. A new
+value applies to subsequent random samples without restart, but never shortens
+an already persisted next-eligible time. Provider `Retry-After` and retry
+backoff may extend it.
+
+Overview pages, per-item outcomes, leases, retries, and progress are durable in
+SQLite and MySQL. A restart resumes committed work without refetching completed
+items. No incomplete or inconsistent overview generation can publish, while
+optional item details never block first publication.
 
 ## List record
 
@@ -103,6 +187,12 @@ Version 4 adds these item fields and values:
 | `metadata` | metadata document or null | Provider snapshot used by the shared review editor. |
 | `collection_role` | string | `auto`, `primary`, or `extra`. Rank remains provider order and never implies that the first movie is the main feature. |
 | `content_kind` | string | Version 4 additionally accepts `song` and `image`. |
+
+Version 5 adds this item field:
+
+| Field | Type | Requirement |
+|---|---|---|
+| `liveness` | string or null | `unknown`, `finite`, or `live`; only meaningful for `kind: remote_stream`. |
 
 ## Shared metadata document
 

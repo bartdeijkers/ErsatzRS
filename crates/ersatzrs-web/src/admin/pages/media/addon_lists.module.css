@@ -201,6 +201,97 @@
     line-height: 1.4;
 }
 
+.import-progress-card {
+    display: grid;
+    gap: 0.65rem;
+    width: min(100%, 68rem);
+    margin: 0 auto 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.import-progress-heading,
+.import-progress-heading > div,
+.import-progress-details,
+.import-progress-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.import-progress-heading {
+    justify-content: space-between;
+}
+
+.import-progress-heading > div {
+    align-items: baseline;
+    flex-wrap: wrap;
+}
+
+.import-progress-heading span,
+.import-progress-card p,
+.import-progress-details {
+    margin: 0;
+    color: var(--color-muted);
+    font-size: 0.82rem;
+}
+
+.import-progress-percent {
+    color: var(--color-gray-100) !important;
+    font-variant-numeric: tabular-nums;
+}
+
+.import-progress-card progress {
+    width: 100%;
+    height: 0.4rem;
+    accent-color: var(--color-primary);
+}
+
+.import-progress-details,
+.import-progress-actions {
+    flex-wrap: wrap;
+}
+
+.detail-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 2rem;
+    padding: 0 0.55rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--color-gray-100);
+    font-size: 0.74rem;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.detail-action:disabled {
+    color: var(--color-muted);
+    cursor: default;
+    opacity: 0.75;
+}
+
+.numbering-off-page {
+    margin-top: 0.25rem;
+    color: var(--color-warning);
+}
+
 .import-footer {
     display: flex;
     align-items: center;
@@ -296,6 +387,49 @@ tbody tr:hover {
 .metadata-item-row[aria-expanded="true"] {
     background: color-mix(in srgb, var(--color-table-hover) 74%, transparent);
     box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.metadata-item-row.numbering-preview-row {
+    background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-primary) 78%, transparent);
+}
+
+.selection-cell,
+.number-cell {
+    width: 2.5rem;
+    padding-right: 0.35rem;
+    text-align: center;
+}
+
+.selection-cell input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: var(--color-primary);
+}
+
+.number-cell,
+.compact-cell,
+.episode-cell {
+    color: var(--color-muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.numbering-preview-row .episode-cell {
+    color: var(--color-primary);
+    font-weight: 750;
+}
+
+.liveness-cell {
+    min-width: 10rem;
+}
+
+.liveness-conflict {
+    margin-top: 0.15rem;
+    color: var(--color-warning);
+    font-size: 0.68rem;
+    font-weight: 700;
 }
 
 .item-artwork-cell {
@@ -1149,6 +1283,38 @@ tbody tr:hover {
     line-height: 1.4;
 }
 
+.liveness-bulk-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem 1rem;
+    margin: 0.25rem 0 1.25rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--color-surface) 76%, transparent);
+}
+
+.liveness-bulk-toolbar label {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.liveness-bulk-toolbar label > span {
+    color: var(--color-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.liveness-bulk-toolbar .page-size {
+    min-width: 12rem;
+}
+
+.liveness-bulk-toolbar button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .discovery-summary {
     display: flex;
     align-items: center;
@@ -1241,17 +1407,6 @@ tbody tr:hover {
     display: block;
     color: var(--color-muted);
     font-size: 0.75rem;
-    line-height: 1.35;
-}
-
-.episode-number {
-    display: block;
-    margin: 0.1rem 0;
-    color: var(--color-gray-100);
-    font-size: 0.75rem;
-    font-variant-numeric: tabular-nums;
-    font-weight: 700;
-    letter-spacing: 0.02em;
     line-height: 1.35;
 }
 
@@ -1478,6 +1633,13 @@ tbody tr:hover {
 
     .numbering-footer .btn-add {
         width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .metadata-item-row,
+    .metadata-hero {
+        transition: none;
     }
 }
 

@@ -5,13 +5,17 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use ersatzrs_addon_contract::{
+    conform_media_list_discover_output, conform_media_list_enrich_output,
     conform_media_list_output, validate_operator_source_url, AddonArtworkRole as WireArtworkRole,
     AddonMediaListContentKind as WireContentKind,
     AddonMediaListItemAvailability as WireAvailability, AddonMediaListItemKind as WireItemKind,
     AddonMediaListItemRole as WireItemRole, AddonMediaListRecord, AddonMetadataDocument,
-    AddonOperationError, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
-    CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, MAX_AVAILABILITY_REASON_BYTES,
-    MAX_LIST_ITEMS, MAX_MEDIA_LIST_OUTPUT_BYTES, MAX_PROVIDER_ID_BYTES,
+    AddonOperationError, MediaListDiscoverLimits, MediaListDiscoverRequest, MediaListDiscoveryPage,
+    MediaListEnrichRequest, MediaListEnrichmentResult, RemoteStreamLiveness as WireLiveness,
+    CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
+    CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5,
+    MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS, MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES,
+    MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES, MAX_MEDIA_LIST_OUTPUT_BYTES, MAX_PROVIDER_ID_BYTES,
     OPERATION_CODE_UNSUPPORTED_URL,
 };
 use ersatzrs_core::addon_media_list::{
@@ -26,7 +30,8 @@ use ersatzrs_core::repositories::{RepositoryError, Result};
 
 use crate::addon_chapters::{fragment_guid, fragment_stream_url};
 use crate::addons::{
-    invoke_enabled_addon, load_installed_addon, AddonInvocation, AddonRuntimeContext,
+    invoke_enabled_addon, invoke_enabled_addon_with_input, load_installed_addon, AddonInvocation,
+    AddonRuntimeContext,
 };
 use crate::db::DbPool;
 
@@ -43,6 +48,172 @@ impl InstalledAddonMediaListProvider {
     #[must_use]
     pub fn new(pool: DbPool) -> Self {
         Self { pool }
+    }
+
+    /// Resolve and validate the optional resumable import transport.
+    pub(crate) async fn import_context(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+    ) -> Result<Option<InstalledMediaListImportContext>> {
+        let installation = load_installed_addon(&self.pool, addon_id)
+            .await
+            .map_err(|error| {
+                RepositoryError::unavailable("load media-list add-on", error.to_string())
+            })?
+            .ok_or_else(|| {
+                RepositoryError::unavailable("load media-list add-on", "add-on is not installed")
+            })?;
+        if !installation
+            .manifest
+            .has_capability(CAPABILITY_MEDIA_LIST_IMPORT_V1)
+        {
+            return Ok(None);
+        }
+        let record_capability = selected_record_capability(&installation.manifest);
+        let source_url = validate_operator_source_url(
+            source_url,
+            &installation.manifest.permissions.network_hosts,
+        )
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "validate media-list source URL",
+                AddonOperationError::new(OPERATION_CODE_UNSUPPORTED_URL, error.to_string())
+                    .to_string(),
+            )
+        })?;
+        Ok(Some(InstalledMediaListImportContext {
+            source_url,
+            record_capability: record_capability.to_owned(),
+        }))
+    }
+
+    /// Fetch exactly one bounded overview page without opening item details.
+    pub(crate) async fn discover(
+        &self,
+        addon_id: &str,
+        context: &InstalledMediaListImportContext,
+        cursor: Option<&str>,
+    ) -> Result<MediaListDiscoveryPage> {
+        let request = MediaListDiscoverRequest {
+            source_url: context.source_url.clone(),
+            record_capability: context.record_capability.clone(),
+            cursor: cursor.map(ToOwned::to_owned),
+            limits: MediaListDiscoverLimits::default(),
+        };
+        request
+            .validate()
+            .map_err(|error| RepositoryError::Decode {
+                kind: "media-list discover request",
+                value: error.to_string(),
+            })?;
+        let input = serde_json::to_vec(&request).map_err(|error| RepositoryError::Decode {
+            kind: "media-list discover request",
+            value: error.to_string(),
+        })?;
+        let runtime = managed_runtime_context();
+        let output = invoke_enabled_addon_with_input(
+            &self.pool,
+            addon_id,
+            AddonInvocation {
+                capability: CAPABILITY_MEDIA_LIST_IMPORT_V1,
+                operation: "discover",
+                runtime: &runtime,
+                extra_environment: &BTreeMap::new(),
+                timeout: Duration::from_secs(45),
+                max_output_bytes: MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES,
+            },
+            &input,
+        )
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable("invoke media-list discovery", error.to_string())
+        })?;
+        conform_media_list_discover_output(&output, cursor.is_none()).map_err(|error| {
+            RepositoryError::Decode {
+                kind: "media-list discover output",
+                value: error.to_string(),
+            }
+        })
+    }
+
+    /// Enrich exactly one committed overview item through the same bounded runner.
+    pub(crate) async fn enrich(
+        &self,
+        addon_id: &str,
+        context: &InstalledMediaListImportContext,
+        provider_id: &str,
+        overview_fingerprint: &str,
+        item: AddonMediaListRecord,
+    ) -> Result<MediaListEnrichmentResult> {
+        let request = MediaListEnrichRequest {
+            source_url: context.source_url.clone(),
+            record_capability: context.record_capability.clone(),
+            provider_id: provider_id.to_owned(),
+            overview_fingerprint: overview_fingerprint.to_owned(),
+            item,
+        };
+        request
+            .validate()
+            .map_err(|error| RepositoryError::Decode {
+                kind: "media-list enrich request",
+                value: error.to_string(),
+            })?;
+        let input = serde_json::to_vec(&request).map_err(|error| RepositoryError::Decode {
+            kind: "media-list enrich request",
+            value: error.to_string(),
+        })?;
+        let runtime = managed_runtime_context();
+        let output = invoke_enabled_addon_with_input(
+            &self.pool,
+            addon_id,
+            AddonInvocation {
+                capability: CAPABILITY_MEDIA_LIST_IMPORT_V1,
+                operation: "enrich",
+                runtime: &runtime,
+                extra_environment: &BTreeMap::new(),
+                timeout: Duration::from_secs(45),
+                max_output_bytes: MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES,
+            },
+            &input,
+        )
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable("invoke media-list enrichment", error.to_string())
+        })?;
+        conform_media_list_enrich_output(&output, provider_id).map_err(|error| {
+            RepositoryError::Decode {
+                kind: "media-list enrich output",
+                value: error.to_string(),
+            }
+        })
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct InstalledMediaListImportContext {
+    pub(crate) source_url: String,
+    pub(crate) record_capability: String,
+}
+
+fn managed_runtime_context() -> AddonRuntimeContext {
+    AddonRuntimeContext {
+        ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
+        ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),
+    }
+}
+
+fn selected_record_capability(manifest: &ersatzrs_addon_contract::AddonManifest) -> &'static str {
+    if manifest.has_capability(CAPABILITY_MEDIA_LIST_LIST_V5) {
+        CAPABILITY_MEDIA_LIST_LIST_V5
+    } else if manifest.has_capability(CAPABILITY_MEDIA_LIST_LIST_V4) {
+        CAPABILITY_MEDIA_LIST_LIST_V4
+    } else if manifest.has_capability(CAPABILITY_MEDIA_LIST_LIST_V3) {
+        CAPABILITY_MEDIA_LIST_LIST_V3
+    } else if manifest.has_capability(CAPABILITY_MEDIA_LIST_LIST_V2) {
+        CAPABILITY_MEDIA_LIST_LIST_V2
+    } else {
+        CAPABILITY_MEDIA_LIST_LIST_V1
     }
 }
 
@@ -73,6 +244,11 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
             })?;
         let capability = if installation
             .manifest
+            .has_capability(CAPABILITY_MEDIA_LIST_LIST_V5)
+        {
+            CAPABILITY_MEDIA_LIST_LIST_V5
+        } else if installation
+            .manifest
             .has_capability(CAPABILITY_MEDIA_LIST_LIST_V4)
         {
             CAPABILITY_MEDIA_LIST_LIST_V4
@@ -89,6 +265,9 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
         } else {
             CAPABILITY_MEDIA_LIST_LIST_V1
         };
+        let supports_resumable_import = installation
+            .manifest
+            .has_capability(CAPABILITY_MEDIA_LIST_IMPORT_V1);
         require_chapter_capability(capability, chapter_input)?;
         let source_url = validate_operator_source_url(
             source_url,
@@ -122,16 +301,25 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
         )
         .await
         .map_err(|error| {
-            RepositoryError::unavailable("invoke media-list add-on", error.to_string())
+            RepositoryError::unavailable(
+                "invoke media-list add-on",
+                legacy_list_invocation_error(&error.to_string(), supports_resumable_import),
+            )
         })?;
 
         let mut list = decode_media_list_output_for_capability(
             &output,
             matches!(
                 capability,
-                CAPABILITY_MEDIA_LIST_LIST_V3 | CAPABILITY_MEDIA_LIST_LIST_V4
+                CAPABILITY_MEDIA_LIST_LIST_V3
+                    | CAPABILITY_MEDIA_LIST_LIST_V4
+                    | CAPABILITY_MEDIA_LIST_LIST_V5
             ),
-            capability == CAPABILITY_MEDIA_LIST_LIST_V4,
+            matches!(
+                capability,
+                CAPABILITY_MEDIA_LIST_LIST_V4 | CAPABILITY_MEDIA_LIST_LIST_V5
+            ),
+            capability == CAPABILITY_MEDIA_LIST_LIST_V5,
         )?;
         if !chapter_input.trim().is_empty() {
             add_chapter_fragments(&mut list, addon_id, chapter_input)?;
@@ -140,11 +328,20 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
     }
 }
 
+fn legacy_list_invocation_error(message: &str, supports_resumable_import: bool) -> String {
+    if !supports_resumable_import && message.contains("entrypoint timed out") {
+        return "the legacy one-shot list import timed out; update this add-on to one that supports media-list.import.v1 for resumable overview discovery".to_owned();
+    }
+    message.to_owned()
+}
+
 fn require_chapter_capability(capability: &str, chapter_input: &str) -> Result<()> {
     if !chapter_input.trim().is_empty()
         && !matches!(
             capability,
-            CAPABILITY_MEDIA_LIST_LIST_V3 | CAPABILITY_MEDIA_LIST_LIST_V4
+            CAPABILITY_MEDIA_LIST_LIST_V3
+                | CAPABILITY_MEDIA_LIST_LIST_V4
+                | CAPABILITY_MEDIA_LIST_LIST_V5
         )
     {
         return Err(RepositoryError::unavailable(
@@ -209,6 +406,7 @@ fn add_chapter_fragments(
             content_kind: full.content_kind,
             collection_role: full.collection_role,
             duration_seconds: end.map(|end| end - start),
+            liveness: full.liveness,
             parent_provider_id: Some(full.provider_id.clone()),
             fragment_start_seconds: Some(start),
             fragment_end_seconds: end,
@@ -221,14 +419,15 @@ fn add_chapter_fragments(
 
 #[cfg(test)]
 fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
-    decode_media_list_output_for_capability(output, true, true)
+    decode_media_list_output_for_capability(output, true, true, true)
 }
 
 #[allow(clippy::too_many_lines)]
-fn decode_media_list_output_for_capability(
+pub(crate) fn decode_media_list_output_for_capability(
     output: &[u8],
     supports_v3_fields: bool,
     supports_v4_metadata: bool,
+    supports_v5_liveness: bool,
 ) -> Result<EnumeratedAddonMediaList> {
     let mut records = conform_media_list_output(output)
         .map_err(|error| RepositoryError::Decode {
@@ -303,6 +502,7 @@ fn decode_media_list_output_for_capability(
             content_kind,
             collection_role,
             duration_seconds,
+            liveness,
             parent_provider_id,
             fragment_start_seconds,
             fragment_end_seconds,
@@ -357,6 +557,12 @@ fn decode_media_list_output_for_capability(
                 value: "rich metadata requires media-list.list.v4".to_owned(),
             });
         }
+        if liveness.is_some() && !supports_v5_liveness {
+            return Err(RepositoryError::Decode {
+                kind: "media-list add-on output",
+                value: "liveness requires media-list.list.v5".to_owned(),
+            });
+        }
         if !supports_v4_metadata
             && (matches!(content_kind, WireContentKind::Song | WireContentKind::Image)
                 || collection_role != WireItemRole::Auto)
@@ -396,6 +602,11 @@ fn decode_media_list_output_for_capability(
             content_kind: domain_content_kind(content_kind),
             collection_role: domain_item_role(collection_role),
             duration_seconds,
+            liveness: if supports_v5_liveness {
+                domain_liveness(liveness.unwrap_or(WireLiveness::Unknown))
+            } else {
+                ersatzrs_domain::RemoteStreamLiveness::from_legacy(None, duration_seconds)
+            },
             parent_provider_id,
             fragment_start_seconds,
             fragment_end_seconds,
@@ -535,6 +746,14 @@ const fn domain_item_role(kind: WireItemRole) -> ersatzrs_domain::AddonMediaList
         WireItemRole::Auto => ersatzrs_domain::AddonMediaListItemRole::Auto,
         WireItemRole::Primary => ersatzrs_domain::AddonMediaListItemRole::Primary,
         WireItemRole::Extra => ersatzrs_domain::AddonMediaListItemRole::Extra,
+    }
+}
+
+const fn domain_liveness(kind: WireLiveness) -> ersatzrs_domain::RemoteStreamLiveness {
+    match kind {
+        WireLiveness::Unknown => ersatzrs_domain::RemoteStreamLiveness::Unknown,
+        WireLiveness::Finite => ersatzrs_domain::RemoteStreamLiveness::Finite,
+        WireLiveness::Live => ersatzrs_domain::RemoteStreamLiveness::Live,
     }
 }
 
@@ -822,6 +1041,18 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
     }
 
     #[test]
+    fn legacy_timeout_explains_the_resumable_capability_upgrade() {
+        let message =
+            super::legacy_list_invocation_error("[process-failed] entrypoint timed out", false);
+        assert!(message.contains("media-list.import.v1"));
+        assert!(message.contains("resumable overview discovery"));
+        assert_eq!(
+            super::legacy_list_invocation_error("provider rejected input", false),
+            "provider rejected input"
+        );
+    }
+
+    #[test]
     fn chapter_fragments_keep_the_full_episode_and_calculate_stream_bounds() {
         let output = br#"{"record_type":"list","provider_id":"episode-list","name":"Episode"}
 {"record_type":"item","provider_id":"episode:42","rank":0,"display_title":"Programme - Episode","title":"Episode","kind":"remote_stream","guids":["example://42"],"source_url":"https://media.example.test/episodes/42","duration_seconds":600,"additional_image_urls":["https://media.example.test/image.jpg"]}
@@ -883,7 +1114,7 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
         let output = br#"{"record_type":"list","provider_id":"x","name":"X"}
 {"record_type":"item","provider_id":"one","rank":0,"display_title":"One","title":"One","kind":"remote_stream","source_url":"https://example.test/one","duration_seconds":60}
 "#;
-        let error = decode_media_list_output_for_capability(output, false, false)
+        let error = decode_media_list_output_for_capability(output, false, false, false)
             .expect_err("v2 must not accept v3 fields");
         assert!(error.to_string().contains("media-list.list.v3"));
     }

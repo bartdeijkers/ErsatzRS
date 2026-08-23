@@ -139,6 +139,12 @@ pub struct ScannerSettings {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AddonDetailWaitSettings {
+    pub minimum_seconds: u32,
+    pub maximum_seconds: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PlayoutSettings {
     pub days_to_build: i32,
     pub skip_missing_items: bool,
@@ -1638,6 +1644,48 @@ pub async fn load_scanner_settings(
             repository,
         )
         .await?,
+    })
+}
+
+/// Load and validate the global delay window for add-on item-detail requests.
+pub async fn load_addon_detail_wait_settings(
+    repository: &dyn AdminSettingsRepository,
+) -> Result<AddonDetailWaitSettings> {
+    let default_minimum = i32::try_from(ersatzrs_domain::DEFAULT_ADDON_DETAIL_WAIT_MINIMUM_SECONDS)
+        .map_err(|_| ApplicationError::InvalidData {
+            kind: "add-on detail wait defaults",
+            value: "minimum does not fit the settings store".to_owned(),
+        })?;
+    let default_maximum = i32::try_from(ersatzrs_domain::DEFAULT_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS)
+        .map_err(|_| ApplicationError::InvalidData {
+            kind: "add-on detail wait defaults",
+            value: "maximum does not fit the settings store".to_owned(),
+        })?;
+    let minimum = get_i32_setting(
+        ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MINIMUM_SECONDS,
+        default_minimum,
+        repository,
+    )
+    .await?;
+    let maximum = get_i32_setting(
+        ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS,
+        default_maximum,
+        repository,
+    )
+    .await?;
+    let range = u32::try_from(minimum)
+        .ok()
+        .zip(u32::try_from(maximum).ok())
+        .and_then(|(minimum, maximum)| {
+            ersatzrs_domain::AddonMediaListDetailWaitRange::new(minimum, maximum)
+        })
+        .ok_or_else(|| ApplicationError::InvalidData {
+            kind: "add-on detail wait settings",
+            value: format!("minimum={minimum}, maximum={maximum}"),
+        })?;
+    Ok(AddonDetailWaitSettings {
+        minimum_seconds: range.minimum_seconds,
+        maximum_seconds: range.maximum_seconds,
     })
 }
 

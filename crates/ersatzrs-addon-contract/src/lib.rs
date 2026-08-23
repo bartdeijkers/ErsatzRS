@@ -21,6 +21,8 @@ pub const CAPABILITY_REMOTE_STREAM_LIST_V1: &str = "remote-stream.list.v1";
 /// Enumerate Remote Streams with stable identity and availability metadata.
 pub const CAPABILITY_REMOTE_STREAM_LIST_V2: &str = "remote-stream.list.v2";
 pub const CAPABILITY_REMOTE_STREAM_LIST_V3: &str = "remote-stream.list.v3";
+/// Enumerate Remote Streams with explicit provider-neutral playback behavior.
+pub const CAPABILITY_REMOTE_STREAM_LIST_V4: &str = "remote-stream.list.v4";
 /// Describe already-enumerated Remote Streams the host chose to keep.
 ///
 /// Enumeration stays cheap and identity-only; this answers with descriptive
@@ -39,6 +41,10 @@ pub const CAPABILITY_MEDIA_LIST_LIST_V2: &str = "media-list.list.v2";
 pub const CAPABILITY_MEDIA_LIST_LIST_V3: &str = "media-list.list.v3";
 /// Enumerate a provider list with shared list/item metadata documents.
 pub const CAPABILITY_MEDIA_LIST_LIST_V4: &str = "media-list.list.v4";
+/// Enumerate provider lists with explicit Remote Stream playback behavior.
+pub const CAPABILITY_MEDIA_LIST_LIST_V5: &str = "media-list.list.v5";
+/// Page list overviews and enrich one item at a time through host-owned jobs.
+pub const CAPABILITY_MEDIA_LIST_IMPORT_V1: &str = "media-list.import.v1";
 /// Host-rendered declarative add-on panel schema.
 pub const CAPABILITY_DECLARATIVE_PANEL_V1: &str = "declarative-panel.v1";
 /// Maximum UTF-8 bytes for provider/list/item identities stored and indexed by the host.
@@ -51,6 +57,16 @@ pub const MAX_CHAPTER_INPUT_BYTES: usize = 64 * 1_024;
 pub const MAX_OPERATION_ERROR_MESSAGE_BYTES: usize = 1_024;
 /// Maximum captured output accepted from `media-list.list`.
 pub const MAX_MEDIA_LIST_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
+/// Maximum captured output accepted from one paged overview invocation.
+pub const MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
+/// Maximum captured output accepted from one item-enrichment invocation.
+pub const MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES: usize = 1024 * 1024;
+/// Maximum serialized JSON request accepted by an import operation.
+pub const MAX_MEDIA_LIST_IMPORT_REQUEST_BYTES: usize = 512 * 1024;
+/// Maximum UTF-8 size of an opaque provider continuation cursor.
+pub const MAX_MEDIA_LIST_IMPORT_CURSOR_BYTES: usize = 4 * 1024;
+/// Maximum number of overview items accepted from one discovery page.
+pub const MAX_MEDIA_LIST_IMPORT_PAGE_ITEMS: usize = 250;
 /// Maximum captured output accepted from `remote-stream.list`.
 pub const MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 /// Maximum number of items accepted from one list invocation.
@@ -96,6 +112,35 @@ pub enum AddonMediaListItemAvailability {
     Unknown,
 }
 
+/// Provider-neutral playback behavior for a Remote Stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteStreamLiveness {
+    #[default]
+    Unknown,
+    Finite,
+    Live,
+}
+
+impl RemoteStreamLiveness {
+    /// Adapt a legacy optional boolean and duration conservatively.
+    #[must_use]
+    pub const fn from_legacy(is_live: Option<bool>, duration_seconds: Option<u64>) -> Self {
+        match is_live {
+            Some(true) => Self::Live,
+            Some(false) => Self::Finite,
+            None if matches!(duration_seconds, Some(value) if value > 0) => Self::Finite,
+            None => Self::Unknown,
+        }
+    }
+
+    /// Compatibility value for legacy boolean consumers.
+    #[must_use]
+    pub const fn legacy_is_live(self) -> bool {
+        matches!(self, Self::Live)
+    }
+}
+
 /// Descriptive content classification for an add-on supplied stream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -121,6 +166,15 @@ pub enum AddonMediaListItemRole {
     Auto,
     Primary,
     Extra,
+}
+
+/// Whether missing item details are fetched automatically after publication.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaListDetailImportPolicy {
+    #[default]
+    Automatic,
+    ManualOnly,
 }
 
 /// One credited person in the provider-neutral metadata document.
@@ -332,7 +386,12 @@ impl AddonMetadataDocument {
     }
 }
 
-/// One bounded `media-list.list.v1` through `media-list.list.v4` NDJSON record.
+/// One bounded `media-list.list.v1` through `media-list.list.v5` NDJSON record.
+///
+/// Both variants intentionally retain the frozen, strongly typed record shape.
+/// Boxing either metadata field would be a source-level API break for add-ons
+/// while leaving the serialized contract unchanged.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "record_type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AddonMediaListRecord {
@@ -370,6 +429,8 @@ pub enum AddonMediaListRecord {
         collection_role: AddonMediaListItemRole,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         duration_seconds: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        liveness: Option<RemoteStreamLiveness>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_provider_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -439,6 +500,7 @@ impl AddonMediaListRecord {
             content_kind: AddonMediaListContentKind::Auto,
             collection_role: AddonMediaListItemRole::Auto,
             duration_seconds: None,
+            liveness: None,
             parent_provider_id: None,
             fragment_start_seconds: None,
             fragment_end_seconds: None,
@@ -523,6 +585,230 @@ impl AddonMediaListRecord {
     }
 }
 
+/// Host limits sent with every bounded overview discovery request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaListDiscoverLimits {
+    pub max_items: u16,
+    pub max_output_bytes: u32,
+}
+
+impl Default for MediaListDiscoverLimits {
+    fn default() -> Self {
+        Self {
+            max_items: u16::try_from(MAX_MEDIA_LIST_IMPORT_PAGE_ITEMS)
+                .expect("the page item limit fits in u16"),
+            max_output_bytes: u32::try_from(MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES)
+                .expect("the page output limit fits in u32"),
+        }
+    }
+}
+
+/// One `media-list.import.v1 discover` request written as JSON to stdin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaListDiscoverRequest {
+    pub source_url: String,
+    pub record_capability: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    #[serde(default)]
+    pub limits: MediaListDiscoverLimits,
+}
+
+impl MediaListDiscoverRequest {
+    /// Validate host and add-on authored request bounds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unsupported schemas, empty URLs, or excessive
+    /// cursor and page limits.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        validate_import_record_capability(&self.record_capability)?;
+        if self.source_url.trim().is_empty() || self.source_url.len() > 8 * 1024 {
+            return invalid(
+                "media list discover source_url",
+                "must be between 1 and 8192 UTF-8 bytes",
+            );
+        }
+        validate_import_cursor(self.cursor.as_deref())?;
+        if self.limits.max_items == 0
+            || usize::from(self.limits.max_items) > MAX_MEDIA_LIST_IMPORT_PAGE_ITEMS
+        {
+            return invalid(
+                "media list discover limits.max_items",
+                "must be between 1 and 250",
+            );
+        }
+        if self.limits.max_output_bytes == 0
+            || usize::try_from(self.limits.max_output_bytes)
+                .ok()
+                .is_none_or(|value| value > MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES)
+        {
+            return invalid(
+                "media list discover limits.max_output_bytes",
+                "must be between 1 and 4194304",
+            );
+        }
+        validate_import_request_size(self)
+    }
+}
+
+/// One `media-list.import.v1 enrich` request written as JSON to stdin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaListEnrichRequest {
+    pub source_url: String,
+    pub record_capability: String,
+    pub provider_id: String,
+    pub overview_fingerprint: String,
+    pub item: AddonMediaListRecord,
+}
+
+impl MediaListEnrichRequest {
+    /// Validate one bounded, identity-preserving enrichment request.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the request is oversized, its schema is not
+    /// supported, or the embedded item identity does not match.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        validate_import_record_capability(&self.record_capability)?;
+        if self.source_url.trim().is_empty() || self.source_url.len() > 8 * 1024 {
+            return invalid(
+                "media list enrich source_url",
+                "must be between 1 and 8192 UTF-8 bytes",
+            );
+        }
+        validate_provider_id(&self.provider_id)?;
+        if self.overview_fingerprint.trim().is_empty()
+            || self.overview_fingerprint.len() > MAX_PROVIDER_ID_BYTES
+        {
+            return invalid(
+                "media list enrich overview_fingerprint",
+                "must be between 1 and 384 UTF-8 bytes",
+            );
+        }
+        self.item.validate()?;
+        match &self.item {
+            AddonMediaListRecord::Item { provider_id, .. } if provider_id == &self.provider_id => {}
+            AddonMediaListRecord::Item { .. } => {
+                return invalid(
+                    "media list enrich item",
+                    "provider_id must match the requested identity",
+                );
+            }
+            AddonMediaListRecord::List { .. } => {
+                return invalid("media list enrich item", "must be an item record");
+            }
+        }
+        validate_import_request_size(self)
+    }
+}
+
+/// First NDJSON record emitted by `media-list.import.v1 discover`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "record_type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum MediaListDiscoverControl {
+    Page {
+        complete: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next_cursor: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        total_hint: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        revision_token: Option<String>,
+    },
+}
+
+/// Validated output from one overview page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaListDiscoveryPage {
+    pub complete: bool,
+    pub next_cursor: Option<String>,
+    pub total_hint: Option<u32>,
+    pub revision_token: Option<String>,
+    pub records: Vec<AddonMediaListRecord>,
+}
+
+/// Typed outcome of one item enrichment attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaListEnrichOutcomeKind {
+    Complete,
+    Unavailable,
+    TransientFailure,
+    PermanentFailure,
+}
+
+/// First NDJSON record emitted by `media-list.import.v1 enrich`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "record_type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum MediaListEnrichControl {
+    Outcome {
+        outcome: MediaListEnrichOutcomeKind,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        code: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        retry_after_seconds: Option<u32>,
+    },
+}
+
+/// Validated result of one item enrichment invocation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaListEnrichmentResult {
+    pub outcome: MediaListEnrichOutcomeKind,
+    pub code: Option<String>,
+    pub message: Option<String>,
+    pub retry_after_seconds: Option<u32>,
+    pub item: Option<AddonMediaListRecord>,
+}
+
+fn validate_import_record_capability(capability: &str) -> Result<(), ContractError> {
+    if matches!(
+        capability,
+        CAPABILITY_MEDIA_LIST_LIST_V1
+            | CAPABILITY_MEDIA_LIST_LIST_V2
+            | CAPABILITY_MEDIA_LIST_LIST_V3
+            | CAPABILITY_MEDIA_LIST_LIST_V4
+            | CAPABILITY_MEDIA_LIST_LIST_V5
+    ) {
+        Ok(())
+    } else {
+        invalid(
+            "media list import record_capability",
+            "must name a supported media-list.list schema",
+        )
+    }
+}
+
+fn validate_import_cursor(cursor: Option<&str>) -> Result<(), ContractError> {
+    if cursor.is_some_and(|value| {
+        value.is_empty()
+            || value.len() > MAX_MEDIA_LIST_IMPORT_CURSOR_BYTES
+            || value.chars().any(char::is_control)
+    }) {
+        return invalid(
+            "media list import cursor",
+            "must be 1 to 4096 UTF-8 bytes without control characters",
+        );
+    }
+    Ok(())
+}
+
+fn validate_import_request_size<T: Serialize>(request: &T) -> Result<(), ContractError> {
+    let bytes = serde_json::to_vec(request).map_err(|error| ContractError::Invalid {
+        field: "media list import request",
+        message: error.to_string(),
+    })?;
+    if bytes.len() > MAX_MEDIA_LIST_IMPORT_REQUEST_BYTES {
+        return invalid("media list import request", "exceeds the 512 KiB limit");
+    }
+    Ok(())
+}
+
 /// One credited person in a Remote Stream list record.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -531,7 +817,7 @@ pub struct RemoteStreamPerson {
     pub role: String,
 }
 
-/// One provider entry emitted by `remote-stream.list.v1` or v2.
+/// One provider entry emitted by `remote-stream.list.v1` through v4.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PlaylistEntry {
@@ -586,8 +872,14 @@ pub struct PlaylistEntry {
     pub fragment_start_seconds: Option<u64>,
     #[serde(default)]
     pub fragment_end_seconds: Option<u64>,
-    #[serde(default)]
-    pub is_live: bool,
+    /// Legacy two-state playback flag. `None` distinguishes omission from an
+    /// explicitly confirmed finite source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_live: Option<bool>,
+    /// Authoritative provider-neutral playback behavior from
+    /// `remote-stream.list.v4`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liveness: Option<RemoteStreamLiveness>,
     #[serde(default)]
     pub availability: AddonMediaListItemAvailability,
     #[serde(default)]
@@ -760,7 +1052,32 @@ impl PlaylistEntry {
                 "must not contain empty URLs",
             );
         }
+        self.effective_liveness()?;
         Ok(())
+    }
+
+    /// Resolve the v4 value or conservatively adapt legacy fields.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when new and legacy fields contradict each other.
+    pub fn effective_liveness(&self) -> Result<RemoteStreamLiveness, ContractError> {
+        match (self.liveness, self.is_live) {
+            (Some(liveness), Some(is_live))
+                if RemoteStreamLiveness::from_legacy(Some(is_live), self.duration_seconds)
+                    != liveness =>
+            {
+                invalid(
+                    "remote stream liveness",
+                    "liveness contradicts legacy is_live",
+                )
+            }
+            (Some(liveness), _) => Ok(liveness),
+            (None, is_live) => Ok(RemoteStreamLiveness::from_legacy(
+                is_live,
+                self.duration_seconds,
+            )),
+        }
     }
 }
 
@@ -984,6 +1301,7 @@ impl AddonManifest {
                 return invalid("capabilities", "duplicate capability id");
             }
         }
+        self.validate_media_list_import_capability()?;
         validate_dependencies(&self.id, &self.dependencies)?;
         for (rid, entrypoint) in &self.entrypoints {
             if rid != "any" && !is_supported_rid(rid) {
@@ -1014,6 +1332,7 @@ impl AddonManifest {
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V2)
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V3)
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V4)
+                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V5)
             {
                 return invalid(
                     "media_list_storage",
@@ -1023,10 +1342,11 @@ impl AddonManifest {
             if !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
                 && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
                 && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3)
+                && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V4)
             {
                 return invalid(
                     "media_list_storage",
-                    "requires remote-stream.list.v1 or remote-stream.list.v2",
+                    "requires a supported remote-stream.list capability",
                 );
             }
         }
@@ -1042,6 +1362,26 @@ impl AddonManifest {
             if !panel_ids.insert(panel.id.as_str()) {
                 return invalid("panels", "duplicate panel id");
             }
+        }
+        Ok(())
+    }
+
+    fn validate_media_list_import_capability(&self) -> Result<(), ContractError> {
+        if self.has_capability(CAPABILITY_MEDIA_LIST_IMPORT_V1)
+            && ![
+                CAPABILITY_MEDIA_LIST_LIST_V1,
+                CAPABILITY_MEDIA_LIST_LIST_V2,
+                CAPABILITY_MEDIA_LIST_LIST_V3,
+                CAPABILITY_MEDIA_LIST_LIST_V4,
+                CAPABILITY_MEDIA_LIST_LIST_V5,
+            ]
+            .into_iter()
+            .any(|capability| self.has_capability(capability))
+        {
+            return invalid(
+                "capabilities",
+                "media-list.import.v1 requires a supported media-list.list record schema",
+            );
         }
         Ok(())
     }
@@ -2096,6 +2436,316 @@ pub fn conform_media_list_output(
     Ok(records)
 }
 
+/// Parse and validate one `media-list.import.v1 discover` NDJSON page.
+///
+/// The first output line is a page control record. A first page then carries
+/// one list header followed by item stubs; continuation pages carry only item
+/// records. Cross-page identity, rank, cursor-loop, and revision checks remain
+/// the durable host job's responsibility.
+///
+/// # Errors
+///
+/// Returns an error when output is malformed, oversized, internally
+/// inconsistent, or violates the page bounds.
+pub fn conform_media_list_discover_output(
+    output: &[u8],
+    first_page: bool,
+) -> Result<MediaListDiscoveryPage, ContractError> {
+    if output.len() > MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES {
+        return invalid("media list discover output", "exceeds the 4 MiB limit");
+    }
+    let text = std::str::from_utf8(output).map_err(|_| ContractError::Invalid {
+        field: "media list discover output",
+        message: "must be UTF-8".to_owned(),
+    })?;
+    let lines = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>();
+    let control_line = lines.first().ok_or_else(|| ContractError::Invalid {
+        field: "media list discover output",
+        message: "is missing a page control record".to_owned(),
+    })?;
+    let control = parse_media_list_discover_control(control_line)?;
+    let MediaListDiscoverControl::Page {
+        complete,
+        next_cursor,
+        total_hint,
+        revision_token,
+    } = control;
+
+    let mut records = Vec::new();
+    let mut provider_ids = BTreeSet::new();
+    let mut ranks = BTreeSet::new();
+    let mut list_headers = 0usize;
+    for (index, line) in lines.iter().skip(1).enumerate() {
+        let record = serde_json::from_str::<AddonMediaListRecord>(line)
+            .map_err(|error| record_parse_error("media list discover output", index + 1, &error))?;
+        record.validate()?;
+        match &record {
+            AddonMediaListRecord::List { .. } => {
+                list_headers += 1;
+                if !first_page || !records.is_empty() || list_headers > 1 {
+                    return invalid(
+                        "media list discover output",
+                        "a list header may only be the first payload record on the first page",
+                    );
+                }
+            }
+            AddonMediaListRecord::Item {
+                provider_id, rank, ..
+            } => {
+                if first_page && list_headers == 0 {
+                    return invalid(
+                        "media list discover output",
+                        "the first page must carry a list header before items",
+                    );
+                }
+                if !provider_ids.insert(provider_id.clone()) || !ranks.insert(*rank) {
+                    return invalid(
+                        "media list discover output",
+                        "item provider_id and rank must be unique within the page",
+                    );
+                }
+                if provider_ids.len() > MAX_MEDIA_LIST_IMPORT_PAGE_ITEMS {
+                    return invalid("media list discover output", "contains more than 250 items");
+                }
+            }
+        }
+        records.push(record);
+    }
+    if first_page && list_headers != 1 {
+        return invalid(
+            "media list discover output",
+            "the first page must contain exactly one list header",
+        );
+    }
+    if !complete && provider_ids.is_empty() {
+        return invalid(
+            "media list discover output",
+            "an incomplete page must make item progress",
+        );
+    }
+    Ok(MediaListDiscoveryPage {
+        complete,
+        next_cursor,
+        total_hint,
+        revision_token,
+        records,
+    })
+}
+
+fn parse_media_list_discover_control(
+    control_line: &str,
+) -> Result<MediaListDiscoverControl, ContractError> {
+    let control = serde_json::from_str::<MediaListDiscoverControl>(control_line)
+        .map_err(|error| record_parse_error("media list discover output", 0, &error))?;
+    let MediaListDiscoverControl::Page {
+        complete,
+        next_cursor,
+        total_hint,
+        revision_token,
+    } = &control;
+    validate_import_cursor(next_cursor.as_deref())?;
+    if *complete == next_cursor.is_some() {
+        return invalid(
+            "media list discover page",
+            "complete pages must omit next_cursor and incomplete pages must provide it",
+        );
+    }
+    if total_hint.is_some_and(|value| {
+        usize::try_from(value)
+            .ok()
+            .is_none_or(|value| value > MAX_LIST_ITEMS)
+    }) {
+        return invalid(
+            "media list discover total_hint",
+            "must not exceed 10000 items",
+        );
+    }
+    if revision_token.as_ref().is_some_and(|value| {
+        value.trim().is_empty()
+            || value.len() > MAX_PROVIDER_ID_BYTES
+            || value.chars().any(char::is_control)
+    }) {
+        return invalid(
+            "media list discover revision_token",
+            "must be 1 to 384 UTF-8 bytes without control characters",
+        );
+    }
+    Ok(control)
+}
+
+/// Parse and validate one `media-list.import.v1 enrich` NDJSON result.
+///
+/// Complete and known-unavailable outcomes carry exactly one item record for
+/// the requested identity. Failure outcomes carry no item, so failures can
+/// never silently replace or omit the committed overview data.
+///
+/// # Errors
+///
+/// Returns an error when the response is malformed, oversized, has the wrong
+/// identity, or contradicts its typed outcome.
+pub fn conform_media_list_enrich_output(
+    output: &[u8],
+    expected_provider_id: &str,
+) -> Result<MediaListEnrichmentResult, ContractError> {
+    if output.len() > MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES {
+        return invalid("media list enrich output", "exceeds the 1 MiB limit");
+    }
+    validate_provider_id(expected_provider_id)?;
+    let text = std::str::from_utf8(output).map_err(|_| ContractError::Invalid {
+        field: "media list enrich output",
+        message: "must be UTF-8".to_owned(),
+    })?;
+    let lines = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>();
+    let control_line = lines.first().ok_or_else(|| ContractError::Invalid {
+        field: "media list enrich output",
+        message: "is missing an outcome control record".to_owned(),
+    })?;
+    let control = parse_media_list_enrich_control(control_line, lines.len())?;
+    let MediaListEnrichControl::Outcome {
+        outcome,
+        code,
+        message,
+        retry_after_seconds,
+    } = control;
+    let expects_item = matches!(
+        outcome,
+        MediaListEnrichOutcomeKind::Complete | MediaListEnrichOutcomeKind::Unavailable
+    );
+    let item = if expects_item {
+        Some(parse_media_list_enrichment_item(
+            lines[1],
+            expected_provider_id,
+            outcome,
+        )?)
+    } else {
+        None
+    };
+    Ok(MediaListEnrichmentResult {
+        outcome,
+        code,
+        message,
+        retry_after_seconds,
+        item,
+    })
+}
+
+fn parse_media_list_enrich_control(
+    control_line: &str,
+    line_count: usize,
+) -> Result<MediaListEnrichControl, ContractError> {
+    let control = serde_json::from_str::<MediaListEnrichControl>(control_line)
+        .map_err(|error| record_parse_error("media list enrich output", 0, &error))?;
+    let MediaListEnrichControl::Outcome {
+        outcome,
+        code,
+        message,
+        retry_after_seconds,
+    } = &control;
+    if code.as_ref().is_some_and(|value| {
+        value.is_empty()
+            || value.len() > 128
+            || value
+                .bytes()
+                .any(|byte| !(byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'))
+    }) {
+        return invalid(
+            "media list enrich outcome code",
+            "must use 1 to 128 lowercase ASCII code characters",
+        );
+    }
+    if message
+        .as_ref()
+        .is_some_and(|value| value.len() > MAX_OPERATION_ERROR_MESSAGE_BYTES)
+    {
+        return invalid(
+            "media list enrich outcome message",
+            "exceeds the 1024-byte limit",
+        );
+    }
+    if retry_after_seconds.is_some_and(|value| value > 86_400) {
+        return invalid(
+            "media list enrich retry_after_seconds",
+            "must not exceed 86400 seconds",
+        );
+    }
+
+    let expects_item = matches!(
+        outcome,
+        MediaListEnrichOutcomeKind::Complete | MediaListEnrichOutcomeKind::Unavailable
+    );
+    if line_count != if expects_item { 2 } else { 1 } {
+        return invalid(
+            "media list enrich output",
+            if expects_item {
+                "complete and unavailable outcomes require exactly one item record"
+            } else {
+                "failure outcomes must not carry item records"
+            },
+        );
+    }
+    if !matches!(outcome, MediaListEnrichOutcomeKind::TransientFailure)
+        && retry_after_seconds.is_some()
+    {
+        return invalid(
+            "media list enrich retry_after_seconds",
+            "is only valid for transient_failure",
+        );
+    }
+    if matches!(
+        outcome,
+        MediaListEnrichOutcomeKind::TransientFailure | MediaListEnrichOutcomeKind::PermanentFailure
+    ) && code.is_none()
+    {
+        return invalid(
+            "media list enrich outcome code",
+            "is required for failure outcomes",
+        );
+    }
+    Ok(control)
+}
+
+fn parse_media_list_enrichment_item(
+    line: &str,
+    expected_provider_id: &str,
+    outcome: MediaListEnrichOutcomeKind,
+) -> Result<AddonMediaListRecord, ContractError> {
+    let record = serde_json::from_str::<AddonMediaListRecord>(line)
+        .map_err(|error| record_parse_error("media list enrich output", 1, &error))?;
+    record.validate()?;
+    match &record {
+        AddonMediaListRecord::Item {
+            provider_id,
+            availability,
+            ..
+        } if provider_id == expected_provider_id => {
+            if matches!(outcome, MediaListEnrichOutcomeKind::Unavailable)
+                && !matches!(availability, AddonMediaListItemAvailability::Unavailable)
+            {
+                return invalid(
+                    "media list enrich unavailable item",
+                    "must report unavailable availability",
+                );
+            }
+        }
+        AddonMediaListRecord::Item { .. } => {
+            return invalid(
+                "media list enrich item",
+                "provider_id does not match the requested identity",
+            );
+        }
+        AddonMediaListRecord::List { .. } => {
+            return invalid("media list enrich item", "must be an item record");
+        }
+    }
+    Ok(record)
+}
+
 /// Parse and validate captured `remote-stream.list.v1` or v2 NDJSON output.
 ///
 /// # Errors
@@ -2808,6 +3458,145 @@ mod tests {
     }
 
     #[test]
+    fn media_list_import_requests_lock_policy_schema_and_bounds() {
+        let request = MediaListDiscoverRequest {
+            source_url: "https://example.test/programmes".to_owned(),
+            record_capability: CAPABILITY_MEDIA_LIST_LIST_V5.to_owned(),
+            cursor: Some("page-2".to_owned()),
+            limits: MediaListDiscoverLimits::default(),
+        };
+        request.validate().expect("bounded discover request");
+        assert_eq!(
+            serde_json::to_string(&MediaListDetailImportPolicy::ManualOnly).unwrap(),
+            r#""manual_only""#
+        );
+        assert!(serde_json::from_str::<MediaListDetailImportPolicy>(r#""essential""#).is_err());
+
+        let mut invalid_schema = request.clone();
+        invalid_schema.record_capability = "media-list.list.v99".to_owned();
+        assert!(invalid_schema.validate().is_err());
+
+        let mut invalid_cursor = request;
+        invalid_cursor.cursor = Some("x".repeat(MAX_MEDIA_LIST_IMPORT_CURSOR_BYTES + 1));
+        assert!(invalid_cursor.validate().is_err());
+    }
+
+    #[test]
+    fn media_list_import_discovery_pages_preserve_overview_metadata() {
+        let first = br#"{"record_type":"page","complete":false,"next_cursor":"page-2","total_hint":2,"revision_token":"rev-1"}
+{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"episode:1","rank":0,"display_title":"Episode 1","title":"Episode 1","kind":"episode","metadata":{"outline":"Overview one","release_date":"2026-08-01","artwork":[{"url":"https://example.test/one.jpg","role":"thumb"}]}}
+"#;
+        let page = conform_media_list_discover_output(first, true).expect("valid first page");
+        assert!(!page.complete);
+        assert_eq!(page.next_cursor.as_deref(), Some("page-2"));
+        assert_eq!(page.records.len(), 2);
+        assert!(matches!(
+            &page.records[1],
+            AddonMediaListRecord::Item {
+                metadata: Some(AddonMetadataDocument {
+                    release_date: Some(date),
+                    outline: Some(outline),
+                    artwork,
+                    ..
+                }),
+                ..
+            } if date == "2026-08-01" && outline == "Overview one" && artwork.len() == 1
+        ));
+
+        let continuation = br#"{"record_type":"page","complete":true,"revision_token":"rev-1"}
+{"record_type":"item","provider_id":"episode:2","rank":1,"display_title":"Episode 2","title":"Episode 2","kind":"episode"}
+"#;
+        assert!(conform_media_list_discover_output(continuation, false).is_ok());
+    }
+
+    #[test]
+    fn media_list_import_discovery_rejects_no_progress_and_page_conflicts() {
+        let no_progress = br#"{"record_type":"page","complete":false,"next_cursor":"same"}
+{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+"#;
+        assert!(conform_media_list_discover_output(no_progress, true).is_err());
+
+        let duplicate = br#"{"record_type":"page","complete":true}
+{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"episode:1","rank":0,"display_title":"One","title":"One","kind":"episode"}
+{"record_type":"item","provider_id":"episode:1","rank":1,"display_title":"Two","title":"Two","kind":"episode"}
+"#;
+        assert!(conform_media_list_discover_output(duplicate, true).is_err());
+
+        let contradictory = br#"{"record_type":"page","complete":true,"next_cursor":"page-2"}
+{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+"#;
+        assert!(conform_media_list_discover_output(contradictory, true).is_err());
+    }
+
+    #[test]
+    fn media_list_import_enforces_page_item_and_output_bounds() {
+        use std::fmt::Write as _;
+
+        let mut too_many = String::from(
+            "{\"record_type\":\"page\",\"complete\":true}\n\
+             {\"record_type\":\"list\",\"provider_id\":\"fixture/list\",\"name\":\"Fixture\"}\n",
+        );
+        for rank in 0..=MAX_MEDIA_LIST_IMPORT_PAGE_ITEMS {
+            writeln!(
+                too_many,
+                "{{\"record_type\":\"item\",\"provider_id\":\"episode:{rank}\",\"rank\":{rank},\"display_title\":\"Episode {rank}\",\"title\":\"Episode {rank}\",\"kind\":\"episode\"}}"
+            )
+            .expect("writing to a String cannot fail");
+        }
+        assert!(conform_media_list_discover_output(too_many.as_bytes(), true).is_err());
+
+        let oversized_page = vec![b'x'; MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES + 1];
+        assert!(conform_media_list_discover_output(&oversized_page, true).is_err());
+        let oversized_item = vec![b'x'; MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES + 1];
+        assert!(conform_media_list_enrich_output(&oversized_item, "episode:1").is_err());
+
+        let mut invalid_limits = MediaListDiscoverRequest {
+            source_url: "https://example.test/programmes".to_owned(),
+            record_capability: CAPABILITY_MEDIA_LIST_LIST_V5.to_owned(),
+            cursor: None,
+            limits: MediaListDiscoverLimits::default(),
+        };
+        invalid_limits.limits.max_items = 0;
+        assert!(invalid_limits.validate().is_err());
+        invalid_limits.limits = MediaListDiscoverLimits::default();
+        invalid_limits.limits.max_output_bytes = 0;
+        assert!(invalid_limits.validate().is_err());
+    }
+
+    #[test]
+    fn media_list_import_enrichment_requires_typed_identity_preserving_results() {
+        let complete = br#"{"record_type":"outcome","outcome":"complete"}
+{"record_type":"item","provider_id":"episode:1","rank":0,"display_title":"One","title":"One","kind":"episode","metadata":{"plot":"Full detail"}}
+"#;
+        let result =
+            conform_media_list_enrich_output(complete, "episode:1").expect("valid complete result");
+        assert_eq!(result.outcome, MediaListEnrichOutcomeKind::Complete);
+        assert!(result.item.is_some());
+
+        let unavailable = br#"{"record_type":"outcome","outcome":"unavailable","code":"not-found","message":"Removed"}
+{"record_type":"item","provider_id":"episode:1","rank":0,"display_title":"One","title":"One","kind":"episode","availability":"unavailable","availability_reason":"not-found"}
+"#;
+        assert!(conform_media_list_enrich_output(unavailable, "episode:1").is_ok());
+
+        let transient = br#"{"record_type":"outcome","outcome":"transient_failure","code":"provider-rate-limited","message":"Try later","retry_after_seconds":120}
+"#;
+        assert!(conform_media_list_enrich_output(transient, "episode:1").is_ok());
+
+        let wrong_identity = complete
+            .windows(b"episode:1".len())
+            .position(|window| window == b"episode:1")
+            .map(|_| complete)
+            .expect("fixture contains identity");
+        assert!(conform_media_list_enrich_output(wrong_identity, "episode:2").is_err());
+
+        let missing_item = br#"{"record_type":"outcome","outcome":"complete"}
+"#;
+        assert!(conform_media_list_enrich_output(missing_item, "episode:1").is_err());
+    }
+
+    #[test]
     fn list_contracts_reject_and_name_unknown_fields() {
         let media_list = br#"{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
 {"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Movie","title":"Movie","kind":"movie","geners":[]}
@@ -2851,6 +3640,74 @@ mod tests {
             serde_json::to_string(&record).unwrap(),
             r#"{"record_type":"item","provider_id":"movie:1","rank":0,"display_title":"Movie","title":"Movie","kind":"movie","guids":[]}"#
         );
+    }
+
+    #[test]
+    fn media_list_liveness_accepts_three_values_and_treats_null_as_unknown() {
+        for (value, expected) in [
+            ("unknown", RemoteStreamLiveness::Unknown),
+            ("finite", RemoteStreamLiveness::Finite),
+            ("live", RemoteStreamLiveness::Live),
+        ] {
+            let output = format!(
+                "{{\"record_type\":\"list\",\"provider_id\":\"fixture/list\",\"name\":\"Fixture\"}}\n\
+                 {{\"record_type\":\"item\",\"provider_id\":\"video:1\",\"rank\":0,\"display_title\":\"Video\",\"title\":\"Video\",\"kind\":\"remote_stream\",\"source_url\":\"https://example.test/video\",\"liveness\":\"{value}\"}}\n"
+            );
+            let records = conform_media_list_output(output.as_bytes()).expect("valid liveness");
+            assert!(matches!(
+                &records[1],
+                AddonMediaListRecord::Item {
+                    liveness: Some(actual),
+                    ..
+                } if *actual == expected
+            ));
+        }
+
+        for suffix in ["", ",\"liveness\":null"] {
+            let output = format!(
+                "{{\"record_type\":\"list\",\"provider_id\":\"fixture/list\",\"name\":\"Fixture\"}}\n\
+                 {{\"record_type\":\"item\",\"provider_id\":\"video:1\",\"rank\":0,\"display_title\":\"Video\",\"title\":\"Video\",\"kind\":\"remote_stream\",\"source_url\":\"https://example.test/video\"{suffix}}}\n"
+            );
+            let records = conform_media_list_output(output.as_bytes()).expect("absent liveness");
+            assert!(matches!(
+                &records[1],
+                AddonMediaListRecord::Item { liveness: None, .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn remote_stream_liveness_adapts_legacy_values_and_rejects_conflicts() {
+        let cases = [
+            (
+                r#"{"id":"one","url":"https://example.test/one","title":"One","is_live":true}"#,
+                RemoteStreamLiveness::Live,
+            ),
+            (
+                r#"{"id":"one","url":"https://example.test/one","title":"One","is_live":false}"#,
+                RemoteStreamLiveness::Finite,
+            ),
+            (
+                r#"{"id":"one","url":"https://example.test/one","title":"One","duration_seconds":60}"#,
+                RemoteStreamLiveness::Finite,
+            ),
+            (
+                r#"{"id":"one","url":"https://example.test/one","title":"One"}"#,
+                RemoteStreamLiveness::Unknown,
+            ),
+            (
+                r#"{"id":"one","url":"https://example.test/one","title":"One","liveness":"unknown"}"#,
+                RemoteStreamLiveness::Unknown,
+            ),
+        ];
+        for (line, expected) in cases {
+            let entries = conform_remote_stream_list_output(line.as_bytes())
+                .expect("compatible Remote Stream liveness");
+            assert_eq!(entries[0].effective_liveness().unwrap(), expected);
+        }
+
+        let contradictory = br#"{"id":"one","url":"https://example.test/one","title":"One","is_live":false,"liveness":"live"}"#;
+        assert!(conform_remote_stream_list_output(contradictory).is_err());
     }
 
     #[test]

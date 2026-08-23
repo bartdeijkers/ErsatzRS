@@ -5,9 +5,11 @@ use ersatzrs_core::repositories::{
     ProgramScheduleRepository,
 };
 use ersatzrs_domain::{
-    CollectionEnumeratorState, CollectionType, Playout, PlayoutProgramScheduleAnchor,
-    PlayoutScheduleItemFillGroupIndex, ProgramSchedule,
+    AddonMediaListDetailPolicy, AddonMediaListImportState, CollectionEnumeratorState,
+    CollectionType, Playout, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+    ProgramSchedule,
 };
+use ersatzrs_infra::addon_media_list_import::AddonMediaListImportCoordinator;
 use ersatzrs_infra::db;
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::Row;
@@ -282,6 +284,139 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
     assert_ne!(anchor_ids[0], anchor_ids[1]);
     assert_eq!(fill_group_ids.len(), 2);
     assert_ne!(fill_group_ids[0], fill_group_ids[1]);
+}
+
+#[tokio::test]
+async fn mysql_persists_resumable_addon_import_progress_and_policy() {
+    #[allow(clippy::disallowed_methods)]
+    let Ok(database_url) = std::env::var("ERSATZRS_MYSQL_TEST_URL") else {
+        eprintln!("skipping MySQL add-on import test: ERSATZRS_MYSQL_TEST_URL is not set");
+        return;
+    };
+
+    let pool = db::init(&database_url)
+        .await
+        .expect("initialize MySQL test database");
+    let suffix = uuid::Uuid::new_v4().simple().to_string();
+    let addon_id = format!("org.ersatzrs.mysql.{suffix}");
+    let source_url = format!("https://mysql.example.test/{suffix}");
+    let now = chrono::Utc::now().to_rfc3339();
+    sqlx::query(
+        r#"INSERT INTO "AddonInstallation" (
+               "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+               "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+           ) VALUES (?, '1.0.0', 1, ?, ?, '{}', ?, ?, ?)"#,
+    )
+    .bind(&addon_id)
+    .bind("a".repeat(64))
+    .bind("b".repeat(64))
+    .bind(format!("addons/{suffix}"))
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .expect("seed MySQL add-on installation");
+    let inserted = sqlx::query(
+        r#"INSERT INTO "AddonMediaList" (
+               "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount",
+               "ProviderMetadataJson", "MetadataOverrideJson", "DetailImportPolicy"
+           ) VALUES (?, ?, ?, 'MySQL resumable import', 37, '{}', '{}', 0)"#,
+    )
+    .bind(&addon_id)
+    .bind(format!("fixture/{suffix}"))
+    .bind(&source_url)
+    .execute(&pool)
+    .await
+    .expect("seed MySQL add-on list");
+    let list_id = i64::try_from(db::last_insert_id(inserted)).expect("MySQL list identity");
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListImportJob" (
+               "AddonMediaListId", "Generation", "State", "RecordCapability",
+               "DiscoveredCount", "OverviewComplete", "CreatedAt", "UpdatedAt",
+               "LastProgressAt", "CompletedAt"
+           ) VALUES (?, 1, 3, 'media-list.list.v5', 37, 1, ?, ?, ?, ?)"#,
+    )
+    .bind(list_id)
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .expect("persist MySQL import checkpoint");
+
+    let coordinator = AddonMediaListImportCoordinator::new(pool.clone());
+    let progress = coordinator
+        .progress(list_id)
+        .await
+        .expect("read MySQL import progress")
+        .expect("progress row");
+    assert_eq!(progress.state, AddonMediaListImportState::Ready);
+    assert_eq!(progress.discovered_count, 37);
+    coordinator
+        .set_detail_policy(list_id, AddonMediaListDetailPolicy::ManualOnly)
+        .await
+        .expect("persist MySQL manual-only policy");
+    let policy: i32 =
+        sqlx::query_scalar(r#"SELECT "DetailImportPolicy" FROM "AddonMediaList" WHERE "Id" = ?"#)
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("read MySQL detail policy");
+    assert_eq!(policy, 1);
+
+    sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?), (?, ?)"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MINIMUM_SECONDS)
+        .bind("7")
+        .bind(ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS)
+        .bind("11")
+        .execute(&pool)
+        .await
+        .expect("persist MySQL add-on detail wait settings");
+    sqlx::query(
+        r#"INSERT INTO "AddonProviderHostCooldown" (
+               "ProviderHost", "NextEligibleAt", "SampledDelaySeconds",
+               "LastAttemptAt", "UpdatedAt"
+           ) VALUES (?, ?, 9, ?, ?)"#,
+    )
+    .bind(format!("{suffix}.example.test"))
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .execute(&pool)
+    .await
+    .expect("persist MySQL provider cooldown");
+    let sampled_delay: i32 = sqlx::query_scalar(
+        r#"SELECT "SampledDelaySeconds" FROM "AddonProviderHostCooldown"
+           WHERE "ProviderHost" = ?"#,
+    )
+    .bind(format!("{suffix}.example.test"))
+    .fetch_one(&pool)
+    .await
+    .expect("read MySQL provider cooldown");
+    assert_eq!(sampled_delay, 9);
+
+    sqlx::query(r#"DELETE FROM "AddonMediaList" WHERE "Id" = ?"#)
+        .bind(list_id)
+        .execute(&pool)
+        .await
+        .expect("remove MySQL list fixture");
+    sqlx::query(r#"DELETE FROM "AddonInstallation" WHERE "AddonId" = ?"#)
+        .bind(&addon_id)
+        .execute(&pool)
+        .await
+        .expect("remove MySQL add-on fixture");
+    sqlx::query(r#"DELETE FROM "AddonProviderHostCooldown" WHERE "ProviderHost" = ?"#)
+        .bind(format!("{suffix}.example.test"))
+        .execute(&pool)
+        .await
+        .expect("remove MySQL provider cooldown fixture");
+    sqlx::query(r#"DELETE FROM "ConfigElement" WHERE "Key" IN (?, ?)"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MINIMUM_SECONDS)
+        .bind(ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS)
+        .execute(&pool)
+        .await
+        .expect("remove MySQL add-on detail wait settings");
 }
 
 /// The graph-state row's persist/overwrite/clear/reload lifecycle on `MySQL`.

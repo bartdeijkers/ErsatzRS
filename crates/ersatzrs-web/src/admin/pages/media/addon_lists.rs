@@ -5,8 +5,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemRole,
-    AddonMediaListPresentationKind, AddonMediaListReviewState,
+    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
+    AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListReviewState,
+    RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
@@ -15,21 +17,22 @@ use crate::admin::i18n::{
     addon_media_list_error_message, delete_failed, match_status, range_of, save_failed, tr, TextKey,
 };
 use crate::admin::server_fns::addon_media_lists::{
-    add_addon_media_list, apply_addon_media_list_content_kind,
+    add_addon_media_list, apply_addon_media_list_content_kind, apply_addon_media_list_liveness,
     assign_addon_media_list_episode_numbers, change_addon_media_list_addon,
-    delete_addon_media_list, get_addon_media_list_form, get_addon_media_list_item,
-    get_addon_media_list_show_nfo, get_addon_media_lists_page_size, list_addon_media_list_items,
-    list_addon_media_list_providers, list_addon_media_lists, match_addon_media_list,
-    publish_addon_media_list, request_addon_media_list_presentation,
-    resolve_addon_media_list_provider, save_addon_media_list_item_nfo,
-    save_addon_media_list_show_nfo, search_addon_media_list_replacements,
-    set_addon_media_list_item_content_kind, set_addon_media_list_item_included,
+    control_addon_media_list_import, delete_addon_media_list, get_addon_media_list_form,
+    get_addon_media_list_item, get_addon_media_list_show_nfo, get_addon_media_lists_page_size,
+    list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
+    match_addon_media_list, publish_addon_media_list, request_addon_media_list_item_details,
+    request_addon_media_list_presentation, resolve_addon_media_list_provider,
+    save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
+    search_addon_media_list_replacements, set_addon_media_list_item_content_kind,
+    set_addon_media_list_item_included, set_addon_media_list_item_liveness,
     set_addon_media_list_item_replacement, set_addon_media_list_item_role, update_addon_media_list,
     update_addon_media_list_item_chapters, AddonMediaListArtwork, AddonMediaListArtworkRole,
-    AddonMediaListForm, AddonMediaListItemDetail, AddonMediaListItemRow,
-    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
-    AddonMediaListNfoPerson, AddonMediaListProviderRow, AddonMediaListReplacementRow,
-    AddonMediaListRow,
+    AddonMediaListForm, AddonMediaListImportAction, AddonMediaListImportProgressRow,
+    AddonMediaListItemDetail, AddonMediaListItemRow, AddonMediaListMetadataConflict,
+    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
+    AddonMediaListProviderRow, AddonMediaListReplacementRow, AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
@@ -264,10 +267,134 @@ type ReplacementAction = Action<(i64, Option<(i64, i64)>), Result<(), ServerFnEr
 type ContentKindAction = Action<(i64, AddonMediaListContentKind), Result<(), ServerFnError>>;
 type InclusionAction = Action<(i64, i64, bool), Result<(), ServerFnError>>;
 type ItemRoleAction = Action<(i64, i64, AddonMediaListItemRole), Result<(), ServerFnError>>;
+type LivenessAction = Action<(i64, i64, Option<RemoteStreamLiveness>), Result<(), ServerFnError>>;
 type ItemDetailAction = Action<i64, Result<Option<AddonMediaListItemDetail>, ServerFnError>>;
+type DetailRequestAction = Action<(i64, i64), Result<(), ServerFnError>>;
 /// Searching local media that could replace one entry.
 type ReplacementSearchAction =
     Action<String, Result<Vec<AddonMediaListReplacementRow>, ServerFnError>>;
+
+const fn liveness_text_key(liveness: RemoteStreamLiveness) -> TextKey {
+    match liveness {
+        RemoteStreamLiveness::Unknown => TextKey::UnknownAvailability,
+        RemoteStreamLiveness::Finite => TextKey::FiniteMedia,
+        RemoteStreamLiveness::Live => TextKey::LiveSource,
+    }
+}
+
+const fn detail_state_text_key(state: AddonMediaListDetailState) -> TextKey {
+    match state {
+        AddonMediaListDetailState::NotRequested => TextKey::FetchDetails,
+        AddonMediaListDetailState::Queued => TextKey::DetailsQueued,
+        AddonMediaListDetailState::WaitingForSlot => TextKey::WaitingForProvider,
+        AddonMediaListDetailState::Running => TextKey::DetailsLoading,
+        AddonMediaListDetailState::WaitingToRetry | AddonMediaListDetailState::Failed => {
+            TextKey::RetryDetails
+        }
+        AddonMediaListDetailState::Complete => TextKey::DetailsComplete,
+        AddonMediaListDetailState::Skipped => TextKey::DetailsSkipped,
+    }
+}
+
+const fn import_state_text_key(state: AddonMediaListImportState) -> TextKey {
+    match state {
+        AddonMediaListImportState::Queued | AddonMediaListImportState::Discovering => {
+            TextKey::FindingProgrammes
+        }
+        AddonMediaListImportState::Verifying => TextKey::CheckingOverview,
+        AddonMediaListImportState::Ready => TextKey::ReadyToReview,
+        AddonMediaListImportState::Paused => TextKey::PauseImport,
+        AddonMediaListImportState::NeedsAttention => TextKey::NeedReview,
+        AddonMediaListImportState::Cancelled => TextKey::CancelImport,
+        AddonMediaListImportState::Superseded => TextKey::Import,
+    }
+}
+
+fn import_progress_phase(
+    progress: &AddonMediaListImportProgressRow,
+    published: bool,
+    policy: AddonMediaListDetailPolicy,
+) -> TextKey {
+    if progress.state == AddonMediaListImportState::Ready {
+        if progress.detail_pending > 0 {
+            return if progress.current_title.is_some() {
+                TextKey::LoadingItemDetails
+            } else {
+                TextKey::WaitingForProvider
+            };
+        }
+        if published && policy == AddonMediaListDetailPolicy::ManualOnly {
+            return TextKey::OverviewOnly;
+        }
+    }
+    import_state_text_key(progress.state)
+}
+
+fn format_clock_duration(seconds: u64) -> String {
+    let hours = seconds / 3_600;
+    let minutes = seconds % 3_600 / 60;
+    let seconds = seconds % 60;
+    if hours > 0 {
+        format!("{hours:02}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes:02}:{seconds:02}")
+    }
+}
+
+fn elapsed_from(started_at: &str) -> Option<String> {
+    let started = chrono::DateTime::parse_from_rfc3339(started_at).ok()?;
+    let seconds = u64::try_from(
+        (chrono::Utc::now() - started.with_timezone(&chrono::Utc))
+            .num_seconds()
+            .max(0),
+    )
+    .ok()?;
+    Some(format_clock_duration(seconds))
+}
+
+fn format_progress_timestamp(value: &str) -> Option<String> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .ok()
+        .map(|timestamp| timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+}
+
+fn progress_sample(progress: &AddonMediaListImportProgressRow) -> (bool, u64, Option<u64>) {
+    let detail_done = progress
+        .detail_complete
+        .saturating_add(progress.detail_skipped)
+        .saturating_add(progress.detail_failed);
+    if progress.detail_pending > 0 || detail_done > 0 {
+        (true, detail_done, Some(progress.detail_total))
+    } else {
+        (false, progress.discovered_count, progress.total_hint)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn browser_now_millis() -> f64 {
+    js_sys::Date::now()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn browser_now_millis() -> f64 {
+    0.0
+}
+
+const fn liveness_override_value(liveness: Option<RemoteStreamLiveness>) -> &'static str {
+    match liveness {
+        None | Some(RemoteStreamLiveness::Unknown) => "provider",
+        Some(RemoteStreamLiveness::Finite) => "finite",
+        Some(RemoteStreamLiveness::Live) => "live",
+    }
+}
+
+fn liveness_override_from_value(value: &str) -> Option<RemoteStreamLiveness> {
+    match value {
+        "finite" => Some(RemoteStreamLiveness::Finite),
+        "live" => Some(RemoteStreamLiveness::Live),
+        _ => None,
+    }
+}
 
 /// One item row, identical in all three sections.
 ///
@@ -284,10 +411,14 @@ fn item_row_view(
     content_kind_action: ContentKindAction,
     inclusion_action: InclusionAction,
     role_action: ItemRoleAction,
+    liveness_action: LivenessAction,
+    selected_items: RwSignal<BTreeSet<i64>>,
+    episode_preview: Memo<BTreeMap<i64, (i32, i32)>>,
     presentation: RwSignal<AddonMediaListPresentationKind>,
     open_item: RwSignal<Option<i64>>,
     loaded_detail: RwSignal<Option<AddonMediaListItemDetail>>,
     detail_action: ItemDetailAction,
+    request_detail_action: DetailRequestAction,
 ) -> AnyView {
     let item_id = item.id;
     let title = item.display_title.clone();
@@ -310,12 +441,21 @@ fn item_row_view(
     let content_kind = item.content_kind;
     let collection_role = item.collection_role;
     let included = item.included;
-    let episode_number = item
+    let current_episode_number = item
         .season
         .zip(item.episode)
         .map(|(season, episode)| format!("S{season:02}E{episode:02}"));
-    let has_episode_number = episode_number.is_some();
-    let episode_number = episode_number.unwrap_or_default();
+    let current_episode_number = current_episode_number.unwrap_or_default();
+    let first_aired = item
+        .first_aired
+        .clone()
+        .unwrap_or_else(|| tr(TextKey::UnknownAvailability).to_string());
+    let row_number = item.rank.saturating_add(1).to_string();
+    let is_remote_stream = item.kind == AddonMediaListItemKind::RemoteStream;
+    let provider_liveness = item.provider_liveness;
+    let liveness_override = item.liveness_override;
+    let effective_liveness = item.effective_liveness;
+    let liveness_conflict = item.liveness_conflict;
     let thumbnail_url = item.thumbnail_url.clone().unwrap_or_default();
     let has_thumbnail = !thumbnail_url.is_empty();
     let tags_summary = item
@@ -333,9 +473,26 @@ fn item_row_view(
         .collect::<Vec<_>>()
         .join(", ");
     let has_metadata_summary = !tags_summary.is_empty() || !people_summary.is_empty();
+    let detail_state = item.detail_state;
+    let detail_diagnostic = item.detail_diagnostic.clone().unwrap_or_default();
+    let detail_pending = matches!(
+        detail_state,
+        AddonMediaListDetailState::Queued
+            | AddonMediaListDetailState::WaitingForSlot
+            | AddonMediaListDetailState::Running
+    );
+    let detail_terminal = matches!(
+        detail_state,
+        AddonMediaListDetailState::Complete | AddonMediaListDetailState::Skipped
+    );
+    let detail_action_label = format!("{}: {title}", tr(detail_state_text_key(detail_state)));
+    let can_request_details =
+        item.parent_provider_id.is_none() && !detail_pending && !detail_terminal;
     let base_needs_review = item.availability != AddonMediaListItemAvailability::Available
         || (item.replacement_media_version_id.is_some() && !item.replacement_valid)
         || item.title.trim().is_empty()
+        || (is_remote_stream
+            && (effective_liveness == RemoteStreamLiveness::Unknown || liveness_conflict))
         || (presentation.get_untracked() == AddonMediaListPresentationKind::TelevisionShow
             && (item.season.is_none() || item.episode.is_none()));
     let availability_reason = item.availability_reason.unwrap_or_default();
@@ -353,10 +510,35 @@ fn item_row_view(
     view! {
         <>
         <tr
-            class=style::metadata_item_row
+            class=move || if episode_preview.with(|preview| preview.contains_key(&item_id)) {
+                format!("{} {}", style::metadata_item_row, style::numbering_preview_row)
+            } else {
+                style::metadata_item_row.to_owned()
+            }
             aria-expanded=move || if open_item.get() == Some(item_id) { "true" } else { "false" }
             on:click=move |_| toggle_editor()
         >
+            <td class=style::selection_cell>
+                <input
+                    type="checkbox"
+                    aria-label=tr(TextKey::SelectItem)
+                    style:visibility=if is_remote_stream { "visible" } else { "hidden" }
+                    prop:checked=move || selected_items.with(|selected| selected.contains(&item_id))
+                    on:change=move |event| {
+                        event.stop_propagation();
+                        let checked = event_target_checked(&event);
+                        selected_items.update(|selected| {
+                            if checked {
+                                selected.insert(item_id);
+                            } else {
+                                selected.remove(&item_id);
+                            }
+                        });
+                    }
+                    on:click=|event| event.stop_propagation()
+                />
+            </td>
+            <td class=style::number_cell>{row_number}</td>
             <td>
                 <input
                     type="checkbox"
@@ -383,10 +565,6 @@ fn item_row_view(
                     toggle_editor();
                 }>{title}</button>
                 <small
-                    class=style::episode_number
-                    style:display=if has_episode_number { "" } else { "none" }
-                >{episode_number}</small>
-                <small
                     class=style::row_note
                     style:display=if has_reason { "" } else { "none" }
                 >{availability_reason}</small>
@@ -399,6 +577,25 @@ fn item_row_view(
                         tags_summary
                     }}
                 </small>
+            </td>
+            <td class=style::compact_cell>{first_aired}</td>
+            <td class=style::episode_cell>
+                {move || {
+                    if let Some((season, episode)) =
+                        episode_preview.with(|preview| preview.get(&item_id).copied())
+                    {
+                        let next = format!("S{season:02}E{episode:02}");
+                        if current_episode_number.is_empty() || current_episode_number == next {
+                            next
+                        } else {
+                            format!("{current_episode_number} → {next}")
+                        }
+                    } else if current_episode_number.is_empty() {
+                        "—".to_owned()
+                    } else {
+                        current_episode_number.clone()
+                    }
+                }}
             </td>
             <td>
                 {move || if presentation.get() == AddonMediaListPresentationKind::Movies {
@@ -453,6 +650,34 @@ fn item_row_view(
                     }.into_any()
                 }}
             </td>
+            <td class=style::liveness_cell>
+                <select
+                    class=style::row_select
+                    aria-label=tr(TextKey::PlaybackBehavior)
+                    style:display=if is_remote_stream { "block" } else { "none" }
+                    prop:value=liveness_override_value(liveness_override)
+                    on:click=|event| event.stop_propagation()
+                    on:change=move |event| {
+                        event.stop_propagation();
+                        liveness_action.dispatch((
+                            list_id,
+                            item_id,
+                            liveness_override_from_value(&event_target_value(&event)),
+                        ));
+                    }
+                >
+                    <option value="provider">
+                        {format!("{} · {}", tr(TextKey::UseProviderValue), tr(liveness_text_key(provider_liveness)))}
+                    </option>
+                    <option value="finite">{tr(TextKey::FiniteMedia)}</option>
+                    <option value="live">{tr(TextKey::LiveSource)}</option>
+                </select>
+                <small
+                    class=style::liveness_conflict
+                    style:display=if is_remote_stream && liveness_conflict { "block" } else { "none" }
+                >{tr(TextKey::ProviderValueChanged)}</small>
+                <span style:display=if is_remote_stream { "none" } else { "inline" }>"—"</span>
+            </td>
             <td data-replacement-state=replacement_state title=item.replacement_path.unwrap_or_default()>
                 <span class=move || if base_needs_review
                     || (presentation.get() == AddonMediaListPresentationKind::Movies
@@ -486,6 +711,42 @@ fn item_row_view(
             </td>
             <td>
                 <div class=style::row_actions>
+                    <button
+                        type="button"
+                        class=style::detail_action
+                        title=move || {
+                            if detail_diagnostic.is_empty() {
+                                tr(detail_state_text_key(detail_state)).to_string()
+                            } else {
+                                format!("{}: {detail_diagnostic}", tr(detail_state_text_key(detail_state)))
+                            }
+                        }
+                        aria-label=detail_action_label
+                        aria-busy=if detail_pending { "true" } else { "false" }
+                        style:display=if item.parent_provider_id.is_none() { "inline-flex" } else { "none" }
+                        disabled=move || !can_request_details || request_detail_action.pending().get()
+                        on:click=move |event| {
+                            event.stop_propagation();
+                            request_detail_action.dispatch((list_id, item_id));
+                        }
+                    >
+                        <span
+                            style=icon_style(
+                                match detail_state {
+                                    AddonMediaListDetailState::Complete => IconName::Check,
+                                    AddonMediaListDetailState::Queued
+                                    | AddonMediaListDetailState::WaitingForSlot
+                                    | AddonMediaListDetailState::Running => IconName::Clock,
+                                    AddonMediaListDetailState::WaitingToRetry
+                                    | AddonMediaListDetailState::Failed => IconName::Refresh,
+                                    _ => IconName::Download,
+                                },
+                                "1rem",
+                            )
+                            aria-hidden="true"
+                        ></span>
+                        <span>{tr(detail_state_text_key(detail_state))}</span>
+                    </button>
                     <button
                         type="button"
                         class=style::icon_button
@@ -532,7 +793,7 @@ fn item_row_view(
             class=style::metadata_accordion_row
             style:display=move || if open_item.get() == Some(item_id) { "table-row" } else { "none" }
         >
-            <td colspan="6">
+            <td colspan="11">
                 {move || loaded_detail.get().map_or_else(
                     || view! { <p class=style::inline_loading>{tr(TextKey::Loading)}</p> }.into_any(),
                     |detail| view! {
@@ -865,6 +1126,7 @@ fn AddonMediaListsIsland(
     let add_source_url = RwSignal::new(String::new());
     let add_folder_name = RwSignal::new(String::new());
     let add_content_kind = RwSignal::new(AddonMediaListContentKind::Auto);
+    let add_load_item_details = RwSignal::new(true);
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
     // The plain HTML form path distinguishes an unroutable URL from a generic
@@ -888,8 +1150,9 @@ fn AddonMediaListsIsland(
     });
 
     let add_action = Action::new(
-        |value: &(String, String, String, AddonMediaListContentKind)| {
-            let (addon_id, source_url, folder_name, content_kind_override) = value.clone();
+        |value: &(String, String, String, AddonMediaListContentKind, bool)| {
+            let (addon_id, source_url, folder_name, content_kind_override, load_item_details) =
+                value.clone();
             async move {
                 add_addon_media_list(
                     addon_id,
@@ -897,6 +1160,7 @@ fn AddonMediaListsIsland(
                     folder_name,
                     content_kind_override,
                     String::new(),
+                    load_item_details,
                 )
                 .await
             }
@@ -920,6 +1184,7 @@ fn AddonMediaListsIsland(
                     add_folder_name.set(String::new());
                     add_addon_id.set(String::new());
                     add_addon_chosen.set(false);
+                    add_load_item_details.set(true);
                     add_open.set(false);
                     data.refetch();
                 }
@@ -1040,11 +1305,32 @@ fn AddonMediaListsIsland(
                                                         u64::try_from(row.match_count).unwrap_or_default(),
                                                         u64::try_from(row.item_count).unwrap_or_default(),
                                                     );
+                                                    let import_summary = row.import_progress.as_ref().map_or_else(|| {
+                                                        if row.detail_import_policy == AddonMediaListDetailPolicy::ManualOnly {
+                                                            tr(TextKey::OverviewOnly).to_string()
+                                                        } else {
+                                                            String::new()
+                                                        }
+                                                    }, |progress| {
+                                                        format!(
+                                                            "{} · {} {} · {} / {} {}",
+                                                            tr(import_state_text_key(progress.state)),
+                                                            progress.discovered_count,
+                                                            tr(TextKey::Discovered),
+                                                            progress.detail_complete,
+                                                            progress.detail_total,
+                                                            tr(TextKey::Details),
+                                                        )
+                                                    });
+                                                    let has_import_summary = !import_summary.is_empty();
                                                     let row_for_delete = row.clone();
                                                     view! {
                                                         <tr>
                                                             <td>{format!("{addon_id} / {provider_id}")}</td>
-                                                            <td>{name}</td>
+                                                            <td>
+                                                                <span>{name}</span>
+                                                                <small class=style::row_note style:display=if has_import_summary { "block" } else { "none" }>{import_summary}</small>
+                                                            </td>
                                                             <td>{match_status}</td>
                                                             <td>
                                                                 <div class=style::row_actions>
@@ -1167,8 +1453,9 @@ fn AddonMediaListsIsland(
                 source_url=add_source_url
                 folder_name=add_folder_name
                 content_kind=add_content_kind
+                load_item_details=add_load_item_details
                 providers=providers
-                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind)| {
+                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind, bool)| {
                     add_action.dispatch(value);
                 })
             />
@@ -1201,8 +1488,9 @@ fn AddAddonMediaListDialog(
     source_url: RwSignal<String>,
     folder_name: RwSignal<String>,
     content_kind: RwSignal<AddonMediaListContentKind>,
+    load_item_details: RwSignal<bool>,
     providers: Vec<AddonMediaListProviderRow>,
-    on_submit: Callback<(String, String, String, AddonMediaListContentKind)>,
+    on_submit: Callback<(String, String, String, AddonMediaListContentKind, bool)>,
 ) -> impl IntoView {
     // Resolving on change rather than on every keystroke keeps one request per
     // pasted or completed URL instead of one per character.
@@ -1251,11 +1539,12 @@ fn AddAddonMediaListDialog(
                         let source_url = source_url.get_untracked();
                         let folder_name = folder_name.get_untracked();
                         let content_kind = content_kind.get_untracked();
+                        let load_item_details = load_item_details.get_untracked();
                         // The add-on may be empty: the server resolves it
                         // from the URL, so the same rule applies to the plain
                         // HTML form post.
                         if !source_url.trim().is_empty() {
-                            on_submit.run((addon_id, source_url, folder_name, content_kind));
+                            on_submit.run((addon_id, source_url, folder_name, content_kind, load_item_details));
                         }
                     }
                 >
@@ -1343,6 +1632,19 @@ fn AddAddonMediaListDialog(
                                 prop:value=move || folder_name.get()
                                 on:input=move |event| folder_name.set(event_target_value(&event))
                             />
+                        </label>
+                        <label class=style::playlist_option>
+                            <input
+                                type="checkbox"
+                                name="load_item_details"
+                                value="true"
+                                prop:checked=move || load_item_details.get()
+                                on:change=move |event| load_item_details.set(event_target_checked(&event))
+                            />
+                            <span>
+                                <b>{tr(TextKey::LoadItemDetailsAfterPublishing)}</b>
+                                <small>{tr(TextKey::LoadItemDetailsHelp)}</small>
+                            </span>
                         </label>
                     </div>
                     <div class=style::dialog_footer>
@@ -1435,6 +1737,7 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
     let presentation = RwSignal::new(AddonMediaListPresentationKind::TelevisionShow);
     let auto_refresh = RwSignal::new(true);
     let generate_playlist = RwSignal::new(false);
+    let load_item_details = RwSignal::new(true);
     let resolved_name = RwSignal::new(String::new());
     let toast = use_toast();
 
@@ -1466,9 +1769,17 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
             AddonMediaListPresentationKind,
             bool,
             bool,
+            bool,
         )| {
-            let (addon_id, source_url, folder_name, presentation, auto_refresh, playlist) =
-                value.clone();
+            let (
+                addon_id,
+                source_url,
+                folder_name,
+                presentation,
+                auto_refresh,
+                playlist,
+                load_item_details,
+            ) = value.clone();
             async move {
                 let id = add_addon_media_list(
                     addon_id,
@@ -1476,6 +1787,7 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                     folder_name,
                     presentation_content_kind(presentation),
                     String::new(),
+                    load_item_details,
                 )
                 .await?;
                 let mut form = get_addon_media_list_form(id)
@@ -1534,6 +1846,7 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                             presentation.get_untracked(),
                             auto_refresh.get_untracked(),
                             generate_playlist.get_untracked(),
+                            load_item_details.get_untracked(),
                         ));
                     }
                 }>
@@ -1633,6 +1946,18 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                         <span>
                             <b>{tr(TextKey::GeneratePlaylist)}</b>
                             <small>{tr(TextKey::GeneratePlaylistFromSortedAddonMediaListItems)}</small>
+                        </span>
+                    </label>
+
+                    <label class=style::playlist_option>
+                        <input type="checkbox" prop:checked=move || load_item_details.get() on:change=move |event| load_item_details.set(event_target_checked(&event))/>
+                        <span>
+                            <b>{tr(TextKey::LoadItemDetailsAfterPublishing)}</b>
+                            <small>{move || tr(if load_item_details.get() {
+                                TextKey::LoadItemDetailsHelp
+                            } else {
+                                TextKey::OverviewOnlyManualDetailsHelp
+                            })}</small>
                         </span>
                     </label>
 
@@ -1937,6 +2262,8 @@ fn item_needs_review(
         || item.metadata_conflict_count > 0
         || (item.replacement_media_version_id.is_some() && !item.replacement_valid)
         || item.title.trim().is_empty()
+        || (item.kind == AddonMediaListItemKind::RemoteStream
+            && (item.effective_liveness == RemoteStreamLiveness::Unknown || item.liveness_conflict))
         || (presentation == AddonMediaListPresentationKind::TelevisionShow
             && (item.season.is_none() || item.episode.is_none()))
         || (presentation == AddonMediaListPresentationKind::Movies
@@ -1987,6 +2314,31 @@ fn episode_numbering_preview_values(
     values
 }
 
+fn episode_numbering_preview_assignments(
+    items: &[AddonMediaListItemRow],
+    season: i32,
+    starting_episode: i32,
+    count: usize,
+    replace_existing: bool,
+) -> BTreeMap<i64, (i32, i32)> {
+    let item_ids = items
+        .iter()
+        .filter(|item| item.included && item.parent_provider_id.is_none())
+        .filter(|item| {
+            replace_existing
+                || item.season.is_none_or(|value| value < 0)
+                || item.episode.is_none_or(|value| value < 1)
+        })
+        .take(count)
+        .map(|item| item.id);
+    let values =
+        episode_numbering_preview_values(items, season, starting_episode, count, replace_existing);
+    item_ids
+        .zip(values)
+        .map(|(item_id, episode)| (item_id, (season, episode)))
+        .collect()
+}
+
 const fn item_section_heading(presentation: AddonMediaListPresentationKind) -> TextKey {
     match presentation {
         AddonMediaListPresentationKind::Movies => TextKey::MovieFilesAndExtras,
@@ -2032,6 +2384,28 @@ fn AddonMediaListEditorIsland(
     let submit_source_url = source_url.clone();
     let auto_refresh = RwSignal::new(form.auto_refresh);
     let generate_playlist = RwSignal::new(form.generate_playlist);
+    let detail_import_policy = RwSignal::new(form.detail_import_policy);
+    let import_progress = RwSignal::new(form.import_progress.clone());
+    let published_revision = RwSignal::new(form.published_revision);
+    let poll_epoch = RwSignal::new(0_u64);
+    let poll_running = RwSignal::new(false);
+    let progress_rate_sample = RwSignal::new(None::<(bool, u64, f64)>);
+    let progress_live_summary = RwSignal::new(
+        form.import_progress
+            .as_ref()
+            .map(|progress| {
+                format!(
+                    "{}: {}",
+                    tr(import_progress_phase(
+                        progress,
+                        form.published_revision > 0,
+                        form.detail_import_policy,
+                    )),
+                    progress.discovered_count
+                )
+            })
+            .unwrap_or_default(),
+    );
     let content_kind_override = RwSignal::new(form.content_kind_override);
     let legacy_chapter_input = form.legacy_chapter_input.clone();
     let presentation_kind = RwSignal::new(form.requested_presentation_kind);
@@ -2167,9 +2541,29 @@ fn AddonMediaListEditorIsland(
     // Keep one provider-ordered overview for every collection type. Availability
     // is a review status, not a separate navigation hierarchy.
     let items = RwSignal::new(initial_items);
+    let selected_items = RwSignal::new(BTreeSet::<i64>::new());
+    let bulk_liveness_value = RwSignal::new("provider".to_owned());
     let need_review_filter = RwSignal::new(false);
     let item_page = RwSignal::new(0_u32);
     let item_page_size = RwSignal::new(DEFAULT_ITEM_PAGE_SIZE);
+    let remote_item_ids = Memo::new(move |_| {
+        items.with(|items| {
+            items
+                .iter()
+                .filter(|item| item.kind == AddonMediaListItemKind::RemoteStream)
+                .map(|item| item.id)
+                .collect::<Vec<_>>()
+        })
+    });
+    let selected_remote_count = Memo::new(move |_| {
+        let remote_ids = remote_item_ids.get();
+        selected_items.with(|selected| {
+            remote_ids
+                .iter()
+                .filter(|item_id| selected.contains(item_id))
+                .count()
+        })
+    });
     let need_review_count = Memo::new(move |_| {
         items.with(|items| {
             items
@@ -2240,6 +2634,41 @@ fn AddonMediaListEditorIsland(
         });
         Some((season, values))
     });
+    let episode_numbering_row_preview = Memo::new(move |_| {
+        if !episode_numbering_open.get()
+            || presentation_kind.get() != AddonMediaListPresentationKind::TelevisionShow
+        {
+            return BTreeMap::new();
+        }
+        let Some(season) = episode_numbering_season
+            .get()
+            .trim()
+            .parse::<i32>()
+            .ok()
+            .filter(|value| *value >= 0)
+        else {
+            return BTreeMap::new();
+        };
+        let Some(starting_episode) = episode_numbering_start
+            .get()
+            .trim()
+            .parse::<i32>()
+            .ok()
+            .filter(|value| *value >= 1)
+        else {
+            return BTreeMap::new();
+        };
+        let count = episode_numbering_assignment_count.get();
+        items.with(|items| {
+            episode_numbering_preview_assignments(
+                items,
+                season,
+                starting_episode,
+                count,
+                replace_existing_episode_numbers.get(),
+            )
+        })
+    });
     let item_page_range = Memo::new(move |_| {
         let total = filtered_item_count.get();
         let size = item_page_size.get();
@@ -2264,6 +2693,28 @@ fn AddonMediaListEditorIsland(
         };
         (start, end, total, page, total_pages)
     });
+    let episode_numbering_off_page_count = Memo::new(move |_| {
+        let preview = episode_numbering_row_preview.get();
+        if preview.is_empty() {
+            return 0;
+        }
+        let (start, end, _, _, _) = item_page_range.get();
+        let visible_ids = items.with(|items| {
+            items
+                .iter()
+                .filter(|item| {
+                    !need_review_filter.get() || item_needs_review(item, presentation_kind.get())
+                })
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .map(|item| item.id)
+                .collect::<BTreeSet<_>>()
+        });
+        preview
+            .keys()
+            .filter(|item_id| !visible_ids.contains(item_id))
+            .count()
+    });
     let replacement_item_title = Memo::new(move |_| {
         let target = replacement_target.get()?;
         items.with(|items| {
@@ -2286,11 +2737,31 @@ fn AddonMediaListEditorIsland(
         let (list_id, item_id, role) = *value;
         async move { set_addon_media_list_item_role(list_id, item_id, role).await }
     });
+    let item_liveness_action = Action::new(|value: &(i64, i64, Option<RemoteStreamLiveness>)| {
+        let (list_id, item_id, liveness) = *value;
+        async move { set_addon_media_list_item_liveness(list_id, item_id, liveness).await }
+    });
+    let bulk_liveness_action =
+        Action::new(|value: &(i64, Option<RemoteStreamLiveness>, Vec<i64>)| {
+            let (id, liveness, item_ids) = value.clone();
+            async move {
+                let item_ids = (!item_ids.is_empty()).then_some(item_ids);
+                apply_addon_media_list_liveness(id, liveness, item_ids).await
+            }
+        });
     let open_item = RwSignal::new(None::<i64>);
     let loaded_detail = RwSignal::new(None::<AddonMediaListItemDetail>);
     let item_detail_action = Action::new(move |item_id: &i64| {
         let item_id = *item_id;
         async move { get_addon_media_list_item(id, item_id).await }
+    });
+    let request_detail_action = Action::new(|value: &(i64, i64)| {
+        let (list_id, item_id) = *value;
+        async move { request_addon_media_list_item_details(list_id, item_id).await }
+    });
+    let control_import_action = Action::new(|value: &(i64, AddonMediaListImportAction)| {
+        let (list_id, action) = *value;
+        async move { control_addon_media_list_import(list_id, action).await }
     });
     let publish_action = Action::new(|id: &i64| publish_addon_media_list(*id));
     let reload_items = move || {
@@ -2327,6 +2798,136 @@ fn AddonMediaListEditorIsland(
         }
     });
     Effect::new(move |_| {
+        if let Some(result) = request_detail_action.value().get() {
+            match result {
+                Ok(()) => {
+                    reload_items();
+                    if !poll_running.get_untracked() {
+                        poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
+                    }
+                }
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+        if let Some(result) = control_import_action.value().get() {
+            match result {
+                Ok(()) => {
+                    toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
+                    reload_items();
+                    if !poll_running.get_untracked() {
+                        poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
+                    }
+                }
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        let _epoch = poll_epoch.get();
+        #[cfg(target_arch = "wasm32")]
+        {
+            if poll_running.get_untracked() {
+                return;
+            }
+            poll_running.set(true);
+            leptos::task::spawn_local(async move {
+                let mut previous_item_marker = import_progress.get_untracked().map(|progress| {
+                    (
+                        progress.discovered_count,
+                        progress.detail_complete,
+                        progress.detail_skipped,
+                        progress.detail_failed,
+                        progress.detail_pending,
+                        progress.current_title.clone(),
+                    )
+                });
+                let mut error_delay_ms = 1_000_u32;
+                let mut last_announcement = None::<(TextKey, u64)>;
+                loop {
+                    let visibility_delay_ms = web_sys::window()
+                        .and_then(|window| window.document())
+                        .map_or(
+                            5_000,
+                            |document| if document.hidden() { 5_000 } else { 1_000 },
+                        );
+                    let delay_ms = visibility_delay_ms.max(error_delay_ms);
+                    gloo_timers::future::TimeoutFuture::new(delay_ms).await;
+                    match get_addon_media_list_form(id).await {
+                        Ok(Some(next_form)) => {
+                            error_delay_ms = 0;
+                            let next_marker = next_form.import_progress.as_ref().map(|progress| {
+                                (
+                                    progress.discovered_count,
+                                    progress.detail_complete,
+                                    progress.detail_skipped,
+                                    progress.detail_failed,
+                                    progress.detail_pending,
+                                    progress.current_title.clone(),
+                                )
+                            });
+                            published_revision.set(next_form.published_revision);
+                            detail_import_policy.set(next_form.detail_import_policy);
+                            if let Some(progress) = next_form.import_progress.as_ref() {
+                                let (details, count, _) = progress_sample(progress);
+                                let now = browser_now_millis();
+                                progress_rate_sample.update(|sample| match *sample {
+                                    Some((sample_details, sample_count, _))
+                                        if sample_details == details && count >= sample_count => {}
+                                    _ => *sample = Some((details, count, now)),
+                                });
+                                let phase = import_progress_phase(
+                                    progress,
+                                    next_form.published_revision > 0,
+                                    next_form.detail_import_policy,
+                                );
+                                let coarse_count = count / 10;
+                                if last_announcement != Some((phase, coarse_count)) {
+                                    progress_live_summary.set(format!("{}: {count}", tr(phase)));
+                                    last_announcement = Some((phase, coarse_count));
+                                }
+                            }
+                            import_progress.set(next_form.import_progress);
+                            if next_marker != previous_item_marker {
+                                previous_item_marker = next_marker;
+                                reload_items_action.dispatch(id);
+                            }
+                            let should_stop = import_progress.with_untracked(|progress| {
+                                progress.as_ref().is_some_and(|progress| {
+                                    matches!(
+                                        progress.state,
+                                        AddonMediaListImportState::Paused
+                                            | AddonMediaListImportState::NeedsAttention
+                                            | AddonMediaListImportState::Cancelled
+                                            | AddonMediaListImportState::Superseded
+                                    ) || (progress.state == AddonMediaListImportState::Ready
+                                        && progress.detail_pending == 0)
+                                })
+                            });
+                            if should_stop {
+                                break;
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(_) => {
+                            error_delay_ms = if error_delay_ms == 0 {
+                                2_000
+                            } else {
+                                error_delay_ms.saturating_mul(2).min(30_000)
+                            };
+                        }
+                    }
+                }
+                poll_running.set(false);
+            });
+        }
+    });
+    Effect::new(move |_| {
         if let Some(result) = item_inclusion_action.value().get() {
             match result {
                 Ok(()) => reload_items(),
@@ -2339,6 +2940,28 @@ fn AddonMediaListEditorIsland(
         if let Some(result) = item_role_action.value().get() {
             match result {
                 Ok(()) => reload_items(),
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+        if let Some(result) = item_liveness_action.value().get() {
+            match result {
+                Ok(()) => reload_items(),
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+        if let Some(result) = bulk_liveness_action.value().get() {
+            match result {
+                Ok(_) => {
+                    selected_items.set(BTreeSet::new());
+                    toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
+                    reload_items();
+                }
                 Err(error) => toast.push(
                     save_failed(addon_media_list_error_message(error)),
                     ToastSeverity::Error,
@@ -2493,6 +3116,8 @@ fn AddonMediaListEditorIsland(
                             review_state: form.review_state,
                             review_error: form.review_error.clone(),
                             published_revision: form.published_revision,
+                            detail_import_policy: detail_import_policy.get_untracked(),
+                            import_progress: form.import_progress.clone(),
                         }, presentation_kind.get_untracked(), next_show_metadata, show_etag.get_untracked()));
                     }
                 >
@@ -2500,6 +3125,126 @@ fn AddonMediaListEditorIsland(
                     <span>{tr(TextKey::SaveAddonMediaList)}</span>
                 </button>
             </div>
+
+            {move || import_progress.get().map(|progress| {
+                let state = progress.state;
+                let phase = import_progress_phase(
+                    &progress,
+                    published_revision.get() > 0,
+                    detail_import_policy.get(),
+                );
+                let (is_detail_progress, current, total) = progress_sample(&progress);
+                let percent = total
+                    .map_or(0, |total| {
+                        current.saturating_mul(100).checked_div(total).unwrap_or(100)
+                    })
+                    .min(100);
+                let current_title = progress.current_title.clone().unwrap_or_default();
+                let diagnostic = progress.diagnostic.clone().unwrap_or_default();
+                let has_current_title = !current_title.is_empty();
+                let has_diagnostic = !diagnostic.is_empty();
+                let has_detail_failed = progress.detail_failed > 0;
+                let elapsed = elapsed_from(&progress.started_at).unwrap_or_default();
+                let last_progress = progress.last_progress_at.as_deref()
+                    .and_then(format_progress_timestamp)
+                    .unwrap_or_default();
+                let has_last_progress = !last_progress.is_empty();
+                let estimate = progress_rate_sample.get().and_then(
+                    |(sample_is_detail, sample_count, sample_at)| {
+                        let now = browser_now_millis();
+                        let elapsed_seconds = (now - sample_at) / 1_000.0;
+                        let total = total?;
+                        let completed_since_sample = current.saturating_sub(sample_count);
+                        if sample_is_detail != is_detail_progress
+                            || completed_since_sample < 3
+                            || elapsed_seconds < 3.0
+                            || current >= total
+                        {
+                            return None;
+                        }
+                        let completed_since_sample =
+                            u32::try_from(completed_since_sample).ok()?;
+                        let remaining = u32::try_from(total - current).ok()?;
+                        let rate = f64::from(completed_since_sample) / elapsed_seconds;
+                        let eta_seconds = f64::from(remaining) / rate;
+                        std::time::Duration::try_from_secs_f64(eta_seconds)
+                            .ok()
+                            .map(|duration| format_clock_duration(duration.as_secs()))
+                    },
+                ).unwrap_or_default();
+                let has_estimate = !estimate.is_empty();
+                let progress_element = if let Some(total) = total {
+                    view! {
+                        <progress
+                            role="progressbar"
+                            max=total.max(1).to_string()
+                            value=current.min(total).to_string()
+                            aria-valuemin="0"
+                            aria-valuemax=total.to_string()
+                            aria-valuenow=current.min(total).to_string()
+                        >{format!("{percent}%")}</progress>
+                    }.into_any()
+                } else {
+                    view! { <progress role="progressbar"></progress> }.into_any()
+                };
+                let contextual_action = match state {
+                    AddonMediaListImportState::Queued => view! {
+                        <button type="button" class=style::btn_cancel on:click=move |_| {
+                            control_import_action.dispatch((id, AddonMediaListImportAction::Cancel));
+                        }>{tr(TextKey::CancelImport)}</button>
+                    }.into_any(),
+                    AddonMediaListImportState::Discovering | AddonMediaListImportState::Verifying => view! {
+                        <button type="button" class=style::btn_cancel on:click=move |_| {
+                            control_import_action.dispatch((id, AddonMediaListImportAction::Pause));
+                        }>{tr(TextKey::PauseImport)}</button>
+                    }.into_any(),
+                    AddonMediaListImportState::Paused => view! {
+                        <button type="button" class=style::btn_cancel on:click=move |_| {
+                            control_import_action.dispatch((id, AddonMediaListImportAction::Resume));
+                        }>{tr(TextKey::ResumeImport)}</button>
+                    }.into_any(),
+                    AddonMediaListImportState::NeedsAttention | AddonMediaListImportState::Cancelled => view! {
+                        <button type="button" class=style::btn_cancel on:click=move |_| {
+                            control_import_action.dispatch((id, AddonMediaListImportAction::Retry));
+                        }>{tr(TextKey::RetryImportNow)}</button>
+                    }.into_any(),
+                    AddonMediaListImportState::Ready | AddonMediaListImportState::Superseded => ().into_any(),
+                };
+                view! {
+                    <section class=style::import_progress_card data-import-state=format!("{state:?}")>
+                        <span class=style::sr_only aria-live="polite" aria-atomic="true">
+                            {move || progress_live_summary.get()}
+                        </span>
+                        <div class=style::import_progress_heading>
+                            <div>
+                                <strong>{tr(phase)}</strong>
+                                <span>{if let Some(total) = total {
+                                    format!("{current} / {total} {}", if is_detail_progress { tr(TextKey::Details) } else { tr(TextKey::Discovered) })
+                                } else {
+                                    format!("{current} {}", tr(TextKey::Discovered))
+                                }}</span>
+                            </div>
+                            <span class=style::import_progress_percent>{total.map_or_else(|| "…".to_owned(), |_| format!("{percent}%"))}</span>
+                        </div>
+                        {progress_element}
+                        <p style:display=if has_current_title { "block" } else { "none" }>{current_title}</p>
+                        <p class=style::import_progress_details>
+                            <span>{format!("{}: {elapsed}", tr(TextKey::ElapsedTime))}</span>
+                            <span style:display=if has_last_progress { "inline" } else { "none" }>{format!("{}: {last_progress}", tr(TextKey::LastSuccessfulProgress))}</span>
+                            <span style:display=if has_estimate { "inline" } else { "none" }>{format!("{}: {estimate}", tr(TextKey::EstimatedRemainingTime))}</span>
+                        </p>
+                        <p class=style::import_progress_details>
+                            <span>{format!("{} / {} {}", progress.detail_complete, progress.detail_total, tr(TextKey::DetailsComplete))}</span>
+                            <span>{format!("{} {}", progress.detail_skipped, tr(TextKey::DetailsSkipped))}</span>
+                            <span style:display=if has_detail_failed { "inline" } else { "none" }>{format!("{} {}", progress.detail_failed, tr(TextKey::Failed))}</span>
+                        </p>
+                        <p class=style::review_error style:display=if has_diagnostic { "flex" } else { "none" }>{diagnostic}</p>
+                        <div class=style::import_progress_actions>
+                            {contextual_action}
+                        </div>
+                    </section>
+                }
+            })}
 
             <form
                 id="addon_media_lists-list-editor-form"
@@ -2763,6 +3508,28 @@ fn AddonMediaListEditorIsland(
                                     <small>{tr(TextKey::GeneratePlaylistFromSortedAddonMediaListItems)}</small>
                                 </label>
                             </div>
+                            <div class=style::field_row>
+                                <div class=style::field_label>{tr(TextKey::Details)}</div>
+                                <label class=style::checkbox_row>
+                                    <input
+                                        type="checkbox"
+                                        name="load_item_details"
+                                        value="true"
+                                        prop:checked=move || detail_import_policy.get() == AddonMediaListDetailPolicy::Automatic
+                                        on:change=move |event| {
+                                            detail_import_policy.set(if event_target_checked(&event) {
+                                                AddonMediaListDetailPolicy::Automatic
+                                            } else {
+                                                AddonMediaListDetailPolicy::ManualOnly
+                                            });
+                                        }
+                                    />
+                                    <span>
+                                        <b>{tr(TextKey::LoadItemDetailsAfterPublishing)}</b>
+                                        <small>{tr(TextKey::LoadItemDetailsHelp)}</small>
+                                    </span>
+                                </label>
+                            </div>
             </form>
             <section class=style::content style:display=move || if form_found { "" } else { "none" }>
                 <section class=style::item_overview aria-labelledby="addon-list-items-heading">
@@ -2853,6 +3620,13 @@ fn AddonMediaListEditorIsland(
                                         }
                                     }}
                                 </small>
+                                <small
+                                    class=style::numbering_off_page
+                                    aria-live="polite"
+                                    style:display=move || { if episode_numbering_off_page_count.get() > 0 { "block" } else { "none" } }
+                                >
+                                    {move || format!("{} {}", episode_numbering_off_page_count.get(), tr(TextKey::OtherPageItemsAffected))}
+                                </small>
                             </div>
                             <button
                                 type="button"
@@ -2885,6 +3659,57 @@ fn AddonMediaListEditorIsland(
                             </button>
                         </div>
                     </section>
+                    <section
+                        class=style::liveness_bulk_toolbar
+                        aria-label=tr(TextKey::PlaybackBehavior)
+                        style:display=move || if remote_item_ids.with(Vec::is_empty) { "none" } else { "flex" }
+                    >
+                        <label>
+                            <span>{tr(TextKey::PlaybackBehavior)}</span>
+                            <select
+                                class=style::page_size
+                                prop:value=move || bulk_liveness_value.get()
+                                on:change=move |event| bulk_liveness_value.set(event_target_value(&event))
+                            >
+                                <option value="provider">{tr(TextKey::UseProviderValue)}</option>
+                                <option value="finite">{tr(TextKey::FiniteMedia)}</option>
+                                <option value="live">{tr(TextKey::LiveSource)}</option>
+                            </select>
+                        </label>
+                        <button
+                            type="button"
+                            class=style::numbering_toggle
+                            disabled=move || selected_remote_count.get() == 0 || bulk_liveness_action.pending().get()
+                            on:click=move |_| {
+                                let remote_ids = remote_item_ids.get();
+                                let item_ids = selected_items.with_untracked(|selected| {
+                                    remote_ids
+                                        .into_iter()
+                                        .filter(|item_id| selected.contains(item_id))
+                                        .collect::<Vec<_>>()
+                                });
+                                bulk_liveness_action.dispatch((
+                                    id,
+                                    liveness_override_from_value(&bulk_liveness_value.get_untracked()),
+                                    item_ids,
+                                ));
+                            }
+                        >
+                            {move || format!("{} ({})", tr(TextKey::ApplyToSelected), selected_remote_count.get())}
+                        </button>
+                        <button
+                            type="button"
+                            class=style::numbering_toggle
+                            disabled=move || remote_item_ids.with(Vec::is_empty) || bulk_liveness_action.pending().get()
+                            on:click=move |_| {
+                                bulk_liveness_action.dispatch((
+                                    id,
+                                    liveness_override_from_value(&bulk_liveness_value.get_untracked()),
+                                    Vec::new(),
+                                ));
+                            }
+                        >{tr(TextKey::ApplyToAllRemoteStreams)}</button>
+                    </section>
                     <div class=style::discovery_summary aria-live="polite">
                         <strong>{move || format!("{} {}", items.with(Vec::len), tr(TextKey::Discovered))}</strong>
                         <span aria-hidden="true">"·"</span>
@@ -2906,10 +3731,34 @@ fn AddonMediaListEditorIsland(
                         <table data-testid="addon-metadata-items">
                             <thead>
                                 <tr>
+                                    <th class=style::selection_cell>
+                                        <input
+                                            type="checkbox"
+                                            aria-label=tr(TextKey::SelectItem)
+                                            style:visibility=move || if remote_item_ids.with(Vec::is_empty) { "hidden" } else { "visible" }
+                                            prop:checked=move || {
+                                                let total = remote_item_ids.with(Vec::len);
+                                                total > 0 && selected_remote_count.get() == total
+                                            }
+                                            on:change=move |event| {
+                                                if event_target_checked(&event) {
+                                                    selected_items.set(remote_item_ids.get().into_iter().collect());
+                                                } else {
+                                                    selected_items.set(BTreeSet::new());
+                                                }
+                                            }
+                                        />
+                                    </th>
+                                    <th class=style::number_cell aria-label=tr(TextKey::Number)>
+                                        <span aria-hidden="true">"#"</span>
+                                    </th>
                                     <th>{tr(TextKey::IncludeItem)}</th>
                                     <th class=style::item_artwork_cell/>
                                     <th>{tr(TextKey::Name)}</th>
+                                    <th>{tr(TextKey::FirstAired)}</th>
+                                    <th>{tr(TextKey::SeasonEpisode)}</th>
                                     <th>{tr(TextKey::MediaKind)}</th>
+                                    <th>{tr(TextKey::PlaybackBehavior)}</th>
                                     <th>{tr(TextKey::Status)}</th>
                                     <th/>
                                 </tr>
@@ -2929,7 +3778,7 @@ fn AddonMediaListEditorIsland(
                                         .collect::<Vec<_>>();
                                     if rows.is_empty() {
                                         return view! {
-                                            <tr><td class=style::empty_cell colspan="6">{tr(TextKey::NoItemsToDisplay)}</td></tr>
+                                            <tr><td class=style::empty_cell colspan="11">{tr(TextKey::NoItemsToDisplay)}</td></tr>
                                         }.into_any();
                                     }
                                     rows.into_iter().map(|item| {
@@ -2943,10 +3792,14 @@ fn AddonMediaListEditorIsland(
                                             item_content_kind_action,
                                             item_inclusion_action,
                                             item_role_action,
+                                            item_liveness_action,
+                                            selected_items,
+                                            episode_numbering_row_preview,
                                             presentation_kind,
                                             open_item,
                                             loaded_detail,
                                             item_detail_action,
+                                            request_detail_action,
                                         )
                                     }).collect_view().into_any()
                                 }}
@@ -3013,7 +3866,14 @@ fn AddonMediaListEditorIsland(
                     <button
                         type="button"
                         class=style::btn_add
-                        disabled=move || publish_action.pending().get()
+                        disabled=move || {
+                            publish_action.pending().get()
+                                || import_progress.with(|progress| {
+                                    progress.as_ref().is_some_and(|progress| {
+                                        progress.state != AddonMediaListImportState::Ready
+                                    })
+                                })
+                        }
                         on:click=move |_| {
                             publish_action.dispatch(id);
                         }
@@ -3263,5 +4123,100 @@ mod tests {
             episode_numbering_preview_values(&items, 2, 3, 2, true),
             [3, 5]
         );
+    }
+
+    #[test]
+    fn numbering_preview_highlights_only_assignable_top_level_items() {
+        let items = vec![
+            AddonMediaListItemRow {
+                id: 1,
+                included: true,
+                ..AddonMediaListItemRow::default()
+            },
+            AddonMediaListItemRow {
+                id: 2,
+                included: false,
+                ..AddonMediaListItemRow::default()
+            },
+            AddonMediaListItemRow {
+                id: 3,
+                included: true,
+                parent_provider_id: Some("parent".to_owned()),
+                ..AddonMediaListItemRow::default()
+            },
+            AddonMediaListItemRow {
+                id: 4,
+                included: true,
+                season: Some(1),
+                episode: Some(7),
+                ..AddonMediaListItemRow::default()
+            },
+            AddonMediaListItemRow {
+                id: 5,
+                included: true,
+                ..AddonMediaListItemRow::default()
+            },
+        ];
+
+        assert_eq!(
+            episode_numbering_preview_assignments(&items, 1, 1, 5, false),
+            BTreeMap::from([(1, (1, 1)), (5, (1, 2))])
+        );
+        assert_eq!(
+            episode_numbering_preview_assignments(&items, 1, 1, 2, true),
+            BTreeMap::from([(1, (1, 1)), (4, (1, 2))])
+        );
+    }
+
+    #[test]
+    fn progress_phase_switches_from_overview_to_published_details() {
+        let overview = AddonMediaListImportProgressRow {
+            state: AddonMediaListImportState::Discovering,
+            discovered_count: 12,
+            total_hint: Some(40),
+            ..AddonMediaListImportProgressRow::default()
+        };
+        assert_eq!(
+            import_progress_phase(&overview, false, AddonMediaListDetailPolicy::Automatic),
+            TextKey::FindingProgrammes
+        );
+        assert_eq!(progress_sample(&overview), (false, 12, Some(40)));
+
+        let details = AddonMediaListImportProgressRow {
+            state: AddonMediaListImportState::Ready,
+            detail_total: 8,
+            detail_complete: 2,
+            detail_skipped: 1,
+            detail_failed: 1,
+            detail_pending: 4,
+            current_title: Some("Episode four".to_owned()),
+            ..AddonMediaListImportProgressRow::default()
+        };
+        assert_eq!(
+            import_progress_phase(&details, true, AddonMediaListDetailPolicy::Automatic),
+            TextKey::LoadingItemDetails
+        );
+        assert_eq!(progress_sample(&details), (true, 4, Some(8)));
+
+        let complete_manual = AddonMediaListImportProgressRow {
+            state: AddonMediaListImportState::Ready,
+            ..AddonMediaListImportProgressRow::default()
+        };
+        assert_eq!(
+            import_progress_phase(
+                &complete_manual,
+                true,
+                AddonMediaListDetailPolicy::ManualOnly,
+            ),
+            TextKey::OverviewOnly
+        );
+    }
+
+    #[test]
+    fn progress_durations_are_stable_and_bounded() {
+        assert_eq!(format_clock_duration(0), "00:00");
+        assert_eq!(format_clock_duration(65), "01:05");
+        assert_eq!(format_clock_duration(3_661), "01:01:01");
+        assert!(elapsed_from("not-a-timestamp").is_none());
     }
 }

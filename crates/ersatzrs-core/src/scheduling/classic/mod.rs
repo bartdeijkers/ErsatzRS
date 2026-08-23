@@ -2837,9 +2837,9 @@ mod tests {
             classic_schedule_items: vec![item],
             ..SchedulingReferenceData::default()
         };
-        reference_data
-            .media_by_key
-            .insert(key, vec![SchedulingMediaItem::new(101, Duration::zero())]);
+        let mut live = SchedulingMediaItem::new(101, Duration::zero());
+        live.liveness = Some(ersatzrs_domain::RemoteStreamLiveness::Live);
+        reference_data.media_by_key.insert(key, vec![live]);
 
         let result = ClassicSchedulingEngine
             .schedule(SchedulingRequest {

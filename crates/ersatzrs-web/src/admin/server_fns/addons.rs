@@ -55,10 +55,26 @@ pub struct AddonOverview {
     pub unverified_sources_enabled: bool,
     /// Add-on used for source URLs no installed package claims, if configured.
     pub default_remote_stream_addon: Option<String>,
+    pub detail_wait: AddonDetailWaitSettingsForm,
     pub repositories_are_deployment_managed: bool,
     pub repositories: Vec<AddonRepositoryRow>,
     pub available: Vec<AvailableAddonRow>,
     pub installed: Vec<InstalledAddonRow>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonDetailWaitSettingsForm {
+    pub minimum_seconds: i32,
+    pub maximum_seconds: i32,
+}
+
+impl Default for AddonDetailWaitSettingsForm {
+    fn default() -> Self {
+        Self {
+            minimum_seconds: 2,
+            maximum_seconds: 16,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,7 +119,33 @@ pub async fn load_addon_overview() -> Result<AddonOverview, ServerFnError> {
         .default_remote_stream_addon()
         .await
         .map_err(ServerFnError::new)?;
+    let detail_wait = state
+        .application
+        .load_addon_detail_wait_settings()
+        .await
+        .map_err(ServerFnError::new)?;
+    overview.detail_wait = AddonDetailWaitSettingsForm {
+        minimum_seconds: i32::try_from(detail_wait.minimum_seconds).map_err(ServerFnError::new)?,
+        maximum_seconds: i32::try_from(detail_wait.maximum_seconds).map_err(ServerFnError::new)?,
+    };
     Ok(overview)
+}
+
+/// Persist the global fair-use window used by all deferred item-detail work.
+#[server]
+pub async fn save_addon_detail_wait_settings(
+    settings: AddonDetailWaitSettingsForm,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .save_addon_detail_wait_settings(ersatzrs_app::commands::SaveAddonDetailWaitSettings {
+            minimum_seconds: settings.minimum_seconds,
+            maximum_seconds: settings.maximum_seconds,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[server]
@@ -275,6 +317,7 @@ impl From<ersatzrs_app::AddonOverviewRead> for AddonOverview {
             // Loaded alongside the overview rather than through the read model,
             // which the add-on lifecycle owns.
             default_remote_stream_addon: None,
+            detail_wait: AddonDetailWaitSettingsForm::default(),
             repositories_are_deployment_managed: value.repositories_are_deployment_managed,
             repositories: value
                 .repositories

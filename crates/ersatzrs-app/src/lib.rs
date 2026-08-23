@@ -474,6 +474,23 @@ impl ApplicationServices {
         commands::update_addon_media_list(command, self.ports.addon_media_lists()).await
     }
 
+    /// Queue one item for deferred provider detail enrichment.
+    pub async fn request_addon_media_list_item_details(
+        &self,
+        command: commands::RequestAddonMediaListItemDetails,
+    ) -> Result<()> {
+        commands::request_addon_media_list_item_details(command, self.ports.addon_media_lists())
+            .await
+    }
+
+    /// Pause, resume, retry, or cancel the current overview import.
+    pub async fn control_addon_media_list_import(
+        &self,
+        command: commands::ControlAddonMediaListImport,
+    ) -> Result<()> {
+        commands::control_addon_media_list_import(command, self.ports.addon_media_lists()).await
+    }
+
     /// Load one page of provider items in one availability group.
     pub async fn list_addon_media_list_items_page(
         &self,
@@ -507,6 +524,22 @@ impl ApplicationServices {
     ) -> Result<()> {
         commands::set_addon_media_list_item_content_kind(command, self.ports.addon_media_lists())
             .await
+    }
+
+    /// Set or restore the playback behavior of one Remote Stream entry.
+    pub async fn set_addon_media_list_item_liveness(
+        &self,
+        command: commands::SetAddonMediaListItemLiveness,
+    ) -> Result<()> {
+        commands::set_addon_media_list_item_liveness(command, self.ports.addon_media_lists()).await
+    }
+
+    /// Apply or restore playback behavior for selected or all Remote Stream entries.
+    pub async fn apply_addon_media_list_liveness(
+        &self,
+        command: commands::ApplyAddonMediaListLiveness,
+    ) -> Result<u64> {
+        commands::apply_addon_media_list_liveness(command, self.ports.addon_media_lists()).await
     }
 
     /// Apply one classification to every entry of a list.
@@ -1048,6 +1081,13 @@ impl ApplicationServices {
     /// Load scanner settings.
     pub async fn load_scanner_settings(&self) -> Result<queries::ScannerSettings> {
         queries::load_scanner_settings(self.ports.admin_settings()).await
+    }
+
+    /// Load the global fair-use delay window for add-on item details.
+    pub async fn load_addon_detail_wait_settings(
+        &self,
+    ) -> Result<queries::AddonDetailWaitSettings> {
+        queries::load_addon_detail_wait_settings(self.ports.admin_settings()).await
     }
 
     /// Load playout settings.
@@ -1614,6 +1654,14 @@ impl ApplicationServices {
         command: commands::SaveScannerSettings,
     ) -> Result<()> {
         commands::save_scanner_settings(command, self.ports.admin_settings()).await
+    }
+
+    /// Validate and atomically save the global add-on detail pacing window.
+    pub async fn save_addon_detail_wait_settings(
+        &self,
+        command: commands::SaveAddonDetailWaitSettings,
+    ) -> Result<()> {
+        commands::save_addon_detail_wait_settings(command, self.ports.admin_settings()).await
     }
 
     /// Validate, atomically save, and apply playout settings.

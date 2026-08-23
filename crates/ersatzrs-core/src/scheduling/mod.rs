@@ -63,6 +63,10 @@ pub struct PlayoutBuildRequest {
 pub struct SchedulingMediaItem {
     pub id: EntityId,
     pub duration: Duration,
+    /// Present only for Remote Streams; unknown remains explicit so schedule
+    /// validation can refuse it instead of treating zero duration as finite.
+    #[serde(default)]
+    pub liveness: Option<ersatzrs_domain::RemoteStreamLiveness>,
     pub title: Option<String>,
     pub show_id: Option<EntityId>,
     pub season_id: Option<EntityId>,
@@ -83,6 +87,7 @@ impl SchedulingMediaItem {
         Self {
             id,
             duration,
+            liveness: None,
             title: None,
             show_id: None,
             season_id: None,
@@ -627,6 +632,12 @@ pub enum SchedulingError {
     SequenceNestingTooDeep,
     #[error("unsupported YAML instruction")]
     UnsupportedYamlInstruction,
+    #[error("Remote Stream {0} has unknown playback behavior")]
+    UnknownRemoteStreamLiveness(EntityId),
+    #[error("finite Remote Stream {0} requires a positive duration")]
+    FiniteRemoteStreamMissingDuration(EntityId),
+    #[error("live Remote Stream {0} requires Classic Flood mode with a deterministic boundary")]
+    UnsupportedLiveSourcePlacement(EntityId),
     #[error("invalid duration: {0}")]
     InvalidDuration(String),
     #[error("invalid time: {0}")]

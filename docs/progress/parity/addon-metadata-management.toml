@@ -2,7 +2,7 @@ feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'Ported'
-adr        = ['0068', '0073', '0075']
+adr        = ['0068', '0073', '0075', '0078', '0079']
 
 summary = '''
 ADR 0075 replaces immediate managed-library publication with a provider-neutral
@@ -28,7 +28,59 @@ Television drafts also provide atomic, provider-free bulk numbering in original
 provider order. Operators can assign one season in bounded batches, preserve
 existing numbering by default, skip occupied episode identities, and still
 correct every result through the item accordion before publication.
+AMM-F implements ADR 0078: Remote Stream remains the live-or-on-demand type and
+one provider-neutral unknown/finite/live value now crosses the frozen add-on
+contract, provider and operator snapshots, Publish, refresh, generated
+definitions, scanner persistence, editor, scheduling, health, IPTV/HLS, and the
+cross-platform yt-dlp package. Unknown is never guessed as finite and live
+items are admitted only where a deterministic live boundary is available.
+AMM-G implements ADR 0079: bounded paginated overview discovery persists and
+resumes before a complete draft may publish, retaining title, first-air date,
+thumbnail, descriptions, and provider order without item-detail calls. Details
+then use durable post-publication one-item jobs and one shared randomized
+provider-host limiter across automatic and manual requests. Its global positive
+whole-second minimum and maximum are localized settings that default to 2 and
+16, apply to later samples without restart, and never shorten a persisted
+cooldown. Manual-only imports, per-item fetch actions, durable progress, stable
+number/date/season-episode columns, and exact accessible bulk-numbering cues are
+implemented for the shared editor and both official providers.
 '''
+
+[[debt]]
+id          = 'addon-detail-provider-cooldown-is-fixed'
+description = 'Let operators configure the global minimum and maximum wait used by randomized add-on detail enrichment while retaining safe defaults and the shared provider-host limiter.'
+discovered  = '2026-08-23'
+adr         = '0079'
+evidence    = 'The application persists both values atomically, the worker loads them for each new randomized sample, and the Add-ons page exposes localized fields in every supported culture. Unit and browser tests prove 2/16 defaults, rejected 12/11 input, persisted 7/11 input, no-restart application, and preservation of an existing longer cooldown.'
+resolved    = true
+resolution  = 'ConfigElement-backed minimum/maximum settings now default to 2/16, validate atomically, load for every new sample without restart, and cannot shorten an existing cooldown. Unit, MySQL 8.4, localization, and Chromium/Firefox tests prove rejected 12/11 input and a persisted 7/11 range.'
+
+[[debt]]
+id          = 'large-addon-list-imports-time-out-without-progress'
+description = 'Import large provider lists through durable bounded checkpoints and show trustworthy live progress instead of failing one opaque 60-second add-on invocation.'
+discovered  = '2026-08-22'
+adr         = '0079'
+evidence    = 'Resolved by media-list.import.v1 and the durable host coordinator. Focused tests cover paginated checkpoints, resume/retry/cancel, a many-page discovery beyond the former aggregate invocation deadline, incomplete-overview publication refusal, restart-safe one-item details, and the shared configured provider-host limiter.'
+resolved    = true
+resolution  = 'Overview discovery is bounded per invocation and durable across processes; only a complete consistent generation enters review. Detail work begins after Publish or a manual request and no longer blocks Add or overview publication.'
+
+[[debt]]
+id          = 'addon-list-item-overview-hides-order-date-and-bulk-numbering-targets'
+description = 'Show stable item order, first-air date, and season/episode identity as dedicated columns, and preview the exact rows affected before bulk numbering is applied.'
+discovered  = '2026-08-23'
+adr         = '0079'
+evidence    = 'The shared item table now renders stable one-based order, First aired, and Season / episode columns. Its bulk-numbering preview uses the command rules to identify every exact eligible row across filters/pages, renders proposed SxxExx values with non-colour highlighting, and reports off-page targets; Chromium and Firefox coverage passed.'
+resolved    = true
+resolution  = 'Operators can see item identity and the exact bounded bulk mutation before applying it, including rows outside the current page.'
+
+[[debt]]
+id          = 'addon-list-remote-stream-liveness-is-lost'
+description = 'Preserve provider and operator unknown/finite/live state when an add-on item is published as Remote Stream, and refuse unsafe schedule placement instead of defaulting a true live source to finite playback.'
+discovered  = '2026-08-22'
+adr         = '0078'
+evidence    = 'ADR 0078 is implemented through media-list.list.v5, remote-stream.list.v4, the paired SQLite/MySQL migration, draft/override/effective/published state, generated YAML, scanner persistence, Classic/Flood validation, IPTV/HLS handling, health, and the shared editor. Contract, repository, scheduling, producer-cancellation, browser, and runtime-smoke tests passed.'
+resolved    = true
+resolution  = 'Reviewed add-on lists now preserve Unknown, Finite, or Live explicitly from provider input through publication and playback; Unknown is refused and Live is allowed only on the proven live-safe path.'
 
 [[debt]]
 id          = 'addon-list-import-has-no-review-draft'

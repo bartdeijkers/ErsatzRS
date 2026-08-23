@@ -15,7 +15,9 @@ use ersatzrs_core::repositories::{
     AddonMediaListRepository,
 };
 use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListPresentationKind};
-use ersatzrs_infra::repositories::{make_repositories, Repositories};
+use ersatzrs_infra::repositories::{
+    make_repositories, project_one_pending_detail_batch, Repositories,
+};
 use sqlx::{Executor, SqlitePool};
 use tempfile::TempDir;
 
@@ -138,8 +140,9 @@ async fn seed_list_item(
     // The list matcher re-identifies each item by (AddonId, ProviderId) once the
     // projection has run, so a managed remote stream must carry both.
     sqlx::query(
-        r#"INSERT INTO "RemoteStream" ("Id", "Url", "AddonId", "ProviderId")
-           VALUES (?, ?, 'org.example.lists', ?)"#,
+        r#"INSERT INTO "RemoteStream" (
+               "Id", "Url", "AddonId", "ProviderId", "Duration", "Liveness", "IsLive"
+           ) VALUES (?, ?, 'org.example.lists', ?, '00:22:00', 1, 0)"#,
     )
     .bind(media_item_id)
     .bind(format!("https://example.invalid/episode/{item_id}"))
@@ -171,8 +174,9 @@ async fn seed_list_item(
         r#"INSERT INTO "AddonMediaListItem" (
               "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
               "MediaItemId", "Rank", "Title", "Season", "Episode", "Availability", "Published",
-              "CollectionRole", "ProviderMetadataJson"
-           ) VALUES (?, 1, ?, ?, 4, ?, ?, ?, ?, ?, 0, 1, ?, ?)"#,
+              "CollectionRole", "ProviderMetadataJson", "DurationSeconds", "ProviderLiveness",
+              "EffectiveLiveness", "PublishedLiveness"
+           ) VALUES (?, 1, ?, ?, 4, ?, ?, ?, ?, ?, 0, 1, ?, ?, 1320, 1, 1, 1)"#,
     )
     .bind(item_id)
     .bind(format!("episode:{item_id}"))
@@ -187,6 +191,62 @@ async fn seed_list_item(
     .execute(pool)
     .await
     .expect("seed addon media list item");
+}
+
+#[tokio::test]
+async fn completed_details_are_projected_once_after_a_quiet_batch_window() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "DetailProjectionPendingAt" = '2999-01-01T00:00:00Z'
+           WHERE "Id" = ?"#,
+    )
+    .bind(LIST_ID)
+    .execute(&pool)
+    .await
+    .expect("mark fresh detail projection");
+    assert_eq!(
+        project_one_pending_detail_batch(&pool)
+            .await
+            .expect("check fresh detail batch"),
+        None,
+        "a detail completion inside the quiet window must not scan immediately"
+    );
+
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "DetailProjectionPendingAt" = '2026-01-01T00:00:00Z'
+           WHERE "Id" = ?"#,
+    )
+    .bind(LIST_ID)
+    .execute(&pool)
+    .await
+    .expect("age detail projection batch");
+    assert_eq!(
+        project_one_pending_detail_batch(&pool)
+            .await
+            .expect("project quiet detail batch"),
+        Some((LIST_ID, 1))
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaList"
+               WHERE "Id" = 1 AND "DetailProjectionPendingAt" IS NOT NULL"#,
+        )
+        .await,
+        0,
+        "the projected batch must be cleared before one coalesced scan is queued"
+    );
+    assert_eq!(
+        project_one_pending_detail_batch(&pool)
+            .await
+            .expect("check cleared detail batch"),
+        None,
+        "one quiet batch must not schedule a second scan"
+    );
 }
 
 /// Presentation selection edits the review draft; publication is the explicit

@@ -56,6 +56,8 @@ pub struct EnumeratedAddonMediaListItem {
     pub collection_role: AddonMediaListItemRole,
     /// Provider-reported full item duration in whole seconds.
     pub duration_seconds: Option<u64>,
+    /// Provider-neutral Remote Stream playback behavior.
+    pub liveness: ersatzrs_domain::RemoteStreamLiveness,
     /// Stable provider identity of the full item for a fragment row.
     pub parent_provider_id: Option<String>,
     /// Inclusive fragment start in whole seconds.

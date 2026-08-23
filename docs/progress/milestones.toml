@@ -974,7 +974,7 @@ title      = 'Accept and implement the drawtext filter contract'
 status     = 'Not started'
 feature    = 'drawtext-overlay-leg'
 plan       = 'plans/drawtext-overlay-leg.md'
-depends_on = ['amm-e-02']
+depends_on = ['amm-g-05']
 acceptance = '''
 ADR 0077 is accepted before implementation. ErsatzRS then exposes a bounded
 FFmpeg drawtext builder and composable pipeline leg for inline and reloadable
@@ -1424,7 +1424,6 @@ phase      = 'AMM-A — Metadata contract and blocking import repair'
 title      = 'Generate parent NFO metadata before projection'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-a-01']
 acceptance = '''
 A newly imported episodic or music-video list derives a valid generated parent
@@ -1446,7 +1445,6 @@ phase      = 'AMM-A — Metadata contract and blocking import repair'
 title      = 'Version one shared rich metadata document'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-a-01']
 acceptance = '''
 The contract crate exposes one bounded list/item metadata document and new
@@ -1468,7 +1466,6 @@ phase      = 'AMM-B — Draft ingest and safe publication'
 title      = 'Persist drafts, inclusion, overrides, and migration state'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-a-03']
 acceptance = '''
 SQLite and MySQL persist provider snapshots, operator patches, effective
@@ -1491,7 +1488,6 @@ phase      = 'AMM-B — Draft ingest and safe publication'
 title      = 'Publish one reviewed revision atomically'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-a-02', 'amm-b-01']
 acceptance = '''
 Only explicit publication creates or changes managed YAML/NFO/artwork,
@@ -1514,7 +1510,6 @@ phase      = 'AMM-C — Shared metadata and artwork editor'
 title      = 'Use one editor for list and item metadata'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-b-01']
 acceptance = '''
 One localized schema-driven editor handles global and per-item metadata for
@@ -1538,7 +1533,6 @@ phase      = 'AMM-C — Shared metadata and artwork editor'
 title      = 'Review and publish poster, fanart, and thumbnails'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-b-02', 'amm-c-01']
 acceptance = '''
 The editor selects provider candidates, assigns poster/fanart/thumb roles, and
@@ -1560,7 +1554,6 @@ phase      = 'AMM-D — Official provider and platform parity'
 title      = 'Populate complete Beeld & Geluid metadata'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-a-03', 'amm-c-01']
 acceptance = '''
 Series and episode pages populate the shared document with available titles,
@@ -1583,7 +1576,6 @@ phase      = 'AMM-D — Official provider and platform parity'
 title      = 'Populate complete yt-dlp metadata'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-a-03', 'amm-c-01']
 acceptance = '''
 yt-dlp maps series/episode identity, descriptions, dates, categories, tags,
@@ -1606,7 +1598,6 @@ phase      = 'AMM-E — Refresh, projection, and health'
 title      = 'Merge refreshes per field and expose operational state'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-b-02', 'amm-c-02', 'amm-d-01', 'amm-d-02']
 acceptance = '''
 Provider refresh updates untouched fields, preserves overrides, records
@@ -1629,7 +1620,6 @@ phase      = 'AMM-E — Refresh, projection, and health'
 title      = 'Close platform, browser, and parity acceptance'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-metadata-management.md'
 depends_on = ['amm-e-01']
 acceptance = '''
 Chromium and Firefox prove draft review, exclusion, editing, artwork,
@@ -1647,4 +1637,256 @@ native Linux, and WSL, including a spaced Unicode mounted path; yt-dlp itself
 performed extraction. Both Clippy configurations, test closeout, Leptos,
 hydration, parity, health/smoke, migration, progress, architecture, dependency,
 and release-bundle gates passed on the final combined release candidate.
+'''
+
+[[milestone]]
+id         = 'amm-f-01'
+phase      = 'AMM-F — Remote Stream liveness and scheduling'
+title      = 'Accept the provider-neutral live-source contract'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = ['amm-e-02']
+acceptance = '''
+ADR 0078 is accepted before implementation. Remote Stream remains the
+live-or-on-demand media type; one three-state unknown/finite/live value owns
+source behavior. New frozen media-list and Remote Stream list capability
+versions, conservative legacy adaptation, provider/host ownership, refresh
+semantics, and the no-implicit-playout-probe decision are contract- and
+reference-tested.
+'''
+evidence = '''
+Completed 2026-08-23. ADR 0078 is Accepted and Implemented. Frozen
+`media-list.list.v5` and `remote-stream.list.v4` records carry the single
+unknown/finite/live value, while contract tests cover null/legacy adaptation,
+conflicts, bounds, and provider-neutral serialization. The reference contract
+documents the compatibility rules and the complete workspace closeout passed.
+'''
+
+[[milestone]]
+id         = 'amm-f-02'
+phase      = 'AMM-F — Remote Stream liveness and scheduling'
+title      = 'Persist and publish Remote Stream liveness'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = ['amm-f-01']
+acceptance = '''
+SQLite and MySQL persist provider, operator, effective, conflicting, and last
+published liveness. Refresh and explicit Publish preserve the AMM ownership
+model; legacy rows migrate without guessing unknown as finite. Provider-free
+reclassification retains the value, generated YAML and scanning project it to
+the authoritative Remote Stream liveness discriminator while maintaining the
+legacy IsLive compatibility mirror. Unknown playback is refused, rollback
+remains atomic, and affected playouts invalidate when the published value
+changes.
+'''
+evidence = '''
+Completed 2026-08-23. The paired SQLite/MySQL liveness migration, add-on draft
+repository, scanner manifest projection, and Remote Stream repository preserve
+provider, override, effective, conflict, and published values. Repository and
+scanner tests cover refresh, restore, atomic publication, unknown refusal,
+legacy mirrors, and playout invalidation; both closeout database configurations
+passed.
+'''
+
+[[milestone]]
+id         = 'amm-f-03'
+phase      = 'AMM-F — Remote Stream liveness and scheduling'
+title      = 'Expose liveness and enforce live-safe schedules'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = ['amm-f-02']
+acceptance = '''
+The shared pencil accordion exposes provider/finite/live behavior, restore and
+bounded bulk editing without a new collection type, popover, pill field, or
+color-only status. Unknown joins the existing need-review filter. Available
+live items may enter original-order playlists without duration; Classic/Flood
+bounds them correctly, every unsupported engine/mode refuses them before
+playout, and IPTV/HLS prove zero seek, realtime admission, no early work-ahead,
+and producer cancellation. Health, localization, hydration, pagination, and
+Playwright accessibility coverage pass.
+'''
+evidence = '''
+Completed 2026-08-23. The shared editor exposes individual restore and bounded
+bulk liveness controls, with Unknown included in review filtering. Core schedule
+tests prove Classic/Flood live bounds and refusal elsewhere; IPTV/HLS tests prove
+zero-seek live behavior, admission/work-ahead rules, and Windows plus Unix
+producer cancellation. Chromium and Firefox passed all six metadata-editor
+flows, and the FFmpeg 9 runtime smoke passed MPEG-TS and both HLS probes.
+'''
+
+[[milestone]]
+id         = 'amm-f-04'
+phase      = 'AMM-F — Remote Stream liveness and scheduling'
+title      = 'Close yt-dlp live-source platform acceptance'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = ['amm-f-03']
+acceptance = '''
+The official yt-dlp package maps live, upcoming, post-live/ended, and VOD
+metadata from complete yt-dlp JSON to the provider-neutral value with no host
+provider vocabulary. POSIX and PowerShell fixtures agree; redacted real-source
+proof covers native Linux, WSL, and Windows where available. Both Clippy
+configurations, test closeout, the consistent Leptos build, hydration, parity,
+health, migration, progress, and release-bundle gates pass before DTX-A resumes.
+'''
+evidence = '''
+Completed 2026-08-23. The official yt-dlp package maps live, upcoming,
+post-live/ended, and VOD extractor JSON to the provider-neutral value through
+the same POSIX and PowerShell adapter contract. Package fixtures passed on
+Windows and WSL, and a redacted live NASA discover/enrich run used yt-dlp
+itself. Both Clippy matrices, test closeout, Leptos/hydration, runtime smoke,
+dependency, architecture, and web-bundle gates passed.
+'''
+
+[[milestone]]
+id         = 'amm-g-01'
+phase      = 'AMM-G — Overview-first imports and deferred details'
+title      = 'Accept the overview-first import and detail contract'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = ['amm-f-04']
+acceptance = '''
+ADR 0079 is accepted before implementation. A provider-neutral
+media-list.import.v1 capability separates overview pagination from one-item
+detail enrichment and frozen media-list record schemas. Contract and reference
+tests lock overview title/first-air/thumbnail/description fields, page and item
+outcomes, automatic versus manual-only policy, post-publication authorization,
+manual priority without throttle bypass, cursor/record/process bounds, the
+shared randomized provider-host cooldown, persisted global positive whole-second
+minimum and maximum settings with defaults of 2 and 16 and minimum no greater
+than maximum, retry and consistency, typed legacy fallback, and the rule that
+no incomplete overview may publish.
+'''
+evidence = '''
+Completed 2026-08-23. ADR 0079 is Accepted and Implemented.
+`media-list.import.v1` defines bounded discover and single-item enrich requests,
+typed outcomes, frozen record capabilities, automatic/manual-only policy,
+post-publication authorization, and host-owned cooldown semantics. Contract,
+reference-add-on, validator, and documentation tests freeze the boundary.
+'''
+
+[[milestone]]
+id         = 'amm-g-02'
+phase      = 'AMM-G — Overview-first imports and deferred details'
+title      = 'Persist and publish complete overview discovery'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = ['amm-g-01']
+acceptance = '''
+SQLite and MySQL persist overview generations, page checkpoints, bounded
+diagnostics, retries, leases, heartbeat, and progress. Add returns promptly;
+the application boundary starts, pauses, resumes, retries, cancels, and
+recovers discovery while every Unix process group or Windows Job Object stays
+bounded. Programme/list/search pagination preserves stable provider order and
+all available overview title, first-air date, thumbnail, and descriptions with
+zero item-detail calls. Aggregate work beyond 60 seconds and crash-after-page
+fixtures resume without duplicates, and only a consistent complete overview
+enters the ADR 0075 draft and becomes eligible for explicit Publish.
+'''
+evidence = '''
+Completed 2026-08-23. SQLite and MySQL migrations plus the host coordinator
+persist generations, pages, cursors, leases, diagnostics, and progress. Focused
+tests cover checkpoint resume, duplicate rejection, changing unversioned
+results, pause/resume/cancel, a many-page import beyond the former aggregate
+deadline, and refusal to publish an incomplete overview. Windows Job Object and
+Unix process-group cancellation tests passed.
+'''
+
+[[milestone]]
+id         = 'amm-g-03'
+phase      = 'AMM-G — Overview-first imports and deferred details'
+title      = 'Run the fair-use deferred detail scanner'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = ['amm-g-02']
+acceptance = '''
+SQLite and MySQL persist per-item policy, overview fingerprint, claim, outcome,
+attempt, diagnostic, completion, next-eligible state, and the global detail
+cooldown window. Automatic work starts only after first Publish and claims one
+item at a time. Across every list for a provider host, no second detail
+operation starts until a newly sampled delay in the configured inclusive range
+has elapsed. The defaults are 2–16 seconds; saved setting changes apply without
+restart to subsequent samples and never shorten an already persisted
+next-eligible time. Retry-After and retry backoff may extend but never shorten
+the delay. Manual requests receive priority but use the same claim, cooldown,
+retry, ownership merge, and coalesced scanner projection. Restarts resume
+without refetching complete items, failures retain published data, and health
+distinguishes active, waiting, retrying, stale, and failed work.
+'''
+evidence = '''
+Completed 2026-08-23. Durable per-item jobs start automatic work only after
+Publish; manual work receives priority but shares the same provider-host claim,
+randomized cooldown, retry, merge, and projection path. Tests prove restart
+resume, no refetch of complete items, retry extension, cross-list limiting,
+manual-only switching, and live 2/16-default plus 7/11-configured ranges without
+restart or shortening an existing cooldown. Health distinguishes every required
+state, and the exact MySQL 8.4 round trip passed.
+'''
+
+[[milestone]]
+id         = 'amm-g-04'
+phase      = 'AMM-G — Overview-first imports and deferred details'
+title      = 'Expose detail, pacing, and item-table controls'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = ['amm-g-03']
+acceptance = '''
+The Add-ons settings page exposes localized Minimum detail wait and Maximum
+detail wait fields in seconds, initialized to 2 and 16. It explains that the
+window is global across lists for the same provider host, accepts positive
+whole seconds only, requires minimum no greater than maximum, round-trips saved
+values, takes effect without restart, and preserves the last valid values after
+an invalid save. The Add page has a localized default-on Load item details after
+publishing option whose off state is explicitly overview-only/manual; it
+remains editable without deleting completed metadata. The editor shows durable
+discovery and post-publication detail progress plus one accessible Fetch/Queued/
+Loading/Retry/Complete action on every top-level item. Its table adds stable
+one-based #, First aired, and Season / episode columns. Opening bulk episode
+numbering previews and non-colour-only highlights the exact eligible rows and
+proposed SxxExx values across filters and pages, including an off-page count,
+using the same rules as the command. Localization, desktop/mobile, keyboard,
+live-region, reduced-motion, hydration, pagination, server-side validation, and
+zero-console-error browser coverage pass.
+'''
+evidence = '''
+Completed 2026-08-23. Settings in all nine locales expose validated positive
+minimum/maximum waits with 2/16 defaults and atomic persistence. The add/editor
+flows expose automatic versus overview-only/manual detail policy, durable
+progress, one accessible item action, stable #/First aired/Season-episode
+columns, and exact on/off-page bulk-numbering previews with non-colour cues.
+The focused Playwright matrix passed 10/10 tests in Chromium and 10/10 in
+Firefox, including invalid 12/11 and persisted 7/11 settings.
+'''
+
+[[milestone]]
+id         = 'amm-g-05'
+phase      = 'AMM-G — Overview-first imports and deferred details'
+title      = 'Close large-list provider and platform acceptance'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+depends_on = ['amm-g-04']
+acceptance = '''
+Official Beeld & Geluid and yt-dlp packages use the same discover/enrich
+orchestration and shared metadata parser on POSIX and PowerShell; yt-dlp itself
+still performs YouTube extraction. Beeld & Geluid overview pages and yt-dlp
+flat output yield available title/date/thumbnail/description without detail
+calls; full details run one item at a time only after Publish or manual request.
+Deterministic and redacted live proof covers skip/manual modes, the persisted
+default 2–16 second cooldown and a non-default configured range, invalid-range
+rejection, retry/restart without refetch, exact order, artwork, and no silent
+omission on Linux/WSL/Windows, including De wereld van Boudewijn Büch when
+available and direct Windows package execution without a listener.
+The exact candidate passes both Clippy configurations, test closeout,
+Leptos/hydration/parity/progress, health, migration, add-on packaging, and
+release-bundle gates before DTX-A.
+'''
+evidence = '''
+Completed 2026-08-23. Official Beeld & Geluid and yt-dlp packages share the
+discover/enrich parser on POSIX and PowerShell. Their deterministic suites
+passed on Windows and WSL; live Beeld & Geluid overview/enrich and NASA yt-dlp
+discover/enrich proof preserved order and overview metadata before one-item
+details. Publisher/validator and checksum proof passed. The final candidate
+passed both Clippy configurations, 1962 standard plus 1601 MySQL-feature tests,
+doctests, Leptos/hydration/browser, runtime smoke, cargo-deny, architecture,
+progress/parity, migration, and structural web-bundle gates.
 '''

@@ -1,9 +1,7 @@
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
-use ersatzrs_infra::addon_media_list::InstalledAddonMediaListProvider;
-use ersatzrs_infra::addon_media_list_sync::{
-    AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer,
-};
+use ersatzrs_infra::addon_media_list_import::AddonMediaListImportCoordinator;
+use ersatzrs_infra::addon_media_list_sync::AddonMediaListSynchronizer;
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_scheduler::runner::{run_scheduler, SchedulerOptions};
 use std::sync::{atomic::AtomicI32, Arc};
@@ -30,6 +28,11 @@ pub fn spawn_background_tasks(
             maintenance.pool.clone(),
             shutdown.clone(),
         )),
+        tokio::spawn(run_addon_media_list_imports(
+            maintenance.pool.clone(),
+            maintenance.application.clone(),
+            shutdown.clone(),
+        )),
         tokio::spawn(run_addon_repository_maintenance(
             maintenance.pool.clone(),
             shutdown.clone(),
@@ -46,6 +49,56 @@ pub fn spawn_background_tasks(
             shutdown,
         )),
     ]
+}
+
+async fn run_addon_media_list_imports(
+    pool: DbPool,
+    application: Arc<ersatzrs_app::ApplicationServices>,
+    shutdown: CancellationToken,
+) {
+    let coordinator = AddonMediaListImportCoordinator::new(pool.clone());
+    let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
+    loop {
+        tokio::select! {
+            () = shutdown.cancelled() => break,
+            _ = interval.tick() => {}
+        }
+        let work = async {
+            let imported = coordinator.process_one_import_page().await?;
+            let detailed = coordinator.process_one_detail().await?;
+            let projected =
+                ersatzrs_infra::repositories::project_one_pending_detail_batch(&pool).await?;
+            if let Some((list_id, library_id)) = projected {
+                let outcome = application
+                    .request_library_scan(ersatzrs_app::commands::RequestLibraryScan::new(
+                        library_id, false,
+                    ))
+                    .await;
+                if !matches!(
+                    outcome,
+                    ersatzrs_app::commands::RequestScanOutcome::Accepted { .. }
+                ) {
+                    tracing::warn!(
+                        ?outcome,
+                        addon_media_list_id = list_id,
+                        library_id,
+                        "failed to queue coalesced detail scan"
+                    );
+                }
+            }
+            Ok::<_, ersatzrs_core::repositories::RepositoryError>(
+                imported || detailed || projected.is_some(),
+            )
+        };
+        tokio::select! {
+            () = shutdown.cancelled() => break,
+            result = work => {
+                if let Err(error) = result {
+                    tracing::warn!(error = %error, "add-on list import worker iteration failed");
+                }
+            }
+        }
+    }
 }
 
 pub struct HdhrTaskInputs {
@@ -93,9 +146,8 @@ async fn run_addon_media_list_maintenance(pool: DbPool, shutdown: CancellationTo
             _ = interval.tick() => {}
         }
 
-        let provider = InstalledAddonMediaListProvider::new(pool.clone());
-        let sync = AddonMediaListRemoteSynchronizer::new(pool.clone(), provider);
-        if let Err(error) = sync.refresh_due_auto_lists().await {
+        let coordinator = AddonMediaListImportCoordinator::new(pool.clone());
+        if let Err(error) = coordinator.refresh_due_auto_lists().await {
             tracing::warn!(error = %error, "failed to refresh due add-on media lists");
         }
 

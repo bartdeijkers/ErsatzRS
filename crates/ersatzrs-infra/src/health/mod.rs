@@ -25,10 +25,12 @@ use checks::{
     FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, HardwareGraphHealthCheck,
     LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck, MirrorChannelHealthCheck,
     MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck,
-    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck, RemoteStreamHealthCheck,
-    RemoteStreamPlaylistHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
-    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
-    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck,
+    RemoteStreamAddonReadinessHealthCheck, RemoteStreamHealthCheck,
+    RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck, SearchProjectionHealthCheck,
+    SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -52,7 +54,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 33] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 35] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -71,6 +73,8 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 33] = [
     "Local television identity",
     "Zero Duration",
     "Remote Streams",
+    "Remote Stream add-on readiness",
+    "Remote Stream schedule compatibility",
     "Remote Stream playlists",
     "Add-ons",
     "Add-on media lists",
@@ -234,6 +238,8 @@ fn registered_health_checks(
         Box::new(LocalTelevisionIdentityHealthCheck::new(pool.clone())),
         Box::new(ZeroDurationHealthCheck::new(pool.clone())),
         Box::new(RemoteStreamHealthCheck::new(pool.clone())),
+        Box::new(RemoteStreamAddonReadinessHealthCheck::new(pool.clone())),
+        Box::new(RemoteStreamScheduleHealthCheck::new(pool.clone())),
         Box::new(RemoteStreamPlaylistHealthCheck::new(pool.clone())),
         Box::new(AddonPlatformHealthCheck::new(pool.clone())),
         Box::new(AddonMediaListHealthCheck::new(pool.clone())),
@@ -1234,8 +1240,8 @@ mod tests {
         .await
         .expect("seed remote stream media item");
         pool.execute(
-            r#"INSERT INTO "RemoteStream" ("Id", "Duration", "Url", "IsLive")
-               VALUES (22, '00:00:00', 'https://example.test/live.m3u8', 1)"#,
+            r#"INSERT INTO "RemoteStream" ("Id", "Duration", "Url", "Liveness", "IsLive")
+               VALUES (22, '00:00:00', 'https://example.test/live.m3u8', 2, 1)"#,
         )
         .await
         .expect("seed remote stream");

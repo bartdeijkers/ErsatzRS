@@ -11,7 +11,7 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole,
+    AddonMediaListItemRole, RemoteStreamLiveness,
 };
 use ersatzrs_infra::addon_media_list_sync::{
     AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer,
@@ -54,6 +54,7 @@ impl AddonMediaListProvider for FakeListProvider {
                 content_kind: AddonMediaListContentKind::Movie,
                 collection_role: AddonMediaListItemRole::Auto,
                 duration_seconds: None,
+                liveness: RemoteStreamLiveness::Unknown,
                 parent_provider_id: None,
                 fragment_start_seconds: None,
                 fragment_end_seconds: None,
@@ -101,7 +102,8 @@ impl AddonMediaListProvider for FakeRemoteStreamListProvider {
                 availability_reason: None,
                 content_kind: AddonMediaListContentKind::Auto,
                 collection_role: AddonMediaListItemRole::Auto,
-                duration_seconds: None,
+                duration_seconds: Some(600),
+                liveness: RemoteStreamLiveness::Finite,
                 parent_provider_id: None,
                 fragment_start_seconds: None,
                 fragment_end_seconds: None,
@@ -162,6 +164,7 @@ fn refresh_metadata_snapshot(changed: bool) -> EnumeratedAddonMediaList {
         content_kind: AddonMediaListContentKind::TelevisionEpisode,
         collection_role: AddonMediaListItemRole::Auto,
         duration_seconds: Some(1_200),
+        liveness: RemoteStreamLiveness::Finite,
         parent_provider_id: None,
         fragment_start_seconds: None,
         fragment_end_seconds: None,
@@ -195,6 +198,7 @@ fn refresh_metadata_snapshot(changed: bool) -> EnumeratedAddonMediaList {
             content_kind: AddonMediaListContentKind::TelevisionEpisode,
             collection_role: AddonMediaListItemRole::Auto,
             duration_seconds: Some(1_300),
+            liveness: RemoteStreamLiveness::Finite,
             parent_provider_id: None,
             fragment_start_seconds: None,
             fragment_end_seconds: None,
@@ -301,6 +305,7 @@ impl AddonMediaListProvider for ChapterListProvider {
             content_kind: AddonMediaListContentKind::TelevisionEpisode,
             collection_role: AddonMediaListItemRole::Auto,
             duration_seconds: Some(600),
+            liveness: RemoteStreamLiveness::Finite,
             parent_provider_id: None,
             fragment_start_seconds: None,
             fragment_end_seconds: None,
@@ -329,6 +334,7 @@ impl AddonMediaListProvider for ChapterListProvider {
                 content_kind: AddonMediaListContentKind::TelevisionEpisode,
                 collection_role: AddonMediaListItemRole::Auto,
                 duration_seconds: chapter.end_seconds.map(|end| end - chapter.start_seconds),
+                liveness: RemoteStreamLiveness::Finite,
                 parent_provider_id: Some(full_provider_id.clone()),
                 fragment_start_seconds: Some(chapter.start_seconds),
                 fragment_end_seconds: chapter.end_seconds,
@@ -1202,7 +1208,8 @@ async fn publish_as_remote_streams(pool: &sqlx::SqlitePool, list_id: i64) {
     .await
     .unwrap();
     sqlx::query(
-        r#"UPDATE "AddonMediaListItem" SET "Published" = "Included"
+        r#"UPDATE "AddonMediaListItem"
+           SET "Published" = "Included", "PublishedLiveness" = "EffectiveLiveness"
            WHERE "AddonMediaListId" = ?"#,
     )
     .bind(list_id)

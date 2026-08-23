@@ -55,7 +55,9 @@ pub(crate) use output_dynamic_range::OutputDynamicRangeHealthCheck;
 pub(super) use pinned_stream_selection::PinnedStreamSelectionHealthCheck;
 pub(super) use playback_data_access::PlaybackDataAccessHealthCheck;
 pub(super) use provider_connectivity::ProviderConnectivityHealthCheck;
-pub(super) use remote_stream::RemoteStreamHealthCheck;
+pub(super) use remote_stream::{
+    RemoteStreamAddonReadinessHealthCheck, RemoteStreamHealthCheck, RemoteStreamScheduleHealthCheck,
+};
 pub(super) use remote_stream_playlist::RemoteStreamPlaylistHealthCheck;
 pub(super) use search_projection::SearchProjectionHealthCheck;
 pub(super) use source_orientation::SourceOrientationHealthCheck;

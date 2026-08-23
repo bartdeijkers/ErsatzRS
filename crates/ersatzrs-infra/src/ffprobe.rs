@@ -862,6 +862,7 @@ mod tests {
                 working_directory: temp.path().to_path_buf(),
                 environment: std::collections::BTreeMap::new(),
             }),
+            liveness: ersatzrs_domain::RemoteStreamLiveness::Finite,
             is_live: false,
             configured_duration: None,
             fallback_query: None,

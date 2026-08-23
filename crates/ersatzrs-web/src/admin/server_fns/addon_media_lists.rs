@@ -1,6 +1,8 @@
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemRole,
-    AddonMediaListPresentationKind, AddonMediaListReviewState,
+    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
+    AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListReviewState,
+    RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -23,6 +25,8 @@ pub struct AddonMediaListRow {
     pub review_state: AddonMediaListReviewState,
     pub review_error: Option<String>,
     pub published_revision: i32,
+    pub detail_import_policy: AddonMediaListDetailPolicy,
+    pub import_progress: Option<AddonMediaListImportProgressRow>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -41,6 +45,72 @@ pub struct AddonMediaListForm {
     pub review_error: Option<String>,
     pub published_revision: i32,
     pub legacy_chapter_input: String,
+    pub detail_import_policy: AddonMediaListDetailPolicy,
+    pub import_progress: Option<AddonMediaListImportProgressRow>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListImportProgressRow {
+    pub state: AddonMediaListImportState,
+    pub started_at: String,
+    pub discovered_count: u64,
+    pub total_hint: Option<u64>,
+    pub detail_total: u64,
+    pub detail_complete: u64,
+    pub detail_skipped: u64,
+    pub detail_failed: u64,
+    pub detail_pending: u64,
+    pub current_title: Option<String>,
+    pub last_progress_at: Option<String>,
+    pub diagnostic: Option<String>,
+}
+
+/// Browser-safe wire representation of an operator action for an overview import.
+///
+/// The matching repository type is intentionally native-only; keeping this small
+/// enum in the web contract prevents the hydrated bundle from depending on
+/// `ersatzrs-core`.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListImportAction {
+    Pause,
+    Resume,
+    Retry,
+    Cancel,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<AddonMediaListImportAction> for ersatzrs_core::repositories::AddonMediaListImportAction {
+    fn from(action: AddonMediaListImportAction) -> Self {
+        match action {
+            AddonMediaListImportAction::Pause => Self::Pause,
+            AddonMediaListImportAction::Resume => Self::Resume,
+            AddonMediaListImportAction::Retry => Self::Retry,
+            AddonMediaListImportAction::Cancel => Self::Cancel,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListImportProgress>
+    for AddonMediaListImportProgressRow
+{
+    fn from(progress: ersatzrs_core::repositories::AddonMediaListImportProgress) -> Self {
+        Self {
+            state: progress.state,
+            started_at: progress.started_at,
+            discovered_count: progress.discovered_count,
+            total_hint: progress.total_hint,
+            detail_total: progress.detail_total,
+            detail_complete: progress.detail_complete,
+            detail_skipped: progress.detail_skipped,
+            detail_failed: progress.detail_failed,
+            detail_pending: progress.detail_pending,
+            current_title: progress.current_title,
+            last_progress_at: progress.last_progress_at,
+            diagnostic: progress.diagnostic,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -49,10 +119,14 @@ pub struct AddonMediaListProviderRow {
     pub name: String,
 }
 
+// These independent transport projections mirror the admin read model; they
+// are not alternate states of one boolean state machine.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListItemRow {
     pub id: i64,
     pub rank: i32,
+    pub kind: AddonMediaListItemKind,
     pub display_title: String,
     pub availability: AddonMediaListItemAvailability,
     pub availability_reason: Option<String>,
@@ -65,8 +139,14 @@ pub struct AddonMediaListItemRow {
     pub year: Option<i32>,
     pub season: Option<i32>,
     pub episode: Option<i32>,
+    pub first_aired: Option<String>,
     pub source_url: Option<String>,
     pub duration_seconds: Option<u64>,
+    pub provider_liveness: RemoteStreamLiveness,
+    pub liveness_override: Option<RemoteStreamLiveness>,
+    pub effective_liveness: RemoteStreamLiveness,
+    pub liveness_conflict: bool,
+    pub published_liveness: RemoteStreamLiveness,
     pub parent_provider_id: Option<String>,
     pub chapter_input: String,
     pub provider_chapter_input: String,
@@ -79,6 +159,8 @@ pub struct AddonMediaListItemRow {
     pub included: bool,
     pub published: bool,
     pub metadata_conflict_count: u32,
+    pub detail_state: AddonMediaListDetailState,
+    pub detail_diagnostic: Option<String>,
 }
 
 /// Per-availability entry totals for one list.
@@ -188,6 +270,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMedi
         Self {
             id: row.id,
             rank: row.rank,
+            kind: row.kind,
             display_title: row.display_title,
             availability: row.availability,
             availability_reason: row.availability_reason,
@@ -200,8 +283,14 @@ impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMedi
             year: row.year,
             season: row.season,
             episode: row.episode,
+            first_aired: row.first_aired,
             source_url: row.source_url,
             duration_seconds: row.duration_seconds,
+            provider_liveness: row.provider_liveness,
+            liveness_override: row.liveness_override,
+            effective_liveness: row.effective_liveness,
+            liveness_conflict: row.liveness_conflict,
+            published_liveness: row.published_liveness,
             parent_provider_id: row.parent_provider_id,
             chapter_input: row.chapter_input,
             provider_chapter_input: row.provider_chapter_input,
@@ -214,6 +303,8 @@ impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMedi
             included: row.included,
             published: row.published,
             metadata_conflict_count: row.metadata_conflict_count,
+            detail_state: row.detail_state,
+            detail_diagnostic: row.detail_diagnostic,
         }
     }
 }
@@ -430,6 +521,7 @@ pub async fn list_addon_media_list_providers(
                     || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V2
                     || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V3
                     || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V4
+                    || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V5
             })
         })
         .map(|item| AddonMediaListProviderRow {
@@ -523,6 +615,8 @@ pub async fn list_addon_media_lists_with_state(
                 review_state: row.review_state,
                 review_error: row.review_error,
                 published_revision: row.published_revision,
+                detail_import_policy: row.detail_import_policy,
+                import_progress: row.import_progress.map(Into::into),
             })
             .collect(),
         total,
@@ -569,6 +663,8 @@ pub async fn get_addon_media_list_form(
                 review_error: form.review_error,
                 published_revision: form.published_revision,
                 legacy_chapter_input: form.legacy_chapter_input,
+                detail_import_policy: form.detail_import_policy,
+                import_progress: form.import_progress.map(Into::into),
             })
         })
 }
@@ -590,6 +686,7 @@ pub async fn list_addon_media_list_items(
                 .map(|row| AddonMediaListItemRow {
                     id: row.id,
                     rank: row.rank,
+                    kind: row.kind,
                     display_title: row.display_title,
                     availability: row.availability,
                     availability_reason: row.availability_reason,
@@ -602,8 +699,14 @@ pub async fn list_addon_media_list_items(
                     year: row.year,
                     season: row.season,
                     episode: row.episode,
+                    first_aired: row.first_aired,
                     source_url: row.source_url,
                     duration_seconds: row.duration_seconds,
+                    provider_liveness: row.provider_liveness,
+                    liveness_override: row.liveness_override,
+                    effective_liveness: row.effective_liveness,
+                    liveness_conflict: row.liveness_conflict,
+                    published_liveness: row.published_liveness,
                     parent_provider_id: row.parent_provider_id,
                     chapter_input: row.chapter_input,
                     provider_chapter_input: row.provider_chapter_input,
@@ -616,6 +719,8 @@ pub async fn list_addon_media_list_items(
                     included: row.included,
                     published: row.published,
                     metadata_conflict_count: row.metadata_conflict_count,
+                    detail_state: row.detail_state,
+                    detail_diagnostic: row.detail_diagnostic,
                 })
                 .collect()
         })
@@ -684,6 +789,46 @@ pub async fn set_addon_media_list_item_content_kind(
                 content_kind,
             },
         )
+        .await
+        .map_err(ServerFnError::new)
+}
+
+/// Set or restore the playback behavior of one Remote Stream entry.
+#[server]
+pub async fn set_addon_media_list_item_liveness(
+    list_id: i64,
+    item_id: i64,
+    liveness: Option<RemoteStreamLiveness>,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .set_addon_media_list_item_liveness(ersatzrs_app::commands::SetAddonMediaListItemLiveness {
+            list_id,
+            item_id,
+            liveness,
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+/// Apply or restore playback behavior for selected or all Remote Stream entries.
+#[server]
+pub async fn apply_addon_media_list_liveness(
+    id: i64,
+    liveness: Option<RemoteStreamLiveness>,
+    item_ids: Option<Vec<i64>>,
+) -> Result<u64, ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .apply_addon_media_list_liveness(ersatzrs_app::commands::ApplyAddonMediaListLiveness {
+            id,
+            liveness,
+            item_ids: item_ids.unwrap_or_default(),
+        })
         .await
         .map_err(ServerFnError::new)
 }
@@ -945,6 +1090,7 @@ pub async fn add_addon_media_list(
     folder_name: String,
     content_kind_override: AddonMediaListContentKind,
     chapter_input: String,
+    load_item_details: bool,
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -956,6 +1102,11 @@ pub async fn add_addon_media_list(
         folder_name,
         content_kind_override,
         chapter_input,
+        if load_item_details {
+            AddonMediaListDetailPolicy::Automatic
+        } else {
+            AddonMediaListDetailPolicy::ManualOnly
+        },
     )
     .await
     .map_err(ServerFnError::new)
@@ -1004,6 +1155,41 @@ pub async fn update_addon_media_list(form: AddonMediaListForm) -> Result<(), Ser
 
     let state = expect_context::<AppState>();
     update_addon_media_list_with_state(&state, form)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+/// Queue one top-level item for detail enrichment with manual priority.
+#[server]
+pub async fn request_addon_media_list_item_details(
+    list_id: i64,
+    item_id: i64,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .request_addon_media_list_item_details(
+            ersatzrs_app::commands::RequestAddonMediaListItemDetails { list_id, item_id },
+        )
+        .await
+        .map_err(ServerFnError::new)
+}
+
+/// Pause, resume, retry, or cancel the current overview generation.
+#[server]
+pub async fn control_addon_media_list_import(
+    id: i64,
+    action: AddonMediaListImportAction,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .control_addon_media_list_import(ersatzrs_app::commands::ControlAddonMediaListImport {
+            id,
+            action: action.into(),
+        })
         .await
         .map_err(ServerFnError::new)
 }
@@ -1063,11 +1249,12 @@ fn log_addon_media_list_failure(
 
 /// Every contract version that can enumerate an add-on media list.
 #[cfg(feature = "ssr")]
-const MEDIA_LIST_CAPABILITIES: [&str; 4] = [
+const MEDIA_LIST_CAPABILITIES: [&str; 5] = [
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V1,
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V2,
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V3,
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V4,
+    ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V5,
 ];
 
 /// Select the add-on for one operator source URL when none was chosen.
@@ -1123,6 +1310,7 @@ pub async fn add_addon_media_list_with_state(
     folder_name: String,
     content_kind_override: AddonMediaListContentKind,
     chapter_input: String,
+    detail_import_policy: AddonMediaListDetailPolicy,
 ) -> ersatzrs_app::Result<i64> {
     // An omitted choice is resolved from the URL rather than rejected, so the
     // operator only has to name an add-on when nothing claims the host.
@@ -1140,6 +1328,7 @@ pub async fn add_addon_media_list_with_state(
             folder_name,
             content_kind_override,
             chapter_input,
+            detail_import_policy,
         })
         .await
         .inspect_err(|error| {
@@ -1199,6 +1388,7 @@ pub async fn update_addon_media_list_with_state(
             generate_playlist: form.generate_playlist,
             content_kind_override: form.content_kind_override,
             chapter_input: form.legacy_chapter_input,
+            detail_import_policy: form.detail_import_policy,
         })
         .await
         .inspect_err(|error| log_addon_media_list_failure("update", None, Some(id), error))?;

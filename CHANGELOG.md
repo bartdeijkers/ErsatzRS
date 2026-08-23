@@ -13,6 +13,25 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.25-beta] - 2026-08-23
+
+### Changed
+
+- Add-on Lists now preserve provider-neutral unknown/finite/live playback
+  behavior through review, publication, scheduling, IPTV, HLS, health, and
+  yt-dlp. Remote Stream remains the collection type for both live and on-demand
+  media, while unsupported or unknown live behavior is refused safely.
+
+- Add-on list imports now publish a verified paginated overview before optional
+  item-detail requests and resume both discovery and enrichment from durable
+  checkpoints. The fair-use scanner serializes automatic and manual requests
+  per provider host using a randomized global range configurable under Add-ons
+  (2–16 seconds by default), without shortening an existing cooldown. Lists can
+  stay overview-only, every row can fetch details manually, and the editor shows
+  durable progress, item number, first-air date, season/episode columns, and
+  exact accessible bulk-numbering previews. Beeld & Geluid and yt-dlp share the
+  provider-neutral workflow on POSIX and Windows.
+
 ## [1.0.24-beta] - 2026-08-22
 
 ### Added
@@ -2242,7 +2261,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.24-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.25-beta...HEAD
+[1.0.25-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.24-beta...v1.0.25-beta
 [1.0.24-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.23-beta...v1.0.24-beta
 [1.0.21-beta.1]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.21-beta...v1.0.21-beta.1
 [1.0.21-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.17-beta...v1.0.21-beta

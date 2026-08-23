@@ -15,10 +15,10 @@ use crate::admin::server_fns::addons::load_addon_detail;
 use crate::admin::server_fns::addons::{
     check_addon_package, disable_addon_package, enable_addon_package, install_addon_package,
     load_addon_overview, refresh_addon_repository, remove_addon_repository,
-    save_addon_configuration, save_addon_repository, set_default_remote_stream_addon,
-    set_unverified_addon_sources, uninstall_addon_package, AddonDetail, AddonOverview,
-    AddonRepositoryEditor, AddonRepositoryRow, AddonSettingEditor, AddonSettingRow,
-    AvailableAddonRow, InstalledAddonRow,
+    save_addon_configuration, save_addon_detail_wait_settings, save_addon_repository,
+    set_default_remote_stream_addon, set_unverified_addon_sources, uninstall_addon_package,
+    AddonDetail, AddonDetailWaitSettingsForm, AddonOverview, AddonRepositoryEditor,
+    AddonRepositoryRow, AddonSettingEditor, AddonSettingRow, AvailableAddonRow, InstalledAddonRow,
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::resource_state::AdminErrorState;
@@ -102,8 +102,21 @@ fn AddonsSettingsIsland(
             move || async move { load_or_notify(load_addon_overview().await, toast) },
         );
     let current = RwSignal::new(None::<AddonOverview>);
+    let detail_wait = DetailWaitEditor {
+        minimum: RwSignal::new("2".to_owned()),
+        maximum: RwSignal::new("16".to_owned()),
+        save: Action::new(move |form: &AddonDetailWaitSettingsForm| {
+            save_addon_detail_wait_settings(*form)
+        }),
+    };
     Effect::new(move |_| {
         if let Some(value) = overview.get() {
+            detail_wait
+                .minimum
+                .set(value.detail_wait.minimum_seconds.to_string());
+            detail_wait
+                .maximum
+                .set(value.detail_wait.maximum_seconds.to_string());
             current.set(Some(value));
         }
     });
@@ -171,6 +184,14 @@ fn AddonsSettingsIsland(
         action_result(default_remote_stream_action.value().get(), overview, toast);
     });
     Effect::new(move |_| action_result(refresh_all_action.value().get(), overview, toast));
+    Effect::new(move |_| match detail_wait.save.value().get() {
+        Some(Ok(())) => {
+            toast.push(tr(TextKey::Saved).to_owned(), ToastSeverity::Success);
+            overview.refetch();
+        }
+        Some(Err(error)) => toast.push(error.to_string(), ToastSeverity::Error),
+        None => {}
+    });
 
     let view_name = initial_view.clone();
     let search_value = initial_search.clone();
@@ -242,6 +263,8 @@ fn AddonsSettingsIsland(
                 removal,
                 pickers,
                 RepositoryActions { save: save_repository_action, refresh: refresh_action },
+                detail_wait,
+                toast,
                 unknown_sources_confirm_open,
                 unknown_sources_action,
                 default_remote_stream_action,
@@ -347,6 +370,13 @@ struct RepositoryActions {
     refresh: Action<String, Result<(), ServerFnError>>,
 }
 
+#[derive(Clone, Copy)]
+struct DetailWaitEditor {
+    minimum: RwSignal<String>,
+    maximum: RwSignal<String>,
+    save: Action<AddonDetailWaitSettingsForm, Result<(), ServerFnError>>,
+}
+
 /// The repository the delete confirmation is about.
 #[derive(Clone, Copy)]
 struct RemovalPrompt {
@@ -376,6 +406,8 @@ fn manager_body(
     removal: RemovalPrompt,
     pickers: FilePickers,
     actions: RepositoryActions,
+    detail_wait: DetailWaitEditor,
+    toast: ToastStore,
     unknown_sources_confirm_open: RwSignal<bool>,
     unknown_sources_action: Action<bool, Result<(), ServerFnError>>,
     default_remote_stream_action: Action<String, Result<(), ServerFnError>>,
@@ -479,6 +511,78 @@ fn manager_body(
         </form>
 
         <section style:display=if view_name == "installed" { "" } else { "none" }>
+            <form
+                class=style::section
+                data-testid="addon-detail-wait-settings"
+                on:submit=move |event| {
+                    event.prevent_default();
+                    let minimum = detail_wait.minimum.get_untracked().trim().parse::<i32>();
+                    let maximum = detail_wait.maximum.get_untracked().trim().parse::<i32>();
+                    match (minimum, maximum) {
+                        (Ok(minimum_seconds), Ok(maximum_seconds))
+                            if minimum_seconds > 0
+                                && maximum_seconds > 0
+                                && minimum_seconds <= maximum_seconds =>
+                        {
+                            detail_wait.save.dispatch(AddonDetailWaitSettingsForm {
+                                minimum_seconds,
+                                maximum_seconds,
+                            });
+                        }
+                        _ => toast.push(
+                            tr(TextKey::AddonDetailWaitInvalid).to_owned(),
+                            ToastSeverity::Error,
+                        ),
+                    }
+                }
+            >
+                <div class=style::section_header>
+                    <div>
+                        <h2>{tr(TextKey::AddonDetailWait)}</h2>
+                        <p id="addon-detail-wait-help" class=style::section_help>
+                            {tr(TextKey::AddonDetailWaitHelp)}
+                        </p>
+                    </div>
+                    <button
+                        type="submit"
+                        class=style::btn_primary
+                        disabled=move || detail_wait.save.pending().get()
+                    >{tr(TextKey::Save)}</button>
+                </div>
+                <div class=style::section_divider></div>
+                <div class=style::detail_wait_fields>
+                    <label for="addon-detail-wait-minimum">
+                        {format!("{} ({})", tr(TextKey::MinimumDetailWait), tr(TextKey::Seconds))}
+                        <input
+                            id="addon-detail-wait-minimum"
+                            data-testid="addon-detail-wait-minimum"
+                            type="number"
+                            min="1"
+                            max="2147483647"
+                            step="1"
+                            required
+                            aria-describedby="addon-detail-wait-help"
+                            prop:value=move || detail_wait.minimum.get()
+                            on:input=move |event| detail_wait.minimum.set(event_target_value(&event))
+                        />
+                    </label>
+                    <label for="addon-detail-wait-maximum">
+                        {format!("{} ({})", tr(TextKey::MaximumDetailWait), tr(TextKey::Seconds))}
+                        <input
+                            id="addon-detail-wait-maximum"
+                            data-testid="addon-detail-wait-maximum"
+                            type="number"
+                            min="1"
+                            max="2147483647"
+                            step="1"
+                            required
+                            aria-describedby="addon-detail-wait-help"
+                            prop:value=move || detail_wait.maximum.get()
+                            on:input=move |event| detail_wait.maximum.set(event_target_value(&event))
+                        />
+                    </label>
+                </div>
+            </form>
             // A routing preference over installed add-ons, so it lives with
             // the add-ons it chooses between rather than with source trust.
             <div class=style::section data-testid="default-remote-stream-addon">

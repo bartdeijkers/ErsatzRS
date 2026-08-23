@@ -46,10 +46,10 @@ use crate::playback::{
     PlaybackSubtitle,
 };
 use crate::remote_stream::{
-    redact_remote_stream_output, redacted_source_label, remote_stream_input_file,
-    remote_stream_producer, resolve_remote_stream_with_addons, spawn_ffmpeg_with_remote_input,
-    RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext,
-    ResolvedRemoteStream,
+    decode_persisted_liveness, redact_remote_stream_output, redacted_source_label,
+    remote_stream_input_file, remote_stream_playback_start, remote_stream_producer,
+    resolve_remote_stream_with_addons, spawn_ffmpeg_with_remote_input, RemoteStreamCommand,
+    RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext, ResolvedRemoteStream,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
@@ -445,6 +445,18 @@ impl HlsSessionWorker {
                         break;
                     }
                 };
+            // A live source is never opened at a future work-ahead cursor. Keep
+            // the session responsive to cancellation while waiting for its
+            // scheduled wall-clock boundary, then admit it in realtime.
+            if let Some(delay) =
+                live_source_admission_delay(live_remote_stream, transcode_cursor, now)
+            {
+                self.set_admission_status(HlsAdmissionStatus::Waiting);
+                self.set_session_state(self.session_state().throttle());
+                let _ = self.trim_playlist_inner().await;
+                tokio::time::sleep(delay.min(Duration::from_secs(1))).await;
+                continue;
+            }
             let force_realtime = realtime_by_buffer || live_remote_stream;
             let recently_accessed = self.was_recently_accessed();
             if idle_timeout.is_some() && !recently_accessed {
@@ -712,20 +724,17 @@ impl HlsSessionWorker {
             } else {
                 playout_start_duration(decision.request_time, active.playout_start)
             };
-            let is_live_remote = active
-                .remote_stream
-                .as_ref()
-                .is_some_and(|stream| stream.is_live);
-            let is_continuous_remote = active
-                .remote_stream
-                .as_ref()
-                .is_some_and(|stream| !stream.is_live);
+            let is_live_remote = active.remote_stream.as_ref().is_some_and(|stream| {
+                stream.liveness == ersatzrs_domain::RemoteStreamLiveness::Live
+            });
+            let is_continuous_remote = active.remote_stream.as_ref().is_some_and(|stream| {
+                stream.liveness == ersatzrs_domain::RemoteStreamLiveness::Finite
+            });
             let hls_realtime = decision.realtime || is_live_remote || is_continuous_remote;
-            let start_position = if is_live_remote {
-                Duration::ZERO
-            } else {
-                active.content_seek_position(elapsed)
-            };
+            let start_position = remote_stream_playback_start(
+                active.remote_stream.as_ref(),
+                active.content_seek_position(elapsed),
+            );
             let start_seconds = duration_as_i64_seconds(start_position);
             let duration = hls_playout_item_duration(
                 &active,
@@ -2909,6 +2918,17 @@ fn should_use_realtime(transcoded_until: DateTime<Utc>, now: DateTime<Utc>) -> b
     transcoded_buffer(transcoded_until, now).num_seconds() >= HLS_REALTIME_BUFFER_SECONDS
 }
 
+fn live_source_admission_delay(
+    is_live: bool,
+    transcode_cursor: DateTime<Utc>,
+    wall_clock_now: DateTime<Utc>,
+) -> Option<Duration> {
+    is_live
+        .then(|| (transcode_cursor - wall_clock_now).to_std().ok())
+        .flatten()
+        .filter(|delay| !delay.is_zero())
+}
+
 fn transcoded_buffer(transcoded_until: DateTime<Utc>, now: DateTime<Utc>) -> chrono::Duration {
     (transcoded_until - now).max(chrono::Duration::zero())
 }
@@ -3839,6 +3859,7 @@ async fn load_active_hls_item(
                   rs."Script" AS "RemoteLegacyScript",
                   rs."Duration" AS "RemoteDuration",
                   rs."FallbackQuery" AS "RemoteFallbackQuery",
+                  rs."Liveness" AS "RemoteLiveness",
                   rs."IsLive" AS "RemoteIsLive"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
@@ -3883,13 +3904,23 @@ async fn load_active_hls_item(
         });
     }
     let remote_stream = if remote_url.is_some() || remote_addon.is_some() {
+        let legacy_is_live =
+            decode_hls_column::<Option<i64>>(&row, "RemoteIsLive")?.is_some_and(|value| value != 0);
+        let stored_liveness = decode_persisted_liveness(
+            decode_hls_column::<Option<i64>>(&row, "RemoteLiveness")?.unwrap_or_default(),
+            legacy_is_live,
+        )
+        .map_err(|error| RepositoryError::Decode {
+            kind: "active HLS remote stream",
+            value: error.to_string(),
+        })?;
         let definition = RemoteStreamDefinition {
             url: remote_url,
             addon: remote_addon,
             duration: decode_hls_column(&row, "RemoteDuration")?,
             fallback_query: decode_hls_column(&row, "RemoteFallbackQuery")?,
-            is_live: decode_hls_column::<Option<i64>>(&row, "RemoteIsLive")?
-                .is_some_and(|value| value != 0),
+            liveness: Some(stored_liveness),
+            is_live: legacy_is_live,
             title: None,
             plot: None,
             year: None,
@@ -4049,7 +4080,7 @@ async fn current_remote_stream_is_live(
     let transcode_at_text = encode_datetime(playout_context.source_time(transcode_at)?);
     let is_live = sqlx::query_scalar::<_, i64>(
         r#"SELECT CASE
-                       WHEN rs."IsLive" <> 0 OR LOWER(rs."Url") LIKE 'rtsp:%' THEN 1
+                       WHEN rs."Liveness" = 2 THEN 1
                        ELSE 0
                    END
            FROM "PlayoutItem" pi
@@ -5200,6 +5231,20 @@ mod tests {
     }
 
     #[test]
+    fn live_source_waits_for_its_wall_clock_boundary() {
+        let now = Utc::now();
+        assert_eq!(
+            live_source_admission_delay(true, now + chrono::Duration::seconds(9), now),
+            Some(Duration::from_secs(9))
+        );
+        assert_eq!(live_source_admission_delay(true, now, now), None);
+        assert_eq!(
+            live_source_admission_delay(false, now + chrono::Duration::seconds(9), now),
+            None
+        );
+    }
+
+    #[test]
     fn hls_transcode_decision_treats_playout_updated_as_live_seek() {
         let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
             .expect("timestamp")
@@ -5678,8 +5723,8 @@ mod tests {
             .with_timezone(&Utc);
         sqlx::query(
             r#"INSERT INTO "RemoteStream" (
-                   "Id", "Url", "Script", "Duration", "FallbackQuery", "IsLive"
-               ) VALUES (30, 'https://example.test/live.m3u8', NULL, NULL, NULL, 1)"#,
+                   "Id", "Url", "Script", "Duration", "FallbackQuery", "Liveness", "IsLive"
+               ) VALUES (30, 'https://example.test/live.m3u8', NULL, NULL, NULL, 2, 1)"#,
         )
         .execute(&pool)
         .await
@@ -5742,9 +5787,9 @@ mod tests {
 
         sqlx::query(
             r#"INSERT INTO "RemoteStream" (
-                   "Id", "Url", "Script", "Duration", "FallbackQuery", "IsLive"
+                   "Id", "Url", "Script", "Duration", "FallbackQuery", "Liveness", "IsLive"
                ) VALUES (
-                   30, NULL, '"tools/live producer.sh"', NULL, NULL, 1
+                   30, NULL, '"tools/live producer.sh"', NULL, NULL, 2, 1
                )"#,
         )
         .execute(&pool)
@@ -5901,6 +5946,7 @@ mod tests {
                 "Script" TEXT NULL,
                 "Duration" TEXT NULL,
                 "FallbackQuery" TEXT NULL,
+                "Liveness" INTEGER NOT NULL,
                 "IsLive" INTEGER NOT NULL
             )"#,
             r#"CREATE TABLE "AddonInstallation" (

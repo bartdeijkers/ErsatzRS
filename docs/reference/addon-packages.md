@@ -27,8 +27,8 @@ deliberately; they do not depend on a moving branch or the application
 workspace by path.
 
 `AddonMediaListRecord` and `AddonMetadataDocument` own
-`media-list.list.v1` through v4 records.
-`PlaylistEntry` owns `remote-stream.list.v1` through v3 records, while
+`media-list.list.v1` through v5 records.
+`PlaylistEntry` owns `remote-stream.list.v1` through v4 records, while
 `PlaylistEntryMetadata` owns `remote-stream.item.v1` and v2. Their shared wire
 enums are distinct from the host's persisted domain enums. The crate also
 exports `conform_media_list_output` and

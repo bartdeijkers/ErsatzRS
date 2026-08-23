@@ -12,12 +12,14 @@ use ersatzrs_core::addon_media_list::{
 use ersatzrs_core::repositories::{AddonMediaListMetadataConflict, RepositoryError, Result};
 use ersatzrs_domain::{
     AddonMediaList, AddonMediaListItemAvailability, AddonMediaListItemKind, EntityId,
+    RemoteStreamLiveness,
 };
 use sqlx::{Pool, Row};
 
 use crate::db::{Db, DbPool};
 use crate::repositories::common::{
-    decode_bool_column, decode_enum_column, decode_optional_datetime, encode_datetime, encode_enum,
+    decode_bool_column, decode_enum_column, decode_optional_datetime, decode_optional_enum_column,
+    encode_datetime, encode_enum,
 };
 
 const PLAYBACK_ORDER_CHRONOLOGICAL: i32 = 1;
@@ -55,7 +57,7 @@ impl AddonMediaListSynchronizer {
 
         let rows = sqlx::query(
             r#"SELECT "Id", "ProviderId", "Kind", "Title", "Year", "Season", "Episode", "Rank", "SourceUrl",
-                      "Availability", "Published"
+                      "Availability", "Published", "DurationSeconds", "PublishedLiveness"
                FROM "AddonMediaListItem"
                WHERE "AddonMediaListId" = ?
                ORDER BY "Rank", "Id""#,
@@ -96,6 +98,8 @@ impl AddonMediaListSynchronizer {
                     &row,
                     "Availability",
                 )?,
+                duration_seconds: decode_optional_seconds(&row, "DurationSeconds")?,
+                liveness: decode_enum_column("RemoteStreamLiveness", &row, "PublishedLiveness")?,
                 guids: self
                     .load_item_guids(row.try_get("Id").repository()?)
                     .await?,
@@ -164,6 +168,182 @@ impl AddonMediaListSynchronizer {
             return Err(publication_in_progress());
         }
 
+        Ok(())
+    }
+
+    /// Merge one deferred detail result without letting playback-sensitive
+    /// values silently alter an already published revision.
+    ///
+    /// Provider metadata remains separate from operator overrides. Safe
+    /// descriptive changes are marked for a coalesced projection; identity,
+    /// classification, availability, source, duration, or liveness changes
+    /// return the list to review while the published playback snapshot stays
+    /// intact.
+    #[allow(clippy::too_many_lines)] // Ownership comparison and the guarded merge are one unit.
+    pub(crate) async fn merge_detail_item(
+        &self,
+        list_id: EntityId,
+        item: &EnumeratedAddonMediaListItem,
+    ) -> Result<()> {
+        let row = sqlx::query(
+            r#"SELECT "item".*, "list"."PublishedRevision"
+               FROM "AddonMediaListItem" AS "item"
+               JOIN "AddonMediaList" AS "list" ON "list"."Id" = "item"."AddonMediaListId"
+               WHERE "item"."AddonMediaListId" = ? AND "item"."ProviderId" = ?
+                 AND "item"."ParentProviderId" IS NULL"#,
+        )
+        .bind(list_id)
+        .bind(&item.provider_id)
+        .fetch_optional(&self.pool)
+        .await
+        .repository()?
+        .ok_or_else(|| {
+            RepositoryError::Conflict(
+                "the enriched item no longer belongs to the committed overview".to_owned(),
+            )
+        })?;
+        let item_id: EntityId = row.try_get("Id").repository()?;
+        let published_revision: i32 = row.try_get("PublishedRevision").repository()?;
+        let published = published_revision > 0 && decode_bool_column(&row, "Published")?;
+        let previous_metadata: String = row.try_get("ProviderMetadataJson").repository()?;
+        let override_metadata: String = row.try_get("MetadataOverrideJson").repository()?;
+        let previous_conflicts: Option<String> =
+            row.try_get("MetadataConflictJson").repository()?;
+        let next_metadata = encode_metadata(&item.metadata)?;
+        let conflicts = refresh_conflict_json(
+            &previous_metadata,
+            &next_metadata,
+            &override_metadata,
+            previous_conflicts.as_deref(),
+        )?;
+        let previous_provider_liveness =
+            decode_enum_column("RemoteStreamLiveness", &row, "ProviderLiveness")?;
+        let liveness_override =
+            decode_optional_enum_column("RemoteStreamLiveness", &row, "LivenessOverride")?;
+        let previous_liveness_conflict = decode_bool_column(&row, "LivenessConflict")?;
+        let (effective_liveness, liveness_conflict) = refresh_liveness(
+            previous_provider_liveness,
+            item.liveness,
+            liveness_override,
+            previous_liveness_conflict,
+        );
+        let previous_guids = self.load_item_guids(item_id).await?;
+        let operational_change = row.try_get::<i32, _>("Kind").repository()?
+            != encode_enum(item.kind)
+            || row.try_get::<Option<String>, _>("SourceUrl").repository()? != item.source_url
+            || decode_optional_seconds(&row, "DurationSeconds")? != item.duration_seconds
+            || row.try_get::<i32, _>("ContentKind").repository()? != encode_enum(item.content_kind)
+            || row.try_get::<i32, _>("CollectionRole").repository()?
+                != encode_enum(item.collection_role)
+            || decode_enum_column::<AddonMediaListItemAvailability>(
+                "AddonMediaListItemAvailability",
+                &row,
+                "Availability",
+            )? != item.availability
+            || previous_provider_liveness != item.liveness
+            || previous_guids != item.guids;
+        let review_required = published && (operational_change || conflicts.is_some());
+        let image_urls = encode_image_urls(&item.additional_image_urls)?;
+        let now = encode_datetime(Utc::now());
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        if published {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem"
+                   SET "DisplayTitle" = ?, "Title" = ?, "Year" = ?, "Season" = ?,
+                       "Episode" = ?, "AdditionalImageUrls" = ?,
+                       "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
+                       "ProviderLiveness" = ?, "EffectiveLiveness" = ?,
+                       "LivenessConflict" = ?
+                   WHERE "Id" = ?"#,
+            )
+            .bind(&item.display_title)
+            .bind(&item.title)
+            .bind(item.year)
+            .bind(item.season)
+            .bind(item.episode)
+            .bind(image_urls)
+            .bind(&next_metadata)
+            .bind(&conflicts)
+            .bind(encode_enum(item.liveness))
+            .bind(encode_enum(effective_liveness))
+            .bind(liveness_conflict)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        } else {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem"
+                   SET "Kind" = ?, "DisplayTitle" = ?, "Title" = ?, "Year" = ?,
+                       "Season" = ?, "Episode" = ?, "SourceUrl" = ?,
+                       "Availability" = ?, "AvailabilityReason" = ?,
+                       "AvailabilityUpdated" = ?, "ContentKind" = ?, "CollectionRole" = ?,
+                       "DurationSeconds" = ?, "AdditionalImageUrls" = ?,
+                       "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
+                       "ProviderLiveness" = ?, "EffectiveLiveness" = ?,
+                       "LivenessConflict" = ?
+                   WHERE "Id" = ?"#,
+            )
+            .bind(encode_enum(item.kind))
+            .bind(&item.display_title)
+            .bind(&item.title)
+            .bind(item.year)
+            .bind(item.season)
+            .bind(item.episode)
+            .bind(&item.source_url)
+            .bind(encode_enum(item.availability))
+            .bind(&item.availability_reason)
+            .bind(&now)
+            .bind(encode_enum(item.content_kind))
+            .bind(encode_enum(item.collection_role))
+            .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
+            .bind(image_urls)
+            .bind(&next_metadata)
+            .bind(&conflicts)
+            .bind(encode_enum(item.liveness))
+            .bind(encode_enum(effective_liveness))
+            .bind(liveness_conflict)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            sqlx::query(r#"DELETE FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" = ?"#)
+                .bind(item_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            insert_item_guids(&mut tx, item_id, &item.guids).await?;
+        }
+        if review_required {
+            sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "ReviewState" = ?, "ReviewError" = ?
+                   WHERE "Id" = ? AND "ReviewState" <> ?"#,
+            )
+            .bind(encode_enum(
+                ersatzrs_domain::AddonMediaListReviewState::Ready,
+            ))
+            .bind("Provider details changed review-gated item values")
+            .bind(list_id)
+            .bind(encode_enum(
+                ersatzrs_domain::AddonMediaListReviewState::Publishing,
+            ))
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        } else if published {
+            sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "DetailProjectionPendingAt" = ?
+                   WHERE "Id" = ?"#,
+            )
+            .bind(&now)
+            .bind(list_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        }
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -414,6 +594,12 @@ impl AddonMediaListSynchronizer {
                         &existing_item.metadata_override_json,
                         existing_item.metadata_conflict_json.as_deref(),
                     )?;
+                    let (effective_liveness, liveness_conflict) = refresh_liveness(
+                        existing_item.provider_liveness,
+                        item.liveness,
+                        existing_item.liveness_override,
+                        existing_item.liveness_conflict,
+                    );
                     sqlx::query(
                         r#"UPDATE "AddonMediaListItem"
                        SET "Kind" = ?, "Rank" = ?, "Title" = ?, "Year" = ?,
@@ -424,6 +610,8 @@ impl AddonMediaListSynchronizer {
                            "ParentProviderId" = ?, "FragmentStartSeconds" = ?,
                            "FragmentEndSeconds" = ?, "AdditionalImageUrls" = ?,
                            "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
+                           "ProviderLiveness" = ?, "EffectiveLiveness" = ?,
+                           "LivenessConflict" = ?,
                            "MediaItemId" = NULL
                        WHERE "Id" = ?"#,
                     )
@@ -452,6 +640,9 @@ impl AddonMediaListSynchronizer {
                     .bind(image_urls)
                     .bind(provider_metadata)
                     .bind(conflicts)
+                    .bind(encode_enum(item.liveness))
+                    .bind(encode_enum(effective_liveness))
+                    .bind(liveness_conflict)
                     .bind(existing_id)
                     .execute(&mut *tx)
                     .await
@@ -588,7 +779,8 @@ impl AddonMediaListSynchronizer {
     async fn load_existing_items(&self, list_id: EntityId) -> Result<Vec<ExistingItem>> {
         let rows = sqlx::query(
             r#"SELECT "Id", "ProviderId", "ParentProviderId", "ProviderMetadataJson",
-                      "MetadataOverrideJson", "MetadataConflictJson"
+                      "MetadataOverrideJson", "MetadataConflictJson", "ProviderLiveness",
+                      "LivenessOverride", "LivenessConflict"
                FROM "AddonMediaListItem"
                WHERE "AddonMediaListId" = ?
                ORDER BY "Rank", "Id""#,
@@ -607,6 +799,17 @@ impl AddonMediaListSynchronizer {
                     provider_metadata_json: row.try_get("ProviderMetadataJson").repository()?,
                     metadata_override_json: row.try_get("MetadataOverrideJson").repository()?,
                     metadata_conflict_json: row.try_get("MetadataConflictJson").repository()?,
+                    provider_liveness: decode_enum_column(
+                        "RemoteStreamLiveness",
+                        row,
+                        "ProviderLiveness",
+                    )?,
+                    liveness_override: decode_optional_enum_column(
+                        "RemoteStreamLiveness",
+                        row,
+                        "LivenessOverride",
+                    )?,
+                    liveness_conflict: decode_bool_column(row, "LivenessConflict")?,
                 })
             })
             .collect()
@@ -915,6 +1118,13 @@ impl AddonMediaListSynchronizer {
         item: &MatchItem,
         provider_media_item_id: Option<EntityId>,
     ) -> Result<Option<PlaylistSelection>> {
+        if item.kind == AddonMediaListItemKind::RemoteStream
+            && (item.liveness == RemoteStreamLiveness::Unknown
+                || (item.liveness == RemoteStreamLiveness::Finite
+                    && item.duration_seconds.is_none_or(|duration| duration == 0)))
+        {
+            return Ok(None);
+        }
         if item.availability != AddonMediaListItemAvailability::Unavailable {
             let projected_episode_id = sqlx::query_scalar::<_, EntityId>(
                 r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
@@ -1060,7 +1270,7 @@ where
     ///
     /// Shared by import and by an add-on change so both paths agree on chapter
     /// expansion, managed-library projection, and matching.
-    async fn persist_enumerated(
+    pub(crate) async fn persist_enumerated(
         &self,
         list: &AddonMediaList,
         enumerated: &mut EnumeratedAddonMediaList,
@@ -1338,8 +1548,8 @@ async fn insert_item(
             "Availability", "AvailabilityReason", "AvailabilityUpdated", "ContentKind",
             "CollectionRole", "DurationSeconds", "ParentProviderId", "FragmentStartSeconds",
             "FragmentEndSeconds", "AdditionalImageUrls", "ProviderMetadataJson",
-            "MetadataOverrideJson"
-           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}')"#,
+            "MetadataOverrideJson", "ProviderLiveness", "EffectiveLiveness"
+           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)"#,
     )
     .bind(&item.provider_id)
     .bind(&item.display_title)
@@ -1368,6 +1578,8 @@ async fn insert_item(
     )?)
     .bind(encode_image_urls(&item.additional_image_urls)?)
     .bind(encode_metadata(&item.metadata)?)
+    .bind(encode_enum(item.liveness))
+    .bind(encode_enum(item.liveness))
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -1398,6 +1610,9 @@ struct ExistingItem {
     provider_metadata_json: String,
     metadata_override_json: String,
     metadata_conflict_json: Option<String>,
+    provider_liveness: RemoteStreamLiveness,
+    liveness_override: Option<RemoteStreamLiveness>,
+    liveness_conflict: bool,
 }
 
 async fn ensure_not_publishing(pool: &Pool<Db>, list_id: EntityId) -> Result<()> {
@@ -1499,6 +1714,25 @@ fn refresh_conflict_json(
     }
 }
 
+fn refresh_liveness(
+    previous_provider: RemoteStreamLiveness,
+    next_provider: RemoteStreamLiveness,
+    operator_override: Option<RemoteStreamLiveness>,
+    existing_conflict: bool,
+) -> (RemoteStreamLiveness, bool) {
+    let Some(operator_value) = operator_override else {
+        return (next_provider, false);
+    };
+    let conflict = if next_provider == operator_value {
+        false
+    } else if previous_provider != next_provider {
+        true
+    } else {
+        existing_conflict
+    };
+    (operator_value, conflict)
+}
+
 fn encode_image_urls(urls: &[String]) -> Result<Option<String>> {
     if urls.is_empty() {
         return Ok(None);
@@ -1537,6 +1771,18 @@ fn optional_fragment_bound(value: Option<u64>, kind: &'static str) -> Result<Opt
         .transpose()
 }
 
+fn decode_optional_seconds(row: &crate::db::DbRow, column: &'static str) -> Result<Option<u64>> {
+    row.try_get::<Option<i64>, _>(column)
+        .repository()?
+        .map(|value| {
+            u64::try_from(value).map_err(|_| RepositoryError::Decode {
+                kind: column,
+                value: value.to_string(),
+            })
+        })
+        .transpose()
+}
+
 #[derive(Debug)]
 struct MatchItem {
     id: EntityId,
@@ -1551,6 +1797,8 @@ struct MatchItem {
     guids: Vec<String>,
     source_url: Option<String>,
     availability: AddonMediaListItemAvailability,
+    duration_seconds: Option<u64>,
+    liveness: RemoteStreamLiveness,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1644,5 +1892,26 @@ mod metadata_conflict_tests {
         )
         .expect("override removed");
         assert!(removed.is_none());
+    }
+
+    #[test]
+    fn liveness_override_wins_and_provider_change_creates_conflict() {
+        let (effective, conflict) = refresh_liveness(
+            RemoteStreamLiveness::Unknown,
+            RemoteStreamLiveness::Live,
+            Some(RemoteStreamLiveness::Finite),
+            false,
+        );
+        assert_eq!(effective, RemoteStreamLiveness::Finite);
+        assert!(conflict);
+
+        let (effective, conflict) = refresh_liveness(
+            RemoteStreamLiveness::Live,
+            RemoteStreamLiveness::Finite,
+            None,
+            true,
+        );
+        assert_eq!(effective, RemoteStreamLiveness::Finite);
+        assert!(!conflict);
     }
 }

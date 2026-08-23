@@ -19,7 +19,8 @@ Unknown fields are rejected.
 | `sync.max_items` | No | `500` | `0` means unlimited; the hard safety limit is 10,000 entries. |
 | `sync.order` | No | `upstream` | `upstream`, `newest_first`, or `title`. |
 | `sync.on_removed` | No | `trash` | `trash` moves owned files to managed trash; `keep` marks them orphaned. |
-| `defaults.is_live` | No | `false` | Applied when the add-on does not mark an item live. |
+| `defaults.liveness` | No | — | Operator override: `unknown`, `finite`, or `live`. |
+| `defaults.is_live` | No | — | Legacy override; explicit false means finite and true means live. |
 | `defaults.content_rating` | No | — | Default content rating. |
 | `defaults.year` | No | — | Default year when an entry has no year. |
 | `filter.include_title` | No | — | Rust regular expression that titles must match. |
@@ -47,8 +48,8 @@ tags:
   - Example series
 ```
 
-The selected add-on must implement `addon.check.v1`, Remote Stream list v1 or
-v2, and `remote-stream.play.v1`. Add-ons are installed,
+The selected add-on must implement `addon.check.v1`, a supported Remote Stream
+list capability, and `remote-stream.play.v1`. Add-ons are installed,
 configured, checked, and enabled under **Settings > Add-ons**; manifests never
 contain command paths.
 
@@ -75,8 +76,8 @@ Capability versions are frozen wire contracts. Add optional or required
 fields under a new capability version instead of emitting them speculatively
 against an existing version.
 
-Optional playback fields are `duration_seconds`, `thumbnail_url`, and
-`is_live`. Optional metadata fields are:
+Optional playback fields are `duration_seconds`, `thumbnail_url`, and the
+legacy `is_live`. Optional metadata fields are:
 
 | Field | Shape | Consumer mapping |
 |---|---|---|
@@ -102,6 +103,16 @@ contract error. Add-ons normalize their provider vocabulary before emitting a
 record.
 The add-on owns provider-specific classification; a saved list content-kind
 override takes precedence when it is not `auto`.
+
+Version 3 adds `additional_image_urls`, `parent_provider_id`,
+`fragment_start_seconds`, and `fragment_end_seconds`. Version 4 adds
+`liveness`, whose only values are `unknown`, `finite`, and `live`. Legacy true
+adapts to live, a positive duration adapts to finite, and false/omitted without
+a positive duration remains unknown. A v4 entry that supplies contradictory
+`liveness` and `is_live` values is rejected. Generated definitions write the
+three-state `liveness` field. In a hand-authored manifest, explicitly setting
+legacy `defaults.is_live: false` remains an operator decision for finite media;
+omitting both default fields leaves the provider value in control.
 
 The host writes playback and availability fields to generated YAML and writes
 descriptive metadata to a same-stem UTF-8 `.nfo` sidecar. Television episodes

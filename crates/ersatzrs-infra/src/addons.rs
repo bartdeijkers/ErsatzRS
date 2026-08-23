@@ -17,11 +17,12 @@ use ersatzrs_addon_contract::{
     sanitize_addon_diagnostic_code, validate_addon_id, AddonCheckResult, AddonCheckStatus,
     AddonEntrypointKind, AddonIconMediaType, AddonManifest, AddonOperationError,
     AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon, CatalogPackage,
-    RepositoryManifest, CAPABILITY_ADDON_CHECK_V1, CAPABILITY_MEDIA_LIST_LIST_V1,
-    CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4,
-    CAPABILITY_REMOTE_STREAM_ITEM_V1, CAPABILITY_REMOTE_STREAM_ITEM_V2,
-    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
-    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED,
+    RepositoryManifest, CAPABILITY_ADDON_CHECK_V1, CAPABILITY_MEDIA_LIST_IMPORT_V1,
+    CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3,
+    CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5, CAPABILITY_REMOTE_STREAM_ITEM_V1,
+    CAPABILITY_REMOTE_STREAM_ITEM_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
+    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
+    CAPABILITY_REMOTE_STREAM_LIST_V4, CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED,
     OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
 };
 use futures_util::StreamExt as _;
@@ -35,7 +36,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 use sqlx::Row as _;
 use sqlx::Transaction;
-use tokio::io::AsyncReadExt as _;
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::process::Command;
 use uuid::Uuid;
 
@@ -2234,15 +2235,18 @@ fn validate_supported_operation(capability: &str, operation: &str) -> Result<(),
                     | CAPABILITY_MEDIA_LIST_LIST_V2
                     | CAPABILITY_MEDIA_LIST_LIST_V3
                     | CAPABILITY_MEDIA_LIST_LIST_V4
+                    | CAPABILITY_MEDIA_LIST_LIST_V5
                     | CAPABILITY_REMOTE_STREAM_LIST_V1
                     | CAPABILITY_REMOTE_STREAM_LIST_V2
-                    | CAPABILITY_REMOTE_STREAM_LIST_V3,
+                    | CAPABILITY_REMOTE_STREAM_LIST_V3
+                    | CAPABILITY_REMOTE_STREAM_LIST_V4,
                 "list",
             )
             | (
                 CAPABILITY_REMOTE_STREAM_ITEM_V1 | CAPABILITY_REMOTE_STREAM_ITEM_V2,
                 "item"
             )
+            | (CAPABILITY_MEDIA_LIST_IMPORT_V1, "discover" | "enrich")
             | (CAPABILITY_REMOTE_STREAM_PLAY_V1, "play")
     );
     if !supported {
@@ -2335,10 +2339,66 @@ pub async fn invoke_enabled_addon(
         .map_err(AddonError::into_operation)
 }
 
+/// Invoke one enabled capability with one bounded JSON request on stdin.
+///
+/// # Errors
+///
+/// Returns an error when resolution, stdin delivery, timeout, process-group
+/// cleanup, or the bounded output contract fails.
+pub async fn invoke_enabled_addon_with_input(
+    pool: &DbPool,
+    addon_id: &str,
+    invocation: AddonInvocation<'_>,
+    input: &[u8],
+) -> Result<Vec<u8>, AddonError> {
+    let mut command = resolve_enabled_addon_command(
+        pool,
+        addon_id,
+        invocation.capability,
+        invocation.operation,
+        invocation.runtime,
+    )
+    .await
+    .map_err(AddonError::into_operation)?;
+    command
+        .environment
+        .extend(invocation.extra_environment.clone());
+    command.environment.insert(
+        "ERSATZRS_ADDON_CAPABILITY".to_owned(),
+        invocation.capability.to_owned(),
+    );
+    run_bounded_command_with_input(
+        &command,
+        invocation.timeout,
+        invocation.max_output_bytes,
+        input,
+    )
+    .await
+    .map_err(AddonError::into_operation)
+}
+
 async fn run_bounded_command(
     command: &ResolvedAddonCommand,
     timeout: Duration,
     max_output_bytes: usize,
+) -> Result<Vec<u8>, AddonError> {
+    run_bounded_command_inner(command, timeout, max_output_bytes, None).await
+}
+
+async fn run_bounded_command_with_input(
+    command: &ResolvedAddonCommand,
+    timeout: Duration,
+    max_output_bytes: usize,
+    input: &[u8],
+) -> Result<Vec<u8>, AddonError> {
+    run_bounded_command_inner(command, timeout, max_output_bytes, Some(input)).await
+}
+
+async fn run_bounded_command_inner(
+    command: &ResolvedAddonCommand,
+    timeout: Duration,
+    max_output_bytes: usize,
+    input: Option<&[u8]>,
 ) -> Result<Vec<u8>, AddonError> {
     let mut process = addon_process(command);
     process
@@ -2346,7 +2406,11 @@ async fn run_bounded_command(
         .env_clear()
         .envs(addon_process_environment())
         .envs(&command.environment)
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = spawn_managed_addon_process(process)
@@ -2359,12 +2423,29 @@ async fn run_bounded_command(
         .stderr()
         .take()
         .ok_or_else(|| AddonError::Process("entrypoint stderr is unavailable".to_owned()))?;
+    let stdin_task = if let Some(input) = input {
+        let mut stdin = child
+            .stdin()
+            .take()
+            .ok_or_else(|| AddonError::Process("entrypoint stdin is unavailable".to_owned()))?;
+        let input = input.to_vec();
+        Some(tokio::spawn(async move {
+            stdin.write_all(&input).await?;
+            stdin.shutdown().await
+        }))
+    } else {
+        None
+    };
     let stdout_task = tokio::spawn(read_limited(stdout, max_output_bytes));
     let stderr_task = tokio::spawn(read_limited(stderr, MAX_CHECK_OUTPUT_BYTES));
     let Ok(wait_result) = tokio::time::timeout(timeout, child.wait()).await else {
         let _ = child.kill().await;
         stdout_task.abort();
         stderr_task.abort();
+        if let Some(task) = stdin_task {
+            task.abort();
+            let _ = task.await;
+        }
         let _ = stdout_task.await;
         let _ = stderr_task.await;
         return Err(AddonError::Process("entrypoint timed out".to_owned()));
@@ -2373,10 +2454,19 @@ async fn run_bounded_command(
         let _ = child.start_kill();
         stdout_task.abort();
         stderr_task.abort();
+        if let Some(task) = stdin_task {
+            task.abort();
+            let _ = task.await;
+        }
         let _ = stdout_task.await;
         let _ = stderr_task.await;
         return Err(AddonError::Process("entrypoint wait failed".to_owned()));
     };
+    if let Some(task) = stdin_task {
+        task.await
+            .map_err(|_| AddonError::Process("stdin writer failed".to_owned()))?
+            .map_err(|_| AddonError::Process("entrypoint stdin write failed".to_owned()))?;
+    }
     let _ = child.start_kill();
     let (stdout, stderr) = collect_bounded_output(stdout_task, stderr_task).await?;
     if stdout.len() > max_output_bytes || stderr.len() > MAX_CHECK_OUTPUT_BYTES {

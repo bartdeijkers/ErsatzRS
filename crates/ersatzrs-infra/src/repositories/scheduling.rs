@@ -31,7 +31,7 @@ use ersatzrs_domain::{
     normalize_sub_kind_token, AddonMediaListContentKind, ChannelSubtitleMode,
     CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
     PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate,
-    ProgramScheduleItem, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
+    ProgramScheduleItem, RemoteStreamLiveness, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
     CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use sqlx::{Pool, Row};
@@ -2526,6 +2526,8 @@ impl SqliteSchedulingContentRepository {
                     (SELECT "mm"."ReleaseDate" FROM "MovieMetadata" AS "mm" WHERE "mm"."MovieId" = "mi"."Id" LIMIT 1),
                     (SELECT "mvm"."ReleaseDate" FROM "MusicVideoMetadata" AS "mvm" WHERE "mvm"."MusicVideoId" = "mi"."Id" LIMIT 1)
                 ) AS "release_date",
+                (SELECT "rs"."Liveness" FROM "RemoteStream" AS "rs"
+                 WHERE "rs"."Id" = "mi"."Id" LIMIT 1) AS "remote_liveness",
                 "mi"."State" AS "state"
              FROM "MediaItem" AS "mi"
              WHERE "mi"."Id" = ?"#,
@@ -3503,6 +3505,11 @@ fn map_scheduling_media_item(row: &DbRow) -> Result<SchedulingMediaItem> {
     Ok(SchedulingMediaItem {
         id: row.try_get("Id").repository()?,
         duration,
+        liveness: decode_optional_enum_column::<RemoteStreamLiveness>(
+            "remote stream liveness",
+            row,
+            "remote_liveness",
+        )?,
         title: row.try_get("title").repository()?,
         show_id: row.try_get("show_id").repository()?,
         season_id: row.try_get("season_id").repository()?,

@@ -556,6 +556,12 @@ pub struct SaveScannerSettings {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SaveAddonDetailWaitSettings {
+    pub minimum_seconds: i32,
+    pub maximum_seconds: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SavePlayoutSettings {
     pub days_to_build: i32,
     pub skip_missing_items: bool,
@@ -3990,6 +3996,44 @@ pub async fn save_scanner_settings(
         .map_err(Into::into)
 }
 
+/// Validate and atomically persist the global add-on detail pacing window.
+pub async fn save_addon_detail_wait_settings(
+    command: SaveAddonDetailWaitSettings,
+    repository: &dyn AdminSettingsRepository,
+) -> crate::Result<()> {
+    if command.minimum_seconds <= 0 {
+        return validation_error(
+            "minimum_seconds",
+            "Minimum detail wait must be a positive whole number of seconds",
+        );
+    }
+    if command.maximum_seconds <= 0 {
+        return validation_error(
+            "maximum_seconds",
+            "Maximum detail wait must be a positive whole number of seconds",
+        );
+    }
+    if command.minimum_seconds > command.maximum_seconds {
+        return validation_error(
+            "minimum_seconds",
+            "Minimum detail wait must not exceed maximum detail wait",
+        );
+    }
+    repository
+        .apply_mutations(vec![
+            setting(
+                ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MINIMUM_SECONDS,
+                command.minimum_seconds.to_string(),
+            ),
+            setting(
+                ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS,
+                command.maximum_seconds.to_string(),
+            ),
+        ])
+        .await
+        .map_err(Into::into)
+}
+
 /// Validate, atomically persist, and fan out playout-setting effects.
 pub async fn save_playout_settings(
     command: SavePlayoutSettings,
@@ -4343,6 +4387,8 @@ pub struct AddAddonMediaList {
     pub content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
     /// Optional YouTube-style chapter markers for a single-video source.
     pub chapter_input: String,
+    /// Whether optional item details should load automatically after Publish.
+    pub detail_import_policy: ersatzrs_domain::AddonMediaListDetailPolicy,
 }
 
 /// Re-run local matching for one persisted Add-on media list.
@@ -4388,6 +4434,22 @@ pub struct UpdateAddonMediaList {
     pub content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
     /// Optional YouTube-style chapter markers for a single-video source.
     pub chapter_input: String,
+    /// Reversible automatic/manual-only detail policy.
+    pub detail_import_policy: ersatzrs_domain::AddonMediaListDetailPolicy,
+}
+
+/// Queue one item for detail enrichment with manual priority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RequestAddonMediaListItemDetails {
+    pub list_id: EntityId,
+    pub item_id: EntityId,
+}
+
+/// Pause, resume, retry, or cancel the newest overview generation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ControlAddonMediaListImport {
+    pub id: EntityId,
+    pub action: ersatzrs_core::repositories::AddonMediaListImportAction,
 }
 
 /// Set the descriptive classification of one Add-on media list entry.
@@ -4395,6 +4457,23 @@ pub struct UpdateAddonMediaList {
 pub struct SetAddonMediaListItemContentKind {
     pub item_id: EntityId,
     pub content_kind: ersatzrs_domain::AddonMediaListContentKind,
+}
+
+/// Set or restore the playback behavior of one Remote Stream entry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SetAddonMediaListItemLiveness {
+    pub list_id: EntityId,
+    pub item_id: EntityId,
+    pub liveness: Option<ersatzrs_domain::RemoteStreamLiveness>,
+}
+
+/// Apply or restore playback behavior for selected or all Remote Stream entries.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApplyAddonMediaListLiveness {
+    pub id: EntityId,
+    pub liveness: Option<ersatzrs_domain::RemoteStreamLiveness>,
+    /// Empty means every top-level Remote Stream entry.
+    pub item_ids: Vec<EntityId>,
 }
 
 /// Apply one classification to every entry of an Add-on media list.
@@ -4495,12 +4574,13 @@ pub async fn add_addon_media_list(
         },
     )?;
     repository
-        .add_or_refresh(
+        .add_or_refresh_with_policy(
             command.addon_id.trim(),
             &source_url,
             (!folder_name.is_empty()).then_some(folder_name),
             command.content_kind_override,
             command.chapter_input.trim(),
+            command.detail_import_policy,
         )
         .await
         .map_err(Into::into)
@@ -4606,6 +4686,35 @@ pub async fn update_addon_media_list(
             command.chapter_input.trim(),
         )
         .await
+        .map_err(ApplicationError::from)?;
+    repository
+        .set_detail_import_policy(command.id, command.detail_import_policy)
+        .await
+        .map_err(Into::into)
+}
+
+/// Queue one item detail request through the durable shared throttle.
+pub async fn request_addon_media_list_item_details(
+    command: RequestAddonMediaListItemDetails,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.list_id, "addon_media_list_id")?;
+    validate_positive_id(command.item_id, "addon_media_list_item_id")?;
+    repository
+        .request_item_details(command.list_id, command.item_id)
+        .await
+        .map_err(Into::into)
+}
+
+/// Apply one lifecycle action to the newest overview import generation.
+pub async fn control_addon_media_list_import(
+    command: ControlAddonMediaListImport,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    repository
+        .control_import(command.id, command.action)
+        .await
         .map_err(Into::into)
 }
 
@@ -4622,6 +4731,37 @@ pub async fn set_addon_media_list_item_content_kind(
     validate_positive_id(command.item_id, "addon_media_list_item_id")?;
     repository
         .update_item_content_kind(command.item_id, command.content_kind)
+        .await
+        .map_err(Into::into)
+}
+
+/// Set or restore the playback behavior of one Remote Stream entry.
+pub async fn set_addon_media_list_item_liveness(
+    command: SetAddonMediaListItemLiveness,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.list_id, "addon_media_list_id")?;
+    validate_positive_id(command.item_id, "addon_media_list_item_id")?;
+    repository
+        .set_item_liveness_override(command.list_id, command.item_id, command.liveness)
+        .await
+        .map_err(Into::into)
+}
+
+/// Apply or restore playback behavior for selected or all Remote Stream entries.
+pub async fn apply_addon_media_list_liveness(
+    command: ApplyAddonMediaListLiveness,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<u64> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    if command.item_ids.len() > 10_000 {
+        return validation_error("item_ids", "must contain at most 10000 items");
+    }
+    for item_id in &command.item_ids {
+        validate_positive_id(*item_id, "addon_media_list_item_id")?;
+    }
+    repository
+        .apply_list_liveness_override(command.id, command.liveness, &command.item_ids)
         .await
         .map_err(Into::into)
 }
@@ -6134,20 +6274,21 @@ mod tests {
         normalize_channel_form, normalize_channel_number_updates, normalize_legacy_nvenc_preset,
         normalize_schedule_item, normalized_hdr_metadata, parse_hdr_content_light,
         parse_hdr_mastering_display, publish_addon_media_list, request_library_scan,
-        request_playout_build, request_scheduled_library_scan, request_show_scan, save_collection,
-        save_ffmpeg_profile, save_ffmpeg_settings, save_logging_settings, save_multi_collection,
-        save_playlist, save_playout_settings, save_rerun_collection, save_smart_collection,
-        set_windows_startup, validate_channel_form, validate_channel_number_updates,
-        validate_output_dynamic_range, validate_schedule_items, validate_template_group_name,
-        validate_template_name, validate_watermark, AddAddonMediaList, AddMediaItemToCollection,
+        request_playout_build, request_scheduled_library_scan, request_show_scan,
+        save_addon_detail_wait_settings, save_collection, save_ffmpeg_profile,
+        save_ffmpeg_settings, save_logging_settings, save_multi_collection, save_playlist,
+        save_playout_settings, save_rerun_collection, save_smart_collection, set_windows_startup,
+        validate_channel_form, validate_channel_number_updates, validate_output_dynamic_range,
+        validate_schedule_items, validate_template_group_name, validate_template_name,
+        validate_watermark, AddAddonMediaList, AddMediaItemToCollection,
         AssignAddonMediaListEpisodeNumbers, BlockItemAdminForm, ChangeAddonMediaListAddon,
         ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm,
         PublishAddonMediaList, RequestLibraryScan, RequestPlayoutBuild, RequestPlayoutBuildOutcome,
         RequestPlayoutBuildRejection, RequestScanOutcome, RequestScanRejection,
-        RequestScheduledLibraryScan, RequestScheduledScanOutcome, RequestShowScan, SaveCollection,
-        SaveFfmpegProfile, SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection,
-        SavePlaylist, SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
-        ScanWorkRequest, WatermarkAdminForm,
+        RequestScheduledLibraryScan, RequestScheduledScanOutcome, RequestShowScan,
+        SaveAddonDetailWaitSettings, SaveCollection, SaveFfmpegProfile, SaveFfmpegSettings,
+        SaveLoggingSettings, SaveMultiCollection, SavePlaylist, SavePlayoutSettings,
+        SaveRerunCollection, SaveSmartCollection, ScanRequest, ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
     use crate::ports::{
@@ -6228,6 +6369,14 @@ mod tests {
                 .expect("added source URLs")
                 .push(source_url.to_owned());
             Ok(1)
+        }
+
+        async fn set_detail_import_policy(
+            &self,
+            _id: EntityId,
+            _policy: ersatzrs_domain::AddonMediaListDetailPolicy,
+        ) -> ersatzrs_core::repositories::Result<()> {
+            Ok(())
         }
 
         async fn managed_library_id(
@@ -7388,6 +7537,7 @@ mod tests {
                     folder_name: String::new(),
                     content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
                     chapter_input: String::new(),
+                    detail_import_policy: ersatzrs_domain::AddonMediaListDetailPolicy::Automatic,
                 },
                 &repository,
             )
@@ -7472,6 +7622,7 @@ mod tests {
                 folder_name: String::new(),
                 content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
                 chapter_input: String::new(),
+                detail_import_policy: ersatzrs_domain::AddonMediaListDetailPolicy::Automatic,
             },
             &repository,
         )
@@ -7504,6 +7655,7 @@ mod tests {
                     folder_name: String::new(),
                     content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
                     chapter_input: chapter_input.to_owned(),
+                    detail_import_policy: ersatzrs_domain::AddonMediaListDetailPolicy::Automatic,
                 },
                 &repository,
             )
@@ -7803,6 +7955,70 @@ mod tests {
         assert_eq!(
             *runtime.events.lock().expect("settings runtime events"),
             ["reload_logging"]
+        );
+    }
+
+    #[tokio::test]
+    async fn addon_detail_wait_settings_validate_before_one_atomic_batch() {
+        let repository = RecordingSettingsRepository::default();
+        save_addon_detail_wait_settings(
+            SaveAddonDetailWaitSettings {
+                minimum_seconds: 7,
+                maximum_seconds: 11,
+            },
+            &repository,
+        )
+        .await
+        .expect("save add-on detail wait settings");
+
+        assert_eq!(
+            repository
+                .values
+                .lock()
+                .expect("settings values")
+                .get(ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MINIMUM_SECONDS)
+                .map(String::as_str),
+            Some("7")
+        );
+        assert_eq!(
+            repository
+                .values
+                .lock()
+                .expect("settings values")
+                .get(ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS)
+                .map(String::as_str),
+            Some("11")
+        );
+        assert_eq!(
+            repository.batches.lock().expect("settings batches").len(),
+            1
+        );
+        assert_eq!(
+            crate::queries::load_addon_detail_wait_settings(&repository)
+                .await
+                .expect("round-trip add-on detail wait settings"),
+            crate::queries::AddonDetailWaitSettings {
+                minimum_seconds: 7,
+                maximum_seconds: 11,
+            }
+        );
+
+        let invalid = save_addon_detail_wait_settings(
+            SaveAddonDetailWaitSettings {
+                minimum_seconds: 12,
+                maximum_seconds: 11,
+            },
+            &repository,
+        )
+        .await;
+        assert!(matches!(
+            invalid,
+            Err(crate::ApplicationError::Validation { .. })
+        ));
+        assert_eq!(
+            repository.batches.lock().expect("settings batches").len(),
+            1,
+            "an invalid save must preserve the last valid range"
         );
     }
 

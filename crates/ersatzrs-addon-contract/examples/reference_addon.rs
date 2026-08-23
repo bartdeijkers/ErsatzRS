@@ -46,6 +46,7 @@ fn run(output: &mut impl io::Write) -> io::Result<()> {
                     content_kind: AddonMediaListContentKind::Movie,
                     collection_role: AddonMediaListItemRole::Primary,
                     duration_seconds: Some(7_200),
+                    liveness: None,
                     parent_provider_id: None,
                     fragment_start_seconds: None,
                     fragment_end_seconds: None,

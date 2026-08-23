@@ -1,15 +1,16 @@
 use async_trait::async_trait;
 use ersatzrs_core::repositories::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListArtwork,
-    AddonMediaListArtworkRole, AddonMediaListArtworkUpload, AddonMediaListItemAdminRow,
-    AddonMediaListItemCounts, AddonMediaListItemDetail, AddonMediaListMetadataConflict,
-    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoOwnership,
-    AddonMediaListPublication, AddonMediaListReplacementCandidate, AddonMediaListRepository,
-    RepositoryError, Result,
+    AddonMediaListArtworkRole, AddonMediaListArtworkUpload, AddonMediaListImportAction,
+    AddonMediaListItemAdminRow, AddonMediaListItemCounts, AddonMediaListItemDetail,
+    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
+    AddonMediaListNfoOwnership, AddonMediaListPublication, AddonMediaListReplacementCandidate,
+    AddonMediaListRepository, RepositoryError, Result,
 };
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemRole,
-    AddonMediaListPresentationKind, AddonMediaListReviewState, EntityId,
+    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
+    AddonMediaListItemAvailability, AddonMediaListItemKind, AddonMediaListItemRole,
+    AddonMediaListPresentationKind, AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
 };
 use sha2::{Digest as _, Sha256};
 use sqlx::{Pool, Row};
@@ -17,6 +18,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::addon_media_list::InstalledAddonMediaListProvider;
+use crate::addon_media_list_import::AddonMediaListImportCoordinator;
 use crate::addon_media_list_sync::{AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer};
 use crate::metadata::{
     artwork_kind, replace_artwork, replace_guids, replace_metadata_languages, replace_people,
@@ -26,6 +28,79 @@ use crate::repositories::common::{decode_bool_column, decode_optional_datetime};
 use crate::repositories::SqlxResultExt as _;
 
 const PAGE_SIZE_KEY: &str = "pages.addon_media_lists.page_size";
+const DETAIL_PROJECTION_BATCH_SECONDS: i64 = 30;
+
+/// Project one quiet batch of safe post-publication detail updates.
+///
+/// The pending timestamp is refreshed by every merge. Clearing it uses the
+/// observed value as a compare-and-swap, so a detail that lands during
+/// projection always leaves another batch pending. The caller queues one
+/// library scan for the returned library rather than scanning once per item.
+///
+/// # Errors
+///
+/// Returns an error when the pending batch cannot be loaded, projected, or
+/// cleared with its compare-and-swap guard.
+pub async fn project_one_pending_detail_batch(
+    pool: &Pool<crate::db::Db>,
+) -> Result<Option<(EntityId, EntityId)>> {
+    let cutoff = crate::repositories::common::encode_datetime(
+        chrono::Utc::now() - chrono::Duration::seconds(DETAIL_PROJECTION_BATCH_SECONDS),
+    );
+    let row = sqlx::query(
+        r#"SELECT "list"."Id", "list"."RequestedPresentationKind",
+                  "list"."DetailProjectionPendingAt", "managed"."LibraryId"
+           FROM "AddonMediaList" AS "list"
+           JOIN "AddonMediaListLibrary" AS "managed"
+             ON "managed"."AddonMediaListId" = "list"."Id"
+           WHERE "list"."ReviewState" = ?
+             AND "list"."DetailProjectionPendingAt" IS NOT NULL
+             AND "list"."DetailProjectionPendingAt" <= ?
+           ORDER BY "list"."DetailProjectionPendingAt", "list"."Id" LIMIT 1"#,
+    )
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListReviewState::Published,
+    ))
+    .bind(&cutoff)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let list_id: EntityId = row.try_get("Id").repository()?;
+    let library_id: EntityId = row.try_get("LibraryId").repository()?;
+    let pending_at: String = row.try_get("DetailProjectionPendingAt").repository()?;
+    let requested = crate::repositories::common::decode_enum_column(
+        "AddonMediaListPresentationKind",
+        &row,
+        "RequestedPresentationKind",
+    )?;
+    let effective = if requested == AddonMediaListPresentationKind::Auto {
+        resolve_auto_presentation(pool, list_id).await?
+    } else {
+        requested
+    };
+
+    if parent_nfo_for(effective).is_some() {
+        ensure_generated_parent_nfo(pool, list_id, effective, None).await?;
+    }
+    reconcile_projection(pool, list_id, requested).await?;
+    AddonMediaListSynchronizer::new(pool.clone())
+        .match_list_items(list_id)
+        .await?;
+
+    sqlx::query(
+        r#"UPDATE "AddonMediaList" SET "DetailProjectionPendingAt" = NULL
+           WHERE "Id" = ? AND "DetailProjectionPendingAt" = ?"#,
+    )
+    .bind(list_id)
+    .bind(pending_at)
+    .execute(pool)
+    .await
+    .repository()?;
+    Ok(Some((list_id, library_id)))
+}
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 struct PublicationJournal {
@@ -58,6 +133,8 @@ struct PublishedItemSnapshot {
     id: EntityId,
     published: bool,
     media_item_id: Option<EntityId>,
+    #[serde(default)]
+    published_liveness: RemoteStreamLiveness,
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -114,7 +191,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                       "list"."LastUpdate", "list"."LastMatch", "list"."LastError",
                       "list"."PresentationKind", "list"."RequestedPresentationKind",
                       "list"."PresentationError", "list"."ReviewState", "list"."ReviewError",
-                      "list"."PublishedRevision",
+                      "list"."PublishedRevision", "list"."DetailImportPolicy",
                       COUNT("matched"."Id") AS "MatchCount"
                FROM "AddonMediaList" AS "list"
                LEFT JOIN "AddonMediaListItem" AS "matched"
@@ -126,7 +203,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                         "list"."LastUpdate", "list"."LastMatch", "list"."LastError",
                         "list"."PresentationKind", "list"."RequestedPresentationKind",
                         "list"."PresentationError", "list"."ReviewState", "list"."ReviewError",
-                        "list"."PublishedRevision"
+                        "list"."PublishedRevision", "list"."DetailImportPolicy"
                ORDER BY "list"."Name", "list"."Id"
                LIMIT ? OFFSET ?"#,
         )
@@ -184,9 +261,20 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                     )?,
                     review_error: row.try_get("ReviewError").repository()?,
                     published_revision: row.try_get("PublishedRevision").repository()?,
+                    detail_import_policy: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListDetailPolicy",
+                        row,
+                        "DetailImportPolicy",
+                    )?,
+                    import_progress: None,
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        let mut rows = rows;
+        let coordinator = AddonMediaListImportCoordinator::new(self.0.clone());
+        for row in &mut rows {
+            row.import_progress = coordinator.progress(row.id).await?;
+        }
         let total = u64::try_from(total).map_err(|_| RepositoryError::Decode {
             kind: "Add-on media list count",
             value: total.to_string(),
@@ -201,7 +289,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                       "list"."ContentKindOverride", "list"."PresentationKind",
                       "list"."RequestedPresentationKind", "list"."PresentationError",
                       "list"."ChapterInput", "list"."ReviewState", "list"."ReviewError",
-                      "list"."PublishedRevision",
+                      "list"."PublishedRevision", "list"."DetailImportPolicy",
                       COALESCE("managed"."FolderName", '') AS "FolderName"
                FROM "AddonMediaList" AS "list"
                LEFT JOIN "AddonMediaListLibrary" AS "managed"
@@ -212,44 +300,57 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         .fetch_optional(&self.0)
         .await
         .repository()?;
-        row.map(|row| {
-            Ok(AddonMediaListAdminForm {
-                id: row.try_get("Id").repository()?,
-                addon_id: row.try_get("AddonId").repository()?,
-                source_url: row.try_get("SourceUrl").repository()?,
-                folder_name: row.try_get("FolderName").repository()?,
-                auto_refresh: decode_bool_column(&row, "AutoRefresh")?,
-                generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
-                content_kind_override: crate::repositories::common::decode_enum_column(
-                    "AddonMediaListContentKind",
-                    &row,
-                    "ContentKindOverride",
-                )?,
-                presentation_kind: crate::repositories::common::decode_enum_column(
-                    "AddonMediaListPresentationKind",
-                    &row,
-                    "PresentationKind",
-                )?,
-                requested_presentation_kind: crate::repositories::common::decode_enum_column(
-                    "AddonMediaListPresentationKind",
-                    &row,
-                    "RequestedPresentationKind",
-                )?,
-                presentation_error: row.try_get("PresentationError").repository()?,
-                review_state: crate::repositories::common::decode_enum_column(
-                    "AddonMediaListReviewState",
-                    &row,
-                    "ReviewState",
-                )?,
-                review_error: row.try_get("ReviewError").repository()?,
-                published_revision: row.try_get("PublishedRevision").repository()?,
-                legacy_chapter_input: row
-                    .try_get::<Option<String>, _>("ChapterInput")
-                    .repository()?
-                    .unwrap_or_default(),
+        let mut form = row
+            .map(|row| {
+                Ok(AddonMediaListAdminForm {
+                    id: row.try_get("Id").repository()?,
+                    addon_id: row.try_get("AddonId").repository()?,
+                    source_url: row.try_get("SourceUrl").repository()?,
+                    folder_name: row.try_get("FolderName").repository()?,
+                    auto_refresh: decode_bool_column(&row, "AutoRefresh")?,
+                    generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
+                    content_kind_override: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListContentKind",
+                        &row,
+                        "ContentKindOverride",
+                    )?,
+                    presentation_kind: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListPresentationKind",
+                        &row,
+                        "PresentationKind",
+                    )?,
+                    requested_presentation_kind: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListPresentationKind",
+                        &row,
+                        "RequestedPresentationKind",
+                    )?,
+                    presentation_error: row.try_get("PresentationError").repository()?,
+                    review_state: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListReviewState",
+                        &row,
+                        "ReviewState",
+                    )?,
+                    review_error: row.try_get("ReviewError").repository()?,
+                    published_revision: row.try_get("PublishedRevision").repository()?,
+                    detail_import_policy: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListDetailPolicy",
+                        &row,
+                        "DetailImportPolicy",
+                    )?,
+                    import_progress: None,
+                    legacy_chapter_input: row
+                        .try_get::<Option<String>, _>("ChapterInput")
+                        .repository()?
+                        .unwrap_or_default(),
+                })
             })
-        })
-        .transpose()
+            .transpose()?;
+        if let Some(form) = &mut form {
+            form.import_progress = AddonMediaListImportCoordinator::new(self.0.clone())
+                .progress(form.id)
+                .await?;
+        }
+        Ok(form)
     }
 
     async fn list_items(&self, id: EntityId) -> Result<Vec<AddonMediaListItemAdminRow>> {
@@ -327,6 +428,101 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         mark_list_ready_tx(&mut tx, list_id).await?;
         tx.commit().await.repository()?;
         Ok(())
+    }
+
+    async fn set_item_liveness_override(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+        liveness: Option<RemoteStreamLiveness>,
+    ) -> Result<()> {
+        let encoded = liveness.map(crate::repositories::common::encode_enum);
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let updated = sqlx::query(
+            r#"UPDATE "AddonMediaListItem"
+               SET "LivenessOverride" = ?,
+                   "EffectiveLiveness" = COALESCE(?, "ProviderLiveness"),
+                   "LivenessConflict" = 0
+               WHERE "Id" = ? AND "AddonMediaListId" = ? AND "Kind" = 4"#,
+        )
+        .bind(encoded)
+        .bind(encoded)
+        .bind(item_id)
+        .bind(list_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::NotFound {
+                kind: "Remote Stream add-on media list item",
+                id: item_id,
+            });
+        }
+        mark_list_ready_tx(&mut tx, list_id).await?;
+        tx.commit().await.repository()?;
+        Ok(())
+    }
+
+    async fn apply_list_liveness_override(
+        &self,
+        id: EntityId,
+        liveness: Option<RemoteStreamLiveness>,
+        item_ids: &[EntityId],
+    ) -> Result<u64> {
+        const MAX_BULK_ITEMS: usize = 10_000;
+        let ids = item_ids
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        if ids.len() > MAX_BULK_ITEMS {
+            return Err(RepositoryError::Conflict(format!(
+                "a liveness bulk edit may contain at most {MAX_BULK_ITEMS} items"
+            )));
+        }
+        let encoded = liveness.map(crate::repositories::common::encode_enum);
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let affected = if ids.is_empty() {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem"
+                   SET "LivenessOverride" = ?,
+                       "EffectiveLiveness" = COALESCE(?, "ProviderLiveness"),
+                       "LivenessConflict" = 0
+                   WHERE "AddonMediaListId" = ? AND "Kind" = 4
+                     AND "ParentProviderId" IS NULL"#,
+            )
+            .bind(encoded)
+            .bind(encoded)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .repository()?
+            .rows_affected()
+        } else {
+            let mut affected = 0_u64;
+            for item_id in ids {
+                affected = affected.saturating_add(
+                    sqlx::query(
+                        r#"UPDATE "AddonMediaListItem"
+                           SET "LivenessOverride" = ?,
+                               "EffectiveLiveness" = COALESCE(?, "ProviderLiveness"),
+                               "LivenessConflict" = 0
+                           WHERE "Id" = ? AND "AddonMediaListId" = ? AND "Kind" = 4"#,
+                    )
+                    .bind(encoded)
+                    .bind(encoded)
+                    .bind(item_id)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?
+                    .rows_affected(),
+                );
+            }
+            affected
+        };
+        mark_list_ready_tx(&mut tx, id).await?;
+        tx.commit().await.repository()?;
+        Ok(affected)
     }
 
     async fn apply_list_content_kind(
@@ -644,6 +840,49 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         Ok(id)
     }
 
+    async fn add_or_refresh_with_policy(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        requested_folder: Option<&str>,
+        content_kind_override: AddonMediaListContentKind,
+        chapter_input: &str,
+        detail_import_policy: AddonMediaListDetailPolicy,
+    ) -> Result<EntityId> {
+        AddonMediaListImportCoordinator::new(self.0.clone())
+            .add_or_refresh(
+                addon_id,
+                source_url,
+                requested_folder,
+                content_kind_override,
+                chapter_input,
+                detail_import_policy,
+            )
+            .await
+    }
+
+    async fn set_detail_import_policy(
+        &self,
+        id: EntityId,
+        policy: AddonMediaListDetailPolicy,
+    ) -> Result<()> {
+        AddonMediaListImportCoordinator::new(self.0.clone())
+            .set_detail_policy(id, policy)
+            .await
+    }
+
+    async fn request_item_details(&self, list_id: EntityId, item_id: EntityId) -> Result<()> {
+        AddonMediaListImportCoordinator::new(self.0.clone())
+            .request_item_details(list_id, item_id)
+            .await
+    }
+
+    async fn control_import(&self, id: EntityId, action: AddonMediaListImportAction) -> Result<()> {
+        AddonMediaListImportCoordinator::new(self.0.clone())
+            .control_import(id, action)
+            .await
+    }
+
     async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>> {
         crate::addon_media_storage::list_library_id(&self.0, id).await
     }
@@ -678,6 +917,14 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         if form.review_state == AddonMediaListReviewState::Publishing {
             return Err(publication_in_progress());
         }
+        if let Some(progress) = &form.import_progress {
+            if progress.state != ersatzrs_domain::AddonMediaListImportState::Ready {
+                let message =
+                    "the complete add-on overview must be verified before publication".to_owned();
+                record_publication_error(&self.0, id, &message).await?;
+                return Err(RepositoryError::Conflict(message));
+            }
+        }
         let active_journal = sqlx::query_scalar::<_, Option<String>>(
             r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = ?"#,
         )
@@ -710,7 +957,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             RepositoryError::Conflict("managed list storage is unavailable".to_owned())
         })?;
         let previous_items = sqlx::query(
-            r#"SELECT "Id", "Published", "MediaItemId"
+            r#"SELECT "Id", "Published", "MediaItemId", "PublishedLiveness"
                FROM "AddonMediaListItem"
                WHERE "AddonMediaListId" = ?
                ORDER BY "Id""#,
@@ -725,6 +972,11 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 id: row.try_get("Id").repository()?,
                 published: decode_bool_column(row, "Published")?,
                 media_item_id: row.try_get("MediaItemId").repository()?,
+                published_liveness: crate::repositories::common::decode_enum_column(
+                    "RemoteStreamLiveness",
+                    row,
+                    "PublishedLiveness",
+                )?,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -772,7 +1024,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             }
             sqlx::query(
                 r#"UPDATE "AddonMediaListItem"
-                   SET "Published" = "Included"
+                   SET "Published" = "Included", "PublishedLiveness" = "EffectiveLiveness"
                    WHERE "AddonMediaListId" = ?"#,
             )
             .bind(id)
@@ -846,10 +1098,42 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             r#"UPDATE "AddonMediaList"
                SET "ReviewState" = 2, "PublishedRevision" = "PublishedRevision" + 1,
                    "ReviewError" = NULL, "PresentationError" = NULL,
-                   "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL
+                   "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL,
+                   "DetailImportAuthorizedAt" = COALESCE("DetailImportAuthorizedAt", ?),
+                   "DetailProjectionPendingAt" = NULL
                WHERE "Id" = ?"#,
         )
+        .bind(crate::repositories::common::encode_datetime(
+            chrono::Utc::now(),
+        ))
         .bind(id)
+        .execute(&mut *commit)
+        .await
+        .repository()?;
+        let detail_now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        sqlx::query(
+            r#"UPDATE "AddonMediaListDetailJob"
+               SET "State" = ?, "RequestedAt" = COALESCE("RequestedAt", ?),
+                   "UpdatedAt" = ?
+               WHERE "AddonMediaListId" = ? AND "State" = ?
+                 AND EXISTS (
+                     SELECT 1 FROM "AddonMediaList"
+                     WHERE "Id" = ? AND "DetailImportPolicy" = ?
+                 )"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListDetailState::Queued,
+        ))
+        .bind(&detail_now)
+        .bind(&detail_now)
+        .bind(id)
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListDetailState::NotRequested,
+        ))
+        .bind(id)
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListDetailPolicy::Automatic,
+        ))
         .execute(&mut *commit)
         .await
         .repository()?;
@@ -865,10 +1149,14 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         for item in &journal.previous_items {
             sqlx::query(
                 r#"UPDATE "AddonMediaListItem"
-                   SET "Published" = ?, "MediaItemId" = ? WHERE "Id" = ?"#,
+                   SET "Published" = ?, "MediaItemId" = ?, "PublishedLiveness" = ?
+                   WHERE "Id" = ?"#,
             )
             .bind(item.published)
             .bind(item.media_item_id)
+            .bind(crate::repositories::common::encode_enum(
+                item.published_liveness,
+            ))
             .bind(item.id)
             .execute(&mut *tx)
             .await
@@ -1192,8 +1480,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()> {
-        let provider = InstalledAddonMediaListProvider::new(self.0.clone());
-        AddonMediaListRemoteSynchronizer::new(self.0.clone(), provider)
+        crate::addon_media_list_import::AddonMediaListImportCoordinator::new(self.0.clone())
             .change_addon(id, addon_id)
             .await
     }
@@ -2083,6 +2370,25 @@ async fn publication_validation_error(
     }
 
     for item in included {
+        if item.kind == AddonMediaListItemKind::RemoteStream {
+            match item.effective_liveness {
+                RemoteStreamLiveness::Unknown => {
+                    return Ok(Some(format!(
+                        "{} requires a finite or live playback decision",
+                        item.display_title
+                    )));
+                }
+                RemoteStreamLiveness::Finite
+                    if item.duration_seconds.is_none_or(|duration| duration == 0) =>
+                {
+                    return Ok(Some(format!(
+                        "{} is finite media and requires a positive duration",
+                        item.display_title
+                    )));
+                }
+                RemoteStreamLiveness::Finite | RemoteStreamLiveness::Live => {}
+            }
+        }
         if item.availability == AddonMediaListItemAvailability::Unavailable
             && !item.replacement_valid
         {
@@ -2593,7 +2899,7 @@ impl SqliteAddonMediaListRepository {
         // matches every group, and an absent page size becomes an unbounded
         // limit both backends accept.
         let rows = sqlx::query(
-            r#"SELECT "item"."Id", "item"."Rank", "item"."DisplayTitle",
+            r#"SELECT "item"."Id", "item"."Rank", "item"."DisplayTitle", "item"."Kind",
                       "item"."Title", "item"."Year", "item"."Season", "item"."Episode",
                       "item"."SourceUrl", "item"."DurationSeconds", "item"."ParentProviderId",
                       "item"."ChapterInput", "item"."ProviderChapterInput",
@@ -2601,6 +2907,11 @@ impl SqliteAddonMediaListRepository {
                        "item"."Included", "item"."Published",
                        "item"."ProviderMetadataJson", "item"."MetadataOverrideJson",
                        "item"."MetadataConflictJson",
+                       "item"."ProviderLiveness", "item"."LivenessOverride",
+                       "item"."EffectiveLiveness", "item"."LivenessConflict",
+                       "item"."PublishedLiveness",
+                      "detail"."State" AS "DetailState",
+                      "detail"."Diagnostic" AS "DetailDiagnostic",
                       "projection"."EpisodeId" AS "ProjectedEpisodeId",
                       "item"."Availability", "item"."AvailabilityReason",
                       "replacement"."MediaItemId" AS "ReplacementMediaItemId",
@@ -2610,6 +2921,8 @@ impl SqliteAddonMediaListRepository {
                  ON "replacement"."AddonMediaListItemId" = "item"."Id"
                LEFT JOIN "AddonMediaListItemEpisode" AS "projection"
                  ON "projection"."AddonMediaListItemId" = "item"."Id"
+               LEFT JOIN "AddonMediaListDetailJob" AS "detail"
+                 ON "detail"."AddonMediaListItemId" = "item"."Id"
                WHERE "item"."AddonMediaListId" = ?
                  AND (? IS NULL OR "item"."Availability" = ?)
                ORDER BY "item"."Rank", "item"."Id"
@@ -2638,6 +2951,7 @@ impl SqliteAddonMediaListRepository {
             let effective_year = metadata.year;
             let effective_season = metadata.season;
             let effective_episode = metadata.episode;
+            let first_aired = metadata.release_date.clone();
             let replacement_media_item_id = row
                 .try_get::<Option<EntityId>, _>("ReplacementMediaItemId")
                 .repository()?;
@@ -2653,6 +2967,11 @@ impl SqliteAddonMediaListRepository {
             result.push(AddonMediaListItemAdminRow {
                 id: row.try_get("Id").repository()?,
                 rank: row.try_get("Rank").repository()?,
+                kind: crate::repositories::common::decode_enum_column(
+                    "AddonMediaListItemKind",
+                    &row,
+                    "Kind",
+                )?,
                 display_title: if effective_title.trim().is_empty() {
                     row.try_get("DisplayTitle").repository()?
                 } else {
@@ -2673,8 +2992,30 @@ impl SqliteAddonMediaListRepository {
                 year: effective_year,
                 season: effective_season,
                 episode: effective_episode,
+                first_aired,
                 source_url: row.try_get("SourceUrl").repository()?,
                 duration_seconds: decode_optional_u64(&row, "DurationSeconds")?,
+                provider_liveness: crate::repositories::common::decode_enum_column(
+                    "RemoteStreamLiveness",
+                    &row,
+                    "ProviderLiveness",
+                )?,
+                liveness_override: crate::repositories::common::decode_optional_enum_column(
+                    "RemoteStreamLiveness",
+                    &row,
+                    "LivenessOverride",
+                )?,
+                effective_liveness: crate::repositories::common::decode_enum_column(
+                    "RemoteStreamLiveness",
+                    &row,
+                    "EffectiveLiveness",
+                )?,
+                liveness_conflict: decode_bool_column(&row, "LivenessConflict")?,
+                published_liveness: crate::repositories::common::decode_enum_column(
+                    "RemoteStreamLiveness",
+                    &row,
+                    "PublishedLiveness",
+                )?,
                 parent_provider_id: row.try_get("ParentProviderId").repository()?,
                 chapter_input: row
                     .try_get::<Option<String>, _>("ChapterInput")
@@ -2716,6 +3057,18 @@ impl SqliteAddonMediaListRepository {
                 included: decode_bool_column(&row, "Included")?,
                 published: decode_bool_column(&row, "Published")?,
                 metadata_conflict_count,
+                detail_state: row
+                    .try_get::<Option<i32>, _>("DetailState")
+                    .repository()?
+                    .map(|value| {
+                        crate::repositories::common::decode_enum(
+                            "AddonMediaListDetailState",
+                            &value.to_string(),
+                        )
+                    })
+                    .transpose()?
+                    .unwrap_or(AddonMediaListDetailState::NotRequested),
+                detail_diagnostic: row.try_get("DetailDiagnostic").repository()?,
             });
         }
         Ok(result)

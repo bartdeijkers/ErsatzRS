@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemRole,
-    AddonMediaListPresentationKind, AddonMediaListReviewState, EntityId,
+    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
+    AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemRole,
+    AddonMediaListPresentationKind, AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -47,6 +48,10 @@ pub struct AddonMediaListAdminRow {
     pub review_error: Option<String>,
     /// Monotonic publication revision used by refresh and audit flows.
     pub published_revision: i32,
+    /// Whether post-publication detail work is automatic or manual-only.
+    pub detail_import_policy: AddonMediaListDetailPolicy,
+    /// Current durable overview/detail activity, if this list uses import v1.
+    pub import_progress: Option<AddonMediaListImportProgress>,
 }
 
 /// Editable settings for one persisted add-on media list.
@@ -76,15 +81,23 @@ pub struct AddonMediaListAdminForm {
     pub review_state: AddonMediaListReviewState,
     pub review_error: Option<String>,
     pub published_revision: i32,
+    pub detail_import_policy: AddonMediaListDetailPolicy,
+    pub import_progress: Option<AddonMediaListImportProgress>,
     /// Legacy list-wide chapter input retained only for ambiguous migrations.
     pub legacy_chapter_input: String,
 }
 
 /// One persisted provider item and its optional local replacement.
+///
+/// These booleans are independent projections for replacement validity,
+/// liveness conflict, inclusion, and publication; they do not encode one state
+/// machine and are consumed independently by the admin read model.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListItemAdminRow {
     pub id: EntityId,
     pub rank: i32,
+    pub kind: ersatzrs_domain::AddonMediaListItemKind,
     pub display_title: String,
     pub availability: AddonMediaListItemAvailability,
     pub availability_reason: Option<String>,
@@ -97,8 +110,20 @@ pub struct AddonMediaListItemAdminRow {
     pub year: Option<i32>,
     pub season: Option<i32>,
     pub episode: Option<i32>,
+    /// Effective provider/operator release date shown as the first-air date.
+    pub first_aired: Option<String>,
     pub source_url: Option<String>,
     pub duration_seconds: Option<u64>,
+    /// Latest provider-owned playback behavior.
+    pub provider_liveness: RemoteStreamLiveness,
+    /// Optional operator decision; when present it owns the effective value.
+    pub liveness_override: Option<RemoteStreamLiveness>,
+    /// Current value that will be copied into the next published snapshot.
+    pub effective_liveness: RemoteStreamLiveness,
+    /// Whether the provider changed beneath an operator override.
+    pub liveness_conflict: bool,
+    /// Value used by the currently published library projection.
+    pub published_liveness: RemoteStreamLiveness,
     pub parent_provider_id: Option<String>,
     pub chapter_input: String,
     /// Latest provider value, retained separately from the operator override.
@@ -123,6 +148,37 @@ pub struct AddonMediaListItemAdminRow {
     pub published: bool,
     /// Number of operator-owned fields whose provider value changed on refresh.
     pub metadata_conflict_count: u32,
+    /// Durable state of optional provider detail enrichment.
+    pub detail_state: AddonMediaListDetailState,
+    /// Bounded provider-neutral diagnostic retained after retry/failure.
+    pub detail_diagnostic: Option<String>,
+}
+
+/// Durable progress reconstructed from overview and item-detail job tables.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListImportProgress {
+    pub state: AddonMediaListImportState,
+    pub started_at: String,
+    pub discovered_count: u64,
+    pub total_hint: Option<u64>,
+    pub detail_total: u64,
+    pub detail_complete: u64,
+    pub detail_skipped: u64,
+    pub detail_failed: u64,
+    pub detail_pending: u64,
+    pub current_title: Option<String>,
+    pub last_progress_at: Option<String>,
+    pub diagnostic: Option<String>,
+}
+
+/// Operator action for one durable overview generation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListImportAction {
+    Pause,
+    Resume,
+    Retry,
+    Cancel,
 }
 
 /// How many entries of one list fall into each availability group.
@@ -322,6 +378,58 @@ pub trait AddonMediaListRepository: Send + Sync {
         content_kind_override: AddonMediaListContentKind,
         chapter_input: &str,
     ) -> Result<EntityId>;
+    /// Start a resumable import when supported, preserving the legacy bounded
+    /// one-shot path for older packages.
+    async fn add_or_refresh_with_policy(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        requested_folder: Option<&str>,
+        content_kind_override: AddonMediaListContentKind,
+        chapter_input: &str,
+        detail_import_policy: AddonMediaListDetailPolicy,
+    ) -> Result<EntityId> {
+        let id = self
+            .add_or_refresh(
+                addon_id,
+                source_url,
+                requested_folder,
+                content_kind_override,
+                chapter_input,
+            )
+            .await?;
+        self.set_detail_import_policy(id, detail_import_policy)
+            .await?;
+        Ok(id)
+    }
+    /// Change automatic/manual-only behavior without discarding completed data.
+    async fn set_detail_import_policy(
+        &self,
+        id: EntityId,
+        policy: AddonMediaListDetailPolicy,
+    ) -> Result<()> {
+        let _ = (id, policy);
+        Err(RepositoryError::unavailable(
+            "set add-on detail-import policy",
+            "not implemented",
+        ))
+    }
+    /// Queue or retry detail enrichment for one top-level provider item.
+    async fn request_item_details(&self, list_id: EntityId, item_id: EntityId) -> Result<()> {
+        let _ = (list_id, item_id);
+        Err(RepositoryError::unavailable(
+            "request add-on item details",
+            "not implemented",
+        ))
+    }
+    /// Pause, resume, retry, or cancel the current overview generation.
+    async fn control_import(&self, id: EntityId, action: AddonMediaListImportAction) -> Result<()> {
+        let _ = (id, action);
+        Err(RepositoryError::unavailable(
+            "control add-on media-list import",
+            "not implemented",
+        ))
+    }
     /// Return the managed Local library projected for a provider list.
     async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>>;
     /// Rerun local matching without invoking the provider.
@@ -446,6 +554,33 @@ pub trait AddonMediaListRepository: Send + Sync {
         item_id: EntityId,
         content_kind: AddonMediaListContentKind,
     ) -> Result<()>;
+    /// Set or clear one Remote Stream playback-behavior override.
+    async fn set_item_liveness_override(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+        liveness: Option<RemoteStreamLiveness>,
+    ) -> Result<()> {
+        let _ = (list_id, item_id, liveness);
+        Err(RepositoryError::unavailable(
+            "set add-on item liveness",
+            "not implemented",
+        ))
+    }
+    /// Apply or clear one override for a bounded set of Remote Stream items.
+    /// An empty ID set means every top-level Remote Stream item in the list.
+    async fn apply_list_liveness_override(
+        &self,
+        id: EntityId,
+        liveness: Option<RemoteStreamLiveness>,
+        item_ids: &[EntityId],
+    ) -> Result<u64> {
+        let _ = (id, liveness, item_ids);
+        Err(RepositoryError::unavailable(
+            "apply add-on item liveness",
+            "not implemented",
+        ))
+    }
     /// Apply one classification to every entry of a list as a bulk default.
     async fn apply_list_content_kind(
         &self,

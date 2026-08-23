@@ -91,6 +91,44 @@ async fn addon_media_list_repository_propagates_closed_pool_failures() {
 }
 
 #[tokio::test]
+async fn publication_refuses_an_incomplete_resumable_overview() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount"
+           ) VALUES (
+              1, 'org.example.lists', 'pending:fixture',
+              'https://example.invalid/large-list', 'Large list', 0
+           )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "AddonMediaListImportJob" (
+              "AddonMediaListId", "Generation", "State", "RecordCapability",
+              "CreatedAt", "UpdatedAt", "LastProgressAt"
+           ) VALUES (
+              1, 1, 0, 'media-list.list.v5',
+              '2026-08-23T10:00:00Z', '2026-08-23T10:00:00Z', '2026-08-23T10:00:00Z'
+           )"#,
+    )
+    .await
+    .unwrap();
+
+    let error = repositories
+        .addon_media_lists
+        .stage_publication(1)
+        .await
+        .expect_err("an incomplete overview must never publish");
+    assert!(matches!(error, RepositoryError::Conflict(_)));
+    assert!(error
+        .to_string()
+        .contains("complete add-on overview must be verified"));
+}
+
+#[tokio::test]
 async fn episode_numbering_uses_provider_order_and_preserves_other_operator_metadata() {
     let pool = common::test_db().await;
     let repositories = make_repositories(pool.clone());

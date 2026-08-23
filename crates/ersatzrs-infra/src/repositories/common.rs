@@ -3,7 +3,8 @@ use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
+    AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemKind,
     AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListReviewState, ArtworkKind,
     BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode, ChannelPlayoutMode,
     ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
@@ -13,8 +14,8 @@ use ersatzrs_domain::{
     FillerMode, FilterMode, FixedStartTimeBehavior, GraphicsElementKind, GuideMode,
     HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy, MediaItemState, MediaSourceKind,
     MediaStreamKind, MetadataKind, MetadataSource, MultipleMode, NormalizeLoudnessMode,
-    OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind, ScalingBehavior,
-    StartType, StreamingMode, SubtitleKind, TailMode, VaapiDriver, VideoScanKind,
+    OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind, RemoteStreamLiveness,
+    ScalingBehavior, StartType, StreamingMode, SubtitleKind, TailMode, VaapiDriver, VideoScanKind,
     WatermarkLocation, WatermarkSize,
 };
 use serde::de::DeserializeOwned;
@@ -625,6 +626,30 @@ db_enum!(AddonMediaListContentKind {
     5 => AddonMediaListContentKind::Song,
     6 => AddonMediaListContentKind::Image,
 });
+db_enum!(AddonMediaListDetailPolicy {
+    0 => AddonMediaListDetailPolicy::Automatic,
+    1 => AddonMediaListDetailPolicy::ManualOnly,
+});
+db_enum!(AddonMediaListImportState {
+    0 => AddonMediaListImportState::Queued,
+    1 => AddonMediaListImportState::Discovering,
+    2 => AddonMediaListImportState::Verifying,
+    3 => AddonMediaListImportState::Ready,
+    4 => AddonMediaListImportState::Paused,
+    5 => AddonMediaListImportState::NeedsAttention,
+    6 => AddonMediaListImportState::Cancelled,
+    7 => AddonMediaListImportState::Superseded,
+});
+db_enum!(AddonMediaListDetailState {
+    0 => AddonMediaListDetailState::NotRequested,
+    1 => AddonMediaListDetailState::Queued,
+    2 => AddonMediaListDetailState::WaitingForSlot,
+    3 => AddonMediaListDetailState::Running,
+    4 => AddonMediaListDetailState::WaitingToRetry,
+    5 => AddonMediaListDetailState::Complete,
+    6 => AddonMediaListDetailState::Skipped,
+    7 => AddonMediaListDetailState::Failed,
+});
 
 // 0 and 1 are frozen: rows written before the presentation set grew to the
 // full library-kind range still decode to the same two projections.
@@ -650,6 +675,11 @@ db_enum!(AddonMediaListItemRole {
     0 => AddonMediaListItemRole::Auto,
     1 => AddonMediaListItemRole::Primary,
     2 => AddonMediaListItemRole::Extra,
+});
+db_enum!(RemoteStreamLiveness {
+    0 => RemoteStreamLiveness::Unknown,
+    1 => RemoteStreamLiveness::Finite,
+    2 => RemoteStreamLiveness::Live,
 });
 db_enum!(VaapiDriver {
     0 => VaapiDriver::Auto,

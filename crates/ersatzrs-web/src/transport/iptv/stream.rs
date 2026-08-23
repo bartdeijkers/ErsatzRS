@@ -54,9 +54,10 @@ use ersatzrs_infra::playback::{
     PlaybackSubtitle,
 };
 use ersatzrs_infra::remote_stream::{
-    redact_remote_stream_output, remote_stream_input_file, remote_stream_producer,
-    resolve_remote_stream_with_addons, spawn_ffmpeg_with_remote_input, RemoteStreamCommand,
-    RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext, ResolvedRemoteStream,
+    decode_persisted_liveness, redact_remote_stream_output, remote_stream_input_file,
+    remote_stream_playback_start, remote_stream_producer, resolve_remote_stream_with_addons,
+    spawn_ffmpeg_with_remote_input, RemoteStreamCommand, RemoteStreamDefinition,
+    RemoteStreamProcess, RemoteStreamSpawnContext, ResolvedRemoteStream,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
@@ -385,15 +386,10 @@ async fn serve_channel_stream_with_channel(
         preferred_audio_title,
         effective_streaming_mode,
     );
-    let start_position = if active
-        .remote_stream
-        .as_ref()
-        .is_some_and(|stream| stream.is_live)
-    {
-        Duration::ZERO
-    } else {
-        active.content_seek_position(now)
-    };
+    let start_position = remote_stream_playback_start(
+        active.remote_stream.as_ref(),
+        active.content_seek_position(now),
+    );
     let start_seconds = duration_as_i64_seconds(start_position);
     let content_start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
     let custom_selection = if active.has_pinned_stream_selection {
@@ -1533,6 +1529,7 @@ pub(crate) async fn load_active_media_path(
                   rs."Script" AS "RemoteLegacyScript",
                   rs."Duration" AS "RemoteDuration",
                   rs."FallbackQuery" AS "RemoteFallbackQuery",
+                  rs."Liveness" AS "RemoteLiveness",
                   rs."IsLive" AS "RemoteIsLive"
            FROM "PlayoutItem" pi
            JOIN "Playout" p ON p."Id" = pi."PlayoutId"
@@ -1608,11 +1605,20 @@ pub(crate) async fn load_active_media_path(
     let remote_stream = if remote_url.is_some() || remote_addon.is_some() {
         let is_live = decode_active_item_column::<Option<i64>>(&row, "RemoteIsLive")?
             .is_some_and(|value| value != 0);
+        let liveness = decode_persisted_liveness(
+            decode_active_item_column::<Option<i64>>(&row, "RemoteLiveness")?.unwrap_or_default(),
+            is_live,
+        )
+        .map_err(|error| RepositoryError::Decode {
+            kind: "active remote stream",
+            value: error.to_string(),
+        })?;
         let definition = RemoteStreamDefinition {
             url: remote_url,
             addon: remote_addon,
             duration: decode_active_item_column(&row, "RemoteDuration")?,
             fallback_query: decode_active_item_column(&row, "RemoteFallbackQuery")?,
+            liveness: Some(liveness),
             is_live,
             title: None,
             plot: None,
@@ -3046,10 +3052,10 @@ mod tests {
 
         sqlx::query(
             r#"INSERT INTO "RemoteStream" (
-                   "Id", "Url", "Script", "Duration", "FallbackQuery", "IsLive"
+                   "Id", "Url", "Script", "Duration", "FallbackQuery", "Liveness", "IsLive"
                ) VALUES (
                    30, 'https://user:secret@example.test/live.m3u8?token=hidden',
-                   NULL, NULL, 'tag:backup', 1
+                   NULL, NULL, 'tag:backup', 2, 1
                )"#,
         )
         .execute(&pool)
@@ -3200,6 +3206,7 @@ mod tests {
                 "Script" TEXT NULL,
                 "Duration" TEXT NULL,
                 "FallbackQuery" TEXT NULL,
+                "Liveness" INTEGER NOT NULL,
                 "IsLive" INTEGER NOT NULL
             )"#,
         ] {

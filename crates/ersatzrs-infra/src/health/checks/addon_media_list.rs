@@ -4,6 +4,7 @@ use super::super::{
 };
 
 const STUCK_PUBLICATION_MINUTES: i64 = 15;
+const STUCK_IMPORT_MINUTES: i64 = 15;
 
 pub(crate) struct AddonMediaListHealthCheck {
     pool: Pool<Db>,
@@ -85,6 +86,10 @@ impl HealthCheck for AddonMediaListHealthCheck {
         let stuck_publications = stuck_publications(&rows)?;
         let invalid_metadata = invalid_metadata(&self.pool).await?;
         let missing_artwork = missing_artwork(&self.pool).await?;
+        let import_failures = import_failures(&self.pool).await?;
+        let detail_worker_failures = detail_worker_failures(&self.pool).await?;
+        let detail_wait_setting_failures = detail_wait_setting_failures(&self.pool).await;
+        let cooldown_failures = cooldown_failures(&self.pool).await?;
         let failures = storage_failures
             .into_iter()
             .chain(failures)
@@ -93,6 +98,10 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .chain(stuck_publications)
             .chain(invalid_metadata)
             .chain(missing_artwork)
+            .chain(import_failures)
+            .chain(detail_worker_failures)
+            .chain(detail_wait_setting_failures)
+            .chain(cooldown_failures)
             .take(5)
             .collect::<Vec<_>>();
         if !failures.is_empty() {
@@ -137,6 +146,20 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .with_link("/media/addon-lists"));
         }
 
+        let detail_activity = detail_activity(&self.pool).await?;
+        if detail_activity.failed > 0 {
+            return Ok(HealthCheckResult::new(
+                self.title(),
+                HealthCheckStatus::Warning,
+                format!(
+                    "{} item detail job(s) need a manual retry; {} are active and {} are waiting for retry or provider pacing",
+                    detail_activity.failed, detail_activity.active, detail_activity.waiting
+                ),
+                "One or more add-on item details could not be loaded",
+            )
+            .with_link("/media/addon-lists"));
+        }
+
         let pending_review = rows
             .iter()
             .filter(|row| {
@@ -145,19 +168,200 @@ impl HealthCheck for AddonMediaListHealthCheck {
             })
             .count();
         if pending_review > 0 {
+            let import_activity = import_activity(&self.pool).await?;
             return Ok(HealthCheckResult::new(
                 self.title(),
                 HealthCheckStatus::Warning,
                 format!(
-                    "{pending_review} add-on media list(s) await metadata review or publication"
+                    "{pending_review} add-on media list(s) await metadata review or publication; {} overview import(s) are active and {} detail item(s) are delayed by retry or provider pacing",
+                    import_activity.active,
+                    detail_activity.waiting,
                 ),
                 "Review and publish the imported metadata before using the new revision",
             )
             .with_link("/media/addon-lists"));
         }
 
+        if detail_activity.active > 0 || detail_activity.waiting > 0 {
+            return Ok(HealthCheckResult::new(
+                self.title(),
+                HealthCheckStatus::Pass,
+                format!(
+                    "{} item detail job(s) are active and {} are waiting for retry or provider pacing",
+                    detail_activity.active, detail_activity.waiting
+                ),
+                "Add-on detail loading is making or awaiting progress",
+            )
+            .with_link("/media/addon-lists"));
+        }
+
         Ok(HealthCheckResult::pass(self.title()).with_link("/media/addon-lists"))
     }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct ImportActivity {
+    active: i64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct DetailActivity {
+    active: i64,
+    waiting: i64,
+    failed: i64,
+}
+
+async fn import_activity(pool: &Pool<Db>) -> Result<ImportActivity> {
+    let active = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "AddonMediaListImportJob" AS "job"
+           WHERE "job"."State" IN (0, 1, 2)
+             AND "job"."Generation" = (
+                 SELECT MAX("latest"."Generation") FROM "AddonMediaListImportJob" AS "latest"
+                 WHERE "latest"."AddonMediaListId" = "job"."AddonMediaListId"
+             )"#,
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(sqlx_error)?;
+    Ok(ImportActivity { active })
+}
+
+async fn detail_activity(pool: &Pool<Db>) -> Result<DetailActivity> {
+    let row = sqlx::query(
+        r#"SELECT
+               COUNT(CASE WHEN "State" IN (1, 3) THEN 1 END) AS "Active",
+               COUNT(CASE WHEN "State" IN (2, 4) THEN 1 END) AS "Waiting",
+               COUNT(CASE WHEN "State" = 7 THEN 1 END) AS "Failed"
+           FROM "AddonMediaListDetailJob""#,
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(sqlx_error)?;
+    Ok(DetailActivity {
+        active: row.try_get::<i64, _>("Active").map_err(sqlx_error)?,
+        waiting: row.try_get::<i64, _>("Waiting").map_err(sqlx_error)?,
+        failed: row.try_get::<i64, _>("Failed").map_err(sqlx_error)?,
+    })
+}
+
+async fn import_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
+    let rows = sqlx::query(
+        r#"SELECT "list"."Name", "job"."State", "job"."Diagnostic",
+                  "job"."LastProgressAt", "job"."UpdatedAt"
+           FROM "AddonMediaListImportJob" AS "job"
+           JOIN "AddonMediaList" AS "list" ON "list"."Id" = "job"."AddonMediaListId"
+           WHERE "job"."Generation" = (
+               SELECT MAX("latest"."Generation") FROM "AddonMediaListImportJob" AS "latest"
+               WHERE "latest"."AddonMediaListId" = "job"."AddonMediaListId"
+           )"#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(sqlx_error)?;
+    let threshold = chrono::Utc::now() - chrono::Duration::minutes(STUCK_IMPORT_MINUTES);
+    let mut failures = Vec::new();
+    for row in rows {
+        let name = row
+            .try_get::<String, _>("Name")
+            .unwrap_or_else(|_| "List".to_owned());
+        let state = row.try_get::<i64, _>("State").map_err(sqlx_error)?;
+        if state == 5 {
+            let diagnostic = row
+                .try_get::<Option<String>, _>("Diagnostic")
+                .map_err(sqlx_error)?
+                .unwrap_or_else(|| "provider overview needs attention".to_owned());
+            failures.push(format!("{name}: {diagnostic}"));
+            continue;
+        }
+        if !matches!(state, 0..=2) {
+            continue;
+        }
+        let progress = row
+            .try_get::<Option<String>, _>("LastProgressAt")
+            .map_err(sqlx_error)?
+            .or(row
+                .try_get::<Option<String>, _>("UpdatedAt")
+                .map_err(sqlx_error)?);
+        let progress = crate::repositories::common::decode_optional_datetime(
+            "add-on overview progress",
+            progress,
+        )
+        .map_err(|error| HealthCheckError::Database(error.to_string()))?;
+        if progress.is_none_or(|progress| progress <= threshold) {
+            failures.push(format!(
+                "{name}: overview import has made no progress for more than {STUCK_IMPORT_MINUTES} minutes"
+            ));
+        }
+    }
+    Ok(failures)
+}
+
+async fn detail_worker_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
+    let threshold = crate::repositories::common::encode_datetime(
+        chrono::Utc::now() - chrono::Duration::minutes(STUCK_IMPORT_MINUTES),
+    );
+    let rows = sqlx::query(
+        r#"SELECT "list"."Name", "item"."DisplayTitle"
+           FROM "AddonMediaListDetailJob" AS "detail"
+           JOIN "AddonMediaList" AS "list" ON "list"."Id" = "detail"."AddonMediaListId"
+           JOIN "AddonMediaListItem" AS "item"
+             ON "item"."Id" = "detail"."AddonMediaListItemId"
+           WHERE "detail"."State" = 3 AND "detail"."UpdatedAt" <= ?
+             AND ("detail"."LeaseExpiresAt" IS NULL OR "detail"."LeaseExpiresAt" <= ?)
+           ORDER BY "detail"."UpdatedAt" LIMIT 5"#,
+    )
+    .bind(&threshold)
+    .bind(crate::repositories::common::encode_datetime(
+        chrono::Utc::now(),
+    ))
+    .fetch_all(pool)
+    .await
+    .map_err(sqlx_error)?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            format!(
+                "{}: detail worker lease is stale for {}",
+                row.try_get::<String, _>("Name")
+                    .unwrap_or_else(|_| "List".to_owned()),
+                row.try_get::<String, _>("DisplayTitle")
+                    .unwrap_or_else(|_| "item".to_owned())
+            )
+        })
+        .collect())
+}
+
+async fn cooldown_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
+    let rows = sqlx::query(
+        r#"SELECT "ProviderHost", "SampledDelaySeconds"
+           FROM "AddonProviderHostCooldown"
+           WHERE "SampledDelaySeconds" <= 0
+           ORDER BY "ProviderHost" LIMIT 5"#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(sqlx_error)?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            let host = row
+                .try_get::<String, _>("ProviderHost")
+                .unwrap_or_else(|_| "provider".to_owned());
+            let delay = row
+                .try_get::<i64, _>("SampledDelaySeconds")
+                .unwrap_or_default();
+            format!("{host}: persisted provider delay {delay}s is not positive")
+        })
+        .collect())
+}
+
+async fn detail_wait_setting_failures(pool: &Pool<Db>) -> Vec<String> {
+    crate::addon_media_list_import::load_detail_wait_range(pool)
+        .await
+        .err()
+        .map(|error| format!("Add-on detail wait settings are invalid: {error}"))
+        .into_iter()
+        .collect()
 }
 
 fn stuck_publications(rows: &[crate::db::DbRow]) -> Result<Vec<String>> {
@@ -489,6 +693,30 @@ mod tests {
                 "LibraryId" INTEGER NOT NULL,
                 "ManifestPath" TEXT NOT NULL
             );
+            CREATE TABLE "AddonMediaListImportJob" (
+                "Id" INTEGER PRIMARY KEY,
+                "AddonMediaListId" INTEGER NOT NULL,
+                "Generation" INTEGER NOT NULL,
+                "State" INTEGER NOT NULL,
+                "Diagnostic" TEXT NULL,
+                "LastProgressAt" TEXT NULL,
+                "UpdatedAt" TEXT NOT NULL
+            );
+            CREATE TABLE "AddonMediaListDetailJob" (
+                "AddonMediaListItemId" INTEGER PRIMARY KEY,
+                "AddonMediaListId" INTEGER NOT NULL,
+                "State" INTEGER NOT NULL,
+                "UpdatedAt" TEXT NOT NULL,
+                "LeaseExpiresAt" TEXT NULL
+            );
+            CREATE TABLE "AddonProviderHostCooldown" (
+                "ProviderHost" TEXT PRIMARY KEY,
+                "SampledDelaySeconds" INTEGER NOT NULL
+            );
+            CREATE TABLE "ConfigElement" (
+                "Key" TEXT PRIMARY KEY,
+                "Value" TEXT NOT NULL
+            );
             INSERT INTO "AddonInstallation" ("AddonId", "Enabled") VALUES ('org.example.list', 1);
             "#,
         )
@@ -559,6 +787,139 @@ mod tests {
             .expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Warning);
         assert!(result.message.contains("metadata field conflict"));
+    }
+
+    #[tokio::test]
+    async fn reports_overview_import_that_needs_attention() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" ("Id", "AddonId", "Name", "ReviewState")
+               VALUES (1, 'org.example.list', 'Fixture', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListImportJob" (
+                   "Id", "AddonMediaListId", "Generation", "State", "Diagnostic", "UpdatedAt"
+               ) VALUES (1, 1, 1, 5, 'provider repeated a cursor', '2026-01-01 00:00:00')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("job");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result.message.contains("provider repeated a cursor"));
+    }
+
+    #[tokio::test]
+    async fn reports_invalid_persisted_provider_delay() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" ("Id", "AddonId", "Name")
+               VALUES (1, 'org.example.list', 'Fixture')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "AddonProviderHostCooldown" ("ProviderHost", "SampledDelaySeconds")
+               VALUES ('example.test', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("cooldown");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result.message.contains("is not positive"));
+    }
+
+    #[tokio::test]
+    async fn reports_invalid_addon_detail_wait_settings() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" ("Id", "AddonId", "Name")
+               VALUES (1, 'org.example.list', 'Fixture')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?), (?, ?)"#)
+            .bind(ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MINIMUM_SECONDS)
+            .bind("12")
+            .bind(ersatzrs_domain::CONFIG_KEY_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS)
+            .bind("11")
+            .execute(&pool)
+            .await
+            .expect("invalid detail wait settings");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result.message.contains("detail wait settings are invalid"));
+    }
+
+    #[tokio::test]
+    async fn distinguishes_active_waiting_retry_and_failed_detail_work() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "Name", "ReviewState", "ProviderMetadataJson"
+               ) VALUES (1, 'org.example.list', 'Fixture', 2, '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        for (id, state, lease) in [
+            (1_i64, 3_i64, Some("2099-01-01 00:00:00")),
+            (2, 2, None),
+            (3, 4, None),
+            (4, 7, None),
+        ] {
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListItem" (
+                       "Id", "AddonMediaListId", "DisplayTitle"
+                   ) VALUES (?, 1, ?)"#,
+            )
+            .bind(id)
+            .bind(format!("Item {id}"))
+            .execute(&pool)
+            .await
+            .expect("item");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListDetailJob" (
+                       "AddonMediaListItemId", "AddonMediaListId", "State",
+                       "UpdatedAt", "LeaseExpiresAt"
+                   ) VALUES (?, 1, ?, '2026-08-23 12:00:00', ?)"#,
+            )
+            .bind(id)
+            .bind(state)
+            .bind(lease)
+            .execute(&pool)
+            .await
+            .expect("detail job");
+        }
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result
+            .message
+            .contains("1 item detail job(s) need a manual retry"));
+        assert!(result.message.contains("1 are active"));
+        assert!(result.message.contains("2 are waiting"));
     }
 
     #[tokio::test]

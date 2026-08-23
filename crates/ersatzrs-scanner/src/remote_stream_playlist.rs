@@ -14,16 +14,19 @@ pub use ersatzrs_addon_contract::PlaylistEntry;
 use ersatzrs_addon_contract::{
     conform_remote_stream_item_output_for_capability, conform_remote_stream_list_output,
     validate_addon_id, AddonMediaListContentKind as WireContentKind,
-    AddonMediaListItemAvailability as WireAvailability, CAPABILITY_REMOTE_STREAM_ITEM_V1,
-    CAPABILITY_REMOTE_STREAM_ITEM_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
+    AddonMediaListItemAvailability as WireAvailability, RemoteStreamLiveness as WireLiveness,
+    CAPABILITY_REMOTE_STREAM_ITEM_V1, CAPABILITY_REMOTE_STREAM_ITEM_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
     CAPABILITY_REMOTE_STREAM_PLAY_V1, MAX_LIST_ITEMS, MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
 };
 use ersatzrs_addon_contract::{
     validate_operator_source_url, AddonOperationError, OPERATION_CODE_UNSUPPORTED_URL,
 };
 use ersatzrs_core::media_chapters::parse_chapter_input;
-use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListItemAvailability};
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListItemAvailability, RemoteStreamLiveness,
+};
 use ersatzrs_infra::addon_chapters::{fragment_guid, fragment_stream_url};
 use ersatzrs_infra::addons::{
     invoke_enabled_addon, load_installed_addon, AddonInvocation, AddonRuntimeContext,
@@ -121,7 +124,11 @@ pub enum RemovedEntryPolicy {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PlaylistDefaults {
-    pub is_live: bool,
+    /// Legacy manifest-level override. Explicit `false` means finite; omission
+    /// leaves the provider value in control.
+    pub is_live: Option<bool>,
+    /// Provider-neutral manifest-level operator override.
+    pub liveness: Option<RemoteStreamLiveness>,
     pub content_rating: Option<String>,
     pub year: Option<i32>,
 }
@@ -254,7 +261,7 @@ struct GeneratedRemoteStreamDefinition<'a> {
     fragment_end_seconds: Option<u64>,
     url: &'a str,
     addon: &'a str,
-    is_live: bool,
+    liveness: RemoteStreamLiveness,
     #[serde(skip_serializing_if = "Option::is_none")]
     duration: Option<String>,
     availability: AddonMediaListItemAvailability,
@@ -339,6 +346,7 @@ pub fn parse_playlist_manifest(yaml: &str, path: &Path) -> Result<ValidatedPlayl
             "filter.min_duration must not exceed filter.max_duration".to_owned(),
         ));
     }
+    validate_playlist_default_liveness(&manifest.defaults)?;
     let mut ids = BTreeSet::new();
     for id in &manifest.exclude {
         let id = id.trim();
@@ -383,6 +391,9 @@ async fn resolve_playlist_addon(pool: &DbPool, addon_id: &str) -> Result<Install
         && !addon
             .manifest
             .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3)
+        && !addon
+            .manifest
+            .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V4)
     {
         return Err(PlaylistError::Addon(format!(
             "{addon_id} does not implement a Remote Stream list capability"
@@ -421,6 +432,11 @@ pub async fn enumerate_playlist(
                 )
             })?;
     let capability = if addon
+        .manifest
+        .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V4)
+    {
+        CAPABILITY_REMOTE_STREAM_LIST_V4
+    } else if addon
         .manifest
         .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3)
     {
@@ -461,19 +477,7 @@ pub async fn enumerate_playlist(
     let text = String::from_utf8(stdout)
         .map_err(|_| PlaylistError::Enumeration("add-on output is not UTF-8".to_owned()))?;
     let mut entries = parse_ndjson_entries(&text)?;
-    if capability != CAPABILITY_REMOTE_STREAM_LIST_V3
-        && entries.iter().any(|entry| {
-            entry.parent_provider_id.is_some()
-                || entry.fragment_start_seconds.is_some()
-                || entry.fragment_end_seconds.is_some()
-                || !entry.additional_image_urls.is_empty()
-        })
-    {
-        return Err(PlaylistError::Enumeration(
-            "additional images and chapter-fragment fields require remote-stream.list.v3"
-                .to_owned(),
-        ));
-    }
+    validate_list_capability_fields(capability, &entries)?;
     if chapter_input.is_some_and(|input| !input.trim().is_empty()) {
         add_playlist_chapter_fragments(&mut entries, addon_id, chapter_input.unwrap_or_default())?;
     }
@@ -483,13 +487,41 @@ pub async fn enumerate_playlist(
     })
 }
 
+fn validate_list_capability_fields(capability: &str, entries: &[PlaylistEntry]) -> Result<()> {
+    if !matches!(
+        capability,
+        CAPABILITY_REMOTE_STREAM_LIST_V3 | CAPABILITY_REMOTE_STREAM_LIST_V4
+    ) && entries.iter().any(|entry| {
+        entry.parent_provider_id.is_some()
+            || entry.fragment_start_seconds.is_some()
+            || entry.fragment_end_seconds.is_some()
+            || !entry.additional_image_urls.is_empty()
+    }) {
+        return Err(PlaylistError::Enumeration(
+            "additional images and chapter-fragment fields require remote-stream.list.v3"
+                .to_owned(),
+        ));
+    }
+    if capability != CAPABILITY_REMOTE_STREAM_LIST_V4
+        && entries.iter().any(|entry| entry.liveness.is_some())
+    {
+        return Err(PlaylistError::Enumeration(
+            "liveness requires remote-stream.list.v4".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 fn require_chapter_capability(
     _addon_id: &str,
     capability: &str,
     chapter_input: Option<&str>,
 ) -> Result<()> {
     if chapter_input.is_some_and(|input| !input.trim().is_empty())
-        && capability != CAPABILITY_REMOTE_STREAM_LIST_V3
+        && !matches!(
+            capability,
+            CAPABILITY_REMOTE_STREAM_LIST_V3 | CAPABILITY_REMOTE_STREAM_LIST_V4
+        )
     {
         return Err(PlaylistError::Enumeration(
             "chapters require an installed add-on with remote-stream.list.v3 support".to_owned(),
@@ -1050,6 +1082,59 @@ const fn domain_availability(availability: WireAvailability) -> AddonMediaListIt
     }
 }
 
+const fn domain_liveness(liveness: WireLiveness) -> RemoteStreamLiveness {
+    match liveness {
+        WireLiveness::Unknown => RemoteStreamLiveness::Unknown,
+        WireLiveness::Finite => RemoteStreamLiveness::Finite,
+        WireLiveness::Live => RemoteStreamLiveness::Live,
+    }
+}
+
+fn validate_playlist_default_liveness(defaults: &PlaylistDefaults) -> Result<()> {
+    let legacy = defaults.is_live.map(|is_live| {
+        if is_live {
+            RemoteStreamLiveness::Live
+        } else {
+            RemoteStreamLiveness::Finite
+        }
+    });
+    if defaults
+        .liveness
+        .zip(legacy)
+        .is_some_and(|(liveness, legacy)| liveness != legacy)
+    {
+        return Err(PlaylistError::Manifest(
+            "defaults.liveness contradicts defaults.is_live".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn default_liveness(defaults: &PlaylistDefaults) -> Option<RemoteStreamLiveness> {
+    defaults.liveness.or_else(|| {
+        defaults.is_live.map(|is_live| {
+            if is_live {
+                RemoteStreamLiveness::Live
+            } else {
+                RemoteStreamLiveness::Finite
+            }
+        })
+    })
+}
+
+fn effective_entry_liveness(
+    defaults: &PlaylistDefaults,
+    entry: &PlaylistEntry,
+) -> Result<RemoteStreamLiveness> {
+    if let Some(liveness) = default_liveness(defaults) {
+        return Ok(liveness);
+    }
+    entry
+        .effective_liveness()
+        .map(domain_liveness)
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))
+}
+
 fn load_sidecar(path: &Path) -> Result<Option<PlaylistSidecarState>> {
     let value = match std::fs::read_to_string(path) {
         Ok(value) => value,
@@ -1245,12 +1330,14 @@ async fn load_staged_playlist_entries(
         Option<String>,
         i32,
         Option<String>,
+        i32,
     );
 
     let rows = sqlx::query_as::<_, StagedItemRow>(
         r#"SELECT "ProviderId", "SourceUrl", "Title", "DisplayTitle", "DurationSeconds",
                   "ParentProviderId", "FragmentStartSeconds", "FragmentEndSeconds",
-                  "Availability", "AvailabilityReason", "ContentKind", "AdditionalImageUrls"
+                  "Availability", "AvailabilityReason", "ContentKind", "AdditionalImageUrls",
+                  "PublishedLiveness"
            FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ? AND "Published" = 1
            ORDER BY "Rank", "Id""#,
@@ -1279,6 +1366,7 @@ async fn load_staged_playlist_entries(
                 availability_reason,
                 content_kind,
                 additional_image_urls,
+                published_liveness,
             )| {
                 let source_url = source_url
                     .filter(|value| !value.trim().is_empty())
@@ -1321,6 +1409,7 @@ async fn load_staged_playlist_entries(
                     availability: stored_availability(availability, &provider_id)?,
                     availability_reason,
                     content_kind: wire_content_kind(content_kind),
+                    liveness: Some(stored_liveness(published_liveness, &provider_id)?),
                     ..PlaylistEntry::default()
                 })
             },
@@ -1362,6 +1451,17 @@ fn stored_content_kind(value: i32, provider_id: &str) -> Result<AddonMediaListCo
         6 => Ok(AddonMediaListContentKind::Image),
         _ => Err(PlaylistError::Enumeration(format!(
             "staged item '{provider_id}' has invalid content kind {value}"
+        ))),
+    }
+}
+
+fn stored_liveness(value: i32, provider_id: &str) -> Result<WireLiveness> {
+    match value {
+        0 => Ok(WireLiveness::Unknown),
+        1 => Ok(WireLiveness::Finite),
+        2 => Ok(WireLiveness::Live),
+        _ => Err(PlaylistError::Enumeration(format!(
+            "staged item '{provider_id}' has invalid liveness {value}"
         ))),
     }
 }
@@ -1719,7 +1819,7 @@ fn generated_definition_bytes(
         fragment_end_seconds: entry.fragment_end_seconds,
         url: &entry.url,
         addon: &manifest.manifest.addon,
-        is_live: entry.is_live || manifest.manifest.defaults.is_live,
+        liveness: effective_entry_liveness(&manifest.manifest.defaults, entry)?,
         duration: entry.duration_seconds.map(format_clock_duration),
         availability: domain_availability(entry.availability),
         availability_reason: entry.availability_reason.as_deref(),
@@ -2966,7 +3066,7 @@ create_playlist: true
                     plot: None,
                     year: None,
                     thumbnail_url: None,
-                    is_live: false,
+                    is_live: Some(false),
                     ..PlaylistEntry::default()
                 },
                 PlaylistEntry {
@@ -2977,7 +3077,7 @@ create_playlist: true
                     plot: None,
                     year: None,
                     thumbnail_url: None,
-                    is_live: false,
+                    is_live: Some(false),
                     ..PlaylistEntry::default()
                 },
                 PlaylistEntry {
@@ -2988,7 +3088,7 @@ create_playlist: true
                     plot: None,
                     year: Some(2020),
                     thumbnail_url: None,
-                    is_live: false,
+                    is_live: Some(false),
                     ..PlaylistEntry::default()
                 },
             ],
@@ -3159,6 +3259,42 @@ create_playlist: true
             Some("0:00 Intro"),
         )
         .expect("v3 supports chapter fragments");
+    }
+
+    #[test]
+    fn liveness_requires_remote_stream_v4() {
+        let mut entry = PlaylistEntry::new("episode", "https://example.test/episode", "Episode");
+        entry.liveness = Some(WireLiveness::Live);
+
+        let error =
+            validate_list_capability_fields(CAPABILITY_REMOTE_STREAM_LIST_V3, &[entry.clone()])
+                .expect_err("v3 is frozen without liveness");
+        assert!(error.to_string().contains("remote-stream.list.v4"));
+        validate_list_capability_fields(CAPABILITY_REMOTE_STREAM_LIST_V4, &[entry])
+            .expect("v4 accepts liveness");
+    }
+
+    #[test]
+    fn manifest_liveness_adapts_explicit_legacy_values() {
+        let finite = parse_playlist_manifest(
+            &format!("{}\ndefaults:\n  is_live: false\n", valid_yaml()),
+            Path::new("finite.playlist.yml"),
+        )
+        .expect("explicit legacy false remains finite");
+        assert_eq!(
+            default_liveness(&finite.manifest.defaults),
+            Some(RemoteStreamLiveness::Finite)
+        );
+
+        let conflict = parse_playlist_manifest(
+            &format!(
+                "{}\ndefaults:\n  is_live: false\n  liveness: live\n",
+                valid_yaml()
+            ),
+            Path::new("conflict.playlist.yml"),
+        )
+        .expect_err("contradictory values must be refused");
+        assert!(conflict.to_string().contains("contradicts"));
     }
 
     #[test]

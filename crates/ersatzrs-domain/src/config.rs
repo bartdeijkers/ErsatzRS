@@ -37,6 +37,10 @@ pub const CONFIG_KEY_HDHR_UUID: &str = "hdhr.uuid";
 pub const CONFIG_KEY_PAGES_IS_DARK_MODE: &str = "pages.is_dark_mode";
 pub const CONFIG_KEY_PAGES_LANGUAGE: &str = "pages.language";
 pub const CONFIG_KEY_LIBRARY_REFRESH_INTERVAL: &str = "scanner.library_refresh_interval";
+pub const CONFIG_KEY_ADDON_DETAIL_WAIT_MINIMUM_SECONDS: &str = "addons.detail_wait.minimum_seconds";
+pub const CONFIG_KEY_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS: &str = "addons.detail_wait.maximum_seconds";
+pub const DEFAULT_ADDON_DETAIL_WAIT_MINIMUM_SECONDS: u32 = 2;
+pub const DEFAULT_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS: u32 = 16;
 pub const CONFIG_KEY_PLAYOUT_DAYS_TO_BUILD: &str = "playout.days_to_build";
 pub const CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS: &str = "playout.skip_missing_items";
 pub const CONFIG_KEY_PLAYOUT_SCRIPTED_SCHEDULE_TIMEOUT_SECONDS: &str =
@@ -54,3 +58,46 @@ pub struct ConfigElement {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ConfigElementKey(pub String);
+
+/// Global fair-use window used between add-on item-detail operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListDetailWaitRange {
+    pub minimum_seconds: u32,
+    pub maximum_seconds: u32,
+}
+
+impl AddonMediaListDetailWaitRange {
+    #[must_use]
+    pub const fn new(minimum_seconds: u32, maximum_seconds: u32) -> Option<Self> {
+        if minimum_seconds == 0 || maximum_seconds == 0 || minimum_seconds > maximum_seconds {
+            return None;
+        }
+        Some(Self {
+            minimum_seconds,
+            maximum_seconds,
+        })
+    }
+}
+
+impl Default for AddonMediaListDetailWaitRange {
+    fn default() -> Self {
+        Self {
+            minimum_seconds: DEFAULT_ADDON_DETAIL_WAIT_MINIMUM_SECONDS,
+            maximum_seconds: DEFAULT_ADDON_DETAIL_WAIT_MAXIMUM_SECONDS,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn addon_detail_wait_range_requires_positive_ordered_bounds() {
+        assert_eq!(AddonMediaListDetailWaitRange::default().minimum_seconds, 2);
+        assert_eq!(AddonMediaListDetailWaitRange::default().maximum_seconds, 16);
+        assert!(AddonMediaListDetailWaitRange::new(1, 1).is_some());
+        assert!(AddonMediaListDetailWaitRange::new(0, 1).is_none());
+        assert!(AddonMediaListDetailWaitRange::new(2, 1).is_none());
+    }
+}

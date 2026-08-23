@@ -52,6 +52,44 @@ pub enum AddonMediaListItemAvailability {
     Unknown,
 }
 
+/// Provider-neutral playback behavior for a Remote Stream.
+///
+/// This is deliberately three-state: a missing provider decision must remain
+/// distinguishable from a source that is confirmed finite. The value is
+/// independent from the Remote Stream collection type, which contains both
+/// finite and live media.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteStreamLiveness {
+    /// No trustworthy provider or operator decision exists.
+    #[default]
+    Unknown,
+    /// The source is finite/on-demand media.
+    Finite,
+    /// The source is live or is intended to become live.
+    Live,
+}
+
+impl RemoteStreamLiveness {
+    /// Adapt an optional legacy boolean and duration without guessing that an
+    /// omitted durationless value is finite.
+    #[must_use]
+    pub const fn from_legacy(is_live: Option<bool>, duration_seconds: Option<u64>) -> Self {
+        match is_live {
+            Some(true) => Self::Live,
+            Some(false) => Self::Finite,
+            None if matches!(duration_seconds, Some(value) if value > 0) => Self::Finite,
+            None => Self::Unknown,
+        }
+    }
+
+    /// Compatibility value for the legacy `RemoteStream.IsLive` mirror.
+    #[must_use]
+    pub const fn legacy_is_live(self) -> bool {
+        matches!(self, Self::Live)
+    }
+}
+
 /// Lifecycle of provider metadata before it becomes playable library content.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -69,6 +107,47 @@ pub enum AddonMediaListReviewState {
     /// publication visible to recovery and health checks instead of exposing
     /// it as a completed revision.
     Publishing,
+}
+
+/// Host policy for optional item-detail enrichment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListDetailPolicy {
+    /// Queue missing details only after the list is explicitly published.
+    #[default]
+    Automatic,
+    /// Retain the overview until an operator requests individual items.
+    ManualOnly,
+}
+
+/// Durable phase of overview-first list discovery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListImportState {
+    #[default]
+    Queued,
+    Discovering,
+    Verifying,
+    Ready,
+    Paused,
+    NeedsAttention,
+    Cancelled,
+    Superseded,
+}
+
+/// Durable per-item state for deferred detail enrichment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListDetailState {
+    #[default]
+    NotRequested,
+    Queued,
+    WaitingForSlot,
+    Running,
+    WaitingToRetry,
+    Complete,
+    Skipped,
+    Failed,
 }
 
 /// Descriptive content classification for an add-on supplied stream.
@@ -367,7 +446,34 @@ pub struct AddonMediaListItemGuid {
 
 #[cfg(test)]
 mod tests {
-    use super::AddonMediaListPresentationKind;
+    use super::{AddonMediaListPresentationKind, RemoteStreamLiveness};
+
+    #[test]
+    fn remote_stream_liveness_adapts_legacy_values_conservatively() {
+        assert_eq!(
+            RemoteStreamLiveness::from_legacy(Some(true), None),
+            RemoteStreamLiveness::Live
+        );
+        assert_eq!(
+            RemoteStreamLiveness::from_legacy(Some(false), None),
+            RemoteStreamLiveness::Finite
+        );
+        assert_eq!(
+            RemoteStreamLiveness::from_legacy(None, Some(60)),
+            RemoteStreamLiveness::Finite
+        );
+        assert_eq!(
+            RemoteStreamLiveness::from_legacy(None, Some(0)),
+            RemoteStreamLiveness::Unknown
+        );
+        assert_eq!(
+            RemoteStreamLiveness::from_legacy(None, None),
+            RemoteStreamLiveness::Unknown
+        );
+        assert!(RemoteStreamLiveness::Live.legacy_is_live());
+        assert!(!RemoteStreamLiveness::Finite.legacy_is_live());
+        assert!(!RemoteStreamLiveness::Unknown.legacy_is_live());
+    }
 
     /// `is_projected` is the one gate a presentation must pass before it can be
     /// requested. A variant added without listing it here would be refused at

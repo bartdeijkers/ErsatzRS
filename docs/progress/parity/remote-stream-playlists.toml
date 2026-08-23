@@ -2,7 +2,7 @@ feature    = 'Remote Stream playlists'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Streaming/YamlRemoteStreamDefinition.cs` has no playlist-ingestion equivalent; this is an ErsatzRS extension'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-infra/src/{addons,remote_stream}.rs`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0065', '0066', '0068', '0070', '0071']
+adr        = ['0065', '0066', '0068', '0070', '0071', '0078']
 
 summary = '''
 Completed in Phase 8D/8E through milestones P8D-01 through P8E-03. ADR 0065
@@ -49,6 +49,11 @@ on refresh, and lets one failed image leave the rest of the list intact. Every
 library projection now replaces the NFO's supported facet, credit, identifier,
 and thumbnail rows on its distinct metadata record; Remote Stream metadata
 continues to be scanner-owned.
+ADR 0078 now carries explicit Unknown, Finite, or Live behavior through reviewed
+add-on-list publication, generated definitions, scanner persistence, managed
+playlist membership, schedule validation, IPTV, and HLS. Unknown is refused;
+live items use zero-seek realtime handling and only Classic/Flood schedules
+that provide a deterministic boundary.
 '''
 
 [[debt]]
@@ -142,3 +147,12 @@ discovered  = '2026-08-17'
 evidence    = 'remote-stream.item.v2 carries bounded provider-neutral timestamp/title text. The host stores provider and operator values separately, gives operator text precedence, derives generic fragments from the one enrichment response, and exposes an explicit restore action. The official yt-dlp add-on owns extraction and whole-second rounding on POSIX and Windows.'
 resolved    = true
 resolution  = 'Provider chapters now cross the versioned add-on boundary as bounded text and are expanded only by provider-neutral host code.'
+
+[[debt]]
+id          = 'reviewed-media-lists-collapse-unknown-liveness-to-finite'
+description = 'Carry explicit unknown/finite/live source behavior through reviewed add-on-list publication, generated Remote Stream definitions, managed playlist membership, schedule validation, IPTV, and HLS.'
+discovered  = '2026-08-22'
+adr         = '0078'
+evidence    = 'Implemented through media-list.list.v5, remote-stream.list.v4, persisted provider/operator/effective/published liveness, generated YAML, scanner projection, and live-safe scheduling and transport paths. Contract, migration, repository, Classic/Flood, health, IPTV/HLS, Windows/Unix cancellation, Chromium/Firefox, and runtime-smoke tests passed.'
+resolved    = true
+resolution  = 'Reviewed list items no longer collapse omitted liveness to finite: all three values survive publication and only explicitly finite/live sources reach their permitted playback paths.'

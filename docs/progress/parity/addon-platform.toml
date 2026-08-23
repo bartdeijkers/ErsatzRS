@@ -2,7 +2,7 @@ feature    = 'Repository-backed add-on platform with tiered trust'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-backed extension equivalent'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-app`, `crates/ersatzrs-infra/src/addons.rs`, `crates/ersatzrs-infra/src/health/checks/addon_platform.rs`, `crates/ersatzrs-web/src/admin/pages/addons.rs`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0051', '0066', '0067', '0072', '0074']
+adr        = ['0051', '0066', '0067', '0072', '0074', '0079']
 
 summary = '''
 The host implementation is substantial: strict package and catalog schemas,
@@ -51,7 +51,22 @@ creates an idempotent managed Local Media Source, and projects every saved
 add-on list as a separately scanned library whose name and folder derive from
 the list. The source, libraries, manifest files, bootstrap reconciliation, and
 health checks remain host-owned; disabling does not delete user-visible files.
+
+ADR 0079 adds resumable media-list orchestration without weakening the
+executable trust boundary. The host keeps every discover/enrich process
+bounded, persists validated checkpoints and worker leases, and recovers jobs
+after transient failure or restart. The older one-shot capabilities remain a
+frozen compatibility path.
 '''
+
+[[debt]]
+id          = 'addon-media-list-invocation-is-not-resumable'
+description = 'Replace the single whole-list process deadline with host-owned bounded discover/enrich invocations, durable checkpoints, retry/backoff, cancellation, and restart recovery.'
+discovered  = '2026-08-22'
+evidence    = 'Implemented by media-list.import.v1 and AddonMediaListImportCoordinator: every discover/enrich invocation remains bounded while SQLite/MySQL persist generations, cursors, item checkpoints, leases, retries, cancellation, and progress. Tests prove many-page work beyond the former aggregate timeout, crash/restart resume, Windows Job Object and Unix process-group cancellation, and legacy one-shot compatibility.'
+adr         = '0079'
+resolved    = true
+resolution  = 'The host now resumes validated page and item checkpoints instead of discarding a whole list when one bounded provider process ends or fails.'
 
 [[debt]]
 id          = 'channel-package-feed-import'

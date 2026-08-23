@@ -1,27 +1,26 @@
 # Current program-level state. Feature/debt details live in parity/*.toml and
 # fine-grained execution state lives in milestones.toml.
 
-current_phase = 'FFmpeg drawtext overlay leg'
-current_focus = 'DTX-A — FFmpeg drawtext overlay leg'
+current_phase = 'DTX-A — FFmpeg drawtext overlay leg'
+current_focus = 'DTX-A — Accept and implement the drawtext filter contract'
 
 summary = '''
-Phases 0–8 and the add-on metadata management program are complete. Add-on
-imports now use one provider-neutral review draft, localized editor, atomic
-publication boundary, per-field refresh ownership, artwork materialization,
-projection, and health model across Beeld & Geluid and yt-dlp. The additive
-FFmpeg drawtext overlay leg is current so live, file-backed text is available
-before Phase 9 teletext resumes at P9A-01; the leg also establishes reusable
-dynamic overlays for Phase 10's video jukebox.
+Phases 0–8 and AMM-A through AMM-G are complete. Add-on Lists now preserve
+unknown/finite/live Remote Stream behavior and use resumable overview-first
+imports with a post-publication fair-use detail scanner, manual-only/per-item
+controls, and a configurable global provider wait whose defaults are 2 and 16
+seconds. DTX-A is now current: it adds an optional FFmpeg drawtext path for
+dynamic or file-backed text while retaining drawvg for static vector-rich
+graphics. Phase 9 teletext resumes at P9A-01 after DTX-A.
 '''
 
 next_steps = '''
-Accept ADR 0077 and complete dtx-a-01 and dtx-a-02 for the FFmpeg filter leg,
-dynamic text-file controller, localized backend choice, and cross-platform
-proof. Restore Phase 9A as the current focus after the drawtext program closes.
+Review and accept proposed ADR 0077 in dtx-a-01, then implement the bounded
+drawtext filter/pipeline contract and its snapshot coverage. Complete dtx-a-02
+with dynamic text selection, atomic reloadable files, localized administration,
+cross-platform runtime proof, and decoded playback evidence. Resume Phase 9A at
+p9a-01 when DTX-A closes.
 '''
-
-[[blocking_decision]]
-note = 'ADR 0075 is accepted: add-on imports use provider-neutral drafts, explicit publication, durable item inclusion, and field-level operator overrides.'
 
 [[blocking_decision]]
 note = 'Milestone dtx-a-01 must accept proposed ADR 0077 before the drawtext filter, schema, controller, or admin backend-selection contract is implemented.'

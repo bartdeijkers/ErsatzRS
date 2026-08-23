@@ -81,6 +81,9 @@ function resetFixtures(): void {
     database
       .prepare('DELETE FROM "ConfigElement" WHERE "Key" = ?')
       .run('addons.allow_unverified_sources');
+    database
+      .prepare('DELETE FROM "ConfigElement" WHERE "Key" IN (?, ?)')
+      .run('addons.detail_wait.minimum_seconds', 'addons.detail_wait.maximum_seconds');
   } finally {
     database.close();
   }
@@ -121,6 +124,60 @@ test.beforeEach(async ({ request }) => {
 });
 
 test.afterEach(() => resetFixtures());
+
+test('validates and round-trips the global item-detail pacing range', async ({ page }) => {
+  await page.goto('/settings/addons');
+  await waitForHydration(page);
+
+  const settings = page.getByTestId('addon-detail-wait-settings');
+  const minimum = settings.getByTestId('addon-detail-wait-minimum');
+  const maximum = settings.getByTestId('addon-detail-wait-maximum');
+  await expect(minimum).toHaveValue('2');
+  await expect(maximum).toHaveValue('16');
+  await expect(settings).toContainText('same provider host');
+
+  await minimum.fill('12');
+  await maximum.fill('11');
+  await settings.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(
+    page.locator('[data-toast-severity="error"]').filter({
+      hasText: 'minimum does not exceed the maximum',
+    }),
+  ).toBeVisible();
+
+  await minimum.fill('7');
+  await maximum.fill('11');
+  await settings.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(
+    page.locator('[data-toast-severity="success"]').filter({ hasText: 'Saved.' }),
+  ).toBeVisible();
+  await expect
+    .poll(() => {
+      const database = openDatabase();
+      try {
+        return database
+          .prepare(`
+            SELECT "Key", "Value" FROM "ConfigElement"
+            WHERE "Key" IN (?, ?) ORDER BY "Key"
+          `)
+          .all(
+            'addons.detail_wait.minimum_seconds',
+            'addons.detail_wait.maximum_seconds',
+          ) as Array<{ Key: string; Value: string }>;
+      } finally {
+        database.close();
+      }
+    })
+    .toEqual([
+      { Key: 'addons.detail_wait.maximum_seconds', Value: '11' },
+      { Key: 'addons.detail_wait.minimum_seconds', Value: '7' },
+    ]);
+
+  await page.reload();
+  await waitForHydration(page);
+  await expect(page.getByTestId('addon-detail-wait-minimum')).toHaveValue('7');
+  await expect(page.getByTestId('addon-detail-wait-maximum')).toHaveValue('11');
+});
 
 test('manages trusted repositories through the hydrated settings page', async ({ page }) => {
   await page.goto('/settings/addons?view=sources');

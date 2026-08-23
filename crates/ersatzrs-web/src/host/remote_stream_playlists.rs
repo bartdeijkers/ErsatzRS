@@ -1,5 +1,9 @@
 use async_trait::async_trait;
-use ersatzrs_addon_contract::{CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_PLAY_V1};
+use ersatzrs_addon_contract::{
+    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
+    CAPABILITY_REMOTE_STREAM_PLAY_V1,
+};
 use ersatzrs_app::{
     RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead, RemoteStreamPlaylistRead,
     RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
@@ -40,9 +44,18 @@ impl RemoteStreamPlaylistRuntime for NativeRemoteStreamPlaylistRuntime {
             .into_iter()
             .filter(|addon| {
                 addon.enabled
-                    && addon
+                    && (addon
                         .manifest
                         .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
+                        || addon
+                            .manifest
+                            .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
+                        || addon
+                            .manifest
+                            .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3)
+                        || addon
+                            .manifest
+                            .has_capability(CAPABILITY_REMOTE_STREAM_LIST_V4))
                     && addon
                         .manifest
                         .has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)

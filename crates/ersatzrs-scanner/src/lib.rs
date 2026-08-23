@@ -25,7 +25,7 @@ use ersatzrs_infra::metadata::{
     replace_strings, update_local_file_subtitles, ArtworkRef, PersonRef, SubtitleMetadataOwner,
 };
 use ersatzrs_infra::remote_stream::{
-    parse_remote_stream_definition, resolve_remote_stream_with_addons, RemoteStreamError,
+    parse_remote_stream_definition, resolve_remote_stream_for_scan_with_addons, RemoteStreamError,
 };
 use sha2::{Digest, Sha256};
 use sqlx::{Row, Transaction};
@@ -408,7 +408,10 @@ async fn scan_local_library_with_progress_once(
                             .await
                             {
                                 Ok((definition, resolved)) => {
-                                    let probed = if is_managed_remote_stream_definition(&path) {
+                                    let probed = if is_managed_remote_stream_definition(&path)
+                                        || resolved.liveness
+                                            == ersatzrs_domain::RemoteStreamLiveness::Unknown
+                                    {
                                         None
                                     } else {
                                         match extractor.extract_remote(&resolved).await {
@@ -1983,7 +1986,7 @@ async fn upsert_local_remote_stream(
     sqlx::query(
         r#"UPDATE "RemoteStream"
                SET "Duration" = ?, "FallbackQuery" = ?, "AddonId" = ?,
-               "Script" = NULL, "Url" = ?, "IsLive" = ?,
+               "Script" = NULL, "Url" = ?, "Liveness" = ?, "IsLive" = ?,
                "Availability" = ?, "AvailabilityReason" = ?, "ContentKind" = ?,
                "ProviderId" = ?
            WHERE "Id" = ?"#,
@@ -1992,6 +1995,11 @@ async fn upsert_local_remote_stream(
     .bind(definition.fallback_query.as_deref())
     .bind(definition.addon.as_deref())
     .bind(definition.url.as_deref())
+    .bind(match resolved.liveness {
+        ersatzrs_domain::RemoteStreamLiveness::Unknown => 0,
+        ersatzrs_domain::RemoteStreamLiveness::Finite => 1,
+        ersatzrs_domain::RemoteStreamLiveness::Live => 2,
+    })
     .bind(i32::from(resolved.is_live))
     .bind(match definition.availability {
         ersatzrs_domain::AddonMediaListItemAvailability::Available => 0,
@@ -2207,7 +2215,7 @@ async fn load_remote_stream_definition(
         source,
     })?;
     let definition = parse_remote_stream_definition(&yaml)?;
-    let resolved = resolve_remote_stream_with_addons(
+    let resolved = resolve_remote_stream_for_scan_with_addons(
         pool,
         &definition,
         &AddonRuntimeContext {
@@ -2254,7 +2262,12 @@ async fn synchronize_remote_stream_playlist(
             None,
         )
         .await?;
-        if definition.active && definition.duration_seconds.is_some_and(|value| value > 0) {
+        let liveness = parsed.effective_liveness()?;
+        if definition.active
+            && (liveness == ersatzrs_domain::RemoteStreamLiveness::Live
+                || (liveness == ersatzrs_domain::RemoteStreamLiveness::Finite
+                    && definition.duration_seconds.is_some_and(|value| value > 0)))
+        {
             ordered_items.push(item_id);
         }
         materialized.push((item_id, parsed));

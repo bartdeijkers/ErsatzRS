@@ -12,12 +12,17 @@
 //! counterparts are in the `BlockScheduling/` and `YamlScheduling/` and
 //! `ScriptedScheduling/` sub-namespaces respectively.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use chrono::Duration;
-use ersatzrs_domain::{EntityId, FillerKind, PlayoutItem, PlayoutScheduleKind};
+use ersatzrs_domain::{
+    EntityId, FillerKind, PlayoutItem, PlayoutMode, PlayoutScheduleKind, RemoteStreamLiveness,
+};
 
 use crate::scheduling::{
-    BlockSchedulingEngine, ClassicSchedulingEngine, ExternalJsonSchedulingEngine, SchedulingError,
-    SchedulingFallbackPreset, SchedulingRequest, SchedulingResult, ScriptedSchedulingEngine,
+    classic_schedule_item_key, BlockSchedulingEngine, ClassicSchedulingEngine,
+    ExternalJsonSchedulingEngine, SchedulingError, SchedulingFallbackPreset, SchedulingMediaItem,
+    SchedulingReferenceData, SchedulingRequest, SchedulingResult, ScriptedSchedulingEngine,
     YamlPlayoutEngine,
 };
 
@@ -82,6 +87,7 @@ impl PlayoutBuilder {
     /// Returns [`SchedulingError::UnsupportedScheduleKind`] for `None`, which
     /// is not a buildable schedule kind.
     pub fn build(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+        validate_remote_stream_placements(&request)?;
         let options = ConfiguredPlayoutOptions::from_request(&request);
         let mut result = match request.playout.schedule_kind {
             PlayoutScheduleKind::Classic => self.classic.schedule(request),
@@ -97,6 +103,109 @@ impl PlayoutBuilder {
         apply_configured_playout_options(&mut result, &options);
         Ok(result)
     }
+}
+
+fn validate_remote_stream_placements(request: &SchedulingRequest) -> Result<(), SchedulingError> {
+    let items = unique_scheduling_media_items(&request.reference_data);
+    let live_ids = items
+        .values()
+        .filter_map(|item| match item.liveness {
+            Some(RemoteStreamLiveness::Unknown) => {
+                Some(Err(SchedulingError::UnknownRemoteStreamLiveness(item.id)))
+            }
+            Some(RemoteStreamLiveness::Finite) if item.duration <= Duration::zero() => Some(Err(
+                SchedulingError::FiniteRemoteStreamMissingDuration(item.id),
+            )),
+            Some(RemoteStreamLiveness::Live) => Some(Ok(item.id)),
+            Some(RemoteStreamLiveness::Finite) | None => None,
+        })
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    if live_ids.is_empty() {
+        return Ok(());
+    }
+
+    if request.playout.schedule_kind != PlayoutScheduleKind::Classic {
+        return Err(SchedulingError::UnsupportedLiveSourcePlacement(
+            *live_ids.iter().next().expect("live id exists"),
+        ));
+    }
+
+    let mut flood_ids = BTreeSet::new();
+    let mut incompatible_ids = BTreeSet::new();
+    for schedule_item in &request.reference_data.classic_schedule_items {
+        let key = classic_schedule_item_key(schedule_item);
+        let target = if schedule_item.playout_mode == PlayoutMode::Flood {
+            &mut flood_ids
+        } else {
+            &mut incompatible_ids
+        };
+        if let Some(media_items) = request.reference_data.media_by_key.get(&key) {
+            target.extend(media_items.iter().map(|item| item.id));
+        }
+        if let Some(playlist_items) = request.reference_data.playlist_items_by_key.get(&key) {
+            target.extend(
+                playlist_items
+                    .iter()
+                    .flat_map(|playlist| playlist.media_items.iter())
+                    .map(|item| item.id),
+            );
+        }
+    }
+
+    live_ids
+        .iter()
+        .find(|id| incompatible_ids.contains(id) || !flood_ids.contains(id))
+        .map_or(Ok(()), |id| {
+            Err(SchedulingError::UnsupportedLiveSourcePlacement(*id))
+        })
+}
+
+fn unique_scheduling_media_items(
+    reference: &SchedulingReferenceData,
+) -> BTreeMap<EntityId, SchedulingMediaItem> {
+    let mut result = BTreeMap::new();
+    let mut insert = |item: &SchedulingMediaItem| {
+        result.entry(item.id).or_insert_with(|| item.clone());
+    };
+    for item in reference.media_items_by_id.values() {
+        insert(item);
+    }
+    for items in reference
+        .media_by_key
+        .values()
+        .chain(reference.collections_by_name.values())
+        .chain(reference.multi_collections_by_name.values())
+        .chain(reference.smart_collections_by_name.values())
+        .chain(reference.playlists_by_group_and_name.values())
+        .chain(reference.searches_by_query.values())
+        .chain(reference.shows_by_name.values())
+        .chain(reference.media_by_show_guid.values())
+    {
+        for item in items {
+            insert(item);
+        }
+    }
+    for playlist in reference
+        .playlist_items_by_group_and_name
+        .values()
+        .chain(reference.playlist_items_by_key.values())
+        .flatten()
+    {
+        for item in &playlist.media_items {
+            insert(item);
+        }
+    }
+    for preset in reference.classic_filler_presets.values() {
+        for item in &preset.media_items {
+            insert(item);
+        }
+    }
+    if let Some(fallback) = &reference.global_fallback {
+        for item in &fallback.media_items {
+            insert(item);
+        }
+    }
+    result
 }
 
 /// Object-safe wrapper around [`crate::scheduling::PlayoutSchedulingEngine`].
@@ -221,7 +330,10 @@ fn min_positive_duration(left: Duration, right: Duration) -> Duration {
 #[cfg(test)]
 mod tests {
     use chrono::{Duration, Utc};
-    use ersatzrs_domain::{FillerKind, Playout, PlayoutGap, PlayoutScheduleKind};
+    use ersatzrs_domain::{
+        FillerKind, Playout, PlayoutGap, PlayoutMode, PlayoutScheduleKind, ProgramScheduleItem,
+        RemoteStreamLiveness,
+    };
 
     use super::*;
     use crate::scheduling::{
@@ -345,6 +457,136 @@ mod tests {
             .iter()
             .all(|item| item.disable_watermarks && item.watermark_ids.is_empty()));
         assert_eq!(output.added_items[2].finish, start + Duration::minutes(45));
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)] // One matrix keeps every liveness/scheduler refusal adjacent.
+    fn live_sources_require_classic_flood_and_unknown_never_schedules() {
+        let start = Utc::now();
+        let mut live = SchedulingMediaItem::new(42, Duration::zero());
+        live.liveness = Some(RemoteStreamLiveness::Live);
+        for schedule_kind in [
+            PlayoutScheduleKind::None,
+            PlayoutScheduleKind::Block,
+            PlayoutScheduleKind::Sequential,
+            PlayoutScheduleKind::Scripted,
+            PlayoutScheduleKind::ExternalJson,
+        ] {
+            let request = SchedulingRequest {
+                playout: Playout {
+                    schedule_kind,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::hours(1),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: SchedulingReferenceData {
+                    media_items_by_id: [(live.id, live.clone())].into(),
+                    ..SchedulingReferenceData::default()
+                },
+            };
+            assert!(matches!(
+                PlayoutBuilder::default().build(request),
+                Err(SchedulingError::UnsupportedLiveSourcePlacement(42))
+            ));
+        }
+
+        for playout_mode in [
+            PlayoutMode::One,
+            PlayoutMode::Multiple,
+            PlayoutMode::Duration,
+        ] {
+            let schedule_item = ProgramScheduleItem {
+                id: 7,
+                playout_mode,
+                media_item_id: Some(live.id),
+                ..ProgramScheduleItem::default()
+            };
+            let key = classic_schedule_item_key(&schedule_item);
+            let request = SchedulingRequest {
+                playout: Playout {
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::hours(1),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: SchedulingReferenceData {
+                    classic_schedule_items: vec![schedule_item],
+                    media_by_key: [(key, vec![live.clone()])].into(),
+                    ..SchedulingReferenceData::default()
+                },
+            };
+            assert!(matches!(
+                PlayoutBuilder::default().build(request),
+                Err(SchedulingError::UnsupportedLiveSourcePlacement(42))
+            ));
+        }
+
+        let schedule_item = ProgramScheduleItem {
+            id: 7,
+            playout_mode: PlayoutMode::Flood,
+            media_item_id: Some(live.id),
+            ..ProgramScheduleItem::default()
+        };
+        let key = classic_schedule_item_key(&schedule_item);
+        let classic_request = SchedulingRequest {
+            playout: Playout {
+                schedule_kind: PlayoutScheduleKind::Classic,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(1),
+            mode: PlayoutBuildMode::Continue,
+            reference_data: SchedulingReferenceData {
+                classic_schedule_items: vec![schedule_item],
+                media_by_key: [(key, vec![live.clone()])].into(),
+                ..SchedulingReferenceData::default()
+            },
+        };
+        PlayoutBuilder::default()
+            .build(classic_request)
+            .expect("Classic Flood should accept a durationless live source");
+
+        let mut unknown = SchedulingMediaItem::new(99, Duration::minutes(1));
+        unknown.liveness = Some(RemoteStreamLiveness::Unknown);
+        let unknown_request = SchedulingRequest {
+            playout: Playout {
+                schedule_kind: PlayoutScheduleKind::Classic,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(1),
+            mode: PlayoutBuildMode::Continue,
+            reference_data: SchedulingReferenceData {
+                media_items_by_id: [(unknown.id, unknown)].into(),
+                ..SchedulingReferenceData::default()
+            },
+        };
+        assert!(matches!(
+            PlayoutBuilder::default().build(unknown_request),
+            Err(SchedulingError::UnknownRemoteStreamLiveness(99))
+        ));
+
+        let mut durationless_finite = SchedulingMediaItem::new(100, Duration::zero());
+        durationless_finite.liveness = Some(RemoteStreamLiveness::Finite);
+        let finite_request = SchedulingRequest {
+            playout: Playout {
+                schedule_kind: PlayoutScheduleKind::Classic,
+                ..Playout::default()
+            },
+            start,
+            finish: start + Duration::hours(1),
+            mode: PlayoutBuildMode::Continue,
+            reference_data: SchedulingReferenceData {
+                media_items_by_id: [(durationless_finite.id, durationless_finite)].into(),
+                ..SchedulingReferenceData::default()
+            },
+        };
+        assert!(matches!(
+            PlayoutBuilder::default().build(finite_request),
+            Err(SchedulingError::FiniteRemoteStreamMissingDuration(100))
+        ));
     }
 
     fn builder_with_static_result(result: SchedulingResult) -> PlayoutBuilder {

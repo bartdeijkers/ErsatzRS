@@ -6,14 +6,12 @@ Accepted (2026-08-21)
 
 ## Implementation
 
-Partial
+Implemented (c8d877b5, 2026-08-22)
 
-The generated parent-NFO bootstrap, v4 provider contract, draft and override
-storage, durable inclusion, explicit publication boundary, shared localized
-list/item editor, and official provider mappings are implemented. Remaining AMM
-work covers injected cross-file/database rollback proof, artwork upload and
-materialization, refresh-conflict presentation, and the full Linux/Firefox
-closeout matrix.
+AMM-A through AMM-E, including rollback, artwork, refresh conflicts, provider
+parity, and the cross-platform/browser closeout, are complete. The separate
+AMM-F live-source follow-up is owned by ADR 0078 and does not reopen this
+draft/publication decision.
 
 ## Context
 

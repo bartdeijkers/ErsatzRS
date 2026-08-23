@@ -7,7 +7,8 @@ use axum::{
 };
 use ersatzrs_core::repositories::{AddonMediaListArtworkRole, RepositoryError};
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListPresentationKind, AddonMediaListReviewState,
+    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListPresentationKind,
+    AddonMediaListReviewState,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -31,6 +32,12 @@ pub struct AddonMediaListAddForm {
     content_kind_override: AddonMediaListContentKind,
     #[serde(default)]
     chapter_input: String,
+    #[serde(default = "default_true")]
+    load_item_details: bool,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +58,8 @@ pub struct AddonMediaListSaveForm {
     content_kind_override: AddonMediaListContentKind,
     #[serde(default)]
     chapter_input: String,
+    #[serde(default)]
+    load_item_details: bool,
 }
 
 fn is_unresolved_addon(error: &ersatzrs_app::ApplicationError) -> bool {
@@ -74,6 +83,11 @@ pub async fn add_addon_media_list_form(
         input.folder_name,
         input.content_kind_override,
         input.chapter_input,
+        if input.load_item_details {
+            AddonMediaListDetailPolicy::Automatic
+        } else {
+            AddonMediaListDetailPolicy::ManualOnly
+        },
     )
     .await
     {
@@ -122,6 +136,12 @@ pub async fn save_addon_media_list_form(
         review_state: AddonMediaListReviewState::default(),
         review_error: None,
         published_revision: 0,
+        detail_import_policy: if input.load_item_details {
+            AddonMediaListDetailPolicy::Automatic
+        } else {
+            AddonMediaListDetailPolicy::ManualOnly
+        },
+        import_progress: None,
     };
     match update_addon_media_list_with_state(&state, form).await {
         Ok(()) => Redirect::to("/media/addon-lists"),

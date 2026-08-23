@@ -259,6 +259,9 @@ pub struct RemoteStream {
     pub fallback_query: Option<String>,
     pub script: Option<String>,
     pub url: Option<String>,
+    pub liveness: crate::RemoteStreamLiveness,
+    /// Compatibility mirror for persisted databases and older callers.
+    /// New runtime decisions must use [`Self::liveness`].
     pub is_live: bool,
 }
 

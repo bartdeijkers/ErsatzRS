@@ -2,7 +2,7 @@ feature    = 'Settings (FFmpeg / Logging / HDHomeRun / Scanner / Playout / UI / 
 etv_source = '`ErsatzTV/Pages/Settings*.razor`, `$ERSATZTV_SRC/ErsatzTV.Core/Domain/ConfigElementKey.cs`'
 rs_target  = '`crates/ersatzrs-app/src/{commands,ports}.rs`, `crates/ersatzrs-web/src/admin/pages/settings.rs`, `crates/ersatzrs-web/src/admin/server_fns/settings.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, `crates/ersatzrs-web/src/admin/languages/`, `crates/ersatzrs-web/src/host/settings.rs`, `crates/ersatzrs-web/src/transport/iptv/stream.rs`, `crates/ersatzrs-domain/src/config.rs`, `crates/ersatzrs-infra/src/{db,ffmpeg_config,hls_worker,logging,playback,xmltv}.rs`, `crates/ersatzrs-core/src/playout_builder.rs`'
 status     = 'Ported'
-adr        = ['0012', '0052', '0059', '0066']
+adr        = ['0012', '0052', '0059', '0066', '0079']
 
 summary    = '''
 Ported: `/settings/{ffmpeg,logging,hdhr,scanner,playout,ui,xmltv}` provides ErsatzTV-shaped forms and raw HTML POST fallbacks. The ErsatzRS-only `/settings/addons` manager provides Installed, Browse, Updates, and Sources views for tiered-trust repositories, local package and repository ZIP installation, package lifecycle, permissions, readiness, and optional icons. Every catalog or installed add-on has a canonical `/settings/addons/{addon_id}` detail route for metadata, configuration, source offers, health, and declarative panels under ADR 0066. Database-backed fields cover FFmpeg, logging, HDHR, scanner, playout, UI, XMLTV, and add-on behavior. On Windows, `/settings/ui` also mirrors ErsatzTV's opt-in per-user login startup: a raw POST delegates through the application runtime port to the live HKCU Run registration for packaged `ErsatzRS.exe`, distinguishes enabled/disabled/repair/unavailable states, and never stores a machine-local boolean in `ConfigElement`. Non-Windows SSR omits the control; ADR 0059 keeps Linux startup under systemd ownership.
@@ -12,7 +12,22 @@ The persisted `pages.language` value drives SSR translations for every settings 
 Configured FFmpeg/ffprobe paths flow through the shared locator used by web and scanner execution and refresh without restart. Empty path fields mean auto-detect and show the resolved tool. The settings loader uses the correct `ChannelWatermark` table. HLS segmenter limits and MPEG-TS settings are consumed by their runtime paths. IPTV response disposal reaps add-on and FFmpeg processes after disconnect; transport proof remains in the HLS and MPEG-TS parity entries. `tests/e2e/settings-i18n.spec.ts` proves all eight settings pages in every supported culture.
 ADR 0052 adds Kodi-style selectors. Contextual `und` matches null metadata and
 suffixless sidecars (ErsatzTV `32e5482`).
+
+AMM-G completes the Add-ons settings slice. `/settings/addons` exposes global
+minimum and maximum waits for randomized item-detail enrichment. The positive
+whole-second values default to 2 and 16, require minimum no greater than
+maximum, persist across restart, and apply without restart while the
+provider-host limiter continues to govern automatic and manual requests.
 '''
+
+[[debt]]
+id          = 'addon-detail-cooldown-settings-are-missing'
+description = 'Expose localized Add-ons settings for the global minimum and maximum randomized item-detail wait instead of fixing the range at 2–16 seconds.'
+discovered  = '2026-08-23'
+adr         = '0079'
+evidence    = 'ConfigElement-backed application commands atomically validate and save the pair; the coordinator loads the current pair for every later sample. All nine locale modules translate the form and validation. Unit, health, MySQL 8.4, Chromium, and Firefox tests prove 2/16 defaults, rejection of 12/11 without mutation, round-trip of 7/11, restart persistence, and no-restart use.'
+resolved    = true
+resolution  = 'Operators can configure the global provider-host detail pacing range safely from the localized Add-ons settings page.'
 
 [[debt]]
 id          = 'settings-i18n-browser-proof'
