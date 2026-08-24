@@ -44,6 +44,45 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 | `./run.sh serve` | Build the scanner companion, then rebuild and serve once.   |
 | `./run.sh seed`  | Apply `tests/fixtures/seed_admin.sql` to the SQLite db.     |
 | `./run.sh log`   | `tail -F ersatzrs.log`.                                     |
+| `cargo xtask affected-checks` | Recommend the narrow focused loop for the current diff. |
+| `cargo xtask runtime-audit --db <path> --redact` | Audit runtime SQLite state without writing it. |
+
+## Select checks from the diff
+
+`affected-checks` turns repository-relative changed paths into recommendations;
+it never executes them. With no paths it combines tracked and untracked working
+tree changes. Pass paths to plan a smaller slice, or `--base` to include
+committed branch changes:
+
+```bash
+cargo xtask affected-checks
+cargo xtask affected-checks --base origin/main
+cargo xtask affected-checks xtask/src/main.rs skills/rust-inner-loop.md
+```
+
+The output uses `./run.sh` on POSIX and `.\run.cmd` on Windows, keeps changed
+packages in one Cargo graph, adds migration/hydration/architecture/progress or
+playback gates only when their paths require them, and labels broad checks as a
+one-time closeout. It is a deterministic starting point; public-contract or
+behavior changes may still require consumer tests from the owning milestone.
+
+## Audit a runtime SQLite database read-only
+
+Use `runtime-audit` during incident diagnosis or Windows dogfood acceptance:
+
+```bash
+cargo xtask runtime-audit --db <ersatzrs-database-path> --redact
+```
+
+The command refuses to create or migrate a database and opens the supplied
+SQLite file with read-only flags. It reports aggregate integrity, successful
+migration version, Classic dated/undated anchor state, exact/overlapping playout
+slots, failed build statuses, and episode/artwork join cardinality. `--redact`
+hides the database path and replaces playout IDs with local ordinals; titles,
+URLs, media paths, and channel names are never queried. Findings are diagnostic
+and keep exit status zero; invalid arguments, unreadable/corrupt databases, or
+missing ErsatzRS schema return failure. MySQL incidents require equivalent
+backend-native read-only queries.
 
 Run `cargo xtask architecture-lint` after changing crate dependencies,
 `ersatzrs-app`, or production admin data loaders. It enforces ADR 0051 and

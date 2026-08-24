@@ -6,7 +6,10 @@ Accepted (2026-08-23)
 
 ## Implementation
 
-Implemented (2026-08-23)
+Partial — the overview-first workflow is implemented, but milestone `amm-g-06`
+must still retain and correctly classify non-playable Beeld & Geluid series
+items whose inclusion is requested through the source URL, and `amm-g-07` must
+accept direct one-item and aggregate official-provider URL shapes end to end.
 
 ## Context
 

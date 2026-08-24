@@ -54,7 +54,22 @@ add-on-list publication, generated definitions, scanner persistence, managed
 playlist membership, schedule validation, IPTV, and HLS. Unknown is refused;
 live items use zero-seek realtime handling and only Classic/Flood schedules
 that provide a deterministic boundary.
+
+Windows dogfood on 2026-08-23 reopened scan-impact scoping. Remote Stream
+membership reconciliation currently selects every playout that owns any
+program-schedule anchor, rather than resolving which schedules can consume the
+changed library or media identities. An unrelated managed-list scan can thus
+enqueue a Classic Refresh and expose the separate checkpoint-continuity defect.
+Milestone crf-02 owns dependency-aware invalidation and coalescing.
 '''
+
+[[debt]]
+id          = 'remote-stream-scan-invalidates-unrelated-playouts'
+description = 'Refresh only playouts whose schedule resolution can consume membership changed by a Remote Stream scan.'
+discovered  = '2026-08-23'
+adr         = '0065'
+evidence    = 'affected_playouts_for_remote_stream_membership currently selects every distinct PlayoutId from PlayoutProgramScheduleAnchor and does not filter by the scanned library, changed media identities, collection references, or schedule dependencies. A redacted Windows run showed two managed-list scans enqueueing all playouts, including an unrelated library-scoped Classic playout. Unchanged periodic scans did not enqueue work, so the defect is over-broad impact selection after a real membership delta rather than the scan timer itself. Tracked by milestone crf-02 and plans/playout-refresh-and-addon-tv-deduplication.md.'
+resolved    = false
 
 [[debt]]
 id          = 'schatkamer-url-and-chapter-sources'

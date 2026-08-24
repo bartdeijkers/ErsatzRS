@@ -1,7 +1,7 @@
 feature    = 'Playout rebuild on impacting changes'
 etv_source = '`ErsatzTV.Core/Scheduling/PlayoutBuilder.cs` (RefreshPlayout/ResetPlayout), `ErsatzTV.Application/ProgramSchedules/Commands/*Handler.cs` (BuildPlayout Refresh), `ErsatzTV.Application/Channels/Commands/UpdateChannelHandler.cs`, `ErsatzTV/Pages/Playouts.razor`'
 rs_target  = '`crates/ersatzrs-core/src/scheduling/classic/mod.rs`, `crates/ersatzrs-core/src/scheduling/{yaml.rs,scripted.rs}`, `crates/ersatzrs-infra/src/maintenance.rs`, `crates/ersatzrs-web/src/admin/server_fns/{channels.rs,schedules.rs,playouts.rs,media_browser.rs}`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0020']
 summary    = '''
 Proposed by ADR 0020: rebuild the impacted playouts whenever a change can alter
@@ -15,7 +15,23 @@ Channel edits enqueue no playout build, matching ErsatzTV's
 reliably and expose queued/building activity to the admin UI. The classic engine now consumes
 `request.mode`, so classic `Refresh` clears and rebuilds the window the way
 ErsatzTV `RefreshPlayout` does.
+
+Reopened 2026-08-23: the clear-and-rebuild mechanics exist, but the real
+Classic build path does not persist the dated checkpoint needed to restore
+continuity. A content-triggered Refresh can therefore rewind a deterministic
+shuffle and schedule already-aired media again. Remote Stream scan impact is
+also selected globally instead of from actual schedule/library dependencies,
+so an unrelated membership change can trigger that unsafe Refresh. Milestones
+crf-01 and crf-02 own the end-to-end correction.
 '''
+
+[[debt]]
+id          = 'scan-triggered-classic-refresh-can-replay-aired-media'
+adr         = '0020'
+description = 'Make a content-triggered Classic Refresh reproduce uninterrupted scheduling state instead of clearing the window and replaying media that has already aired.'
+discovered  = '2026-08-23'
+evidence    = 'Two unrelated managed Remote Stream scans changed membership and queued Refresh for every playout with a program-schedule anchor. The affected Classic movie playout had no dated checkpoint to restore, because all persisted anchors were undated continuation state, and its deterministic shuffled sequence restarted. Current tests prove restoration only after manually injecting a checkpoint; they do not exercise a fresh build, process restart, real scan invalidation, and Refresh as one scenario. Tracked by milestones crf-01 and crf-02 and plans/playout-refresh-and-addon-tv-deduplication.md.'
+resolved    = false
 
 [[debt]]
 id          = 'channel-edit-triggers-no-playout-rebuild'

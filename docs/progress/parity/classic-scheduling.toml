@@ -1,11 +1,13 @@
 feature    = 'Classic scheduling'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`'
-status     = 'Ported'
-adr        = ['0010']
+status     = 'In progress'
+adr        = ['0010', '0020']
 
 summary    = '''
-Ported for the current non-web parity target: `PlayoutBuilder` dispatches Classic schedules to `ClassicSchedulingEngine`; SQL reference loading covers program schedules, alternates, typed One/Multiple/Duration/Flood schedule items, collection media, imported schedule-item filler preset IDs, existing playout state, program schedule anchors, fill-group indices, and Classic scheduling context JSON. Imported database coverage now proves per-item PreRoll/MidRoll/PostRoll/Tail/Fallback filler IDs survive repository loading and saving, schedule-item filler media wraps primary Classic content, tail filler advances whole items until the next fixed item, fallback filler fills the remaining gap, and fill-group indices continue to persist and advance.
+The Classic baseline covers engine dispatch, SQL loading, typed items,
+collections, filler, anchors, fill groups, and scheduling-context persistence.
+Regressions cover filler placement and whole-item advancement.
 
 Continue-build continuation fixes (2026-06-08): `apply_build_result` now persists `result.anchor` (the post-build anchor) instead of the stale input `playout.anchor`; previously the anchor row was deleted on every build, so each periodic Continue build restarted from `now` and stacked overlapping `PlayoutItem` rows over the live window. Mirrored ErsatzTV `PlayoutBuilder.BuildPlayoutItems` `trimBefore = playoutStart.AddHours(-4)`: the Classic engine's `remove_before` is now `request.start - 4h` rather than `state.current_time`, which (once the anchor persists) would have deleted the entire scheduled timeline on the next Continue build.
 
@@ -20,7 +22,23 @@ Verified 2026-07-19 from Windows MTV dogfood: Classic already preserves the inte
 Frozen-shuffle fix (2026-07-27): Reset now regenerates and persists `Playout.seed`, mirroring `ResetPlayout()`. Refresh rejects end-of-horizon playout state and undated Continue anchors, accepting only dated checkpoints aligned with the rebuild day. Random draws with replacement; RandomRotation uses scalable grouped ordering and persists cycle-predecessor state across Continue seams; the other randomized orders are distinct; and `RandomStartPoint` matches upstream scope. See the playback-order debt and ADR 0010.
 
 Cross-playout fix (2026-08-02): SQLite/MySQL assign new Classic state IDs, matching upstream EF. Strict inserts cannot replace another playout's state; duplicate sources share one enumerator. Startup Refreshes invalid playouts, Continue rechecks, health reports failures, and tests cover both backends.
+
+Reopened 2026-08-23 from Windows dogfood: production Classic builds persisted
+only undated end-of-horizon program-schedule anchors. Refresh correctly rejects
+those continuation anchors but no production path creates the dated day
+checkpoint it expects, so a scan-triggered Refresh can clear the window and
+restart deterministic shuffled state from the beginning. Milestone crf-01
+owns real checkpoint generation, safe restoration, existing-database handling,
+and health coverage before Classic Refresh continuity can be called ported.
 '''
+
+[[debt]]
+id          = 'classic-refresh-has-no-production-checkpoint-anchor'
+description = 'Generate and restore dated Classic day checkpoints in real builds so Refresh cannot restart shuffled or enumerated media from the beginning.'
+discovered  = '2026-08-23'
+adr         = '0020'
+evidence    = 'A redacted Windows runtime snapshot contained 26 PlayoutProgramScheduleAnchor rows and every row had AnchorDate=NULL. The production Classic builder emits only an undated continuation anchor, while retained_refresh_anchors intentionally accepts only a same-day dated checkpoint. The existing refresh regression seeds such a dated anchor by hand and therefore does not prove that an initial or multi-day build creates one. A scan-triggered Refresh subsequently replayed already-aired shuffled media. Tracked by milestone crf-01 and plans/playout-refresh-and-addon-tv-deduplication.md.'
+resolved    = false
 
 [[debt]]
 id          = 'playout-local-runtime-state-primary-keys'

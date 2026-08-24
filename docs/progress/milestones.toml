@@ -1890,3 +1890,128 @@ passed both Clippy configurations, 1962 standard plus 1601 MySQL-feature tests,
 doctests, Leptos/hydration/browser, runtime smoke, cargo-deny, architecture,
 progress/parity, migration, and structural web-bundle gates.
 '''
+
+[[milestone]]
+id         = 'amm-g-06'
+phase      = 'AMM-G — Overview-first imports and deferred details'
+title      = 'Retain unavailable Beeld & Geluid series episodes'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-replacement-ux.md'
+depends_on = ['amm-g-05']
+acceptance = '''
+The resumable discover path and legacy fallback preserve every operator-supplied
+series, list, and search query parameter while adding or replacing only the
+pagination parameter. Importing the Strip- en cartoontekenen series with
+alleenafspeelbaar=nee yields exactly eight provider-ordered overview items,
+including provider item 2101608050040897831 (Les 7, first aired 1993-03-07) as
+unavailable with reason not_playable, without fetching its detail page.
+Duplicate HTML and embedded-JSON candidates merge by stable provider identity;
+explicit provider availability overrides optimistic structural defaults while
+the best available overview metadata is retained. Deterministic POSIX and
+Windows fixtures cover the resumable and legacy paths, query preservation, and
+candidate merging. A host import/review regression proves the unavailable row
+survives publication and can receive a Local replacement. Refresh or reimport
+repairs an affected seven-item snapshot without duplicates or provider-order
+drift.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'amm-g-07'
+phase      = 'AMM-G — Overview-first imports and deferred details'
+title      = 'Accept direct and aggregate official add-on-list URLs'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-source-url-acceptance.md'
+depends_on = ['amm-g-05']
+acceptance = '''
+Both official add-ons accept every frozen source shape in the plan's seven-URL
+matrix through their resumable and legacy POSIX/Windows paths. A direct yt-dlp
+root object without entries becomes exactly one item: the NSF watch URL remains
+Live and the finite watch URL remains Finite. A YouTube playlist yields every
+reported entry once in provider order. Beeld & Geluid shared-list, dated-search,
+and series URLs preserve all input query parameters across pagination and yield
+every overview item once in provider order; a nested episode URL becomes
+exactly one item. Aggregate discovery performs no item-detail requests.
+Invalid provider output cannot masquerade as a successful zero-item draft.
+After an official package update, an existing failed or empty draft exposes a
+localized retry action that replaces only its incomplete provider generation
+without deleting operator state, duplicating items, or requiring a restart.
+Every matrix source reaches non-empty review and publication. Browser proof for
+the NSF URL then creates channel nsf live plus a 24/7-compatible schedule and
+playout entirely through the Windows admin UI and verifies playable IPTV/HLS
+output with Live semantics. Deterministic add-on, host, health, hydration,
+browser, packaging, and cross-platform regressions pass.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'crf-01'
+phase      = 'CRF — Classic refresh continuity'
+title      = 'Generate and restore real Classic refresh checkpoints'
+status     = 'Not started'
+feature    = 'classic-scheduling'
+plan       = 'plans/playout-refresh-and-addon-tv-deduplication.md'
+depends_on = []
+acceptance = '''
+A fresh production-shaped Classic build persists dated day checkpoints for
+every stateful schedule source needed to rebuild the active window, alongside
+its undated continuation state. Refresh after a process restart restores the
+correct checkpoint and produces the same future media identities and schedule
+contexts as an uninterrupted baseline while re-stamping mutable settings; it
+never schedules an already-consumed shuffled item merely because Refresh ran.
+Tests cover multi-day builds, duplicate source references, add/remove membership
+changes, Random and RandomRotation continuation, and the explicit Classic
+reset mapping. A preflight handles existing databases that contain only
+undated anchors: it either proves and persists a deterministic checkpoint from
+surviving state or refuses the destructive clear with an actionable health/UI
+diagnostic. It never silently falls back to Reset. SQLite and MySQL repository,
+restart, maintenance, health, and scheduler regressions pass.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'crf-02'
+phase      = 'CRF — Classic refresh continuity'
+title      = 'Scope scan invalidation to dependent playouts'
+status     = 'Not started'
+feature    = 'remote-stream-playlists'
+plan       = 'plans/playout-refresh-and-addon-tv-deduplication.md'
+depends_on = ['crf-01']
+acceptance = '''
+Remote Stream membership reconciliation reports the changed library and stable
+media identities and resolves the schedules, collections, and playouts that can
+actually consume them. An unrelated managed-list scan enqueues no build for a
+library-scoped Classic playout; a relevant add, removal, replacement, or
+re-identification enqueues exactly one coalesced Refresh with an observable
+reason. An unchanged scan enqueues nothing. End-to-end SQLite and MySQL tests
+start from a fresh Classic build, restart the host, scan both related and
+unrelated libraries, and prove that the related Refresh matches uninterrupted
+scheduling without replay while every unrelated playout row and anchor remains
+unchanged. Health exposes unresolved global-impact or failed refresh state.
+'''
+evidence = ''
+
+[[milestone]]
+id         = 'amm-h-01'
+phase      = 'AMM-H — Projection idempotency and display uniqueness'
+title      = 'Deduplicate projected artwork and television rows'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/playout-refresh-and-addon-tv-deduplication.md'
+depends_on = ['amm-g-05']
+acceptance = '''
+Add-on television publication canonicalizes artwork candidates by metadata
+owner, kind, and normalized local path or URL; the fallback thumbnail is added
+only when an equivalent candidate is absent, and repository replacement is
+defensively idempotent. Television list queries select one deterministic
+thumbnail without multiplying Episode rows even if legacy duplicates remain.
+A transactional SQLite/MySQL repair removes only exact duplicate Artwork rows,
+preserves distinct poster/fanart/thumbnail variants and operator replacements,
+and reports its counts. A 27-episode projection remains 27 unique rows, season
+counts of 13 and 14 remain 13 and 14, and repeated publish/refresh cycles do not
+change row counts. Repository, migration, health, localized browser, and
+restart tests cover both clean and legacy data before release closeout.
+'''
+evidence = ''

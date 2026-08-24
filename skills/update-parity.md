@@ -1,6 +1,6 @@
 ---
 name: update-parity
-description: Update the ErsatzRS ErsatzTV parity record. Use when a porting task starts, progresses, completes, is deferred, or is deliberately dropped.
+description: Update or reopen an ErsatzRS parity record. Use when a port starts, progresses, completes, is deferred/dropped, or runtime evidence disproves a previously Ported or Implemented claim.
 ---
 
 # Update Parity
@@ -37,7 +37,29 @@ edit it for parity data.
    concrete verification evidence.
 7. Validate: `cargo xtask progress check`.
 
+## Reopen a regression
+
+When runtime evidence disproves a completed claim:
+
+1. Preserve a redacted, reproducible observation and separate confirmed facts
+   from hypotheses. Do not commit library names, paths, URLs, or titles.
+2. Set each affected parity feature to `In progress` and add one focused open
+   `[[debt]]` with `discovered`, evidence, `resolved = false`, and the owning
+   ADR when applicable.
+3. If a linked ADR begins its Implementation section with `Implemented`, change
+   that implementation token to `Partial` and explain the reopened gap. Do not
+   change an accepted decision's Status unless the decision itself changed.
+4. Add an open milestone with measurable acceptance and a live plan. Put
+   release-critical corrective work in `phase.toml` next steps.
+5. Update `[Unreleased]`, prepend a session entry, and run
+   `cargo xtask progress check`.
+
+When closing the regression, record the resolution and concrete test/runtime
+evidence, complete the milestone, restore `Ported`/`Implemented` only when no
+linked debt remains, and prune a plan only after its substance is preserved in
+structured progress.
+
 ## Rule
 
-Every PR that completes or intentionally changes parity updates the relevant
-feature file and passes `cargo xtask progress check`.
+Every change that completes, intentionally changes, or reopens parity updates
+the relevant feature file and passes `cargo xtask progress check`.

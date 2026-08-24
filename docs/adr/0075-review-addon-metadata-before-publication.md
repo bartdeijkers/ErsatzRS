@@ -6,12 +6,18 @@ Accepted (2026-08-21)
 
 ## Implementation
 
-Implemented (c8d877b5, 2026-08-22)
+Partial — initial implementation landed in c8d877b5 (2026-08-22).
 
 AMM-A through AMM-E, including rollback, artwork, refresh conflicts, provider
 parity, and the cross-platform/browser closeout, are complete. The separate
 AMM-F live-source follow-up is owned by ADR 0078 and does not reopen this
 draft/publication decision.
+
+Reopened on 2026-08-23: television publication can persist the same thumbnail
+twice, and the television repository then multiplies one logical episode into
+one result per artwork row. Milestone `amm-h-01` must make artwork replacement
+idempotent, make reads cardinality-safe, repair only exact legacy duplicates,
+and add health and SQLite/MySQL/browser proof.
 
 ## Context
 

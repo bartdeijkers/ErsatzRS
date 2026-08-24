@@ -20,7 +20,7 @@ crates/
   ersatzrs-scanner/   scanner binary
   ersatzrs-healthcheck/ readiness-probe binary
   ersatzrs-launcher/  Windows-only system-tray launcher (no-op on other targets)
-  xtask/               repository validation and progress tooling
+  xtask/               validation, progress, focused-check, and read-only runtime-audit tooling
 migrations/       sqlx migrations
 assets/           drawvg source templates, VGS scripts, and related assets
 ```

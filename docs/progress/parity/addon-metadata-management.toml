@@ -1,7 +1,7 @@
 feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0068', '0073', '0075', '0078', '0079']
 
 summary = '''
@@ -43,8 +43,43 @@ whole-second minimum and maximum are localized settings that default to 2 and
 16, apply to later samples without restart, and never shorten a persisted
 cooldown. Manual-only imports, per-item fetch actions, durable progress, stable
 number/date/season-episode columns, and exact accessible bulk-numbering cues are
-implemented for the shared editor and both official providers.
+implemented for the shared editor and both official providers. Beeld & Geluid
+series discovery remains partial because an explicitly requested non-playable
+episode can be omitted by the legacy paginator or misclassified as available by
+the resumable parser; milestone amm-g-06 owns that regression. Direct media URL
+imports can also retain list metadata while producing an empty draft, and the
+declared official-provider URL shapes lack one end-to-end acceptance matrix;
+milestone amm-g-07 owns that regression.
+Windows dogfood also reopened television projection idempotency. One metadata
+projection can persist the same thumbnail twice; the television repository's
+unbounded artwork join then returns one apparent episode row per matching
+artwork row. Milestone amm-h-01 owns producer-side deduplication, defensive
+read cardinality, exact-duplicate data repair, and health coverage.
 '''
+
+[[debt]]
+id          = 'addon-tv-projection-duplicates-artwork-and-list-rows'
+description = 'Keep add-on television artwork idempotent and return each projected episode exactly once in media-browser lists.'
+discovered  = '2026-08-23'
+adr         = '0075'
+evidence    = 'A redacted Windows audit found 27 unique episode/provider identities but two identical thumbnail Artwork rows on every EpisodeMetadata record; the television listing consequently returned 54 rows. addon_media_list.rs first copies metadata.artwork and then unconditionally pushes artwork_path or the first artwork_url as another thumbnail, metadata::replace_artwork inserts every candidate without deduplication, and television.rs LEFT JOINs every thumbnail row without selecting one. A second projected list showed the same invariant failure. Tracked by milestone amm-h-01 and plans/playout-refresh-and-addon-tv-deduplication.md.'
+resolved    = false
+
+[[debt]]
+id          = 'direct-and-aggregate-addon-list-url-shapes-are-not-accepted-consistently'
+description = 'Treat direct media URLs as one-item add-on lists and prove every declared official yt-dlp and Beeld & Geluid source shape through discovery, review, publication, recovery, and the live channel workflow.'
+discovered  = '2026-08-23'
+adr         = '0079'
+evidence    = 'A Windows admin-UI reproduction with the NSF YouTube watch URL resolved title and description but showed 0 Discovered and failed publication because no item could be included. Direct yt-dlp output is one root media object without entries, while both the legacy mapper and v0.7.0 resumable adapter enumerate only playlist.entries. The required acceptance matrix adds direct live and finite YouTube videos, a YouTube playlist, and Beeld & Geluid shared-list, dated-search, series, and nested-episode URLs. It also requires UI-only retry of the existing failed draft and completion of the nsf live channel, schedule, and playout. Tracked by runnable milestone amm-g-07 and plans/addon-list-source-url-acceptance.md.'
+resolved    = false
+
+[[debt]]
+id          = 'beeldengeluid-series-import-misclassifies-or-omits-unplayable-items'
+description = 'Retain every Beeld & Geluid series episode requested by the operator, including non-playable episodes that need a Local replacement, and preserve the provider availability reason.'
+discovered  = '2026-08-23'
+adr         = '0079'
+evidence    = 'Live reproduction with the Strip- en cartoontekenen series URL and alleenafspeelbaar=nee returns eight overview episodes, including provider item 2101608050040897831 (Les 7, first aired 1993-03-07) with isPlayable=false. The legacy Windows series paginator discards the input query before adding pagina, so the provider defaults to seven playable items. The v0.9.0 resumable parser retains all eight but first-wins duplicate-candidate merging lets an optimistic card candidate override the later explicit isPlayable=false JSON evidence and incorrectly reports the item as available. The host supports unavailable rows and Local replacements, so omission or misclassification violates that contract. Tracked by runnable milestone amm-g-06 and plans/addon-list-replacement-ux.md.'
+resolved    = false
 
 [[debt]]
 id          = 'addon-detail-provider-cooldown-is-fixed'

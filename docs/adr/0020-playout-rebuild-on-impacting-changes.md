@@ -6,22 +6,28 @@ Accepted 2026-07-03
 
 ## Implementation
 
-Implemented. The scheduler core treats `Refresh` as a window rewrite request for
-classic, YAML, and scripted playouts. Classic builds consume
-`PlayoutBuildMode`: `Continue` keeps the normal main anchor path, `Refresh`
-clears generated items while ignoring the stale main anchor and retaining the
-same-day checkpoint anchors needed for enumerator/shuffle continuity, and
-`Reset` starts with no retained anchors. Channel saves compare the
-Channel saves do not enqueue a playout build, matching ErsatzTV's
-`UpdateChannelHandler`; they retain channel/EPG side effects and embedded
-subtitle extraction. The
-Playouts admin reset path keeps ErsatzTV's mapping (classic Reset Playout
-enqueues `Refresh`; block, sequential, and scripted playouts enqueue `Reset`),
-and classic `Refresh` clears the near-term generated rows it previously left
-stale. Focused scheduler, channel-save, reset, and maintenance tests cover the
-three closeout slices; the post-sequence gates passed on 2026-07-03, including
-workspace clippy, the MySQL clippy pass, workspace all-features tests,
-`cargo xtask parity-check web`, and `cargo xtask smoke`.
+Partially implemented; reopened on 2026-08-23. The scheduler core treats
+`Refresh` as a window rewrite request for classic, YAML, and scripted playouts.
+Classic builds consume `PlayoutBuildMode`: `Continue` keeps the normal main
+anchor path, `Refresh` clears generated items while ignoring the stale main
+anchor and retaining same-day checkpoint anchors, and `Reset` starts with no
+retained anchors. Channel saves do not enqueue a playout build, matching
+ErsatzTV's `UpdateChannelHandler`; they retain channel/EPG side effects and
+embedded-subtitle extraction. The Playouts admin reset path keeps ErsatzTV's
+mapping (classic Reset Playout enqueues `Refresh`; block, sequential, and
+scripted playouts enqueue `Reset`).
+
+Windows dogfood proved that the continuity part of this implementation is not
+complete. The production Classic builder persists an undated end-of-horizon
+anchor but does not create the dated day checkpoint that `Refresh` requires.
+After a membership-changing scan, `Refresh` can therefore clear the generated
+window and restart deterministic shuffled state, replaying already-aired media.
+The scanner also selects every playout with any program-schedule anchor as
+affected by Remote Stream membership, so an unrelated scan can trigger the
+unsafe rebuild. The accepted decision remains unchanged; milestones crf-01 and
+crf-02 must add real checkpoints, safe legacy-state handling, dependency-aware
+scan invalidation, health coverage, and end-to-end restart regressions before
+the implementation is complete.
 
 ## Context
 
@@ -140,8 +146,13 @@ items reflect the change, not just extended past it.**
   reshuffle or repeat content. This needs focused scheduler tests asserting that a
   `Refresh` after a settings change reproduces the same media order from the
   checkpoint while re-stamping per-item settings.
-- Rebuild frequency rises (channel saves now build). Coalescing plus the existing
-  lock keep this bounded; library scans must batch rather than enqueue per item.
+- Rebuild frequency rises after impacting schedule or library changes. Channel
+  saves still do not enqueue a build. Coalescing plus the existing lock keep
+  this bounded; library scans must batch rather than enqueue per item.
+- A Refresh without a restorable checkpoint is unsafe: it can turn a
+  deterministic shuffle into a replay. Existing databases need an explicit,
+  observable bootstrap or refusal path; they must never be silently treated as
+  a fresh Reset.
 - The on-air item is unchanged until its boundary; operators watching live see the
   change one item later, matching ErsatzTV and avoiding mid-item restarts.
 
@@ -192,3 +203,6 @@ items reflect the change, not just extended past it.**
   reaching already-scheduled classic items.
 - 2026-07-20: Corrected channel-save behavior to match ErsatzTV: no automatic
   playout rebuild; manual requests now have reliable queued-work feedback.
+- 2026-08-23: Reopened implementation after Windows dogfood showed that real
+  Classic builds create no dated Refresh checkpoints and Remote Stream scan
+  impact selection can enqueue unrelated playouts.

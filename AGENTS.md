@@ -113,6 +113,7 @@ cargo clippy --workspace --all-targets --features mysql -- -D warnings
 # in ONE configuration:
 #   ./run.sh check -p <crate>        # fast type-check, no codegen/link
 #   ./run.sh test -p <crate>         # required focused/local test runner
+#   cargo xtask affected-checks      # recommend focused checks from the diff
 # The checked-in `.config/nextest.toml` runs through all failures, performs no
 # retries, and reports tests that exceed 60 seconds. Agent hooks block direct
 # `cargo test` commands: use `./run.sh test-closeout` for the canonical local
@@ -230,6 +231,8 @@ cargo xtask progress routes --unrouted    # advertised-but-404 admin routes
 cargo xtask progress sessions --limit 10  # recent session/handoff log
 cargo xtask progress adr list             # derived ADR index
 cargo xtask progress check                # validate the text sources (CI gate)
+cargo xtask affected-checks               # recommend one focused Cargo/test graph for the diff
+cargo xtask runtime-audit --db <path> --redact  # read-only SQLite incident aggregates
 cargo xtask architecture-lint             # enforce app boundary + admin debt ratchets
 cargo xtask smoke                         # boot temp web host and probe IPTV/HLS playback
 ```

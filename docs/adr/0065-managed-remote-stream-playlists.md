@@ -13,12 +13,18 @@ revised by [ADR 0068](0068-addon-metadata-sidecars-and-local-replacements.md).
 
 ## Implementation
 
-Implemented in Phase 8D/8E and revised under ADR 0066. The scanner,
+Partial — implemented in Phase 8D/8E and revised under ADR 0066. The scanner,
 SQLite/MySQL ownership migration, signed add-on list/play integration,
 health/troubleshooting checks, localized admin management, tag facets, managed
 playlist ordering, and playout refresh path are tracked by milestones P8D-02
 through P8E-03 and the `remote-stream-playlists` parity record. Named extractor
 configuration and raw single-stream scripts are no longer implemented.
+
+Reopened on 2026-08-23: membership reconciliation currently treats every
+playout with a program-schedule anchor as impacted, even when its schedule
+cannot consume the changed Remote Stream library. Milestone `crf-02` must add
+dependency-scoped invalidation, coalescing, diagnostics, and end-to-end
+SQLite/MySQL proof before the playout refresh path is complete.
 
 ## Context
 

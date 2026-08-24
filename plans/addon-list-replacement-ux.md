@@ -4,7 +4,8 @@
 
 Not started. Written 2026-08-17 after fixing the defect that made the
 replacement picker return no candidates at all, and after walking the flow
-end to end against a real unavailable episode.
+end to end against a real unavailable episode. Updated 2026-08-23 with the
+blocking provider-enumeration regression tracked by `amm-g-06`.
 
 ## Context
 
@@ -15,6 +16,40 @@ local media version, and playback then uses the local file.
 The mechanism works. Confirmed on 2026-08-17: Teleac item 49 (rank 6, reported
 `unavailable` / `not_playable`) now resolves to a local `.mp4` through the
 existing picker, and the row reports the replacement.
+
+### Blocking provider-enumeration regression
+
+The replacement flow cannot help when discovery omits or misclassifies the
+unavailable provider item. A live reproduction on 2026-08-23 used:
+
+`https://schatkamer.beeldengeluid.nl/serie/2101608030022428031/strip-en-cartoontekenen?alleenafspeelbaar=nee`
+
+The requested overview contains eight episodes. Provider item
+`2101608050040897831`, **Les 7: Cartoon, strook en paginaverhaal**, first aired
+1993-03-07, is explicitly `isPlayable=false`; the default overview contains
+only the seven playable episodes.
+
+Two paths currently violate the same operator-visible contract:
+
+- the legacy Windows series paginator reconstructs the page URL from only the
+  path and therefore drops `alleenafspeelbaar=nee` before adding `pagina`;
+- the v0.9.0 resumable parser sees all eight items, but its first-wins merge
+  keeps an earlier optimistic HTML-card availability value instead of the
+  later explicit `isPlayable=false` embedded-JSON evidence.
+
+Complete `amm-g-06` before accepting the replacement UX:
+
+- preserve every input query parameter for series, list, and search discovery,
+  replacing only the pagination parameter;
+- merge duplicate candidates by stable provider identity, with explicit
+  provider availability taking precedence over structural defaults while
+  retaining the richest overview metadata;
+- persist the affected item as `unavailable` / `not_playable` without a detail
+  request, so it remains visible and eligible for a Local replacement;
+- freeze the exact eight-item case in deterministic POSIX and Windows tests for
+  both resumable discovery and the legacy fallback;
+- add a host import/review regression and prove refresh or reimport repairs an
+  affected seven-item snapshot without duplicates or order drift.
 
 Getting there exposed how hard the feature is to actually use.
 
@@ -134,5 +169,7 @@ explicit confirmation.
 ## Related
 
 - ADR 0068 — add-on metadata sidecars and Local replacements.
+- ADR 0079 — overview-first discovery and deferred detail enrichment.
+- Milestone `amm-g-06` — retain unavailable Beeld & Geluid series episodes.
 - `docs/progress/parity/remote-stream-playlists.toml` — owns add-on list
   behaviour.

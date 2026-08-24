@@ -13,6 +13,25 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Added focused repository skills for fast Rust iteration, read-only runtime
+  incident analysis, stateful Refresh continuity, SQL cardinality/idempotency,
+  durable background work, and Windows dogfood acceptance. New cross-platform
+  `affected-checks` and read-only SQLite `runtime-audit` developer commands
+  turn changed paths and runtime state into bounded, redacted evidence without
+  executing broad gates or mutating an operator database.
+
+### Changed
+
+- Reopened the Classic Refresh and add-on television projection parity
+  contracts after Windows dogfood exposed two release-correctness defects:
+  scan-triggered Refresh can rewind a shuffled Classic playout when no dated
+  checkpoint exists, and duplicate thumbnail projection can multiply episode
+  rows in the television browser. Corrective milestones now require safe
+  existing-database handling, scoped scan invalidation, idempotent artwork,
+  and SQLite, MySQL, browser, restart, and health proof.
+
 ## [1.0.25-beta] - 2026-08-23
 
 ### Changed

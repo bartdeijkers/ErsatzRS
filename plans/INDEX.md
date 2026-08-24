@@ -20,7 +20,7 @@ public open-source project.
 | Changelog | Keep a Changelog in `CHANGELOG.md` | The root changelog is the main human-readable release overview and must stay current under `[Unreleased]`. |
 | Documentation model | Diataxis | Docs are split into tutorials, how-to guides, reference, and explanation. |
 | Porting rule | ErsatzTV behavior by default | Deliberate deviations require ADRs. |
-| AI workflows | Repo-local `.claude/skills/` | Skills travel with the repository and stay reviewable. |
+| AI workflows | Canonical repo-local `skills/` with agent compatibility pointers | Skills travel with the repository and stay reviewable without diverging copies. |
 
 ## Implemented Contract Files
 
@@ -84,17 +84,28 @@ public open-source project.
 - `.github/workflows/release.yml`
 - `.github/dependabot.yml`
 
-### Repo-Local Claude Skills
+### Repo-local skills
 
-- `.claude/skills/port-ersatztv.md`
-- `.claude/skills/explain-ersatztv.md`
-- `.claude/skills/new-crate.md`
-- `.claude/skills/ffmpeg-snapshot-test.md`
-- `.claude/skills/add-migration.md`
-- `.claude/skills/new-adr.md`
-- `.claude/skills/changelog-entry.md`
-- `.claude/skills/update-parity.md`
-- `.claude/skills/verify-phase.md`
+Canonical contracts live under `skills/`; `.claude/skills/` and
+`.codex/skills/` contain exact relative pointers validated by `xtask` tests.
+
+- `skills/add-migration.md`
+- `skills/changelog-entry.md`
+- `skills/durable-background-work.md`
+- `skills/explain-ersatztv.md`
+- `skills/ffmpeg-snapshot-test.md`
+- `skills/hydration-islands.md`
+- `skills/new-adr.md`
+- `skills/new-crate.md`
+- `skills/parity-slice.md`
+- `skills/port-ersatztv.md`
+- `skills/runtime-incident-audit.md`
+- `skills/rust-inner-loop.md`
+- `skills/sql-cardinality-idempotency.md`
+- `skills/stateful-refresh-safety.md`
+- `skills/update-parity.md`
+- `skills/verify-phase.md`
+- `skills/windows-dogfood-acceptance.md`
 
 ## Plan Documents
 
@@ -119,7 +130,17 @@ changelog, and git history for evidence. The authoritative live state is always
   `docs/progress/parity/addon-platform.toml`.
 - `addon-list-replacement-ux.md` — reshape the Local replacement flow for an
   unavailable add-on list item, written after walking the flow end to end
-  against a real unavailable episode.
+  against a real unavailable episode; it also owns the blocking `amm-g-06`
+  regression that must retain and correctly classify that episode during
+  Beeld & Geluid overview discovery.
+- `addon-list-source-url-acceptance.md` — make direct media URLs valid one-item
+  add-on lists, freeze the seven required yt-dlp and Beeld & Geluid URL shapes,
+  add UI-only failed-draft recovery, and complete the `nsf live` channel,
+  schedule, and playout acceptance scenario under `amm-g-07`.
+- `playout-refresh-and-addon-tv-deduplication.md` — corrective Windows-dogfood
+  plan for real Classic Refresh checkpoints, dependency-scoped scan
+  invalidation, safe existing-database behavior, and idempotent add-on
+  television artwork/list projection under `crf-01`, `crf-02`, and `amm-h-01`.
 - `addon-list-artwork-and-metadata-projection.md` — two follow-up slices found by
   inspecting a real imported list: nothing ever fetches the add-on's artwork to
   disk although the whole surrounding chain exists, and every projection writes
