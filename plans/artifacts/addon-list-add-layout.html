@@ -133,7 +133,7 @@
       .resolution{grid-template-columns:1fr;gap:10px;padding:10px 0 1px}.resolution dl{grid-template-columns:repeat(2,minmax(110px,1fr))}.section-heading{align-items:flex-start;flex-direction:column}
       .general-summary{grid-template-columns:56px 1fr 42px;min-height:78px;padding-left:12px}.general-art{width:46px;height:54px}.metadata-panel{padding-right:18px;padding-left:18px}.metadata-grid{grid-template-columns:1fr}.artwork-row{grid-template-columns:1fr}.item-panel{padding:18px 16px 16px}.panel-actions{flex-wrap:wrap}.panel-actions>span{flex-basis:100%;margin-bottom:3px}
       .preview-totals{display:grid;grid-template-columns:repeat(2,1fr)}.metric{min-width:0;padding-right:14px}.metric+.metric{padding-left:14px}
-      .art-col,th:nth-child(2),td:nth-child(2),.status-col,th:nth-child(5),td:nth-child(5){display:none}
+      .art-col,th:nth-child(4),td:nth-child(4),.status-col,th:nth-child(10),td:nth-child(10),th:nth-child(6),td:nth-child(6),th:nth-child(9),td:nth-child(9){display:none}
       .preview-name[data-mobile-status]:not([data-mobile-status=""])::after{content:attr(data-mobile-status);display:block;margin-top:3px;color:var(--amber);font-size:11.5px;line-height:1.35}
       th,td{padding-right:9px;padding-left:9px}.type-col{width:126px}
       .item-pager{flex-wrap:wrap;justify-content:space-between;gap:8px 16px;min-height:64px;padding:8px 10px}.page-size-control{flex:1 1 auto}.pager-status{min-width:auto}
@@ -141,7 +141,7 @@
     }
     @media(max-width:520px){.source-body{grid-template-columns:1fr}.source-field-wide{grid-column:auto}}
     @media(max-width:430px){
-      .draft-state{display:none}.workflow{grid-template-columns:repeat(2,1fr)}.type-col,th:nth-child(4),td:nth-child(4){display:none}.resolution dl{grid-template-columns:1fr 1fr}.item-edit-cell{padding-right:4px}
+      .draft-state{display:none}.workflow{grid-template-columns:repeat(2,1fr)}.type-col,th:nth-child(8),td:nth-child(8),th:nth-child(7),td:nth-child(7){display:none}.resolution dl{grid-template-columns:1fr 1fr}.item-edit-cell{padding-right:4px}
     }
   </style>
 </head>
@@ -202,7 +202,7 @@
                 <p class="field-hint">Paste a supported Beeld &amp; Geluid or yt-dlp URL. Credentials remain managed by the add-on.</p>
               </div>
               <div class="source-body">
-                <div class="field source-field-wide"><label for="provider">Add-on</label><select class="input" id="provider"><option selected>Beeld &amp; Geluid (auto-detected)</option><option>yt-dlp</option></select></div>
+                <div class="field source-field-wide"><label for="provider">Add-on</label><select class="input" id="provider"><option value="">Determine from the URL</option><option selected>Beeld &amp; Geluid</option><option>yt-dlp</option></select><p class="source-group-help">Beeld &amp; Geluid was detected from the URL. Choose another add-on to override detection.</p></div>
                 <div class="field">
                   <label for="collection-type"><span class="field-title"><svg class="field-title-icon" aria-hidden="true"><use id="collection-type-icon-use" href="#icon-tv-show"></use></svg><span>Collection type</span></span><small>Operator choice</small></label>
                   <select class="input" id="collection-type">
@@ -216,9 +216,10 @@
                   </select>
                   <p class="source-group-help" id="collection-help">Creates one show and reviews season and episode metadata in the shared editor.</p>
                 </div>
-                <div class="field"><label for="refresh-policy"><span class="field-title"><svg class="field-title-icon" aria-hidden="true"><use id="refresh-icon-use" href="#icon-clock"></use></svg><span>Provider refresh</span></span></label><select class="input" id="refresh-policy"><option selected>Daily</option><option>Weekly</option><option>Manual only</option></select></div>
+                <div class="playlist-option"><input id="auto-refresh" type="checkbox" checked><label for="auto-refresh">Automatic Refresh<small>Update list from the provider once each day</small></label></div>
                 <div class="field source-field-wide"><label for="folder-name">Library folder <small>Optional</small></label><input class="input" id="folder-name" value="Glamourland"></div>
-                <div class="playlist-option"><input id="create-ordered-playlist" type="checkbox"><label for="create-ordered-playlist">Create playlist in original order<small>Maintains a generated playlist in the order supplied by the add-on.</small></label></div>
+                <div class="playlist-option"><input id="create-ordered-playlist" type="checkbox"><label for="create-ordered-playlist">Create playlist in original order<small>Keep a generated playlist in the provider's original order after each publish</small></label></div>
+                <div class="playlist-option"><input id="load-item-details" type="checkbox" checked><label for="load-item-details">Load item details after publishing<small id="load-item-details-help">Import the overview first, then fetch one item's extended metadata at a controlled rate after publication.</small></label></div>
               </div>
             </form>
           </div>
@@ -254,7 +255,7 @@ television</textarea><p class="tag-meta" id="general-tags-help"><span data-tag-c
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th class="include-col">Include</th><th class="art-col">Thumb</th><th>Name</th><th class="type-col">Detected type</th><th class="status-col">Source check</th><th class="edit-col"></th></tr></thead>
+              <thead><tr><th class="selection-col" aria-label="Select"></th><th class="number-col">#</th><th class="include-col">Include</th><th class="art-col" aria-label="Artwork"></th><th>Name</th><th>First aired</th><th>Season / episode</th><th class="type-col">Media kind</th><th>Playback behavior</th><th class="status-col">Status</th><th class="edit-col" aria-label="Actions"></th></tr></thead>
               <tbody id="preview-rows"></tbody>
             </table>
           </div>
@@ -356,7 +357,7 @@ television</textarea><p class="tag-meta" id="general-tags-help"><span data-tag-c
     }
     function itemEditorMarkup(type,row,sourceIndex,isOpen){
       var panelId='item-editor-'+sourceIndex;
-      return '<tr class="item-editor-row"><td colspan="6"><section class="item-panel'+(isOpen?' open':'')+'" id="'+panelId+'" aria-hidden="'+String(!isOpen)+'"'+(isOpen?'':' inert')+'><div class="item-panel-layout"><div><h3>'+row.kind+' metadata</h3><div class="metadata-grid">'+itemMetadataFields(type,row,sourceIndex)+'</div></div><aside class="item-aside"><h4>Artwork and provenance</h4><div class="artwork"><span class="artwork-preview"><button class="artwork-edit" type="button" aria-label="Edit item thumbnail" title="Edit artwork">✎</button></span><div><b>Thumbnail</b><small>Provider image · 1280 × 720</small></div></div><button class="text-button" type="button">✎ Edit cast and credits</button><p class="provider-baseline"><strong>Provider baseline retained.</strong><br>Operator changes made during import remain protected on refresh.</p></aside></div><div class="panel-actions"><span>'+(row.warning?'Complete the highlighted metadata':'No unsaved changes')+'</span><button class="text-button" type="button">Reset operator changes</button><button class="button-primary" type="button">Save item metadata</button></div></section></td></tr>';
+      return '<tr class="item-editor-row"><td colspan="11"><section class="item-panel'+(isOpen?' open':'')+'" id="'+panelId+'" aria-hidden="'+String(!isOpen)+'"'+(isOpen?'':' inert')+'><div class="item-panel-layout"><div><h3>'+row.kind+' metadata</h3><div class="metadata-grid">'+itemMetadataFields(type,row,sourceIndex)+'</div></div><aside class="item-aside"><h4>Artwork and provenance</h4><div class="artwork"><span class="artwork-preview"><button class="artwork-edit" type="button" aria-label="Edit item thumbnail" title="Edit artwork">✎</button></span><div><b>Thumbnail</b><small>Provider image · 1280 × 720</small></div></div><button class="text-button" type="button">✎ Edit cast and credits</button><p class="provider-baseline"><strong>Provider baseline retained.</strong><br>Operator changes made during import remain protected on refresh.</p></aside></div><div class="panel-actions"><span>'+(row.warning?'Complete the highlighted metadata':'No unsaved changes')+'</span><button class="text-button" type="button">Reset operator changes</button><button class="button-primary" type="button">Save item metadata</button></div></section></td></tr>';
     }
     function renderPreview(){
       var type=byId('collection-type').value;
@@ -378,7 +379,11 @@ television</textarea><p class="tag-meta" id="general-tags-help"><span data-tag-c
         var mobileStatus=row.warning?row.status:'';
         var isOpen=openEditorIndex===sourceItemIndex;
         var panelId='item-editor-'+sourceItemIndex;
-        rows.push('<tr class="preview-item-row" data-source-index="'+sourceItemIndex+'" aria-expanded="'+String(isOpen)+'"><td><input class="row-check" type="checkbox" '+(row.included?'checked':'')+' aria-label="Include '+row.title+'"></td><td><span class="thumb'+thumbClass+'"></span></td><td class="preview-name" data-mobile-status="'+mobileStatus+'"><span class="item-title">'+row.title+'</span><span class="item-subtitle">'+row.subtitle+'</span></td><td>'+row.kind+'</td><td><span class="status'+(row.warning?' warning':'')+'">'+(row.warning?'<span class="warning-icon">△</span>':'')+row.status+'</span></td><td class="item-edit-cell"><button class="edit-button" type="button" aria-label="Edit '+row.title+' metadata" aria-controls="'+panelId+'" aria-expanded="'+String(isOpen)+'" title="Edit metadata">✎</button></td></tr>'+itemEditorMarkup(type,row,sourceItemIndex,isOpen));
+        var remote=type==='remote_stream';
+        var firstAired=type==='tv_show'?(row.warning?'—':'1986-09-'+String(12+sourceItemIndex).padStart(2,'0')):'—';
+        var numbering=type==='tv_show'?(row.warning?'—':'1 / '+(sourceItemIndex+1)):'—';
+        var playback=remote?'<select class="input" aria-label="Playback behavior for '+row.title+'"><option>Use provider value</option><option>Finite media</option><option>Live source</option></select>':'—';
+        rows.push('<tr class="preview-item-row" data-source-index="'+sourceItemIndex+'" aria-expanded="'+String(isOpen)+'"><td>'+(remote?'<input class="row-check" type="checkbox" aria-label="Select '+row.title+'">':'')+'</td><td>'+(sourceItemIndex+1)+'</td><td><input class="row-check" type="checkbox" '+(row.included?'checked':'')+' aria-label="Include '+row.title+'"></td><td><span class="thumb'+thumbClass+'"></span></td><td class="preview-name" data-mobile-status="'+mobileStatus+'"><span class="item-title">'+row.title+'</span><span class="item-subtitle">'+row.subtitle+'</span></td><td>'+firstAired+'</td><td>'+numbering+'</td><td>'+row.kind+'</td><td>'+playback+'</td><td><span class="status'+(row.warning?' warning':'')+'">'+(row.warning?'<span class="warning-icon">△</span>':'')+row.status+'</span></td><td class="item-edit-cell"><button class="text-button" type="button" title="Fetch details">↓</button><button class="text-button" type="button">Replace</button><button class="edit-button" type="button" aria-label="Edit '+row.title+' metadata" aria-controls="'+panelId+'" aria-expanded="'+String(isOpen)+'" title="Edit metadata">✎</button><button class="text-button" type="button" disabled>Clear</button></td></tr>'+itemEditorMarkup(type,row,sourceItemIndex,isOpen));
       }
       byId('preview-rows').innerHTML=rows.join('');
       byId('page-status').textContent=(filteredTotal?start+1:0)+'–'+end+' of '+filteredTotal;
@@ -449,8 +454,7 @@ television</textarea><p class="tag-meta" id="general-tags-help"><span data-tag-c
       byId('provider-mark').textContent=ytDlp?'YTD':'B&G';
       byId('resolution-state').textContent=ytDlp?'Operator-selected add-on':'Source recognized';
     });
-    function updateRefreshIcon(){byId('refresh-icon-use').setAttribute('href',byId('refresh-policy').value==='Manual only'?'#icon-manual-action':'#icon-clock')}
-    byId('refresh-policy').addEventListener('change',updateRefreshIcon);
+    byId('load-item-details').addEventListener('change',function(){byId('load-item-details-help').textContent=this.checked?"Import the overview first, then fetch one item's extended metadata at a controlled rate after publication.":'Import the overview only; fetch details manually per item when needed.'});
     byId('page-size').addEventListener('change',function(){currentPage=0;renderPreview()});
     byId('page-previous').addEventListener('click',function(){currentPage=Math.max(0,currentPage-1);renderPreview()});
     byId('page-next').addEventListener('click',function(){currentPage+=1;renderPreview()});
@@ -465,7 +469,6 @@ television</textarea><p class="tag-meta" id="general-tags-help"><span data-tag-c
       counter.textContent=count+' tag'+(count===1?'':'s');
     });
     setGeneralEditor(false);
-    updateRefreshIcon();
     applyProfile();
   </script>
 </body>

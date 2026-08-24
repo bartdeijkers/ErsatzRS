@@ -102,8 +102,13 @@ cargo clippy --workspace --all-targets --features mysql -- -D warnings
 ./run.sh test-closeout
 
 # Inner-loop verification
-# Use focused commands while iterating; reserve the full parity gate for
-# closeout. If your target-dir override points at a slow mount (this project
+# During implementation, NEVER run the full closeout/parity gate unless the
+# user explicitly requests it or the task is being finalized. After an edit,
+# prefer `cargo xtask affected-checks`, then run only the smallest relevant
+# check or test. Do not run Playwright unless the changed code affects
+# browser-visible behavior.
+#
+# If your target-dir override points at a slow mount (this project
 # once used a 9p scratch disk at /mnt/f, where Rust's many-small-files I/O is
 # ~20-100x slower than ext4), each recompile is especially expensive; the
 # default ./target on ordinary local disk applies unless you've added your
@@ -120,8 +125,8 @@ cargo clippy --workspace --all-targets --features mysql -- -D warnings
 # gate, which runs nextest for unit/integration tests and Cargo only for
 # doctests. CI intentionally retains its direct Cargo test selection.
 #   ./run.sh dev                     # build scanner companion, then Leptos watch
-# Run the full multi-config gate (two clippy passes, ./run.sh test-closeout,
-# cargo leptos build, cargo xtask parity-check) ONCE at closeout, not per edit.
+# The full multi-config gate consists of the two clippy passes,
+# `./run.sh test-closeout`, `cargo leptos build`, and `cargo xtask parity-check`.
 # sccache (cache on ext4) makes the unavoidable config switches cheap, but it is
 # the maintainer's local shell optimization and is enabled per-shell/run.sh, not
 # machine-wide — agents need not (and under a sandboxed uid cannot) enable it, so
