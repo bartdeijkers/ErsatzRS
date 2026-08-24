@@ -28,6 +28,212 @@ use tokio::sync::Barrier;
 static MYSQL_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[tokio::test]
+async fn mysql_artwork_duplicate_repair_preserves_variants_and_actor_references() {
+    #[allow(clippy::disallowed_methods)]
+    let Ok(database_url) = std::env::var("ERSATZRS_MYSQL_TEST_URL") else {
+        eprintln!("skipping MySQL artwork repair test: ERSATZRS_MYSQL_TEST_URL is not set");
+        return;
+    };
+    let _test_guard = MYSQL_TEST_LOCK.lock().await;
+    let pool = db::init(&database_url)
+        .await
+        .expect("initialize MySQL artwork repair database");
+
+    const BASE: i64 = 980_000;
+    sqlx::query(r#"DELETE FROM `Actor` WHERE `Id` = ?"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("clear prior actor fixture");
+    sqlx::query(r#"DELETE FROM `AddonMediaList` WHERE `Id` = ?"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("clear prior list fixture");
+    sqlx::query(r#"DELETE FROM `Show` WHERE `Id` = ?"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("clear prior show fixture");
+    sqlx::query(r#"DELETE FROM `MediaSource` WHERE `Id` = ?"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("clear prior media source fixture");
+    sqlx::query(
+        r#"DELETE FROM `AddonInstallation` WHERE `AddonId` = 'org.example.artwork-repair'"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("clear prior add-on fixture");
+
+    sqlx::query(
+        r#"INSERT INTO `AddonInstallation` (
+               `AddonId`, `Version`, `Enabled`, `PackageSha256`, `ContentSha256`,
+               `ManifestJson`, `InstallPath`, `InstalledAt`, `UpdatedAt`
+           ) VALUES (
+               'org.example.artwork-repair', '1.0.0', 1, 'package', 'content',
+               '{}', 'addons/artwork-repair', '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z'
+           )"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed repair add-on");
+    sqlx::query(
+        r#"INSERT INTO `AddonMediaList` (
+               `Id`, `AddonId`, `ProviderId`, `SourceUrl`, `Name`, `ItemCount`,
+               `ProviderMetadataJson`, `MetadataOverrideJson`
+           ) VALUES (?, 'org.example.artwork-repair', 'fixture',
+                     'https://example.invalid/fixture', 'Artwork repair', 0, '{}', '{}')"#,
+    )
+    .bind(BASE)
+    .execute(&pool)
+    .await
+    .expect("seed repair list");
+    sqlx::query(r#"INSERT INTO `MediaSource` (`Id`) VALUES (?)"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("seed repair media source");
+    sqlx::query(r#"INSERT INTO `LocalMediaSource` (`Id`) VALUES (?)"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("seed repair local media source");
+    sqlx::query(
+        r#"INSERT INTO `Library` (`Id`, `Name`, `MediaKind`, `MediaSourceId`)
+           VALUES (?, 'Artwork repair', 2, ?)"#,
+    )
+    .bind(BASE)
+    .bind(BASE)
+    .execute(&pool)
+    .await
+    .expect("seed repair library");
+    sqlx::query(r#"INSERT INTO `LocalLibrary` (`Id`) VALUES (?)"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("seed repair local library");
+    sqlx::query(
+        r#"INSERT INTO `LibraryPath` (`Id`, `LibraryId`, `Path`)
+           VALUES (?, ?, '/tmp/artwork-repair')"#,
+    )
+    .bind(BASE)
+    .bind(BASE)
+    .execute(&pool)
+    .await
+    .expect("seed repair library path");
+    sqlx::query(r#"INSERT INTO `MediaItem` (`Id`, `LibraryPathId`, `State`) VALUES (?, ?, 0)"#)
+        .bind(BASE)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("seed repair media item");
+    sqlx::query(r#"INSERT INTO `Show` (`Id`) VALUES (?)"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("seed repair show");
+    sqlx::query(
+        r#"INSERT INTO `ShowMetadata` (
+               `Id`, `DateAdded`, `DateUpdated`, `MetadataKind`, `ShowId`, `Title`
+           ) VALUES (?, 'old', 'old', 0, ?, 'Artwork repair')"#,
+    )
+    .bind(BASE)
+    .bind(BASE)
+    .execute(&pool)
+    .await
+    .expect("seed repair show metadata");
+    sqlx::query(
+        r#"INSERT INTO `AddonMediaListTelevisionShow` (`AddonMediaListId`, `ShowId`)
+           VALUES (?, ?)"#,
+    )
+    .bind(BASE)
+    .bind(BASE)
+    .execute(&pool)
+    .await
+    .expect("seed repair projection");
+
+    for (offset, path) in [
+        (1_i64, "/media/thumb.jpg"),
+        (2, "/media/thumb.jpg"),
+        (3, "/media/Thumb.jpg"),
+        (4, "/media/actor.jpg"),
+        (5, "/media/actor.jpg"),
+    ] {
+        sqlx::query(
+            r#"INSERT INTO `Artwork` (
+                   `Id`, `ArtworkKind`, `DateAdded`, `DateUpdated`, `ShowMetadataId`, `Path`
+               ) VALUES (?, 0, 'old', 'new', ?, ?)"#,
+        )
+        .bind(BASE + offset)
+        .bind(BASE)
+        .bind(path)
+        .execute(&pool)
+        .await
+        .expect("seed repair artwork");
+    }
+    sqlx::query(r#"INSERT INTO `Actor` (`Id`, `ArtworkId`, `Name`) VALUES (?, ?, 'Keeper')"#)
+        .bind(BASE)
+        .bind(BASE + 5)
+        .execute(&pool)
+        .await
+        .expect("seed actor-referenced artwork");
+
+    sqlx::raw_sql(include_str!(
+        "../../../migrations/mysql/202608241400_artwork_cardinality_repair.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("apply MySQL artwork repair");
+
+    let ids = sqlx::query_scalar::<_, i64>(
+        r#"SELECT `Id` FROM `Artwork`
+           WHERE `ShowMetadataId` = ? ORDER BY `Id`"#,
+    )
+    .bind(BASE)
+    .fetch_all(&pool)
+    .await
+    .expect("load repaired MySQL artwork");
+    assert_eq!(ids, [BASE + 1, BASE + 3, BASE + 4, BASE + 5]);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(r#"SELECT `ArtworkId` FROM `Actor` WHERE `Id` = ?"#)
+            .bind(BASE)
+            .fetch_one(&pool)
+            .await
+            .expect("load retained MySQL actor reference"),
+        BASE + 5
+    );
+
+    sqlx::query(r#"DELETE FROM `Actor` WHERE `Id` = ?"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("remove repair actor fixture");
+    sqlx::query(r#"DELETE FROM `AddonMediaList` WHERE `Id` = ?"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("remove repair list fixture");
+    sqlx::query(r#"DELETE FROM `Show` WHERE `Id` = ?"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("remove repair show fixture");
+    sqlx::query(r#"DELETE FROM `MediaSource` WHERE `Id` = ?"#)
+        .bind(BASE)
+        .execute(&pool)
+        .await
+        .expect("remove repair media source fixture");
+    sqlx::query(
+        r#"DELETE FROM `AddonInstallation` WHERE `AddonId` = 'org.example.artwork-repair'"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("remove repair add-on fixture");
+}
+
+#[tokio::test]
 #[allow(clippy::too_many_lines)]
 async fn mysql_backend_runs_migrations_and_representative_queries() {
     #[allow(clippy::disallowed_methods)]

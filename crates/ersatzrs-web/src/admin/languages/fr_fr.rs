@@ -354,6 +354,19 @@ impl LanguageStrings for FrenchStrings {
         )
     }
 
+    fn artwork_cardinality_message(
+        &self,
+        duplicate_rows: [i64; 3],
+        projection_counts: [i64; 5],
+    ) -> String {
+        let [show_duplicate_rows, season_duplicate_rows, episode_duplicate_rows] = duplicate_rows;
+        let [published_items, projection_rows, distinct_episodes, complete_hierarchy_rows, hierarchy_episodes] =
+            projection_counts;
+        format!(
+            "La cardinalité des illustrations nécessite une intervention : {show_duplicate_rows} ligne(s) d’illustration de série en double, {season_duplicate_rows} ligne(s) d’illustration de saison en double et {episode_duplicate_rows} ligne(s) d’illustration d’épisode en double ; les décomptes de la projection télévisuelle sont {published_items} élément(s) d’épisode publié(s) dans les listes d’extensions, {projection_rows} ligne(s) de projection, {distinct_episodes} épisode(s) projeté(s) distinct(s), {complete_hierarchy_rows} projection(s) de hiérarchie complète(s) et {hierarchy_episodes} épisode(s) dans la hiérarchie. Actualisez ou republiez les listes télévisées d’extensions concernées."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Impossible de charger le contexte de dépannage de lecture : {error}")
     }
@@ -904,6 +917,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayout => "Diffusion classique",
         TextKey::ClassicPlayoutState => "État de la diffusion classique",
         TextKey::ScanRefreshState => "État de l’actualisation après analyse",
+        TextKey::ArtworkCardinality => "Cardinalité des illustrations",
         TextKey::BlockPlayout => "Diffusion par blocs",
         TextKey::ScriptedPlayout => "Grille scriptée",
         TextKey::AlternateSchedules => "Grilles alternatives",

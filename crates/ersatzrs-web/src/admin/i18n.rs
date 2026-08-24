@@ -1419,6 +1419,7 @@ pub enum TextKey {
     ClassicPlayout,
     ClassicPlayoutState,
     ScanRefreshState,
+    ArtworkCardinality,
     BlockPlayout,
     ScriptedPlayout,
     AlternateSchedules,
@@ -2805,6 +2806,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ClassicPlayout,
     TextKey::ClassicPlayoutState,
     TextKey::ScanRefreshState,
+    TextKey::ArtworkCardinality,
     TextKey::BlockPlayout,
     TextKey::ScriptedPlayout,
     TextKey::AlternateSchedules,
@@ -3245,6 +3247,7 @@ pub fn health_summary(errors: u32, warnings: u32) -> String {
 
 const CLASSIC_PLAYOUT_STATE_TITLE: &str = "Classic Playout State";
 const SCAN_REFRESH_STATE_TITLE: &str = "Scan Refresh State";
+const ARTWORK_CARDINALITY_TITLE: &str = "Artwork Cardinality";
 const ADDONS_HEALTH_TITLE: &str = "Add-ons";
 const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str =
     "Classic playout state is not safe to Refresh for: ";
@@ -3256,6 +3259,17 @@ const SCAN_REFRESH_STALE_RESOLUTION_SEPARATOR: &str = " stale impact resolution(
 const SCAN_REFRESH_FAILED_INTENT_SEPARATOR: &str = " failed playout refresh intent(s), and ";
 const SCAN_REFRESH_STALE_INTENT_SUFFIX: &str =
     " stale playout refresh intent(s). Review scanner and scheduling logs, then retry the affected scan or playout refresh.";
+const ARTWORK_CARDINALITY_MESSAGE_PREFIX: &str = "Artwork cardinality needs attention: ";
+const ARTWORK_CARDINALITY_SHOW_SEPARATOR: &str = " duplicate show artwork row(s), ";
+const ARTWORK_CARDINALITY_SEASON_SEPARATOR: &str = " duplicate season artwork row(s), and ";
+const ARTWORK_CARDINALITY_EPISODE_SEPARATOR: &str =
+    " duplicate episode artwork row(s); projected television counts are ";
+const ARTWORK_CARDINALITY_PUBLISHED_SEPARATOR: &str = " published add-on list episode item(s), ";
+const ARTWORK_CARDINALITY_PROJECTION_SEPARATOR: &str = " projection row(s), ";
+const ARTWORK_CARDINALITY_DISTINCT_SEPARATOR: &str = " distinct projected episode(s), ";
+const ARTWORK_CARDINALITY_COMPLETE_SEPARATOR: &str = " complete hierarchy projection(s), and ";
+const ARTWORK_CARDINALITY_HIERARCHY_SUFFIX: &str =
+    " hierarchy episode(s). Refresh or republish the affected add-on television lists.";
 
 pub fn health_check_title(title: &str) -> String {
     health_check_title_text(use_i18n(), title)
@@ -3265,6 +3279,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
     match title {
         CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
         SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
+        ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
         _ => title.to_owned(),
     }
@@ -3305,6 +3320,24 @@ pub fn health_check_message_text(
             );
         }
     }
+    if title == ARTWORK_CARDINALITY_TITLE {
+        if let Some(counts) = artwork_cardinality_counts(displayed_message) {
+            return languages_for(language).artwork_cardinality_message(
+                [
+                    counts.duplicate_show_rows,
+                    counts.duplicate_season_rows,
+                    counts.duplicate_episode_rows,
+                ],
+                [
+                    counts.published_items,
+                    counts.projection_rows,
+                    counts.distinct_episodes,
+                    counts.complete_hierarchy_rows,
+                    counts.hierarchy_episodes,
+                ],
+            );
+        }
+    }
     displayed_message.to_owned()
 }
 
@@ -3322,6 +3355,44 @@ fn scan_refresh_state_counts(message: &str) -> Option<(u64, u64, u64, u64)> {
         failed_intents.parse().ok()?,
         stale_intents.parse().ok()?,
     ))
+}
+
+struct ArtworkCardinalityMessageCounts {
+    duplicate_show_rows: i64,
+    duplicate_season_rows: i64,
+    duplicate_episode_rows: i64,
+    published_items: i64,
+    projection_rows: i64,
+    distinct_episodes: i64,
+    complete_hierarchy_rows: i64,
+    hierarchy_episodes: i64,
+}
+
+fn artwork_cardinality_counts(message: &str) -> Option<ArtworkCardinalityMessageCounts> {
+    let message = message.strip_prefix(ARTWORK_CARDINALITY_MESSAGE_PREFIX)?;
+    let (duplicate_show_rows, message) = message.split_once(ARTWORK_CARDINALITY_SHOW_SEPARATOR)?;
+    let (duplicate_season_rows, message) =
+        message.split_once(ARTWORK_CARDINALITY_SEASON_SEPARATOR)?;
+    let (duplicate_episode_rows, message) =
+        message.split_once(ARTWORK_CARDINALITY_EPISODE_SEPARATOR)?;
+    let (published_items, message) = message.split_once(ARTWORK_CARDINALITY_PUBLISHED_SEPARATOR)?;
+    let (projection_rows, message) =
+        message.split_once(ARTWORK_CARDINALITY_PROJECTION_SEPARATOR)?;
+    let (distinct_episodes, message) =
+        message.split_once(ARTWORK_CARDINALITY_DISTINCT_SEPARATOR)?;
+    let (complete_hierarchy_rows, message) =
+        message.split_once(ARTWORK_CARDINALITY_COMPLETE_SEPARATOR)?;
+    let hierarchy_episodes = message.strip_suffix(ARTWORK_CARDINALITY_HIERARCHY_SUFFIX)?;
+    Some(ArtworkCardinalityMessageCounts {
+        duplicate_show_rows: duplicate_show_rows.parse().ok()?,
+        duplicate_season_rows: duplicate_season_rows.parse().ok()?,
+        duplicate_episode_rows: duplicate_episode_rows.parse().ok()?,
+        published_items: published_items.parse().ok()?,
+        projection_rows: projection_rows.parse().ok()?,
+        distinct_episodes: distinct_episodes.parse().ok()?,
+        complete_hierarchy_rows: complete_hierarchy_rows.parse().ok()?,
+        hierarchy_episodes: hierarchy_episodes.parse().ok()?,
+    })
 }
 
 pub fn unable_to_load_playback_troubleshooting(error: impl std::fmt::Display) -> String {
@@ -3468,6 +3539,11 @@ pub trait LanguageStrings: Sync {
         stale_resolutions: u64,
         failed_intents: u64,
         stale_intents: u64,
+    ) -> String;
+    fn artwork_cardinality_message(
+        &self,
+        duplicate_rows: [i64; 3],
+        projection_counts: [i64; 5],
     ) -> String;
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String;
     fn playout_reset_prompt(&self, channel: &str, schedule: &str) -> String;
@@ -3649,6 +3725,33 @@ mod tests {
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(title, SCAN_REFRESH_STATE_TITLE);
                 assert!(!localized.starts_with(SCAN_REFRESH_STATE_MESSAGE_PREFIX));
+            }
+        }
+    }
+
+    #[test]
+    fn artwork_cardinality_health_text_is_localized_for_every_language() {
+        let message = "Artwork cardinality needs attention: 2 duplicate show artwork row(s), 3 duplicate season artwork row(s), and 5 duplicate episode artwork row(s); projected television counts are 7 published add-on list episode item(s), 11 projection row(s), 13 distinct projected episode(s), 17 complete hierarchy projection(s), and 19 hierarchy episode(s). Refresh or republish the affected add-on television lists.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = health_check_title_text(language, ARTWORK_CARDINALITY_TITLE);
+            let localized = health_check_message_text(
+                language,
+                ARTWORK_CARDINALITY_TITLE,
+                message,
+                "10 duplicate artwork row(s) and 4 projected television cardinality mismatch(es)",
+            );
+            assert!(!title.trim().is_empty());
+            for count in ["2", "3", "5", "7", "11", "13", "17", "19"] {
+                assert!(
+                    localized.contains(count),
+                    "{}: {localized}",
+                    definition.code
+                );
+            }
+            if definition.code != UiLanguage::English.code() {
+                assert_ne!(title, ARTWORK_CARDINALITY_TITLE);
+                assert!(!localized.starts_with(ARTWORK_CARDINALITY_MESSAGE_PREFIX));
             }
         }
     }

@@ -21,8 +21,8 @@ use crate::addon_media_list::InstalledAddonMediaListProvider;
 use crate::addon_media_list_import::AddonMediaListImportCoordinator;
 use crate::addon_media_list_sync::{AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer};
 use crate::metadata::{
-    artwork_kind, replace_artwork, replace_guids, replace_metadata_languages, replace_people,
-    replace_strings, ArtworkRef, PersonRef,
+    artwork_identity, artwork_kind, replace_artwork, replace_guids, replace_metadata_languages,
+    replace_people, replace_strings, ArtworkRef, PersonRef,
 };
 use crate::repositories::common::{decode_bool_column, decode_optional_datetime};
 use crate::repositories::SqlxResultExt as _;
@@ -2809,13 +2809,10 @@ async fn replace_projected_metadata_relations(
             date_added: chrono::Utc::now(),
         })
         .collect::<Vec<_>>();
-    if let Some(path) = artwork_path.or_else(|| metadata.artwork_urls.first().cloned()) {
-        artwork.push(ArtworkRef {
-            kind: artwork_kind::THUMBNAIL,
-            path,
-            date_added: chrono::Utc::now(),
-        });
-    }
+    append_missing_thumbnail(
+        &mut artwork,
+        artwork_path.or_else(|| metadata.artwork_urls.first().cloned()),
+    );
     replace_artwork(
         tx,
         fk_column,
@@ -2828,6 +2825,24 @@ async fn replace_projected_metadata_relations(
         &artwork,
     )
     .await
+}
+
+fn append_missing_thumbnail(artwork: &mut Vec<ArtworkRef>, path: Option<String>) {
+    let Some(path) = path else {
+        return;
+    };
+    let fallback_identity = artwork_identity(artwork_kind::THUMBNAIL, &path);
+    if artwork
+        .iter()
+        .any(|item| artwork_identity(item.kind, &item.path) == fallback_identity)
+    {
+        return;
+    }
+    artwork.push(ArtworkRef {
+        kind: artwork_kind::THUMBNAIL,
+        path,
+        date_added: chrono::Utc::now(),
+    });
 }
 
 /// Convert a publication-local NFO artwork filename into the absolute path

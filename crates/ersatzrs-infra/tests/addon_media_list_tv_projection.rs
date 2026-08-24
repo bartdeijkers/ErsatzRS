@@ -8,11 +8,11 @@
 
 mod common;
 
-use std::{fs, path::Path};
+use std::{collections::BTreeSet, fs, path::Path};
 
 use ersatzrs_core::repositories::{
-    AddonMediaListArtworkRole, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
-    AddonMediaListRepository,
+    AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListNfoMetadata,
+    AddonMediaListNfoPerson, AddonMediaListRepository, TelevisionRepository,
 };
 use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListPresentationKind};
 use ersatzrs_infra::repositories::{
@@ -26,6 +26,21 @@ const LIST_ID: i64 = 1;
 /// Seed a managed add-on list whose items are backed by on-disk stream files,
 /// which is what the projection reads NFO metadata from.
 async fn seed_managed_list(pool: &SqlitePool) -> TempDir {
+    seed_managed_list_items(
+        pool,
+        &[
+            (10_i64, 1_i32, 1_i32, "Pilot".to_owned()),
+            (11, 1, 2, "Second".to_owned()),
+            (12, 0, 1, "Special".to_owned()),
+        ],
+    )
+    .await
+}
+
+async fn seed_managed_list_items(
+    pool: &SqlitePool,
+    episodes: &[(i64, i32, i32, String)],
+) -> TempDir {
     let directory = tempfile::tempdir().expect("managed list temp directory");
 
     pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
@@ -53,16 +68,18 @@ async fn seed_managed_list(pool: &SqlitePool) -> TempDir {
     )
     .await
     .expect("seed addon installation");
-    pool.execute(
+    sqlx::query(
         r#"INSERT INTO "AddonMediaList" (
               "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "Description", "ItemCount",
               "ProviderMetadataJson", "ReviewState", "PublishedRevision"
            ) VALUES (
               1, 'org.example.lists', 'fixture/show',
-              'https://example.invalid/fixture/show', 'Fixture Show', 'Provider introduction', 3,
+              'https://example.invalid/fixture/show', 'Fixture Show', 'Provider introduction', ?,
               '{"title":"Fixture Show","plot":"Provider introduction"}', 2, 1
            )"#,
     )
+    .bind(i64::try_from(episodes.len()).expect("fixture episode count fits i64"))
+    .execute(pool)
     .await
     .expect("seed addon media list");
     sqlx::query(
@@ -75,19 +92,14 @@ async fn seed_managed_list(pool: &SqlitePool) -> TempDir {
     .await
     .expect("seed managed library");
 
-    // Season 1 episodes 1 and 2, plus a specials episode, so the projection has
-    // to create two distinct seasons.
-    for (item_id, season, episode, title) in [
-        (10_i64, 1_i32, 1_i32, "Pilot"),
-        (11, 1, 2, "Second"),
-        (12, 0, 1, "Special"),
-    ] {
-        seed_list_item(pool, directory.path(), item_id, season, episode, title).await;
+    for (item_id, season, episode, title) in episodes {
+        seed_list_item(pool, directory.path(), *item_id, *season, *episode, title).await;
     }
 
     directory
 }
 
+#[allow(clippy::too_many_lines)]
 async fn seed_list_item(
     pool: &SqlitePool,
     root: &Path,
@@ -100,6 +112,7 @@ async fn seed_list_item(
     let nfo_path = stream_path.with_extension("nfo");
     let media_item_id = 100 + item_id;
 
+    let artwork_url = format!("https://example.invalid/artwork/{item_id}.jpg");
     let nfo = AddonMediaListNfoMetadata {
         title: title.to_owned(),
         season: Some(season),
@@ -119,13 +132,29 @@ async fn seed_list_item(
         directors: vec!["Fixture Director".to_owned()],
         writers: vec!["Fixture Writer".to_owned()],
         artists: vec!["Fixture Artist".to_owned()],
-        artwork_urls: vec![format!("https://example.invalid/artwork/{item_id}.jpg")],
+        artwork: vec![AddonMediaListArtwork {
+            url: artwork_url.clone(),
+            role: AddonMediaListArtworkRole::Thumb,
+            ..AddonMediaListArtwork::default()
+        }],
+        artwork_urls: vec![artwork_url],
         guids: vec![format!("fixture://episode-{item_id}")],
         ..AddonMediaListNfoMetadata::default()
     };
+    // The provider-facing metadata must remain a bounded HTTPS URL for review
+    // validation. The already-materialized NFO uses the managed sibling file,
+    // reproducing the real publication shape that used to collide with the
+    // scanner-known fallback path.
+    let mut disk_nfo = nfo.clone();
+    disk_nfo.artwork[0].url = stream_path
+        .with_extension("jpg")
+        .file_name()
+        .expect("fixture artwork file name")
+        .to_string_lossy()
+        .into_owned();
     fs::write(
         &nfo_path,
-        ersatzrs_infra::addon_media_nfo::serialize("episodedetails", &nfo)
+        ersatzrs_infra::addon_media_nfo::serialize("episodedetails", &disk_nfo)
             .expect("serialize managed item NFO"),
     )
     .expect("write managed item NFO");
@@ -545,6 +574,15 @@ async fn television_projection_is_idempotent() {
         scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "EpisodeMetadata""#).await,
         3
     );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "Artwork" WHERE "EpisodeMetadataId" IS NOT NULL"#,
+        )
+        .await,
+        3,
+        "one materialized thumbnail must remain per projected episode"
+    );
 }
 
 /// The projection consumes the NFO rather than merely preserving it on disk:
@@ -637,6 +675,193 @@ async fn television_projection_projects_nfo_facets_and_materialized_artwork() {
         Path::new(&artwork_path).is_file(),
         "projected artwork is not a materialized file: {artwork_path}"
     );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            &format!(r#"SELECT COUNT(*) FROM "Artwork" WHERE "EpisodeMetadataId" = {metadata_id}"#),
+        )
+        .await,
+        1,
+        "the role-aware candidate and legacy fallback resolve to one identity"
+    );
+}
+
+async fn assert_television_cardinality(pool: &SqlitePool) {
+    assert_eq!(
+        scalar::<i64>(pool, r#"SELECT COUNT(*) FROM "AddonMediaListItem""#).await,
+        27
+    );
+    assert_eq!(
+        scalar::<i64>(
+            pool,
+            r#"SELECT COUNT(DISTINCT "ProviderId") FROM "AddonMediaListItem""#,
+        )
+        .await,
+        27
+    );
+    assert_eq!(
+        scalar::<i64>(pool, r#"SELECT COUNT(*) FROM "AddonMediaListItemEpisode""#).await,
+        27
+    );
+    assert_eq!(
+        scalar::<i64>(
+            pool,
+            r#"SELECT COUNT(DISTINCT "EpisodeId") FROM "AddonMediaListItemEpisode""#,
+        )
+        .await,
+        27
+    );
+    assert_eq!(
+        scalar::<i64>(pool, r#"SELECT COUNT(*) FROM "EpisodeMetadata""#).await,
+        27
+    );
+    assert_eq!(
+        scalar::<i64>(
+            pool,
+            r#"SELECT COUNT(*) FROM "Artwork" WHERE "EpisodeMetadataId" IS NOT NULL"#,
+        )
+        .await,
+        27,
+        "publication must retain one thumbnail identity per episode"
+    );
+
+    let seasons = sqlx::query_as::<_, (i64, i64)>(
+        r#"SELECT season."Id", COUNT(episode."Id")
+           FROM "Season" AS season
+           LEFT JOIN "Episode" AS episode ON episode."SeasonId" = season."Id"
+           GROUP BY season."Id", season."SeasonNumber"
+           ORDER BY season."SeasonNumber""#,
+    )
+    .fetch_all(pool)
+    .await
+    .expect("load projected season cardinalities");
+    assert_eq!(
+        seasons.iter().map(|(_, count)| *count).collect::<Vec<_>>(),
+        [13, 14]
+    );
+
+    let repositories = make_repositories(pool.clone());
+    let mut all_episode_ids = BTreeSet::new();
+    for (season_id, expected) in seasons {
+        assert_eq!(
+            repositories
+                .television
+                .get_episode_count(season_id)
+                .await
+                .expect("count projected season"),
+            expected
+        );
+        let mut season_episode_ids = BTreeSet::new();
+        for page in 1..=4 {
+            let cards = repositories
+                .television
+                .get_paged_episodes(season_id, page, 5)
+                .await
+                .expect("page projected season");
+            for card in cards {
+                assert!(
+                    season_episode_ids.insert(card.episode_id),
+                    "an episode crossed a repository page boundary twice"
+                );
+                assert!(
+                    all_episode_ids.insert(card.episode_id),
+                    "an episode appeared in two projected seasons"
+                );
+            }
+        }
+        assert_eq!(
+            i64::try_from(season_episode_ids.len()).expect("season size fits i64"),
+            expected
+        );
+    }
+    assert_eq!(all_episode_ids.len(), 27);
+}
+
+/// Release proof for the observed 27 -> 54 failure: two seasons containing 13
+/// and 14 episodes remain cardinality-stable across publication, detail refresh,
+/// repository pagination, and a real `SQLite` close/reopen boundary.
+#[tokio::test]
+async fn television_projection_keeps_27_unique_episodes_across_publish_refresh_and_restart() {
+    let database_directory = tempfile::tempdir().expect("cardinality database directory");
+    let database_path = database_directory.path().join("cardinality.db");
+    let database_url = format!("sqlite://{}?mode=rwc", database_path.display());
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("open cardinality database");
+    pool.execute("PRAGMA foreign_keys = ON")
+        .await
+        .expect("enable cardinality foreign keys");
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("migrate cardinality database");
+
+    let episodes = (1..=13)
+        .map(|episode| {
+            (
+                1_000_i64 + i64::from(episode),
+                1,
+                episode,
+                format!("Season 1 Episode {episode}"),
+            )
+        })
+        .chain((1..=14).map(|episode| {
+            (
+                1_100_i64 + i64::from(episode),
+                2,
+                episode,
+                format!("Season 2 Episode {episode}"),
+            )
+        }))
+        .collect::<Vec<_>>();
+    let _managed_directory = seed_managed_list_items(&pool, &episodes).await;
+    let repositories = make_repositories(pool.clone());
+
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .expect("publish 27-episode projection");
+    assert_television_cardinality(&pool).await;
+
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "DetailProjectionPendingAt" = '2026-01-01T00:00:00Z'
+           WHERE "Id" = ?"#,
+    )
+    .bind(LIST_ID)
+    .execute(&pool)
+    .await
+    .expect("queue detail projection refresh");
+    assert_eq!(
+        project_one_pending_detail_batch(&pool)
+            .await
+            .expect("run detail projection refresh"),
+        Some((LIST_ID, 1))
+    );
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .expect("republish refreshed 27-episode projection");
+    assert_television_cardinality(&pool).await;
+
+    drop(repositories);
+    pool.close().await;
+    let reopened = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("reopen cardinality database");
+    reopened
+        .execute("PRAGMA foreign_keys = ON")
+        .await
+        .expect("enable reopened foreign keys");
+    assert_television_cardinality(&reopened).await;
 }
 
 #[tokio::test]

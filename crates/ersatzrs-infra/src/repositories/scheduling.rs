@@ -4444,33 +4444,54 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
             }
             AdminSearchKind::Show => {
                 let sql = format!(
-                    r#"SELECT sm."ShowId" AS "ItemId", a."Path" AS "Path"
-                       FROM "ShowMetadata" sm
-                       JOIN "Artwork" a
-                         ON a."ShowMetadataId" = sm."Id" AND a."ArtworkKind" = 0
-                       WHERE sm."ShowId" IN ({placeholders})"#
+                    r#"SELECT sh."Id" AS "ItemId",
+                              (
+                                  SELECT a."Path"
+                                  FROM "Artwork" a
+                                  JOIN "ShowMetadata" sm
+                                    ON sm."Id" = a."ShowMetadataId"
+                                  WHERE sm."ShowId" = sh."Id"
+                                    AND a."ArtworkKind" = 0
+                                    AND NULLIF(TRIM(a."Path"), '') IS NOT NULL
+                                  ORDER BY a."Id"
+                                  LIMIT 1
+                              ) AS "Path"
+                       FROM "Show" sh
+                       WHERE sh."Id" IN ({placeholders})"#
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
-                    enrichment.poster.insert(
-                        row.try_get("ItemId").repository()?,
-                        row.try_get("Path").repository()?,
-                    );
+                    let id = row.try_get("ItemId").repository()?;
+                    if let Some(path) = row.try_get("Path").repository()? {
+                        enrichment.poster.insert(id, path);
+                    }
                 }
             }
             AdminSearchKind::Season => {
                 let sql = format!(
                     r#"SELECT sea."Id" AS "SeasonId",
-                              sea_art."Path" AS "OwnPath",
-                              show_art."Path" AS "ShowPath"
+                              (
+                                  SELECT sea_art."Path"
+                                  FROM "Artwork" sea_art
+                                  JOIN "SeasonMetadata" sem
+                                    ON sem."Id" = sea_art."SeasonMetadataId"
+                                  WHERE sem."SeasonId" = sea."Id"
+                                    AND sea_art."ArtworkKind" = 0
+                                    AND NULLIF(TRIM(sea_art."Path"), '') IS NOT NULL
+                                  ORDER BY sea_art."Id"
+                                  LIMIT 1
+                              ) AS "OwnPath",
+                              (
+                                  SELECT show_art."Path"
+                                  FROM "Artwork" show_art
+                                  JOIN "ShowMetadata" shm
+                                    ON shm."Id" = show_art."ShowMetadataId"
+                                  WHERE shm."ShowId" = sea."ShowId"
+                                    AND show_art."ArtworkKind" = 0
+                                    AND NULLIF(TRIM(show_art."Path"), '') IS NOT NULL
+                                  ORDER BY show_art."Id"
+                                  LIMIT 1
+                              ) AS "ShowPath"
                        FROM "Season" sea
-                       LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = sea."Id"
-                       LEFT JOIN "Artwork" sea_art
-                         ON sea_art."SeasonMetadataId" = sem."Id"
-                         AND sea_art."ArtworkKind" = 0
-                       LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = sea."ShowId"
-                       LEFT JOIN "Artwork" show_art
-                         ON show_art."ShowMetadataId" = shm."Id"
-                         AND show_art."ArtworkKind" = 0
                        WHERE sea."Id" IN ({placeholders})"#
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {
@@ -4487,23 +4508,42 @@ impl AdminSearchRepository for SqliteSchedulingContentRepository {
                 let sql = format!(
                     r#"SELECT ep."Id" AS "EpisodeId",
                               ep."SeasonId" AS "SeasonId",
-                              ep_art."Path" AS "OwnPath",
-                              sea_art."Path" AS "SeasonPath",
-                              show_art."Path" AS "ShowPath"
+                              (
+                                  SELECT ep_art."Path"
+                                  FROM "Artwork" ep_art
+                                  JOIN "EpisodeMetadata" em
+                                    ON em."Id" = ep_art."EpisodeMetadataId"
+                                  WHERE em."EpisodeId" = ep."Id"
+                                    AND ep_art."ArtworkKind" = 0
+                                    AND NULLIF(TRIM(ep_art."Path"), '') IS NOT NULL
+                                  ORDER BY ep_art."Id"
+                                  LIMIT 1
+                              ) AS "OwnPath",
+                              (
+                                  SELECT sea_art."Path"
+                                  FROM "Artwork" sea_art
+                                  JOIN "SeasonMetadata" sem
+                                    ON sem."Id" = sea_art."SeasonMetadataId"
+                                  WHERE sem."SeasonId" = ep."SeasonId"
+                                    AND sea_art."ArtworkKind" = 0
+                                    AND NULLIF(TRIM(sea_art."Path"), '') IS NOT NULL
+                                  ORDER BY sea_art."Id"
+                                  LIMIT 1
+                              ) AS "SeasonPath",
+                              (
+                                  SELECT show_art."Path"
+                                  FROM "Artwork" show_art
+                                  JOIN "ShowMetadata" shm
+                                    ON shm."Id" = show_art."ShowMetadataId"
+                                  JOIN "Season" show_season
+                                    ON show_season."ShowId" = shm."ShowId"
+                                  WHERE show_season."Id" = ep."SeasonId"
+                                    AND show_art."ArtworkKind" = 0
+                                    AND NULLIF(TRIM(show_art."Path"), '') IS NOT NULL
+                                  ORDER BY show_art."Id"
+                                  LIMIT 1
+                              ) AS "ShowPath"
                        FROM "Episode" ep
-                       LEFT JOIN "EpisodeMetadata" em ON em."EpisodeId" = ep."Id"
-                       LEFT JOIN "Artwork" ep_art
-                         ON ep_art."EpisodeMetadataId" = em."Id"
-                         AND ep_art."ArtworkKind" = 0
-                       LEFT JOIN "Season" sea ON sea."Id" = ep."SeasonId"
-                       LEFT JOIN "SeasonMetadata" sem ON sem."SeasonId" = sea."Id"
-                       LEFT JOIN "Artwork" sea_art
-                         ON sea_art."SeasonMetadataId" = sem."Id"
-                         AND sea_art."ArtworkKind" = 0
-                       LEFT JOIN "ShowMetadata" shm ON shm."ShowId" = sea."ShowId"
-                       LEFT JOIN "Artwork" show_art
-                         ON show_art."ShowMetadataId" = shm."Id"
-                         AND show_art."ArtworkKind" = 0
                        WHERE ep."Id" IN ({placeholders})"#
                 );
                 for row in fetch_admin_search_rows(&self.0, &sql, ids).await? {

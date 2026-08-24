@@ -348,6 +348,19 @@ impl LanguageStrings for PolishStrings {
         )
     }
 
+    fn artwork_cardinality_message(
+        &self,
+        duplicate_rows: [i64; 3],
+        projection_counts: [i64; 5],
+    ) -> String {
+        let [show_duplicate_rows, season_duplicate_rows, episode_duplicate_rows] = duplicate_rows;
+        let [published_items, projection_rows, distinct_episodes, complete_hierarchy_rows, hierarchy_episodes] =
+            projection_counts;
+        format!(
+            "Krotność grafik wymaga uwagi: {show_duplicate_rows} zduplikowanych wierszy grafik serialu, {season_duplicate_rows} zduplikowanych wierszy grafik sezonu i {episode_duplicate_rows} zduplikowanych wierszy grafik odcinka; liczby dla projekcji telewizyjnej to {published_items} opublikowanych pozycji odcinków z list dodatków, {projection_rows} wierszy projekcji, {distinct_episodes} różnych projektowanych odcinków, {complete_hierarchy_rows} projekcji z pełną hierarchią i {hierarchy_episodes} odcinków w hierarchii. Odśwież lub ponownie opublikuj odpowiednie telewizyjne listy dodatków."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Nie można wczytać kontekstu diagnostyki odtwarzania: {error}")
     }
@@ -1627,6 +1640,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayout => "Klasyczna emisja",
         TextKey::ClassicPlayoutState => "Stan klasycznej emisji",
         TextKey::ScanRefreshState => "Stan odświeżania po skanowaniu",
+        TextKey::ArtworkCardinality => "Krotność grafik",
         TextKey::BlockPlayout => "Emisja blokowa",
         TextKey::ScriptedPlayout => "Harmonogram skryptowy",
         TextKey::AlternateSchedules => "Harmonogramy alternatywne",

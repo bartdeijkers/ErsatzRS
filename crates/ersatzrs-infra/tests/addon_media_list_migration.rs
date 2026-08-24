@@ -154,3 +154,151 @@ async fn destructive_migration_removes_legacy_trakt_schema_and_data() {
             .unwrap();
     assert_eq!((playlist_count, legacy_config_count), (0, 0));
 }
+
+/// AMM-H-01 repairs only byte-exact duplicates in add-on-projected television.
+/// Variants, unrelated artwork, malformed multi-owner rows, and any duplicate
+/// set referenced by an actor must survive both the migration and a restart.
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn artwork_cardinality_repair_is_narrow_restart_safe_and_reports_counts() {
+    let directory = tempfile::tempdir().expect("create migration test directory");
+    let database_path = directory.path().join("artwork-repair.db");
+    let database_url = format!("sqlite://{}?mode=rwc", database_path.display());
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("open migration test database");
+    pool.execute("PRAGMA foreign_keys = ON").await.unwrap();
+    sqlx::raw_sql(
+        r#"
+        CREATE TABLE "ConfigElement" (
+            "Id" INTEGER PRIMARY KEY AUTOINCREMENT,
+            "Key" TEXT NULL,
+            "Value" TEXT NULL
+        );
+        CREATE TABLE "ShowMetadata" ("Id" INTEGER PRIMARY KEY, "ShowId" INTEGER NOT NULL);
+        CREATE TABLE "Season" ("Id" INTEGER PRIMARY KEY, "ShowId" INTEGER NOT NULL);
+        CREATE TABLE "SeasonMetadata" ("Id" INTEGER PRIMARY KEY, "SeasonId" INTEGER NOT NULL);
+        CREATE TABLE "EpisodeMetadata" ("Id" INTEGER PRIMARY KEY, "EpisodeId" INTEGER NOT NULL);
+        CREATE TABLE "AddonMediaListTelevisionShow" ("ShowId" INTEGER NOT NULL);
+        CREATE TABLE "AddonMediaListItemEpisode" ("EpisodeId" INTEGER NOT NULL);
+        CREATE TABLE "Artwork" (
+            "Id" INTEGER PRIMARY KEY,
+            "ArtistMetadataId" INTEGER NULL,
+            "ArtworkKind" INTEGER NOT NULL,
+            "BlurHash43" TEXT NULL,
+            "BlurHash54" TEXT NULL,
+            "BlurHash64" TEXT NULL,
+            "ChannelId" INTEGER NULL,
+            "DateAdded" TEXT NOT NULL,
+            "DateUpdated" TEXT NOT NULL,
+            "EpisodeMetadataId" INTEGER NULL,
+            "ImageMetadataId" INTEGER NULL,
+            "MovieMetadataId" INTEGER NULL,
+            "MusicVideoMetadataId" INTEGER NULL,
+            "OriginalContentType" TEXT NULL,
+            "OtherVideoMetadataId" INTEGER NULL,
+            "Path" TEXT NULL,
+            "RemoteStreamMetadataId" INTEGER NULL,
+            "SeasonMetadataId" INTEGER NULL,
+            "ShowMetadataId" INTEGER NULL,
+            "SongMetadataId" INTEGER NULL,
+            "SourcePath" TEXT NULL
+        );
+        CREATE TABLE "Actor" (
+            "Id" INTEGER PRIMARY KEY,
+            "ArtworkId" INTEGER NULL,
+            FOREIGN KEY ("ArtworkId") REFERENCES "Artwork" ("Id") ON DELETE CASCADE
+        );
+
+        INSERT INTO "ShowMetadata" ("Id", "ShowId") VALUES (10, 1);
+        INSERT INTO "Season" ("Id", "ShowId") VALUES (2, 1);
+        INSERT INTO "SeasonMetadata" ("Id", "SeasonId") VALUES (20, 2);
+        INSERT INTO "EpisodeMetadata" ("Id", "EpisodeId") VALUES (30, 3), (31, 4);
+        INSERT INTO "AddonMediaListTelevisionShow" ("ShowId") VALUES (1);
+        INSERT INTO "AddonMediaListItemEpisode" ("EpisodeId") VALUES (3);
+
+        INSERT INTO "Artwork" (
+            "Id", "ArtworkKind", "DateAdded", "DateUpdated",
+            "EpisodeMetadataId", "Path", "SourcePath"
+        ) VALUES
+            (1, 1, 'old', 'old', 30, '/media/thumb.jpg', NULL),
+            (2, 1, 'new', 'new', 30, '/media/thumb.jpg', NULL),
+            (3, 1, 'new', 'new', 30, '/media/variant.jpg', NULL),
+            (4, 1, 'new', 'new', 30, '/media/thumb.jpg', 'provider-a');
+
+        INSERT INTO "Artwork" (
+            "Id", "ArtworkKind", "DateAdded", "DateUpdated", "ShowMetadataId", "Path"
+        ) VALUES
+            (5, 0, 'old', 'old', 10, '/media/poster.jpg'),
+            (6, 0, 'new', 'new', 10, '/media/poster.jpg');
+        INSERT INTO "Actor" ("Id", "ArtworkId") VALUES (100, 6);
+
+        INSERT INTO "Artwork" (
+            "Id", "ArtworkKind", "DateAdded", "DateUpdated", "SeasonMetadataId", "Path"
+        ) VALUES
+            (7, 0, 'old', 'old', 20, '/media/Season.jpg'),
+            (8, 0, 'new', 'new', 20, '/media/season.jpg');
+
+        INSERT INTO "Artwork" (
+            "Id", "ArtworkKind", "DateAdded", "DateUpdated", "EpisodeMetadataId", "Path"
+        ) VALUES
+            (9, 1, 'old', 'old', 31, '/other/thumb.jpg'),
+            (10, 1, 'new', 'new', 31, '/other/thumb.jpg');
+
+        INSERT INTO "Artwork" (
+            "Id", "ArtworkKind", "DateAdded", "DateUpdated",
+            "EpisodeMetadataId", "ShowMetadataId", "Path"
+        ) VALUES
+            (11, 1, 'old', 'old', 30, 10, '/malformed/thumb.jpg'),
+            (12, 1, 'new', 'new', 30, 10, '/malformed/thumb.jpg');
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed legacy artwork shapes");
+
+    sqlx::raw_sql(include_str!(
+        "../../../migrations/202608241400_artwork_cardinality_repair.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("apply artwork cardinality repair");
+
+    pool.close().await;
+    let reopened = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+        .expect("reopen repaired database");
+    reopened.execute("PRAGMA foreign_keys = ON").await.unwrap();
+
+    let ids = sqlx::query_scalar::<_, i64>(r#"SELECT "Id" FROM "Artwork" ORDER BY "Id""#)
+        .fetch_all(&reopened)
+        .await
+        .expect("load repaired artwork ids");
+    assert_eq!(ids, [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(r#"SELECT "ArtworkId" FROM "Actor" WHERE "Id" = 100"#)
+            .fetch_one(&reopened)
+            .await
+            .expect("load retained actor reference"),
+        6
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "ConfigElement"
+               WHERE "Key" = 'migration.artwork_cardinality_repair'"#,
+        )
+        .fetch_one(&reopened)
+        .await
+        .expect("load aggregate repair report"),
+        r#"{"removedRows":1,"skippedReferencedRows":1}"#
+    );
+    assert!(sqlx::query("PRAGMA foreign_key_check")
+        .fetch_all(&reopened)
+        .await
+        .expect("check repaired foreign keys")
+        .is_empty());
+}

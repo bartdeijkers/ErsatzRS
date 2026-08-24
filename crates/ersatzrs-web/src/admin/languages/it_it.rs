@@ -360,6 +360,19 @@ impl LanguageStrings for ItalianStrings {
         )
     }
 
+    fn artwork_cardinality_message(
+        &self,
+        duplicate_rows: [i64; 3],
+        projection_counts: [i64; 5],
+    ) -> String {
+        let [show_duplicate_rows, season_duplicate_rows, episode_duplicate_rows] = duplicate_rows;
+        let [published_items, projection_rows, distinct_episodes, complete_hierarchy_rows, hierarchy_episodes] =
+            projection_counts;
+        format!(
+            "La cardinalità delle immagini richiede attenzione: {show_duplicate_rows} righe duplicate di immagini della serie, {season_duplicate_rows} righe duplicate di immagini della stagione e {episode_duplicate_rows} righe duplicate di immagini dell'episodio; i conteggi della proiezione televisiva sono {published_items} elementi episodio pubblicati da elenchi di add-on, {projection_rows} righe di proiezione, {distinct_episodes} episodi proiettati distinti, {complete_hierarchy_rows} proiezioni con gerarchia completa e {hierarchy_episodes} episodi nella gerarchia. Aggiorna o ripubblica gli elenchi televisivi degli add-on interessati."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!(
             "Impossibile caricare il contesto di risoluzione dei problemi della riproduzione: {error}"
@@ -908,6 +921,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayout => "Playout classico",
         TextKey::ClassicPlayoutState => "Stato del playout classico",
         TextKey::ScanRefreshState => "Stato dell'aggiornamento dopo la scansione",
+        TextKey::ArtworkCardinality => "Cardinalità delle immagini",
         TextKey::BlockPlayout => "Playout a blocchi",
         TextKey::ScriptedPlayout => "Programma scriptato",
         TextKey::AlternateSchedules => "Programmi alternativi",

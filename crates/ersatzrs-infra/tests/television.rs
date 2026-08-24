@@ -104,6 +104,59 @@ async fn television_repository_paginates_unique_episodes_when_versions_have_mult
 }
 
 #[tokio::test]
+async fn television_repository_uses_lowest_artwork_id_without_multiplying_episodes() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_tv_fixture(&pool).await;
+    seed_legacy_duplicate_artwork(&pool).await;
+
+    let season = repos.television.get_season(20).await.unwrap().unwrap();
+    assert_eq!(
+        season.season_poster_path.as_deref(),
+        Some("lowest-season-poster.jpg")
+    );
+    assert_eq!(
+        season.show_fanart_path.as_deref(),
+        Some("lowest-show-fanart.jpg")
+    );
+
+    assert_eq!(repos.television.get_episode_count(20).await.unwrap(), 2);
+
+    let episodes = repos
+        .television
+        .get_paged_episodes(20, 1, 100)
+        .await
+        .unwrap();
+    assert_eq!(
+        episodes
+            .iter()
+            .map(|episode| episode.episode_id)
+            .collect::<Vec<_>>(),
+        vec![30, 31]
+    );
+    assert_eq!(
+        episodes[0].thumbnail_path.as_deref(),
+        Some("lowest-pilot-thumb.jpg")
+    );
+    assert!(episodes[1].thumbnail_path.is_none());
+
+    let first_page = repos.television.get_paged_episodes(20, 1, 1).await.unwrap();
+    assert_eq!(first_page.len(), 1);
+    assert_eq!(first_page[0].episode_id, 30);
+
+    let second_page = repos.television.get_paged_episodes(20, 2, 1).await.unwrap();
+    assert_eq!(second_page.len(), 1);
+    assert_eq!(second_page[0].episode_id, 31);
+
+    assert!(repos
+        .television
+        .get_paged_episodes(20, 3, 1)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
 async fn television_repository_applies_remote_path_replacements_to_local_path() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
@@ -215,9 +268,9 @@ async fn seed_tv_fixture(pool: &SqlitePool) {
                "Id", "ArtworkKind", "Path", "SeasonMetadataId", "ShowMetadataId",
                "EpisodeMetadataId", "DateAdded", "DateUpdated"
            ) VALUES
-               (1, 0, 'season-poster.jpg', 200, NULL, NULL, ?, ?),
-               (2, 3, 'show-fanart.jpg', NULL, 100, NULL, ?, ?),
-               (3, 1, 'pilot-thumb.jpg', NULL, NULL, 300, ?, ?)"#,
+               (101, 0, 'season-poster.jpg', 200, NULL, NULL, ?, ?),
+               (102, 3, 'show-fanart.jpg', NULL, 100, NULL, ?, ?),
+               (103, 1, 'pilot-thumb.jpg', NULL, NULL, 300, ?, ?)"#,
     )
     .bind(now)
     .bind(now)
@@ -262,6 +315,31 @@ async fn seed_tv_fixture(pool: &SqlitePool) {
                (4001, 3000, '/media/show/s01e01-alt-audio.mkv', 'hash-alt-audio'),
                (4002, 3001, '/media/show/s01e01-720p.mkv', 'hash-720p')"#,
     )
+    .await
+    .unwrap();
+}
+
+async fn seed_legacy_duplicate_artwork(pool: &SqlitePool) {
+    let now = "2026-05-22T00:00:00Z";
+    sqlx::query(
+        r#"INSERT INTO "Artwork" (
+               "Id", "ArtworkKind", "Path", "SeasonMetadataId", "ShowMetadataId",
+               "EpisodeMetadataId", "DateAdded", "DateUpdated"
+           ) VALUES
+               (0, 1, '   ', NULL, NULL, 300, ?, ?),
+               (1, 0, 'lowest-season-poster.jpg', 200, NULL, NULL, ?, ?),
+               (2, 3, 'lowest-show-fanart.jpg', NULL, 100, NULL, ?, ?),
+               (3, 1, 'lowest-pilot-thumb.jpg', NULL, NULL, 300, ?, ?)"#,
+    )
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
     .await
     .unwrap();
 }

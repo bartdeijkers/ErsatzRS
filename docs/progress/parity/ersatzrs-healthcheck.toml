@@ -35,7 +35,20 @@ same invariant at startup and before every Continue build.
 The Output Dynamic Range check uses a backend-portable `SELECT DISTINCT`
 ordering and one shared classification contract for SQLite and MySQL. The
 focused MySQL regression now runs without an environment-based skip in CI.
+
+The Artwork Cardinality check reports aggregate exact/same-source duplicates
+and projected show, season, and episode count mismatches without disclosing
+paths or provider identities. It links operators to the repaired television
+projection invariant while leaving distinct variants visible and intact.
 '''
+
+[[debt]]
+id          = 'projected-artwork-cardinality-is-not-health-visible'
+description = 'Health must detect duplicate projected artwork and television hierarchy/cardinality drift without exposing operator media identifiers.'
+discovered  = '2026-08-23'
+evidence    = 'Resolved 2026-08-24: ArtworkCardinalityHealthCheck aggregates exact and same-source duplicate counts plus projected show/season/episode mismatches, emits localized guidance in every supported culture, and has focused clean/legacy regressions.'
+resolved    = true
+resolution  = 'The registered aggregate check makes the AMM-H invariant actionable while keeping paths and provider IDs out of health output.'
 
 [[debt]]
 id          = 'zero-duration-healthcheck-static-images'

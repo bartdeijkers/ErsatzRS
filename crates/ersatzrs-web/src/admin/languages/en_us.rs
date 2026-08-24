@@ -362,6 +362,19 @@ impl LanguageStrings for EnglishStrings {
         )
     }
 
+    fn artwork_cardinality_message(
+        &self,
+        duplicate_rows: [i64; 3],
+        projection_counts: [i64; 5],
+    ) -> String {
+        let [show_duplicate_rows, season_duplicate_rows, episode_duplicate_rows] = duplicate_rows;
+        let [published_items, projection_rows, distinct_episodes, complete_hierarchy_rows, hierarchy_episodes] =
+            projection_counts;
+        format!(
+            "Artwork cardinality needs attention: {show_duplicate_rows} duplicate show artwork row(s), {season_duplicate_rows} duplicate season artwork row(s), and {episode_duplicate_rows} duplicate episode artwork row(s); projected television counts are {published_items} published add-on list episode item(s), {projection_rows} projection row(s), {distinct_episodes} distinct projected episode(s), {complete_hierarchy_rows} complete hierarchy projection(s), and {hierarchy_episodes} hierarchy episode(s). Refresh or republish the affected add-on television lists."
+        )
+    }
+
     fn playout_reset_prompt(&self, channel: &str, schedule: &str) -> String {
         format!(
             "Enter the time that the playout on channel {channel} with schedule {schedule} should reset every day"
@@ -904,6 +917,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayout => "Classic Playout",
         TextKey::ClassicPlayoutState => "Classic Playout State",
         TextKey::ScanRefreshState => "Scan Refresh State",
+        TextKey::ArtworkCardinality => "Artwork Cardinality",
         TextKey::BlockPlayout => "Block Playout",
         TextKey::ScriptedPlayout => "Scripted Schedule",
         TextKey::AlternateSchedules => "Alternate Schedules",

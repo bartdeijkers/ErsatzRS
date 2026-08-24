@@ -131,7 +131,7 @@ pub async fn seed_media_path(pool: &SqlitePool, source_id: i64, library_id: i64,
 /// Panics if seeding the fixture media item fails.
 pub async fn seed_media_item(pool: &SqlitePool, item_id: i64, path_id: i64) {
     sqlx::query(
-        r#"INSERT OR REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, ?, 'Normal')"#,
+        r#"INSERT OR REPLACE INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (?, ?, 0)"#,
     )
     .bind(item_id)
     .bind(path_id)

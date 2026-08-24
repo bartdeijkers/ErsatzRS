@@ -47,7 +47,21 @@ ADR 0062 intentionally extends that pinned baseline with read-only music-video,
 song, and image detail routes, canonical card/search/collection destinations,
 shared actions and unavailable warnings, and linked rating, language, studio,
 music-label, genre, and tag facts on every applicable detail surface.
+
+Closed 2026-08-24: television list and detail projections choose one stable,
+lowest-ID non-empty artwork winner per entity, so legacy duplicate thumbnails
+cannot multiply episodes or destabilize pagination. A 27-episode add-on list
+remains 27 unique links with season counts 13 and 14 across reload in Chromium
+and Firefox.
 '''
+
+[[debt]]
+id          = 'television-artwork-join-multiplies-projected-rows'
+description = 'Legacy duplicate Artwork rows must not multiply projected television entities or destabilize their thumbnails and pagination.'
+discovered  = '2026-08-23'
+evidence    = 'Resolved 2026-08-24: television, scheduling, and admin-media queries select the lowest-ID non-empty artwork row through scalar projections. Focused repository tests seed duplicate and variant artwork, and tests/e2e/addon-tv-cardinality.spec.ts proves 27 unique episode links, 13/14 season counts, deterministic thumbnails, hydration, and reload in Chromium and Firefox.'
+resolved    = true
+resolution  = 'All affected browser consumers are cardinality-safe even before the narrow migration repairs eligible exact duplicates.'
 
 [[debt]]
 id          = 'artist-detail-add-to-collection-and-previews-regression'

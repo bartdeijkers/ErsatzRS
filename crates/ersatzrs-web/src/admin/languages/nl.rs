@@ -352,6 +352,19 @@ impl LanguageStrings for DutchStrings {
         )
     }
 
+    fn artwork_cardinality_message(
+        &self,
+        duplicate_rows: [i64; 3],
+        projection_counts: [i64; 5],
+    ) -> String {
+        let [show_duplicate_rows, season_duplicate_rows, episode_duplicate_rows] = duplicate_rows;
+        let [published_items, projection_rows, distinct_episodes, complete_hierarchy_rows, hierarchy_episodes] =
+            projection_counts;
+        format!(
+            "De cardinaliteit van afbeeldingen vereist aandacht: {show_duplicate_rows} dubbele afbeeldingsrij(en) voor series, {season_duplicate_rows} dubbele afbeeldingsrij(en) voor seizoenen en {episode_duplicate_rows} dubbele afbeeldingsrij(en) voor afleveringen; de aantallen voor de televisieprojectie zijn {published_items} gepubliceerde afleveringitem(s) uit add-onlijsten, {projection_rows} projectierij(en), {distinct_episodes} unieke geprojecteerde aflevering(en), {complete_hierarchy_rows} volledige hiërarchieprojectie(s) en {hierarchy_episodes} hiërarchieaflevering(en). Vernieuw of publiceer de betreffende add-ontelevisielijsten opnieuw."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Kan context voor afspeelprobleemoplossing niet laden: {error}")
     }
@@ -1616,6 +1629,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayout => "Klassieke uitzending",
         TextKey::ClassicPlayoutState => "Status klassieke uitzending",
         TextKey::ScanRefreshState => "Status van scanvernieuwing",
+        TextKey::ArtworkCardinality => "Cardinaliteit van afbeeldingen",
         TextKey::BlockPlayout => "Blokuitzending",
         TextKey::ScriptedPlayout => "Scripted uitzending",
         TextKey::AlternateSchedules => "Alternatieve schema's",

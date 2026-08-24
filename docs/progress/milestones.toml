@@ -2032,7 +2032,7 @@ independent closeout audits report no remaining release blocker.
 id         = 'amm-h-01'
 phase      = 'AMM-H — Projection idempotency and display uniqueness'
 title      = 'Deduplicate projected artwork and television rows'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/playout-refresh-and-addon-tv-deduplication.md'
 depends_on = ['amm-g-05']
@@ -2049,4 +2049,14 @@ counts of 13 and 14 remain 13 and 14, and repeated publish/refresh cycles do not
 change row counts. Repository, migration, health, localized browser, and
 restart tests cover both clean and legacy data before release closeout.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-08-24. Publication and shared metadata replacement deduplicate
+artwork by owner, kind, and normalized path/URL; every television/admin read
+chooses the lowest-ID non-empty artwork row without multiplying entities.
+Restart-safe SQLite and live MySQL 8.4 migrations preserve variants, operator
+rows, and Actor-referenced sets while recording aggregate repair counts. A
+production projection regression keeps 27 episodes split 13/14 across publish,
+refresh, and restart. Focused repository, health, localization, runtime-audit,
+Chromium, and Firefox proofs pass; both browser projects used the matched
+Leptos bundle and the managed ErsatzRS FFmpeg 9 binaries.
+'''

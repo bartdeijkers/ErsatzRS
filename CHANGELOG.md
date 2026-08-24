@@ -34,6 +34,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Add-on television publication now canonicalizes repeated artwork candidates,
+  reads one deterministic thumbnail per projected item, repairs only safe exact
+  duplicates in existing SQLite/MySQL databases, and reports aggregate
+  projection-cardinality problems through localized health diagnostics.
+
 - Remote Stream membership scans now refresh only Classic playouts whose
   current schedules can consume the changed media or managed playlist. Stable
   membership deltas produce one reasoned, coalesced refresh intent per playout;

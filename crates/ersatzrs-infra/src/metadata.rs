@@ -12,6 +12,7 @@
 //! surface. All variable values use bound parameters.
 use crate::repositories::SqlxResultExt as _;
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
@@ -107,6 +108,90 @@ pub struct ArtworkRef {
     pub kind: i32,
     pub path: String,
     pub date_added: DateTime<Utc>,
+}
+
+/// Opaque equality key for one artwork source within a single metadata owner.
+///
+/// The metadata owner is supplied by the repository operation; kind remains
+/// part of this key so the same source can intentionally serve, for example,
+/// as both poster and thumbnail artwork.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct ArtworkIdentity {
+    kind: i32,
+    normalized_source: String,
+}
+
+/// Return the cross-platform lexical identity for one artwork candidate.
+///
+/// Absolute URLs use `url`'s canonical serialization. Other values are
+/// treated as local paths: both separator spellings are accepted and `.` / `..`
+/// components are resolved lexically without touching the filesystem or
+/// changing case.
+#[must_use]
+pub(crate) fn artwork_identity(kind: i32, source: &str) -> ArtworkIdentity {
+    ArtworkIdentity {
+        kind,
+        normalized_source: normalize_artwork_source(source),
+    }
+}
+
+fn normalize_artwork_source(source: &str) -> String {
+    if !is_windows_drive_path(source) {
+        if let Ok(url) = url::Url::parse(source) {
+            return url.to_string();
+        }
+    }
+
+    normalize_artwork_path(source)
+}
+
+fn is_windows_drive_path(source: &str) -> bool {
+    let bytes = source.as_bytes();
+    bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
+}
+
+fn normalize_artwork_path(source: &str) -> String {
+    let path = source.replace('\\', "/");
+    let drive = is_windows_drive_path(&path).then(|| &path[..2]);
+    let after_drive = drive.map_or(path.as_str(), |_| &path[2..]);
+    let leading_separators = after_drive
+        .as_bytes()
+        .iter()
+        .take_while(|byte| **byte == b'/')
+        .count();
+    let rooted = leading_separators > 0;
+    let unc = drive.is_none() && leading_separators >= 2;
+    let remainder = &after_drive[leading_separators..];
+
+    let mut components = Vec::new();
+    let anchor_depth = if unc { 2 } else { 0 };
+    for component in remainder.split('/') {
+        match component {
+            ".." if components.len() > anchor_depth
+                && components.last().is_some_and(|value| *value != "..") =>
+            {
+                components.pop();
+            }
+            ".." if !rooted => components.push(component),
+            "" | "." | ".." => {}
+            _ => components.push(component),
+        }
+    }
+
+    let joined = components.join("/");
+    match (drive, rooted, unc, joined.is_empty()) {
+        (Some(drive), true, _, true) => format!("{drive}/"),
+        (Some(drive), true, _, false) => format!("{drive}/{joined}"),
+        (Some(drive), false, _, true) => drive.to_owned(),
+        (Some(drive), false, _, false) => format!("{drive}{joined}"),
+        (None, true, true, true) => "//".to_owned(),
+        (None, true, true, false) => format!("//{joined}"),
+        (None, true, false, true) => "/".to_owned(),
+        (None, true, false, false) => format!("/{joined}"),
+        (None, false, _, true) if source.is_empty() => String::new(),
+        (None, false, _, true) => ".".to_owned(),
+        (None, false, _, false) => joined,
+    }
 }
 
 /// DELETE-then-INSERT rows in a "shared string" table (`Genre`, `Tag`,
@@ -239,7 +324,9 @@ pub async fn replace_people(
 /// which `ArtworkKind`s the caller manages on this pass; rows of those kinds
 /// are deleted unconditionally so the source-of-truth can shrink (a media item
 /// that loses its poster between scans must not keep stale rows). Kinds
-/// outside `scope` are left untouched.
+/// outside `scope` are left untouched and incoming items outside `scope` are
+/// ignored. Blank sources are ignored; semantic duplicates are inserted once
+/// in input order, preserving the first row's source spelling and timestamp.
 ///
 /// # Errors
 ///
@@ -275,7 +362,14 @@ pub async fn replace_artwork(
         ) VALUES (?, ?, ?, ?, ?)"#
     );
     let now = encode_datetime(Utc::now());
+    let mut identities = HashSet::with_capacity(items.len());
     for item in items {
+        if !scope.contains(&item.kind) || item.path.trim().is_empty() {
+            continue;
+        }
+        if !identities.insert(artwork_identity(item.kind, &item.path)) {
+            continue;
+        }
         sqlx::query(crate::db::assert_sql_safe(&insert_sql))
             .bind(item.kind)
             .bind(metadata_id)
@@ -786,6 +880,274 @@ fn encode_datetime(value: DateTime<Utc>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone as _;
+
+    fn artwork_ref(kind: i32, path: &str, day: u32) -> ArtworkRef {
+        ArtworkRef {
+            kind,
+            path: path.to_owned(),
+            date_added: Utc
+                .with_ymd_and_hms(2024, 1, day, 1, 2, 3)
+                .single()
+                .expect("valid artwork timestamp"),
+        }
+    }
+
+    async fn artwork_test_pool() -> crate::db::DbPool {
+        #[cfg(feature = "mysql")]
+        let pool = {
+            sqlx::any::install_default_drivers();
+            sqlx::any::AnyPoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .expect("connect artwork test database")
+        };
+        #[cfg(not(feature = "mysql"))]
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect artwork test database");
+
+        sqlx::query(
+            r#"CREATE TABLE "Artwork" (
+                "Id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                "ArtworkKind" INTEGER NOT NULL,
+                "EpisodeMetadataId" INTEGER NULL,
+                "DateAdded" TEXT NOT NULL,
+                "DateUpdated" TEXT NOT NULL,
+                "Path" TEXT NOT NULL
+            )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("create artwork test table");
+
+        pool
+    }
+
+    async fn load_test_artwork(pool: &crate::db::DbPool) -> Vec<(i64, String, String)> {
+        sqlx::query(
+            r#"SELECT "ArtworkKind", "Path", "DateAdded"
+               FROM "Artwork"
+               WHERE "EpisodeMetadataId" = ?
+               ORDER BY "Id""#,
+        )
+        .bind(42_i64)
+        .fetch_all(pool)
+        .await
+        .expect("load replaced artwork")
+        .iter()
+        .map(|row| {
+            (
+                row.get::<i64, _>("ArtworkKind"),
+                row.get::<String, _>("Path"),
+                row.get::<String, _>("DateAdded"),
+            )
+        })
+        .collect()
+    }
+
+    #[test]
+    fn artwork_url_identity_uses_canonical_url_serialization() {
+        let identity = artwork_identity(
+            artwork_kind::THUMBNAIL,
+            "HTTPS://Example.COM:443/images/season/../thumbnail.jpg",
+        );
+
+        assert_eq!(
+            identity.normalized_source,
+            "https://example.com/images/thumbnail.jpg"
+        );
+        assert_eq!(
+            identity,
+            artwork_identity(
+                artwork_kind::THUMBNAIL,
+                "https://example.com/images/thumbnail.jpg",
+            )
+        );
+        assert_ne!(
+            identity,
+            artwork_identity(
+                artwork_kind::THUMBNAIL,
+                "https://example.com/images/thumbnail.jpg?size=large",
+            ),
+            "a distinct URL query remains a distinct artwork source"
+        );
+    }
+
+    #[test]
+    fn artwork_path_identity_is_cross_platform_and_lexical() {
+        let identity = artwork_identity(
+            artwork_kind::THUMBNAIL,
+            r"C:\Media\Series\.\Season 1\..\Poster.jpg",
+        );
+
+        assert_eq!(identity.normalized_source, "C:/Media/Series/Poster.jpg");
+        assert_eq!(
+            identity,
+            artwork_identity(artwork_kind::THUMBNAIL, "C:/Media/Series/Poster.jpg",)
+        );
+        assert_eq!(
+            artwork_identity(
+                artwork_kind::THUMBNAIL,
+                r"\\server\share\series\.\season\..\poster.jpg",
+            ),
+            artwork_identity(artwork_kind::THUMBNAIL, "//server/share/series/poster.jpg",)
+        );
+        assert_eq!(
+            artwork_identity(artwork_kind::THUMBNAIL, "../../series/poster.jpg").normalized_source,
+            "../../series/poster.jpg",
+            "leading parent components must not cancel each other"
+        );
+        assert_ne!(
+            identity,
+            artwork_identity(artwork_kind::THUMBNAIL, "c:/Media/Series/Poster.jpg",),
+            "drive-letter case is not folded"
+        );
+        assert_ne!(
+            identity,
+            artwork_identity(artwork_kind::THUMBNAIL, "C:/Media/Series/poster.jpg",),
+            "component case is not folded"
+        );
+    }
+
+    #[tokio::test]
+    async fn replace_artwork_keeps_first_semantic_occurrence_and_preserves_variants() {
+        let pool = artwork_test_pool().await;
+        let items = vec![
+            artwork_ref(
+                artwork_kind::THUMBNAIL,
+                "HTTPS://Example.COM:443/images/season/../thumbnail.jpg",
+                1,
+            ),
+            artwork_ref(
+                artwork_kind::THUMBNAIL,
+                "https://example.com/images/thumbnail.jpg",
+                2,
+            ),
+            artwork_ref(
+                artwork_kind::POSTER,
+                "https://example.com/images/thumbnail.jpg",
+                3,
+            ),
+            artwork_ref(
+                artwork_kind::THUMBNAIL,
+                "https://example.com/images/thumbnail.jpg?size=large",
+                4,
+            ),
+            artwork_ref(
+                artwork_kind::THUMBNAIL,
+                r"library\show\.\season\..\thumbnail.jpg",
+                5,
+            ),
+            artwork_ref(artwork_kind::THUMBNAIL, "library/show/thumbnail.jpg", 6),
+            artwork_ref(artwork_kind::THUMBNAIL, "library/show/Thumbnail.jpg", 7),
+        ];
+
+        for _ in 0..2 {
+            let mut tx = pool.begin().await.expect("begin artwork replace");
+            replace_artwork(
+                &mut tx,
+                "EpisodeMetadataId",
+                42,
+                &[artwork_kind::THUMBNAIL, artwork_kind::POSTER],
+                &items,
+            )
+            .await
+            .expect("replace artwork");
+            tx.commit().await.expect("commit artwork replace");
+        }
+
+        let rows = load_test_artwork(&pool).await;
+        let variants = rows
+            .iter()
+            .map(|(kind, path, _)| (*kind, path.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            variants,
+            vec![
+                (
+                    i64::from(artwork_kind::THUMBNAIL),
+                    "HTTPS://Example.COM:443/images/season/../thumbnail.jpg",
+                ),
+                (
+                    i64::from(artwork_kind::POSTER),
+                    "https://example.com/images/thumbnail.jpg",
+                ),
+                (
+                    i64::from(artwork_kind::THUMBNAIL),
+                    "https://example.com/images/thumbnail.jpg?size=large",
+                ),
+                (
+                    i64::from(artwork_kind::THUMBNAIL),
+                    r"library\show\.\season\..\thumbnail.jpg",
+                ),
+                (
+                    i64::from(artwork_kind::THUMBNAIL),
+                    "library/show/Thumbnail.jpg",
+                ),
+            ],
+            "repeated replacement keeps one first-wins row per semantic identity"
+        );
+        assert_eq!(
+            rows[0].2, "2024-01-01 01:02:03",
+            "the first equivalent candidate also supplies DateAdded"
+        );
+    }
+
+    #[tokio::test]
+    async fn replace_artwork_ignores_out_of_scope_and_blank_candidates() {
+        let pool = artwork_test_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "Artwork" (
+                "ArtworkKind", "EpisodeMetadataId", "DateAdded", "DateUpdated", "Path"
+            ) VALUES (?, ?, ?, ?, ?)"#,
+        )
+        .bind(artwork_kind::LOGO)
+        .bind(42_i64)
+        .bind("2024-01-01 01:02:03")
+        .bind("2024-01-01 01:02:03")
+        .bind("operator-logo.png")
+        .execute(&pool)
+        .await
+        .expect("insert operator-owned artwork");
+        let items = vec![
+            artwork_ref(artwork_kind::LOGO, "unmanaged-logo.png", 2),
+            artwork_ref(artwork_kind::THUMBNAIL, "", 3),
+            artwork_ref(artwork_kind::THUMBNAIL, " \t ", 4),
+            artwork_ref(artwork_kind::THUMBNAIL, "thumbnail.jpg", 5),
+        ];
+
+        for _ in 0..2 {
+            let mut tx = pool.begin().await.expect("begin scoped artwork replace");
+            replace_artwork(
+                &mut tx,
+                "EpisodeMetadataId",
+                42,
+                &[artwork_kind::THUMBNAIL],
+                &items,
+            )
+            .await
+            .expect("replace scoped artwork");
+            tx.commit().await.expect("commit scoped artwork replace");
+        }
+
+        let rows = load_test_artwork(&pool).await;
+        let variants = rows
+            .iter()
+            .map(|(kind, path, _)| (*kind, path.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            variants,
+            vec![
+                (i64::from(artwork_kind::LOGO), "operator-logo.png",),
+                (i64::from(artwork_kind::THUMBNAIL), "thumbnail.jpg"),
+            ],
+            "replacement must neither create unmanaged rows nor persist blank sources"
+        );
+    }
 
     #[test]
     fn sidecars_without_language_use_und() {

@@ -360,6 +360,19 @@ impl LanguageStrings for GermanStrings {
         )
     }
 
+    fn artwork_cardinality_message(
+        &self,
+        duplicate_rows: [i64; 3],
+        projection_counts: [i64; 5],
+    ) -> String {
+        let [show_duplicate_rows, season_duplicate_rows, episode_duplicate_rows] = duplicate_rows;
+        let [published_items, projection_rows, distinct_episodes, complete_hierarchy_rows, hierarchy_episodes] =
+            projection_counts;
+        format!(
+            "Die Kardinalität des Bildmaterials erfordert Aufmerksamkeit: {show_duplicate_rows} doppelte Bildzeile(n) für Serien, {season_duplicate_rows} doppelte Bildzeile(n) für Staffeln und {episode_duplicate_rows} doppelte Bildzeile(n) für Episoden; die Zählwerte der Fernsehprojektion sind {published_items} veröffentlichte Episodenelement(e) aus Add-on-Listen, {projection_rows} Projektionszeile(n), {distinct_episodes} eindeutige projizierte Episode(n), {complete_hierarchy_rows} vollständige Hierarchieprojektion(en) und {hierarchy_episodes} Hierarchieepisode(n). Aktualisieren oder veröffentlichen Sie die betroffenen Add-on-Fernsehlisten erneut."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Kontext für die Wiedergabefehlerbehebung konnte nicht geladen werden: {error}")
     }
@@ -898,6 +911,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayout => "Klassischer Playout",
         TextKey::ClassicPlayoutState => "Klassischer Playout-Zustand",
         TextKey::ScanRefreshState => "Status der Scan-Aktualisierung",
+        TextKey::ArtworkCardinality => "Kardinalität des Bildmaterials",
         TextKey::BlockPlayout => "Block-Playout",
         TextKey::ScriptedPlayout => "Skriptierter Sendeplan",
         TextKey::AlternateSchedules => "Alternative Sendepläne",

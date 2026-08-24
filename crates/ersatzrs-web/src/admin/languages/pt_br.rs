@@ -348,6 +348,19 @@ impl LanguageStrings for PortugueseBrazilStrings {
         )
     }
 
+    fn artwork_cardinality_message(
+        &self,
+        duplicate_rows: [i64; 3],
+        projection_counts: [i64; 5],
+    ) -> String {
+        let [show_duplicate_rows, season_duplicate_rows, episode_duplicate_rows] = duplicate_rows;
+        let [published_items, projection_rows, distinct_episodes, complete_hierarchy_rows, hierarchy_episodes] =
+            projection_counts;
+        format!(
+            "A cardinalidade das imagens requer atenção: {show_duplicate_rows} linha(s) duplicada(s) de imagem da série, {season_duplicate_rows} linha(s) duplicada(s) de imagem da temporada e {episode_duplicate_rows} linha(s) duplicada(s) de imagem do episódio; as contagens da projeção de televisão são {published_items} item(ns) de episódio publicado(s) de listas de complementos, {projection_rows} linha(s) de projeção, {distinct_episodes} episódio(s) projetado(s) distinto(s), {complete_hierarchy_rows} projeção(ões) de hierarquia completa(s) e {hierarchy_episodes} episódio(s) na hierarquia. Atualize ou publique novamente as listas de televisão de complementos afetadas."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!(
             "Não foi possível carregar o contexto de solução de problemas de reprodução: {error}"
@@ -1643,6 +1656,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayout => "Programação clássica",
         TextKey::ClassicPlayoutState => "Estado da programação clássica",
         TextKey::ScanRefreshState => "Estado da atualização após a varredura",
+        TextKey::ArtworkCardinality => "Cardinalidade das imagens",
         TextKey::BlockPlayout => "Programação por blocos",
         TextKey::ScriptedPlayout => "Grade com script",
         TextKey::AlternateSchedules => "Grades alternativas",

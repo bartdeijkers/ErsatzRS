@@ -165,9 +165,9 @@ resolution  = 'The add-on settings route is included in whole-app hydration and 
 
 [[debt]]
 id          = 'mysql-runtime-migration-proof-is-missing'
-description = 'Live MySQL CI now exercises managed add-on-list storage, NFO sidecars, and scan-refresh continuity, but projected television reads, writes, and artwork cardinality remain proven only on SQLite.'
+description = 'Live MySQL proof covers managed add-on-list storage, scan-refresh continuity, and the AMM-H artwork repair, but the complete projected television publication/read path remains SQLite-only.'
 discovered  = '2026-08-15'
-evidence    = 'Corrected 2026-08-24: the `MySQL health and continuity contract` runs migrations against MySQL 8.4 and now exercises a real managed AddonInstallation/AddonMediaList publication through Local scanning, generated YAML/NFO sidecars, durable refresh admission, and Classic restart continuity. A separate two-connection test proves scan-resolution and intent upserts under InnoDB contention. The remaining backend gap is the projected Show/Season/Episode and artwork-cardinality path owned by amm-h-01, so this debt remains open.'
+evidence    = 'Updated 2026-08-24: the `MySQL health and continuity contract` runs migrations against MySQL 8.4 and exercises a managed publication through Local scanning, generated sidecars, durable refresh admission, and Classic restart continuity. AMM-H additionally proves its exact-duplicate Artwork repair against live MySQL 8.4, including variant preservation and Actor-referenced-set safety. The full Show/Season/Episode publication and consumer read path is still not exercised end to end on MySQL, so this debt remains open pending ADR 0080 disposition.'
 adr         = '0066'
 resolved    = false
 

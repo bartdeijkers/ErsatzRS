@@ -5,7 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::content_variants;
-use ersatzrs_core::repositories::{FillerRepository, ProgramScheduleRepository};
+use ersatzrs_core::repositories::{
+    AdminMediaRepository, AdminSearchKind, AdminSearchRepository, FillerRepository,
+    ProgramScheduleRepository,
+};
 use ersatzrs_core::scheduling::{
     block_item_smart_shuffle_config_key, classic_schedule_item_key,
     classic_schedule_item_policy_key, legacy_playout_cooldown_config_key,
@@ -867,6 +870,116 @@ async fn scheduling_repository_search_documents_page_returns_page_map() {
     assert_eq!(page_map.page_map[&'#'], 1);
     assert_eq!(page_map.page_map[&'b'], 1);
     assert_eq!(page_map.page_map[&'g'], 2);
+}
+
+#[tokio::test]
+async fn admin_show_detail_uses_one_lowest_non_empty_artwork_winner_per_season() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_legacy_tv_artwork_variants(&pool).await;
+
+    let detail = repos
+        .admin_media
+        .get_show_detail_admin(10)
+        .await
+        .unwrap()
+        .expect("show detail");
+
+    assert_eq!(detail.poster_path.as_deref(), Some("show-lowest.jpg"));
+    assert_eq!(detail.fanart_path.as_deref(), Some("fanart-lowest.jpg"));
+    assert_eq!(detail.seasons.len(), 1);
+    assert_eq!(detail.seasons[0].id, 11);
+    assert_eq!(
+        detail.seasons[0].poster_path.as_deref(),
+        Some("season-lowest.jpg")
+    );
+}
+
+#[tokio::test]
+async fn admin_search_uses_stable_lowest_non_empty_tv_artwork_winners() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+    seed_legacy_tv_artwork_variants(&pool).await;
+
+    let show = repos
+        .scheduling
+        .enrich_admin_search(AdminSearchKind::Show, &[10])
+        .await
+        .unwrap();
+    assert_eq!(show.poster.len(), 1);
+    assert_eq!(
+        show.poster.get(&10).map(String::as_str),
+        Some("show-lowest.jpg")
+    );
+
+    let season = repos
+        .scheduling
+        .enrich_admin_search(AdminSearchKind::Season, &[11])
+        .await
+        .unwrap();
+    assert_eq!(season.poster.len(), 1);
+    assert_eq!(season.season_poster.len(), 1);
+    assert_eq!(
+        season.poster.get(&11).map(String::as_str),
+        Some("season-lowest.jpg")
+    );
+    assert_eq!(
+        season.season_poster.get(&11).map(String::as_str),
+        Some("show-lowest.jpg")
+    );
+
+    let episode = repos
+        .scheduling
+        .enrich_admin_search(AdminSearchKind::Episode, &[12, 13])
+        .await
+        .unwrap();
+    assert_eq!(episode.poster.len(), 1);
+    assert_eq!(episode.season_poster.len(), 2);
+    assert_eq!(episode.show_poster.len(), 2);
+    assert_eq!(episode.episode_season_id.len(), 2);
+    assert_eq!(
+        episode.poster.get(&12).map(String::as_str),
+        Some("episode-lowest.jpg")
+    );
+    assert!(!episode.poster.contains_key(&13));
+    for episode_id in [12, 13] {
+        assert_eq!(
+            episode.season_poster.get(&episode_id).map(String::as_str),
+            Some("season-lowest.jpg")
+        );
+        assert_eq!(
+            episode.show_poster.get(&episode_id).map(String::as_str),
+            Some("show-lowest.jpg")
+        );
+    }
+
+    let restarted = make_repositories(pool);
+    assert_eq!(
+        restarted
+            .scheduling
+            .enrich_admin_search(AdminSearchKind::Show, &[10])
+            .await
+            .unwrap(),
+        show
+    );
+    assert_eq!(
+        restarted
+            .scheduling
+            .enrich_admin_search(AdminSearchKind::Season, &[11])
+            .await
+            .unwrap(),
+        season
+    );
+    assert_eq!(
+        restarted
+            .scheduling
+            .enrich_admin_search(AdminSearchKind::Episode, &[12, 13])
+            .await
+            .unwrap(),
+        episode
+    );
 }
 
 #[tokio::test]
@@ -1990,6 +2103,36 @@ async fn seed_scheduling_fixture(pool: &SqlitePool) {
     seed_media_fixture(pool).await;
     seed_collection_fixture(pool).await;
     seed_overlay_fixture(pool).await;
+}
+
+async fn seed_legacy_tv_artwork_variants(pool: &SqlitePool) {
+    pool.execute(
+        r#"INSERT INTO "Artwork" (
+               "Id", "ArtworkKind", "Path", "ShowMetadataId", "SeasonMetadataId",
+               "EpisodeMetadataId", "DateAdded", "DateUpdated"
+           ) VALUES
+               (9000, 0, NULL, NULL, 110, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9001, 0, '   ', NULL, 110, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9002, 0, 'season-lowest.jpg', NULL, 110, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9003, 0, 'season-lowest.jpg', NULL, 110, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9004, 0, 'season-later.jpg', NULL, 110, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9010, 0, NULL, 100, NULL, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9011, 0, '   ', 100, NULL, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9012, 0, 'show-lowest.jpg', 100, NULL, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9013, 0, 'show-lowest.jpg', 100, NULL, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9014, 0, 'show-later.jpg', 100, NULL, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9020, 3, '   ', 100, NULL, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9021, 3, 'fanart-lowest.jpg', 100, NULL, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9022, 3, 'fanart-lowest.jpg', 100, NULL, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9023, 3, 'fanart-later.jpg', 100, NULL, NULL, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9030, 0, NULL, NULL, NULL, 120, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9031, 0, '   ', NULL, NULL, 120, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9032, 0, 'episode-lowest.jpg', NULL, NULL, 120, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9033, 0, 'episode-lowest.jpg', NULL, NULL, 120, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z'),
+               (9034, 0, 'episode-later.jpg', NULL, NULL, 120, '2026-04-15T00:00:00Z', '2026-04-15T00:00:00Z')"#,
+    )
+    .await
+    .unwrap();
 }
 
 async fn seed_media_fixture(pool: &SqlitePool) {

@@ -20,16 +20,28 @@ impl TelevisionRepository for SqliteTelevisionRepository {
                       s."SeasonNumber" AS "SeasonNumber",
                       COALESCE(shm."Title", '') AS "ShowTitle",
                       shm."Year" AS "ShowYear",
-                      sa."Path" AS "SeasonPoster",
-                      fa."Path" AS "ShowFanArt"
+                      (
+                          SELECT sa."Path"
+                          FROM "Artwork" sa
+                          WHERE sa."SeasonMetadataId" = sm."Id"
+                            AND sa."ArtworkKind" = 0
+                            AND NULLIF(TRIM(sa."Path"), '') IS NOT NULL
+                          ORDER BY sa."Id"
+                          LIMIT 1
+                      ) AS "SeasonPoster",
+                      (
+                          SELECT fa."Path"
+                          FROM "Artwork" fa
+                          WHERE fa."ShowMetadataId" = shm."Id"
+                            AND fa."ArtworkKind" = 3
+                            AND NULLIF(TRIM(fa."Path"), '') IS NOT NULL
+                          ORDER BY fa."Id"
+                          LIMIT 1
+                      ) AS "ShowFanArt"
                FROM "Season" s
                JOIN "Show" sh ON sh."Id" = s."ShowId"
                JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
                LEFT JOIN "SeasonMetadata" sm ON sm."SeasonId" = s."Id"
-               LEFT JOIN "Artwork" sa
-                   ON sa."SeasonMetadataId" = sm."Id" AND sa."ArtworkKind" = 0
-               LEFT JOIN "Artwork" fa
-                   ON fa."ShowMetadataId" = shm."Id" AND fa."ArtworkKind" = 3
                WHERE s."Id" = ?
                ORDER BY s."Id"
                LIMIT 1"#,
@@ -80,7 +92,15 @@ impl TelevisionRepository for SqliteTelevisionRepository {
                       COALESCE(em."SortTitle", em."Title", '') AS "SortTitle",
                       em."Plot" AS "Plot",
                       em."ReleaseDate" AS "ReleaseDate",
-                      a."Path" AS "Thumbnail",
+                      (
+                          SELECT a."Path"
+                          FROM "Artwork" a
+                          WHERE a."EpisodeMetadataId" = em."Id"
+                            AND a."ArtworkKind" = 1
+                            AND NULLIF(TRIM(a."Path"), '') IS NOT NULL
+                          ORDER BY a."Id"
+                          LIMIT 1
+                      ) AS "Thumbnail",
                       COALESCE(mi."State", 0) AS "State",
                       mi."LibraryPathId" AS "LibraryPathId",
                       (
@@ -100,8 +120,6 @@ impl TelevisionRepository for SqliteTelevisionRepository {
                JOIN "Season" s ON s."Id" = e."SeasonId"
                JOIN "Show" sh ON sh."Id" = s."ShowId"
                JOIN "ShowMetadata" shm ON shm."ShowId" = sh."Id"
-               LEFT JOIN "Artwork" a
-                   ON a."EpisodeMetadataId" = em."Id" AND a."ArtworkKind" = 1
                LEFT JOIN "MediaItem" mi ON mi."Id" = e."Id"
                WHERE e."SeasonId" = ?
                ORDER BY em."EpisodeNumber", em."Id"

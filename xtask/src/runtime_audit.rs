@@ -11,12 +11,15 @@ use anyhow::{bail, Context, Result};
 use rusqlite::{Connection, OpenFlags};
 
 const REQUIRED_TABLES: &[&str] = &[
+    "Actor",
+    "AddonMediaListTelevisionShow",
     "Artwork",
     "Episode",
     "EpisodeMetadata",
     "Playout",
     "PlayoutItem",
     "PlayoutProgramScheduleAnchor",
+    "Season",
 ];
 
 pub fn run(args: Vec<String>) -> ExitCode {
@@ -136,6 +139,8 @@ struct EpisodeAudit {
     multiplied_rows: i64,
     duplicate_artwork_groups: i64,
     duplicate_artwork_extras: i64,
+    actor_referenced_duplicate_extras: i64,
+    projected_season_episode_counts: Vec<i64>,
 }
 
 impl AuditReport {
@@ -174,6 +179,12 @@ impl AuditReport {
             findings.push(format!(
                 "{} exact duplicate episode Artwork row(s) were detected",
                 self.episodes.duplicate_artwork_extras
+            ));
+        }
+        if self.episodes.actor_referenced_duplicate_extras > 0 {
+            findings.push(format!(
+                "{} same-source duplicate episode Artwork extra row(s) belong to groups with Actor references",
+                self.episodes.actor_referenced_duplicate_extras
             ));
         }
         if self.episodes.multiplied_rows > 0 {
@@ -219,7 +230,7 @@ impl AuditReport {
         }
         output.push_str(&format!(
             "runtime-audit: timeline rows={} playouts={} duplicate_slot_groups={} duplicate_slot_extras={} adjacent_overlaps={} failed_build_statuses={}\n\
-             runtime-audit: episodes logical={} metadata_rows={} thumbnail_join_rows={} multiplied_rows={} duplicate_artwork_groups={} duplicate_artwork_extras={}\n",
+             runtime-audit: episodes logical={} metadata_rows={} thumbnail_join_rows={} multiplied_rows={} duplicate_artwork_groups={} duplicate_artwork_extras={} actor_referenced_duplicate_extras={} projected_season_episode_counts=[{}]\n",
             self.timeline.rows,
             self.timeline.playouts,
             self.timeline.duplicate_slot_groups,
@@ -231,7 +242,14 @@ impl AuditReport {
             self.episodes.joined_thumbnail_rows,
             self.episodes.multiplied_rows,
             self.episodes.duplicate_artwork_groups,
-            self.episodes.duplicate_artwork_extras
+            self.episodes.duplicate_artwork_extras,
+            self.episodes.actor_referenced_duplicate_extras,
+            self.episodes
+                .projected_season_episode_counts
+                .iter()
+                .map(i64::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
         ));
         let findings = self.findings();
         for finding in &findings {
@@ -416,6 +434,39 @@ fn audit_episodes(connection: &Connection) -> Result<EpisodeAudit> {
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
+    let actor_referenced_duplicate_extras = connection.query_row(
+        r#"SELECT COALESCE(SUM(duplicate."RowCount" - 1), 0)
+           FROM (
+               SELECT "EpisodeMetadataId", "ArtworkKind", "Path", "SourcePath",
+                      COUNT(*) AS "RowCount"
+               FROM "Artwork"
+               WHERE "EpisodeMetadataId" IS NOT NULL
+               GROUP BY "EpisodeMetadataId", "ArtworkKind", "Path", "SourcePath"
+               HAVING COUNT(*) > 1
+           ) AS duplicate
+           WHERE EXISTS (
+               SELECT 1
+               FROM "Artwork" AS member
+               JOIN "Actor" AS actor ON actor."ArtworkId" = member."Id"
+               WHERE member."EpisodeMetadataId" IS duplicate."EpisodeMetadataId"
+                 AND member."ArtworkKind" = duplicate."ArtworkKind"
+                 AND member."Path" IS duplicate."Path"
+                 AND member."SourcePath" IS duplicate."SourcePath"
+           )"#,
+        [],
+        |row| row.get(0),
+    )?;
+    let mut season_statement = connection.prepare(
+        r#"SELECT COUNT(episode."Id")
+           FROM "AddonMediaListTelevisionShow" AS projection
+           JOIN "Season" AS season ON season."ShowId" = projection."ShowId"
+           LEFT JOIN "Episode" AS episode ON episode."SeasonId" = season."Id"
+           GROUP BY season."Id", season."SeasonNumber"
+           ORDER BY season."SeasonNumber", season."Id""#,
+    )?;
+    let projected_season_episode_counts = season_statement
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(EpisodeAudit {
         logical_episodes,
         metadata_rows,
@@ -423,6 +474,8 @@ fn audit_episodes(connection: &Connection) -> Result<EpisodeAudit> {
         multiplied_rows: joined_thumbnail_rows.saturating_sub(metadata_rows),
         duplicate_artwork_groups,
         duplicate_artwork_extras,
+        actor_referenced_duplicate_extras,
+        projected_season_episode_counts,
     })
 }
 
@@ -526,6 +579,8 @@ mod tests {
         assert_eq!(report.episodes.metadata_rows, 2);
         assert_eq!(report.episodes.joined_thumbnail_rows, 4);
         assert_eq!(report.episodes.duplicate_artwork_extras, 1);
+        assert_eq!(report.episodes.actor_referenced_duplicate_extras, 1);
+        assert_eq!(report.episodes.projected_season_episode_counts, [2]);
         assert_eq!(report.failed_build_statuses, 1);
 
         let rendered = report.render(&database.path, true);
@@ -582,8 +637,21 @@ mod tests {
                     "PlayoutId" INTEGER PRIMARY KEY,
                     "Success" INTEGER NOT NULL
                 );
+                CREATE TABLE "Actor" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "ArtworkId" INTEGER NULL
+                );
+                CREATE TABLE "AddonMediaListTelevisionShow" (
+                    "ShowId" INTEGER NOT NULL
+                );
+                CREATE TABLE "Season" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "ShowId" INTEGER NOT NULL,
+                    "SeasonNumber" INTEGER NOT NULL
+                );
                 CREATE TABLE "Episode" (
-                    "Id" INTEGER PRIMARY KEY
+                    "Id" INTEGER PRIMARY KEY,
+                    "SeasonId" INTEGER NOT NULL
                 );
                 CREATE TABLE "EpisodeMetadata" (
                     "Id" INTEGER PRIMARY KEY,
@@ -610,12 +678,15 @@ mod tests {
                     (2, 10, 100, '2026-08-23T00:00:00Z', '2026-08-23T01:00:00Z'),
                     (3, 10, 101, '2026-08-23T00:30:00Z', '2026-08-23T01:30:00Z');
                 INSERT INTO "PlayoutBuildStatus" VALUES (10, 0);
-                INSERT INTO "Episode" VALUES (1), (2);
+                INSERT INTO "AddonMediaListTelevisionShow" VALUES (1);
+                INSERT INTO "Season" VALUES (10, 1, 1);
+                INSERT INTO "Episode" VALUES (1, 10), (2, 10);
                 INSERT INTO "EpisodeMetadata" VALUES (100, 1), (200, 2);
                 INSERT INTO "Artwork" VALUES
                     (1, 100, 1, 'thumb-a.jpg', 'provider-a'),
                     (2, 100, 1, 'thumb-a.jpg', 'provider-a'),
                     (3, 100, 1, 'thumb-b.jpg', 'provider-b');
+                INSERT INTO "Actor" VALUES (1, 2);
                 INSERT INTO _sqlx_migrations VALUES (202608230001, 1);
                 "#,
             )

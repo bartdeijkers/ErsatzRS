@@ -8,17 +8,17 @@ summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
 Lists preserve unknown/finite/live Remote Stream behavior and use resumable
 overview-first imports with deferred fair-use details. CRF has repaired Classic
-Refresh continuity and dependency-scoped scan invalidation. AMM-H repairs
-duplicate television artwork and list rows; AMM-G-06/07 retain unavailable
+Refresh continuity, dependency-scoped scan invalidation, and AMM-H projected
+television cardinality are complete. AMM-G-06/07 retain unavailable
 episodes and close the official URL matrix. DTX-A remains the current feature
 phase, followed by Phase 9 teletext.
 '''
 
 next_steps = '''
-Before the next release, complete amm-h-01 so projected television lists are
-cardinality-safe and exact artwork duplicates are repaired. Close amm-g-06 and
-amm-g-07 for unavailable-item and source-URL acceptance. Then continue
-dtx-a-01/dtx-a-02 and resume Phase 9A at p9a-01.
+Before the next release, decide and implement proposed ADR 0080 as task 4,
+standardizing the supported database backend. Then close amm-g-06 and amm-g-07
+for unavailable-item and source-URL acceptance, continue dtx-a-01/dtx-a-02,
+and resume Phase 9A at p9a-01.
 '''
 
 [[blocking_decision]]

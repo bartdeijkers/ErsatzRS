@@ -1,5 +1,6 @@
 mod addon_media_list;
 mod addon_platform;
+mod artwork_cardinality;
 mod classic_playout_state;
 mod dirty_migration;
 mod dolby_vision;
@@ -35,6 +36,7 @@ mod zero_duration;
 
 pub(super) use addon_media_list::AddonMediaListHealthCheck;
 pub(super) use addon_platform::AddonPlatformHealthCheck;
+pub(super) use artwork_cardinality::ArtworkCardinalityHealthCheck;
 pub(super) use classic_playout_state::ClassicPlayoutStateHealthCheck;
 pub(super) use dirty_migration::DirtyMigrationHealthCheck;
 pub(super) use dolby_vision::DolbyVisionHealthCheck;

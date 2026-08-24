@@ -50,11 +50,12 @@ the resumable parser; milestone amm-g-06 owns that regression. Direct media URL
 imports can also retain list metadata while producing an empty draft, and the
 declared official-provider URL shapes lack one end-to-end acceptance matrix;
 milestone amm-g-07 owns that regression.
-Windows dogfood also reopened television projection idempotency. One metadata
-projection can persist the same thumbnail twice; the television repository's
-unbounded artwork join then returns one apparent episode row per matching
-artwork row. Milestone amm-h-01 owns producer-side deduplication, defensive
-read cardinality, exact-duplicate data repair, and health coverage.
+AMM-H closed the Windows dogfood television-cardinality regression. Artwork
+candidates are canonicalized before replacement, television and admin reads
+select one deterministic non-empty artwork winner, and narrow restart-safe
+SQLite/MySQL repairs remove only safe exact duplicates. Aggregate health and
+runtime-audit diagnostics plus a 27-episode browser proof keep the invariant
+visible without exposing media paths.
 '''
 
 [[debt]]
@@ -62,8 +63,9 @@ id          = 'addon-tv-projection-duplicates-artwork-and-list-rows'
 description = 'Keep add-on television artwork idempotent and return each projected episode exactly once in media-browser lists.'
 discovered  = '2026-08-23'
 adr         = '0075'
-evidence    = 'A redacted Windows audit found 27 unique episode/provider identities but two identical thumbnail Artwork rows on every EpisodeMetadata record; the television listing consequently returned 54 rows. addon_media_list.rs first copies metadata.artwork and then unconditionally pushes artwork_path or the first artwork_url as another thumbnail, metadata::replace_artwork inserts every candidate without deduplication, and television.rs LEFT JOINs every thumbnail row without selecting one. A second projected list showed the same invariant failure. Tracked by milestone amm-h-01 and plans/playout-refresh-and-addon-tv-deduplication.md.'
-resolved    = false
+evidence    = 'Resolved 2026-08-24: publication and shared replacement deduplicate semantic artwork identities; scalar subqueries choose the lowest-ID non-empty artwork without multiplying television rows; restart-safe SQLite and live MySQL 8.4 repair proof preserves variants, operator rows, and Actor-referenced sets. Repository and projection regressions keep 27 episodes split 13/14 through publish, refresh, and restart, while Chromium and Firefox prove unique browser links and stable thumbnails.'
+resolved    = true
+resolution  = 'Producer, storage-repair, defensive-read, health, runtime-audit, restart, and browser layers now enforce or report the projected television cardinality invariant.'
 
 [[debt]]
 id          = 'direct-and-aggregate-addon-list-url-shapes-are-not-accepted-consistently'

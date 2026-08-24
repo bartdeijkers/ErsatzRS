@@ -889,13 +889,21 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             }
         }
         let season_rows = sqlx::query(
-            r#"SELECT season."Id", season."SeasonNumber", artwork."Path" AS "Poster"
+            r#"SELECT season."Id", season."SeasonNumber",
+                      (
+                          SELECT artwork."Path"
+                          FROM "Artwork" artwork
+                          JOIN "SeasonMetadata" artwork_metadata
+                            ON artwork_metadata."Id" = artwork."SeasonMetadataId"
+                          WHERE artwork_metadata."SeasonId" = season."Id"
+                            AND artwork."ArtworkKind" = 0
+                            AND NULLIF(TRIM(artwork."Path"), '') IS NOT NULL
+                          ORDER BY artwork."Id"
+                          LIMIT 1
+                      ) AS "Poster"
                FROM "Season" season
-               JOIN "SeasonMetadata" metadata ON metadata."SeasonId" = season."Id"
-               LEFT JOIN "Artwork" artwork
-                 ON artwork."SeasonMetadataId" = metadata."Id"
-                AND artwork."ArtworkKind" = 0
-               WHERE season."ShowId" = ? ORDER BY season."SeasonNumber""#,
+               WHERE season."ShowId" = ?
+               ORDER BY season."SeasonNumber", season."Id""#,
         )
         .bind(id)
         .fetch_all(&self.0)

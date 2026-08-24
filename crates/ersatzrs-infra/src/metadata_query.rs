@@ -43,8 +43,8 @@ pub(crate) async fn load_strings(
         .repository()
 }
 
-/// Load a single `Artwork.Path` of the given kind owned by the given
-/// metadata row.
+/// Load the lowest-id non-empty `Artwork.Path` of the given kind owned by the
+/// given metadata row.
 pub(crate) async fn load_artwork_path(
     pool: &Pool<crate::db::Db>,
     owner_column: &str,
@@ -53,7 +53,9 @@ pub(crate) async fn load_artwork_path(
 ) -> Result<Option<String>> {
     let sql = format!(
         r#"SELECT "Path" FROM "Artwork"
-           WHERE "{owner_column}" = ? AND "ArtworkKind" = ? LIMIT 1"#
+           WHERE "{owner_column}" = ? AND "ArtworkKind" = ?
+             AND NULLIF(TRIM("Path"), '') IS NOT NULL
+           ORDER BY "Id" LIMIT 1"#
     );
     sqlx::query_scalar::<_, Option<String>>(crate::db::assert_sql_safe(&sql))
         .bind(metadata_id)
