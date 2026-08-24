@@ -43,6 +43,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Restored the scoped `cargo-deny` exception for the RSA timing advisory that
+  is bundled by `jsonwebtoken`'s RustCrypto provider. ErsatzRS IPTV tokens are
+  restricted to HS256 shared secrets and never execute the affected RSA
+  private-key operation; the corrected policy replaces the obsolete MySQL
+  rationale and keeps dependency CI enforceable.
+
 - Add-on television publication now canonicalizes repeated artwork candidates,
   reads one deterministic thumbnail per projected item, repairs only safe exact
   duplicates in existing SQLite/MySQL databases, and reports aggregate
