@@ -320,6 +320,7 @@ function seedAddonLists(testInfo: TestInfo): AddonListSeed {
     guids: [`fixture://editor-${suffix}`],
     source_url: `https://example.invalid/watch/editor-${suffix}`,
     content_kind: 'other_video',
+    liveness: 'finite',
   };
   const editorUnavailableRecord = JSON.stringify({
     ...editorItemBase,
@@ -390,7 +391,7 @@ fi
     license: 'Zlib',
     source_url: 'https://example.invalid/e2e-addon',
     host_version: '*',
-    capabilities: [{ id: 'addon.check.v1' }, { id: 'media-list.list.v2' }],
+    capabilities: [{ id: 'addon.check.v1' }, { id: 'media-list.list.v5' }],
     dependencies: [],
     entrypoints: {
       any: { path: 'addon.sh', kind: 'posix_shell' },
