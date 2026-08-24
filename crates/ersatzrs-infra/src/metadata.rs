@@ -894,16 +894,6 @@ mod tests {
     }
 
     async fn artwork_test_pool() -> crate::db::DbPool {
-        #[cfg(feature = "mysql")]
-        let pool = {
-            sqlx::any::install_default_drivers();
-            sqlx::any::AnyPoolOptions::new()
-                .max_connections(1)
-                .connect("sqlite::memory:")
-                .await
-                .expect("connect artwork test database")
-        };
-        #[cfg(not(feature = "mysql"))]
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")

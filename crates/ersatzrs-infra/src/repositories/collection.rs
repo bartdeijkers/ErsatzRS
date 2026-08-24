@@ -1386,7 +1386,7 @@ impl CollectionRepository for SqliteCollectionRepository {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let mut added = 0;
         for media_item_id in media_item_ids {
-            let sqlite_sql = r#"INSERT INTO "CollectionItem" (
+            let sql = r#"INSERT INTO "CollectionItem" (
                              "CollectionId", "MediaItemId", "PreferredAudioLanguageCode",
                              "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "SubtitleMode"
                          )
@@ -1399,30 +1399,6 @@ impl CollectionRepository for SqliteCollectionRepository {
                                AND "PreferredSubtitleLanguageCode" IS ?
                                AND "SubtitleMode" IS ?
                          )"#;
-            let mysql_sql = r"INSERT INTO `CollectionItem` (
-                            `CollectionId`, `MediaItemId`, `PreferredAudioLanguageCode`,
-                            `PreferredAudioTitle`, `PreferredSubtitleLanguageCode`, `SubtitleMode`
-                        )
-                        SELECT ?, ?, ?, ?, ?, ? FROM DUAL
-                        WHERE NOT EXISTS (
-                            SELECT 1 FROM `CollectionItem`
-                            WHERE `CollectionId` = ? AND `MediaItemId` = ?
-                              AND `PreferredAudioLanguageCode` <=> ?
-                              AND `PreferredAudioTitle` <=> ?
-                              AND `PreferredSubtitleLanguageCode` <=> ?
-                              AND `SubtitleMode` <=> ?
-                        )";
-            #[cfg(feature = "mysql")]
-            let sql = if tx.as_mut().backend_name() == "MySQL" {
-                mysql_sql
-            } else {
-                sqlite_sql
-            };
-            #[cfg(not(feature = "mysql"))]
-            let sql = {
-                let _ = mysql_sql;
-                sqlite_sql
-            };
             let result = sqlx::query(sql)
                 .bind(collection_id)
                 .bind(media_item_id)
@@ -2131,24 +2107,8 @@ async fn inserted_id(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     result: crate::db::DbQueryResult,
 ) -> Result<EntityId> {
-    #[cfg(feature = "mysql")]
-    {
-        let _ = result;
-        let sql = if tx.as_mut().backend_name() == "MySQL" {
-            "SELECT LAST_INSERT_ID()"
-        } else {
-            "SELECT last_insert_rowid()"
-        };
-        sqlx::query_scalar(sql)
-            .fetch_one(&mut **tx)
-            .await
-            .repository()
-    }
-    #[cfg(not(feature = "mysql"))]
-    {
-        let _ = tx;
-        Ok(result.last_insert_rowid())
-    }
+    let _ = tx;
+    Ok(result.last_insert_rowid())
 }
 
 fn map_collection(row: &DbRow) -> Result<Collection> {

@@ -759,7 +759,6 @@ mod tests {
     }
 
     // Only used by the SQLite-backed lifecycle tests below.
-    #[cfg(not(feature = "mysql"))]
     async fn test_pool() -> DbPool {
         let dir = std::env::temp_dir().join(format!("ersatzrs-graph-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("create temp db dir");
@@ -769,7 +768,6 @@ mod tests {
     }
 
     // Only used by the SQLite-backed lifecycle tests below.
-    #[cfg(not(feature = "mysql"))]
     fn denial(device: &str) -> HardwareGraphDenial {
         HardwareGraphDenial::new(
             HardwareGraphOperation::NvencHdrVulkanLibplacebo,
@@ -778,7 +776,6 @@ mod tests {
         )
     }
 
-    #[cfg(not(feature = "mysql"))]
     fn probed_report(gpu: &str) -> FfmpegCapabilityReport {
         let selected = ersatzrs_ffmpeg::NvidiaDeviceIdentity {
             index: 0,
@@ -808,7 +805,6 @@ mod tests {
     /// A concurrent worker can still hold the startup snapshot after another
     /// worker has published its denial. Persisting the stale snapshot must not
     /// erase the first denial from the restart state.
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn stale_worker_snapshot_persists_shared_denials_for_restart() {
         let pool = test_pool().await;
@@ -879,7 +875,6 @@ mod tests {
         assert!(restarted.hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, &device));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn a_previous_runtime_generation_cannot_poison_the_active_graph_state() {
         let pool = test_pool().await;
@@ -924,7 +919,6 @@ mod tests {
     /// This row is written at startup and on every `FFmpeg` settings save, so a
     /// backend-specific statement here breaks both. The `MySQL` half of this
     /// lifecycle lives in `tests/mysql_backend.rs`.
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn graph_state_persists_overwrites_clears_and_reloads() {
         let pool = test_pool().await;
@@ -984,7 +978,6 @@ mod tests {
     }
 
     /// ADR 0014: denials are keyed to the binary digest they were learned against.
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn a_changed_ffmpeg_digest_clears_stored_denials_at_startup() {
         let pool = test_pool().await;
@@ -1026,7 +1019,6 @@ mod tests {
     /// stream, so the steps they perform are driven here instead: classify the
     /// failing stderr, persist a device-scoped denial, and confirm the reloaded
     /// state is what a rebuilt command would select from.
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn a_runtime_graph_failure_is_classified_persisted_and_reloadable() {
         let pool = test_pool().await;
@@ -1105,7 +1097,6 @@ mod tests {
 
     /// A record is reusable only with matching identities and terminal evidence
     /// for every applicable operation.
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn only_a_complete_identity_matching_record_is_reused() {
         let gpu = "NVIDIA GeForce RTX 3080 Ti";
@@ -1181,7 +1172,6 @@ mod tests {
     }
 
     /// A row written before completion tracking existed cannot be attributed.
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn a_legacy_record_is_discarded_rather_than_trusted() {
         let pool = test_pool().await;

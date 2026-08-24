@@ -325,7 +325,7 @@ pub async fn run_scan_worker(
     tracing::info!("scanner worker shutting down");
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use ersatzrs_domain::ScanPlayoutRefreshReason;

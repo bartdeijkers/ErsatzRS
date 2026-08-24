@@ -132,8 +132,8 @@ an already persisted next-eligible time. Provider `Retry-After` and retry
 backoff may extend it.
 
 Overview pages, per-item outcomes, leases, retries, and progress are durable in
-SQLite and MySQL. A restart resumes committed work without refetching completed
-items. No incomplete or inconsistent overview generation can publish, while
+SQLite. A restart resumes committed work without refetching completed items.
+No incomplete or inconsistent overview generation can publish, while
 optional item details never block first publication.
 
 ## List record

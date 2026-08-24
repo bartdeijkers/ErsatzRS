@@ -9,7 +9,6 @@
 //! concurrency. `ersatzrs_infra::db::begin_write` issues `BEGIN IMMEDIATE`
 //! instead, which takes the write lock up front where `busy_timeout` does
 //! apply, so concurrent writers queue rather than fail.
-#![cfg(not(feature = "mysql"))]
 
 use std::time::Duration;
 

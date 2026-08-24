@@ -643,22 +643,6 @@ mod tests {
         assert!(!is_safe_relative_path("a/../../b"));
     }
 
-    #[cfg(feature = "mysql")]
-    async fn test_db() -> ersatzrs_infra::db::DbPool {
-        sqlx::any::install_default_drivers();
-        let pool = sqlx::any::AnyPoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .expect("create in-memory sqlite pool");
-        sqlx::migrate!("../../migrations")
-            .run(&pool)
-            .await
-            .expect("run migrations");
-        pool
-    }
-
-    #[cfg(not(feature = "mysql"))]
     async fn test_db() -> ersatzrs_infra::db::DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)

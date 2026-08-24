@@ -2786,7 +2786,6 @@ mod tests {
     use super::*;
     use chrono::TimeZone;
 
-    #[cfg(not(feature = "mysql"))]
     async fn source_stream_test_pool() -> DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -2855,7 +2854,6 @@ mod tests {
         pool
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn source_video_loader_distinguishes_absence_decode_and_database_failure() {
         let pool = source_stream_test_pool().await;
@@ -2894,7 +2892,6 @@ mod tests {
         ));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn source_video_loader_preserves_null_codec_as_absent_metadata() {
         let pool = source_stream_test_pool().await;
@@ -2932,7 +2929,6 @@ mod tests {
         ));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn source_video_loader_requires_the_persisted_dolby_vision_base_layer_flag() {
         let pool = source_stream_test_pool().await;
@@ -2982,7 +2978,6 @@ mod tests {
         assert!(incomplete.reason.contains("required fields are missing"));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn source_audio_loader_rejects_malformed_rows_instead_of_dropping_them() {
         let pool = source_stream_test_pool().await;
@@ -3002,7 +2997,6 @@ mod tests {
         ));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn target_frame_rate_loader_distinguishes_absence_decode_and_database_failure() {
         let pool = source_stream_test_pool().await;

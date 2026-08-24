@@ -2204,7 +2204,6 @@ mod tests {
         assert!(detail_retry_seconds(20) <= 3_600);
     }
 
-    #[cfg(not(feature = "mysql"))]
     mod sqlite {
         use super::*;
 

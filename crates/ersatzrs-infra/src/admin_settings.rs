@@ -262,7 +262,7 @@ pub async fn delete_custom_resolution(pool: &DbPool, id: i64) -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use super::*;
 

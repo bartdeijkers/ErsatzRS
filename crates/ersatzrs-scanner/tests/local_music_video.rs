@@ -5,8 +5,6 @@
 //! Like [`local_scan.rs`] this is `#[ignore]`-gated on `ffprobe` + the Big
 //! Buck Bunny fixture; run with `./run.sh test -p ersatzrs-scanner --run-ignored ignored-only`.
 
-#![cfg(not(feature = "mysql"))]
-
 use std::env;
 use std::path::{Path, PathBuf};
 

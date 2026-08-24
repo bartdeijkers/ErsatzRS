@@ -33,11 +33,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [dev-dependencies]
 httpmock = "0.8"
 
-[features]
-default = []
-mysql = ["ersatzrs-infra/mysql"]
-mysql-integration = ["mysql", "ersatzrs-infra/mysql-integration"]
-
 [lib]
 name = "ersatzrs_scanner"
 path = "src/lib.rs"

@@ -22,11 +22,6 @@ impl HealthCheck for SqliteConnectionDefaultsHealthCheck {
     async fn check(&self) -> Result<HealthCheckResult> {
         let mut connection = self.pool.acquire().await.map_err(sqlx_error)?;
 
-        #[cfg(feature = "mysql")]
-        if connection.backend_name() != "SQLite" {
-            return Ok(HealthCheckResult::not_applicable(self.title()));
-        }
-
         let foreign_keys: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
             .fetch_one(&mut *connection)
             .await

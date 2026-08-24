@@ -635,7 +635,7 @@ async fn count_stale_replacements(pool: &Pool<Db>) -> Result<i64> {
     Ok(stale)
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use sqlx::sqlite::SqlitePoolOptions;
 

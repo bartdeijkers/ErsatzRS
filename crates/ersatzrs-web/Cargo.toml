@@ -111,17 +111,6 @@ ssr = ["leptos/ssr", "leptos_router/ssr", "leptos_meta/ssr"]
 # is not sufficient to expose them; the runtime opt-in documented in
 # `docs/reference/configuration.md` is required as well.
 development-routes = []
-mysql = [
-    "ersatzrs-infra/mysql",
-    "ersatzrs-scanner/mysql",
-    "ersatzrs-scheduler/mysql",
-]
-mysql-integration = [
-    "mysql",
-    "ersatzrs-infra/mysql-integration",
-    "ersatzrs-scanner/mysql-integration",
-    "ersatzrs-scheduler/mysql-integration",
-]
 
 [lints]
 workspace = true

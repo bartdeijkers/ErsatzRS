@@ -235,7 +235,6 @@ impl HealthCheck for DolbyVisionHealthCheck {
 #[cfg(test)]
 mod tests {
     use super::rejection_reason;
-    #[cfg(not(feature = "mysql"))]
     use super::{DolbyVisionHealthCheck, HealthCheck};
     use ersatzrs_ffmpeg::HardwareGraphOperation;
 
@@ -315,7 +314,6 @@ mod tests {
         assert_eq!(exact_input_reason(profile_5(), &runtime), None);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn health_counts_each_rejected_stream_and_names_its_media_version() {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()

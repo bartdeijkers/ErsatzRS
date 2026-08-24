@@ -764,19 +764,16 @@ pub async fn load_ids(pool: &Pool<crate::db::Db>, sql: &str, parent_id: i64) -> 
 
 /// Turns a plain `INSERT INTO` statement into a cascade-safe upsert.
 ///
-/// `REPLACE INTO` is not an update: on both `SQLite` and `MySQL` it deletes the
-/// conflicting row before inserting the replacement, and that delete fires
-/// `ON DELETE CASCADE`. Any table whose primary key is a cascade parent
-/// therefore loses all of its children every time a row is "replaced", while
-/// the row itself looks untouched. Editing an `FFmpeg` profile destroyed every
-/// channel using it exactly this way on 2026-08-12.
+/// `REPLACE INTO` is not an update: it deletes the conflicting row before
+/// inserting the replacement, and that delete fires `ON DELETE CASCADE`. Any
+/// table whose primary key is a cascade parent therefore loses all of its
+/// children every time a row is "replaced", while the row itself looks
+/// untouched. Editing an `FFmpeg` profile destroyed every channel using it
+/// exactly this way on 2026-08-12.
 ///
 /// A real upsert never deletes the row, so no cascade runs. It also preserves
 /// columns the statement does not list, where `REPLACE` silently reset them to
 /// their schema defaults.
-///
-/// Identifiers stay double-quoted for both backends because `MySQL` sessions
-/// are opened with `ANSI_QUOTES`.
 ///
 /// `insert_sql` must be an `INSERT INTO "Table" ("A", "B", ...) VALUES (...)`
 /// statement; `conflict_columns` are the key columns that identify an existing
@@ -787,10 +784,7 @@ pub async fn load_ids(pool: &Pool<crate::db::Db>, sql: &str, parent_id: i64) -> 
 /// `UNIQUE constraint failed` where it previously succeeded. The primary key is
 /// never assigned, so a conflict on a secondary key updates the existing row in
 /// place instead of moving its identity out from under its children.
-///
-/// `MySQL` needs only one clause: `ON DUPLICATE KEY UPDATE` already fires for
-/// every unique key.
-pub(crate) fn cascade_safe_upsert(insert_sql: &str, keys: &[&[&str]], is_mysql: bool) -> String {
+pub(crate) fn cascade_safe_upsert(insert_sql: &str, keys: &[&[&str]]) -> String {
     let columns = insert_columns(insert_sql);
     let primary_key = keys.first().copied().unwrap_or(&[]);
 
@@ -800,27 +794,10 @@ pub(crate) fn cascade_safe_upsert(insert_sql: &str, keys: &[&[&str]], is_mysql: 
             .filter(|column| {
                 !target.contains(&column.as_str()) && !primary_key.contains(&column.as_str())
             })
-            .map(|column| {
-                if is_mysql {
-                    format!("\"{column}\" = VALUES(\"{column}\")")
-                } else {
-                    format!("\"{column}\" = excluded.\"{column}\"")
-                }
-            })
+            .map(|column| format!("\"{column}\" = excluded.\"{column}\""))
             .collect::<Vec<_>>()
             .join(", ")
     };
-
-    if is_mysql {
-        let updates = assignments(primary_key);
-        // Every column belongs to the key, so there is nothing to assign.
-        // Re-assigning the key is the idiomatic no-op that keeps the row.
-        if updates.is_empty() {
-            let first = primary_key.first().copied().unwrap_or_default();
-            return format!("{insert_sql}\nON DUPLICATE KEY UPDATE \"{first}\" = \"{first}\"");
-        }
-        return format!("{insert_sql}\nON DUPLICATE KEY UPDATE {updates}");
-    }
 
     let mut sql = insert_sql.to_owned();
     for target in keys {
@@ -844,11 +821,7 @@ pub(crate) fn cascade_safe_upsert(insert_sql: &str, keys: &[&[&str]], is_mysql: 
 macro_rules! upsert_sql {
     ($insert:expr, $keys:expr $(,)?) => {{
         static UPSERT_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
-            $crate::repositories::common::cascade_safe_upsert(
-                $insert,
-                $keys,
-                $crate::db::connected_backend_is_mysql(),
-            )
+            $crate::repositories::common::cascade_safe_upsert($insert, $keys)
         });
         UPSERT_SQL.as_str()
     }};
@@ -946,7 +919,7 @@ mod tests {
 
     #[test]
     fn sqlite_upsert_updates_every_non_key_column() {
-        let sql = cascade_safe_upsert(CHANNEL_INSERT, &[&["Id"]], false);
+        let sql = cascade_safe_upsert(CHANNEL_INSERT, &[&["Id"]]);
         assert!(sql.starts_with("INSERT INTO \"Channel\""), "{sql}");
         assert!(
             sql.ends_with(
@@ -962,30 +935,14 @@ mod tests {
     }
 
     #[test]
-    fn mysql_upsert_uses_duplicate_key_syntax() {
-        let sql = cascade_safe_upsert(CHANNEL_INSERT, &[&["Id"]], true);
-        assert!(
-            sql.ends_with(
-                "ON DUPLICATE KEY UPDATE \
-                 \"Name\" = VALUES(\"Name\"), \"Group\" = VALUES(\"Group\")"
-            ),
-            "{sql}"
-        );
-    }
-
-    #[test]
     fn key_only_statements_keep_the_existing_row() {
         // Join tables such as PlayoutItemWatermark are entirely key columns, so
         // there is nothing to SET. The row and its children must survive.
         let join =
             r#"INSERT INTO "PlayoutItemWatermark" ("PlayoutItemId", "WatermarkId") VALUES (?, ?)"#;
         assert!(
-            cascade_safe_upsert(join, &[&["PlayoutItemId", "WatermarkId"]], false)
+            cascade_safe_upsert(join, &[&["PlayoutItemId", "WatermarkId"]])
                 .ends_with("ON CONFLICT(\"PlayoutItemId\", \"WatermarkId\") DO NOTHING")
-        );
-        assert!(
-            cascade_safe_upsert(join, &[&["PlayoutItemId", "WatermarkId"]], true)
-                .contains("ON DUPLICATE KEY UPDATE")
         );
     }
 }

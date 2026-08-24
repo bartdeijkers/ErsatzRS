@@ -122,9 +122,7 @@ switch ($Command) {
         }
         cargo nextest run --workspace
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        cargo nextest run --workspace --all-features
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        cargo test --workspace --all-features --doc
+        cargo test --workspace --doc
         exit $LASTEXITCODE
     }
     'build' {

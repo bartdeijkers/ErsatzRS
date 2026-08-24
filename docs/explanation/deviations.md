@@ -91,10 +91,24 @@ ADR: [0004](../adr/0004-collapsed-initial-schema.md)
 
 ## sqlx instead of EF Core
 
-ErsatzRS uses explicit SQL through sqlx, with SQLite as the default backend and
-MySQL support behind a Cargo feature flag.
+ErsatzRS uses explicit SQL through sqlx. ADR 0006 records the original backend
+choice and its historical optional-MySQL context; ADR 0080 now makes SQLite the
+sole supported backend.
 
 ADR: [0006](../adr/0006-sqlx-over-sea-orm.md)
+
+Current database ADR: [0080](../adr/0080-standardize-on-sqlite.md)
+
+## SQLite instead of MySQL or MariaDB parity
+
+ErsatzTV supports client-server MySQL deployments. ErsatzRS is a single-host
+media server and standardizes on SQLite so every migration, health check, and
+release path receives the same proof. The web host and scanner can share one
+local database file, but active-active servers and network filesystems are not
+supported. Operators of historical source-built MySQL variants require an
+offline migration before upgrading to a SQLite-only release.
+
+ADR: [0080](../adr/0080-standardize-on-sqlite.md)
 
 ## SQL-backed search without Elasticsearch
 

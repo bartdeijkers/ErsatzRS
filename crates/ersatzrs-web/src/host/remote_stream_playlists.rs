@@ -500,7 +500,7 @@ async fn troubleshoot_with_pool(
     })
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;

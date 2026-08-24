@@ -4760,7 +4760,6 @@ mod tests {
             .is_err());
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn forced_reference_cleanup_removes_media_lists_and_only_generated_playlists() {
         let temp = tempfile::tempdir().expect("temp directory");

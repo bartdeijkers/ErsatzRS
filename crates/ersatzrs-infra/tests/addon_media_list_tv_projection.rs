@@ -4,7 +4,6 @@
 //! managed add-on list. It had no test, which is how a projection that omitted
 //! `SeasonMetadata` — leaving projected seasons invisible to every consumer that
 //! joins metadata to resolve a season title — reached a running system.
-#![cfg(not(feature = "mysql"))]
 
 mod common;
 

@@ -1155,7 +1155,7 @@ async fn fetch_base_source(
     })
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use super::*;
 

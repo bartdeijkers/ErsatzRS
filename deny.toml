@@ -5,12 +5,6 @@ ignore = [
   # Transitive through Leptos 0.7/tachys/either_of. No safe upstream upgrade is
   # available yet; revisit when Leptos moves off paste.
   "RUSTSEC-2024-0436",
-  # Marvin Attack timing sidechannel in `rsa`, pulled in transitively by
-  # sqlx-mysql for MySQL auth. No upstream patch yet (RustCrypto/RSA#626).
-  # ErsatzRS connects to the database over a trusted local/internal network
-  # only, so the network-observable timing channel does not apply to our
-  # threat model. Re-evaluate when RustCrypto ships a constant-time fix.
-  "RUSTSEC-2023-0071",
   # Transitive through Leptos 0.8 proc macros (leptos_macro,
   # leptos_router_macro, reactive_stores_macro, rstml/syn_derive). No safe
   # upstream upgrade is available yet; revisit when Leptos migrates away from

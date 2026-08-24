@@ -39,7 +39,7 @@ For the test pyramid and Playwright playbooks, see [TEST.md](TEST.md).
 | `./run.sh dev`   | Build the scanner companion, then run the Leptos hot loop.  |
 | `./run.sh check` | Fast inner-loop `cargo check` (no codegen/link); scope with `-p <crate>`. |
 | `./run.sh test`  | Focused/local nextest run; requires explicit crate/filter arguments. |
-| `./run.sh test-closeout` | Two workspace nextest passes (without and with `--all-features`) then Cargo doctests. |
+| `./run.sh test-closeout` | One workspace nextest pass, then Cargo doctests. |
 | `./run.sh build` | Build the scanner companion, then build and run the web host. |
 | `./run.sh serve` | Build the scanner companion, then rebuild and serve once.   |
 | `./run.sh seed`  | Apply `tests/fixtures/seed_admin.sql` to the SQLite db.     |
@@ -81,8 +81,7 @@ slots, failed build statuses, and episode/artwork join cardinality. `--redact`
 hides the database path and replaces playout IDs with local ordinals; titles,
 URLs, media paths, and channel names are never queried. Findings are diagnostic
 and keep exit status zero; invalid arguments, unreadable/corrupt databases, or
-missing ErsatzRS schema return failure. MySQL incidents require equivalent
-backend-native read-only queries.
+missing ErsatzRS schema return failure.
 
 Run `cargo xtask architecture-lint` after changing crate dependencies,
 `ersatzrs-app`, or production admin data loaders. It enforces ADR 0051 and
@@ -125,12 +124,6 @@ Cargo tools; self-hosted runs leave the maintainer's existing tool binaries
 untouched. The full test selection remains intact, and self-hosted CI retains
 the single canonical workspace Test job. This path remains an explicit
 fallback rather than the default.
-
-The focused `MySQL health and continuity contract` job always runs on
-GitHub-hosted Ubuntu with an isolated MySQL 8 service. It injects
-`ERSATZRS_MYSQL_TEST_URL` and executes both the Output Dynamic Range
-classification regression and scoped Classic scan-refresh restart regression
-without the environment-based skip used by local MySQL integration tests.
 
 Because the self-hosted runner is a single physical machine, every job in
 `ci.yml` queues and runs serially on it — there is no wall-clock parallelism
@@ -216,13 +209,9 @@ overridden to the `/mnt/f` (9p) scratch mount (see "Performance baseline"
 below) — no such override is committed today, so `target-dir` resolves to the
 default `./target` unless you add one yourself:
 
-1. `cargo run --bin ersatzrs-web` — native, default features, binary.
+1. `cargo run --bin ersatzrs-web` — native binary.
 2. `cargo clippy --workspace --all-targets` — adds test/example targets.
-3. `cargo clippy … --features mysql` — different feature union → recompiles
-   `sqlx` and every downstream crate.
-4. `cargo test --workspace --all-features` — yet another feature union + test
-   harness codegen.
-5. `cargo leptos build` — the `wasm32` target, an entirely separate triple.
+3. `cargo leptos build` — the `wasm32` target, an entirely separate triple.
 
 Keep the edit loop cheap by **not** flipping configurations while iterating:
 
@@ -235,28 +224,20 @@ Keep the edit loop cheap by **not** flipping configurations while iterating:
 - **UI work:** `./run.sh dev` (`cargo leptos watch`) — keeps the SSR binary and
   WASM bundle in lockstep; never pair a standalone `cargo leptos build` with a
   separate `cargo run` while iterating.
-- Run the full multi-config gate (the two clippy passes, `./run.sh
-  test-closeout`, `cargo leptos build`, `cargo xtask parity-check`) **once at
+- Run the full gate (`cargo clippy`, `./run.sh test-closeout`, `cargo leptos
+  build`, `cargo xtask parity-check`) **once at
   closeout**, not per edit.
 
 Nextest does not run doctests. `./run.sh test-closeout` therefore runs nextest
 for unit/integration/binary tests and then uses Cargo only for workspace
 doctests. Direct agent `cargo test` commands are blocked by the checked-in
 Codex/Claude hooks; use the wrappers so focused testing cannot drift back to
-Cargo. CI intentionally remains on its existing
-`cargo test --workspace --all-features --lib --bins --tests` selection.
+Cargo. CI intentionally remains on its direct
+`cargo test --workspace --lib --bins --tests` selection.
 
-**Two nextest passes, for the same reason clippy needs two.** `--all-features`
-enables `mysql`, and every integration test file that opens with
-`#![cfg(not(feature = "mysql"))]` then compiles to nothing. Running only that
-configuration is not a stricter superset — it is a different, smaller set, so
-the closeout runs the plain workspace pass first and the `--all-features` pass
-after it.
-
-This is not theoretical. Until 2026-08-19 the closeout ran only the
-`--all-features` pass, hiding 322 tests, two of which had been failing on a
-seeded `MediaStreamKind` of `0` where the enum is 1-based. A green closeout said
-nothing about them.
+The closeout deliberately uses the sole supported SQLite graph. Historical
+dual-backend feature combinations are not part of current development or
+release acceptance.
 
 ### Optional: sccache (recommended if your target-dir sits on a slow disk)
 
@@ -281,8 +262,7 @@ where it is usable instead:
 
 - `./run.sh` enables sccache for its subcommands automatically when `sccache` is
   on `PATH` (it runs as the cache owner).
-- To also cache the manual closeout gate (the two clippy passes and
-  `./run.sh test-closeout`),
+- To also cache the manual closeout gate (clippy and `./run.sh test-closeout`),
   `export RUSTC_WRAPPER=sccache` in your own interactive shell (`~/.bashrc`).
 - Keep only the cache location in your global `~/.cargo/config.toml` `[env]`
   (inert unless `RUSTC_WRAPPER=sccache` is set), pointed at fast ext4, not the

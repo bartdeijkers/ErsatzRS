@@ -886,27 +886,11 @@ fn schedule_item_collection_name(row: &DbRow, id: EntityId) -> Result<String> {
 }
 
 async fn load_schedule_item_options_admin(pool: &Pool<Db>) -> Result<ScheduleItemOptions> {
-    let sqlite_seasons_sql = r#"SELECT "s"."Id",
+    let seasons_sql = r#"SELECT "s"."Id",
                                 COALESCE("sm"."Title", 'Season ' || "s"."SeasonNumber") AS "Name"
                          FROM "Season" AS "s"
                          LEFT JOIN "SeasonMetadata" AS "sm" ON "sm"."SeasonId" = "s"."Id"
                          ORDER BY "sm"."Title", "s"."SeasonNumber", "s"."Id""#;
-    let mysql_seasons_sql = r"SELECT `s`.`Id`,
-                                COALESCE(`sm`.`Title`, CONCAT('Season ', `s`.`SeasonNumber`)) AS `Name`
-                         FROM `Season` AS `s`
-                         LEFT JOIN `SeasonMetadata` AS `sm` ON `sm`.`SeasonId` = `s`.`Id`
-                         ORDER BY `sm`.`Title`, `s`.`SeasonNumber`, `s`.`Id`";
-    #[cfg(feature = "mysql")]
-    let seasons_sql = if pool.acquire().await.repository()?.backend_name() == "MySQL" {
-        mysql_seasons_sql
-    } else {
-        sqlite_seasons_sql
-    };
-    #[cfg(not(feature = "mysql"))]
-    let seasons_sql = {
-        let _ = mysql_seasons_sql;
-        sqlite_seasons_sql
-    };
     Ok(ScheduleItemOptions {
         collections: load_schedule_simple_options(
             pool,

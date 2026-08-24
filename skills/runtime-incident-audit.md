@@ -15,7 +15,7 @@ copies. Prefer aggregate counts and stable schema relationships.
 ## Evidence chain
 
 1. Record the observation window, server version/commit when available, process
-   executable path, executable hash, database backend, and health result.
+   executable path, executable hash, SQLite database path, and health result.
 2. Confirm the executable is the configured-target or packaged binary rather
    than a stale `target/debug` artifact.
 3. Read only the bounded log window surrounding the event. Correlate scan,
@@ -23,9 +23,10 @@ copies. Prefer aggregate counts and stable schema relationships.
 4. For SQLite, run
    `cargo xtask runtime-audit --db <database> --redact`. It opens the file
    read-only and reports integrity, Classic anchor state, playout timeline
-   anomalies, and episode/artwork cardinality without titles or paths. For
-   MySQL, use equivalent read-only aggregate queries; do not convert or mutate a
-   database merely to use this helper.
+   anomalies, and episode/artwork cardinality without titles or paths. A
+   historical MySQL/MariaDB deployment must stay on its recorded compatible
+   revision and follow ADR 0080's offline preservation/migration guidance; do
+   not point the SQLite-only runtime or this helper at it.
 5. Count at each layer: provider identity, `MediaItem`, subtype, metadata,
    related rows, repository query rows, and rendered rows. This distinguishes a
    duplicate import from a one-to-many join multiplying one logical item.

@@ -82,7 +82,7 @@ impl HealthCheck for LocalTelevisionIdentityHealthCheck {
     }
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use sqlx::Executor;

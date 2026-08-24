@@ -1,5 +1,3 @@
-#![cfg(not(feature = "mysql"))]
-
 use std::fs;
 use std::path::{Path, PathBuf};
 

@@ -2390,7 +2390,7 @@ const fn collection_type_for_kind(kind: AddonMediaListItemKind) -> i32 {
     }
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod generated_playlist_refresh_tests {
     use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::Executor as _;

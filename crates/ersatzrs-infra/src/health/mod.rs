@@ -1539,7 +1539,6 @@ mod tests {
     }
     /// Seed one HDR10-selected profile plus a channel that uses it.
     // Only used by the SQLite-backed HDR10 health tests below.
-    #[cfg(not(feature = "mysql"))]
     async fn seed_hdr10_profile_and_channel(
         pool: &Pool<Db>,
         id: i64,
@@ -1561,7 +1560,6 @@ mod tests {
     }
 
     // Only used by the SQLite-backed HDR10 health tests below.
-    #[cfg(not(feature = "mysql"))]
     #[allow(clippy::too_many_arguments)]
     async fn seed_hdr10_profile_with_acceleration(
         pool: &Pool<Db>,
@@ -1612,7 +1610,6 @@ mod tests {
             .expect("seed channel");
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn output_dynamic_range_check_is_not_applicable_without_hdr10_profiles() {
         let pool = test_pool().await;
@@ -1622,7 +1619,6 @@ mod tests {
         assert_eq!(result.status, HealthCheckStatus::NotApplicable);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn output_dynamic_range_check_passes_for_a_valid_hdr10_profile() {
         let pool = test_pool().await;
@@ -1634,7 +1630,6 @@ mod tests {
         assert_eq!(result.status, HealthCheckStatus::Pass);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn output_dynamic_range_check_fails_for_unsupported_codec_and_bit_depth() {
         let pool = test_pool().await;
@@ -1668,7 +1663,6 @@ mod tests {
     ///
     /// `transcode_video`/`video_format` decide whether the channel copies, which
     /// is the whole condition the check keys on.
-    #[cfg(not(feature = "mysql"))]
     async fn seed_rotated_item_on_channel(
         pool: &Pool<Db>,
         id: i64,
@@ -1735,7 +1729,6 @@ mod tests {
     /// ADR 0003 / `p8c-02`: MPEG-TS cannot carry a display matrix, so a
     /// stream-copied rotated item reaches clients sideways. Transcoding bakes
     /// the rotation into the pixels, so it must not be reported.
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn source_orientation_check_reports_only_copied_rotated_items() {
         let pool = test_pool().await;
@@ -1787,7 +1780,6 @@ mod tests {
     /// Duplicate profile names are seeded on purpose: they are what makes the
     /// `SELECT DISTINCT` meaningful, and they are the case the dropped `Id`
     /// tie-breaker existed for.
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn output_dynamic_range_check_classifies_every_row_shape_on_sqlite() {
         let pool = test_pool().await;
@@ -1831,7 +1823,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn output_dynamic_range_check_warns_when_hdr10_demotes_to_software() {
         let pool = test_pool().await;
@@ -1849,7 +1840,6 @@ mod tests {
         assert!(result.message.contains("Hdr10 Vaapi"), "{}", result.message);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn output_dynamic_range_check_passes_for_nvenc_hdr10() {
         let pool = test_pool().await;
@@ -1861,7 +1851,6 @@ mod tests {
         assert_eq!(result.status, HealthCheckStatus::Pass);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn output_dynamic_range_check_reports_copy_profiles_as_informational() {
         let pool = test_pool().await;

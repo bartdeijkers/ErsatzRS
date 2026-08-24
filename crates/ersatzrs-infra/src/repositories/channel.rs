@@ -40,9 +40,8 @@ static CHANNEL_UPSERT_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::ne
                 "MusicVideoCreditsMode", "MusicVideoCreditsTemplate",
                 "SongVideoMode", "PlayoutSource", "PlayoutMode", "MirrorSourceChannelId",
                 "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         &[&["Id"], &["Number"]],
-        crate::db::connected_backend_is_mysql(),
     )
 });
 

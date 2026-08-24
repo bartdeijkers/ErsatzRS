@@ -26,10 +26,7 @@ by the checked-in `rust-toolchain.toml`. The baseline setup is:
 ```bash
 rustup show
 cargo fmt --all -- --check
-# Lint mirrors CI: two passes, neither with --all-features, so feature-gated
-# test files do not escape lint.
 cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy --workspace --all-targets --features mysql -- -D warnings
 ./run.sh test-closeout
 cargo deny check
 ```

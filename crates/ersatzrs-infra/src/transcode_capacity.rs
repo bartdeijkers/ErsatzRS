@@ -440,7 +440,6 @@ mod tests {
         reset_active_transcode_state_for_tests();
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn config_pool(value: Option<&str>) -> DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -467,7 +466,6 @@ mod tests {
         pool
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn active_transcode_limit_distinguishes_absence_invalid_value_and_database_failure() {
         let absent_pool = config_pool(None).await;

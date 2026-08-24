@@ -321,7 +321,7 @@ pub async fn delete_custom_resolution(id: i64) -> Result<(), ServerFnError> {
 }
 
 #[allow(clippy::too_many_lines)]
-#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+#[cfg(all(test, feature = "ssr"))]
 pub async fn load_ffmpeg_settings_with_pool(
     pool: &ersatzrs_infra::db::DbPool,
 ) -> Result<FfmpegSettingsPageData, ServerFnError> {
@@ -750,7 +750,7 @@ pub async fn save_config_value(
     .map_err(ServerFnError::new)
 }
 
-#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+#[cfg(all(test, feature = "ssr"))]
 mod tests {
     use super::*;
     use sqlx::Row;

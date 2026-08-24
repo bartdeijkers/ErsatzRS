@@ -530,7 +530,6 @@ mod tests {
 
     use ersatzrs_domain::{DolbyVisionMetadataState, MediaStream, ScanProgressSink};
 
-    #[cfg(not(feature = "mysql"))]
     use super::replace_streams;
     use super::{
         apply_provider_dolby_vision_metadata, sort_title, PageProgress, ProviderItemTable,
@@ -628,7 +627,6 @@ mod tests {
             .is_some_and(|hint| hint.contains("Emby")));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn provider_stream_persistence_round_trips_dolby_vision_and_hdr_fields() {
         use ersatzrs_domain::MediaStreamKind;

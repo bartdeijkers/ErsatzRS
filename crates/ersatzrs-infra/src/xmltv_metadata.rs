@@ -574,7 +574,6 @@ fn nonempty(value: Option<String>) -> Option<String> {
 mod tests {
     use super::*;
 
-    #[cfg(not(feature = "mysql"))]
     async fn test_db() -> (tempfile::TempDir, Pool<Db>) {
         let root = tempfile::tempdir().expect("create XMLTV metadata test root");
         let database_url = format!("sqlite:{}", root.path().join("ErsatzRS.db").display());
@@ -597,7 +596,6 @@ mod tests {
         assert!(decode_string_list(Some("  ".to_owned())).is_empty());
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn episode_uses_show_artwork_for_icon_and_episode_artwork_for_thumbnail() {
         let (_root, pool) = test_db().await;
@@ -639,7 +637,6 @@ mod tests {
         assert_eq!(content.episode_number, Some(3));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn movie_uses_thumbnail_when_poster_is_unavailable() {
         let (_root, pool) = test_db().await;
@@ -669,7 +666,6 @@ mod tests {
         assert_eq!(content.icon_size_hint, IconSizeHint::Thumbnail);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn remote_stream_projects_generic_episode_metadata_without_flattening_roles() {
         let (_root, pool) = test_db().await;

@@ -352,7 +352,7 @@ fn remote_stream_has_duration(row: &DbRow, definition: &RemoteStreamDefinition) 
         })
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;

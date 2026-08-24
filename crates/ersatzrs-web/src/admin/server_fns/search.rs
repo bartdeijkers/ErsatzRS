@@ -1143,7 +1143,7 @@ mod bulk_id_tests {
     }
 }
 
-#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+#[cfg(all(test, feature = "ssr"))]
 mod section_tests {
     //! DB-backed projection tests. Seed a tiny fixture (one show + two
     //! seasons, one episode without its own poster, one season-0) and verify

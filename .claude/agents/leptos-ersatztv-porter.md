@@ -111,9 +111,7 @@ See TEST.md "Verification responsibility split" for the contract.
     "Pre-commit gates for the user" section listing exactly:
 
     - `cargo fmt --all -- --check`
-    - `cargo clippy --workspace --all-targets -- -D warnings` and
-      `cargo clippy --workspace --all-targets --features mysql -- -D warnings`
-      (mirror CI: two passes, neither with `--all-features`)
+    - `cargo clippy --workspace --all-targets -- -D warnings`
     - `cargo test --workspace --all-features`
     - `cargo leptos build` (from `crates/ersatzrs-web`)
     - Playwright MCP smoke for the touched page(s): which URLs to visit and

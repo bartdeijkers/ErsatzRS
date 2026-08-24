@@ -942,7 +942,7 @@ mod tests {
         assert!(html.contains(r">hours</span>"));
     }
 
-    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[cfg(feature = "ssr")]
     #[tokio::test]
     async fn closed_pool_renders_error_state_without_a_submittable_form() {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()

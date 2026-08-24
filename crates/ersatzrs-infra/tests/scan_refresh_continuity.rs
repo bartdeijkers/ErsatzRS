@@ -1,5 +1,3 @@
-#![cfg(not(feature = "mysql"))]
-
 mod common;
 
 use std::collections::BTreeSet;

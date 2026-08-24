@@ -2402,9 +2402,7 @@ async fn upsert_episode_metadata(
 mod tests {
     use super::*;
 
-    #[cfg(not(feature = "mysql"))]
     use ersatzrs_domain::LibraryMediaKind;
-    #[cfg(not(feature = "mysql"))]
     use sqlx::{sqlite::SqlitePoolOptions, Executor};
 
     #[test]
@@ -2477,7 +2475,6 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
     fn descriptor(folder: &str, year: i32, imdb: &str) -> LocalShowDescriptor {
         let nfo = TvShowNfo {
             title: Some("The Kids in the Hall".to_owned()),
@@ -2504,7 +2501,6 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn reconciliation_test_db() -> DbPool {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
@@ -2521,7 +2517,6 @@ mod tests {
         pool
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[allow(clippy::too_many_lines)]
     async fn seed_merged_kids_in_the_hall(pool: &DbPool) {
         pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
@@ -2664,7 +2659,6 @@ mod tests {
         .await;
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn seed_episode(
         pool: &DbPool,
         episode_id: i64,
@@ -2707,7 +2701,6 @@ mod tests {
         .unwrap();
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn seed_extra(pool: &DbPool, id: i64, parent_id: i64, path: &str) {
         sqlx::query(
             r#"INSERT INTO "MediaItem"
@@ -2746,7 +2739,6 @@ mod tests {
         .unwrap();
     }
 
-    #[cfg(not(feature = "mysql"))]
     fn reconciliation_work() -> Vec<(ShowWork, LocalShowDescriptor)> {
         [
             ("/library/original", 1988, "tt0096623"),
@@ -2766,7 +2758,6 @@ mod tests {
         .collect()
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn run_reconciliation(pool: &DbPool, inject_failure: bool) -> Result<()> {
         reconcile_merged_local_shows(
             pool,
@@ -2781,7 +2772,6 @@ mod tests {
         .await
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn reconciliation_splits_mixed_season_and_preserves_canonical_ids() {
         let pool = reconciliation_test_db().await;
@@ -2839,7 +2829,6 @@ mod tests {
         assert_eq!(show_count, 2, "reconciliation must be idempotent");
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn reconciliation_rolls_back_the_entire_split_on_error() {
         let pool = reconciliation_test_db().await;
@@ -2880,7 +2869,6 @@ mod tests {
         assert_eq!(cached_etags, 6);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn cleanup_removes_empty_parents_but_keeps_extras_only_parents() {
         let pool = reconciliation_test_db().await;

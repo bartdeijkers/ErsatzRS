@@ -89,16 +89,11 @@ is added on purpose. Never use a different cargo build path.
 # Build
 cargo build --workspace
 
-# Lint (mirror CI: two passes, neither with --all-features, so feature-gated
-# `#![cfg(not(feature = "mysql"))]` test files don't escape lint).
+# Lint
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy --workspace --all-targets --features mysql -- -D warnings
 
-# Test closeout. Two nextest passes for the same reason clippy needs two:
-# `--all-features` enables `mysql`, which compiles every
-# `#![cfg(not(feature = "mysql"))]` integration test away, so that pass alone
-# is a smaller set rather than a superset. Then Cargo for doctests.
+# Test closeout. Nextest runs unit/integration tests; Cargo runs doctests.
 ./run.sh test-closeout
 
 # Inner-loop verification
@@ -125,7 +120,7 @@ cargo clippy --workspace --all-targets --features mysql -- -D warnings
 # gate, which runs nextest for unit/integration tests and Cargo only for
 # doctests. CI intentionally retains its direct Cargo test selection.
 #   ./run.sh dev                     # build scanner companion, then Leptos watch
-# The full multi-config gate consists of the two clippy passes,
+# The full gate consists of clippy,
 # `./run.sh test-closeout`, `cargo leptos build`, and `cargo xtask parity-check`.
 # sccache (cache on ext4) makes the unavoidable config switches cheap, but it is
 # the maintainer's local shell optimization and is enabled per-shell/run.sh, not
@@ -179,9 +174,6 @@ curl http://127.0.0.1:8409/healthz
 
 # Run the full mediaserver with IPTV JWT enforcement enabled.
 JWT__IssuerSigningKey=dev-secret cargo run --bin ersatzrs-web
-
-# Run the full mediaserver against MySQL/MariaDB.
-DATABASE_URL='mysql://user:pass@127.0.0.1:3306/ersatzrs' cargo run --features mysql --bin ersatzrs-web
 
 # Run a one-shot media scan against the same database.
 # Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.
@@ -359,7 +351,7 @@ indicator of ErsatzTV parity.
 - **UI:** Leptos (full-stack Rust, SSR + islands hydration). Start server-rendered; add interactivity only where needed.
 - **FFmpeg integration:** CLI spawn via `tokio::process::Command` - same model as ErsatzTV's `CliWrap` usage. **No libav bindings.** FFmpeg 9.x is the supported runtime line (for `drawvg` and the current output-option contract); detect on startup and reject older and unverified future major versions.
 - **Graphics engine:** use FFmpeg's `drawvg` filter with SVG templates in `assets/` as the replacement for ErsatzTV's `ScriptGraphicsElement` + external renderer pipe. This is the main "why Rust rewrite" win - do not reintroduce an external graphics process.
-- **Database:** `sqlx` with SQLite first, MySQL behind a feature flag. **Do not port ErsatzTV's 393 EF migrations 1:1** - collapse them into one initial schema derived from the final state of `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/TvContext.cs` (99 DbSets) and evolve from there.
+- **Database:** `sqlx` with SQLite as the sole supported backend. **Do not port ErsatzTV's 393 EF migrations 1:1** - collapse them into one initial schema derived from the final state of `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/TvContext.cs` (99 DbSets) and evolve from there. Keep the database on a local filesystem; network shares and active-active servers are unsupported (ADR 0080).
 - **Web host:** `axum` + `tower` + `tokio`. Leptos mounts via `leptos_axum`.
 - **CQRS:** no MediatR equivalent - plain `async fn` handlers in `ersatzrs-app`, repository traits in `ersatzrs-core`, sqlx impls in `ersatzrs-infra`.
 - **Scheduling:** four engines to port from `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/` behind a shared trait - Block, YAML (`serde_yaml` + per-instruction dispatch), Classic, and Scripted (`mlua` for Lua 5.4).

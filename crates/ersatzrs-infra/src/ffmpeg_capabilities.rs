@@ -338,7 +338,6 @@ fn acceleration_from_name(value: &str) -> Option<HardwareAccelerationKind> {
 mod tests {
     use super::*;
 
-    #[cfg(not(feature = "mysql"))]
     async fn test_pool() -> DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -430,7 +429,6 @@ mod tests {
     /// A concurrent worker can still hold the startup snapshot after another
     /// worker has published its denial. Persisting the stale snapshot must not
     /// erase the first denial from the restart state.
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn stale_worker_snapshot_persists_shared_decode_denials() {
         let pool = test_pool().await;
@@ -480,7 +478,6 @@ mod tests {
         ));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn a_previous_runtime_generation_cannot_poison_active_decode_capabilities() {
         let pool = test_pool().await;

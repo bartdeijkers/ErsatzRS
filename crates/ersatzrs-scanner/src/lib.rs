@@ -4837,7 +4837,6 @@ mod tests {
         ));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn movie_extra_imports_as_linked_other_video_and_stays_hidden_by_default() {
         use super::{
@@ -4927,7 +4926,6 @@ mod tests {
         assert_eq!(visible, vec![extra_id]);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn music_video_unplugged_versions_link_to_official_primary_and_stay_hidden_by_default() {
         use super::{
@@ -5014,7 +5012,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn music_video_solo_upscale_becomes_primary_with_no_versions() {
         use super::{
@@ -5070,7 +5067,6 @@ mod tests {
         assert!(row.get::<Option<i64>, _>("ParentMediaItemId").is_none());
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn music_video_remaster_promoted_over_untagged_master_demotes_it_to_versions() {
@@ -5209,7 +5205,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn movie_and_song_enhanced_versions_do_not_replace_untagged_primaries() {
         use super::{link_alternate_versions_for_library_path, upsert_local_file};
@@ -5262,7 +5257,6 @@ mod tests {
         assert_primary_and_remaster_alternate(&song_pool, &song_path, &song_remaster_path).await;
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn mtv_unplugged_music_video_orphan_is_searchable_by_adr_selector() {
         use super::{
@@ -5332,7 +5326,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn orphan_song_alternate_is_typed_but_unlinked() {
         use super::{link_alternate_versions_for_library_path, upsert_local_file};
@@ -5372,7 +5365,6 @@ mod tests {
         assert!(row.get::<Option<i64>, _>("ParentMediaItemId").is_none());
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn movie_directors_cut_links_to_unmarked_primary() {
         use super::{link_alternate_versions_for_library_path, upsert_local_file};
@@ -5421,7 +5413,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn remote_stream_scan_persists_definition_metadata_and_continues_after_invalid_yaml() {
@@ -5644,7 +5635,6 @@ broadcasters: [Current Network]
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn search_ids(
         repository: &ersatzrs_infra::repositories::SqliteSchedulingContentRepository,
         query: &str,
@@ -5658,7 +5648,6 @@ broadcasters: [Current Network]
             .collect()
     }
 
-    #[cfg(not(feature = "mysql"))]
     fn probed_version() -> ersatzrs_infra::ffprobe::FfprobeMediaVersion {
         ersatzrs_infra::ffprobe::FfprobeMediaVersion {
             version: ersatzrs_domain::MediaVersion {
@@ -5675,7 +5664,6 @@ broadcasters: [Current Network]
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn test_db() -> sqlx::SqlitePool {
         use sqlx::sqlite::SqlitePoolOptions;
         use sqlx::Executor;
@@ -5695,7 +5683,6 @@ broadcasters: [Current Network]
         pool
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn file_test_db(path: &Path) -> sqlx::SqlitePool {
         use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
         use sqlx::Executor;
@@ -5723,7 +5710,6 @@ broadcasters: [Current Network]
         pool
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[allow(clippy::too_many_lines)]
     async fn seed_managed_remote_stream_playlist(
         pool: &sqlx::SqlitePool,
@@ -5837,7 +5823,6 @@ create_playlist: true
         .expect("published add-on list item");
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn playlist_publication_failure_marks_resolution_and_replays_on_restart() {
         use ersatzrs_domain::ScanPlayoutRefreshReason;
@@ -5918,7 +5903,6 @@ create_playlist: true
         assert_eq!(intent_count, 0);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn playlist_crash_after_database_commit_replays_without_losing_intent() {
@@ -6121,7 +6105,6 @@ create_playlist: true
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn manifest_first_preserves_old_search_match_for_invalidation() {
@@ -6232,7 +6215,6 @@ create_playlist: true
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn other_song_and_image_scans_write_and_replace_uniform_facets() {
@@ -6399,7 +6381,6 @@ create_playlist: true
         assert_eq!(stale_studios, 0);
     }
 
-    #[cfg(not(feature = "mysql"))]
     fn seed_music_video_library_path(path: &Path) -> super::LocalLibraryPath {
         super::LocalLibraryPath {
             id: 1,
@@ -6408,7 +6389,6 @@ create_playlist: true
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn seed_music_video_library(
         pool: &sqlx::SqlitePool,
         library_path: &super::LocalLibraryPath,
@@ -6416,7 +6396,6 @@ create_playlist: true
         seed_local_library(pool, library_path, "Music Videos", 3).await;
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn seed_song_library(pool: &sqlx::SqlitePool, path: &Path) -> super::LocalLibraryPath {
         let library_path = super::LocalLibraryPath {
             id: 1,
@@ -6427,7 +6406,6 @@ create_playlist: true
         library_path
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn seed_movie_library_path(
         pool: &sqlx::SqlitePool,
         path: &Path,
@@ -6441,7 +6419,6 @@ create_playlist: true
         library_path
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn seed_local_library(
         pool: &sqlx::SqlitePool,
         library_path: &super::LocalLibraryPath,
@@ -6475,7 +6452,6 @@ create_playlist: true
             .expect("library path");
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn media_item_id_for_path(pool: &sqlx::SqlitePool, path: &Path) -> i64 {
         use sqlx::Row;
 
@@ -6497,7 +6473,6 @@ create_playlist: true
         .get::<i64, _>("MediaItemId")
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn assert_primary_and_remaster_alternate(
         pool: &sqlx::SqlitePool,
         primary_path: &Path,
@@ -6544,7 +6519,6 @@ create_playlist: true
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn seed_movie_library(pool: &sqlx::SqlitePool, path: &Path) {
         use sqlx::Executor;
 
@@ -6571,7 +6545,6 @@ create_playlist: true
             .expect("library path");
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn count_table(pool: &sqlx::SqlitePool, table: &str) -> i64 {
         let sql = format!(r#"SELECT COUNT(*) FROM "{table}""#);
         sqlx::query_scalar(ersatzrs_infra::db::assert_sql_safe(sql))
@@ -6580,7 +6553,6 @@ create_playlist: true
             .expect("count")
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn sqlite_busy_retry_waits_for_concurrent_writer() {
         use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
@@ -6641,7 +6613,6 @@ create_playlist: true
         assert_eq!(count, 2);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn managed_playlist_keeps_identity_and_replaces_upstream_order() {
@@ -6828,7 +6799,6 @@ create_playlist: true
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn remote_stream_provider_identity_survives_generated_path_change() {
         use super::{upsert_local_remote_stream, LocalLibraryPath};
@@ -6930,7 +6900,7 @@ create_playlist: true
         );
     }
 
-    #[cfg(all(not(feature = "mysql"), unix))]
+    #[cfg(unix)]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn remote_stream_playlist_scan_materializes_definitions_tags_and_order() {
@@ -7428,7 +7398,6 @@ defaults:
         assert_eq!(tag_count, 6);
     }
 
-    #[cfg(not(feature = "mysql"))]
     mod movie_enrichment {
         use super::super::{
             enrich_movie_metadata, insert_media_item, original_title_for_path,
@@ -7742,7 +7711,6 @@ defaults:
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
     mod music_video_enrichment {
         use super::super::{
             delete_empty_artists, upsert_artist_for_folder, upsert_local_music_video,

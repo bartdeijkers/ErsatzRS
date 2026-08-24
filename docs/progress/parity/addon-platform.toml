@@ -168,8 +168,9 @@ id          = 'mysql-runtime-migration-proof-is-missing'
 description = 'Live MySQL proof covers managed add-on-list storage, scan-refresh continuity, and the AMM-H artwork repair, but the complete projected television publication/read path remains SQLite-only.'
 discovered  = '2026-08-15'
 evidence    = 'Updated 2026-08-24: the `MySQL health and continuity contract` runs migrations against MySQL 8.4 and exercises a managed publication through Local scanning, generated sidecars, durable refresh admission, and Classic restart continuity. AMM-H additionally proves its exact-duplicate Artwork repair against live MySQL 8.4, including variant preservation and Actor-referenced-set safety. The full Show/Season/Episode publication and consumer read path is still not exercised end to end on MySQL, so this debt remains open pending ADR 0080 disposition.'
-adr         = '0066'
-resolved    = false
+adr         = '0080'
+resolved    = true
+resolution  = 'Accepted ADR 0080 removes MySQL/MariaDB from the supported backend contract, so missing end-to-end MySQL add-on proof is no longer release debt. Historical evidence remains above.'
 
 [[debt]]
 id          = 'packaged-windows-addon-execution-is-unproven'

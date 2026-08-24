@@ -13,10 +13,9 @@
 #   ./run.sh log       # tail ersatzrs.log
 #
 # Inner-loop tip: while iterating, prefer `./run.sh check [-p <crate>]` (or
-# `./run.sh dev` for UI work) and DO NOT flip --features / --all-features /
-# --all-targets between runs. Each flip is a separate compilation graph that
-# re-runs rustc across the whole tree. Run the full multi-config gate
-# (cargo xtask parity-check, the two clippy passes, ./run.sh test-closeout,
+# `./run.sh dev` for UI work) and do not flip targets between runs. Each flip is
+# a separate compilation graph that re-runs rustc across the whole tree. Run
+# the full gate (cargo xtask parity-check, clippy, ./run.sh test-closeout, and
 # cargo leptos build) once at closeout, not per edit.
 
 set -euo pipefail
@@ -142,13 +141,8 @@ case "$cmd" in
       echo "cargo-nextest is required; see BUILD.md installation instructions" >&2
       exit 1
     fi
-    # Two passes, mirroring the clippy gate. `--all-features` enables `mysql`,
-    # which compiles every `#![cfg(not(feature = "mysql"))]` integration test
-    # away: running only that configuration silently skipped 322 tests, and two
-    # of them had been red for months.
     cargo nextest run --workspace
-    cargo nextest run --workspace --all-features
-    exec cargo test --workspace --all-features --doc
+    exec cargo test --workspace --doc
     ;;
   build)
     check_target_size

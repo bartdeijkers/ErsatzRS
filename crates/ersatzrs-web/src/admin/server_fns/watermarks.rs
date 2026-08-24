@@ -795,7 +795,7 @@ rect 40 178 240 2 fill
     })
 }
 
-#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+#[cfg(all(test, feature = "ssr"))]
 mod tests {
     use super::*;
     use sqlx::Row;

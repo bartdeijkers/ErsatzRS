@@ -1352,10 +1352,8 @@ mod tests {
     use super::*;
     use httpmock::Method::GET;
     use httpmock::MockServer;
-    #[cfg(not(feature = "mysql"))]
     use sqlx::Executor;
 
-    #[cfg(not(feature = "mysql"))]
     async fn test_db() -> Pool<Db> {
         let temp_dir =
             std::env::temp_dir().join(format!("ersatzrs-subtitles-{}", uuid::Uuid::new_v4()));
@@ -1914,7 +1912,6 @@ Dialogue: 0,0:00:46.00,0:00:42.00,Default,,0,0,0,,{\\move(10,20,30,40)}Straddles
     }
 
     #[tokio::test]
-    #[cfg(not(feature = "mysql"))]
     #[allow(clippy::too_many_lines)]
     async fn playout_selection_matches_etv_window_and_media_type_filter() {
         let pool = test_db().await;

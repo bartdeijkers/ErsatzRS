@@ -215,7 +215,7 @@ pub(crate) async fn clean_library_folders_for_path(
     Ok(())
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::Executor;

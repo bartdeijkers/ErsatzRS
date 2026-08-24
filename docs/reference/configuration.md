@@ -37,14 +37,16 @@ select WAL journaling, and use NORMAL synchronization. WAL mode persists in the
 database file; the connection-local settings are reapplied to pooled and lazy
 connections.
 
-MySQL and MariaDB URLs require an application binary built with the `mysql`
-feature:
+Only SQLite URLs are supported. A custom file uses a SQLite URL such as:
 
 ```text
-DATABASE_URL=mysql://user:password@database-host/ersatzrs
+DATABASE_URL=sqlite:///var/lib/ersatzrs/ErsatzRS.db
 ```
 
-Treat URLs containing credentials as secrets.
+Keep the file on local storage with correct filesystem locking semantics.
+Network shares, `mysql://` and `mariadb://` URLs, and multiple active ErsatzRS
+servers sharing one database are unsupported. See
+[ADR 0080](../adr/0080-standardize-on-sqlite.md).
 
 ## Server listen address
 

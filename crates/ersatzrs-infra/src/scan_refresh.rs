@@ -27,19 +27,6 @@ const SQLITE_BEGIN_RESOLUTION_UPSERT_SQL: &str = r#"INSERT INTO "ScanRefreshReso
        "StartedAt" = excluded."StartedAt",
        "UpdatedAt" = excluded."UpdatedAt""#;
 
-#[cfg(feature = "mysql")]
-const MYSQL_BEGIN_RESOLUTION_UPSERT_SQL: &str = r#"INSERT INTO "ScanRefreshResolution" (
-       "LibraryId", "Generation", "State", "Reason", "Diagnostic",
-       "StartedAt", "UpdatedAt"
-   ) VALUES (?, 1, ?, ?, NULL, ?, ?)
-   ON DUPLICATE KEY UPDATE
-       "Generation" = "Generation" + 1,
-       "State" = VALUES("State"),
-       "Reason" = VALUES("Reason"),
-       "Diagnostic" = NULL,
-       "StartedAt" = VALUES("StartedAt"),
-       "UpdatedAt" = VALUES("UpdatedAt")"#;
-
 const SQLITE_REFRESH_INTENT_UPSERT_SQL: &str = r#"INSERT INTO "ScanPlayoutRefreshIntent" (
        "PlayoutId", "LibraryId", "Generation", "State", "Reason",
        "Diagnostic", "CreatedAt", "UpdatedAt"
@@ -59,49 +46,6 @@ const SQLITE_REFRESH_INTENT_UPSERT_SQL: &str = r#"INSERT INTO "ScanPlayoutRefres
        END,
        "Diagnostic" = NULL,
        "UpdatedAt" = excluded."UpdatedAt""#;
-
-#[cfg(feature = "mysql")]
-const MYSQL_REFRESH_INTENT_UPSERT_SQL: &str = r#"INSERT INTO "ScanPlayoutRefreshIntent" (
-       "PlayoutId", "LibraryId", "Generation", "State", "Reason",
-       "Diagnostic", "CreatedAt", "UpdatedAt"
-   ) VALUES (?, ?, 1, ?, ?, NULL, ?, ?)
-   ON DUPLICATE KEY UPDATE
-       "LibraryId" = CASE
-           WHEN "LibraryId" <=> VALUES("LibraryId") THEN VALUES("LibraryId")
-           ELSE NULL
-       END,
-       "Generation" = "Generation" + 1,
-       "State" = VALUES("State"),
-       "Reason" = CASE
-           WHEN "Reason" = VALUES("Reason") THEN "Reason"
-           ELSE ?
-       END,
-       "Diagnostic" = NULL,
-       "UpdatedAt" = VALUES("UpdatedAt")"#;
-
-fn begin_resolution_upsert_sql(tx: &mut Transaction<'_, Db>) -> &'static str {
-    #[cfg(feature = "mysql")]
-    {
-        if tx.as_mut().backend_name() == "MySQL" {
-            return MYSQL_BEGIN_RESOLUTION_UPSERT_SQL;
-        }
-    }
-    #[cfg(not(feature = "mysql"))]
-    let _ = tx;
-    SQLITE_BEGIN_RESOLUTION_UPSERT_SQL
-}
-
-fn refresh_intent_upsert_sql(tx: &mut Transaction<'_, Db>) -> &'static str {
-    #[cfg(feature = "mysql")]
-    {
-        if tx.as_mut().backend_name() == "MySQL" {
-            return MYSQL_REFRESH_INTENT_UPSERT_SQL;
-        }
-    }
-    #[cfg(not(feature = "mysql"))]
-    let _ = tx;
-    SQLITE_REFRESH_INTENT_UPSERT_SQL
-}
 
 /// One durable refresh recovered after a process restart.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -234,8 +178,7 @@ pub async fn begin_resolution(
 ) -> Result<i64, sqlx::Error> {
     let now = Utc::now().to_rfc3339();
     let mut tx = begin_write(pool).await?;
-    let upsert_sql = begin_resolution_upsert_sql(&mut tx);
-    sqlx::query(upsert_sql)
+    sqlx::query(SQLITE_BEGIN_RESOLUTION_UPSERT_SQL)
         .bind(library_id)
         .bind(RESOLUTION_STATE_RESOLVING)
         .bind(reason.as_str())
@@ -243,9 +186,8 @@ pub async fn begin_resolution(
         .bind(&now)
         .execute(&mut *tx)
         .await?;
-    // The upsert's update branch holds the keyed row lock on MySQL until this
-    // transaction commits; SQLite's write transaction likewise prevents a
-    // writer from changing the row between allocation and this read.
+    // SQLite's write transaction prevents another writer from changing the row
+    // between allocation and this read.
     let generation: i64 = sqlx::query_scalar(
         r#"SELECT "Generation" FROM "ScanRefreshResolution" WHERE "LibraryId" = ?"#,
     )
@@ -353,9 +295,8 @@ async fn persist_refresh_intents_with_owner(
     playout_ids: &[EntityId],
 ) -> Result<(), sqlx::Error> {
     let now = Utc::now().to_rfc3339();
-    let upsert_sql = refresh_intent_upsert_sql(tx);
     for &playout_id in playout_ids {
-        sqlx::query(upsert_sql)
+        sqlx::query(SQLITE_REFRESH_INTENT_UPSERT_SQL)
             .bind(playout_id)
             .bind(library_id)
             .bind(INTENT_STATE_PENDING)
@@ -509,7 +450,7 @@ pub async fn fail_refresh(
     Ok(())
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use std::{sync::Arc, time::Duration};
 
@@ -1085,37 +1026,5 @@ mod tests {
                 Some(RESOLUTION_FAILED_DIAGNOSTIC.to_owned())
             )
         );
-    }
-}
-
-#[cfg(all(test, feature = "mysql"))]
-mod mysql_sql_shape_tests {
-    use super::*;
-
-    #[test]
-    fn resolution_upsert_allocates_generation_in_the_mysql_write() {
-        let sql = MYSQL_BEGIN_RESOLUTION_UPSERT_SQL;
-
-        assert!(sql.contains("ON DUPLICATE KEY UPDATE"));
-        assert!(sql.contains(r#""Generation" = "Generation" + 1"#));
-        assert!(sql.contains(r#""State" = VALUES("State")"#));
-        assert!(sql.contains(r#""Reason" = VALUES("Reason")"#));
-        assert!(sql.contains(r#""Diagnostic" = NULL"#));
-        assert_eq!(sql.matches('?').count(), 5);
-    }
-
-    #[test]
-    fn intent_upsert_merges_every_concurrent_mysql_field() {
-        let sql = MYSQL_REFRESH_INTENT_UPSERT_SQL;
-
-        assert!(sql.contains("ON DUPLICATE KEY UPDATE"));
-        assert!(
-            sql.contains(r#"WHEN "LibraryId" <=> VALUES("LibraryId") THEN VALUES("LibraryId")"#)
-        );
-        assert!(sql.contains(r#""Generation" = "Generation" + 1"#));
-        assert!(sql.contains(r#""State" = VALUES("State")"#));
-        assert!(sql.contains(r#"WHEN "Reason" = VALUES("Reason") THEN "Reason""#));
-        assert!(sql.contains(r#""Diagnostic" = NULL"#));
-        assert_eq!(sql.matches('?').count(), 7);
     }
 }

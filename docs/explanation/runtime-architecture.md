@@ -43,7 +43,7 @@ flowchart LR
         Web[Web host<br/>Axum + Leptos application]
         Scanner[Scanner CLI<br/>Rust application]
         Health[Healthcheck CLI<br/>Rust application]
-        Database[(Application database<br/>SQLite or MySQL)]
+        Database[(Application database<br/>SQLite)]
         State[(Managed state<br/>packages, add-on data/cache, logs)]
     end
 
@@ -78,7 +78,9 @@ playout state; the managed state directories own verified packages and
 per-add-on data. [ADR 0051](../adr/0051-application-boundary-and-composition-root.md)
 owns the application/composition-root decision, and
 [ADR 0066](../adr/0066-repository-backed-add-ons.md) owns the add-on
-boundary.
+boundary. [ADR 0080](../adr/0080-standardize-on-sqlite.md) owns the SQLite-only
+database boundary; the database file stays on one host and is not shared by
+active-active servers.
 
 ## Evidence and excluded future state
 

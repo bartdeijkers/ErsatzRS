@@ -2,7 +2,6 @@ use sqlx::migrate::Migrator;
 #[cfg(test)]
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-#[cfg(not(feature = "mysql"))]
 use std::time::Duration;
 use thiserror::Error;
 use uuid::Uuid;
@@ -24,39 +23,18 @@ use ersatzrs_domain::{
     CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR, CONFIG_KEY_XMLTV_DAYS_TO_BUILD, CONFIG_KEY_XMLTV_TIME_ZONE,
 };
 
-#[cfg(feature = "mysql")]
-use sqlx::any::{AnyPoolOptions, AnyRow};
-#[cfg(not(feature = "mysql"))]
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteQueryResult, SqliteRow,
     SqliteSynchronous,
 };
-#[cfg(feature = "mysql")]
-use sqlx::{Any, AnyPool};
-#[cfg(not(feature = "mysql"))]
 use sqlx::{ConnectOptions, Sqlite, SqlitePool};
 
-#[cfg(feature = "mysql")]
-use sqlx::{ConnectOptions, Executor};
-
-#[cfg(feature = "mysql")]
-pub type Db = Any;
-#[cfg(not(feature = "mysql"))]
 pub type Db = Sqlite;
 
-#[cfg(feature = "mysql")]
-pub type DbPool = AnyPool;
-#[cfg(not(feature = "mysql"))]
 pub type DbPool = SqlitePool;
 
-#[cfg(feature = "mysql")]
-pub type DbRow = AnyRow;
-#[cfg(not(feature = "mysql"))]
 pub type DbRow = SqliteRow;
 
-#[cfg(feature = "mysql")]
-pub type DbQueryResult = sqlx::any::AnyQueryResult;
-#[cfg(not(feature = "mysql"))]
 pub type DbQueryResult = SqliteQueryResult;
 
 pub fn assert_sql_safe(sql: impl AsRef<str>) -> sqlx::AssertSqlSafe<String> {
@@ -66,14 +44,13 @@ pub fn assert_sql_safe(sql: impl AsRef<str>) -> sqlx::AssertSqlSafe<String> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatabaseBackend {
     Sqlite,
-    #[cfg(feature = "mysql")]
-    MySql,
 }
 
 pub const DATABASE_URL_ENV_VAR: &str = "DATABASE_URL";
 pub const DEFAULT_SQLITE_DIR_NAME: &str = ".ersatzrs";
 pub const DEFAULT_SQLITE_FILE_NAME: &str = "ErsatzRS.db";
 pub(crate) const SQLITE_BUSY_TIMEOUT_MS: u32 = 30_000;
+const SQLITE_ONLY_DATABASE_URL_DIAGNOSTIC: &str = "MySQL and MariaDB database URLs are no longer supported. ErsatzRS is permanently SQLite-only; migrate the database to SQLite before starting this version.";
 
 const DEFAULT_SYSTEM_PLAYLIST_GROUP_NAME: &str = "Add-on Lists";
 const DEFAULT_FFMPEG_PROFILE_NAME: &str = "1920x1080 x264 ac3 6ch";
@@ -169,8 +146,6 @@ const ADR0017_DEFAULT_PROFILES: [DefaultFfmpegProfileSeed; 5] = [
 ];
 
 static SQLITE_MIGRATOR: Migrator = sqlx::migrate!("../../migrations");
-#[cfg(feature = "mysql")]
-static MYSQL_MIGRATOR: Migrator = sqlx::migrate!("../../migrations/mysql");
 
 #[derive(Debug, Error)]
 pub enum DatabaseUrlError {
@@ -289,31 +264,33 @@ fn default_sqlite_database_url(path: &Path) -> String {
 }
 
 #[must_use]
-pub fn database_backend(database_url: &str) -> DatabaseBackend {
-    if database_url.starts_with("mysql://") || database_url.starts_with("mariadb://") {
-        #[cfg(feature = "mysql")]
-        {
-            return DatabaseBackend::MySql;
-        }
+pub fn database_backend(_database_url: &str) -> DatabaseBackend {
+    DatabaseBackend::Sqlite
+}
+
+fn database_url_uses_removed_backend(database_url: &str) -> bool {
+    database_url.split_once(':').is_some_and(|(scheme, _)| {
+        matches!(scheme.to_ascii_lowercase().as_str(), "mysql" | "mariadb")
+    })
+}
+
+fn reject_removed_database_backend(database_url: &str) -> Result<(), sqlx::Error> {
+    if database_url_uses_removed_backend(database_url) {
+        return Err(sqlx::Error::Configuration(
+            SQLITE_ONLY_DATABASE_URL_DIAGNOSTIC.into(),
+        ));
     }
 
-    DatabaseBackend::Sqlite
+    Ok(())
 }
 
 /// Open a database pool and run all pending migrations.
 ///
 /// # Errors
 ///
-/// Returns an error if the database cannot be opened, the selected backend is
-/// not compiled in, or migrations fail.
+/// Returns an error if the URL selects a removed database backend, the database
+/// cannot be opened, or migrations fail.
 pub async fn init(database_url: &str) -> Result<DbPool, sqlx::Error> {
-    #[cfg(not(feature = "mysql"))]
-    if database_url.starts_with("mysql://") || database_url.starts_with("mariadb://") {
-        return Err(sqlx::Error::Configuration(
-            "MySQL database URLs require building ersatzrs-infra with the `mysql` feature".into(),
-        ));
-    }
-
     let database_backend = database_backend(database_url);
     let pool = connect_database(database_url, database_backend).await?;
     run_migrations(&pool, database_backend).await?;
@@ -373,7 +350,6 @@ async fn bootstrap_media_server_database_from_url(
     })
 }
 
-#[cfg(not(feature = "mysql"))]
 fn sqlite_connect_options(database_url: &str) -> Result<SqliteConnectOptions, sqlx::Error> {
     Ok(database_url
         .parse::<SqliteConnectOptions>()?
@@ -385,101 +361,19 @@ fn sqlite_connect_options(database_url: &str) -> Result<SqliteConnectOptions, sq
         .disable_statement_logging())
 }
 
-#[cfg(not(feature = "mysql"))]
 async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
     SqlitePoolOptions::new()
         .connect_with(sqlite_connect_options(database_url)?)
         .await
 }
 
-#[cfg(feature = "mysql")]
-fn sqlite_any_pool_options() -> AnyPoolOptions {
-    AnyPoolOptions::new().after_connect(|connection, _metadata| {
-        Box::pin(async move {
-            connection.execute("PRAGMA foreign_keys = ON").await?;
-            connection.execute("PRAGMA busy_timeout = 30000").await?;
-            connection.execute("PRAGMA journal_mode = WAL").await?;
-            connection.execute("PRAGMA synchronous = NORMAL").await?;
-            Ok(())
-        })
-    })
-}
-
-#[cfg(feature = "mysql")]
-fn sqlite_any_connect_options(
-    database_url: &str,
-) -> Result<sqlx::any::AnyConnectOptions, sqlx::Error> {
-    let database_url = sqlite_url_with_create_mode(database_url);
-    Ok(database_url
-        .parse::<sqlx::any::AnyConnectOptions>()?
-        .disable_statement_logging())
-}
-
-#[cfg(feature = "mysql")]
-async fn connect_sqlite(database_url: &str) -> Result<DbPool, sqlx::Error> {
-    sqlx::any::install_default_drivers();
-    sqlite_any_pool_options()
-        .connect_with(sqlite_any_connect_options(database_url)?)
-        .await
-}
-
-/// Open a `MySQL` pool, enable ANSI identifier quotes for each session, and run
-/// all pending `MySQL` migrations.
-///
-/// # Errors
-///
-/// Returns an error if the database cannot be opened or migrations fail.
-#[cfg(feature = "mysql")]
-async fn connect_mysql(database_url: &str) -> Result<DbPool, sqlx::Error> {
-    sqlx::any::install_default_drivers();
-    let options = database_url
-        .parse::<sqlx::any::AnyConnectOptions>()?
-        .disable_statement_logging();
-
-    AnyPoolOptions::new()
-        .after_connect(|connection, _metadata| {
-            Box::pin(async move {
-                connection
-                    .execute("SET SESSION sql_mode = CONCAT_WS(',', @@sql_mode, 'ANSI_QUOTES')")
-                    .await?;
-                Ok(())
-            })
-        })
-        .connect_with(options)
-        .await
-}
-
-/// The backend the process connected to, recorded once at connect time.
-///
-/// Repository SQL that must differ per dialect reads this instead of calling
-/// `backend_name()` on a freshly acquired connection. Acquiring inside a held
-/// transaction deadlocks a single-connection pool, which is exactly how the
-/// integration tests are configured.
-static CONNECTED_BACKEND: std::sync::OnceLock<DatabaseBackend> = std::sync::OnceLock::new();
-
-/// Whether the connected backend is `MySQL`.
-///
-/// Defaults to `false` (`SQLite`) when no pool has been opened through
-/// [`connect_database`], which is the case for tests that build a pool
-/// directly.
-#[must_use]
-pub fn connected_backend_is_mysql() -> bool {
-    match CONNECTED_BACKEND.get() {
-        #[cfg(feature = "mysql")]
-        Some(DatabaseBackend::MySql) => true,
-        Some(DatabaseBackend::Sqlite) | None => false,
-    }
-}
-
 async fn connect_database(
     database_url: &str,
     database_backend: DatabaseBackend,
 ) -> Result<DbPool, sqlx::Error> {
-    let _ = CONNECTED_BACKEND.set(database_backend);
+    reject_removed_database_backend(database_url)?;
     match database_backend {
         DatabaseBackend::Sqlite => connect_sqlite(database_url).await,
-        #[cfg(feature = "mysql")]
-        DatabaseBackend::MySql => connect_mysql(database_url).await,
     }
 }
 
@@ -545,43 +439,25 @@ async fn migrations_table_exists(
     pool: &DbPool,
     database_backend: DatabaseBackend,
 ) -> Result<bool, sqlx::Error> {
-    let exists: i64 = match database_backend {
-        DatabaseBackend::Sqlite => sqlx::query_scalar(
-            r"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
-        )
-        .fetch_one(pool)
-        .await?,
-        #[cfg(feature = "mysql")]
-        DatabaseBackend::MySql => sqlx::query_scalar(
-            r"SELECT COUNT(*) FROM information_schema.tables
-               WHERE table_schema = DATABASE() AND table_name = '_sqlx_migrations'",
-        )
-        .fetch_one(pool)
-        .await?,
-    };
+    let DatabaseBackend::Sqlite = database_backend;
+    let exists: i64 = sqlx::query_scalar(
+        r"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
+    )
+    .fetch_one(pool)
+    .await?;
 
     Ok(exists > 0)
 }
 
 fn migrator_for_backend(database_backend: DatabaseBackend) -> &'static Migrator {
-    match database_backend {
-        #[cfg(feature = "mysql")]
-        DatabaseBackend::MySql => &MYSQL_MIGRATOR,
-        DatabaseBackend::Sqlite => &SQLITE_MIGRATOR,
-    }
+    let DatabaseBackend::Sqlite = database_backend;
+    &SQLITE_MIGRATOR
 }
 
 #[must_use]
 #[allow(clippy::needless_pass_by_value)]
 pub fn last_insert_id(result: DbQueryResult) -> i64 {
-    #[cfg(feature = "mysql")]
-    {
-        result.last_insert_id().unwrap_or_default()
-    }
-    #[cfg(not(feature = "mysql"))]
-    {
-        result.last_insert_rowid()
-    }
+    result.last_insert_rowid()
 }
 
 /// Begin a transaction that is going to write.
@@ -603,19 +479,7 @@ pub fn last_insert_id(result: DbQueryResult) -> i64 {
 ///
 /// Returns an error when the transaction cannot be started.
 pub async fn begin_write(pool: &DbPool) -> Result<sqlx::Transaction<'static, Db>, sqlx::Error> {
-    #[cfg(feature = "mysql")]
-    {
-        // `Any` may be backed by MySQL, where this SQLite-only spelling is a
-        // syntax error, so only SQLite gets the stronger statement.
-        if pool.connect_options().database_url.scheme() == "sqlite" {
-            return pool.begin_with("BEGIN IMMEDIATE").await;
-        }
-        pool.begin().await
-    }
-    #[cfg(not(feature = "mysql"))]
-    {
-        pool.begin_with("BEGIN IMMEDIATE").await
-    }
+    pool.begin_with("BEGIN IMMEDIATE").await
 }
 
 #[allow(clippy::unused_async)]
@@ -623,30 +487,14 @@ pub(crate) async fn inserted_id(
     transaction: &mut sqlx::Transaction<'_, Db>,
     result: DbQueryResult,
 ) -> Result<i64, sqlx::Error> {
-    #[cfg(feature = "mysql")]
-    {
-        let _ = result;
-        let sql = if transaction.as_mut().backend_name() == "MySQL" {
-            "SELECT LAST_INSERT_ID()"
-        } else {
-            "SELECT last_insert_rowid()"
-        };
-        sqlx::query_scalar(sql).fetch_one(&mut **transaction).await
-    }
-    #[cfg(not(feature = "mysql"))]
-    {
-        let _ = transaction;
-        Ok(result.last_insert_rowid())
-    }
+    let _ = transaction;
+    Ok(result.last_insert_rowid())
 }
 
 #[must_use]
 pub fn random_order_expression(database_backend: DatabaseBackend) -> &'static str {
-    match database_backend {
-        #[cfg(feature = "mysql")]
-        DatabaseBackend::MySql => "RAND()",
-        DatabaseBackend::Sqlite => "RANDOM()",
-    }
+    let DatabaseBackend::Sqlite = database_backend;
+    "RANDOM()"
 }
 
 /// Lazily create a `SQLite` pool for tests and server-function contexts that do
@@ -657,15 +505,7 @@ pub fn random_order_expression(database_backend: DatabaseBackend) -> &'static st
 /// Returns an error when the `SQLite` URL cannot be parsed by the selected
 /// database driver.
 pub fn lazy_sqlite_pool(database_url: &str) -> Result<DbPool, sqlx::Error> {
-    #[cfg(feature = "mysql")]
-    {
-        sqlx::any::install_default_drivers();
-        Ok(sqlite_any_pool_options().connect_lazy_with(sqlite_any_connect_options(database_url)?))
-    }
-    #[cfg(not(feature = "mysql"))]
-    {
-        Ok(SqlitePoolOptions::new().connect_lazy_with(sqlite_connect_options(database_url)?))
-    }
+    Ok(SqlitePoolOptions::new().connect_lazy_with(sqlite_connect_options(database_url)?))
 }
 
 async fn initialize_media_server_database(pool: &DbPool) -> Result<bool, sqlx::Error> {
@@ -1053,17 +893,6 @@ async fn ensure_config_value(pool: &DbPool, key: &str, value: &str) -> Result<()
     Ok(())
 }
 
-#[cfg(feature = "mysql")]
-fn sqlite_url_with_create_mode(database_url: &str) -> String {
-    if database_url == "sqlite::memory:" || database_url.contains("mode=") {
-        database_url.to_string()
-    } else if database_url.contains('?') {
-        format!("{database_url}&mode=rwc")
-    } else {
-        format!("{database_url}?mode=rwc")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1097,7 +926,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn fresh_sqlite_schema_contains_uniform_metadata_facets() {
         let pool = init("sqlite::memory:").await.expect("migrate fresh schema");
@@ -1145,7 +973,6 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn existing_sqlite_profiles_upgrade_to_ffmpeg_9_options() {
         const FFMPEG_9_PROFILE_VERSION: i64 = 202_608_051_900;
@@ -1204,7 +1031,6 @@ mod tests {
         assert_eq!(rows[2].get::<Option<String>, _>("VideoTune"), None);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn existing_sqlite_profiles_default_to_sdr_output_dynamic_range() {
         // ADR 0064: the migration is additive and must not change what an
@@ -1274,7 +1100,6 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn fresh_database_seeds_only_the_adr_0017_hdr_profiles_as_hdr10() {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -1313,7 +1138,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn existing_sqlite_schema_upgrades_to_uniform_metadata_facets() {
         const UNIFORM_FACETS_VERSION: i64 = 202_608_051_200;
@@ -1411,12 +1235,12 @@ mod tests {
     #[test]
     fn resolve_database_url_prefers_env_override() {
         let resolved = resolve_database_url_from_parts(
-            Some(OsString::from("mysql://root@localhost:3306/ersatzrs")),
+            Some(OsString::from("sqlite:///data/ersatzrs.db")),
             None,
         )
         .expect("use env override");
 
-        assert_eq!(resolved, "mysql://root@localhost:3306/ersatzrs");
+        assert_eq!(resolved, "sqlite:///data/ersatzrs.db");
     }
 
     #[test]
@@ -2148,21 +1972,25 @@ mod tests {
         format!("sqlite:{}", temp_dir.join("ErsatzRS.db").display())
     }
 
-    #[cfg(feature = "mysql")]
-    #[test]
-    fn mysql_urls_map_to_mysql_backend() {
-        assert_eq!(
-            database_backend("mysql://root@localhost:3306/ersatzrs"),
-            DatabaseBackend::MySql
-        );
-    }
+    #[tokio::test]
+    async fn removed_database_urls_fail_with_permanent_sqlite_only_diagnostic() {
+        for database_url in [
+            "mysql://root@localhost:3306/ersatzrs",
+            "mariadb://root@localhost:3306/ersatzrs",
+        ] {
+            let error = init(database_url)
+                .await
+                .expect_err("removed database backend must fail");
+            assert!(error
+                .to_string()
+                .ends_with(super::SQLITE_ONLY_DATABASE_URL_DIAGNOSTIC));
 
-    #[cfg(feature = "mysql")]
-    #[test]
-    fn mariadb_urls_map_to_mysql_backend() {
-        assert_eq!(
-            database_backend("mariadb://root@localhost:3306/ersatzrs"),
-            DatabaseBackend::MySql
-        );
+            let error = bootstrap_media_server_database_from_url(database_url.to_owned())
+                .await
+                .expect_err("media-server startup must reject removed database backend");
+            assert!(error
+                .to_string()
+                .ends_with(super::SQLITE_ONLY_DATABASE_URL_DIAGNOSTIC));
+        }
     }
 }

@@ -94,8 +94,10 @@ preserve behavior by default, and document deliberate deviations through ADRs.
 - No libav bindings are allowed without a new ADR.
 - FFmpeg 9.x is the supported runtime line; older and unverified future major
   versions are rejected at startup.
-- SQLite is the default database backend.
-- MySQL and MariaDB support are available behind the `mysql` feature.
+- SQLite is the sole supported database backend. The web host and scanner may
+  share one database file on one host; active-active servers and database files
+  on network filesystems are unsupported. See
+  [ADR 0080](docs/adr/0080-standardize-on-sqlite.md).
 - Add-ons are detached-signature-verified packages started as child processes;
   no native or Rust dynamic-library ABI is loaded into ErsatzRS.
 - `ersatzrs-infra` owns repository trust, immutable package storage, settings

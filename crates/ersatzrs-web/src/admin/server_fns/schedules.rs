@@ -2351,27 +2351,13 @@ mod tests {
     use super::*;
 
     async fn test_db() -> DbPool {
-        #[cfg(feature = "mysql")]
-        {
-            sqlx::any::install_default_drivers();
-            sqlx::any::AnyPoolOptions::new()
-                .max_connections(1)
-                .connect("sqlite::memory:")
-                .await
-                .unwrap()
-        }
-
-        #[cfg(not(feature = "mysql"))]
-        {
-            sqlx::sqlite::SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect("sqlite::memory:")
-                .await
-                .unwrap()
-        }
+        sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap()
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn migrated_test_db() -> DbPool {
         use sqlx::Executor;
 
@@ -2618,7 +2604,6 @@ mod tests {
         assert_eq!(stored, 0);
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn replace_schedule_items_round_trips_multiple_then_one_without_post_roll() {
         let pool = migrated_test_db().await;
@@ -2681,7 +2666,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(not(feature = "mysql"))]
     async fn schedule_smart_shuffle_policy_save_load_round_trip_and_off_removes_attachment() {
         let pool = migrated_test_db().await;
         sqlx::query(

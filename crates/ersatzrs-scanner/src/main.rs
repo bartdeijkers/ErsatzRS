@@ -448,7 +448,7 @@ async fn resolve_ffprobe_path(pool: &DbPool, args: &Args) -> anyhow::Result<Stri
     Ok(report.ffprobe.path)
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use super::{
         scan_emby, scan_jellyfin, scan_plex, Args, Provider, PLEX_SERVER_AUTH_TOKEN_PREFIX,

@@ -1,11 +1,28 @@
 feature    = 'Initial schema / database backends'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Data/TvContext.cs` and `$ERSATZTV_SRC/ErsatzTV.Infrastructure.MySql/Migrations/`'
-rs_target  = '`migrations/`, `migrations/mysql/`, `crates/ersatzrs-infra`'
-status     = 'Ported'
-adr        = ['0004']
+rs_target  = '`migrations/`, `crates/ersatzrs-infra`'
+status     = 'In progress'
+adr        = ['0004', '0080']
 summary    = '''
-Ported: the initial SQLite schema matches the ErsatzTV table/column/foreign-key shape and infra repositories now read/write ErsatzTV integer enums, EF-style UTC `DateTime` text, ErsatzTV `TimeSpan` values, and playout runtime state tables (`PlayoutAnchor`, `ScheduleItemsEnumeratorState`, `PlayoutGap`, `PlayoutHistory`, `PlayoutProgramScheduleAnchor`, `CollectionEnumeratorState`, `PlayoutScheduleItemFillGroupIndex`, `FillGroupEnumeratorState`, and `PlayoutTemplate`) for the covered persistence surfaces. Classic collection-anchor and fill-group roots use database-assigned global identities on SQLite and MySQL; strict transactional inserts preserve cross-playout ownership and roll back on collisions instead of applying destructive replacement semantics. Phase 7 Slice 14 adds typed `ProgramScheduleItem` subtype repositories (`Duration`/`Flood`/`Multiple`/`One`), schedule item watermark/graphics joins, EF-compatible `ProgramScheduleAlternate` converters, and typed `BlockItem` target/overlay writes. Phase 7 Slice 7 adds the MySQL backend behind the `mysql` feature: URL detection for `mysql://` / `mariadb://`, unsupported-backend errors when the feature is absent, ErsatzTV-style MySQL DDL with named constraints and `utf8mb4`/`utf8mb4_general_ci` parity, runtime backend-aware SQL helpers, and feature-gated MySQL migration/read-write integration coverage. SQLite startup and lazy pools now enforce foreign keys, a 30-second busy timeout, WAL journaling, and NORMAL synchronization on every connection, with a matching migration and health check. Remaining table-level read/write and real-world decode gaps are tracked in [persistence-gap-matrix.md](../persistence-gap-matrix.md).
+In progress under accepted ADR 0080: the initial SQLite schema matches the ErsatzTV table/column/foreign-key shape and infra repositories read/write ErsatzTV integer enums, EF-style UTC `DateTime` text, ErsatzTV `TimeSpan` values, and the covered playout runtime state. SQLite startup and lazy pools enforce foreign keys, a 30-second busy timeout, WAL journaling, NORMAL synchronization, immediate write transactions, bounded retries, and schema health checks. Runtime, Cargo, migrations, CI, developer graphs, and current operator documentation are SQLite-only; removed `mysql://` and `mariadb://` URLs fail with a permanent migration diagnostic. Only the verified release-specific offline conversion runbook remains open under ADR 0080. Historical MySQL implementation and proof below are retained as delivery evidence. Remaining table-level read/write and real-world decode gaps are tracked in [persistence-gap-matrix.md](../persistence-gap-matrix.md).
 '''
+
+[[debt]]
+id          = 'sqlite-only-runtime-removal'
+description = 'Complete ADR 0080 in the runtime and Cargo graph: remove MySQL features, dependencies, dialect branches and integration tests, then reject mysql:// and mariadb:// URLs with a clear diagnostic.'
+discovered  = '2026-08-24'
+evidence    = 'Resolved 2026-08-24: the mysql/mysql-integration features, sqlx Any/MySQL dependencies, dialect branches, migration tree, integration tests, CI service, dual developer graphs, and current support instructions are removed. The workspace compiles and Clippy passes SQLite-only; focused startup tests prove mysql:// and mariadb:// fail with the permanent migration diagnostic.'
+adr         = '0080'
+resolved    = true
+resolution  = 'The supported compile and runtime graph now contains one SQLite backend while preserving repository boundaries and SQLite concurrency/default contracts.'
+
+[[debt]]
+id          = 'mysql-to-sqlite-release-runbook'
+description = 'Before the first SQLite-only release, publish and execute a deterministic offline migration procedure for historical source-built MySQL/MariaDB installations.'
+discovered  = '2026-08-24'
+evidence    = 'The backup guide documents native consistent dump, checksum, and scratch-restore proof, and explicitly states that SQL dumps are not SQLite imports. Closure must pin the final MySQL-capable revision and prove all table data, migration history, identities, foreign keys, NULL/text/blob values, SQLite integrity, health, and rollback.'
+adr         = '0080'
+resolved    = false
 
 [[debt]]
 id          = 'replace-into-cascade-deleted-child-rows'
@@ -21,7 +38,7 @@ description = 'A new migration did not run until the crate was rebuilt for an un
 discovered  = '2026-08-12'
 evidence    = 'A pinned-key migration silently never applied across repeated restarts; the compiled `Migrator` kept the previous migration set. `crates/ersatzrs-infra/build.rs` now emits `rerun-if-changed` for both migration directories.'
 resolved    = true
-resolution  = 'A build script tracks `migrations/` and `migrations/mysql/`, so adding or editing a `.sql` file invalidates the crate and the new migration runs on the next start.'
+resolution  = 'At the time of the dual-backend implementation, a build script tracked both migration trees. ADR 0080 later retired the MySQL tree; the SQLite migration directory remains a build input.'
 
 [[debt]]
 id          = 'fresh-db-default-channel-branding'

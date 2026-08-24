@@ -1,4 +1,3 @@
-#![cfg(not(feature = "mysql"))]
 mod common;
 
 use chrono::Duration;

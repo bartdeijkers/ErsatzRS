@@ -34,7 +34,6 @@ Confirm the release commit is ready:
 git status --short
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy --workspace --all-targets --features mysql -- -D warnings
 ./run.sh test-closeout
 ```
 

@@ -763,7 +763,7 @@ pub fn media_kind_label(kind: i32) -> &'static str {
     }
 }
 
-#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+#[cfg(all(test, feature = "ssr"))]
 mod tests {
     use super::*;
     use sqlx::Row;

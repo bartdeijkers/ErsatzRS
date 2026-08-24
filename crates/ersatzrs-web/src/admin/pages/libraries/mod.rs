@@ -524,7 +524,7 @@ fn ScanIndicator(visible: Signal<bool>, fraction: Signal<Option<f32>>) -> impl I
     }
 }
 
-#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+#[cfg(all(test, feature = "ssr"))]
 mod tests {
     use super::*;
 

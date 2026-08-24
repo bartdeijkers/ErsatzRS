@@ -5,8 +5,8 @@ description: Audit and implement SQL repository reads or projection writes whose
 
 # SQL Cardinality and Idempotency
 
-Read [STYLE.md](../STYLE.md#sql), the repository trait, both backend queries,
-and [add-migration](add-migration.md) when persisted repair is required.
+Read [STYLE.md](../STYLE.md#sql), the repository trait, the SQLite query, and
+[add-migration](add-migration.md) when persisted repair is required.
 
 ## Define invariants first
 
@@ -24,12 +24,12 @@ and [add-migration](add-migration.md) when persisted repair is required.
    related rows. Assert logical count, page count, links, and selected artwork.
 4. Repeat the write and restart the repository; row counts and identities must
    remain stable.
-5. Inspect the SQLite query plan and the equivalent MySQL indexes when a join,
-   correlated selection, or grouping changes. Correctness must not introduce a
-   table scan on a hot media-browser path.
+5. Inspect the SQLite query plan and indexes when a join, correlated selection,
+   or grouping changes. Correctness must not introduce a table scan on a hot
+   media-browser path.
 
 For existing data, offer an aggregate dry-run and a transactional repair that
 deletes only exact extras while preserving distinct variants and operator-owned
 rows. Test a fresh database, a legacy duplicate fixture, rollback/failure, and
-both backends. Extend health when duplicate state affects visible media or
+restart. Extend health when duplicate state affects visible media or
 port-completeness readiness.

@@ -1,4 +1,3 @@
-#![cfg(not(feature = "mysql"))]
 #![allow(dead_code)]
 
 use chrono::{DateTime, Duration, TimeZone, Utc};

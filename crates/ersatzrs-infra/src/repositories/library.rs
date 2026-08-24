@@ -23,13 +23,7 @@ pub struct SqliteLibraryRepository(pub Pool<crate::db::Db>);
 /// wrote for them.
 static LIBRARY_PATH_UPSERT_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
     let insert = r#"INSERT INTO "LibraryPath" ("LibraryId", "Id", "Path") VALUES (?, ?, '')"#;
-    if crate::db::connected_backend_is_mysql() {
-        format!("{insert}\nON DUPLICATE KEY UPDATE \"LibraryId\" = VALUES(\"LibraryId\")")
-    } else {
-        format!(
-            "{insert}\nON CONFLICT(\"Id\") DO UPDATE SET \"LibraryId\" = excluded.\"LibraryId\""
-        )
-    }
+    format!("{insert}\nON CONFLICT(\"Id\") DO UPDATE SET \"LibraryId\" = excluded.\"LibraryId\"")
 });
 
 #[async_trait]

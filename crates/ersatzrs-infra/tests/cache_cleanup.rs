@@ -1,5 +1,3 @@
-#![cfg(not(feature = "mysql"))]
-
 use ersatzrs_infra::cache_cleanup::{clean_caches, CacheCleanupConfig};
 
 #[tokio::test]

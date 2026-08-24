@@ -5644,7 +5644,6 @@ mod tests {
         assert!(try_reserve_work_ahead(0).is_none());
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn hls_work_ahead_loader_distinguishes_absence_invalid_and_database_failure() {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -5711,7 +5710,6 @@ mod tests {
         ));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn live_remote_stream_lookup_uses_transcode_cursor_not_wall_clock() {
         let pool = active_hls_item_test_pool().await;
@@ -5750,7 +5748,6 @@ mod tests {
             .expect("cursor liveness"));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn active_hls_item_loader_preserves_absence_decode_and_database_failure() {
         let pool = active_hls_item_test_pool().await;
@@ -5833,7 +5830,6 @@ mod tests {
         ));
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn active_hls_item_uses_source_programming_and_target_channel_settings() {
         let pool = active_hls_item_test_pool().await;
@@ -5878,7 +5874,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[allow(clippy::too_many_lines)] // The inline schema mirrors the production query shape.
     async fn active_hls_item_test_pool() -> sqlx::SqlitePool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -5986,7 +5981,6 @@ mod tests {
         pool
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn on_demand_startup_timeshifts_playout_and_updates_checkpoint() {
         let pool = on_demand_test_pool().await;
@@ -6023,7 +6017,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn on_demand_test_pool() -> sqlx::SqlitePool {
         use sqlx::sqlite::SqlitePoolOptions;
 
@@ -6037,7 +6030,6 @@ mod tests {
         pool
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn create_on_demand_test_schema(pool: &sqlx::SqlitePool) {
         for statement in [
             r#"CREATE TABLE "Channel" (
@@ -6067,7 +6059,6 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn seed_on_demand_test_playout(pool: &sqlx::SqlitePool) {
         for statement in [
             r#"INSERT INTO "Channel" ("Id", "Number", "Name", "PlayoutMode", "SlugSeconds")
@@ -6093,7 +6084,6 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn assert_on_demand_playout_shifted(pool: &sqlx::SqlitePool) {
         let item = sqlx::query(
             r#"SELECT "Start", "Finish", "GuideStart", "GuideFinish"

@@ -104,10 +104,8 @@ jobs:
           if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
             cargo install stylance-cli --version 0.8.2 --locked
           fi
-      - name: Clippy (default / SQLite)
+      - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Clippy (MySQL feature)
-        run: cargo clippy --workspace --all-targets --features mysql -- -D warnings
 
   test:
     name: Test
@@ -130,8 +128,8 @@ jobs:
           if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
             cargo install stylance-cli --version 0.8.2 --locked
           fi
-      - name: Test (all features)
-        run: cargo test --workspace --all-features --lib --bins --tests
+      - name: Test
+        run: cargo test --workspace --lib --bins --tests
       - name: Validate progress index (docs/progress/)
         run: cargo xtask progress check
       - name: Validate architecture boundaries and debt ratchets
@@ -143,7 +141,7 @@ jobs:
     name: Test (${{ matrix.shard }})
     if: ${{ inputs.runner == 'github-hosted' }}
     runs-on: ubuntu-24.04
-    # Keep cold all-features linking within the hosted job lifetime by splitting
+    # Keep cold workspace linking within the hosted job lifetime by splitting
     # the large web crate's library and binary test targets. Preserve native
     # runner parallelism; debug info is not needed to determine test outcomes.
     env:
@@ -173,66 +171,21 @@ jobs:
           sudo apt-get install --no-install-recommends --yes lld
       - name: Install Stylance CLI
         run: cargo install stylance-cli --version 0.8.2 --locked
-      - name: Test remaining workspace (all features)
+      - name: Test remaining workspace
         if: matrix.shard == 'workspace-minus-web'
-        run: cargo test --workspace --exclude ersatzrs-web --all-features --lib --bins --tests
-      - name: Test web library (all features)
+        run: cargo test --workspace --exclude ersatzrs-web --lib --bins --tests
+      - name: Test web library
         if: matrix.shard == 'web-lib'
-        run: cargo test -p ersatzrs-web --all-features --lib
-      - name: Test web binaries (all features)
+        run: cargo test -p ersatzrs-web --lib
+      - name: Test web binaries
         if: matrix.shard == 'web-bins'
-        run: cargo test -p ersatzrs-web --all-features --bins
+        run: cargo test -p ersatzrs-web --bins
       - name: Validate progress index (docs/progress/)
         if: matrix.shard == 'workspace-minus-web'
         run: cargo xtask progress check
       - name: Validate architecture boundaries and debt ratchets
         if: matrix.shard == 'workspace-minus-web'
         run: cargo xtask architecture-lint
-
-  mysql_health:
-    name: MySQL health and continuity contract
-    runs-on: ubuntu-24.04
-    needs: fmt
-    services:
-      mysql:
-        image: mysql:8.4
-        env:
-          MYSQL_DATABASE: ersatzrs_health_test
-          MYSQL_ROOT_PASSWORD: ersatzrs-test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping --silent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=12
-    env:
-      ERSATZRS_MYSQL_TEST_URL: mysql://root:ersatzrs-test@127.0.0.1:3306/ersatzrs_health_test
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: mysql-health
-          cache-bin: "false"
-      - name: Prove Output Dynamic Range health classifications on MySQL 8
-        run: >-
-          cargo test -p ersatzrs-infra --features mysql-integration
-          --test mysql_backend
-          mysql_output_dynamic_range_health_check_classifies_every_row_shape
-          -- --exact
-      - name: Prove scan-refresh concurrency safety on MySQL 8
-        run: >-
-          cargo test -p ersatzrs-infra --features mysql-integration
-          --test mysql_backend
-          mysql_scan_refresh_concurrency_preserves_generations_and_newer_resolution
-          -- --exact
-      - name: Prove scoped Classic scan refresh continuity on MySQL 8
-        run: >-
-          cargo test -p ersatzrs-web --features mysql-integration
-          --test scan_refresh_mysql_production_continuity
-          mysql_production_scan_refresh_survives_restart_and_preserves_unrelated_rows
-          -- --exact
 
   hydration:
     name: Playwright E2E
@@ -307,7 +260,7 @@ jobs:
             cargo install cargo-deny --version 0.19.6 --locked
           fi
       - name: Cargo deny
-        run: cargo deny --all-features check
+        run: cargo deny check
 
   commitlint:
     name: Commit lint

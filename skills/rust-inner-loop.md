@@ -21,8 +21,8 @@ Use the platform wrapper printed by `affected-checks`:
   uses nextest.
 - Admin UI: `dev`/`serve` so SSR and hydration assets stay from one build.
 
-Do not alternate default, MySQL, all-targets, WASM, and release graphs after
-every edit. Do not run direct `cargo test`. Do not clean a warm target merely
+Do not alternate native, all-targets, WASM, and release graphs after every
+edit. Do not run direct `cargo test`. Do not clean a warm target merely
 because a build is slow; use `cargo xtask target-size` and the documented
 40-GiB policy.
 
@@ -35,7 +35,7 @@ because a build is slow; use `cargo xtask target-size` and the documented
 - Suspect the stale-binary trap when runtime behavior disagrees with source:
   identify the executable under the configured target/package before debugging
   code further.
-- Run the two Clippy configurations, `test-closeout`, Leptos/parity gates, and
+- Run the workspace Clippy configuration, `test-closeout`, Leptos/parity gates, and
   other broad milestone requirements once after the focused loop is green.
 
 Report the selected Cargo graph, focused commands and outcomes, and the broad

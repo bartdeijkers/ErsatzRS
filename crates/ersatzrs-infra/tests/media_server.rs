@@ -1,4 +1,3 @@
-#![cfg(not(feature = "mysql"))]
 //! Regression coverage for the media-server missing-item state machine
 //! (`crate::media_server`): trashing items no longer on the server and flagging
 //! items whose local file is missing as `RemoteOnly`/`Unavailable`.

@@ -2988,7 +2988,7 @@ mod tests {
         StreamingMode, WatermarkLocation, WatermarkSize,
     };
     use ersatzrs_ffmpeg::{FfmpegCapabilityReport, GraphicsPipelineOverlay, WatermarkOverlay};
-    #[cfg(all(unix, not(feature = "mysql")))]
+    #[cfg(unix)]
     use ersatzrs_ffmpeg::{
         FfmpegRuntimeReport, GraphFailureKind, HardwareGraphDenial, HardwareGraphOperation,
     };
@@ -3014,7 +3014,6 @@ mod tests {
             .await
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn active_playback_item_loader_rejects_invalid_subtitle_state() {
         let pool = active_playback_item_test_pool().await;
@@ -3098,7 +3097,6 @@ mod tests {
         assert_eq!(active.media_path, "/media/streams/live.yml");
     }
 
-    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     async fn active_playback_item_loader_resolves_and_projects_delayed_mirror() {
         let pool = active_playback_item_test_pool().await;
@@ -3148,7 +3146,6 @@ mod tests {
         );
     }
 
-    #[cfg(not(feature = "mysql"))]
     async fn active_playback_item_test_pool() -> DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -4513,16 +4510,6 @@ mod tests {
     }
 
     async fn capacity_test_pool(limit: i32) -> DbPool {
-        #[cfg(feature = "mysql")]
-        let pool = {
-            sqlx::any::install_default_drivers();
-            sqlx::any::AnyPoolOptions::new()
-                .max_connections(1)
-                .connect("sqlite::memory:")
-                .await
-                .expect("open capacity test db")
-        };
-        #[cfg(not(feature = "mysql"))]
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -5207,7 +5194,7 @@ mod tests {
         .is_err());
     }
 
-    #[cfg(all(unix, not(feature = "mysql")))]
+    #[cfg(unix)]
     #[tokio::test]
     async fn profile_5_graph_failure_is_learned_without_a_wrong_colour_respawn() {
         use std::os::unix::fs::PermissionsExt as _;
@@ -5302,7 +5289,7 @@ mod tests {
         );
     }
 
-    #[cfg(all(unix, not(feature = "mysql")))]
+    #[cfg(unix)]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn graph_fallback_failure_is_learned_without_a_second_retry() {
@@ -5416,7 +5403,7 @@ mod tests {
             .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
     }
 
-    #[cfg(all(unix, not(feature = "mysql")))]
+    #[cfg(unix)]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn graph_failure_after_decode_retry_is_learned_without_a_second_retry() {

@@ -5,8 +5,8 @@ This is the single, normative style contract for ErsatzRS. It covers:
 1. **Rust** — how we write Rust in this repository.
 2. **Rust ↔ C# parity** — when ErsatzTV C# patterns win over idiomatic Rust
    because persisted data or public behavior depends on them.
-3. **SQL** — how we write SQLite (and MySQL-behind-feature-flag) schema and
-   migrations so they remain compatible with the ErsatzTV reference model.
+3. **SQL** — how we write SQLite schema and migrations so they remain
+   compatible with the ErsatzTV reference model.
 
 If you find style guidance anywhere else in the tree, treat it as a pointer to
 this file. Do not create a second style document.
@@ -204,13 +204,8 @@ the ErsatzTV form. Example from the initial schema:
   sqlx queries depend on, so the query regression surfaces with the schema
   change.
 
-### MySQL backend
+### Database backend
 
-The MySQL backend is behind a feature flag. When that backend gains its own
-migrations:
-
-- Keep identifier casing identical to the SQLite schema. Use backticks for
-  quoting (`` `Channel` ``) instead of double quotes.
-- Map types as EF Core does: `INTEGER` → `INT`, `TEXT` → `LONGTEXT` or
-  `VARCHAR(n)` where EF used `varchar(n)`, `REAL` → `DOUBLE`.
-- Mirror the same constraint and index names.
+ADR 0080 makes SQLite the sole supported backend. Do not add dialect branches,
+paired migrations, or optional client-server database features without a new
+ADR establishing the product need and ownership of their ongoing proof.

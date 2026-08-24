@@ -2,11 +2,17 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Implementation
 
-Not implemented
+Partially implemented (2026-08-24). Runtime and Cargo are SQLite-only: the
+MySQL features, dependencies, migration tree, dialect branches, integration
+tests, CI service job, dual-feature check graphs, dependency-advisory exception,
+and current support documentation are removed. `mysql://` and `mariadb://`
+startup URLs fail with a permanent SQLite-only diagnostic. A verified offline
+data conversion procedure remains release work; backup-preservation steps are
+documented without claiming standard dump files can be imported into SQLite.
 
 ## Context
 

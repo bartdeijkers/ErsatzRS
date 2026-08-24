@@ -170,9 +170,7 @@ the deadline is already reached, set `stop_reason=time-box` and break:
 3. **Verify** (focused, not the full closeout gate), scoped to the touched
    crate only:
    - `cargo fmt --all -- --check`
-   - `cargo clippy -p <touched crate> --all-targets -- -D warnings`, plus the
-     `--features mysql` pass too if the touched crate is feature-gated by it
-     (currently only `ersatzrs-infra`)
+   - `cargo clippy -p <touched crate> --all-targets -- -D warnings`
    - `cargo xtask hydration-lint -p ersatzrs-web` if the touched file is an
      admin page
    - A focused `./run.sh test -p <crate> <module filter>` if the touched

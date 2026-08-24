@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-24","summary":"Accepted ADR 0080 and made runtime, Cargo, migrations, CI, docs, skills, and agent tooling SQLite-only; verified offline MySQL-to-SQLite conversion remains release work."}
 {"agent":"Codex","date":"2026-08-24","summary":"Completed AMM-H-01 projected artwork deduplication, safe SQLite/MySQL repair, cardinality-safe reads, localized health, and 27-episode Chromium/Firefox proof."}
 {"agent":"Codex","date":"2026-08-24","summary":"Completed crf-02 with dependency-scoped Classic invalidation, crash-safe generated-file resolution, durable coalesced refresh intents, startup/periodic recovery, localized health, SQLite restart continuity, and live MySQL race coverage."}
 {"agent":"Codex","date":"2026-08-24","summary":"Completed crf-01 with durable Classic refresh checkpoints, safe refresh/startup repair gating, health coverage, migrations, and restart/idempotency regressions."}

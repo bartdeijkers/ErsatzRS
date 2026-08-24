@@ -229,7 +229,7 @@ async fn duplicate_artwork_rows(pool: &Pool<Db>, query: &'static str) -> Result<
     })
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use sqlx::{sqlite::SqlitePoolOptions, Executor};
 

@@ -26,7 +26,7 @@ use super::schedules::{persist_smart_shuffle_attachment_tx, validate_smart_shuff
 #[cfg(all(test, feature = "ssr"))]
 use ersatzrs_core::scheduling::block_item_smart_shuffle_config_key;
 
-#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+#[cfg(all(test, feature = "ssr"))]
 use ersatzrs_core::scheduling::{legacy_playout_cooldown_config_key, SchedulingSmartShufflePolicy};
 
 // ---------------------------------------------------------------------------
@@ -1429,7 +1429,7 @@ pub fn format_duration_label(minutes: i32) -> String {
 mod tests {
     use super::*;
 
-    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[cfg(feature = "ssr")]
     async fn migrated_test_db() -> DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -1606,7 +1606,7 @@ mod tests {
         );
     }
 
-    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[cfg(feature = "ssr")]
     #[tokio::test]
     async fn saving_block_item_off_persists_disabled_legacy_override() {
         let pool = migrated_test_db().await;
@@ -1684,7 +1684,7 @@ mod tests {
         assert_eq!(legacy_count, 1);
     }
 
-    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[cfg(feature = "ssr")]
     #[tokio::test]
     async fn saving_inherited_block_item_off_preserves_missing_attachment() {
         let pool = migrated_test_db().await;
@@ -1748,7 +1748,7 @@ mod tests {
         assert_eq!(attachment_count, 0);
     }
 
-    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[cfg(feature = "ssr")]
     #[tokio::test]
     async fn loading_block_items_distinguishes_missing_and_explicit_attachments() {
         let pool = migrated_test_db().await;
@@ -1799,7 +1799,7 @@ mod tests {
         assert_eq!(items[2].smart_shuffle.preset, "balanced");
     }
 
-    #[cfg(all(feature = "ssr", not(feature = "mysql")))]
+    #[cfg(feature = "ssr")]
     #[tokio::test]
     async fn copying_block_preserves_attachment_presence() {
         let pool = migrated_test_db().await;

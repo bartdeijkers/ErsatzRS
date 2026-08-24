@@ -5,7 +5,6 @@
 //! test below generates a tiny MKV with an embedded text subtitle when `FFmpeg`
 //! is available and verifies the full extract-and-flip-to-`IsExtracted=1` path.
 
-#![cfg(not(feature = "mysql"))]
 mod common;
 
 use ersatzrs_infra::ffmpeg_config::{

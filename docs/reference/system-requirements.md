@@ -41,7 +41,7 @@ a trusted LAN, VPN, or an authenticated reverse proxy.
 
 ErsatzRS needs writable persistent storage for:
 
-- the SQLite database, unless MySQL or MariaDB is configured;
+- the SQLite database on a local filesystem with correct locking semantics;
 - the managed FFmpeg runtime;
 - extracted resources and, in builds containing the add-on host, verified
   add-on packages and add-on data; and
@@ -68,9 +68,11 @@ pre-placed runtime.
 
 ## Database support
 
-- SQLite is the default and requires no separate database server.
-- MySQL 8 and compatible MariaDB deployments require a binary built with the
-  `mysql` feature and a `mysql://` or `mariadb://` database URL.
+- SQLite is the sole supported backend and requires no separate database
+  server.
+- The web host and scanner may share the database file on one host. Network
+  filesystems and multiple active server instances sharing one database are
+  unsupported.
 - Startup applies pending migrations and reports unknown, dirty, or mismatched
   migration history through health checks.
 

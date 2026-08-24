@@ -38,6 +38,6 @@ become Reset, replay consumed shuffled media, or modify unrelated playouts.
 - Update the Classic Playout State health contract whenever readiness to
   continue or refresh changes.
 
-Run focused core/infra/scanner tests in one Cargo graph first, then SQLite,
-MySQL, restart, runtime smoke, and playback-sensitive closeout gates required by
-the owning milestone.
+Run focused core/infra/scanner tests in one Cargo graph first, then SQLite
+restart, runtime smoke, and playback-sensitive closeout gates required by the
+owning milestone.

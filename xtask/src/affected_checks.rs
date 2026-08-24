@@ -273,9 +273,6 @@ impl Recommendations {
         }
         if self.migration {
             output.push_str(&format!("  {wrapper} test -p ersatzrs-infra migration\n"));
-            output.push_str(&format!(
-                "  {wrapper} test -p ersatzrs-infra --features mysql-integration migration\n"
-            ));
         }
         if self.hydration {
             output.push_str("  cargo xtask hydration-lint -p ersatzrs-web\n");
@@ -297,9 +294,6 @@ impl Recommendations {
             output.push_str("\nCloseout (once, after the focused loop is green):\n");
             output.push_str("  cargo fmt --all -- --check\n");
             output.push_str("  cargo clippy --workspace --all-targets -- -D warnings\n");
-            output.push_str(
-                "  cargo clippy --workspace --all-targets --features mysql -- -D warnings\n",
-            );
             output.push_str(&format!("  {wrapper} test-closeout\n"));
             if self.hydration {
                 output.push_str("  (cd crates/ersatzrs-web && cargo leptos build)\n");
@@ -379,7 +373,8 @@ mod tests {
         assert!(rendered.contains("-p ersatzrs-infra"));
         assert!(rendered.contains("-p ersatzrs-web"));
         assert!(rendered.contains("hydration-lint"));
-        assert!(rendered.contains("mysql-integration migration"));
+        assert!(rendered.contains("test -p ersatzrs-infra migration"));
+        assert!(!rendered.contains("--features mysql"));
         assert!(rendered.contains("cargo xtask smoke"));
     }
 

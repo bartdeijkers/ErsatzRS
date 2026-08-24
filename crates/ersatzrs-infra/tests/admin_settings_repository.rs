@@ -1,5 +1,3 @@
-#![cfg(not(feature = "mysql"))]
-
 use ersatzrs_core::repositories::{AdminSettingsRepository, RepositoryError, SettingsMutation};
 use ersatzrs_infra::repositories::SqliteAdminSettingsRepository;
 

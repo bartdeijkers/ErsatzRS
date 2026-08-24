@@ -351,7 +351,7 @@ fn parse_interval(value: &str) -> Option<Duration> {
     amount.checked_mul(multiplier).map(Duration::from_secs)
 }
 
-#[cfg(all(test, not(feature = "mysql"), unix))]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use sqlx::sqlite::SqlitePoolOptions;

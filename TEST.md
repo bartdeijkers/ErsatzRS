@@ -13,7 +13,6 @@ For build commands and the dev loop, see [BUILD.md](BUILD.md).
 | Unit             | `#[cfg(test)]` modules in each crate                     | Pure logic — duration math, template parsing, scheduling primitives.            |
 | Snapshot         | `insta` in `ersatzrs-ffmpeg`, `ersatzrs-infra`           | Generated FFmpeg argv, filter graphs, playout build round-trips.                |
 | Integration      | `tests/` per crate                                       | Database repositories, external clients (Plex/Jellyfin/Emby/Trakt), ffprobe.    |
-| MySQL backend    | `--features mysql-integration`                           | Same integration tests, run against MariaDB via testcontainers.                 |
 | Hydration smoke  | CI-gated lint plus Playwright specs or browser probes.    | Admin UI islands actually attach handlers and the round-trip server fn fires.   |
 | Runtime smoke    | `cargo xtask smoke`                                      | Real web host, seeded SQLite fixture, IPTV MPEG-TS and HLS startup playback.    |
 | CI               | `.github/workflows/ci.yml`                               | fmt, clippy, test, architecture/hydration lint, scoped hydration smoke, cargo-deny, commitlint, docs. |
@@ -29,23 +28,22 @@ References:
 
 ## What runs where
 
-- **CI (every push and PR)**: the SQLite/default test layers plus a dedicated
-  MySQL 8 Output Dynamic Range health-contract job, `cargo xtask architecture-lint`,
-  and `cargo xtask hydration-lint -p ersatzrs-web`. The browser island
+- **CI (every push and PR)**: the SQLite test layers,
+  `cargo xtask architecture-lint`, and
+  `cargo xtask hydration-lint -p ersatzrs-web`. The browser island
   hydration smoke also runs in CI when the
   diff touches web, Leptos, E2E, workflow, Cargo, Node, or hydration policy
-  files. Other environment-gated MySQL integration tests still require
-  `ERSATZRS_MYSQL_TEST_URL` when run locally.
+  files.
 - **Focused/local dev**: use `./run.sh test -p <crate>` as the required runner
   and append a test filter when one regression is sufficient. Agent command
   hooks reject direct `cargo test` invocations. The
   repository profile runs through all failures, retries nothing, and reports
-  tests slower than 60 seconds. Add the relevant feature flags when the change
-  crosses a gated path.
+  tests slower than 60 seconds. Add relevant non-database feature flags when a
+  change crosses a gated path.
 - **Closeout**: use `./run.sh test-closeout`. It runs all workspace
   unit/integration/binary tests through nextest, then Cargo doctests because
-  nextest cannot execute them. The MySQL integration feature may pull a MariaDB
-  image on a cold cache. CI remains on its existing direct Cargo test selection.
+  nextest cannot execute them. CI remains on its existing direct Cargo test
+  selection.
 - **Hydration smoke**: prefer a runnable Playwright spec under `tests/e2e/` and
   run it with `E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test ...`.
   For exploratory work, a browser probe through Playwright MCP or another
@@ -227,9 +225,7 @@ The **porter** produces:
 The **human** runs, before committing:
 
 - `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets -- -D warnings` and
-  `cargo clippy --workspace --all-targets --features mysql -- -D warnings`
-  (mirror CI: two passes, neither with `--all-features`).
+- `cargo clippy --workspace --all-targets -- -D warnings`.
 - `./run.sh test-closeout`
 - `cargo leptos build` from `crates/ersatzrs-web` (rebuilds hydration assets).
 - A runnable Playwright spec for the touched page when one exists or is added;

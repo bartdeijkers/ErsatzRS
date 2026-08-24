@@ -23,11 +23,6 @@ tracing = "0.1"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt", "time"] }
 
-[features]
-default = []
-mysql = ["ersatzrs-infra/mysql"]
-mysql-integration = ["mysql", "ersatzrs-infra/mysql-integration"]
-
 [lib]
 name = "ersatzrs_scheduler"
 path = "src/lib.rs"

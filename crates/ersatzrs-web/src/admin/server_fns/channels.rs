@@ -764,7 +764,7 @@ fn channel_logo_url(name: &str, path: Option<&str>) -> String {
     }
 }
 
-#[cfg(all(test, feature = "ssr", not(feature = "mysql")))]
+#[cfg(all(test, feature = "ssr"))]
 mod tests {
     use tokio::sync::mpsc;
 

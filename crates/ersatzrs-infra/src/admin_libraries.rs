@@ -130,7 +130,7 @@ pub async fn load_external_collections(pool: &DbPool) -> Result<Vec<AdminExterna
     })
 }
 
-#[cfg(all(test, not(feature = "mysql")))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use ersatzrs_core::repositories::RepositoryError;

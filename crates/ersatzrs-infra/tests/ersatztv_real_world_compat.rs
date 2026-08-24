@@ -1,4 +1,3 @@
-#![cfg(not(feature = "mysql"))]
 use std::{collections::BTreeSet, path::PathBuf};
 
 use chrono::{Duration, Utc};

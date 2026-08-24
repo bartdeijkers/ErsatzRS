@@ -28,7 +28,7 @@ Before editing:
 1. Read ADRs 0064, 0017, 0014, the milestone's full acceptance text, and the
    open debts in
    [`hdr-dolby-vision-metadata.toml`](progress/parity/hdr-dolby-vision-metadata.toml).
-2. Trace profile persistence and validation across domain, SQLite/MySQL,
+2. Trace profile persistence and validation across domain, SQLite,
    application services, the localized profile editor, and FFmpeg argv
    generation. Map scanner side-data persistence and selected-stream flow.
 3. Pin redistributable SDR, HDR10, and HLG fixtures and define decoded-frame and
@@ -43,12 +43,12 @@ Implement the complete slice:
   white for SDR-to-HDR and correct post-transform metadata emission/stripping.
 - Persist source mastering/content-light metadata and carry it with stream
   selection; add invalid-profile and unsupported-output health findings.
-- Add SQLite/MySQL round trips, validation tests, reviewed argv snapshots,
+- Add SQLite round trips, validation tests, reviewed argv snapshots,
   decoded-image comparisons, side-data assertions, and MPEG-TS/HLS transition
   proof. Do not claim Dolby Vision support in this milestone.
 
 Close with focused crate tests, localization/hydration proof, smoke and TSDuck
-for playback-sensitive changes, both Clippy configurations, test closeout,
+  for playback-sensitive changes, Clippy, test closeout,
 `cargo xtask progress check`, and `git diff --check`. Update the milestone,
 parity debt, changelog, prompt ranking, and session log. Do not commit or push
 unless explicitly requested.

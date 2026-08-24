@@ -1231,8 +1231,8 @@ mod legacy_sql_regressions {
         }
 
         // ErsatzTV seeds with `new Random().Next()` (non-negative 32-bit int).
-        // Generate it in Rust and bind it so the INSERT stays backend-neutral; an
-        // embedded `random()` would be SQLite-only and overflow MySQL's `INT`.
+        // Generate it in Rust and bind it to preserve ErsatzTV's non-negative
+        // 32-bit range instead of using SQLite's signed 64-bit `random()`.
         let seed = next_seed();
 
         sqlx::query(
@@ -2629,24 +2629,11 @@ mod legacy_sql_regressions {
         use super::*;
 
         async fn test_db() -> ersatzrs_infra::db::DbPool {
-            #[cfg(feature = "mysql")]
-            {
-                sqlx::any::install_default_drivers();
-                sqlx::any::AnyPoolOptions::new()
-                    .max_connections(1)
-                    .connect("sqlite::memory:")
-                    .await
-                    .expect("pool")
-            }
-
-            #[cfg(not(feature = "mysql"))]
-            {
-                sqlx::sqlite::SqlitePoolOptions::new()
-                    .max_connections(1)
-                    .connect("sqlite::memory:")
-                    .await
-                    .expect("pool")
-            }
+            sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .expect("pool")
         }
 
         fn playout_queue_state() -> (

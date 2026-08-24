@@ -76,9 +76,10 @@ Common end-user guides:
 - Rust stable, pinned through [rust-toolchain.toml](rust-toolchain.toml).
 - Network access for the first managed FFmpeg runtime download, or an explicit
   FFmpeg 9.x override/pre-placed managed runtime for offline development.
-- SQLite as the default database backend (created at `~/.ersatzrs/ErsatzRS.db`).
-- MySQL 8/MariaDB support behind the `mysql` Cargo feature; set
-  `DATABASE_URL='mysql://user:pass@host/ersatzrs'` to use it.
+- SQLite as the sole supported database backend (created at
+  `~/.ersatzrs/ErsatzRS.db`). Keep the database on a local filesystem with
+  correct locking semantics; network shares and active-active servers are not
+  supported.
 - For interactive UI development: `cargo install cargo-leptos --locked`, then use
   the `./run.sh` dev entry point (`./run.sh dev` for hot-reload, `./run.sh build`
   for a CI-parity one-shot build that generates the WASM hydration assets). On
