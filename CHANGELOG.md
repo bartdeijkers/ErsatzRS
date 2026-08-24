@@ -34,6 +34,14 @@ release section when tagging a release.
 
 ### Fixed
 
+- Classic Refresh now restores complete, production-generated day checkpoints
+  across process restarts instead of rewinding shuffled media. Checkpoints
+  preserve schedule, source, fill-group, Smart Shuffle, Random, and Random
+  Rotation state; membership changes reconcile by stable playback identity,
+  and legacy continuation-only databases refuse the destructive rebuild with
+  an actionable Reset/health diagnostic while leaving the playout window
+  untouched.
+
 - Toast lifecycles now use measured elapsed time, so delayed browser timer
   callbacks cannot stretch the configured display and fade durations after a
   hover or touch pause.

@@ -29,10 +29,10 @@ use ersatzrs_core::search::{
 };
 use ersatzrs_domain::{
     normalize_sub_kind_token, AddonMediaListContentKind, ChannelSubtitleMode,
-    CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutHistory, PlayoutItem,
-    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleAlternate,
-    ProgramScheduleItem, RemoteStreamLiveness, CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID,
-    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutClassicCheckpoint,
+    PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+    ProgramScheduleAlternate, ProgramScheduleItem, RemoteStreamLiveness,
+    CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use sqlx::{Pool, Row};
 
@@ -397,6 +397,7 @@ impl SqliteSchedulingContentRepository {
                 existing_program_schedule_anchors: self
                     .program_schedule_anchors(playout_id)
                     .await?,
+                existing_classic_checkpoints: self.classic_checkpoints(playout_id).await?,
                 existing_fill_group_indices: self.fill_group_indices(playout_id).await?,
                 existing_items: self.playout_items(playout_id).await?,
                 existing_history: self.playout_history(playout_id).await?,
@@ -3107,6 +3108,35 @@ impl SqliteSchedulingContentRepository {
                             .repository()?
                             .unwrap_or_default(),
                     },
+                })
+            })
+            .collect()
+    }
+
+    async fn classic_checkpoints(
+        &self,
+        playout_id: EntityId,
+    ) -> Result<Vec<PlayoutClassicCheckpoint>> {
+        let rows = sqlx::query(
+            r#"SELECT "PlayoutId", "CheckpointDate", "Context"
+               FROM "PlayoutClassicCheckpoint"
+               WHERE "PlayoutId" = ?
+               ORDER BY "CheckpointDate""#,
+        )
+        .bind(playout_id)
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+
+        rows.iter()
+            .map(|row| {
+                Ok(PlayoutClassicCheckpoint {
+                    playout_id: row.try_get("PlayoutId").repository()?,
+                    checkpoint_date: decode_datetime(
+                        "classic checkpoint date",
+                        row.try_get("CheckpointDate").repository()?,
+                    )?,
+                    context: row.try_get("Context").repository()?,
                 })
             })
             .collect()

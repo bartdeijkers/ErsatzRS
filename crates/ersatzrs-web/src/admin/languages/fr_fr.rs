@@ -338,7 +338,7 @@ impl LanguageStrings for FrenchStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "L’état de l’énumérateur de diffusion classique est incomplet pour : {playouts}. Le planificateur doit actualiser ces diffusions avant qu’elles puissent continuer en toute sécurité."
+            "L’état de la diffusion classique ne permet pas une actualisation sûre pour : {playouts}. Utilisez Réinitialiser la diffusion pour un état ancien ou incompatible ; l’actualisation n’efface jamais une fenêtre sans point de contrôle complet."
         )
     }
 

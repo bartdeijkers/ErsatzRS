@@ -12,8 +12,9 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_core::scheduling::{next_playout_seed, SchedulingResult};
 use ersatzrs_domain::{
-    EntityId, Playout, PlayoutAnchor, PlayoutBuildStatus, PlayoutGap, PlayoutHistory, PlayoutItem,
-    PlayoutItemGraphicsElement, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
+    EntityId, Playout, PlayoutAnchor, PlayoutBuildStatus, PlayoutClassicCheckpoint, PlayoutGap,
+    PlayoutHistory, PlayoutItem, PlayoutItemGraphicsElement, PlayoutProgramScheduleAnchor,
+    PlayoutScheduleItemFillGroupIndex,
 };
 use sqlx::{Pool, Row, Transaction};
 
@@ -162,6 +163,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         replace_gaps(&mut tx, playout.id, gaps).await?;
         replace_history(&mut tx, playout.id, history).await?;
         replace_program_schedule_anchors(&mut tx, playout.id, program_schedule_anchors).await?;
+        replace_classic_checkpoints(&mut tx, playout.id, &[]).await?;
         replace_fill_group_indices(&mut tx, playout.id, fill_group_indices).await?;
         replace_playout_templates(&mut tx, playout).await?;
 
@@ -405,6 +407,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         replace_anchor_state(&mut tx, playout.id, result.anchor.as_ref()).await?;
         replace_program_schedule_anchors(&mut tx, playout.id, &result.program_schedule_anchors)
             .await?;
+        replace_classic_checkpoints(&mut tx, playout.id, &result.classic_checkpoints).await?;
         replace_fill_group_indices(&mut tx, playout.id, &result.fill_group_indices).await?;
         replace_playout_templates(&mut tx, playout).await?;
 
@@ -2441,6 +2444,49 @@ async fn replace_program_schedule_anchors(
         .bind(persisted_id)
         .bind(anchor.enumerator_state.seed)
         .bind(anchor.enumerator_state.index)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    }
+    Ok(())
+}
+
+async fn replace_classic_checkpoints(
+    tx: &mut Transaction<'_, crate::db::Db>,
+    playout_id: EntityId,
+    checkpoints: &[PlayoutClassicCheckpoint],
+) -> Result<()> {
+    if checkpoints
+        .iter()
+        .any(|checkpoint| checkpoint.playout_id != playout_id)
+    {
+        return Err(RepositoryError::Conflict(format!(
+            "Classic checkpoint does not belong to playout {playout_id}"
+        )));
+    }
+    let unique_dates = checkpoints
+        .iter()
+        .map(|checkpoint| checkpoint.checkpoint_date)
+        .collect::<std::collections::BTreeSet<_>>();
+    if unique_dates.len() != checkpoints.len() {
+        return Err(RepositoryError::Conflict(format!(
+            "Classic checkpoints contain duplicate dates for playout {playout_id}"
+        )));
+    }
+
+    sqlx::query(r#"DELETE FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = ?"#)
+        .bind(playout_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    for checkpoint in checkpoints {
+        sqlx::query(
+            r#"INSERT INTO "PlayoutClassicCheckpoint" ("PlayoutId", "CheckpointDate", "Context")
+               VALUES (?, ?, ?)"#,
+        )
+        .bind(checkpoint.playout_id)
+        .bind(encode_datetime(checkpoint.checkpoint_date))
+        .bind(&checkpoint.context)
         .execute(&mut **tx)
         .await
         .repository()?;

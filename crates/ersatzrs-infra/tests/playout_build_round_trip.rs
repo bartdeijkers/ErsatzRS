@@ -24,10 +24,11 @@ use ersatzrs_core::scheduling::{
 };
 use ersatzrs_domain::{
     FillerKind, GraphicsElement, GraphicsElementConfig, GraphicsElementKind, Playout,
-    PlayoutAnchor, PlayoutItemGraphicsElement, PlayoutScheduleKind, TextGraphicsConfig,
+    PlayoutAnchor, PlayoutClassicCheckpoint, PlayoutItemGraphicsElement, PlayoutScheduleKind,
+    TextGraphicsConfig,
 };
 use ersatzrs_infra::repositories::make_repositories;
-use sqlx::Executor;
+use sqlx::{Executor, Row};
 
 // ── pure persistence tests ────────────────────────────────────────────────────
 
@@ -121,6 +122,57 @@ async fn apply_build_result_reset_clears_items_and_appends_new() {
         "guide_group": i.guide_group,
         "filler_kind": format!("{:?}", i.filler_kind),
     })).collect::<Vec<_>>());
+}
+
+#[tokio::test]
+async fn apply_build_result_replaces_classic_checkpoints_idempotently() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (1, 1, 'Classic', 42)"#,
+    )
+    .await
+    .unwrap();
+    let playout = Playout {
+        id: 1,
+        channel_id: 1,
+        schedule_kind: PlayoutScheduleKind::Classic,
+        seed: 42,
+        ..Playout::default()
+    };
+    let checkpoint_date = common::fixed_time();
+
+    for context in ["{\"Version\":1}", "{\"Version\":1,\"Retry\":true}"] {
+        repos
+            .playout
+            .apply_build_result(
+                &SchedulingResult {
+                    classic_checkpoints: vec![PlayoutClassicCheckpoint {
+                        playout_id: 1,
+                        checkpoint_date,
+                        context: context.to_owned(),
+                    }],
+                    ..SchedulingResult::default()
+                },
+                &playout,
+                Duration::zero(),
+            )
+            .await
+            .unwrap();
+    }
+
+    let rows =
+        sqlx::query(r#"SELECT "Context" FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = 1"#)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].try_get::<String, _>("Context").unwrap(),
+        "{\"Version\":1,\"Retry\":true}"
+    );
 }
 
 #[tokio::test]

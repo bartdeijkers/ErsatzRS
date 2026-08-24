@@ -344,7 +344,7 @@ impl LanguageStrings for GermanStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "Der Enumeratorzustand des klassischen Playouts ist unvollständig für: {playouts}. Der Planer muss diese Playouts aktualisieren, bevor sie sicher fortgesetzt werden können."
+            "Der Zustand des klassischen Playouts kann nicht sicher aktualisiert werden für: {playouts}. Verwenden Sie Playout zurücksetzen für veraltete oder inkompatible Zustände; Aktualisieren löscht nie ein Fenster ohne vollständigen Prüfpunkt."
         )
     }
 

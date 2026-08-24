@@ -17,17 +17,19 @@ embedded-subtitle extraction. The Playouts admin reset path keeps ErsatzTV's
 mapping (classic Reset Playout enqueues `Refresh`; block, sequential, and
 scripted playouts enqueue `Reset`).
 
-Windows dogfood proved that the continuity part of this implementation is not
-complete. The production Classic builder persists an undated end-of-horizon
-anchor but does not create the dated day checkpoint that `Refresh` requires.
-After a membership-changing scan, `Refresh` can therefore clear the generated
-window and restart deterministic shuffled state, replaying already-aired media.
-The scanner also selects every playout with any program-schedule anchor as
-affected by Remote Stream membership, so an unrelated scan can trigger the
-unsafe rebuild. The accepted decision remains unchanged; milestones crf-01 and
-crf-02 must add real checkpoints, safe legacy-state handling, dependency-aware
-scan invalidation, health coverage, and end-to-end restart regressions before
-the implementation is complete.
+Classic continuity was completed on 2026-08-24. Fresh builds now persist one
+dated per-source anchor set and one versioned `PlayoutClassicCheckpoint` at the
+initial rebuild seam and each subsequent day seam, alongside the undated
+Continue anchors. The complete checkpoint includes schedule order and state,
+source ordering keyed by stable playback identity, fill groups, Smart Shuffle,
+Random, and Random Rotation context. Refresh validates the whole set before the
+transactional clear, restores it across process restart, reconciles membership
+without shifting a raw index onto consumed shuffled media, and re-stamps mutable
+settings. Legacy, partial, wrong-day, duplicate, or incompatible state is
+refused with a failing build/health diagnostic that requires explicit Reset;
+the existing window remains untouched. The remaining reopened work is crf-02:
+the scanner still selects every playout with any program-schedule anchor as
+affected by Remote Stream membership instead of resolving real dependencies.
 
 ## Context
 
@@ -150,9 +152,9 @@ items reflect the change, not just extended past it.**
   saves still do not enqueue a build. Coalescing plus the existing lock keep
   this bounded; library scans must batch rather than enqueue per item.
 - A Refresh without a restorable checkpoint is unsafe: it can turn a
-  deterministic shuffle into a replay. Existing databases need an explicit,
-  observable bootstrap or refusal path; they must never be silently treated as
-  a fresh Reset.
+  deterministic shuffle into a replay. Existing databases now take the
+  observable refusal path unless a complete versioned checkpoint is present;
+  they are never silently treated as a fresh Reset.
 - The on-air item is unchanged until its boundary; operators watching live see the
   change one item later, matching ErsatzTV and avoiding mid-item restarts.
 
@@ -206,3 +208,7 @@ items reflect the change, not just extended past it.**
 - 2026-08-23: Reopened implementation after Windows dogfood showed that real
   Classic builds create no dated Refresh checkpoints and Remote Stream scan
   impact selection can enqueue unrelated playouts.
+- 2026-08-24: Completed Classic checkpoint generation, restart restoration,
+  stable membership reconciliation, destructive preflight, legacy refusal,
+  transactional SQLite/MySQL persistence, and health coverage. Dependency-
+  scoped scan invalidation remains under crf-02.

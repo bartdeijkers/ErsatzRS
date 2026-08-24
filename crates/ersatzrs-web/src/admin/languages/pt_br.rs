@@ -332,7 +332,7 @@ impl LanguageStrings for PortugueseBrazilStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "O estado do enumerador da programação clássica está incompleto para: {playouts}. O agendador precisa atualizar essas programações antes que elas possam continuar com segurança."
+            "O estado da programação clássica não permite uma atualização segura para: {playouts}. Use Redefinir programação para estados antigos ou incompatíveis; Atualizar nunca limpa uma janela sem um ponto de controle completo."
         )
     }
 

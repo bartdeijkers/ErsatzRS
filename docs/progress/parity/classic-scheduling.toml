@@ -23,13 +23,12 @@ Frozen-shuffle fix (2026-07-27): Reset now regenerates and persists `Playout.see
 
 Cross-playout fix (2026-08-02): SQLite/MySQL assign new Classic state IDs, matching upstream EF. Strict inserts cannot replace another playout's state; duplicate sources share one enumerator. Startup Refreshes invalid playouts, Continue rechecks, health reports failures, and tests cover both backends.
 
-Reopened 2026-08-23 from Windows dogfood: production Classic builds persisted
-only undated end-of-horizon program-schedule anchors. Refresh correctly rejects
-those continuation anchors but no production path creates the dated day
-checkpoint it expects, so a scan-triggered Refresh can clear the window and
-restart deterministic shuffled state from the beginning. Milestone crf-01
-owns real checkpoint generation, safe restoration, existing-database handling,
-and health coverage before Classic Refresh continuity can be called ported.
+Resolved 2026-08-24: Classic persists complete versioned initial/day
+checkpoints plus undated Continue state. Restarted Refresh restores schedule,
+source, fill-group, Smart Shuffle, Random, and Random Rotation state, while
+stable playback identity prevents consumed replay after membership changes.
+Preflight refuses incomplete or legacy state before clearing, reports it in
+build/health status, and requires Reset. SQLite/MySQL replacement is atomic.
 '''
 
 [[debt]]
@@ -37,8 +36,8 @@ id          = 'classic-refresh-has-no-production-checkpoint-anchor'
 description = 'Generate and restore dated Classic day checkpoints in real builds so Refresh cannot restart shuffled or enumerated media from the beginning.'
 discovered  = '2026-08-23'
 adr         = '0020'
-evidence    = 'A redacted Windows runtime snapshot contained 26 PlayoutProgramScheduleAnchor rows and every row had AnchorDate=NULL. The production Classic builder emits only an undated continuation anchor, while retained_refresh_anchors intentionally accepts only a same-day dated checkpoint. The existing refresh regression seeds such a dated anchor by hand and therefore does not prove that an initial or multi-day build creates one. A scan-triggered Refresh subsequently replayed already-aired shuffled media. Tracked by milestone crf-01 and plans/playout-refresh-and-addon-tv-deduplication.md.'
-resolved    = false
+evidence    = 'Resolved by `PlayoutClassicCheckpoint`, chunked initial/day-seam generation, exact full-set preflight, stable source-order reconciliation, startup refusal, and Classic Playout State health reporting. Regressions cover fresh multi-day generation, duplicate sources, shuffled schedule order, membership add/remove, Shuffle/Random/RandomRotation restart equivalence with mutable setting re-stamping, continuation-only refusal without row deletion, safe startup repair, SQLite idempotency, and the paired MySQL migration/repository path.'
+resolved    = true
 
 [[debt]]
 id          = 'playout-local-runtime-state-primary-keys'

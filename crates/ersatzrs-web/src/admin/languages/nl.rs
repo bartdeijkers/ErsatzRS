@@ -336,7 +336,7 @@ impl LanguageStrings for DutchStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "De enumeratorstatus van de klassieke uitzending is onvolledig voor: {playouts}. De planner moet deze uitzendingen vernieuwen voordat ze veilig kunnen doorgaan."
+            "De status van de klassieke uitzending kan niet veilig worden vernieuwd voor: {playouts}. Gebruik Uitzending opnieuw instellen voor verouderde of incompatibele status; Vernieuwen wist nooit een venster zonder een volledig controlepunt."
         )
     }
 

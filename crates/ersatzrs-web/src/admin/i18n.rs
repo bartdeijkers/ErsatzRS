@@ -3244,9 +3244,9 @@ pub fn health_summary(errors: u32, warnings: u32) -> String {
 const CLASSIC_PLAYOUT_STATE_TITLE: &str = "Classic Playout State";
 const ADDONS_HEALTH_TITLE: &str = "Add-ons";
 const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str =
-    "Classic playout enumerator state is incomplete for: ";
+    "Classic playout state is not safe to Refresh for: ";
 const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str =
-    ". The scheduler must Refresh these playouts before they can continue safely.";
+    ". Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
 
 pub fn health_check_title(title: &str) -> String {
     health_check_title_text(use_i18n(), title)
@@ -3562,7 +3562,7 @@ mod tests {
 
     #[test]
     fn classic_playout_health_text_is_localized_for_every_language() {
-        let message = "Classic playout enumerator state is incomplete for: 50 - Health. The scheduler must Refresh these playouts before they can continue safely.";
+        let message = "Classic playout state is not safe to Refresh for: 50 - Health. Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);
             let title = health_check_title_text(language, CLASSIC_PLAYOUT_STATE_TITLE);

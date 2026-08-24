@@ -177,6 +177,18 @@ pub struct PlayoutProgramScheduleAnchor {
     pub enumerator_state: CollectionEnumeratorState,
 }
 
+/// Versioned Classic scheduler state captured at a dated rebuild seam.
+///
+/// Program-schedule anchors retain ErsatzTV's per-source enumerator rows. This
+/// companion row owns the scheduler-wide state needed to prove that a Refresh
+/// can restore the complete seam before replacing materialized playout items.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct PlayoutClassicCheckpoint {
+    pub playout_id: EntityId,
+    pub checkpoint_date: DateTime<Utc>,
+    pub context: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PlayoutScheduleItemFillGroupIndex {
     pub id: EntityId,

@@ -572,7 +572,9 @@ mod tests {
     use std::collections::BTreeSet;
 
     use chrono::{Duration, Utc};
+    use ersatzrs_core::locking::EntityLocker;
     use ersatzrs_core::repositories::{PlayoutRepository, ProgramScheduleRepository};
+    use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
     use ersatzrs_domain::{CollectionType, PlayoutItem, ProgramScheduleItem};
     use ersatzrs_ffmpeg::FfmpegRuntimeReport;
     use sqlx::Executor;
@@ -851,6 +853,14 @@ mod tests {
         seed_library_path(&pool).await;
         for statement in [
             r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (80, 10, 0)"#,
+            r#"INSERT INTO "Movie" ("Id") VALUES (80)"#,
+            r#"INSERT INTO "MediaVersion" (
+                   "Id", "DateAdded", "DateUpdated", "Duration", "Height",
+                   "MovieId", "VideoScanKind", "Width"
+               ) VALUES (
+                   80, '2026-08-24T00:00:00Z', '2026-08-24T00:00:00Z',
+                   '00:01:00', 1080, 80, 1, 1920
+               )"#,
             r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
                VALUES (80, 'Classic Health', 0)"#,
             r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (80, 80)"#,
@@ -894,21 +904,18 @@ mod tests {
         assert_eq!(invalid.status, HealthCheckStatus::Fail);
         assert!(invalid.message.contains("50 - Health"));
 
-        pool.execute(
-            r#"INSERT INTO "PlayoutProgramScheduleAnchor" (
-                   "CollectionId", "CollectionType", "PlayoutId"
-               ) VALUES (80, 0, 10)"#,
+        crate::maintenance::run_requested_playout_build(
+            &pool,
+            &EntityLocker::new(),
+            PlayoutBuildRequest {
+                playout_id: 10,
+                mode: PlayoutBuildMode::Reset,
+            },
+            now,
+            None,
         )
         .await
-        .expect("seed Classic collection anchor");
-        pool.execute(
-            r#"INSERT INTO "CollectionEnumeratorState" (
-                   "PlayoutProgramScheduleAnchorId", "Seed", "Index"
-               ) SELECT "Id", 0, 0 FROM "PlayoutProgramScheduleAnchor"
-                 WHERE "PlayoutId" = 10"#,
-        )
-        .await
-        .expect("seed Classic collection state");
+        .expect("build complete Classic checkpoint state");
 
         assert_eq!(
             check

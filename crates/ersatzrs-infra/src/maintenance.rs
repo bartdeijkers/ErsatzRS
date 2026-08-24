@@ -11,8 +11,9 @@ use ersatzrs_core::maintenance::{
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{PlayoutRepository, RepositoryError};
 use ersatzrs_core::scheduling::{
-    audit_classic_runtime_state, PlayoutBuildMode, PlayoutBuildRequest, SchedulingError,
-    SchedulingReferenceData, SchedulingRequest, SchedulingResult,
+    audit_classic_refresh_checkpoint, audit_classic_runtime_state, PlayoutBuildMode,
+    PlayoutBuildRequest, SchedulingError, SchedulingReferenceData, SchedulingRequest,
+    SchedulingResult,
 };
 use ersatzrs_domain::{ChannelPlayoutMode, EntityId, PlayoutBuildStatus, PlayoutScheduleKind};
 use reqwest::StatusCode;
@@ -369,7 +370,23 @@ pub async fn repair_invalid_classic_playouts(
         let reference_data = SqliteSchedulingContentRepository::new(pool.clone())
             .classic_reference_data(playout_id, now, max_playout_offset)
             .await?;
-        if classic_runtime_state_is_complete(pool, playout_id, &reference_data).await? {
+        let runtime_complete =
+            classic_runtime_state_is_complete(pool, playout_id, &reference_data).await?;
+        let refresh_audit = audit_classic_refresh_checkpoint(&reference_data, playout_id, now);
+        if runtime_complete && refresh_audit.is_complete() {
+            continue;
+        }
+
+        if let Some(diagnostic) = refresh_audit.diagnostic {
+            warn!(playout_id, %diagnostic, "refusing unsafe Classic startup repair");
+            repository
+                .upsert_build_status(&PlayoutBuildStatus {
+                    playout_id,
+                    last_build: now,
+                    success: false,
+                    message: Some(diagnostic),
+                })
+                .await?;
             continue;
         }
 
@@ -560,6 +577,7 @@ async fn build_playout(
         playout.id,
         playout.schedule_kind,
         mode,
+        now,
         &reference_data,
     )
     .await?;
@@ -611,15 +629,24 @@ async fn safe_classic_build_mode(
     playout_id: EntityId,
     schedule_kind: PlayoutScheduleKind,
     requested_mode: PlayoutBuildMode,
+    now: DateTime<Utc>,
     reference_data: &SchedulingReferenceData,
 ) -> Result<PlayoutBuildMode> {
+    if schedule_kind != PlayoutScheduleKind::Classic || reference_data.existing_items.is_empty() {
+        return Ok(requested_mode);
+    }
+
+    if requested_mode == PlayoutBuildMode::Refresh {
+        require_safe_classic_refresh(pool, playout_id, now, reference_data).await?;
+        return Ok(requested_mode);
+    }
     if requested_mode != PlayoutBuildMode::Continue
-        || schedule_kind != PlayoutScheduleKind::Classic
-        || reference_data.existing_items.is_empty()
         || classic_runtime_state_is_complete(pool, playout_id, reference_data).await?
     {
         return Ok(requested_mode);
     }
+
+    require_safe_classic_refresh(pool, playout_id, now, reference_data).await?;
 
     let audit = audit_classic_runtime_state(reference_data);
     warn!(
@@ -631,6 +658,47 @@ async fn safe_classic_build_mode(
         "promoting Classic Continue build to Refresh because runtime state is inconsistent"
     );
     Ok(PlayoutBuildMode::Refresh)
+}
+
+async fn require_safe_classic_refresh(
+    pool: &Pool<Db>,
+    playout_id: EntityId,
+    now: DateTime<Utc>,
+    reference_data: &SchedulingReferenceData,
+) -> Result<()> {
+    let audit = audit_classic_refresh_checkpoint(reference_data, playout_id, now);
+    let Some(checkpoint_date) = audit.checkpoint_date else {
+        return Err(
+            SchedulingError::UnsafeClassicRefresh(audit.diagnostic.unwrap_or_else(|| {
+                "Classic Refresh refused because no dated checkpoint is available".to_owned()
+            }))
+            .into(),
+        );
+    };
+    if let Some(diagnostic) = audit.diagnostic {
+        return Err(SchedulingError::UnsafeClassicRefresh(diagnostic).into());
+    }
+
+    let missing_child_states: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "PlayoutProgramScheduleAnchor" AS "a"
+           LEFT JOIN "CollectionEnumeratorState" AS "s"
+             ON "s"."PlayoutProgramScheduleAnchorId" = "a"."Id"
+           WHERE "a"."PlayoutId" = ?
+             AND "a"."AnchorDate" = ?
+             AND "s"."PlayoutProgramScheduleAnchorId" IS NULL"#,
+    )
+    .bind(playout_id)
+    .bind(encode_datetime(checkpoint_date))
+    .fetch_one(pool)
+    .await?;
+    if missing_child_states != 0 {
+        return Err(SchedulingError::UnsafeClassicRefresh(
+            "Classic Refresh refused: the selected dated checkpoint has missing enumerator state. Use Reset Playout once to create a complete checkpoint before retrying Refresh".to_owned(),
+        )
+        .into());
+    }
+    Ok(())
 }
 
 pub(crate) async fn classic_runtime_state_is_complete(

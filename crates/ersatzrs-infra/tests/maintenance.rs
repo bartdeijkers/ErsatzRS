@@ -564,14 +564,18 @@ async fn startup_repair_refreshes_only_classic_playouts_with_missing_runtime_sta
     pool.execute(
         r#"DELETE FROM "CollectionEnumeratorState"
            WHERE "PlayoutProgramScheduleAnchorId" IN (
-               SELECT "Id" FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = 88
+               SELECT "Id" FROM "PlayoutProgramScheduleAnchor"
+               WHERE "PlayoutId" = 88 AND "AnchorDate" IS NULL
            )"#,
     )
     .await
     .unwrap();
-    pool.execute(r#"DELETE FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = 88"#)
-        .await
-        .unwrap();
+    pool.execute(
+        r#"DELETE FROM "PlayoutProgramScheduleAnchor"
+           WHERE "PlayoutId" = 88 AND "AnchorDate" IS NULL"#,
+    )
+    .await
+    .unwrap();
     pool.execute(r#"UPDATE "Playout" SET "ScheduleKind" = 'Classic' WHERE "Id" = 88"#)
         .await
         .unwrap();
@@ -580,8 +584,12 @@ async fn startup_repair_refreshes_only_classic_playouts_with_missing_runtime_sta
         .await
         .unwrap();
     assert_eq!(repaired, 1);
-    assert_eq!(classic_anchor_count(&pool, 88).await, 1);
-    assert_eq!(classic_anchor_state_count(&pool, 88).await, 1);
+    assert_eq!(classic_undated_anchor_count(&pool, 88).await, 1);
+    assert_eq!(
+        classic_anchor_state_count(&pool, 88).await,
+        classic_anchor_count(&pool, 88).await
+    );
+    assert!(classic_checkpoint_count(&pool, 88).await >= 1);
     assert_eq!(
         repair_invalid_classic_playouts(&pool, &locker, now, None)
             .await
@@ -589,6 +597,82 @@ async fn startup_repair_refreshes_only_classic_playouts_with_missing_runtime_sta
         0,
         "a repaired playout must pass the next startup audit"
     );
+}
+
+#[tokio::test]
+async fn startup_repair_refuses_legacy_state_without_clearing_the_window() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repos, 1).await;
+    seed_refresh_rebuild_fixture(&pool, &repos).await;
+
+    let now = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
+    let locker = EntityLocker::new();
+    run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 88,
+            mode: PlayoutBuildMode::Reset,
+        },
+        now,
+        None,
+    )
+    .await
+    .unwrap();
+    let item_ids_before = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "PlayoutItem" WHERE "PlayoutId" = 88 ORDER BY "Start", "Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    pool.execute(
+        r#"DELETE FROM "CollectionEnumeratorState"
+           WHERE "PlayoutProgramScheduleAnchorId" IN (
+               SELECT "Id" FROM "PlayoutProgramScheduleAnchor"
+               WHERE "PlayoutId" = 88 AND "AnchorDate" IS NOT NULL
+           )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"DELETE FROM "PlayoutProgramScheduleAnchor"
+           WHERE "PlayoutId" = 88 AND "AnchorDate" IS NOT NULL"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(r#"DELETE FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = 88"#)
+        .await
+        .unwrap();
+
+    let repaired = repair_invalid_classic_playouts(&pool, &locker, now, None)
+        .await
+        .unwrap();
+    assert_eq!(repaired, 0);
+    let item_ids_after = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "PlayoutItem" WHERE "PlayoutId" = 88 ORDER BY "Start", "Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        item_ids_after, item_ids_before,
+        "unsafe startup repair must leave the materialized window untouched"
+    );
+    assert_eq!(classic_undated_anchor_count(&pool, 88).await, 1);
+    let status = sqlx::query(
+        r#"SELECT "Success", "Message" FROM "PlayoutBuildStatus" WHERE "PlayoutId" = 88"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(status.get::<i64, _>("Success"), 0);
+    let message = status
+        .get::<Option<String>, _>("Message")
+        .unwrap_or_default();
+    assert!(message.contains("Classic Refresh refused"));
+    assert!(message.contains("Reset Playout"));
 }
 
 #[tokio::test]
@@ -615,14 +699,18 @@ async fn classic_continue_promotes_to_refresh_when_runtime_state_is_missing() {
     pool.execute(
         r#"DELETE FROM "CollectionEnumeratorState"
            WHERE "PlayoutProgramScheduleAnchorId" IN (
-               SELECT "Id" FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = 88
+               SELECT "Id" FROM "PlayoutProgramScheduleAnchor"
+               WHERE "PlayoutId" = 88 AND "AnchorDate" IS NULL
            )"#,
     )
     .await
     .unwrap();
-    pool.execute(r#"DELETE FROM "PlayoutProgramScheduleAnchor" WHERE "PlayoutId" = 88"#)
-        .await
-        .unwrap();
+    pool.execute(
+        r#"DELETE FROM "PlayoutProgramScheduleAnchor"
+           WHERE "PlayoutId" = 88 AND "AnchorDate" IS NULL"#,
+    )
+    .await
+    .unwrap();
 
     let hls_registry = Arc::new(FakeHlsRegistry::default());
     run_requested_playout_build(
@@ -638,8 +726,11 @@ async fn classic_continue_promotes_to_refresh_when_runtime_state_is_missing() {
     .await
     .unwrap();
 
-    assert_eq!(classic_anchor_count(&pool, 88).await, 1);
-    assert_eq!(classic_anchor_state_count(&pool, 88).await, 1);
+    assert_eq!(classic_undated_anchor_count(&pool, 88).await, 1);
+    assert_eq!(
+        classic_anchor_state_count(&pool, 88).await,
+        classic_anchor_count(&pool, 88).await
+    );
     assert_eq!(
         *hls_registry
             .playout_updates
@@ -753,6 +844,26 @@ async fn classic_anchor_state_count(pool: &SqlitePool, playout_id: i64) -> i64 {
     .fetch_one(pool)
     .await
     .unwrap()
+}
+
+async fn classic_undated_anchor_count(pool: &SqlitePool, playout_id: i64) -> i64 {
+    sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "PlayoutProgramScheduleAnchor"
+           WHERE "PlayoutId" = ? AND "AnchorDate" IS NULL"#,
+    )
+    .bind(playout_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+async fn classic_checkpoint_count(pool: &SqlitePool, playout_id: i64) -> i64 {
+    sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = ?"#)
+        .bind(playout_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
 }
 
 #[tokio::test]

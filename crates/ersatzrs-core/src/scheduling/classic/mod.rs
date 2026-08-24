@@ -6,9 +6,10 @@ use std::{
 use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_domain::{
     ChannelSubtitleMode, CollectionEnumeratorState, EntityId, FillWithGroupMode, FillerKind,
-    FillerMode, FixedStartTimeBehavior, GuideMode, MultipleMode, PlaybackOrder, PlayoutAnchor,
-    PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
-    ProgramScheduleItem, StartType, TailMode,
+    FillerMode, FixedStartTimeBehavior, GuideMode, MultipleMode, PinnedStreamSelection,
+    PlaybackOrder, PlayoutAnchor, PlayoutClassicCheckpoint, PlayoutItem,
+    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, ProgramScheduleItem,
+    StartType, TailMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -67,6 +68,196 @@ impl ClassicRuntimeStateAudit {
     }
 }
 
+/// Safety audit for the dated state required before a destructive Classic
+/// Refresh can replace an existing materialized window.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassicRefreshCheckpointAudit {
+    pub checkpoint_date: Option<DateTime<Utc>>,
+    pub expected_source_count: usize,
+    pub actual_source_count: usize,
+    pub diagnostic: Option<String>,
+}
+
+impl ClassicRefreshCheckpointAudit {
+    #[must_use]
+    pub const fn is_complete(&self) -> bool {
+        self.diagnostic.is_none()
+    }
+}
+
+/// Prove that the earliest checkpoint on the Refresh day contains one state
+/// for every unique schedule source plus compatible scheduler-wide context.
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn audit_classic_refresh_checkpoint(
+    reference_data: &SchedulingReferenceData,
+    playout_id: EntityId,
+    start: DateTime<Utc>,
+) -> ClassicRefreshCheckpointAudit {
+    let expected_keys = reference_data
+        .classic_schedule_items
+        .iter()
+        .map(classic_schedule_item_key)
+        .collect::<BTreeSet<_>>();
+    let fail = |checkpoint_date, actual_source_count, reason: String| {
+        ClassicRefreshCheckpointAudit {
+            checkpoint_date,
+            expected_source_count: expected_keys.len(),
+            actual_source_count,
+            diagnostic: Some(format!(
+                "Classic Refresh refused: {reason}. Use Reset Playout once to create a complete checkpoint before retrying Refresh"
+            )),
+        }
+    };
+    let start_day = midnight(start);
+    let next_day = start_day + Duration::days(1);
+    let mut candidates = reference_data
+        .existing_classic_checkpoints
+        .iter()
+        .filter(|checkpoint| {
+            checkpoint.playout_id == playout_id
+                && checkpoint.checkpoint_date >= start_day
+                && checkpoint.checkpoint_date < next_day
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by_key(|checkpoint| checkpoint.checkpoint_date);
+    let Some(checkpoint) = candidates.first() else {
+        return fail(
+            None,
+            0,
+            format!(
+                "no complete dated checkpoint exists for {} (continuation-only legacy state is not safe to reuse)",
+                start_day.date_naive()
+            ),
+        );
+    };
+    if candidates
+        .iter()
+        .filter(|candidate| candidate.checkpoint_date == checkpoint.checkpoint_date)
+        .count()
+        != 1
+    {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            0,
+            "duplicate checkpoint rows exist at the selected seam".to_owned(),
+        );
+    }
+    let Ok(context) = serde_json::from_str::<ClassicCheckpointContext>(&checkpoint.context) else {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            0,
+            "the selected checkpoint context is unreadable".to_owned(),
+        );
+    };
+    if context.version != CLASSIC_CHECKPOINT_VERSION {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            context.sources.len(),
+            format!(
+                "checkpoint version {} is incompatible with version {CLASSIC_CHECKPOINT_VERSION}",
+                context.version
+            ),
+        );
+    }
+    if context.anchor.next_start != checkpoint.checkpoint_date {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            context.sources.len(),
+            "checkpoint date and scheduler continuation time do not match".to_owned(),
+        );
+    }
+    let source_keys = context.sources.keys().cloned().collect::<BTreeSet<_>>();
+    if source_keys != expected_keys
+        || context.sources.values().any(|source| {
+            usize::from(source.media.is_some()) + usize::from(source.playlist.is_some()) != 1
+        })
+    {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            context.sources.len(),
+            "checkpoint sources are partial, stale, or duplicated".to_owned(),
+        );
+    }
+
+    let expected_schedule_item_ids = reference_data
+        .classic_schedule_items
+        .iter()
+        .map(|item| item.id)
+        .collect::<BTreeSet<_>>();
+    let checkpoint_schedule_item_ids = context
+        .schedule_order
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if context.schedule_order.len() != checkpoint_schedule_item_ids.len()
+        || checkpoint_schedule_item_ids != expected_schedule_item_ids
+    {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            context.sources.len(),
+            "schedule-item checkpoint order is partial, stale, or duplicated".to_owned(),
+        );
+    }
+
+    let dated = reference_data
+        .existing_program_schedule_anchors
+        .iter()
+        .filter(|anchor| anchor.anchor_date == Some(checkpoint.checkpoint_date))
+        .collect::<Vec<_>>();
+    let dated_keys = dated
+        .iter()
+        .map(|anchor| history_key_for_collection_key(&collection_key_for_anchor(anchor)))
+        .collect::<Vec<_>>();
+    let dated_key_set = dated_keys.iter().cloned().collect::<BTreeSet<_>>();
+    if dated_keys.len() != dated_key_set.len() || dated_key_set != expected_keys {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            dated.len(),
+            "dated source anchors are partial, stale, or duplicated".to_owned(),
+        );
+    }
+    if dated.iter().any(|anchor| {
+        let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
+        context
+            .sources
+            .get(&key)
+            .is_none_or(|source| source.enumerator_state != anchor.enumerator_state)
+    }) {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            dated.len(),
+            "dated source anchors disagree with the complete checkpoint context".to_owned(),
+        );
+    }
+
+    let expected_fill_groups = reference_data
+        .classic_schedule_items
+        .iter()
+        .filter(|item| item.fill_with_group_mode != FillWithGroupMode::None)
+        .map(|item| item.id)
+        .collect::<BTreeSet<_>>();
+    let checkpoint_fill_groups = context
+        .fill_group_states
+        .keys()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    if checkpoint_fill_groups != expected_fill_groups {
+        return fail(
+            Some(checkpoint.checkpoint_date),
+            dated.len(),
+            "fill-group checkpoint state is partial or stale".to_owned(),
+        );
+    }
+
+    ClassicRefreshCheckpointAudit {
+        checkpoint_date: Some(checkpoint.checkpoint_date),
+        expected_source_count: expected_keys.len(),
+        actual_source_count: dated.len(),
+        diagnostic: None,
+    }
+}
+
 /// Compare persisted Classic runtime-state identities with the active schedule definition.
 #[must_use]
 pub fn audit_classic_runtime_state(
@@ -119,7 +310,7 @@ pub fn classic_schedule_item_policy_key(item: &ProgramScheduleItem) -> String {
     item.id.to_string()
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ClassicState {
     current_time: DateTime<Utc>,
     schedule_state: CollectionEnumeratorState,
@@ -152,13 +343,86 @@ impl PlayoutSchedulingEngine for ClassicSchedulingEngine {
         }
 
         items.sort_by_key(|item| (item.sort_order, item.id));
+        if request.mode == PlayoutBuildMode::Refresh
+            && !request.reference_data.existing_items.is_empty()
+        {
+            let audit = audit_classic_refresh_checkpoint(
+                &request.reference_data,
+                request.playout.id,
+                request.start,
+            );
+            if let Some(diagnostic) = audit.diagnostic {
+                return Err(SchedulingError::UnsafeClassicRefresh(diagnostic));
+            }
+        }
         let state = state_for_mode(&request, &items);
 
         let mut context = ClassicContext::new(request, items, state);
         context.apply_existing_collection_anchors();
+        context.restore_checkpoint_sources();
         context.schedule();
         Ok(context.into_result())
     }
+}
+
+const CLASSIC_CHECKPOINT_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ClassicCheckpointContext {
+    version: u32,
+    anchor: PlayoutAnchor,
+    schedule_order: Vec<EntityId>,
+    fill_group_states: BTreeMap<EntityId, CollectionEnumeratorState>,
+    smart_shuffle: SchedulingSmartShuffleState,
+    random_rotation_cycle_predecessors: BTreeMap<String, EntityId>,
+    sources: BTreeMap<String, ClassicCheckpointSource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ClassicCheckpointSource {
+    enumerator_state: CollectionEnumeratorState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    media: Option<ClassicMediaCheckpoint>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    playlist: Option<ClassicPlaylistCheckpoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ClassicMediaCheckpoint {
+    playback_order: PlaybackOrder,
+    current_index: usize,
+    ordered_items: Vec<ClassicMediaIdentity>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ClassicPlaylistCheckpoint {
+    index: usize,
+    child_index: usize,
+    children: Vec<ClassicPlaylistChildCheckpoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ClassicPlaylistChildCheckpoint {
+    collection_key: SchedulingCollectionKey,
+    items_taken_from_current: usize,
+    current_index: usize,
+    ordered_items: Vec<ClassicMediaIdentity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ClassicMediaIdentity {
+    media_item_id: EntityId,
+    preferred_audio_language_code: Option<String>,
+    preferred_audio_title: Option<String>,
+    preferred_subtitle_language_code: Option<String>,
+    subtitle_mode: Option<ChannelSubtitleMode>,
+    pinned_stream_selection: Option<PinnedStreamSelection>,
 }
 
 impl ClassicSchedulingEngine {
@@ -202,6 +466,9 @@ struct ClassicContext {
     smart_shuffle_state: SchedulingSmartShuffleState,
     random_draw_states: BTreeMap<String, u64>,
     random_rotation_cycle_predecessors: BTreeMap<String, EntityId>,
+    restored_checkpoint: Option<ClassicCheckpointContext>,
+    generated_dated_anchors: Vec<PlayoutProgramScheduleAnchor>,
+    generated_checkpoints: Vec<PlayoutClassicCheckpoint>,
     result: SchedulingResult,
 }
 
@@ -217,16 +484,29 @@ impl ClassicContext {
         let mut media_states = BTreeMap::new();
         let mut random_draw_states = BTreeMap::new();
         let collection_anchors = retained_collection_anchors(&request);
-        let anchor_context = if request.mode == PlayoutBuildMode::Continue {
-            request
+        let restored_checkpoint = (request.mode == PlayoutBuildMode::Refresh)
+            .then(|| selected_refresh_checkpoint(&request))
+            .flatten()
+            .map(|(_, context)| context);
+        let anchor_context = match request.mode {
+            PlayoutBuildMode::Continue => request
                 .playout
                 .anchor
                 .as_ref()
                 .and_then(|anchor| anchor.context.as_deref())
                 .and_then(|context| serde_json::from_str::<ClassicAnchorContext>(context).ok())
-                .unwrap_or_default()
-        } else {
-            ClassicAnchorContext::default()
+                .unwrap_or_default(),
+            PlayoutBuildMode::Refresh => restored_checkpoint
+                .as_ref()
+                .map(|checkpoint| ClassicAnchorContext {
+                    version: classic_anchor_context_version(),
+                    smart_shuffle: checkpoint.smart_shuffle.clone(),
+                    random_rotation_cycle_predecessors: checkpoint
+                        .random_rotation_cycle_predecessors
+                        .clone(),
+                })
+                .unwrap_or_default(),
+            PlayoutBuildMode::Reset => ClassicAnchorContext::default(),
         };
         let smart_shuffle_state = anchor_context.smart_shuffle;
         let mut random_rotation_cycle_predecessors =
@@ -338,6 +618,9 @@ impl ClassicContext {
                     });
             }
         }
+        if let Some(checkpoint) = &restored_checkpoint {
+            fill_group_states.clone_from(&checkpoint.fill_group_states);
+        }
 
         let mut context = Self {
             request,
@@ -353,12 +636,16 @@ impl ClassicContext {
             smart_shuffle_state,
             random_draw_states,
             random_rotation_cycle_predecessors,
+            restored_checkpoint,
+            generated_dated_anchors: Vec::new(),
+            generated_checkpoints: Vec::new(),
             result: SchedulingResult {
                 remove_before: Some(remove_before),
                 ..SchedulingResult::default()
             },
         };
         context.refresh_schedule_order();
+        context.restore_checkpoint_schedule_order();
         context
     }
 
@@ -419,7 +706,69 @@ impl ClassicContext {
         }
     }
 
+    fn restore_checkpoint_sources(&mut self) {
+        let Some(checkpoint) = self.restored_checkpoint.clone() else {
+            return;
+        };
+
+        for (key, source) in checkpoint.sources {
+            let mut state = source.enumerator_state;
+            if let (Some(enumerator), Some(media_checkpoint)) =
+                (self.media.get_mut(&key), source.media.as_ref())
+            {
+                let membership_changed = restore_media_checkpoint(enumerator, media_checkpoint);
+                if enumerator.playback_order == PlaybackOrder::Random {
+                    let draw_index = usize::try_from(state.index).unwrap_or_default();
+                    let random_state =
+                        select_random_draw(enumerator, seed_to_u64(state.seed), draw_index);
+                    self.random_draw_states.insert(key.clone(), random_state);
+                } else if membership_changed {
+                    state.index = i32::try_from(enumerator.current_index()).unwrap_or_default();
+                }
+            }
+            if let (Some(playlist), Some(playlist_checkpoint)) =
+                (self.playlists.get_mut(&key), source.playlist.as_ref())
+            {
+                restore_playlist_checkpoint(playlist, playlist_checkpoint);
+                state.index = i32::try_from(playlist.index).unwrap_or_default();
+            }
+            self.media_states.insert(key, state);
+        }
+    }
+
+    fn restore_checkpoint_schedule_order(&mut self) {
+        let Some(checkpoint) = &self.restored_checkpoint else {
+            return;
+        };
+        let restored = checkpoint
+            .schedule_order
+            .iter()
+            .filter_map(|item_id| {
+                self.schedule_items
+                    .iter()
+                    .position(|item| item.id == *item_id)
+            })
+            .collect::<Vec<_>>();
+        if restored.len() == self.schedule_items.len() {
+            self.schedule_order = restored;
+        }
+    }
+
     fn schedule(&mut self) {
+        let final_finish = self.request.finish;
+        self.capture_checkpoint();
+        let mut chunk_finish = midnight(self.state.current_time) + Duration::days(1);
+        while chunk_finish < final_finish {
+            self.request.finish = chunk_finish;
+            self.schedule_until_finish();
+            self.capture_checkpoint();
+            chunk_finish += Duration::days(1);
+        }
+        self.request.finish = final_finish;
+        self.schedule_until_finish();
+    }
+
+    fn schedule_until_finish(&mut self) {
         let mut time_count = BTreeMap::<DateTime<Utc>, usize>::new();
         while self.state.current_time < self.request.finish {
             let count = time_count.entry(self.state.current_time).or_default();
@@ -1341,7 +1690,20 @@ impl ClassicContext {
         if let Some(last_finish) = self.result.added_items.iter().map(|item| item.finish).max() {
             next_start = next_start.max(last_finish);
         }
-        self.result.anchor = Some(PlayoutAnchor {
+        self.result.anchor = Some(self.playout_anchor(next_start));
+        self.result.program_schedule_anchors = self.program_schedule_anchors();
+        self.result.classic_checkpoints = self.classic_checkpoints();
+        self.result.fill_group_indices = self.fill_group_indices();
+        self.result.history_to_remove.extend(cleanup_history(
+            &self.request.reference_data.existing_history,
+            self.request.start,
+            self.request.reference_data.max_playout_offset,
+        ));
+        self.result
+    }
+
+    fn playout_anchor(&self, next_start: DateTime<Utc>) -> PlayoutAnchor {
+        PlayoutAnchor {
             schedule_items_enumerator_state: self.state.schedule_state,
             next_start,
             multiple_remaining: self.state.multiple_remaining,
@@ -1365,18 +1727,130 @@ impl ClassicContext {
                 .unwrap_or_default()
             }),
             ..PlayoutAnchor::default()
+        }
+    }
+
+    fn capture_checkpoint(&mut self) {
+        let checkpoint_date = self
+            .result
+            .added_items
+            .iter()
+            .map(|item| item.finish)
+            .max()
+            .unwrap_or(self.state.current_time)
+            .max(self.state.current_time);
+        if self
+            .generated_checkpoints
+            .iter()
+            .any(|checkpoint| checkpoint.checkpoint_date == checkpoint_date)
+        {
+            return;
+        }
+
+        let context = ClassicCheckpointContext {
+            version: CLASSIC_CHECKPOINT_VERSION,
+            anchor: self.playout_anchor(checkpoint_date),
+            schedule_order: self
+                .schedule_order
+                .iter()
+                .map(|index| self.schedule_items[*index].id)
+                .collect(),
+            fill_group_states: self.fill_group_states.clone(),
+            smart_shuffle: self.smart_shuffle_state.clone(),
+            random_rotation_cycle_predecessors: self.random_rotation_cycle_predecessors.clone(),
+            sources: self.checkpoint_sources(),
+        };
+        self.generated_checkpoints.push(PlayoutClassicCheckpoint {
+            playout_id: self.request.playout.id,
+            checkpoint_date,
+            context: serde_json::to_string(&context).unwrap_or_default(),
         });
-        self.result.program_schedule_anchors = self.program_schedule_anchors();
-        self.result.fill_group_indices = self.fill_group_indices();
-        self.result.history_to_remove.extend(cleanup_history(
-            &self.request.reference_data.existing_history,
-            self.request.start,
-            self.request.reference_data.max_playout_offset,
-        ));
-        self.result
+        self.generated_dated_anchors
+            .extend(self.program_schedule_anchors_at(Some(checkpoint_date)));
+    }
+
+    fn checkpoint_sources(&self) -> BTreeMap<String, ClassicCheckpointSource> {
+        let mut result = BTreeMap::new();
+        for schedule_item in &self.schedule_items {
+            let key = item_key(schedule_item);
+            if result.contains_key(&key) {
+                continue;
+            }
+            let enumerator_state =
+                self.media_states
+                    .get(&key)
+                    .copied()
+                    .unwrap_or(CollectionEnumeratorState {
+                        seed: self.request.playout.seed,
+                        index: 0,
+                    });
+            let media = self
+                .media
+                .get(&key)
+                .map(|enumerator| ClassicMediaCheckpoint {
+                    playback_order: enumerator.playback_order,
+                    current_index: enumerator.current_index(),
+                    ordered_items: enumerator.items.iter().map(media_identity).collect(),
+                });
+            let playlist = self
+                .playlists
+                .get(&key)
+                .map(|playlist| ClassicPlaylistCheckpoint {
+                    index: playlist.index,
+                    child_index: playlist.child_index,
+                    children: playlist
+                        .children
+                        .iter()
+                        .map(|child| ClassicPlaylistChildCheckpoint {
+                            collection_key: child.collection_key.clone(),
+                            items_taken_from_current: child.items_taken_from_current,
+                            current_index: child.enumerator.current_index(),
+                            ordered_items: child
+                                .enumerator
+                                .items
+                                .iter()
+                                .map(media_identity)
+                                .collect(),
+                        })
+                        .collect(),
+                });
+            result.insert(
+                key,
+                ClassicCheckpointSource {
+                    enumerator_state,
+                    media,
+                    playlist,
+                },
+            );
+        }
+        result
     }
 
     fn program_schedule_anchors(&self) -> Vec<PlayoutProgramScheduleAnchor> {
+        let mut result = BTreeMap::new();
+        for anchor in self
+            .collection_anchors
+            .iter()
+            .filter(|anchor| anchor.anchor_date.is_some())
+        {
+            let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
+            result.insert((anchor.anchor_date, key), anchor.clone());
+        }
+        for anchor in self.program_schedule_anchors_at(None) {
+            let key = history_key_for_collection_key(&collection_key_for_anchor(&anchor));
+            result.insert((anchor.anchor_date, key), anchor);
+        }
+        for anchor in &self.generated_dated_anchors {
+            let key = history_key_for_collection_key(&collection_key_for_anchor(anchor));
+            result.insert((anchor.anchor_date, key), anchor.clone());
+        }
+        result.into_values().collect()
+    }
+
+    fn program_schedule_anchors_at(
+        &self,
+        anchor_date: Option<DateTime<Utc>>,
+    ) -> Vec<PlayoutProgramScheduleAnchor> {
         let mut result = Vec::new();
         let mut seen_keys = BTreeSet::new();
         for schedule_item in &self.schedule_items {
@@ -1385,13 +1859,9 @@ impl ClassicContext {
             if !seen_keys.insert(key_string.clone()) {
                 continue;
             }
-            let Some(enumerator) = self.media.get(&key_string) else {
-                continue;
-            };
-            let existing = self
-                .collection_anchors
-                .iter()
-                .find(|anchor| anchor.anchor_date.is_none() && anchor_matches_key(anchor, &key));
+            let existing = self.collection_anchors.iter().find(|anchor| {
+                anchor.anchor_date == anchor_date && anchor_matches_key(anchor, &key)
+            });
             // Match EF entity semantics: zero means new and lets the database
             // allocate the globally unique primary key. Existing entities keep
             // their persisted identity.
@@ -1399,7 +1869,7 @@ impl ClassicContext {
             result.push(PlayoutProgramScheduleAnchor {
                 id,
                 playout_id: self.request.playout.id,
-                anchor_date: None,
+                anchor_date,
                 collection_type: key.collection_type,
                 collection_id: key.collection_id,
                 multi_collection_id: key.multi_collection_id,
@@ -1409,28 +1879,47 @@ impl ClassicContext {
                 playlist_id: key.playlist_id,
                 search_query: key.search_query,
                 fake_collection_key: key.fake_collection_key,
-                enumerator_state: CollectionEnumeratorState {
-                    seed: self
-                        .media_states
-                        .get(&key_string)
-                        .map_or_else(|| self.request.playout.seed, |state| state.seed),
-                    index: if enumerator.playback_order == PlaybackOrder::Random {
-                        self.media_states
-                            .get(&key_string)
-                            .map_or(0, |state| state.index)
-                    } else {
-                        i32::try_from(enumerator.current_index()).unwrap_or_default()
-                    },
-                },
+                enumerator_state: self.enumerator_state_for_key(&key_string),
             });
         }
-        result.extend(
-            self.collection_anchors
-                .iter()
-                .filter(|anchor| anchor.anchor_date.is_some())
-                .cloned(),
-        );
         result
+    }
+
+    fn enumerator_state_for_key(&self, key: &str) -> CollectionEnumeratorState {
+        let mut state = self
+            .media_states
+            .get(key)
+            .copied()
+            .unwrap_or(CollectionEnumeratorState {
+                seed: self.request.playout.seed,
+                index: 0,
+            });
+        if let Some(playlist) = self.playlists.get(key) {
+            state.index = i32::try_from(playlist.index).unwrap_or_default();
+        } else if let Some(enumerator) = self.media.get(key) {
+            if enumerator.playback_order != PlaybackOrder::Random {
+                state.index = i32::try_from(enumerator.current_index()).unwrap_or_default();
+            }
+        }
+        state
+    }
+
+    fn classic_checkpoints(&self) -> Vec<PlayoutClassicCheckpoint> {
+        let mut checkpoints = BTreeMap::new();
+        if self.request.mode == PlayoutBuildMode::Continue {
+            let start_day = midnight(self.request.start);
+            for checkpoint in &self.request.reference_data.existing_classic_checkpoints {
+                if checkpoint.playout_id == self.request.playout.id
+                    && checkpoint.checkpoint_date >= start_day
+                {
+                    checkpoints.insert(checkpoint.checkpoint_date, checkpoint.clone());
+                }
+            }
+        }
+        for checkpoint in &self.generated_checkpoints {
+            checkpoints.insert(checkpoint.checkpoint_date, checkpoint.clone());
+        }
+        checkpoints.into_values().collect()
     }
 
     fn fill_group_indices(&self) -> Vec<PlayoutScheduleItemFillGroupIndex> {
@@ -1805,19 +2294,22 @@ fn state_for_mode(request: &SchedulingRequest, items: &[ProgramScheduleItem]) ->
 }
 
 fn refresh_state(request: &SchedulingRequest, items: &[ProgramScheduleItem]) -> ClassicState {
-    let mut state = start_state(request, items);
-    // A Refresh clears the generated window. The playout anchor belongs to
-    // the end of that old window, so only a dated collection checkpoint can
-    // move the rebuild start; schedule-item state must be derived afresh for
-    // that time-aligned start.
-    if let Some(anchor_date) = retained_refresh_anchors(request)
-        .iter()
-        .filter_map(|anchor| anchor.anchor_date)
-        .min()
-    {
-        state.current_time = anchor_date.max(request.start);
+    selected_refresh_checkpoint(request).map_or_else(
+        || start_state(request, items),
+        |(_, checkpoint)| checkpoint_state(&checkpoint.anchor),
+    )
+}
+
+fn checkpoint_state(anchor: &PlayoutAnchor) -> ClassicState {
+    ClassicState {
+        current_time: anchor.next_start,
+        schedule_state: anchor.schedule_items_enumerator_state,
+        multiple_remaining: anchor.multiple_remaining,
+        duration_finish: anchor.duration_finish,
+        in_flood: anchor.in_flood,
+        in_duration_filler: anchor.in_duration_filler,
+        next_guide_group: anchor.next_guide_group.max(1),
     }
-    state
 }
 
 fn anchor_state(anchor: &PlayoutAnchor, request: &SchedulingRequest) -> ClassicState {
@@ -1838,6 +2330,30 @@ fn retained_collection_anchors(request: &SchedulingRequest) -> Vec<PlayoutProgra
         PlayoutBuildMode::Refresh => retained_refresh_anchors(request),
         PlayoutBuildMode::Reset => Vec::new(),
     }
+}
+
+fn selected_refresh_checkpoint(
+    request: &SchedulingRequest,
+) -> Option<(DateTime<Utc>, ClassicCheckpointContext)> {
+    let start_day = midnight(request.start);
+    let next_day = start_day + Duration::days(1);
+    request
+        .reference_data
+        .existing_classic_checkpoints
+        .iter()
+        .filter(|checkpoint| {
+            checkpoint.playout_id == request.playout.id
+                && checkpoint.checkpoint_date >= start_day
+                && checkpoint.checkpoint_date < next_day
+        })
+        .filter_map(|checkpoint| {
+            let context =
+                serde_json::from_str::<ClassicCheckpointContext>(&checkpoint.context).ok()?;
+            (context.version == CLASSIC_CHECKPOINT_VERSION
+                && context.anchor.next_start == checkpoint.checkpoint_date)
+                .then_some((checkpoint.checkpoint_date, context))
+        })
+        .min_by_key(|(checkpoint_date, _)| *checkpoint_date)
 }
 
 fn retained_continue_anchors(request: &SchedulingRequest) -> Vec<PlayoutProgramScheduleAnchor> {
@@ -1989,6 +2505,130 @@ fn collection_key_for_anchor(anchor: &PlayoutProgramScheduleAnchor) -> Schedulin
         search_query: anchor.search_query.clone(),
         fake_collection_key: anchor.fake_collection_key.clone(),
     }
+}
+
+fn media_identity(item: &SchedulingMediaItem) -> ClassicMediaIdentity {
+    ClassicMediaIdentity {
+        media_item_id: item.id,
+        preferred_audio_language_code: item.preferred_audio_language_code.clone(),
+        preferred_audio_title: item.preferred_audio_title.clone(),
+        preferred_subtitle_language_code: item.preferred_subtitle_language_code.clone(),
+        subtitle_mode: item.subtitle_mode,
+        pinned_stream_selection: item.pinned_stream_selection,
+    }
+}
+
+fn take_matching_media_item(
+    available: &mut [Option<SchedulingMediaItem>],
+    identity: &ClassicMediaIdentity,
+) -> Option<SchedulingMediaItem> {
+    let index = available.iter().position(|candidate| {
+        candidate
+            .as_ref()
+            .is_some_and(|item| media_identity(item) == *identity)
+    })?;
+    available[index].take()
+}
+
+/// Restore the exact in-cycle ordering when membership is unchanged. When a
+/// scan added or removed members, keep every unconsumed surviving item ahead
+/// of newly-added items and already-consumed items so a shifted raw index can
+/// never replay a different shuffled row.
+fn restore_media_checkpoint(
+    enumerator: &mut MediaEnumerator,
+    checkpoint: &ClassicMediaCheckpoint,
+) -> bool {
+    if enumerator.playback_order != checkpoint.playback_order {
+        return true;
+    }
+
+    let current_items = std::mem::take(&mut enumerator.items);
+    let mut exact_available = current_items.iter().cloned().map(Some).collect::<Vec<_>>();
+    let exact = checkpoint
+        .ordered_items
+        .iter()
+        .filter_map(|identity| take_matching_media_item(&mut exact_available, identity))
+        .collect::<Vec<_>>();
+    let same_membership = exact.len() == checkpoint.ordered_items.len()
+        && exact.len() == current_items.len()
+        && exact_available.iter().all(Option::is_none);
+    if same_membership {
+        enumerator.items = exact;
+        enumerator.set_index(checkpoint.current_index);
+        return false;
+    }
+
+    let mut available = current_items.into_iter().map(Some).collect::<Vec<_>>();
+    if checkpoint.playback_order == PlaybackOrder::Random {
+        let mut restored = checkpoint
+            .ordered_items
+            .iter()
+            .filter_map(|identity| take_matching_media_item(&mut available, identity))
+            .collect::<Vec<_>>();
+        restored.extend(available.into_iter().flatten());
+        enumerator.items = restored;
+        enumerator.set_index(0);
+        return true;
+    }
+
+    let split = checkpoint.current_index.min(checkpoint.ordered_items.len());
+    let mut remaining = checkpoint.ordered_items[split..]
+        .iter()
+        .filter_map(|identity| take_matching_media_item(&mut available, identity))
+        .collect::<Vec<_>>();
+    let consumed = checkpoint.ordered_items[..split]
+        .iter()
+        .filter_map(|identity| take_matching_media_item(&mut available, identity))
+        .collect::<Vec<_>>();
+    remaining.extend(available.into_iter().flatten());
+    remaining.extend(consumed);
+    enumerator.items = remaining;
+    enumerator.set_index(0);
+    true
+}
+
+fn restore_playlist_checkpoint(
+    playlist: &mut PlaylistEnumerator,
+    checkpoint: &ClassicPlaylistCheckpoint,
+) {
+    let mut available = std::mem::take(&mut playlist.children)
+        .into_iter()
+        .map(Some)
+        .collect::<Vec<_>>();
+    let mut children = Vec::new();
+    let mut restored_child_index = None;
+
+    for (checkpoint_index, child_checkpoint) in checkpoint.children.iter().enumerate() {
+        let Some(index) = available.iter().position(|candidate| {
+            candidate
+                .as_ref()
+                .is_some_and(|child| child.collection_key == child_checkpoint.collection_key)
+        }) else {
+            continue;
+        };
+        let Some(mut child) = available[index].take() else {
+            continue;
+        };
+        let media_checkpoint = ClassicMediaCheckpoint {
+            playback_order: child.enumerator.playback_order,
+            current_index: child_checkpoint.current_index,
+            ordered_items: child_checkpoint.ordered_items.clone(),
+        };
+        restore_media_checkpoint(&mut child.enumerator, &media_checkpoint);
+        child.items_taken_from_current = child_checkpoint.items_taken_from_current;
+        if checkpoint_index == checkpoint.child_index {
+            restored_child_index = Some(children.len());
+        }
+        children.push(child);
+    }
+    children.extend(available.into_iter().flatten());
+    playlist.children = children;
+    playlist.index = checkpoint.index;
+    playlist.child_index = if playlist.children.is_empty() {
+        0
+    } else {
+        restored_child_index.unwrap_or_default() % playlist.children.len()
+    };
 }
 
 fn item_key(item: &ProgramScheduleItem) -> String {
@@ -2486,8 +3126,26 @@ mod tests {
             })
             .expect("Classic schedule should build");
 
-        assert_eq!(result.program_schedule_anchors.len(), 1);
-        assert_eq!(result.program_schedule_anchors[0].id, 0);
+        assert_eq!(
+            result
+                .program_schedule_anchors
+                .iter()
+                .filter(|anchor| anchor.anchor_date.is_none())
+                .count(),
+            1
+        );
+        assert_eq!(
+            result
+                .program_schedule_anchors
+                .iter()
+                .filter(|anchor| anchor.anchor_date.is_some())
+                .count(),
+            1
+        );
+        assert!(result
+            .program_schedule_anchors
+            .iter()
+            .all(|anchor| anchor.id == 0));
         assert_eq!(result.fill_group_indices.len(), 1);
         assert_eq!(result.fill_group_indices[0].id, 0);
     }
@@ -3374,6 +4032,400 @@ mod tests {
             .program_schedule_anchors
             .iter()
             .any(|anchor| anchor.id == 900 || anchor.id == 902));
+    }
+
+    #[test]
+    fn classic_fresh_multi_day_build_generates_dated_source_checkpoints() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let first = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let duplicate_source = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(2, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&first);
+        assert_eq!(key, item_key(&duplicate_source));
+
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![first, duplicate_source],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            vec![
+                SchedulingMediaItem::new(101, Duration::hours(1)),
+                SchedulingMediaItem::new(102, Duration::hours(1)),
+                SchedulingMediaItem::new(103, Duration::hours(1)),
+            ],
+        );
+
+        let result = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::days(2),
+                mode: PlayoutBuildMode::Continue,
+                reference_data,
+            })
+            .expect("fresh multi-day Classic schedule should build");
+
+        let dated = result
+            .program_schedule_anchors
+            .iter()
+            .filter_map(|anchor| anchor.anchor_date)
+            .collect::<Vec<_>>();
+        assert!(
+            dated.len() >= 2,
+            "fresh builds must persist one deduplicated source checkpoint at the initial and day seams: {dated:?}"
+        );
+        assert_eq!(
+            result
+                .program_schedule_anchors
+                .iter()
+                .filter(|anchor| anchor.anchor_date.is_none())
+                .count(),
+            1,
+            "duplicate schedule sources share one continuation enumerator"
+        );
+    }
+
+    #[test]
+    fn classic_restart_refresh_matches_uninterrupted_checkpoint_timeline() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        for playback_order in [
+            PlaybackOrder::Shuffle,
+            PlaybackOrder::Random,
+            PlaybackOrder::RandomRotation,
+        ] {
+            let schedule_item = ProgramScheduleItem {
+                playback_order,
+                subtitle_mode: Some(ChannelSubtitleMode::Forced),
+                ..schedule_item(1, PlayoutMode::One, 1, None)
+            };
+            let key = item_key(&schedule_item);
+            let mut reference_data = SchedulingReferenceData {
+                classic_schedule_items: vec![schedule_item],
+                ..SchedulingReferenceData::default()
+            };
+            reference_data.media_by_key.insert(
+                key.clone(),
+                (101..=108)
+                    .map(|id| SchedulingMediaItem::new(id, Duration::hours(1)))
+                    .collect(),
+            );
+            let playout = Playout {
+                id: 50,
+                schedule_kind: PlayoutScheduleKind::Classic,
+                seed: 17,
+                ..Playout::default()
+            };
+            let initial = ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: playout.clone(),
+                    start,
+                    finish: start + Duration::days(2),
+                    mode: PlayoutBuildMode::Continue,
+                    reference_data: reference_data.clone(),
+                })
+                .expect("initial production-shaped build should complete");
+
+            let refresh_finish = start + Duration::hours(7);
+            let expected = initial
+                .added_items
+                .iter()
+                .filter(|item| item.start < refresh_finish)
+                .map(|item| {
+                    (
+                        item.media_item_id,
+                        item.start,
+                        item.finish,
+                        item.scheduling_context.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let mut restarted_reference_data = reference_data;
+            restarted_reference_data.classic_schedule_items[0].subtitle_mode =
+                Some(ChannelSubtitleMode::Any);
+            restarted_reference_data.existing_items = initial.added_items.clone();
+            restarted_reference_data.existing_program_schedule_anchors =
+                initial.program_schedule_anchors;
+            restarted_reference_data.existing_classic_checkpoints = initial.classic_checkpoints;
+            restarted_reference_data.existing_fill_group_indices = initial.fill_group_indices;
+
+            let refreshed = ClassicSchedulingEngine
+                .schedule(SchedulingRequest {
+                    playout: Playout {
+                        anchor: initial.anchor,
+                        ..playout
+                    },
+                    start: start + Duration::hours(3),
+                    finish: refresh_finish,
+                    mode: PlayoutBuildMode::Refresh,
+                    reference_data: restarted_reference_data,
+                })
+                .expect("restart Refresh should restore the complete checkpoint");
+            let actual = refreshed
+                .added_items
+                .iter()
+                .map(|item| {
+                    (
+                        item.media_item_id,
+                        item.start,
+                        item.finish,
+                        item.scheduling_context.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            assert_eq!(
+                actual, expected,
+                "{playback_order:?} Refresh diverged from uninterrupted scheduling"
+            );
+            assert!(refreshed
+                .added_items
+                .iter()
+                .all(|item| item.subtitle_mode == Some(ChannelSubtitleMode::Any)));
+        }
+    }
+
+    #[test]
+    fn classic_refresh_refuses_legacy_continuation_only_state() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            existing_items: vec![PlayoutItem {
+                playout_id: 50,
+                media_item_id: 101,
+                start,
+                finish: start + Duration::hours(1),
+                ..PlayoutItem::default()
+            }],
+            existing_program_schedule_anchors: vec![PlayoutProgramScheduleAnchor {
+                playout_id: 50,
+                collection_type: CollectionType::Collection,
+                collection_id: Some(1),
+                enumerator_state: CollectionEnumeratorState { seed: 7, index: 1 },
+                ..PlayoutProgramScheduleAnchor::default()
+            }],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            vec![
+                SchedulingMediaItem::new(101, Duration::hours(1)),
+                SchedulingMediaItem::new(102, Duration::hours(1)),
+            ],
+        );
+
+        let error = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    id: 50,
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    seed: 7,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::hours(4),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data,
+            })
+            .expect_err("legacy continuation-only state must not be cleared");
+
+        assert!(error.to_string().contains("Classic Refresh refused"));
+        assert!(error.to_string().contains("Reset Playout"));
+    }
+
+    #[test]
+    fn classic_refresh_reconciles_shuffle_membership_without_consumed_replay() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 6, 0, 0).unwrap();
+        let checkpoint_day = Utc.with_ymd_and_hms(2026, 4, 27, 0, 0, 0).unwrap();
+        let schedule_item = ProgramScheduleItem {
+            playback_order: PlaybackOrder::Shuffle,
+            ..schedule_item(1, PlayoutMode::One, 1, None)
+        };
+        let key = item_key(&schedule_item);
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: vec![schedule_item],
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key.clone(),
+            (101..=108)
+                .map(|id| SchedulingMediaItem::new(id, Duration::hours(1)))
+                .collect(),
+        );
+        let playout = Playout {
+            id: 50,
+            schedule_kind: PlayoutScheduleKind::Classic,
+            seed: 17,
+            ..Playout::default()
+        };
+        let initial = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: playout.clone(),
+                start,
+                finish: start + Duration::days(2),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: reference_data.clone(),
+            })
+            .expect("initial shuffled build");
+        let checkpoint = initial
+            .classic_checkpoints
+            .iter()
+            .find(|checkpoint| checkpoint.checkpoint_date == checkpoint_day)
+            .expect("midnight checkpoint");
+        let checkpoint_context =
+            serde_json::from_str::<ClassicCheckpointContext>(&checkpoint.context)
+                .expect("checkpoint context");
+        let media_checkpoint = checkpoint_context.sources[&key]
+            .media
+            .as_ref()
+            .expect("media checkpoint");
+        assert!(media_checkpoint.current_index > 0);
+        let consumed_before_checkpoint = media_checkpoint.ordered_items
+            [..media_checkpoint.current_index]
+            .iter()
+            .map(|identity| identity.media_item_id)
+            .collect::<BTreeSet<_>>();
+        let removed_id =
+            media_checkpoint.ordered_items[media_checkpoint.current_index].media_item_id;
+
+        let mut restarted = reference_data;
+        restarted
+            .media_by_key
+            .get_mut(&key)
+            .expect("source media")
+            .retain(|item| item.id != removed_id);
+        restarted
+            .media_by_key
+            .get_mut(&key)
+            .expect("source media")
+            .push(SchedulingMediaItem::new(999, Duration::hours(1)));
+        restarted.existing_items = initial.added_items;
+        restarted.existing_program_schedule_anchors = initial.program_schedule_anchors;
+        restarted.existing_classic_checkpoints = initial.classic_checkpoints;
+        restarted.existing_fill_group_indices = initial.fill_group_indices;
+
+        let refresh_time = checkpoint_day + Duration::hours(3);
+        let refreshed = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    anchor: initial.anchor,
+                    ..playout
+                },
+                start: refresh_time,
+                finish: checkpoint_day + Duration::hours(6),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data: restarted,
+            })
+            .expect("membership-changing Refresh should reconcile the checkpoint");
+        let rebuilt_before_refresh = refreshed
+            .added_items
+            .iter()
+            .filter(|item| item.start < refresh_time)
+            .map(|item| item.media_item_id)
+            .collect::<BTreeSet<_>>();
+        let future_ids = refreshed
+            .added_items
+            .iter()
+            .filter(|item| item.start >= refresh_time)
+            .map(|item| item.media_item_id)
+            .collect::<Vec<_>>();
+
+        assert!(!future_ids.is_empty());
+        assert!(future_ids.iter().all(|id| {
+            !consumed_before_checkpoint.contains(id) && !rebuilt_before_refresh.contains(id)
+        }));
+    }
+
+    #[test]
+    fn classic_refresh_restores_shuffled_schedule_order_with_duplicate_sources() {
+        let start = Utc.with_ymd_and_hms(2026, 4, 26, 20, 0, 0).unwrap();
+        let checkpoint_day = Utc.with_ymd_and_hms(2026, 4, 27, 0, 0, 0).unwrap();
+        let schedule_items = (1..=3)
+            .map(|id| schedule_item(id, PlayoutMode::One, 1, None))
+            .collect::<Vec<_>>();
+        let key = item_key(&schedule_items[0]);
+        assert!(schedule_items.iter().all(|item| item_key(item) == key));
+        let mut reference_data = SchedulingReferenceData {
+            classic_schedule_items: schedule_items,
+            classic_shuffle_schedule_items: true,
+            ..SchedulingReferenceData::default()
+        };
+        reference_data.media_by_key.insert(
+            key,
+            (101..=105)
+                .map(|id| SchedulingMediaItem::new(id, Duration::minutes(1)))
+                .collect(),
+        );
+        let playout = Playout {
+            id: 50,
+            schedule_kind: PlayoutScheduleKind::Classic,
+            seed: 17,
+            ..Playout::default()
+        };
+        let initial = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: playout.clone(),
+                start,
+                finish: checkpoint_day + Duration::hours(1),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: reference_data.clone(),
+            })
+            .expect("initial shuffled schedule-item build");
+        let expected = initial
+            .added_items
+            .iter()
+            .filter(|item| item.start >= checkpoint_day)
+            .map(|item| (item.media_item_id, item.scheduling_context.clone()))
+            .collect::<Vec<_>>();
+
+        let mut restarted = reference_data;
+        restarted.existing_items = initial.added_items;
+        restarted.existing_program_schedule_anchors = initial.program_schedule_anchors;
+        restarted.existing_classic_checkpoints = initial.classic_checkpoints;
+        restarted.existing_fill_group_indices = initial.fill_group_indices;
+        let refreshed = ClassicSchedulingEngine
+            .schedule(SchedulingRequest {
+                playout: Playout {
+                    anchor: initial.anchor,
+                    ..playout
+                },
+                start: checkpoint_day + Duration::minutes(15),
+                finish: checkpoint_day + Duration::hours(1),
+                mode: PlayoutBuildMode::Refresh,
+                reference_data: restarted,
+            })
+            .expect("Refresh should restore shuffled schedule-item state");
+        let actual = refreshed
+            .added_items
+            .iter()
+            .map(|item| (item.media_item_id, item.scheduling_context.clone()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
+        assert_eq!(
+            refreshed
+                .program_schedule_anchors
+                .iter()
+                .filter(|anchor| anchor.anchor_date.is_none())
+                .count(),
+            1,
+            "duplicate schedule items must share one source enumerator"
+        );
     }
 
     #[test]
@@ -4460,8 +5512,10 @@ mod tests {
             })),
             "program_schedule_anchors": result.program_schedule_anchors.iter().map(|anchor| serde_json::json!({
                 "collection_id": anchor.collection_id,
+                "anchor_date": anchor.anchor_date,
                 "index": anchor.enumerator_state.index,
             })).collect::<Vec<_>>(),
+            "classic_checkpoints": result.classic_checkpoints.iter().map(|checkpoint| checkpoint.checkpoint_date).collect::<Vec<_>>(),
             "warnings": result.warnings,
         })
     }

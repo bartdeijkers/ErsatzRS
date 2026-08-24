@@ -1950,7 +1950,7 @@ evidence = ''
 id         = 'crf-01'
 phase      = 'CRF — Classic refresh continuity'
 title      = 'Generate and restore real Classic refresh checkpoints'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'classic-scheduling'
 plan       = 'plans/playout-refresh-and-addon-tv-deduplication.md'
 depends_on = []
@@ -1969,7 +1969,23 @@ surviving state or refuses the destructive clear with an actionable health/UI
 diagnostic. It never silently falls back to Reset. SQLite and MySQL repository,
 restart, maintenance, health, and scheduler regressions pass.
 '''
-evidence = ''
+evidence = '''
+Classic now chunks production builds at the initial and daily rebuild seams,
+persisting deduplicated dated source anchors plus a versioned complete
+`PlayoutClassicCheckpoint` and the undated Continue state in the same
+transaction as generated items and the main anchor. The context restores exact
+schedule ordering/state, source cycles keyed by playback identity, fill groups,
+Smart Shuffle, Random, and RandomRotation state. Full preflight rejects
+partial, stale, duplicate, wrong-day, incompatible, and continuation-only
+legacy state before any clear; startup/build status and Classic Playout State
+health require an explicit Reset while retaining the existing window.
+Regressions cover fresh multi-day generation, duplicate source references,
+shuffled schedule order, add/remove membership, Shuffle/Random/RandomRotation
+restart equivalence and setting re-stamping, safe repair/refusal, the existing
+Classic admin reset mapping, SQLite idempotency, paired migrations, and the
+MySQL repository configuration. Focused Classic, maintenance, health,
+repository, SQLite migration, and MySQL migration checks pass.
+'''
 
 [[milestone]]
 id         = 'crf-02'

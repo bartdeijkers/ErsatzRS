@@ -10,8 +10,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
     CollectionType, EntityId, FillerKind, FillerMode, FixedStartTimeBehavior, PlaybackOrder,
-    Playout, PlayoutAnchor, PlayoutGap, PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor,
-    PlayoutScheduleItemFillGroupIndex, PlayoutScheduleKind, ProgramScheduleItem,
+    Playout, PlayoutAnchor, PlayoutClassicCheckpoint, PlayoutGap, PlayoutHistory, PlayoutItem,
+    PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex, PlayoutScheduleKind,
+    ProgramScheduleItem,
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,8 +24,9 @@ pub use block::{
     EffectiveDeco, EffectiveDecoSelection, EffectiveDecoTemplateItem,
 };
 pub use classic::{
-    audit_classic_runtime_state, classic_schedule_item_key, classic_schedule_item_policy_key,
-    ClassicRuntimeStateAudit, ClassicSchedulingContext, ClassicSchedulingEngine,
+    audit_classic_refresh_checkpoint, audit_classic_runtime_state, classic_schedule_item_key,
+    classic_schedule_item_policy_key, ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit,
+    ClassicSchedulingContext, ClassicSchedulingEngine,
 };
 pub use scripted::ScriptedSchedulingEngine;
 pub use smart_shuffle::{
@@ -264,6 +266,7 @@ pub struct SchedulingReferenceData {
     pub classic_random_start_point: bool,
     pub classic_fixed_start_time_behavior: FixedStartTimeBehavior,
     pub existing_program_schedule_anchors: Vec<PlayoutProgramScheduleAnchor>,
+    pub existing_classic_checkpoints: Vec<PlayoutClassicCheckpoint>,
     pub existing_fill_group_indices: Vec<PlayoutScheduleItemFillGroupIndex>,
     pub existing_items: Vec<PlayoutItem>,
     pub existing_history: Vec<PlayoutHistory>,
@@ -591,6 +594,9 @@ pub struct SchedulingResult {
     /// Collection-enumerator anchors produced by Classic scheduling.
     /// Block/YAML/Scripted engines leave this empty; state is in `anchor.context`.
     pub program_schedule_anchors: Vec<PlayoutProgramScheduleAnchor>,
+    /// Complete Classic state at each dated rebuild seam. Other engines leave
+    /// this empty.
+    pub classic_checkpoints: Vec<PlayoutClassicCheckpoint>,
     /// Fill-group enumerator state produced by Classic scheduling.
     pub fill_group_indices: Vec<PlayoutScheduleItemFillGroupIndex>,
     pub warnings: Vec<String>,
@@ -644,6 +650,8 @@ pub enum SchedulingError {
     InvalidTime(String),
     #[error("script error: {0}")]
     Script(String),
+    #[error("{0}")]
+    UnsafeClassicRefresh(String),
     #[error("unsupported playout schedule kind: {0:?}")]
     UnsupportedScheduleKind(PlayoutScheduleKind),
 }

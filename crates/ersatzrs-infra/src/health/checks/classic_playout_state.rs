@@ -3,6 +3,7 @@ use super::super::{
     Result, Row,
 };
 use chrono::{Duration, Utc};
+use ersatzrs_core::scheduling::audit_classic_refresh_checkpoint;
 use ersatzrs_domain::PlayoutScheduleKind;
 
 use crate::maintenance::classic_runtime_state_is_complete;
@@ -55,14 +56,17 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
             let playout_id = row
                 .try_get::<i64, _>("Id")
                 .map_err(|error| HealthCheckError::Database(error.to_string()))?;
+            let now = Utc::now();
             let reference_data = scheduling
-                .classic_reference_data(playout_id, Utc::now(), Duration::zero())
+                .classic_reference_data(playout_id, now, Duration::zero())
                 .await
                 .map_err(|error| HealthCheckError::Database(error.to_string()))?;
-            if classic_runtime_state_is_complete(&self.pool, playout_id, &reference_data)
-                .await
-                .map_err(|error| HealthCheckError::Database(error.to_string()))?
-            {
+            let runtime_complete =
+                classic_runtime_state_is_complete(&self.pool, playout_id, &reference_data)
+                    .await
+                    .map_err(|error| HealthCheckError::Database(error.to_string()))?;
+            let refresh_audit = audit_classic_refresh_checkpoint(&reference_data, playout_id, now);
+            if runtime_complete && refresh_audit.is_complete() {
                 continue;
             }
 
@@ -87,7 +91,7 @@ impl HealthCheck for ClassicPlayoutStateHealthCheck {
             self.title(),
             HealthCheckStatus::Fail,
             format!(
-                "Classic playout enumerator state is incomplete for: {}. The scheduler must Refresh these playouts before they can continue safely.",
+                "Classic playout state is not safe to Refresh for: {}. Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.",
                 invalid.join(", ")
             ),
             format!("{} Classic playout state error(s)", invalid.len()),

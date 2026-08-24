@@ -4,10 +4,11 @@ use ersatzrs_core::repositories::{
     ChannelRepository, ConfigRepository, FfmpegProfileRepository, PlayoutRepository,
     ProgramScheduleRepository,
 };
+use ersatzrs_core::scheduling::SchedulingResult;
 use ersatzrs_domain::{
     AddonMediaListDetailPolicy, AddonMediaListImportState, CollectionEnumeratorState,
-    CollectionType, Playout, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
-    ProgramSchedule,
+    CollectionType, Playout, PlayoutClassicCheckpoint, PlayoutProgramScheduleAnchor,
+    PlayoutScheduleItemFillGroupIndex, ProgramSchedule,
 };
 use ersatzrs_infra::addon_media_list_import::AddonMediaListImportCoordinator;
 use ersatzrs_infra::db;
@@ -284,6 +285,44 @@ async fn mysql_backend_runs_migrations_and_representative_queries() {
     assert_ne!(anchor_ids[0], anchor_ids[1]);
     assert_eq!(fill_group_ids.len(), 2);
     assert_ne!(fill_group_ids[0], fill_group_ids[1]);
+
+    let checkpoint_date = chrono::Utc::now();
+    let checkpoint_playout = Playout {
+        id: 7101,
+        channel_id: 7001,
+        program_schedule_id: Some(7101),
+        ..Playout::default()
+    };
+    for context in ["{\"Version\":1}", "{\"Version\":1,\"Retry\":true}"] {
+        repos
+            .playout
+            .apply_build_result(
+                &SchedulingResult {
+                    classic_checkpoints: vec![PlayoutClassicCheckpoint {
+                        playout_id: 7101,
+                        checkpoint_date,
+                        context: context.to_owned(),
+                    }],
+                    ..SchedulingResult::default()
+                },
+                &checkpoint_playout,
+                chrono::Duration::zero(),
+            )
+            .await
+            .expect("replace MySQL Classic checkpoint state");
+    }
+    let checkpoint_rows =
+        sqlx::query(r#"SELECT "Context" FROM "PlayoutClassicCheckpoint" WHERE "PlayoutId" = 7101"#)
+            .fetch_all(&pool)
+            .await
+            .expect("load MySQL Classic checkpoints");
+    assert_eq!(checkpoint_rows.len(), 1);
+    assert_eq!(
+        checkpoint_rows[0]
+            .try_get::<String, _>("Context")
+            .expect("decode checkpoint context"),
+        "{\"Version\":1,\"Retry\":true}"
+    );
 }
 
 #[tokio::test]

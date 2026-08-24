@@ -332,7 +332,7 @@ impl LanguageStrings for PolishStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "Stan iteratora klasycznej emisji jest niekompletny dla: {playouts}. Harmonogram musi odświeżyć te emisje, zanim będzie można je bezpiecznie kontynuować."
+            "Stan klasycznej emisji nie pozwala na bezpieczne odświeżenie dla: {playouts}. Użyj Resetuj emisję dla starego lub niezgodnego stanu; Odśwież nigdy nie usuwa okna bez pełnego punktu kontrolnego."
         )
     }
 

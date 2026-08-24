@@ -16,13 +16,12 @@ reliably and expose queued/building activity to the admin UI. The classic engine
 `request.mode`, so classic `Refresh` clears and rebuilds the window the way
 ErsatzTV `RefreshPlayout` does.
 
-Reopened 2026-08-23: the clear-and-rebuild mechanics exist, but the real
-Classic build path does not persist the dated checkpoint needed to restore
-continuity. A content-triggered Refresh can therefore rewind a deterministic
-shuffle and schedule already-aired media again. Remote Stream scan impact is
-also selected globally instead of from actual schedule/library dependencies,
-so an unrelated membership change can trigger that unsafe Refresh. Milestones
-crf-01 and crf-02 own the end-to-end correction.
+Reopened 2026-08-23; Classic continuity was completed by crf-01 on 2026-08-24.
+Content-triggered Refresh now requires and restores a complete production
+checkpoint, so it cannot silently rewind deterministic scheduling, and unsafe
+legacy state is refused before rows are cleared. Remote Stream scan impact is
+still selected globally instead of from actual schedule/library dependencies,
+so crf-02 remains open to prevent unrelated rebuild requests.
 '''
 
 [[debt]]
@@ -30,8 +29,8 @@ id          = 'scan-triggered-classic-refresh-can-replay-aired-media'
 adr         = '0020'
 description = 'Make a content-triggered Classic Refresh reproduce uninterrupted scheduling state instead of clearing the window and replaying media that has already aired.'
 discovered  = '2026-08-23'
-evidence    = 'Two unrelated managed Remote Stream scans changed membership and queued Refresh for every playout with a program-schedule anchor. The affected Classic movie playout had no dated checkpoint to restore, because all persisted anchors were undated continuation state, and its deterministic shuffled sequence restarted. Current tests prove restoration only after manually injecting a checkpoint; they do not exercise a fresh build, process restart, real scan invalidation, and Refresh as one scenario. Tracked by milestones crf-01 and crf-02 and plans/playout-refresh-and-addon-tv-deduplication.md.'
-resolved    = false
+evidence    = 'The replay half is resolved by crf-01: production-generated complete checkpoints survive repository restart, match uninterrupted Shuffle/Random/RandomRotation identities and contexts, re-stamp settings, reconcile membership, and refuse unsafe legacy state without deleting the window. Dependency over-selection remains recorded separately in remote-stream-playlists and milestone crf-02.'
+resolved    = true
 
 [[debt]]
 id          = 'channel-edit-triggers-no-playout-rebuild'

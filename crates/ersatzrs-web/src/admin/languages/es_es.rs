@@ -348,7 +348,7 @@ impl LanguageStrings for SpanishStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "El estado del enumerador de reproducción clásica está incompleto para: {playouts}. El programador debe actualizar estas reproducciones antes de que puedan continuar de forma segura."
+            "El estado de la reproducción clásica no permite una actualización segura para: {playouts}. Usa Restablecer reproducción para estados antiguos o incompatibles; Actualizar nunca borra una ventana sin un punto de control completo."
         )
     }
 

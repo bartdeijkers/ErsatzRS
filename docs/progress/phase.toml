@@ -15,8 +15,8 @@ DTX-A remains the current feature phase, followed by Phase 9 teletext.
 '''
 
 next_steps = '''
-Before the next release, complete crf-01 and crf-02 so a scan-triggered Classic
-Refresh cannot replay aired media, and complete amm-h-01 so projected television
+Before the next release, complete crf-02 so scans invalidate only dependent
+playouts, and complete amm-h-01 so projected television
 lists are cardinality-safe and existing exact artwork duplicates are repaired.
 Close amm-g-06 and amm-g-07 for unavailable-item and source-URL acceptance.
 Then continue dtx-a-01/dtx-a-02 and resume Phase 9A at p9a-01.

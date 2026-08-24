@@ -344,7 +344,7 @@ impl LanguageStrings for ItalianStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "Lo stato dell'enumeratore di riproduzione classico è incompleto per: {playouts}. Lo scheduler deve aggiornare queste riproduzioni prima che possano continuare in sicurezza."
+            "Lo stato della riproduzione classica non consente un aggiornamento sicuro per: {playouts}. Usa Reimposta riproduzione per stati precedenti o incompatibili; Aggiorna non cancella mai una finestra senza un checkpoint completo."
         )
     }
 

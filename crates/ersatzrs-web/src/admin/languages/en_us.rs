@@ -342,7 +342,7 @@ impl LanguageStrings for EnglishStrings {
 
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
-            "Classic playout enumerator state is incomplete for: {playouts}. The scheduler must Refresh these playouts before they can continue safely."
+            "Classic playout state is not safe to Refresh for: {playouts}. Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint."
         )
     }
 
