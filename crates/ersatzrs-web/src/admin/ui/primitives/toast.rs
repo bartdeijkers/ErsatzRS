@@ -15,6 +15,13 @@ const EXIT_DURATION_MS: u32 = 2_000;
 #[cfg(target_arch = "wasm32")]
 const LIFECYCLE_TICK_MS: u32 = 50;
 
+#[cfg(any(target_arch = "wasm32", test))]
+fn elapsed_lifecycle_ms(previous_ms: f64, current_ms: f64) -> u32 {
+    let elapsed_ms = (current_ms - previous_ms).max(0.0);
+    let elapsed = std::time::Duration::from_secs_f64(elapsed_ms.min(f64::from(u32::MAX)) / 1_000.0);
+    u32::try_from(elapsed.as_millis()).unwrap_or(u32::MAX)
+}
+
 /// Severity level for a toast notification.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToastSeverity {
@@ -108,6 +115,8 @@ struct ToastQueue {
     visible: Vec<Toast>,
     queued: VecDeque<Toast>,
     next_id: u64,
+    #[cfg(target_arch = "wasm32")]
+    last_tick_ms: Option<f64>,
 }
 
 impl ToastQueue {
@@ -175,6 +184,28 @@ impl ToastQueue {
     fn is_empty(&self) -> bool {
         self.visible.is_empty() && self.queued.is_empty()
     }
+
+    #[cfg(target_arch = "wasm32")]
+    fn start_clock(&mut self) {
+        self.last_tick_ms = Some(js_sys::Date::now());
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn stop_clock(&mut self) {
+        self.last_tick_ms = None;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn advance_to_now(&mut self) {
+        let current_ms = js_sys::Date::now();
+        let elapsed_ms = self
+            .last_tick_ms
+            .replace(current_ms)
+            .map_or(0, |previous_ms| {
+                elapsed_lifecycle_ms(previous_ms, current_ms)
+            });
+        self.advance(elapsed_ms);
+    }
 }
 
 /// Process-level toast store. Provide once in the app root and use `push_toast` in islands.
@@ -236,7 +267,11 @@ impl ToastStore {
 
         let accepted = self
             .inner
-            .try_update(|queue| queue.push(message, severity, action))
+            .try_update(|queue| {
+                #[cfg(target_arch = "wasm32")]
+                queue.advance_to_now();
+                queue.push(message, severity, action)
+            })
             .unwrap_or(false);
         if accepted {
             #[cfg(target_arch = "wasm32")]
@@ -245,13 +280,21 @@ impl ToastStore {
     }
 
     pub fn remove(&self, id: u64) {
-        self.inner.update(|queue| queue.dismiss(id));
+        self.inner.update(|queue| {
+            #[cfg(target_arch = "wasm32")]
+            queue.advance_to_now();
+            queue.dismiss(id);
+        });
         #[cfg(target_arch = "wasm32")]
         self.ensure_ticker();
     }
 
     fn set_paused(&self, id: u64, paused: bool) {
-        self.inner.update(|queue| queue.set_paused(id, paused));
+        self.inner.update(|queue| {
+            #[cfg(target_arch = "wasm32")]
+            queue.advance_to_now();
+            queue.set_paused(id, paused);
+        });
     }
 
     pub fn toasts(&self) -> Signal<Vec<Toast>> {
@@ -266,12 +309,14 @@ impl ToastStore {
         }
 
         self.ticker_running.set(true);
+        self.inner.update(ToastQueue::start_clock);
         let store = *self;
         leptos::task::spawn_local(async move {
             loop {
                 gloo_timers::future::TimeoutFuture::new(LIFECYCLE_TICK_MS).await;
-                store.inner.update(|queue| queue.advance(LIFECYCLE_TICK_MS));
+                store.inner.update(ToastQueue::advance_to_now);
                 if store.inner.with_untracked(ToastQueue::is_empty) {
+                    store.inner.update(ToastQueue::stop_clock);
                     store.ticker_running.set(false);
                     break;
                 }
@@ -575,6 +620,16 @@ mod tests {
         assert!(!toast.advance(VISIBLE_DURATION_MS));
         assert_eq!(toast.phase, ToastPhase::Exiting);
         assert!(toast.advance(EXIT_DURATION_MS));
+    }
+
+    #[test]
+    fn lifecycle_elapsed_time_uses_the_actual_callback_delay() {
+        assert_eq!(elapsed_lifecycle_ms(1_000.0, 1_075.9), 75);
+        assert_eq!(elapsed_lifecycle_ms(1_075.0, 1_000.0), 0);
+        assert_eq!(
+            elapsed_lifecycle_ms(0.0, f64::from(u32::MAX) + 1_000.0),
+            u32::MAX
+        );
     }
 
     #[test]

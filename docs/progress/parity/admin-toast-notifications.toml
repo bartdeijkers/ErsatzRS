@@ -24,6 +24,7 @@ normalization, duplicate suppression, overflow ordering, lifecycle transitions,
 interaction pause, and final removal. `tests/e2e/toast-parity.spec.ts` exercises
 real playout rebuild feedback across dark desktop and light mobile layouts,
 hover/touch pause and resume, automatic expiry, duplicate suppression, and
-manual close; media-browser coverage keeps the action-link navigation and now
-asserts that the action remains inline.
+manual close. The lifecycle ticker consumes measured wall-clock time so delayed
+browser callbacks cannot stretch those durations. Media-browser coverage keeps
+the action-link navigation and asserts that the action remains inline.
 '''

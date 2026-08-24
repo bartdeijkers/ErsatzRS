@@ -32,6 +32,12 @@ release section when tagging a release.
   existing-database handling, scoped scan invalidation, idempotent artwork,
   and SQLite, MySQL, browser, restart, and health proof.
 
+### Fixed
+
+- Toast lifecycles now use measured elapsed time, so delayed browser timer
+  callbacks cannot stretch the configured display and fade durations after a
+  hover or touch pause.
+
 ## [1.0.25-beta] - 2026-08-23
 
 ### Changed
