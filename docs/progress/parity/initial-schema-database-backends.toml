@@ -4,7 +4,7 @@ rs_target  = '`migrations/`, `crates/ersatzrs-infra`'
 status     = 'In progress'
 adr        = ['0004', '0080']
 summary    = '''
-In progress under accepted ADR 0080: the initial SQLite schema matches the ErsatzTV table/column/foreign-key shape and infra repositories read/write ErsatzTV integer enums, EF-style UTC `DateTime` text, ErsatzTV `TimeSpan` values, and the covered playout runtime state. SQLite startup and lazy pools enforce foreign keys, a 30-second busy timeout, WAL journaling, NORMAL synchronization, immediate write transactions, bounded retries, and schema health checks. Runtime, Cargo, migrations, CI, developer graphs, and current operator documentation are SQLite-only; removed `mysql://` and `mariadb://` URLs fail with a permanent migration diagnostic. Only the verified release-specific offline conversion runbook remains open under ADR 0080. Historical MySQL implementation and proof below are retained as delivery evidence. Remaining table-level read/write and real-world decode gaps are tracked in [persistence-gap-matrix.md](../persistence-gap-matrix.md).
+In progress: ADR 0080 is implemented and the initial SQLite schema matches the ErsatzTV table/column/foreign-key shape. Infra repositories read/write ErsatzTV integer enums, EF-style UTC `DateTime` text, ErsatzTV `TimeSpan` values, and the covered playout runtime state. SQLite startup and lazy pools enforce foreign keys, a 30-second busy timeout, WAL journaling, NORMAL synchronization, immediate write transactions, bounded retries, and schema health checks. Runtime, Cargo, migrations, CI, developer graphs, and current operator documentation are SQLite-only; removed `mysql://` and `mariadb://` URLs fail with a permanent diagnostic. The maintainer confirmed no user deployment used the retired optional backend, so no conversion runbook is required. Historical MySQL implementation and proof below are retained as delivery evidence. Remaining table-level read/write and real-world decode gaps are tracked in [persistence-gap-matrix.md](../persistence-gap-matrix.md).
 '''
 
 [[debt]]
@@ -20,9 +20,10 @@ resolution  = 'The supported compile and runtime graph now contains one SQLite b
 id          = 'mysql-to-sqlite-release-runbook'
 description = 'Before the first SQLite-only release, publish and execute a deterministic offline migration procedure for historical source-built MySQL/MariaDB installations.'
 discovered  = '2026-08-24'
-evidence    = 'The backup guide documents native consistent dump, checksum, and scratch-restore proof, and explicitly states that SQL dumps are not SQLite imports. Closure must pin the final MySQL-capable revision and prove all table data, migration history, identities, foreign keys, NULL/text/blob values, SQLite integrity, health, and rollback.'
+evidence    = 'The project initially treated conversion as release debt and documented preservation steps. On 2026-08-24 the maintainer confirmed that no ErsatzRS user deployment ever used the optional MySQL/MariaDB backend, establishing that there is no deployed operator data or migration population.'
 adr         = '0080'
-resolved    = false
+resolved    = true
+resolution  = 'The maintainer confirmed on 2026-08-24 that no ErsatzRS user deployment ever used MySQL/MariaDB. With no deployed operator data to convert, a migration utility and release runbook would serve no migration population and are not required. Unsupported database URLs continue to fail explicitly.'
 
 [[debt]]
 id          = 'replace-into-cascade-deleted-child-rows'

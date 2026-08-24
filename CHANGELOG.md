@@ -28,9 +28,10 @@ release section when tagging a release.
   documentation, repository skills, agent checklists, developer scripts,
   affected-check recommendations, and CI on SQLite as the sole supported
   database backend. Removed MySQL/MariaDB URLs now fail with migration guidance.
-  The local closeout exercises one workspace graph plus doctests, while a
-  verified MySQL-to-SQLite conversion remains an explicit release blocker
-  rather than an unproved recommendation.
+  The local closeout exercises one workspace graph plus doctests. The
+  maintainer confirmed that the retired optional backend had no user
+  deployments, so no operator conversion procedure or release blocker is
+  required.
 
 - Reopened the Classic Refresh and add-on television projection parity
   contracts after Windows dogfood exposed two release-correctness defects:

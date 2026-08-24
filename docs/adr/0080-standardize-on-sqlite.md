@@ -6,13 +6,14 @@ Accepted
 
 ## Implementation
 
-Partially implemented (2026-08-24). Runtime and Cargo are SQLite-only: the
-MySQL features, dependencies, migration tree, dialect branches, integration
-tests, CI service job, dual-feature check graphs, dependency-advisory exception,
-and current support documentation are removed. `mysql://` and `mariadb://`
-startup URLs fail with a permanent SQLite-only diagnostic. A verified offline
-data conversion procedure remains release work; backup-preservation steps are
-documented without claiming standard dump files can be imported into SQLite.
+Implemented (2026-08-24). Runtime and Cargo are SQLite-only: the MySQL
+features, dependencies, migration tree, dialect branches, integration tests,
+CI service job, dual-feature check graphs, dependency-advisory exception, and
+current support documentation are removed. `mysql://` and `mariadb://` startup
+URLs fail with a permanent SQLite-only diagnostic. The maintainer confirmed
+that no ErsatzRS user deployment ever used the optional MySQL/MariaDB backend,
+so there is no deployed operator data to convert and no migration utility or
+runbook is required.
 
 ## Context
 
@@ -61,13 +62,11 @@ The web host and scanner may access the same SQLite database on one host. The
 database file must live on a filesystem with correct local locking semantics;
 network shares and multiple active ErsatzRS server instances are unsupported.
 
-Source-built MySQL installations cannot upgrade in place to a SQLite-only
-binary. Before the first release that removes MySQL support, the project will
-publish a deterministic offline migration procedure using the last
-MySQL-capable source revision. The normal ErsatzRS runtime will not retain a
-MySQL client solely for migration. Operators must keep a verified database
-backup and validate the migrated SQLite database before retiring the MySQL
-deployment.
+The maintainer confirmed that no ErsatzRS user deployment ever used the
+optional source-built MySQL/MariaDB backend. There is therefore no operator
+migration population and no conversion utility or release runbook will be
+published. SQLite-only binaries still reject historical MySQL/MariaDB URLs
+explicitly instead of silently creating or selecting another database.
 
 Adding another production database backend in the future requires a new ADR
 with a demonstrated deployment need, an ownership model for migrations and
@@ -85,8 +84,8 @@ component.
 - MySQL-specific dependencies and their security and maintenance surface leave
   the production graph.
 - ErsatzRS deliberately loses MySQL/MariaDB parity with ErsatzTV.
-- Operators who chose the opt-in MySQL build must perform an offline migration
-  and accept downtime before upgrading.
+- No operator migration is required because the optional MySQL/MariaDB backend
+  had no user deployments before its removal.
 - SQLite's single-writer model remains a design constraint. New write-heavy
   features must use short transactions, bounded concurrency, and idempotent
   recovery rather than assuming a client-server database will absorb

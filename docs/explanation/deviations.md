@@ -105,8 +105,9 @@ ErsatzTV supports client-server MySQL deployments. ErsatzRS is a single-host
 media server and standardizes on SQLite so every migration, health check, and
 release path receives the same proof. The web host and scanner can share one
 local database file, but active-active servers and network filesystems are not
-supported. Operators of historical source-built MySQL variants require an
-offline migration before upgrading to a SQLite-only release.
+supported. SQLite-only binaries reject MySQL/MariaDB URLs explicitly. The
+maintainer confirmed that no user deployment used the retired optional
+backend, so no operator conversion procedure is required.
 
 ADR: [0080](../adr/0080-standardize-on-sqlite.md)
 

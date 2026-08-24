@@ -15,11 +15,9 @@ phase, followed by Phase 9 teletext.
 '''
 
 next_steps = '''
-Before the next release, finish the verified offline-migration runbook remaining
-under accepted ADR 0080; its runtime, Cargo, documentation, CI, script,
-check-graph, advisory, and migration-tree retirement is complete. Then close
-amm-g-06 and amm-g-07 for unavailable-item and source-URL acceptance, continue
-dtx-a-01/dtx-a-02, and resume Phase 9A at p9a-01.
+ADR 0080 is complete. Next close amm-g-06 and amm-g-07 for unavailable-item
+and source-URL acceptance, continue dtx-a-01/dtx-a-02, and resume Phase 9A at
+p9a-01.
 '''
 
 [[blocking_decision]]
