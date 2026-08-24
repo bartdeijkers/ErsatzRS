@@ -43,6 +43,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Made canonical skill-mirror validation handle both real Git symlinks on
+  Linux and flattened pointer files in Windows checkouts, eliminating a
+  platform-specific `xtask` CI failure.
+
 - Restored the scoped `cargo-deny` exception for the RSA timing advisory that
   is bundled by `jsonwebtoken`'s RustCrypto provider. ErsatzRS IPTV tokens are
   restricted to HS256 shared secrets and never execute the affected RSA

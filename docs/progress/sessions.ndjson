@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-25","summary":"Fixed Linux CI skill-mirror validation by distinguishing real symlinks from flattened Windows pointer files; installed cargo-nextest 0.9.143 for focused local tests."}
 {"agent":"Codex","date":"2026-08-24","summary":"Fixed cargo-deny CI after SQLite-only cleanup by restoring the unreachable RSA advisory exception with the correct HS256-only JWT rationale."}
 {"agent":"Codex","date":"2026-08-24","summary":"Completed ADR 0080 after the maintainer confirmed no MySQL or MariaDB user deployments existed; removed the unnecessary conversion release blocker."}
 {"agent":"Codex","date":"2026-08-24","summary":"Accepted ADR 0080 and made runtime, Cargo, migrations, CI, docs, skills, and agent tooling SQLite-only; verified offline MySQL-to-SQLite conversion remains release work."}

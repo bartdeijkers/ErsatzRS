@@ -402,9 +402,19 @@ mod tests {
 
             let expected = format!("../../skills/{name}.md");
             for mirror in [".codex/skills", ".claude/skills"] {
-                let pointer = fs::read_to_string(root.join(mirror).join(format!("{name}.md")))
+                let mirror_path = root.join(mirror).join(format!("{name}.md"));
+                let metadata = fs::symlink_metadata(&mirror_path)
                     .unwrap_or_else(|error| panic!("missing {mirror}/{name}.md: {error}"));
-                assert_eq!(pointer.trim(), expected);
+                if metadata.file_type().is_symlink() {
+                    let pointer = fs::read_link(&mirror_path)
+                        .unwrap_or_else(|error| panic!("read {mirror}/{name}.md link: {error}"));
+                    assert_eq!(pointer, Path::new(&expected));
+                } else {
+                    let pointer = fs::read_to_string(&mirror_path).unwrap_or_else(|error| {
+                        panic!("read flattened {mirror}/{name}.md pointer: {error}")
+                    });
+                    assert_eq!(pointer.trim(), expected);
+                }
             }
         }
         assert!(skill_count >= 17, "expected canonical skill catalog");
