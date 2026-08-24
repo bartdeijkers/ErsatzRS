@@ -100,7 +100,7 @@ codec, service/page number, subtitle flag/type, language, region/character set,
 forced/default disposition, and source provenance.
 
 Scanner work covers local and supported remote providers, exact media-version
-selection, rescan reconciliation, unavailable files, SQLite/MySQL parity, and
+selection, rescan reconciliation, unavailable files, SQLite persistence, and
 search/detail projections. Preserve alternate-audio and ordinary subtitle
 behavior while adding teletext; a codec that cannot be decoded must remain
 visible rather than disappear from selection.
@@ -153,10 +153,10 @@ session log. Phase 9 closes only after:
 
 - runtime packaging/probing is verified for all six RIDs or an ADR records an
   intentional supported-platform exception;
-- SQLite/MySQL scanner and persistence tests pass;
+- SQLite scanner and persistence tests pass;
 - FFmpeg argv snapshots and decoded subtitle/page fixtures pass;
 - changed admin surfaces are localized and hydration/browser-proven;
-- `./run.sh test-closeout`, both workspace Clippy configurations,
+- `./run.sh test-closeout`, the workspace Clippy configuration,
   `cargo leptos build`, and `cargo xtask parity-check` pass;
 - `cargo xtask smoke` and the TSDuck playback gate cover every changed output
   mode; and

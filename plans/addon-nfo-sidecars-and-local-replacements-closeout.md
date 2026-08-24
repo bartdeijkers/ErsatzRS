@@ -2,8 +2,8 @@
 
 > **Status:** Active closeout. Slices 1 through 6, the complete managed-pair
 > failure/recovery matrix, and generic hydrated browser acceptance are
-> implemented and tested. MySQL runtime migration proof and packaged Windows
-> add-on execution still block completion.
+> implemented and tested. Packaged Windows add-on execution still blocks
+> completion; ADR 0080 retired the former MySQL proof requirement.
 
 ## Goal
 
@@ -42,9 +42,9 @@ translations, icons, or language-specific assets into ErsatzRS.
   `unavailable`; `unknown` never activates it, and provider recovery wins.
 - Beeld & Geluid POSIX retains an unavailable item even when its detail page is
   gone. Provider-specific assertions live in the add-ons repository.
-- Focused generic scanner, synchronization, web, SQLite, MySQL compile, and
-  add-on tests passed during the implementation session.
-- Both workspace clippy configurations, the full test closeout (apart from
+- Focused generic scanner, synchronization, web, SQLite, and add-on tests
+  passed during the implementation session.
+- Workspace Clippy, the full test closeout (apart from
   three sandbox-denied HTTP mocks that passed unrestricted), web parity check,
   the consistent Leptos SSR/WASM build, and the unrestricted streaming smoke
   gate passed during closeout.
@@ -148,9 +148,8 @@ whether a temporarily omitted item becomes a retained tombstone or is deleted;
 deleting it currently cascades the replacement mapping and may lose operator
 intent. Record and test the chosen grace/tombstone policy.
 
-Bound provider/list IDs and reason strings to values supported by both SQLite
-and MySQL indexes. Exercise the new migration on both backends, including MySQL
-strict grouping/index limits.
+Bound provider/list IDs and reason strings to values supported by SQLite
+indexes. Exercise the new migration against fresh and upgraded SQLite schemas.
 
 ### 7. Finish add-on-owned behavior in the add-ons repository — POSIX advanced
 
@@ -203,7 +202,7 @@ unknown provider state. All messages remain bounded and provider-neutral.
    and playback proof.
 5. Provider-owned POSIX/Windows tests and parity in the add-ons repository.
 6. Generic admin browser workflow and all-culture localization checks.
-7. SQLite/MySQL migration tests, default/MySQL clippy, scanner/web/infra tests,
+7. SQLite migration tests, workspace Clippy, scanner/web/infra tests,
    hydration lint, progress validation, and full closeout once.
 
 ## Verification commands

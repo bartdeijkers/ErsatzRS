@@ -110,8 +110,7 @@ Relevant implementation surfaces:
    already-consumed item. If upstream parity cannot represent this safely, amend
    ADR 0020 before changing the behavior contract.
 7. Cover Shuffle, Random, RandomRotation, duplicate references, day boundaries,
-   restart, settings re-stamping, and the admin Classic reset mapping on SQLite
-   and MySQL.
+   restart, settings re-stamping, and the admin Classic reset mapping on SQLite.
 
 ## Track B — Dependency-scoped Scan Invalidation (`crf-02`)
 
@@ -146,7 +145,7 @@ Relevant implementation surfaces:
    distinct valid variants.
 3. Deduplicate again inside `replace_artwork` so every current and future caller
    receives an idempotent replace operation. Add a database uniqueness guard
-   only if its SQLite/MySQL and path-normalization semantics match the contract;
+   only if its SQLite and path-normalization semantics match the contract;
    do not rely on a constraint as the sole defense.
 4. Make television list queries choose one deterministic preferred thumbnail
    per metadata record, for example through a ranked/correlated selection. Do
@@ -167,7 +166,7 @@ Relevant implementation surfaces:
 ## Verification and Release Gate
 
 - Focused scheduler, maintenance, scanner, metadata, television repository, and
-  migration tests pass on SQLite and MySQL.
+  migration tests pass on SQLite.
 - Health regressions detect missing/invalid checkpoints, refused Refresh,
   unresolved scan impact, and exact duplicate artwork.
 - Browser coverage proves television list counts and links in Chromium and

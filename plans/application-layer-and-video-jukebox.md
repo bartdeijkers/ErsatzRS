@@ -219,7 +219,7 @@ must not depend on concrete application services or storage.
   Trakt, media, and supporting admin/API handlers are thin adapters over
   application commands and queries.
 - Core ports and records are storage-neutral; infrastructure owns SQL, typed
-  row decoding, transaction boundaries, and SQLite/MySQL differences. The
+  row decoding, transaction boundaries, and SQLite behavior. The
   composition root is the only web layer that constructs concrete adapters.
 - Architecture lint reports zero direct admin SQL, raw admin-pool consumers,
   server-error defaults, and row-decode defaults. Leptos server-function
@@ -283,8 +283,8 @@ Before schema or API work, accept an ADR covering:
   idempotency key, queue position, timestamps, and rejection/failure detail.
 - Use explicit states: Pending, Accepted, Rejected, Queued, Playing, Played,
   Cancelled, Expired, and Failed.
-- Add storage-neutral repository/catalog/policy/clock/event ports and SQLite +
-  MySQL implementations.
+- Add storage-neutral repository/catalog/policy/clock/event ports and a SQLite
+  implementation.
 - Make submit, idempotency, claim, and state transition operations atomic.
 
 ### P10A-03 — Application use cases and scheduler integration
@@ -323,7 +323,7 @@ Every implementation milestone must close with:
 
 - source-vs-port comparison when ErsatzTV behavior exists;
 - application unit tests with fake ports;
-- infrastructure database tests for SQLite and MySQL-sensitive shapes;
+- infrastructure database tests for SQLite schema and concurrency-sensitive shapes;
 - focused web/scheduler tests for adapter and side-effect behavior;
 - updated parity debt and milestone evidence;
 - `cargo xtask progress check`;

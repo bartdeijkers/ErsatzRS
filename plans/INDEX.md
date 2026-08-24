@@ -125,9 +125,8 @@ changelog, and git history for evidence. The authoritative live state is always
   for generic v2 add-on metadata/NFO sidecars, observable content-kind
   semantics, transactional YAML/NFO publication, exact Local replacements,
   provider-owned multilingual assets/tests, and POSIX/Windows add-on parity.
-  Its two remaining blockers — live MySQL runtime migration proof and packaged
-  Windows add-on execution — are also recorded as open debts in
-  `docs/progress/parity/addon-platform.toml`.
+  Its remaining blocker is packaged Windows add-on execution; ADR 0080 retired
+  the former MySQL proof requirement.
 - `addon-list-replacement-ux.md` — reshape the Local replacement flow for an
   unavailable add-on list item, written after walking the flow end to end
   against a real unavailable episode; it also owns the blocking `amm-g-06`

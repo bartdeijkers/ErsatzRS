@@ -325,7 +325,6 @@ Closeout gate — run once, not per edit:
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo clippy --workspace --all-targets --features mysql -- -D warnings
 ./run.sh test-closeout
 cargo xtask progress check
 cargo xtask architecture-lint
@@ -339,9 +338,8 @@ part of CI:
 scripts/e2e/tsduck-playback-gate.sh gate
 ```
 
-Two clippy passes are required and **neither** uses `--all-features`: that
-mirrors CI, and without the separate `--features mysql` pass the feature-gated
-`#![cfg(not(feature = "mysql"))]` test files escape lint entirely.
+One workspace Clippy pass mirrors the SQLite-only CI graph accepted by ADR
+0080.
 
 `target/` grows fast. Prune with `cargo sweep --time 30`; run `cargo clean`
 once it passes 40 GiB.
