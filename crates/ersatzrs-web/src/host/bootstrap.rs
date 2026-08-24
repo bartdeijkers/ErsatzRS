@@ -166,6 +166,12 @@ pub async fn run() {
     .await
     .expect("failed to build application state");
 
+    let recovered_refreshes =
+        super::tasks::run_background_task_preflight(app_state.application.clone())
+            .await
+            .unwrap_or_else(|error| abort_after_startup_recovery_error(&error));
+    tracing::info!(recovered_refreshes, "startup scan recovery complete");
+
     // Coordinated shutdown: the signal handler cancels this token, the axum
     // server drains in-flight requests, and every background task observes the
     // same token so the whole process exits cleanly (tray "Exit", `docker stop`,
@@ -230,6 +236,14 @@ pub async fn run() {
 
     pool.close().await;
     tracing::info!("shutdown complete");
+}
+
+fn abort_after_startup_recovery_error(error: &ersatzrs_app::ApplicationError) -> ! {
+    tracing::error!(
+        %error,
+        "startup scan recovery failed; refusing to start background workers"
+    );
+    panic!("startup scan recovery and refresh admission failed: {error}");
 }
 
 async fn prepare_streaming_resources() {

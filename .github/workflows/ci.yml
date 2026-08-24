@@ -190,7 +190,7 @@ jobs:
         run: cargo xtask architecture-lint
 
   mysql_health:
-    name: MySQL health contract
+    name: MySQL health and continuity contract
     runs-on: ubuntu-24.04
     needs: fmt
     services:
@@ -220,6 +220,18 @@ jobs:
           cargo test -p ersatzrs-infra --features mysql-integration
           --test mysql_backend
           mysql_output_dynamic_range_health_check_classifies_every_row_shape
+          -- --exact
+      - name: Prove scan-refresh concurrency safety on MySQL 8
+        run: >-
+          cargo test -p ersatzrs-infra --features mysql-integration
+          --test mysql_backend
+          mysql_scan_refresh_concurrency_preserves_generations_and_newer_resolution
+          -- --exact
+      - name: Prove scoped Classic scan refresh continuity on MySQL 8
+        run: >-
+          cargo test -p ersatzrs-web --features mysql-integration
+          --test scan_refresh_mysql_production_continuity
+          mysql_production_scan_refresh_survives_restart_and_preserves_unrelated_rows
           -- --exact
 
   hydration:

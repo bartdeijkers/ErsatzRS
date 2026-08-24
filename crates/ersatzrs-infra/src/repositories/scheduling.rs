@@ -31,7 +31,7 @@ use ersatzrs_domain::{
     normalize_sub_kind_token, AddonMediaListContentKind, ChannelSubtitleMode,
     CollectionEnumeratorState, CollectionType, DecoMode, EntityId, PlayoutClassicCheckpoint,
     PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
-    ProgramScheduleAlternate, ProgramScheduleItem, RemoteStreamLiveness,
+    PlayoutScheduleKind, ProgramScheduleAlternate, ProgramScheduleItem, RemoteStreamLiveness,
     CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use sqlx::{Pool, Row};
@@ -74,6 +74,147 @@ pub struct SqliteSchedulingContentRepository(
 );
 
 impl SqliteSchedulingContentRepository {
+    /// Resolve Classic playouts whose current persisted schedule graph can
+    /// consume changed media or a structurally changed managed playlist.
+    ///
+    /// This deliberately walks the current default and alternate program
+    /// schedules. Runtime anchors are continuation state, not dependency
+    /// declarations, and therefore are never consulted here.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the current schedule graph or one of its content
+    /// sources cannot be loaded or decoded.
+    #[allow(clippy::too_many_lines)]
+    pub async fn classic_playouts_affected_by_scan(
+        &self,
+        changed_media_item_ids: &BTreeSet<EntityId>,
+        managed_playlist_id: Option<EntityId>,
+    ) -> Result<Vec<EntityId>> {
+        if changed_media_item_ids.is_empty() && managed_playlist_id.is_none() {
+            return Ok(Vec::new());
+        }
+
+        let rows = sqlx::query(
+            r#"SELECT "Id", "ScheduleKind", "ProgramScheduleId"
+               FROM "Playout" ORDER BY "Id""#,
+        )
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        let schedule_repo =
+            super::program_schedule::SqliteProgramScheduleRepository(self.0.clone());
+        let mut classic_playouts = BTreeSet::new();
+        let mut playouts_by_schedule: BTreeMap<EntityId, BTreeSet<EntityId>> = BTreeMap::new();
+        for row in rows {
+            let playout_id: EntityId = row.try_get("Id").repository()?;
+            let schedule_kind: PlayoutScheduleKind =
+                decode_enum_column("scan impact playout schedule kind", &row, "ScheduleKind")?;
+            if schedule_kind != PlayoutScheduleKind::Classic {
+                continue;
+            }
+            classic_playouts.insert(playout_id);
+            if let Some(schedule_id) = row.try_get("ProgramScheduleId").repository()? {
+                playouts_by_schedule
+                    .entry(schedule_id)
+                    .or_default()
+                    .insert(playout_id);
+            }
+        }
+        let alternate_rows = sqlx::query(
+            r#"SELECT "a"."PlayoutId", "a"."ProgramScheduleId", "p"."ScheduleKind"
+               FROM "ProgramScheduleAlternate" AS "a"
+               JOIN "Playout" AS "p" ON "p"."Id" = "a"."PlayoutId"
+               ORDER BY "a"."ProgramScheduleId", "a"."PlayoutId""#,
+        )
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        for row in alternate_rows {
+            let schedule_kind: PlayoutScheduleKind = decode_enum_column(
+                "scan impact alternate playout schedule kind",
+                &row,
+                "ScheduleKind",
+            )?;
+            if schedule_kind != PlayoutScheduleKind::Classic {
+                continue;
+            }
+            let playout_id: EntityId = row.try_get("PlayoutId").repository()?;
+            let schedule_id: EntityId = row.try_get("ProgramScheduleId").repository()?;
+            classic_playouts.insert(playout_id);
+            playouts_by_schedule
+                .entry(schedule_id)
+                .or_default()
+                .insert(playout_id);
+        }
+
+        let global_fallback_affected =
+            if changed_media_item_ids.is_empty() && managed_playlist_id.is_none() {
+                false
+            } else if let Some(filler_id) = self
+                .load_config_entity_id(CONFIG_KEY_FFMPEG_GLOBAL_FALLBACK_FILLER_ID)
+                .await?
+            {
+                self.filler_affected_by_scan(filler_id, changed_media_item_ids, managed_playlist_id)
+                    .await?
+            } else {
+                false
+            };
+
+        if global_fallback_affected {
+            return Ok(classic_playouts.into_iter().collect());
+        }
+
+        let mut affected = BTreeSet::new();
+        let mut filler_impact = BTreeMap::new();
+        for (schedule_id, playout_ids) in playouts_by_schedule {
+            let mut schedule_affected = false;
+            for item in schedule_repo.list_items(schedule_id).await? {
+                if let Some(playlist_id) = managed_playlist_id {
+                    if Self::program_schedule_item_references_playlist(&item, playlist_id) {
+                        schedule_affected = true;
+                        break;
+                    }
+                }
+                if self
+                    .items_for_program_schedule_item(&item)
+                    .await?
+                    .iter()
+                    .any(|media| changed_media_item_ids.contains(&media.id))
+                {
+                    schedule_affected = true;
+                    break;
+                }
+                for filler_id in program_schedule_item_filler_ids(&item) {
+                    let filler_affected = if let Some(affected) = filler_impact.get(&filler_id) {
+                        *affected
+                    } else {
+                        let affected = self
+                            .filler_affected_by_scan(
+                                filler_id,
+                                changed_media_item_ids,
+                                managed_playlist_id,
+                            )
+                            .await?;
+                        filler_impact.insert(filler_id, affected);
+                        affected
+                    };
+                    if filler_affected {
+                        schedule_affected = true;
+                        break;
+                    }
+                }
+                if schedule_affected {
+                    break;
+                }
+            }
+            if schedule_affected {
+                affected.extend(playout_ids);
+            }
+        }
+        Ok(affected.into_iter().collect())
+    }
+
     /// Construct the repository over a database pool.
     #[must_use]
     pub fn new(pool: Pool<crate::db::Db>) -> Self {
@@ -1286,17 +1427,24 @@ impl SqliteSchedulingContentRepository {
         &self,
         playlist_id: EntityId,
     ) -> Result<Vec<SchedulingMediaItem>> {
-        let name =
-            sqlx::query_scalar::<_, String>(r#"SELECT "Name" FROM "Playlist" WHERE "Id" = ?"#)
-                .bind(playlist_id)
-                .fetch_optional(&self.0)
-                .await
-                .repository()?;
-
-        match name {
-            Some(name) => Box::pin(self.playlist_media_items(None, &name)).await,
-            None => Ok(Vec::new()),
+        let rows = sqlx::query(
+            r#"SELECT * FROM "PlaylistItem"
+               WHERE "PlaylistId" = ?
+               ORDER BY "Index", "Id""#,
+        )
+        .bind(playlist_id)
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        let mut items = Vec::new();
+        let mut seen = BTreeSet::new();
+        for row in rows {
+            let playback = playback_override_from_row(&row)?;
+            let mut child_items = Box::pin(self.items_for_collection_key_row(&row, 0)).await?;
+            apply_playback_override(&mut child_items, &playback);
+            append_unique(&mut items, &mut seen, child_items);
         }
+        Ok(items)
     }
 
     async fn media_item_by_id(&self, id: EntityId) -> Result<Vec<SchedulingMediaItem>> {
@@ -1309,6 +1457,15 @@ impl SqliteSchedulingContentRepository {
         &self,
         item: &ProgramScheduleItem,
     ) -> Result<Vec<SchedulingMediaItem>> {
+        if matches!(
+            item.collection_type,
+            CollectionType::RerunFirstRun | CollectionType::RerunRerun
+        ) {
+            return match item.rerun_collection_id {
+                Some(rerun_id) => self.items_for_rerun_collection_id(rerun_id).await,
+                None => Ok(Vec::new()),
+            };
+        }
         self.items_for_collection_key(
             &SchedulingCollectionKey {
                 collection_type: item.collection_type,
@@ -1323,6 +1480,81 @@ impl SqliteSchedulingContentRepository {
             0,
         )
         .await
+    }
+
+    async fn items_for_rerun_collection_id(
+        &self,
+        rerun_collection_id: EntityId,
+    ) -> Result<Vec<SchedulingMediaItem>> {
+        let row = sqlx::query(
+            r#"SELECT "CollectionType", "CollectionId", "MediaItemId",
+                      "MultiCollectionId", "SmartCollectionId"
+               FROM "RerunCollection" WHERE "Id" = ?"#,
+        )
+        .bind(rerun_collection_id)
+        .fetch_optional(&self.0)
+        .await
+        .repository()?;
+        let Some(row) = row else {
+            return Ok(Vec::new());
+        };
+        self.items_for_collection_key(
+            &SchedulingCollectionKey {
+                collection_type: decode_enum_column(
+                    "rerun collection target type",
+                    &row,
+                    "CollectionType",
+                )?,
+                collection_id: row.try_get("CollectionId").repository()?,
+                media_item_id: row.try_get("MediaItemId").repository()?,
+                multi_collection_id: row.try_get("MultiCollectionId").repository()?,
+                smart_collection_id: row.try_get("SmartCollectionId").repository()?,
+                ..SchedulingCollectionKey::default()
+            },
+            0,
+        )
+        .await
+    }
+
+    fn program_schedule_item_references_playlist(
+        item: &ProgramScheduleItem,
+        target_playlist_id: EntityId,
+    ) -> bool {
+        item.collection_type == CollectionType::Playlist
+            && item.playlist_id == Some(target_playlist_id)
+    }
+
+    async fn filler_affected_by_scan(
+        &self,
+        filler_id: EntityId,
+        changed_media_item_ids: &BTreeSet<EntityId>,
+        managed_playlist_id: Option<EntityId>,
+    ) -> Result<bool> {
+        let row = sqlx::query(
+            r#"SELECT "CollectionType", "PlaylistId"
+               FROM "FillerPreset" WHERE "Id" = ?"#,
+        )
+        .bind(filler_id)
+        .fetch_optional(&self.0)
+        .await
+        .repository()?;
+        if let (Some(row), Some(managed_id)) = (row, managed_playlist_id) {
+            let collection_type: CollectionType =
+                decode_enum_column("filler dependency collection type", &row, "CollectionType")?;
+            let playlist_id: Option<EntityId> = row.try_get("PlaylistId").repository()?;
+            if collection_type == CollectionType::Playlist && playlist_id == Some(managed_id) {
+                return Ok(true);
+            }
+        }
+        Ok(self
+            .scheduling_filler_preset(filler_id)
+            .await?
+            .is_some_and(|preset| {
+                preset
+                    .media_items
+                    .iter()
+                    .any(|media| changed_media_item_ids.contains(&media.id))
+            }))
     }
 
     async fn expand_collection_item_rows(

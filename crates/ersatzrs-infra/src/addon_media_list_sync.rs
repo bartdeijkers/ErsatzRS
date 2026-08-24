@@ -1,9 +1,9 @@
 use crate::addon_media_storage::{
-    delete_list_library, ensure_list_library, has_media_source, validated_folder_name,
+    ensure_list_library, has_media_source, list_library_id, validated_folder_name,
 };
 use crate::db::inserted_id;
 use crate::repositories::SqlxResultExt as _;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use chrono::{Duration, Utc};
 use ersatzrs_core::addon_media_list::{
@@ -12,9 +12,9 @@ use ersatzrs_core::addon_media_list::{
 use ersatzrs_core::repositories::{AddonMediaListMetadataConflict, RepositoryError, Result};
 use ersatzrs_domain::{
     AddonMediaList, AddonMediaListItemAvailability, AddonMediaListItemKind, EntityId,
-    RemoteStreamLiveness,
+    RemoteStreamLiveness, ScanPlayoutRefresh, ScanPlayoutRefreshReason,
 };
-use sqlx::{Pool, Row};
+use sqlx::{Pool, Row, Transaction};
 
 use crate::db::{Db, DbPool};
 use crate::repositories::common::{
@@ -29,6 +29,43 @@ const COLLECTION_TYPE_MOVIE: i32 = 10;
 const COLLECTION_TYPE_EPISODE: i32 = 20;
 const COLLECTION_TYPE_REMOTE_STREAM: i32 = 70;
 const OMITTED_BY_PROVIDER_REASON: &str = "omitted_by_provider";
+
+/// Result of matching one or more add-on media lists.
+///
+/// Refreshes are coalesced by playout id and sorted so a host can enqueue the
+/// exact committed work immediately without repeating dependency resolution.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AddonMediaListMatchReport {
+    pub matched_list_count: usize,
+    pub playout_refreshes: Vec<ScanPlayoutRefresh>,
+}
+
+impl AddonMediaListMatchReport {
+    fn one(playout_refreshes: Vec<ScanPlayoutRefresh>) -> Self {
+        Self {
+            matched_list_count: 1,
+            playout_refreshes,
+        }
+    }
+
+    fn merge(&mut self, other: Self) {
+        self.matched_list_count = self
+            .matched_list_count
+            .saturating_add(other.matched_list_count);
+        for refresh in other.playout_refreshes {
+            match self
+                .playout_refreshes
+                .binary_search_by_key(&refresh.playout_id, |candidate| candidate.playout_id)
+            {
+                Ok(index) => {
+                    self.playout_refreshes[index].reason =
+                        self.playout_refreshes[index].reason.merge(refresh.reason);
+                }
+                Err(index) => self.playout_refreshes.insert(index, refresh),
+            }
+        }
+    }
+}
 
 /// Maintains locally persisted Add-on media lists and generated playlists.
 pub struct AddonMediaListSynchronizer {
@@ -48,13 +85,97 @@ impl AddonMediaListSynchronizer {
     ///
     /// Returns an error when the list cannot be loaded or database writes fail.
     pub async fn match_list_items(&self, list_id: EntityId) -> Result<()> {
+        self.match_list_items_with_report(list_id).await.map(|_| ())
+    }
+
+    /// Match one saved add-on media list and report the exact Classic playouts
+    /// whose generated-playlist dependency changed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the list cannot be loaded, impact resolution
+    /// fails, or the atomic playlist-and-intent commit cannot complete.
+    pub async fn match_list_items_with_report(
+        &self,
+        list_id: EntityId,
+    ) -> Result<AddonMediaListMatchReport> {
         let list = self.load_list(list_id).await?;
-        let playlist_id = if list.generate_playlist {
-            Some(self.ensure_generated_playlist(&list).await?)
-        } else {
-            None
+        let desired_playlist_items = self
+            .match_persisted_items(&list, list.generate_playlist)
+            .await?;
+
+        if !list.generate_playlist {
+            self.record_last_match(list_id).await?;
+            return Ok(AddonMediaListMatchReport::one(Vec::new()));
+        }
+
+        let Some(playlist_id) = list.playlist_id else {
+            // A not-yet-created playlist cannot be referenced by a valid
+            // schedule foreign key. Create its identity, link, complete item
+            // projection, and terminal resolution state in one transaction so
+            // a restart can never expose an empty generated playlist shell.
+            let group_id = system_playlist_group_id(&self.pool).await?;
+            let reason = ScanPlayoutRefreshReason::RemoteStreamMembershipAdded;
+            let refresh = self
+                .prepare_generated_playlist_refresh(list_id, None, reason)
+                .await?;
+            let result = self
+                .commit_generated_playlist_creation(
+                    &list,
+                    group_id,
+                    &desired_playlist_items,
+                    &refresh,
+                )
+                .await;
+            if let Err(error) = result {
+                self.fail_generated_playlist_refresh(&refresh, &error).await;
+                return Err(error);
+            }
+            return Ok(AddonMediaListMatchReport::one(refresh.playout_refreshes()));
+        };
+        let persisted_playlist_items =
+            load_generated_playlist_items(&self.pool, playlist_id).await?;
+        if persisted_playlist_items == desired_playlist_items {
+            self.record_last_match(list_id).await?;
+            return Ok(AddonMediaListMatchReport::one(Vec::new()));
+        }
+
+        let reason =
+            generated_playlist_change_reason(&persisted_playlist_items, &desired_playlist_items);
+        let refresh = self
+            .prepare_generated_playlist_refresh(list_id, Some(playlist_id), reason)
+            .await?;
+
+        let changed = self
+            .commit_generated_playlist_match(
+                list_id,
+                playlist_id,
+                &desired_playlist_items,
+                &refresh,
+            )
+            .await;
+        let changed = match changed {
+            Ok(changed) => changed,
+            Err(error) => {
+                self.fail_generated_playlist_refresh(&refresh, &error).await;
+                return Err(error);
+            }
         };
 
+        let playout_refreshes = if changed {
+            refresh.playout_refreshes()
+        } else {
+            Vec::new()
+        };
+
+        Ok(AddonMediaListMatchReport::one(playout_refreshes))
+    }
+
+    async fn match_persisted_items(
+        &self,
+        list: &AddonMediaList,
+        generate_playlist_items: bool,
+    ) -> Result<Vec<GeneratedPlaylistItem>> {
         let rows = sqlx::query(
             r#"SELECT "Id", "ProviderId", "Kind", "Title", "Year", "Season", "Episode", "Rank", "SourceUrl",
                       "Availability", "Published", "DurationSeconds", "PublishedLiveness"
@@ -62,22 +183,11 @@ impl AddonMediaListSynchronizer {
                WHERE "AddonMediaListId" = ?
                ORDER BY "Rank", "Id""#,
         )
-        .bind(list_id)
+        .bind(list.id)
         .fetch_all(&self.pool)
         .await
         .repository()?;
-
-        if let Some(playlist_id) = playlist_id {
-            // Generated playlists are a projection of the current provider
-            // snapshot. Rebuild their items so removed entries and changed
-            // ranks cannot leave stale rows behind.
-            sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
-                .bind(playlist_id)
-                .execute(&self.pool)
-                .await
-                .repository()?;
-        }
-
+        let mut desired = Vec::new();
         for row in rows {
             let item = MatchItem {
                 id: row.try_get("Id").repository()?,
@@ -104,7 +214,6 @@ impl AddonMediaListSynchronizer {
                     .load_item_guids(row.try_get("Id").repository()?)
                     .await?,
             };
-
             let matched_id = self.identify_item(&item).await?;
             sqlx::query(r#"UPDATE "AddonMediaListItem" SET "MediaItemId" = ? WHERE "Id" = ?"#)
                 .bind(matched_id)
@@ -112,26 +221,13 @@ impl AddonMediaListSynchronizer {
                 .execute(&self.pool)
                 .await
                 .repository()?;
-
-            if let Some(playlist_id) = playlist_id {
-                if !decode_bool_column(&row, "Published")? {
-                    continue;
-                }
+            if generate_playlist_items && decode_bool_column(&row, "Published")? {
                 if let Some(selection) = self.playlist_selection(&item, matched_id).await? {
-                    self.upsert_playlist_item(playlist_id, &item, selection)
-                        .await?;
+                    desired.push(GeneratedPlaylistItem::new(&item, selection));
                 }
             }
         }
-
-        sqlx::query(r#"UPDATE "AddonMediaList" SET "LastMatch" = ? WHERE "Id" = ?"#)
-            .bind(encode_datetime(Utc::now()))
-            .bind(list_id)
-            .execute(&self.pool)
-            .await
-            .repository()?;
-
-        Ok(())
+        Ok(desired)
     }
 
     /// Update user-editable Add-on media list settings.
@@ -354,30 +450,52 @@ impl AddonMediaListSynchronizer {
     /// Returns an error when persistence fails.
     pub async fn delete_list(&self, list_id: EntityId) -> Result<()> {
         ensure_not_publishing(&self.pool, list_id).await?;
-        delete_list_library(&self.pool, list_id).await?;
-        let maybe_playlist_id = sqlx::query_scalar::<_, Option<EntityId>>(
-            r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?"#,
-        )
-        .bind(list_id)
-        .fetch_optional(&self.pool)
-        .await
-        .repository()?
-        .flatten();
+        let library_id = list_library_id(&self.pool, list_id).await?;
+        let removal = self.prepare_generated_playlist_removal(list_id).await?;
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        if let Some(removal) = &removal {
+            self.remove_generated_playlist_in_tx(&mut tx, list_id, removal, None)
+                .await?;
+        }
 
-        sqlx::query(r#"DELETE FROM "AddonMediaList" WHERE "Id" = ?"#)
-            .bind(list_id)
-            .execute(&self.pool)
+        if let Some(library_id) = library_id {
+            sqlx::query(
+                r#"UPDATE "ScanPlayoutRefreshIntent" SET "LibraryId" = NULL
+                   WHERE "LibraryId" = ?"#,
+            )
+            .bind(library_id)
+            .execute(&mut *tx)
             .await
             .repository()?;
-
-        if let Some(playlist_id) = maybe_playlist_id {
-            sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
-                .bind(playlist_id)
-                .execute(&self.pool)
+            sqlx::query(r#"DELETE FROM "ScanRefreshResolution" WHERE "LibraryId" = ?"#)
+                .bind(library_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            sqlx::query(r#"DELETE FROM "AddonMediaListLibrary" WHERE "AddonMediaListId" = ?"#)
+                .bind(list_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            sqlx::query(r#"DELETE FROM "Library" WHERE "Id" = ?"#)
+                .bind(library_id)
+                .execute(&mut *tx)
                 .await
                 .repository()?;
         }
 
+        let deleted = sqlx::query(r#"DELETE FROM "AddonMediaList" WHERE "Id" = ?"#)
+            .bind(list_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        if deleted.rows_affected() != 1 {
+            return Err(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id: list_id,
+            });
+        }
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -387,6 +505,18 @@ impl AddonMediaListSynchronizer {
     ///
     /// Returns an error when list loading or database writes fail.
     pub async fn match_due_lists(&self) -> Result<usize> {
+        self.match_due_lists_with_report()
+            .await
+            .map(|report| report.matched_list_count)
+    }
+
+    /// Re-match due lists and report committed generated-playlist refreshes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when list loading, matching, impact resolution, or
+    /// persistence fails.
+    pub async fn match_due_lists_with_report(&self) -> Result<AddonMediaListMatchReport> {
         let cutoff = Utc::now() - Duration::hours(1);
         let rows = sqlx::query(
             r#"SELECT "Id"
@@ -399,14 +529,15 @@ impl AddonMediaListSynchronizer {
         .await
         .repository()?;
 
-        let mut count = 0;
+        let mut report = AddonMediaListMatchReport::default();
         for row in rows {
-            self.match_list_items(row.try_get("Id").repository()?)
-                .await?;
-            count += 1;
+            report.merge(
+                self.match_list_items_with_report(row.try_get("Id").repository()?)
+                    .await?,
+            );
         }
 
-        Ok(count)
+        Ok(report)
     }
 
     /// Re-match every persisted list after a provider or Local library scan
@@ -416,15 +547,29 @@ impl AddonMediaListSynchronizer {
     ///
     /// Returns an error when list loading, matching, or playlist projection fails.
     pub async fn match_all_lists(&self) -> Result<usize> {
+        self.match_all_lists_with_report()
+            .await
+            .map(|report| report.matched_list_count)
+    }
+
+    /// Re-match every persisted list and report committed generated-playlist
+    /// refreshes for immediate queue admission by the host.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when list loading, matching, impact resolution, or
+    /// persistence fails.
+    pub async fn match_all_lists_with_report(&self) -> Result<AddonMediaListMatchReport> {
         let ids =
             sqlx::query_scalar::<_, EntityId>(r#"SELECT "Id" FROM "AddonMediaList" ORDER BY "Id""#)
                 .fetch_all(&self.pool)
                 .await
                 .repository()?;
-        for id in &ids {
-            self.match_list_items(*id).await?;
+        let mut report = AddonMediaListMatchReport::default();
+        for id in ids {
+            report.merge(self.match_list_items_with_report(id).await?);
         }
-        Ok(ids.len())
+        Ok(report)
     }
 
     async fn save_list(
@@ -1020,27 +1165,89 @@ impl AddonMediaListSynchronizer {
         Ok(None)
     }
 
-    async fn ensure_generated_playlist(&self, list: &AddonMediaList) -> Result<EntityId> {
-        if let Some(playlist_id) = list.playlist_id {
-            return Ok(playlist_id);
-        }
+    async fn prepare_generated_playlist_refresh(
+        &self,
+        list_id: EntityId,
+        playlist_id: Option<EntityId>,
+        reason: ScanPlayoutRefreshReason,
+    ) -> Result<GeneratedPlaylistRefresh> {
+        let library_id = list_library_id(&self.pool, list_id).await?;
+        let playout_ids =
+            crate::repositories::SqliteSchedulingContentRepository::new(self.pool.clone())
+                .classic_playouts_affected_by_scan(&BTreeSet::new(), playlist_id)
+                .await?;
+        let generation = if let Some(library_id) = library_id {
+            Some(
+                crate::scan_refresh::begin_resolution(&self.pool, library_id, reason)
+                    .await
+                    .repository()?,
+            )
+        } else {
+            None
+        };
+        Ok(GeneratedPlaylistRefresh {
+            library_id,
+            generation,
+            reason,
+            playout_ids,
+        })
+    }
 
-        let group_id = system_playlist_group_id(&self.pool).await?;
-        let name = list.name.clone();
+    async fn fail_generated_playlist_refresh(
+        &self,
+        refresh: &GeneratedPlaylistRefresh,
+        error: &RepositoryError,
+    ) {
+        if let (Some(library_id), Some(generation)) = (refresh.library_id, refresh.generation) {
+            let _ = crate::scan_refresh::fail_resolution(
+                &self.pool,
+                library_id,
+                generation,
+                &error.to_string(),
+            )
+            .await;
+        }
+    }
+
+    async fn commit_generated_playlist_creation(
+        &self,
+        list: &AddonMediaList,
+        group_id: EntityId,
+        desired: &[GeneratedPlaylistItem],
+        refresh: &GeneratedPlaylistRefresh,
+    ) -> Result<EntityId> {
         let mut transaction = crate::db::begin_write(&self.pool).await.repository()?;
         let result = sqlx::query(
             r#"INSERT INTO "Playlist" ("IsSystem", "Name", "PlaylistGroupId")
                VALUES (1, ?, ?)"#,
         )
-        .bind(&name)
+        .bind(&list.name)
         .bind(group_id)
         .execute(&mut *transaction)
         .await
         .repository()?;
         let playlist_id = inserted_id(&mut transaction, result).await.repository()?;
 
-        sqlx::query(r#"UPDATE "AddonMediaList" SET "PlaylistId" = ? WHERE "Id" = ?"#)
-            .bind(playlist_id)
+        let linked = sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "PlaylistId" = ?
+               WHERE "Id" = ? AND "PlaylistId" IS NULL AND "GeneratePlaylist" = 1"#,
+        )
+        .bind(playlist_id)
+        .bind(list.id)
+        .execute(&mut *transaction)
+        .await
+        .repository()?;
+        if linked.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "generated playlist state changed during matching".to_owned(),
+            ));
+        }
+        replace_generated_playlist_items(&mut transaction, playlist_id, desired).await?;
+        persist_generated_playlist_refresh_in_tx(&mut transaction, refresh, refresh.library_id)
+            .await?;
+        complete_generated_playlist_resolution_in_tx(&mut transaction, refresh).await?;
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "LastMatch" = ? WHERE "Id" = ?"#)
+            .bind(encode_datetime(Utc::now()))
             .bind(list.id)
             .execute(&mut *transaction)
             .await
@@ -1050,67 +1257,115 @@ impl AddonMediaListSynchronizer {
         Ok(playlist_id)
     }
 
-    async fn upsert_playlist_item(
+    pub(crate) async fn prepare_generated_playlist_removal(
         &self,
-        playlist_id: EntityId,
-        item: &MatchItem,
-        selection: PlaylistSelection,
+        list_id: EntityId,
+    ) -> Result<Option<GeneratedPlaylistRemoval>> {
+        let list = self.load_list(list_id).await?;
+        let Some(playlist_id) = list.playlist_id else {
+            return Ok(None);
+        };
+        // Resolve before deleting the playlist: its schedule and filler
+        // references cascade with the owned row and are no longer discoverable
+        // afterward.
+        let library_id = list_library_id(&self.pool, list_id).await?;
+        let playout_ids =
+            crate::repositories::SqliteSchedulingContentRepository::new(self.pool.clone())
+                .classic_playouts_affected_by_scan(&BTreeSet::new(), Some(playlist_id))
+                .await?;
+        Ok(Some(GeneratedPlaylistRemoval {
+            playlist_id,
+            refresh: GeneratedPlaylistRefresh {
+                library_id,
+                generation: None,
+                reason: ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved,
+                playout_ids,
+            },
+        }))
+    }
+
+    pub(crate) async fn commit_generated_playlist_removal_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Db>,
+        list_id: EntityId,
+        removal: &GeneratedPlaylistRemoval,
     ) -> Result<()> {
-        let collection_type = selection
-            .collection_type
-            .unwrap_or_else(|| collection_type_for_kind(item.kind));
-        let existing_id = sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT "Id" FROM "PlaylistItem" WHERE "PlaylistId" = ? AND "Index" = ?"#,
+        self.remove_generated_playlist_in_tx(tx, list_id, removal, removal.refresh.library_id)
+            .await
+    }
+
+    async fn remove_generated_playlist_in_tx(
+        &self,
+        tx: &mut Transaction<'_, Db>,
+        list_id: EntityId,
+        removal: &GeneratedPlaylistRemoval,
+        intent_library_id: Option<EntityId>,
+    ) -> Result<()> {
+        let current_playlist_id = sqlx::query_scalar::<_, Option<EntityId>>(
+            r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?"#,
         )
-        .bind(playlist_id)
-        .bind(item.rank)
-        .fetch_optional(&self.pool)
+        .bind(list_id)
+        .fetch_one(&mut **tx)
         .await
         .repository()?;
-
-        if let Some(existing_id) = existing_id {
-            sqlx::query(
-                r#"UPDATE "PlaylistItem"
-                   SET "CollectionType" = ?, "MediaItemId" = ?,
-                       "CollectionId" = NULL, "MultiCollectionId" = NULL,
-                       "SmartCollectionId" = NULL, "PlaybackOrder" = ?,
-                       "IncludeInProgramGuide" = 1, "MediaVersionId" = ?,
-                       "VideoStreamIndex" = ?, "AudioStreamIndex" = NULL,
-                       "SubtitleStreamIndex" = NULL
-                   WHERE "Id" = ?"#,
-            )
-            .bind(collection_type)
-            .bind(selection.media_item_id)
-            .bind(PLAYBACK_ORDER_CHRONOLOGICAL)
-            .bind(selection.media_version_id)
-            .bind(selection.video_stream_index)
-            .bind(existing_id)
-            .execute(&self.pool)
-            .await
-            .repository()?;
-        } else {
-            sqlx::query(
-                r#"INSERT INTO "PlaylistItem" (
-                    "Index", "PlaylistId", "CollectionType", "CollectionId",
-                    "MediaItemId", "MultiCollectionId", "SmartCollectionId",
-                    "IncludeInProgramGuide", "PlaybackOrder", "PlayAll",
-                    "MediaVersionId", "VideoStreamIndex", "AudioStreamIndex",
-                    "SubtitleStreamIndex"
-                   ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, 1, ?, 0, ?, ?, NULL, NULL)"#,
-            )
-            .bind(item.rank)
-            .bind(playlist_id)
-            .bind(collection_type)
-            .bind(selection.media_item_id)
-            .bind(PLAYBACK_ORDER_CHRONOLOGICAL)
-            .bind(selection.media_version_id)
-            .bind(selection.video_stream_index)
-            .execute(&self.pool)
-            .await
-            .repository()?;
+        if current_playlist_id != Some(removal.playlist_id) {
+            return Err(RepositoryError::Conflict(
+                "generated playlist ownership changed before removal".to_owned(),
+            ));
         }
 
+        let deleted = sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
+            .bind(removal.playlist_id)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+        if deleted.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "generated playlist disappeared before removal".to_owned(),
+            ));
+        }
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "PlaylistId" = NULL WHERE "Id" = ?"#)
+            .bind(list_id)
+            .execute(&mut **tx)
+            .await
+            .repository()?;
+        persist_generated_playlist_refresh_in_tx(tx, &removal.refresh, intent_library_id).await
+    }
+
+    async fn record_last_match(&self, list_id: EntityId) -> Result<()> {
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "LastMatch" = ? WHERE "Id" = ?"#)
+            .bind(encode_datetime(Utc::now()))
+            .bind(list_id)
+            .execute(&self.pool)
+            .await
+            .repository()?;
         Ok(())
+    }
+
+    async fn commit_generated_playlist_match(
+        &self,
+        list_id: EntityId,
+        playlist_id: EntityId,
+        desired: &[GeneratedPlaylistItem],
+        refresh: &GeneratedPlaylistRefresh,
+    ) -> Result<bool> {
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let persisted = load_generated_playlist_items_in_tx(&mut tx, playlist_id).await?;
+        let changed = persisted != desired;
+        if changed {
+            replace_generated_playlist_items(&mut tx, playlist_id, desired).await?;
+            persist_generated_playlist_refresh_in_tx(&mut tx, refresh, refresh.library_id).await?;
+        }
+
+        complete_generated_playlist_resolution_in_tx(&mut tx, refresh).await?;
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "LastMatch" = ? WHERE "Id" = ?"#)
+            .bind(encode_datetime(Utc::now()))
+            .bind(list_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        tx.commit().await.repository()?;
+        Ok(changed)
     }
 
     async fn playlist_selection(
@@ -1784,6 +2039,311 @@ fn decode_optional_seconds(row: &crate::db::DbRow, column: &'static str) -> Resu
 }
 
 #[derive(Debug)]
+struct GeneratedPlaylistRefresh {
+    library_id: Option<EntityId>,
+    generation: Option<i64>,
+    reason: ScanPlayoutRefreshReason,
+    playout_ids: Vec<EntityId>,
+}
+
+impl GeneratedPlaylistRefresh {
+    fn playout_refreshes(&self) -> Vec<ScanPlayoutRefresh> {
+        self.playout_ids
+            .iter()
+            .copied()
+            .map(|playout_id| ScanPlayoutRefresh {
+                playout_id,
+                reason: self.reason,
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct GeneratedPlaylistRemoval {
+    playlist_id: EntityId,
+    refresh: GeneratedPlaylistRefresh,
+}
+
+async fn persist_generated_playlist_refresh_in_tx(
+    tx: &mut Transaction<'_, Db>,
+    refresh: &GeneratedPlaylistRefresh,
+    library_id: Option<EntityId>,
+) -> Result<()> {
+    if let Some(library_id) = library_id {
+        crate::scan_refresh::persist_refresh_intents(
+            tx,
+            library_id,
+            refresh.reason,
+            &refresh.playout_ids,
+        )
+        .await
+        .repository()?;
+    } else {
+        crate::scan_refresh::persist_unowned_refresh_intents(
+            tx,
+            refresh.reason,
+            &refresh.playout_ids,
+        )
+        .await
+        .repository()?;
+    }
+    Ok(())
+}
+
+async fn complete_generated_playlist_resolution_in_tx(
+    tx: &mut Transaction<'_, Db>,
+    refresh: &GeneratedPlaylistRefresh,
+) -> Result<()> {
+    if let (Some(library_id), Some(generation)) = (refresh.library_id, refresh.generation) {
+        crate::scan_refresh::complete_resolution_in_tx(tx, library_id, generation, refresh.reason)
+            .await
+            .repository()?;
+    }
+    Ok(())
+}
+
+/// Canonical generated-row shape. The logical key is the complete row except
+/// for the database-owned id; cardinality is exactly one entry per desired
+/// published list item, ordered by `(Index, insertion order)`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GeneratedPlaylistItem {
+    index: i32,
+    collection_type: i32,
+    collection_id: Option<EntityId>,
+    media_item_id: Option<EntityId>,
+    multi_collection_id: Option<EntityId>,
+    smart_collection_id: Option<EntityId>,
+    include_in_program_guide: bool,
+    playback_order: i32,
+    play_all: bool,
+    count: Option<i32>,
+    preferred_audio_language_code: Option<String>,
+    preferred_audio_title: Option<String>,
+    preferred_subtitle_language_code: Option<String>,
+    subtitle_mode: Option<i32>,
+    media_version_id: Option<EntityId>,
+    video_stream_index: Option<i32>,
+    audio_stream_index: Option<i32>,
+    subtitle_stream_index: Option<i32>,
+}
+
+impl GeneratedPlaylistItem {
+    fn new(item: &MatchItem, selection: PlaylistSelection) -> Self {
+        Self {
+            index: item.rank,
+            collection_type: selection
+                .collection_type
+                .unwrap_or_else(|| collection_type_for_kind(item.kind)),
+            collection_id: None,
+            media_item_id: Some(selection.media_item_id),
+            multi_collection_id: None,
+            smart_collection_id: None,
+            include_in_program_guide: true,
+            playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
+            play_all: false,
+            count: None,
+            preferred_audio_language_code: None,
+            preferred_audio_title: None,
+            preferred_subtitle_language_code: None,
+            subtitle_mode: None,
+            media_version_id: selection.media_version_id,
+            video_stream_index: selection.video_stream_index,
+            audio_stream_index: None,
+            subtitle_stream_index: None,
+        }
+    }
+
+    fn content(&self) -> GeneratedPlaylistItemContent {
+        GeneratedPlaylistItemContent {
+            collection_type: self.collection_type,
+            collection_id: self.collection_id,
+            media_item_id: self.media_item_id,
+            multi_collection_id: self.multi_collection_id,
+            smart_collection_id: self.smart_collection_id,
+            include_in_program_guide: self.include_in_program_guide,
+            playback_order: self.playback_order,
+            play_all: self.play_all,
+            count: self.count,
+            preferred_audio_language_code: self.preferred_audio_language_code.clone(),
+            preferred_audio_title: self.preferred_audio_title.clone(),
+            preferred_subtitle_language_code: self.preferred_subtitle_language_code.clone(),
+            subtitle_mode: self.subtitle_mode,
+            media_version_id: self.media_version_id,
+            video_stream_index: self.video_stream_index,
+            audio_stream_index: self.audio_stream_index,
+            subtitle_stream_index: self.subtitle_stream_index,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct GeneratedPlaylistItemContent {
+    collection_type: i32,
+    collection_id: Option<EntityId>,
+    media_item_id: Option<EntityId>,
+    multi_collection_id: Option<EntityId>,
+    smart_collection_id: Option<EntityId>,
+    include_in_program_guide: bool,
+    playback_order: i32,
+    play_all: bool,
+    count: Option<i32>,
+    preferred_audio_language_code: Option<String>,
+    preferred_audio_title: Option<String>,
+    preferred_subtitle_language_code: Option<String>,
+    subtitle_mode: Option<i32>,
+    media_version_id: Option<EntityId>,
+    video_stream_index: Option<i32>,
+    audio_stream_index: Option<i32>,
+    subtitle_stream_index: Option<i32>,
+}
+
+const GENERATED_PLAYLIST_ITEMS_SQL: &str = r#"SELECT "Index", "CollectionType", "CollectionId", "MediaItemId",
+              "MultiCollectionId", "SmartCollectionId", "IncludeInProgramGuide",
+              "PlaybackOrder", "PlayAll", "Count", "PreferredAudioLanguageCode",
+              "PreferredAudioTitle", "PreferredSubtitleLanguageCode", "SubtitleMode",
+              "MediaVersionId", "VideoStreamIndex", "AudioStreamIndex",
+              "SubtitleStreamIndex"
+       FROM "PlaylistItem" WHERE "PlaylistId" = ? ORDER BY "Index", "Id""#;
+
+async fn load_generated_playlist_items(
+    pool: &Pool<Db>,
+    playlist_id: EntityId,
+) -> Result<Vec<GeneratedPlaylistItem>> {
+    let rows = sqlx::query(GENERATED_PLAYLIST_ITEMS_SQL)
+        .bind(playlist_id)
+        .fetch_all(pool)
+        .await
+        .repository()?;
+    rows.iter().map(decode_generated_playlist_item).collect()
+}
+
+async fn load_generated_playlist_items_in_tx(
+    tx: &mut Transaction<'_, Db>,
+    playlist_id: EntityId,
+) -> Result<Vec<GeneratedPlaylistItem>> {
+    let rows = sqlx::query(GENERATED_PLAYLIST_ITEMS_SQL)
+        .bind(playlist_id)
+        .fetch_all(&mut **tx)
+        .await
+        .repository()?;
+    rows.iter().map(decode_generated_playlist_item).collect()
+}
+
+fn decode_generated_playlist_item(row: &crate::db::DbRow) -> Result<GeneratedPlaylistItem> {
+    Ok(GeneratedPlaylistItem {
+        index: row.try_get("Index").repository()?,
+        collection_type: row.try_get("CollectionType").repository()?,
+        collection_id: row.try_get("CollectionId").repository()?,
+        media_item_id: row.try_get("MediaItemId").repository()?,
+        multi_collection_id: row.try_get("MultiCollectionId").repository()?,
+        smart_collection_id: row.try_get("SmartCollectionId").repository()?,
+        include_in_program_guide: decode_bool_column(row, "IncludeInProgramGuide")?,
+        playback_order: row.try_get("PlaybackOrder").repository()?,
+        play_all: decode_bool_column(row, "PlayAll")?,
+        count: row.try_get("Count").repository()?,
+        preferred_audio_language_code: row.try_get("PreferredAudioLanguageCode").repository()?,
+        preferred_audio_title: row.try_get("PreferredAudioTitle").repository()?,
+        preferred_subtitle_language_code: row
+            .try_get("PreferredSubtitleLanguageCode")
+            .repository()?,
+        subtitle_mode: row.try_get("SubtitleMode").repository()?,
+        media_version_id: row.try_get("MediaVersionId").repository()?,
+        video_stream_index: row.try_get("VideoStreamIndex").repository()?,
+        audio_stream_index: row.try_get("AudioStreamIndex").repository()?,
+        subtitle_stream_index: row.try_get("SubtitleStreamIndex").repository()?,
+    })
+}
+
+async fn replace_generated_playlist_items(
+    tx: &mut Transaction<'_, Db>,
+    playlist_id: EntityId,
+    desired: &[GeneratedPlaylistItem],
+) -> Result<()> {
+    sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+        .bind(playlist_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    for item in desired {
+        sqlx::query(
+            r#"INSERT INTO "PlaylistItem" (
+                   "Index", "PlaylistId", "CollectionType", "CollectionId",
+                   "MediaItemId", "MultiCollectionId", "SmartCollectionId",
+                   "IncludeInProgramGuide", "PlaybackOrder", "PlayAll", "Count",
+                   "PreferredAudioLanguageCode", "PreferredAudioTitle",
+                   "PreferredSubtitleLanguageCode", "SubtitleMode", "MediaVersionId",
+                   "VideoStreamIndex", "AudioStreamIndex", "SubtitleStreamIndex"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(item.index)
+        .bind(playlist_id)
+        .bind(item.collection_type)
+        .bind(item.collection_id)
+        .bind(item.media_item_id)
+        .bind(item.multi_collection_id)
+        .bind(item.smart_collection_id)
+        .bind(item.include_in_program_guide)
+        .bind(item.playback_order)
+        .bind(item.play_all)
+        .bind(item.count)
+        .bind(&item.preferred_audio_language_code)
+        .bind(&item.preferred_audio_title)
+        .bind(&item.preferred_subtitle_language_code)
+        .bind(item.subtitle_mode)
+        .bind(item.media_version_id)
+        .bind(item.video_stream_index)
+        .bind(item.audio_stream_index)
+        .bind(item.subtitle_stream_index)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    }
+    Ok(())
+}
+
+fn generated_playlist_change_reason(
+    persisted: &[GeneratedPlaylistItem],
+    desired: &[GeneratedPlaylistItem],
+) -> ScanPlayoutRefreshReason {
+    let persisted_counts = generated_playlist_content_counts(persisted);
+    let desired_counts = generated_playlist_content_counts(desired);
+    if persisted.len() == desired.len() {
+        return if persisted_counts == desired_counts {
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReordered
+        } else {
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced
+        };
+    }
+    if content_counts_are_subset(&persisted_counts, &desired_counts) {
+        ScanPlayoutRefreshReason::RemoteStreamMembershipAdded
+    } else if content_counts_are_subset(&desired_counts, &persisted_counts) {
+        ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved
+    } else {
+        ScanPlayoutRefreshReason::RemoteStreamMembershipMixed
+    }
+}
+
+fn generated_playlist_content_counts(
+    items: &[GeneratedPlaylistItem],
+) -> BTreeMap<GeneratedPlaylistItemContent, usize> {
+    let mut counts = BTreeMap::new();
+    for item in items {
+        *counts.entry(item.content()).or_default() += 1;
+    }
+    counts
+}
+
+fn content_counts_are_subset(
+    candidate: &BTreeMap<GeneratedPlaylistItemContent, usize>,
+    superset: &BTreeMap<GeneratedPlaylistItemContent, usize>,
+) -> bool {
+    candidate
+        .iter()
+        .all(|(item, count)| superset.get(item).is_some_and(|other| other >= count))
+}
+
+#[derive(Debug)]
 struct MatchItem {
     id: EntityId,
     addon_id: String,
@@ -1827,6 +2387,660 @@ const fn collection_type_for_kind(kind: AddonMediaListItemKind) -> i32 {
         AddonMediaListItemKind::Season => COLLECTION_TYPE_SEASON,
         AddonMediaListItemKind::Episode => COLLECTION_TYPE_EPISODE,
         AddonMediaListItemKind::RemoteStream => COLLECTION_TYPE_REMOTE_STREAM,
+    }
+}
+
+#[cfg(all(test, not(feature = "mysql")))]
+mod generated_playlist_refresh_tests {
+    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::Executor as _;
+
+    use super::*;
+
+    const LIST_ID: EntityId = 10;
+    const LIBRARY_ID: EntityId = 500;
+    const PLAYLIST_ID: EntityId = 100;
+    const UNRELATED_PLAYLIST_ID: EntityId = 101;
+    const RELATED_PLAYOUT_ID: EntityId = 900;
+    const UNRELATED_PLAYOUT_ID: EntityId = 901;
+
+    async fn pool() -> DbPool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect SQLite fixture");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate SQLite fixture");
+        pool.execute("PRAGMA foreign_keys = OFF")
+            .await
+            .expect("disable fixture foreign keys");
+        pool
+    }
+
+    async fn seed_generated_list(pool: &DbPool) {
+        pool.execute(
+            r#"INSERT INTO "PlaylistGroup" ("Id", "Name", "IsSystem")
+               VALUES (1, 'System', 1)"#,
+        )
+        .await
+        .expect("seed system playlist group");
+        sqlx::query(
+            r#"INSERT INTO "Playlist" ("Id", "IsSystem", "Name", "PlaylistGroupId")
+               VALUES (?, 1, 'Generated list', 1)"#,
+        )
+        .bind(PLAYLIST_ID)
+        .execute(pool)
+        .await
+        .expect("seed generated playlist");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+                   "GeneratePlaylist", "PlaylistId"
+               ) VALUES (?, 'fixture.addon', 'fixture-list',
+                         'https://example.invalid/list', 'Fixture list', 1, ?)"#,
+        )
+        .bind(LIST_ID)
+        .bind(PLAYLIST_ID)
+        .execute(pool)
+        .await
+        .expect("seed add-on list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLibrary" (
+                   "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+               ) VALUES (?, ?, 'fixture-list', 'fixture-list/list.yml')"#,
+        )
+        .bind(LIST_ID)
+        .bind(LIBRARY_ID)
+        .execute(pool)
+        .await
+        .expect("seed managed list library");
+        for (media_item_id, provider_id) in [(1_i64, "provider-one"), (2, "provider-two")] {
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State")
+                   VALUES (?, 1, 0)"#,
+            )
+            .bind(media_item_id)
+            .execute(pool)
+            .await
+            .expect("seed media item");
+            sqlx::query(
+                r#"INSERT INTO "RemoteStream" (
+                       "Id", "Url", "IsLive", "AddonId", "ProviderId", "Liveness"
+                   ) VALUES (?, ?, 0, 'fixture.addon', ?, 1)"#,
+            )
+            .bind(media_item_id)
+            .bind(format!("https://example.invalid/media/{media_item_id}"))
+            .bind(provider_id)
+            .execute(pool)
+            .await
+            .expect("seed remote stream");
+        }
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItem" (
+                   "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
+                   "MediaItemId", "Rank", "Title", "SourceUrl", "Availability",
+                   "DurationSeconds", "Published", "PublishedLiveness"
+               ) VALUES (
+                   20, ?, 'provider-one', 'Fixture item', 4, 1, 0, 'Fixture item',
+                   'https://example.invalid/media/1', 0, 600, 1, 1
+               )"#,
+        )
+        .bind(LIST_ID)
+        .execute(pool)
+        .await
+        .expect("seed add-on list item");
+        insert_playlist_item(pool, PLAYLIST_ID, 1)
+            .await
+            .expect("seed generated playlist item");
+    }
+
+    async fn insert_playlist_item(
+        pool: &DbPool,
+        playlist_id: EntityId,
+        media_item_id: EntityId,
+    ) -> std::result::Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"INSERT INTO "PlaylistItem" (
+                   "Index", "PlaylistId", "CollectionType", "CollectionId",
+                   "MediaItemId", "MultiCollectionId", "SmartCollectionId",
+                   "IncludeInProgramGuide", "PlaybackOrder", "PlayAll",
+                   "MediaVersionId", "VideoStreamIndex", "AudioStreamIndex",
+                   "SubtitleStreamIndex"
+               ) VALUES (0, ?, 70, NULL, ?, NULL, NULL, 1, 1, 0, NULL, NULL, NULL, NULL)"#,
+        )
+        .bind(playlist_id)
+        .bind(media_item_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn seed_classic_playlist_playout(
+        pool: &DbPool,
+        playout_id: EntityId,
+        playlist_id: EntityId,
+    ) {
+        let schedule_id = playout_id + 1_000;
+        let schedule_item_id = playout_id + 2_000;
+        sqlx::query(
+            r#"INSERT INTO "ProgramSchedule" (
+                   "Id", "Name", "KeepMultiPartEpisodesTogether", "TreatCollectionsAsShows",
+                   "ShuffleScheduleItems", "RandomStartPoint", "FixedStartTimeBehavior"
+               ) VALUES (?, ?, 1, 0, 0, 0, 'Strict')"#,
+        )
+        .bind(schedule_id)
+        .bind(format!("Schedule {schedule_id}"))
+        .execute(pool)
+        .await
+        .expect("seed program schedule");
+        sqlx::query(
+            r#"INSERT INTO "ProgramScheduleItem" (
+                   "Id", "ProgramScheduleId", "CollectionType", "PlaylistId",
+                   "PlaybackOrder", "FillWithGroupMode", "GuideMode", "MarathonGroupBy",
+                   "MarathonShuffleGroups", "MarathonShuffleItems", "Index"
+               ) VALUES (?, ?, 'Playlist', ?, 'Chronological', 'None', 'Normal',
+                         'None', 0, 0, 0)"#,
+        )
+        .bind(schedule_item_id)
+        .bind(schedule_id)
+        .bind(playlist_id)
+        .execute(pool)
+        .await
+        .expect("seed playlist schedule item");
+        sqlx::query(r#"INSERT INTO "ProgramScheduleOneItem" ("Id") VALUES (?)"#)
+            .bind(schedule_item_id)
+            .execute(pool)
+            .await
+            .expect("seed one-item schedule mode");
+        sqlx::query(
+            r#"INSERT INTO "Playout" (
+                   "Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed"
+               ) VALUES (?, ?, ?, 'Classic', 123)"#,
+        )
+        .bind(playout_id)
+        .bind(playout_id)
+        .bind(schedule_id)
+        .execute(pool)
+        .await
+        .expect("seed Classic playout");
+    }
+
+    async fn select_second_provider(pool: &DbPool) {
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem"
+               SET "ProviderId" = 'provider-two',
+                   "SourceUrl" = 'https://example.invalid/media/2'
+               WHERE "Id" = 20"#,
+        )
+        .execute(pool)
+        .await
+        .expect("select second provider item");
+    }
+
+    async fn playlist_item_identity(pool: &DbPool, playlist_id: EntityId) -> (EntityId, EntityId) {
+        let row = sqlx::query(
+            r#"SELECT "Id", "MediaItemId" FROM "PlaylistItem"
+               WHERE "PlaylistId" = ? ORDER BY "Index", "Id" LIMIT 1"#,
+        )
+        .bind(playlist_id)
+        .fetch_one(pool)
+        .await
+        .expect("load playlist item identity");
+        (
+            row.try_get("Id").expect("playlist item id"),
+            row.try_get("MediaItemId").expect("playlist media item id"),
+        )
+    }
+
+    async fn intent_playout_ids(pool: &DbPool) -> Vec<EntityId> {
+        sqlx::query_scalar(
+            r#"SELECT "PlayoutId" FROM "ScanPlayoutRefreshIntent" ORDER BY "PlayoutId""#,
+        )
+        .fetch_all(pool)
+        .await
+        .expect("load durable refresh intents")
+    }
+
+    async fn detach_seeded_playlist(pool: &DbPool) {
+        sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+            .bind(PLAYLIST_ID)
+            .execute(pool)
+            .await
+            .expect("remove seeded playlist items");
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "PlaylistId" = NULL WHERE "Id" = ?"#)
+            .bind(LIST_ID)
+            .execute(pool)
+            .await
+            .expect("detach seeded playlist");
+        sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
+            .bind(PLAYLIST_ID)
+            .execute(pool)
+            .await
+            .expect("remove seeded playlist");
+    }
+
+    async fn reject_refresh_intent_inserts(pool: &DbPool) {
+        pool.execute(
+            r#"CREATE TRIGGER "fail_scan_playout_refresh_intent"
+               BEFORE INSERT ON "ScanPlayoutRefreshIntent"
+               BEGIN
+                   SELECT RAISE(ABORT, 'simulated refresh intent failure');
+               END"#,
+        )
+        .await
+        .expect("install refresh intent failure trigger");
+    }
+
+    async fn allow_refresh_intent_inserts(pool: &DbPool) {
+        pool.execute(r#"DROP TRIGGER "fail_scan_playout_refresh_intent""#)
+            .await
+            .expect("remove refresh intent failure trigger");
+    }
+
+    async fn linked_playlist_id(pool: &DbPool) -> Option<EntityId> {
+        sqlx::query_scalar(r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?"#)
+            .bind(LIST_ID)
+            .fetch_one(pool)
+            .await
+            .expect("load generated playlist link")
+    }
+
+    async fn playlist_exists(pool: &DbPool, playlist_id: EntityId) -> bool {
+        sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ?"#)
+            .bind(playlist_id)
+            .fetch_one(pool)
+            .await
+            .expect("count generated playlist")
+            == 1
+    }
+
+    async fn intent_owner(pool: &DbPool, playout_id: EntityId) -> Option<EntityId> {
+        sqlx::query_scalar(
+            r#"SELECT "LibraryId" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = ?"#,
+        )
+        .bind(playout_id)
+        .fetch_one(pool)
+        .await
+        .expect("load refresh intent owner")
+    }
+
+    async fn intent_reason(pool: &DbPool, playout_id: EntityId) -> String {
+        sqlx::query_scalar(
+            r#"SELECT "Reason" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = ?"#,
+        )
+        .bind(playout_id)
+        .fetch_one(pool)
+        .await
+        .expect("load refresh intent reason")
+    }
+
+    #[tokio::test]
+    async fn first_generated_playlist_creation_commits_complete_projection() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        detach_seeded_playlist(&pool).await;
+
+        let report = AddonMediaListSynchronizer::new(pool.clone())
+            .match_list_items_with_report(LIST_ID)
+            .await
+            .expect("create first generated playlist");
+
+        let playlist_id = linked_playlist_id(&pool)
+            .await
+            .expect("generated playlist link");
+        assert!(playlist_exists(&pool, playlist_id).await);
+        assert_eq!(playlist_item_identity(&pool, playlist_id).await.1, 1);
+        assert!(report.playout_refreshes.is_empty());
+        assert!(intent_playout_ids(&pool).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn first_generated_playlist_creation_rolls_back_with_its_intent() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        detach_seeded_playlist(&pool).await;
+        seed_classic_playlist_playout(&pool, RELATED_PLAYOUT_ID, PLAYLIST_ID).await;
+        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
+        let list = synchronizer
+            .load_list(LIST_ID)
+            .await
+            .expect("load generated list");
+        let generation = crate::scan_refresh::begin_resolution(
+            &pool,
+            LIBRARY_ID,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
+        )
+        .await
+        .expect("begin generated playlist creation");
+        let refresh = GeneratedPlaylistRefresh {
+            library_id: Some(LIBRARY_ID),
+            generation: Some(generation),
+            reason: ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
+            playout_ids: vec![RELATED_PLAYOUT_ID],
+        };
+        reject_refresh_intent_inserts(&pool).await;
+
+        synchronizer
+            .commit_generated_playlist_creation(&list, 1, &[generated_item(1)], &refresh)
+            .await
+            .expect_err("intent failure must roll back playlist creation");
+
+        assert_eq!(linked_playlist_id(&pool).await, None);
+        let playlist_count: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Playlist""#)
+            .fetch_one(&pool)
+            .await
+            .expect("count rolled-back playlists");
+        assert_eq!(playlist_count, 0);
+        assert!(intent_playout_ids(&pool).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn disabling_generated_output_removes_playlist_and_intent_atomically() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        seed_classic_playlist_playout(&pool, RELATED_PLAYOUT_ID, PLAYLIST_ID).await;
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "GeneratePlaylist" = 0 WHERE "Id" = ?"#)
+            .bind(LIST_ID)
+            .execute(&pool)
+            .await
+            .expect("disable generated output");
+        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
+        let removal = synchronizer
+            .prepare_generated_playlist_removal(LIST_ID)
+            .await
+            .expect("resolve generated playlist dependencies")
+            .expect("generated playlist removal");
+        reject_refresh_intent_inserts(&pool).await;
+
+        let mut failed_tx = crate::db::begin_write(&pool)
+            .await
+            .expect("begin failed disable transaction");
+        synchronizer
+            .commit_generated_playlist_removal_in_tx(&mut failed_tx, LIST_ID, &removal)
+            .await
+            .expect_err("intent failure must roll back generated playlist removal");
+        failed_tx
+            .rollback()
+            .await
+            .expect("roll back failed disable transaction");
+
+        assert_eq!(linked_playlist_id(&pool).await, Some(PLAYLIST_ID));
+        assert!(playlist_exists(&pool, PLAYLIST_ID).await);
+        assert!(intent_playout_ids(&pool).await.is_empty());
+
+        allow_refresh_intent_inserts(&pool).await;
+        let mut commit = crate::db::begin_write(&pool)
+            .await
+            .expect("begin disable transaction");
+        synchronizer
+            .commit_generated_playlist_removal_in_tx(&mut commit, LIST_ID, &removal)
+            .await
+            .expect("commit generated playlist removal");
+        commit.commit().await.expect("commit disable transaction");
+
+        assert_eq!(linked_playlist_id(&pool).await, None);
+        assert!(!playlist_exists(&pool, PLAYLIST_ID).await);
+        assert_eq!(intent_playout_ids(&pool).await, [RELATED_PLAYOUT_ID]);
+        assert_eq!(
+            intent_owner(&pool, RELATED_PLAYOUT_ID).await,
+            Some(LIBRARY_ID)
+        );
+        assert_eq!(
+            intent_reason(&pool, RELATED_PLAYOUT_ID).await,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved.as_str()
+        );
+    }
+
+    #[tokio::test]
+    async fn deleting_generated_list_removes_state_with_unowned_intent_atomically() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        seed_classic_playlist_playout(&pool, RELATED_PLAYOUT_ID, PLAYLIST_ID).await;
+        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
+        reject_refresh_intent_inserts(&pool).await;
+
+        synchronizer
+            .delete_list(LIST_ID)
+            .await
+            .expect_err("intent failure must roll back add-on list deletion");
+
+        assert_eq!(linked_playlist_id(&pool).await, Some(PLAYLIST_ID));
+        assert!(playlist_exists(&pool, PLAYLIST_ID).await);
+        assert!(intent_playout_ids(&pool).await.is_empty());
+
+        allow_refresh_intent_inserts(&pool).await;
+        synchronizer
+            .delete_list(LIST_ID)
+            .await
+            .expect("delete add-on list with durable refresh intent");
+
+        let list_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(LIST_ID)
+                .fetch_one(&pool)
+                .await
+                .expect("count deleted add-on list");
+        assert_eq!(list_count, 0);
+        assert!(!playlist_exists(&pool, PLAYLIST_ID).await);
+        assert_eq!(intent_playout_ids(&pool).await, [RELATED_PLAYOUT_ID]);
+        assert_eq!(intent_owner(&pool, RELATED_PLAYOUT_ID).await, None);
+        assert_eq!(
+            intent_reason(&pool, RELATED_PLAYOUT_ID).await,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved.as_str()
+        );
+    }
+
+    #[tokio::test]
+    async fn unchanged_generated_playlist_keeps_rows_and_creates_no_intent() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        let before = playlist_item_identity(&pool, PLAYLIST_ID).await;
+
+        let report = AddonMediaListSynchronizer::new(pool.clone())
+            .match_list_items_with_report(LIST_ID)
+            .await
+            .expect("match unchanged generated playlist");
+
+        assert_eq!(report.matched_list_count, 1);
+        assert!(report.playout_refreshes.is_empty());
+        assert_eq!(playlist_item_identity(&pool, PLAYLIST_ID).await, before);
+        assert!(intent_playout_ids(&pool).await.is_empty());
+        let resolutions: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "ScanRefreshResolution" WHERE "LibraryId" = ?"#,
+        )
+        .bind(LIBRARY_ID)
+        .fetch_one(&pool)
+        .await
+        .expect("count scan resolutions");
+        assert_eq!(resolutions, 0);
+    }
+
+    #[tokio::test]
+    async fn changed_generated_playlist_commits_one_exact_playout_intent() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        seed_classic_playlist_playout(&pool, RELATED_PLAYOUT_ID, PLAYLIST_ID).await;
+        select_second_provider(&pool).await;
+
+        let report = AddonMediaListSynchronizer::new(pool.clone())
+            .match_list_items_with_report(LIST_ID)
+            .await
+            .expect("match changed generated playlist");
+
+        assert_eq!(
+            report.playout_refreshes,
+            [ScanPlayoutRefresh {
+                playout_id: RELATED_PLAYOUT_ID,
+                reason: ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced,
+            }]
+        );
+        assert_eq!(intent_playout_ids(&pool).await, [RELATED_PLAYOUT_ID]);
+        assert_eq!(playlist_item_identity(&pool, PLAYLIST_ID).await.1, 2);
+        let resolution: (EntityId, i32) = sqlx::query_as(
+            r#"SELECT "LibraryId", "State" FROM "ScanRefreshResolution"
+               WHERE "LibraryId" = ?"#,
+        )
+        .bind(LIBRARY_ID)
+        .fetch_one(&pool)
+        .await
+        .expect("load completed resolution");
+        assert_eq!(resolution, (LIBRARY_ID, 1));
+    }
+
+    #[tokio::test]
+    async fn shared_media_in_unrelated_playlist_creates_no_false_positive_intent() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        sqlx::query(
+            r#"INSERT INTO "Playlist" ("Id", "IsSystem", "Name", "PlaylistGroupId")
+               VALUES (?, 0, 'Unrelated', 1)"#,
+        )
+        .bind(UNRELATED_PLAYLIST_ID)
+        .execute(&pool)
+        .await
+        .expect("seed unrelated playlist");
+        insert_playlist_item(&pool, UNRELATED_PLAYLIST_ID, 1)
+            .await
+            .expect("seed shared media in unrelated playlist");
+        seed_classic_playlist_playout(&pool, RELATED_PLAYOUT_ID, PLAYLIST_ID).await;
+        seed_classic_playlist_playout(&pool, UNRELATED_PLAYOUT_ID, UNRELATED_PLAYLIST_ID).await;
+        select_second_provider(&pool).await;
+
+        let report = AddonMediaListSynchronizer::new(pool.clone())
+            .match_list_items_with_report(LIST_ID)
+            .await
+            .expect("match changed generated playlist");
+
+        assert_eq!(
+            report
+                .playout_refreshes
+                .iter()
+                .map(|refresh| refresh.playout_id)
+                .collect::<Vec<_>>(),
+            [RELATED_PLAYOUT_ID]
+        );
+        assert_eq!(intent_playout_ids(&pool).await, [RELATED_PLAYOUT_ID]);
+    }
+
+    #[tokio::test]
+    async fn stale_resolution_rolls_back_playlist_replacement_and_intent() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        let before = playlist_item_identity(&pool, PLAYLIST_ID).await;
+        let reason = ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced;
+        let stale_generation = crate::scan_refresh::begin_resolution(&pool, LIBRARY_ID, reason)
+            .await
+            .expect("begin stale resolution");
+        let current_generation = crate::scan_refresh::begin_resolution(
+            &pool,
+            LIBRARY_ID,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReordered,
+        )
+        .await
+        .expect("supersede stale resolution");
+        assert!(current_generation > stale_generation);
+        let desired = [generated_item(2)];
+        let refresh = GeneratedPlaylistRefresh {
+            library_id: Some(LIBRARY_ID),
+            generation: Some(stale_generation),
+            reason,
+            playout_ids: vec![RELATED_PLAYOUT_ID],
+        };
+
+        AddonMediaListSynchronizer::new(pool.clone())
+            .commit_generated_playlist_match(LIST_ID, PLAYLIST_ID, &desired, &refresh)
+            .await
+            .expect_err("stale generation must reject the atomic commit");
+
+        assert_eq!(playlist_item_identity(&pool, PLAYLIST_ID).await, before);
+        assert!(intent_playout_ids(&pool).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn changed_playlist_without_library_commits_nullable_owner_intent() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        let before = playlist_item_identity(&pool, PLAYLIST_ID).await;
+        seed_classic_playlist_playout(&pool, RELATED_PLAYOUT_ID, PLAYLIST_ID).await;
+        sqlx::query(r#"DELETE FROM "AddonMediaListLibrary" WHERE "AddonMediaListId" = ?"#)
+            .bind(LIST_ID)
+            .execute(&pool)
+            .await
+            .expect("remove managed library ownership");
+        select_second_provider(&pool).await;
+
+        let report = AddonMediaListSynchronizer::new(pool.clone())
+            .match_list_items_with_report(LIST_ID)
+            .await
+            .expect("match changed legacy generated playlist");
+
+        assert_eq!(
+            report.playout_refreshes,
+            [ScanPlayoutRefresh {
+                playout_id: RELATED_PLAYOUT_ID,
+                reason: ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced,
+            }]
+        );
+        assert_ne!(playlist_item_identity(&pool, PLAYLIST_ID).await, before);
+        assert_eq!(intent_playout_ids(&pool).await, [RELATED_PLAYOUT_ID]);
+        let owner: Option<EntityId> = sqlx::query_scalar(
+            r#"SELECT "LibraryId" FROM "ScanPlayoutRefreshIntent" WHERE "PlayoutId" = ?"#,
+        )
+        .bind(RELATED_PLAYOUT_ID)
+        .fetch_one(&pool)
+        .await
+        .expect("load nullable intent owner");
+        assert_eq!(owner, None);
+    }
+
+    #[tokio::test]
+    async fn list_without_generated_playlist_is_a_safe_noop() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        let before = playlist_item_identity(&pool, PLAYLIST_ID).await;
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "GeneratePlaylist" = 0, "PlaylistId" = NULL WHERE "Id" = ?"#,
+        )
+        .bind(LIST_ID)
+        .execute(&pool)
+        .await
+        .expect("detach generated playlist");
+
+        let report = AddonMediaListSynchronizer::new(pool.clone())
+            .match_list_items_with_report(LIST_ID)
+            .await
+            .expect("match unmanaged list without generated playlist");
+
+        assert!(report.playout_refreshes.is_empty());
+        assert_eq!(playlist_item_identity(&pool, PLAYLIST_ID).await, before);
+        assert!(intent_playout_ids(&pool).await.is_empty());
+    }
+
+    fn generated_item(media_item_id: EntityId) -> GeneratedPlaylistItem {
+        GeneratedPlaylistItem {
+            index: 0,
+            collection_type: COLLECTION_TYPE_REMOTE_STREAM,
+            collection_id: None,
+            media_item_id: Some(media_item_id),
+            multi_collection_id: None,
+            smart_collection_id: None,
+            include_in_program_guide: true,
+            playback_order: PLAYBACK_ORDER_CHRONOLOGICAL,
+            play_all: false,
+            count: None,
+            preferred_audio_language_code: None,
+            preferred_audio_title: None,
+            preferred_subtitle_language_code: None,
+            subtitle_mode: None,
+            media_version_id: None,
+            video_stream_index: None,
+            audio_stream_index: None,
+            subtitle_stream_index: None,
+        }
     }
 }
 

@@ -165,9 +165,9 @@ resolution  = 'The add-on settings route is included in whole-app hydration and 
 
 [[debt]]
 id          = 'mysql-runtime-migration-proof-is-missing'
-description = 'The add-on schema applies to a live MySQL server in CI, but no test exercises the add-on tables themselves there. Managed list, storage, NFO sidecar, and television projection reads and writes are proven only on SQLite, so a backend-specific defect in those paths would not be caught.'
+description = 'Live MySQL CI now exercises managed add-on-list storage, NFO sidecars, and scan-refresh continuity, but projected television reads, writes, and artwork cardinality remain proven only on SQLite.'
 discovered  = '2026-08-15'
-evidence    = 'Corrected 2026-08-19: an earlier version of this entry claimed the add-on migrations had never run against a live server. They have — the `MySQL health contract` CI job runs them against a MySQL 8.4 container, and on 2026-08-18 it caught a real defect, an over-length `AddonMediaListItemEpisode` foreign-key name that MySQL rejects, which had made every MySQL database unmigratable past `202608162100`. What that job does not cover is add-on table behavior: `crates/ersatzrs-infra/tests/mysql_backend.rs` exercises representative queries, hardware graph state, and two health checks, none of them add-on paths.'
+evidence    = 'Corrected 2026-08-24: the `MySQL health and continuity contract` runs migrations against MySQL 8.4 and now exercises a real managed AddonInstallation/AddonMediaList publication through Local scanning, generated YAML/NFO sidecars, durable refresh admission, and Classic restart continuity. A separate two-connection test proves scan-resolution and intent upserts under InnoDB contention. The remaining backend gap is the projected Show/Season/Episode and artwork-cardinality path owned by amm-h-01, so this debt remains open.'
 adr         = '0066'
 resolved    = false
 

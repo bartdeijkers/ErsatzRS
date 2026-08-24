@@ -342,6 +342,18 @@ impl LanguageStrings for FrenchStrings {
         )
     }
 
+    fn scan_refresh_state_message(
+        &self,
+        unresolved_resolutions: u64,
+        stale_resolutions: u64,
+        failed_intents: u64,
+        stale_intents: u64,
+    ) -> String {
+        format!(
+            "L’état de l’actualisation après analyse nécessite une intervention : {unresolved_resolutions} résolution(s) d’impact non terminée(s), {stale_resolutions} résolution(s) d’impact bloquée(s), {failed_intents} demande(s) d’actualisation de diffusion en échec et {stale_intents} demande(s) d’actualisation de diffusion bloquée(s). Consultez les journaux de l’analyseur et de la planification, puis relancez l’analyse ou l’actualisation concernée."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Impossible de charger le contexte de dépannage de lecture : {error}")
     }
@@ -891,6 +903,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnsupportedPlayoutKind => "Type de diffusion non pris en charge.",
         TextKey::ClassicPlayout => "Diffusion classique",
         TextKey::ClassicPlayoutState => "État de la diffusion classique",
+        TextKey::ScanRefreshState => "État de l’actualisation après analyse",
         TextKey::BlockPlayout => "Diffusion par blocs",
         TextKey::ScriptedPlayout => "Grille scriptée",
         TextKey::AlternateSchedules => "Grilles alternatives",
@@ -2571,7 +2584,9 @@ fn media_source_error_message(error: &str) -> String {
 fn addon_operation_error_message(code: &str, detail: &str) -> String {
     let summary = match code {
         "missing-setting" => "Configurez le paramètre d’add-on requis.",
-        "missing-secret" => "Configurez la référence secrète requise dans les paramètres de l’add-on.",
+        "missing-secret" => {
+            "Configurez la référence secrète requise dans les paramètres de l’add-on."
+        }
         "provider-unreachable" => "L’add-on n’a pas pu joindre son fournisseur.",
         "provider-rejected" => "Le fournisseur a rejeté la demande de l’add-on.",
         "provider-rate-limited" => "Le fournisseur a temporairement limité l’add-on.",
@@ -2579,7 +2594,11 @@ fn addon_operation_error_message(code: &str, detail: &str) -> String {
         "unsupported-url" => "L’add-on ne prend pas en charge cette URL.",
         _ => "L’add-on a signalé un échec.",
     };
-    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+    if detail.trim().is_empty() {
+        summary.to_owned()
+    } else {
+        format!("{summary} {detail}")
+    }
 }
 
 fn addon_media_list_error_message(error: &str) -> String {
@@ -2710,12 +2729,13 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
 mod tests {
     use super::*;
     use crate::admin::i18n::{
-        episode_display_subtitle_text, ffmpeg_loudness_mode_text, ffmpeg_profile_audio_format_text,
-        ffmpeg_profile_error_text, ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text,
-        filler_error_text, hardware_acceleration_option_text, library_kind_text, log_level_text,
+        addon_media_list_error_text, episode_display_subtitle_text, ffmpeg_loudness_mode_text,
+        ffmpeg_profile_audio_format_text, ffmpeg_profile_error_text,
+        ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text, filler_error_text,
+        hardware_acceleration_option_text, library_kind_text, log_level_text,
         media_action_error_text, media_browser_error_text, media_kind_text,
         media_source_error_text, playout_schedule_kind_text, schedule_error_text,
-        scheduling_content_error_text, settings_error_text, addon_media_list_error_text, upload_error_text,
+        scheduling_content_error_text, settings_error_text, upload_error_text,
         watermark_error_text, UiLanguage,
     };
 
@@ -2945,7 +2965,10 @@ mod tests {
             "custom database failure"
         );
         assert_eq!(
-            addon_media_list_error_text(UiLanguage::French, "add-on media list with id 42 not found"),
+            addon_media_list_error_text(
+                UiLanguage::French,
+                "add-on media list with id 42 not found"
+            ),
             "La liste add-on n'existe pas."
         );
         assert_eq!(

@@ -348,6 +348,18 @@ impl LanguageStrings for ItalianStrings {
         )
     }
 
+    fn scan_refresh_state_message(
+        &self,
+        unresolved_resolutions: u64,
+        stale_resolutions: u64,
+        failed_intents: u64,
+        stale_intents: u64,
+    ) -> String {
+        format!(
+            "Lo stato dell'aggiornamento dopo la scansione richiede attenzione: {unresolved_resolutions} risoluzioni dell'impatto non completate, {stale_resolutions} risoluzioni dell'impatto bloccate, {failed_intents} richieste di aggiornamento del playout non riuscite e {stale_intents} richieste di aggiornamento del playout bloccate. Controlla i log dello scanner e della pianificazione, quindi riprova la scansione o l'aggiornamento del playout interessato."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!(
             "Impossibile caricare il contesto di risoluzione dei problemi della riproduzione: {error}"
@@ -895,6 +907,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnsupportedPlayoutKind => "Tipo di playout non supportato.",
         TextKey::ClassicPlayout => "Playout classico",
         TextKey::ClassicPlayoutState => "Stato del playout classico",
+        TextKey::ScanRefreshState => "Stato dell'aggiornamento dopo la scansione",
         TextKey::BlockPlayout => "Playout a blocchi",
         TextKey::ScriptedPlayout => "Programma scriptato",
         TextKey::AlternateSchedules => "Programmi alternativi",
@@ -2526,7 +2539,9 @@ fn media_source_error_message(error: &str) -> String {
 fn addon_operation_error_message(code: &str, detail: &str) -> String {
     let summary = match code {
         "missing-setting" => "Configura l’impostazione obbligatoria dell’add-on.",
-        "missing-secret" => "Configura il riferimento segreto obbligatorio nelle impostazioni dell’add-on.",
+        "missing-secret" => {
+            "Configura il riferimento segreto obbligatorio nelle impostazioni dell’add-on."
+        }
         "provider-unreachable" => "L’add-on non ha potuto raggiungere il provider.",
         "provider-rejected" => "Il provider ha rifiutato la richiesta dell’add-on.",
         "provider-rate-limited" => "Il provider ha limitato temporaneamente l’add-on.",
@@ -2534,7 +2549,11 @@ fn addon_operation_error_message(code: &str, detail: &str) -> String {
         "unsupported-url" => "L’add-on non supporta questo URL.",
         _ => "L’add-on ha segnalato un errore.",
     };
-    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+    if detail.trim().is_empty() {
+        summary.to_owned()
+    } else {
+        format!("{summary} {detail}")
+    }
 }
 
 fn addon_media_list_error_message(error: &str) -> String {
@@ -2550,7 +2569,9 @@ fn addon_media_list_error_message(error: &str) -> String {
     if let Some(folder) =
         normalized.strip_prefix("another list of this add-on already uses the folder ")
     {
-        return format!("Un'altra lista di questo componente aggiuntivo usa già la cartella \"{folder}\".");
+        return format!(
+            "Un'altra lista di questo componente aggiuntivo usa già la cartella \"{folder}\"."
+        );
     }
     if let Some(folder) = normalized.strip_suffix(" is not usable as a folder name") {
         return format!("\"{folder}\" non è utilizzabile come nome di cartella.");

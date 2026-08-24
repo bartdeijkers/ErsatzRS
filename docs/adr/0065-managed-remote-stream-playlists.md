@@ -20,11 +20,16 @@ playlist ordering, and playout refresh path are tracked by milestones P8D-02
 through P8E-03 and the `remote-stream-playlists` parity record. Named extractor
 configuration and raw single-stream scripts are no longer implemented.
 
-Reopened on 2026-08-23: membership reconciliation currently treats every
-playout with a program-schedule anchor as impacted, even when its schedule
-cannot consume the changed Remote Stream library. Milestone `crf-02` must add
-dependency-scoped invalidation, coalescing, diagnostics, and end-to-end
-SQLite/MySQL proof before the playout refresh path is complete.
+Completed on 2026-08-24 under milestone `crf-02`. Stable identity deltas and
+current-schedule dependency resolution now produce coalesced durable intents
+only for Classic playouts that can consume the changed media or managed
+playlist. The resolution marker precedes generated-file mutation, remains
+active through the playlist/intent commit and ownership-sidecar publication,
+and is completed only after publication. Startup replays interrupted work
+before mutating workers start. SQLite and MySQL production-path regressions,
+including live two-connection InnoDB races, prove restart continuity and
+unrelated-row isolation; aggregate localized health reports stale or failed
+work without exposing source paths.
 
 ## Context
 

@@ -336,6 +336,18 @@ impl LanguageStrings for PolishStrings {
         )
     }
 
+    fn scan_refresh_state_message(
+        &self,
+        unresolved_resolutions: u64,
+        stale_resolutions: u64,
+        failed_intents: u64,
+        stale_intents: u64,
+    ) -> String {
+        format!(
+            "Stan odświeżania po skanowaniu wymaga uwagi: {unresolved_resolutions} nierozwiązanych analiz wpływu, {stale_resolutions} nieaktualnych analiz wpływu, {failed_intents} nieudanych zleceń odświeżenia emisji i {stale_intents} nieaktualnych zleceń odświeżenia emisji. Sprawdź dzienniki skanera i harmonogramowania, a następnie ponów skanowanie lub odświeżenie emisji."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Nie można wczytać kontekstu diagnostyki odtwarzania: {error}")
     }
@@ -1021,7 +1033,11 @@ fn addon_operation_error_message(code: &str, detail: &str) -> String {
         "unsupported-url" => "Dodatek nie obsługuje tego adresu URL.",
         _ => "Dodatek zgłosił błąd.",
     };
-    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+    if detail.trim().is_empty() {
+        summary.to_owned()
+    } else {
+        format!("{summary} {detail}")
+    }
 }
 
 fn addon_media_list_error_message(error: &str) -> String {
@@ -1610,6 +1626,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnsupportedPlayoutKind => "Nieobsługiwany typ planu emisji.",
         TextKey::ClassicPlayout => "Klasyczna emisja",
         TextKey::ClassicPlayoutState => "Stan klasycznej emisji",
+        TextKey::ScanRefreshState => "Stan odświeżania po skanowaniu",
         TextKey::BlockPlayout => "Emisja blokowa",
         TextKey::ScriptedPlayout => "Harmonogram skryptowy",
         TextKey::AlternateSchedules => "Harmonogramy alternatywne",
@@ -2599,11 +2616,12 @@ pub fn text(key: TextKey) -> &'static str {
 mod tests {
     use super::*;
     use crate::admin::i18n::{
-        episode_display_subtitle_text, ffmpeg_profile_error_text, ffmpeg_profile_video_format_text,
-        ffmpeg_tonemap_algorithm_text, filler_error_text, hardware_acceleration_option_text,
-        library_kind_text, log_level_text, media_action_error_text, media_browser_error_text,
-        media_kind_text, media_source_error_text, playout_schedule_kind_text, schedule_error_text,
-        scheduling_content_error_text, settings_error_text, addon_media_list_error_text, upload_error_text,
+        addon_media_list_error_text, episode_display_subtitle_text, ffmpeg_profile_error_text,
+        ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text, filler_error_text,
+        hardware_acceleration_option_text, library_kind_text, log_level_text,
+        media_action_error_text, media_browser_error_text, media_kind_text,
+        media_source_error_text, playout_schedule_kind_text, schedule_error_text,
+        scheduling_content_error_text, settings_error_text, upload_error_text,
         watermark_error_text, UiLanguage,
     };
 

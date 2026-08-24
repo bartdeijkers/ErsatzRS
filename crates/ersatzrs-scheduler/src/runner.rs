@@ -77,19 +77,9 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
     // one, reuse it so the admin UI can observe playout lock state.
     let locker = locker.unwrap_or_default();
 
-    let repaired = repair_invalid_classic_playouts(
-        &startup.pool,
-        &locker,
-        chrono::Utc::now(),
-        hls_sessions.as_deref(),
-    )
-    .await?;
-    if repaired > 0 {
-        info!(
-            repaired,
-            "repaired inconsistent Classic playout runtime state"
-        );
-    }
+    repair_classic_playouts_on_startup(&startup.pool, &locker, hls_sessions.as_deref()).await?;
+
+    recover_scan_refreshes_on_startup(application.as_ref()).await?;
 
     if run_once {
         let report = run_maintenance_once(
@@ -118,6 +108,7 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                 return Ok(());
             }
             _ = ticker.tick() => {
+                retry_pending_scan_refreshes(application.as_ref()).await;
                 match run_maintenance_once(
                     startup.pool.clone(),
                     &cache_config,
@@ -162,6 +153,54 @@ pub async fn run_scheduler(options: SchedulerOptions) -> anyhow::Result<()> {
                 }
             }
         }
+    }
+}
+
+async fn repair_classic_playouts_on_startup(
+    pool: &ersatzrs_infra::db::DbPool,
+    locker: &EntityLocker,
+    hls_sessions: Option<&dyn HlsSessionRegistry>,
+) -> anyhow::Result<()> {
+    let repaired =
+        repair_invalid_classic_playouts(pool, locker, chrono::Utc::now(), hls_sessions).await?;
+    if repaired > 0 {
+        info!(
+            repaired,
+            "repaired inconsistent Classic playout runtime state"
+        );
+    }
+    Ok(())
+}
+
+async fn recover_scan_refreshes_on_startup(
+    application: Option<&Arc<ersatzrs_app::ApplicationServices>>,
+) -> anyhow::Result<()> {
+    let Some(application) = application else {
+        return Ok(());
+    };
+    let recovered = application.recover_scan_playout_refreshes().await?;
+    if recovered > 0 {
+        info!(
+            recovered,
+            "re-admitted durable scan-triggered playout refreshes"
+        );
+    }
+    Ok(())
+}
+
+async fn retry_pending_scan_refreshes(
+    application: Option<&Arc<ersatzrs_app::ApplicationServices>>,
+) {
+    let Some(application) = application else {
+        return;
+    };
+    match application.retry_pending_scan_playout_refreshes().await {
+        Ok(retried) if retried > 0 => info!(
+            retried,
+            "re-admitted pending scan-triggered playout refreshes"
+        ),
+        Ok(_) => {}
+        Err(error) => warn!(%error, "scan-triggered playout refresh retry failed"),
     }
 }
 

@@ -52,6 +52,7 @@ pub struct RemoteStreamDefinition {
     #[serde(default)]
     pub liveness: Option<RemoteStreamLiveness>,
     /// Compatibility mirror for legacy YAML and callers.
+    #[serde(default)]
     pub is_live: bool,
     pub title: Option<String>,
     pub original_title: Option<String>,
@@ -348,9 +349,7 @@ pub fn parse_remote_stream_definition(
     let mut definition: RemoteStreamDefinition = serde_yaml::from_value(raw)
         .map_err(|error| RemoteStreamError::Definition(error.to_string()))?;
     if let Some(liveness) = definition.liveness {
-        if legacy_was_explicit
-            && RemoteStreamLiveness::from_legacy(Some(definition.is_live), None) != liveness
-        {
+        if legacy_was_explicit && definition.is_live != liveness.legacy_is_live() {
             return Err(RemoteStreamError::Definition(
                 "liveness contradicts legacy is_live".to_owned(),
             ));
@@ -1740,6 +1739,29 @@ content_rating: PG
             "url: https://example.test\nis_live: false\nduration: 00:99:00"
         )
         .is_err());
+    }
+
+    #[test]
+    fn authoritative_liveness_accepts_an_optional_compatible_legacy_mirror() {
+        let without_mirror =
+            parse_remote_stream_definition("url: https://example.test\nliveness: live")
+                .expect("authoritative liveness without legacy mirror");
+        assert_eq!(without_mirror.liveness, Some(RemoteStreamLiveness::Live));
+        assert!(without_mirror.is_live);
+
+        let unknown = parse_remote_stream_definition(
+            "url: https://example.test\nliveness: unknown\nis_live: false",
+        )
+        .expect("unknown liveness has a false compatibility mirror");
+        assert_eq!(unknown.liveness, Some(RemoteStreamLiveness::Unknown));
+        assert!(!unknown.is_live);
+
+        assert!(parse_remote_stream_definition(
+            "url: https://example.test\nliveness: finite\nis_live: true"
+        )
+        .expect_err("an unequivocally contradictory mirror must fail")
+        .to_string()
+        .contains("contradicts"));
     }
 
     #[test]

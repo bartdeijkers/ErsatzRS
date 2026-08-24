@@ -348,6 +348,18 @@ impl LanguageStrings for GermanStrings {
         )
     }
 
+    fn scan_refresh_state_message(
+        &self,
+        unresolved_resolutions: u64,
+        stale_resolutions: u64,
+        failed_intents: u64,
+        stale_intents: u64,
+    ) -> String {
+        format!(
+            "Der Status der Scan-Aktualisierung erfordert Aufmerksamkeit: {unresolved_resolutions} nicht abgeschlossene Auswirkungsauflösung(en), {stale_resolutions} festgefahrene Auswirkungsauflösung(en), {failed_intents} fehlgeschlagene Playout-Aktualisierungsanforderung(en) und {stale_intents} festgefahrene Playout-Aktualisierungsanforderung(en). Prüfen Sie die Scanner- und Planungsprotokolle und wiederholen Sie anschließend den betroffenen Scan oder die Playout-Aktualisierung."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Kontext für die Wiedergabefehlerbehebung konnte nicht geladen werden: {error}")
     }
@@ -885,6 +897,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnsupportedPlayoutKind => "Nicht unterstützter Playout-Typ.",
         TextKey::ClassicPlayout => "Klassischer Playout",
         TextKey::ClassicPlayoutState => "Klassischer Playout-Zustand",
+        TextKey::ScanRefreshState => "Status der Scan-Aktualisierung",
         TextKey::BlockPlayout => "Block-Playout",
         TextKey::ScriptedPlayout => "Skriptierter Sendeplan",
         TextKey::AlternateSchedules => "Alternative Sendepläne",
@@ -2437,7 +2450,9 @@ fn media_source_error_message(error: &str) -> String {
 fn addon_operation_error_message(code: &str, detail: &str) -> String {
     let summary = match code {
         "missing-setting" => "Konfigurieren Sie die erforderliche Add-on-Einstellung.",
-        "missing-secret" => "Konfigurieren Sie den erforderlichen Geheimnisverweis in den Add-on-Einstellungen.",
+        "missing-secret" => {
+            "Konfigurieren Sie den erforderlichen Geheimnisverweis in den Add-on-Einstellungen."
+        }
         "provider-unreachable" => "Das Add-on konnte den Anbieter nicht erreichen.",
         "provider-rejected" => "Der Anbieter hat die Add-on-Anfrage abgelehnt.",
         "provider-rate-limited" => "Der Anbieter hat das Add-on vorübergehend begrenzt.",
@@ -2445,7 +2460,11 @@ fn addon_operation_error_message(code: &str, detail: &str) -> String {
         "unsupported-url" => "Das Add-on unterstützt diese URL nicht.",
         _ => "Das Add-on hat einen Fehler gemeldet.",
     };
-    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+    if detail.trim().is_empty() {
+        summary.to_owned()
+    } else {
+        format!("{summary} {detail}")
+    }
 }
 
 fn addon_media_list_error_message(error: &str) -> String {
@@ -2461,7 +2480,9 @@ fn addon_media_list_error_message(error: &str) -> String {
     if let Some(folder) =
         normalized.strip_prefix("another list of this add-on already uses the folder ")
     {
-        return format!("Eine andere Liste dieses Add-ons verwendet den Ordner \"{folder}\" bereits.");
+        return format!(
+            "Eine andere Liste dieses Add-ons verwendet den Ordner \"{folder}\" bereits."
+        );
     }
     if let Some(folder) = normalized.strip_suffix(" is not usable as a folder name") {
         return format!("\"{folder}\" ist als Ordnername nicht verwendbar.");

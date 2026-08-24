@@ -336,6 +336,18 @@ impl LanguageStrings for PortugueseBrazilStrings {
         )
     }
 
+    fn scan_refresh_state_message(
+        &self,
+        unresolved_resolutions: u64,
+        stale_resolutions: u64,
+        failed_intents: u64,
+        stale_intents: u64,
+    ) -> String {
+        format!(
+            "O estado da atualização após a varredura requer atenção: {unresolved_resolutions} resolução(ões) de impacto não concluída(s), {stale_resolutions} resolução(ões) de impacto paralisada(s), {failed_intents} solicitação(ões) de atualização da programação com falha e {stale_intents} solicitação(ões) de atualização da programação paralisada(s). Verifique os logs do scanner e do agendamento e tente novamente a varredura ou a atualização afetada."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!(
             "Não foi possível carregar o contexto de solução de problemas de reprodução: {error}"
@@ -1035,7 +1047,11 @@ fn addon_operation_error_message(code: &str, detail: &str) -> String {
         "unsupported-url" => "O add-on não oferece suporte a esta URL.",
         _ => "O add-on relatou uma falha.",
     };
-    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+    if detail.trim().is_empty() {
+        summary.to_owned()
+    } else {
+        format!("{summary} {detail}")
+    }
 }
 
 fn addon_media_list_error_message(error: &str) -> String {
@@ -1626,6 +1642,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnsupportedPlayoutKind => "Tipo de programação sem suporte.",
         TextKey::ClassicPlayout => "Programação clássica",
         TextKey::ClassicPlayoutState => "Estado da programação clássica",
+        TextKey::ScanRefreshState => "Estado da atualização após a varredura",
         TextKey::BlockPlayout => "Programação por blocos",
         TextKey::ScriptedPlayout => "Grade com script",
         TextKey::AlternateSchedules => "Grades alternativas",
@@ -2619,12 +2636,13 @@ pub fn text(key: TextKey) -> &'static str {
 mod tests {
     use super::*;
     use crate::admin::i18n::{
-        episode_display_subtitle_text, ffmpeg_loudness_mode_text, ffmpeg_profile_error_text,
-        ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text, filler_error_text,
-        hardware_acceleration_option_text, log_level_text, media_action_error_text,
-        media_browser_error_text, media_kind_text, media_source_error_text,
-        playout_schedule_kind_text, schedule_error_text, scheduling_content_error_text,
-        settings_error_text, addon_media_list_error_text, upload_error_text, watermark_error_text, UiLanguage,
+        addon_media_list_error_text, episode_display_subtitle_text, ffmpeg_loudness_mode_text,
+        ffmpeg_profile_error_text, ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text,
+        filler_error_text, hardware_acceleration_option_text, log_level_text,
+        media_action_error_text, media_browser_error_text, media_kind_text,
+        media_source_error_text, playout_schedule_kind_text, schedule_error_text,
+        scheduling_content_error_text, settings_error_text, upload_error_text,
+        watermark_error_text, UiLanguage,
     };
 
     #[test]

@@ -183,10 +183,10 @@ impl AppState {
                 Arc::new(repositories.scheduling.clone()),
                 Arc::new(ersatzrs_core::playout_builder::PlayoutBuilder::default()),
                 Arc::new(TokioPlayoutBuildQueue {
-                    sender: playout_build_tx.clone(),
+                    sender: playout_build_tx,
                 }),
                 Arc::new(TokioScanWorkQueue::new(scan_work_tx)),
-                Arc::new(NativeScanRuntime::new(pool.clone(), playout_build_tx)),
+                Arc::new(NativeScanRuntime::new(pool.clone())),
             ),
             OperationCoordinator::new(
                 playout_locker,

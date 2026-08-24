@@ -1991,7 +1991,7 @@ repository, SQLite migration, and MySQL migration checks pass.
 id         = 'crf-02'
 phase      = 'CRF — Classic refresh continuity'
 title      = 'Scope scan invalidation to dependent playouts'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'remote-stream-playlists'
 plan       = 'plans/playout-refresh-and-addon-tv-deduplication.md'
 depends_on = ['crf-01']
@@ -2007,7 +2007,26 @@ unrelated libraries, and prove that the related Refresh matches uninterrupted
 scheduling without replay while every unrelated playout row and anchor remains
 unchanged. Health exposes unresolved global-impact or failed refresh state.
 '''
-evidence = ''
+evidence = '''
+Stable membership and effective metadata deltas now expand current Classic
+schedule dependencies across direct media, collections, smart and multi
+collections, searches, playlists, reruns, and fillers. Pure reorders invalidate
+only the exact managed playlist. One backend-atomic, generation-guarded intent
+per playout commits with reconciliation and is coalesced through application,
+startup, cadence, and partial-success periodic admission.
+
+A durable resolution marker precedes generated YAML/NFO mutation, remains
+active through the database boundary and ownership-sidecar publication, and
+replays before background workers start after either crash edge. Stale replay
+failure cannot overwrite newer work. File-backed SQLite production coverage
+proves NFO-only changes, pure reorder scoping, shuffled restart continuity, and
+byte-stable unrelated rows. The MySQL 8.4 CI path exercises the real scanner,
+application queue, host preflight, and a separate two-connection InnoDB race
+for resolution and intent upserts. Aggregate-only health is localized for all
+supported cultures. Focused scanner, persistence, application, scheduler,
+migration, Clippy, architecture, hydration, and web parity checks pass; two
+independent closeout audits report no remaining release blocker.
+'''
 
 [[milestone]]
 id         = 'amm-h-01'

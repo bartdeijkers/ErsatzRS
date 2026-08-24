@@ -1064,35 +1064,23 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             } else {
                 form.requested_presentation_kind
             };
+        let synchronizer = AddonMediaListSynchronizer::new(self.0.clone());
+        let generated_playlist_removal = if form.generate_playlist {
+            None
+        } else {
+            synchronizer.prepare_generated_playlist_removal(id).await?
+        };
         if parent_nfo_for(effective_presentation).is_some() {
             ensure_generated_parent_nfo(&self.0, id, effective_presentation, None).await?;
         }
         reconcile_projection(&self.0, id, form.requested_presentation_kind).await?;
-        AddonMediaListSynchronizer::new(self.0.clone())
-            .match_list_items(id)
-            .await?;
+        synchronizer.match_list_items(id).await?;
 
         let mut commit = crate::db::begin_write(&self.0).await.repository()?;
-        if !form.generate_playlist {
-            let playlist_id = sqlx::query_scalar::<_, Option<EntityId>>(
-                r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ?"#,
-            )
-            .bind(id)
-            .fetch_one(&mut *commit)
-            .await
-            .repository()?;
-            if let Some(playlist_id) = playlist_id {
-                sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ?"#)
-                    .bind(playlist_id)
-                    .execute(&mut *commit)
-                    .await
-                    .repository()?;
-                sqlx::query(r#"UPDATE "AddonMediaList" SET "PlaylistId" = NULL WHERE "Id" = ?"#)
-                    .bind(id)
-                    .execute(&mut *commit)
-                    .await
-                    .repository()?;
-            }
+        if let Some(removal) = &generated_playlist_removal {
+            synchronizer
+                .commit_generated_playlist_removal_in_tx(&mut commit, id, removal)
+                .await?;
         }
         sqlx::query(
             r#"UPDATE "AddonMediaList"

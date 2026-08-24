@@ -16,3 +16,69 @@ pub trait ScanProgressSink: Send + Sync {
 impl ScanProgressSink for () {
     fn report(&self, _fraction: f32) {}
 }
+
+/// Bounded reason for a playout refresh discovered while reconciling a scan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScanPlayoutRefreshReason {
+    /// A managed remote-stream playlist gained one or more stable members.
+    RemoteStreamMembershipAdded,
+    /// A managed remote-stream playlist lost one or more stable members.
+    RemoteStreamMembershipRemoved,
+    /// Existing stable members changed their playable projection.
+    RemoteStreamMembershipReplaced,
+    /// Upstream identity replacement changed the persisted media-item identity.
+    RemoteStreamMembershipReidentified,
+    /// Stable members retained identity but changed playlist order.
+    RemoteStreamMembershipReordered,
+    /// More than one bounded membership-change category applies.
+    RemoteStreamMembershipMixed,
+}
+
+impl ScanPlayoutRefreshReason {
+    /// Stable diagnostic token that never includes provider or media identity.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::RemoteStreamMembershipAdded => "remote-stream-membership-added",
+            Self::RemoteStreamMembershipRemoved => "remote-stream-membership-removed",
+            Self::RemoteStreamMembershipReplaced => "remote-stream-membership-replaced",
+            Self::RemoteStreamMembershipReidentified => "remote-stream-membership-reidentified",
+            Self::RemoteStreamMembershipReordered => "remote-stream-membership-reordered",
+            Self::RemoteStreamMembershipMixed => "remote-stream-membership-mixed",
+        }
+    }
+
+    /// Decode a persisted bounded diagnostic token.
+    #[must_use]
+    pub fn from_token(token: &str) -> Option<Self> {
+        match token {
+            "remote-stream-membership-added" => Some(Self::RemoteStreamMembershipAdded),
+            "remote-stream-membership-removed" => Some(Self::RemoteStreamMembershipRemoved),
+            "remote-stream-membership-replaced" => Some(Self::RemoteStreamMembershipReplaced),
+            "remote-stream-membership-reidentified" => {
+                Some(Self::RemoteStreamMembershipReidentified)
+            }
+            "remote-stream-membership-reordered" => Some(Self::RemoteStreamMembershipReordered),
+            "remote-stream-membership-mixed" => Some(Self::RemoteStreamMembershipMixed),
+            _ => None,
+        }
+    }
+
+    /// Coalesce multiple discoveries for one playout without losing that the
+    /// scan crossed more than one dependency category.
+    #[must_use]
+    pub const fn merge(self, other: Self) -> Self {
+        if self as u8 == other as u8 {
+            self
+        } else {
+            Self::RemoteStreamMembershipMixed
+        }
+    }
+}
+
+/// One dependency-scoped playout refresh produced by a completed scan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ScanPlayoutRefresh {
+    pub playout_id: crate::EntityId,
+    pub reason: ScanPlayoutRefreshReason,
+}

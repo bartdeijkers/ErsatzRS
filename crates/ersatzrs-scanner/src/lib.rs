@@ -15,7 +15,7 @@ use ersatzrs_domain::{
     classify_alternate_version, classify_extra_video, normalize_group_key,
     normalize_sub_kind_token, AlternateVersionClassification, ContentKind, ExtraParentHint,
     ExtraVideoClassification, LibraryMediaKind, MediaChapter, MediaStream, MediaStreamKind,
-    ScanProgressSink,
+    ScanPlayoutRefresh, ScanProgressSink,
 };
 use ersatzrs_infra::addons::AddonRuntimeContext;
 use ersatzrs_infra::db::{Db, DbPool, DbRow};
@@ -179,7 +179,7 @@ pub struct LocalScanReport {
     pub scanned_files: usize,
     pub failed_files: usize,
     pub issues: Vec<String>,
-    pub playout_ids_to_refresh: Vec<i64>,
+    pub playout_refreshes: Vec<ScanPlayoutRefresh>,
 }
 
 /// One pre-enumerated unit of work for the local scanner. Materializing the
@@ -482,8 +482,8 @@ async fn scan_local_library_with_progress_once(
                             )
                             .await
                             {
-                                Ok(playout_ids) => {
-                                    report.playout_ids_to_refresh.extend(playout_ids);
+                                Ok(playout_refreshes) => {
+                                    report.playout_refreshes.extend(playout_refreshes);
                                     report.scanned_files += 1;
                                 }
                                 Err(error) => {
@@ -557,8 +557,19 @@ async fn scan_local_library_with_progress_once(
     if let Some(sink) = progress {
         sink.report(1.0);
     }
-    report.playout_ids_to_refresh.sort_unstable();
-    report.playout_ids_to_refresh.dedup();
+    let mut refreshes = BTreeMap::new();
+    for refresh in std::mem::take(&mut report.playout_refreshes) {
+        refreshes
+            .entry(refresh.playout_id)
+            .and_modify(|reason: &mut ersatzrs_domain::ScanPlayoutRefreshReason| {
+                *reason = reason.merge(refresh.reason);
+            })
+            .or_insert(refresh.reason);
+    }
+    report.playout_refreshes = refreshes
+        .into_iter()
+        .map(|(playout_id, reason)| ScanPlayoutRefresh { playout_id, reason })
+        .collect();
     Ok(report)
 }
 
@@ -689,7 +700,16 @@ fn collect_remote_stream_files(root: &str) -> Vec<LocalScanWork> {
             }
         }
     }
-    files.sort_by(|left, right| work_path(left).cmp(work_path(right)));
+    files.sort_by(|left, right| {
+        let class = |work: &LocalScanWork| match work {
+            LocalScanWork::RemoteStreamPlaylist { .. } => 0_u8,
+            LocalScanWork::RemoteStream { .. } => 1_u8,
+            _ => 2_u8,
+        };
+        class(left)
+            .cmp(&class(right))
+            .then_with(|| work_path(left).cmp(work_path(right)))
+    });
     files
 }
 
@@ -1843,19 +1863,67 @@ async fn upsert_local_remote_stream(
     let path_text = path.display().to_string();
     let path_hash = path_hash(&path_text);
 
-    let maybe_existing = sqlx::query(
-        r#"SELECT "mf"."MediaVersionId",
-                  "mv"."RemoteStreamId" AS "MediaItemId",
-                  "rsm"."Id" AS "MetadataId"
-           FROM "MediaFile" AS "mf"
-           JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
-           JOIN "RemoteStreamMetadata" AS "rsm"
-             ON "rsm"."RemoteStreamId" = "mv"."RemoteStreamId"
-           WHERE "mf"."PathHash" = ?"#,
-    )
-    .bind(&path_hash)
-    .fetch_optional(&mut *tx)
-    .await?;
+    let maybe_existing = if let (Some(addon_id), Some(provider_id)) = (
+        definition.addon.as_deref(),
+        definition.provider_id.as_deref(),
+    ) {
+        let exact = sqlx::query(
+            r#"SELECT "mv"."Id" AS "MediaVersionId",
+                      "rs"."Id" AS "MediaItemId",
+                      "rsm"."Id" AS "MetadataId"
+               FROM "RemoteStream" AS "rs"
+               JOIN "RemoteStreamMetadata" AS "rsm"
+                 ON "rsm"."RemoteStreamId" = "rs"."Id"
+               JOIN "MediaVersion" AS "mv" ON "mv"."RemoteStreamId" = "rs"."Id"
+               WHERE "rs"."AddonId" = ? AND "rs"."ProviderId" = ?
+               ORDER BY "mv"."Id" LIMIT 1"#,
+        )
+        .bind(addon_id)
+        .bind(provider_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        match exact {
+            Some(row) => Some(row),
+            None => {
+                sqlx::query(
+                    r#"SELECT "mv"."Id" AS "MediaVersionId",
+                              "rs"."Id" AS "MediaItemId",
+                              "rsm"."Id" AS "MetadataId"
+                       FROM "RemoteStream" AS "rs"
+                       JOIN "RemoteStreamMetadata" AS "rsm"
+                         ON "rsm"."RemoteStreamId" = "rs"."Id"
+                       JOIN "MediaVersion" AS "mv" ON "mv"."RemoteStreamId" = "rs"."Id"
+                       WHERE "rs"."AddonId" = ?
+                         AND LOWER("rs"."ProviderId") = LOWER(?)
+                       ORDER BY "mv"."Id" LIMIT 1"#,
+                )
+                .bind(addon_id)
+                .bind(provider_id)
+                .fetch_optional(&mut *tx)
+                .await?
+            }
+        }
+    } else {
+        None
+    };
+    let maybe_existing = match maybe_existing {
+        Some(row) => Some(row),
+        None => {
+            sqlx::query(
+                r#"SELECT "mf"."MediaVersionId",
+                          "mv"."RemoteStreamId" AS "MediaItemId",
+                          "rsm"."Id" AS "MetadataId"
+                   FROM "MediaFile" AS "mf"
+                   JOIN "MediaVersion" AS "mv" ON "mv"."Id" = "mf"."MediaVersionId"
+                   JOIN "RemoteStreamMetadata" AS "rsm"
+                     ON "rsm"."RemoteStreamId" = "mv"."RemoteStreamId"
+                   WHERE "mf"."PathHash" = ?"#,
+            )
+            .bind(&path_hash)
+            .fetch_optional(&mut *tx)
+            .await?
+        }
+    };
 
     let fallback_title = path
         .file_stem()
@@ -1914,6 +1982,26 @@ async fn upsert_local_remote_stream(
         .bind(metadata_id)
         .execute(&mut *tx)
         .await?;
+        let updated_file = sqlx::query(
+            r#"UPDATE "MediaFile" SET "Path" = ?, "PathHash" = ?
+               WHERE "MediaVersionId" = ?"#,
+        )
+        .bind(&path_text)
+        .bind(&path_hash)
+        .bind(version_id)
+        .execute(&mut *tx)
+        .await?;
+        if updated_file.rows_affected() == 0 {
+            sqlx::query(
+                r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+                   VALUES (?, ?, ?)"#,
+            )
+            .bind(version_id)
+            .bind(&path_text)
+            .bind(&path_hash)
+            .execute(&mut *tx)
+            .await?;
+        }
         (item_id, metadata_id, version_id, true)
     } else {
         let item_id = insert_media_item(&mut tx, library_path.id).await?;
@@ -2233,67 +2321,316 @@ async fn synchronize_remote_stream_playlist(
     library_path: &LocalLibraryPath,
     path: &Path,
     ffprobe_path: &str,
-) -> Result<Vec<i64>> {
-    let yaml = std::fs::read(path).map_err(|source| ScannerError::RemoteStreamPlaylistRead {
-        path: path.display().to_string(),
-        source,
-    })?;
-    let manifest_text = std::str::from_utf8(&yaml).map_err(|error| {
-        remote_stream_playlist::PlaylistError::Manifest(format!("manifest is not UTF-8: {error}"))
-    })?;
-    let manifest = remote_stream_playlist::parse_playlist_manifest(manifest_text, path)?;
-    let runtime = AddonRuntimeContext {
-        ffmpeg_path: Some(paired_ffmpeg_path(ffprobe_path)),
-        ffprobe_path: Some(ffprobe_path.to_owned()),
-    };
-    let sync =
-        remote_stream_playlist::sync_playlist_files(pool, path, &yaml, &manifest, &runtime).await?;
-    let mut ordered_items = Vec::new();
-    let mut materialized = Vec::new();
-    for definition in &sync.definitions {
-        let (parsed, source) =
-            load_remote_stream_definition(pool, &definition.path, ffprobe_path).await?;
-        let item_id = upsert_local_remote_stream(
+) -> Result<Vec<ScanPlayoutRefresh>> {
+    synchronize_remote_stream_playlist_to_boundary(
+        pool,
+        library_id,
+        library_path,
+        path,
+        ffprobe_path,
+        PlaylistSyncBoundary::Published,
+    )
+    .await
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PlaylistSyncBoundary {
+    Published,
+    #[cfg(test)]
+    DatabaseCommitted,
+}
+
+#[allow(clippy::too_many_lines)]
+async fn synchronize_remote_stream_playlist_to_boundary(
+    pool: &DbPool,
+    library_id: i64,
+    library_path: &LocalLibraryPath,
+    path: &Path,
+    ffprobe_path: &str,
+    boundary: PlaylistSyncBoundary,
+) -> Result<Vec<ScanPlayoutRefresh>> {
+    let mut reason = ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipMixed;
+    let resolution_generation =
+        ersatzrs_infra::scan_refresh::begin_resolution(pool, library_id, reason).await?;
+
+    let result = async {
+        let yaml =
+            std::fs::read(path).map_err(|source| ScannerError::RemoteStreamPlaylistRead {
+                path: path.display().to_string(),
+                source,
+            })?;
+        let manifest_text = std::str::from_utf8(&yaml).map_err(|error| {
+            remote_stream_playlist::PlaylistError::Manifest(format!(
+                "manifest is not UTF-8: {error}"
+            ))
+        })?;
+        let manifest = remote_stream_playlist::parse_playlist_manifest(manifest_text, path)?;
+        let runtime = AddonRuntimeContext {
+            ffmpeg_path: Some(paired_ffmpeg_path(ffprobe_path)),
+            ffprobe_path: Some(ffprobe_path.to_owned()),
+        };
+        let sync =
+            remote_stream_playlist::stage_playlist_files(pool, path, &yaml, &manifest, &runtime)
+                .await?;
+        let relative = path
+            .strip_prefix(&library_path.path)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let managed_source = format!("remote-stream-playlist:v1:{library_id}:{relative}");
+        reason = membership_refresh_reason(&sync.membership_delta, false);
+        let managed_playlist_id: Option<i64> =
+            sqlx::query_scalar(r#"SELECT "Id" FROM "Playlist" WHERE "ManagedSource" = ?"#)
+                .bind(&managed_source)
+                .fetch_optional(pool)
+                .await?;
+        let existing_order = match managed_playlist_id {
+            Some(playlist_id) => managed_playlist_media_item_ids(pool, playlist_id).await?,
+            None => Vec::new(),
+        };
+        let playlist_existence_changed =
+            manifest.manifest.create_playlist != managed_playlist_id.is_some();
+        let initial_change = sync.membership_changed || playlist_existence_changed;
+        if initial_change && !sync.membership_changed {
+            reason = ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipMixed;
+        }
+
+        let resolver =
+            ersatzrs_infra::repositories::SqliteSchedulingContentRepository::new(pool.clone());
+        let mut affected = std::collections::BTreeSet::new();
+        let mut old_media_by_provider = std::collections::BTreeMap::new();
+        if initial_change {
+            let old_provider_ids = sync
+                .membership_delta
+                .removed_provider_ids
+                .iter()
+                .chain(&sync.membership_delta.changed_provider_ids)
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>();
+            old_media_by_provider = remote_stream_media_ids_by_provider_id(
+                pool,
+                library_id,
+                &manifest.manifest.addon,
+                &old_provider_ids,
+            )
+            .await?;
+            let old_media_ids = old_media_by_provider.values().copied().collect();
+            affected.extend(
+                resolver
+                    .classic_playouts_affected_by_scan(&old_media_ids, managed_playlist_id)
+                    .await?,
+            );
+        }
+
+        let mut ordered_items = Vec::new();
+        let mut materialized = Vec::new();
+        for definition in &sync.definitions {
+            let (parsed, source) =
+                load_remote_stream_definition(pool, &definition.path, ffprobe_path).await?;
+            let item_id = upsert_local_remote_stream(
+                pool,
+                library_path,
+                &definition.path,
+                &parsed,
+                &source,
+                None,
+            )
+            .await?;
+            let liveness = parsed.effective_liveness()?;
+            if definition.active
+                && (liveness == ersatzrs_domain::RemoteStreamLiveness::Live
+                    || (liveness == ersatzrs_domain::RemoteStreamLiveness::Finite
+                        && definition.duration_seconds.is_some_and(|value| value > 0)))
+            {
+                ordered_items.push(item_id);
+            }
+            materialized.push((item_id, parsed));
+        }
+        link_materialized_remote_stream_fragments(pool, &materialized).await?;
+
+        let sql_order_changed = if manifest.manifest.create_playlist {
+            existing_order != ordered_items
+        } else {
+            managed_playlist_id.is_some()
+        };
+        let effective_change = initial_change || sql_order_changed;
+        if effective_change && !sync.membership_changed {
+            reason = ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipMixed;
+        }
+
+        if effective_change {
+            let new_provider_ids = sync
+                .membership_delta
+                .added_provider_ids
+                .iter()
+                .chain(&sync.membership_delta.changed_provider_ids)
+                .cloned()
+                .collect::<std::collections::BTreeSet<_>>();
+            let new_media_by_provider = remote_stream_media_ids_by_provider_id(
+                pool,
+                library_id,
+                &manifest.manifest.addon,
+                &new_provider_ids,
+            )
+            .await?;
+            let reidentified = old_media_by_provider
+                .iter()
+                .any(|(provider_id, old_media_id)| {
+                    new_media_by_provider
+                        .get(provider_id)
+                        .is_some_and(|new_media_id| new_media_id != old_media_id)
+                });
+            reason = if sync.membership_changed {
+                membership_refresh_reason(&sync.membership_delta, reidentified)
+            } else {
+                ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipMixed
+            };
+            let new_media_ids = new_media_by_provider
+                .values()
+                .copied()
+                .collect::<std::collections::BTreeSet<_>>();
+            // Reordering changes only the exact managed playlist. Feeding all
+            // of its stable members back through collection/search resolution
+            // would refresh unrelated sources that merely share one item.
+            affected.extend(
+                resolver
+                    .classic_playouts_affected_by_scan(
+                        &new_media_ids,
+                        sql_order_changed.then_some(managed_playlist_id).flatten(),
+                    )
+                    .await?,
+            );
+        }
+
+        let affected = affected.into_iter().collect::<Vec<_>>();
+        synchronize_managed_playlist(
             pool,
-            library_path,
-            &definition.path,
-            &parsed,
-            &source,
-            None,
+            &managed_source,
+            &manifest.name,
+            manifest.manifest.create_playlist,
+            &ordered_items,
+            effective_change,
+            Some((library_id, reason, affected.as_slice())),
         )
         .await?;
-        let liveness = parsed.effective_liveness()?;
-        if definition.active
-            && (liveness == ersatzrs_domain::RemoteStreamLiveness::Live
-                || (liveness == ersatzrs_domain::RemoteStreamLiveness::Finite
-                    && definition.duration_seconds.is_some_and(|value| value > 0)))
-        {
-            ordered_items.push(item_id);
+        let refreshes = affected
+            .into_iter()
+            .map(|playout_id| ScanPlayoutRefresh { playout_id, reason })
+            .collect::<Vec<_>>();
+        #[cfg(test)]
+        if boundary == PlaylistSyncBoundary::DatabaseCommitted {
+            return Ok(refreshes);
         }
-        materialized.push((item_id, parsed));
+        #[cfg(not(test))]
+        let _ = boundary;
+        sync.publish_sidecar()?;
+        complete_scan_refresh_resolution(pool, library_id, resolution_generation, reason).await?;
+        Ok::<_, ScannerError>(refreshes)
     }
-    link_materialized_remote_stream_fragments(pool, &materialized).await?;
-    let relative = path
-        .strip_prefix(&library_path.path)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .replace('\\', "/");
-    let managed_source = format!("remote-stream-playlist:v1:{library_id}:{relative}");
-    let mut affected = synchronize_managed_playlist(
-        pool,
-        &managed_source,
-        &manifest.name,
-        manifest.manifest.create_playlist,
-        &ordered_items,
-        sync.membership_changed,
+    .await;
+
+    match result {
+        Ok(refreshes) => Ok(refreshes),
+        Err(error) => {
+            if let Err(state_error) = ersatzrs_infra::scan_refresh::fail_resolution(
+                pool,
+                library_id,
+                resolution_generation,
+                &error.to_string(),
+            )
+            .await
+            {
+                warn!(
+                    library_id,
+                    error = %state_error,
+                    "failed to retain scan refresh resolution failure"
+                );
+            }
+            Err(error)
+        }
+    }
+}
+
+fn membership_refresh_reason(
+    delta: &remote_stream_playlist::PlaylistMembershipDelta,
+    reidentified: bool,
+) -> ersatzrs_domain::ScanPlayoutRefreshReason {
+    use remote_stream_playlist::PlaylistMembershipChangeReason;
+
+    let reason = match delta.reason() {
+        PlaylistMembershipChangeReason::Added => {
+            ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipAdded
+        }
+        PlaylistMembershipChangeReason::Removed => {
+            ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved
+        }
+        PlaylistMembershipChangeReason::ChangedOrReplaced => {
+            ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced
+        }
+        PlaylistMembershipChangeReason::Reordered => {
+            ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipReordered
+        }
+        PlaylistMembershipChangeReason::Unchanged | PlaylistMembershipChangeReason::Mixed => {
+            ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipMixed
+        }
+    };
+    if reidentified
+        && reason == ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced
+    {
+        ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipReidentified
+    } else if reidentified {
+        reason.merge(ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipReidentified)
+    } else {
+        reason
+    }
+}
+
+async fn remote_stream_media_ids_by_provider_id(
+    pool: &DbPool,
+    library_id: i64,
+    addon_id: &str,
+    provider_ids: &std::collections::BTreeSet<String>,
+) -> Result<std::collections::BTreeMap<String, i64>> {
+    if provider_ids.is_empty() {
+        return Ok(std::collections::BTreeMap::new());
+    }
+    let rows = sqlx::query(
+        r#"SELECT "rs"."Id", "rs"."ProviderId"
+           FROM "RemoteStream" AS "rs"
+           JOIN "MediaItem" AS "mi" ON "mi"."Id" = "rs"."Id"
+           JOIN "LibraryPath" AS "lp" ON "lp"."Id" = "mi"."LibraryPathId"
+           WHERE "lp"."LibraryId" = ? AND "rs"."AddonId" = ?
+             AND "rs"."ProviderId" IS NOT NULL
+           ORDER BY "rs"."Id""#,
     )
+    .bind(library_id)
+    .bind(addon_id)
+    .fetch_all(pool)
     .await?;
-    if sync.membership_changed {
-        affected.extend(affected_playouts_for_remote_stream_membership(pool).await?);
+    let mut result = std::collections::BTreeMap::new();
+    for row in rows {
+        let provider_id = row.get::<String, _>("ProviderId");
+        if provider_ids
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(&provider_id))
+        {
+            result
+                .entry(provider_id.to_ascii_lowercase())
+                .or_insert_with(|| row.get::<i64, _>("Id"));
+        }
     }
-    affected.sort_unstable();
-    affected.dedup();
-    Ok(affected)
+    Ok(result)
+}
+
+async fn managed_playlist_media_item_ids(pool: &DbPool, playlist_id: i64) -> Result<Vec<i64>> {
+    Ok(sqlx::query_scalar(
+        r#"SELECT "MediaItemId" FROM "PlaylistItem"
+           WHERE "PlaylistId" = ? AND "MediaItemId" IS NOT NULL
+           ORDER BY "Index", "Id""#,
+    )
+    .bind(playlist_id)
+    .fetch_all(pool)
+    .await?)
 }
 
 async fn link_materialized_remote_stream_fragments(
@@ -2361,7 +2698,8 @@ async fn synchronize_managed_playlist(
     enabled: bool,
     ordered_items: &[i64],
     membership_changed: bool,
-) -> Result<Vec<i64>> {
+    refresh_intent: Option<(i64, ersatzrs_domain::ScanPlayoutRefreshReason, &[i64])>,
+) -> Result<()> {
     let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
     let existing: Option<i64> =
         sqlx::query_scalar(r#"SELECT "Id" FROM "Playlist" WHERE "ManagedSource" = ?"#)
@@ -2370,17 +2708,18 @@ async fn synchronize_managed_playlist(
             .await?;
     if !enabled {
         if let Some(id) = existing {
-            let affected = affected_playouts_for_playlist(&mut tx, id).await?;
             sqlx::query(r#"DELETE FROM "Playlist" WHERE "Id" = ? AND "ManagedSource" = ?"#)
                 .bind(id)
                 .bind(managed_source)
                 .execute(&mut *tx)
                 .await?;
+            persist_scan_refresh_intents(&mut tx, refresh_intent).await?;
             tx.commit().await?;
-            return Ok(affected);
+            return Ok(());
         }
+        persist_scan_refresh_intents(&mut tx, refresh_intent).await?;
         tx.commit().await?;
-        return Ok(Vec::new());
+        return Ok(());
     }
     let group_id: Option<i64> = sqlx::query_scalar(
         r#"SELECT "Id" FROM "PlaylistGroup" WHERE "IsSystem" = 1 ORDER BY "Id" LIMIT 1"#,
@@ -2424,12 +2763,9 @@ async fn synchronize_managed_playlist(
         .await?;
         ersatzrs_infra::db::last_insert_id(result)
     };
-    let replace_items = existing.is_none() || membership_changed;
-    let affected = if replace_items && existing.is_some() {
-        affected_playouts_for_playlist(&mut tx, playlist_id).await?
-    } else {
-        Vec::new()
-    };
+    let persisted_order = managed_playlist_media_item_ids_in_tx(&mut tx, playlist_id).await?;
+    let replace_items =
+        existing.is_none() || membership_changed || persisted_order != ordered_items;
     if replace_items {
         sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
             .bind(playlist_id)
@@ -2450,33 +2786,49 @@ async fn synchronize_managed_playlist(
             .await?;
         }
     }
+    persist_scan_refresh_intents(&mut tx, refresh_intent).await?;
     tx.commit().await?;
-    Ok(affected)
+    Ok(())
 }
 
-async fn affected_playouts_for_playlist(
+async fn managed_playlist_media_item_ids_in_tx(
     tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
     playlist_id: i64,
 ) -> Result<Vec<i64>> {
     Ok(sqlx::query_scalar(
-        r#"SELECT DISTINCT "PlayoutId"
-           FROM "PlayoutProgramScheduleAnchor"
-           WHERE "PlaylistId" = ?
-           ORDER BY "PlayoutId""#,
+        r#"SELECT "MediaItemId" FROM "PlaylistItem"
+           WHERE "PlaylistId" = ? AND "MediaItemId" IS NOT NULL
+           ORDER BY "Index", "Id""#,
     )
     .bind(playlist_id)
     .fetch_all(&mut **tx)
     .await?)
 }
 
-async fn affected_playouts_for_remote_stream_membership(pool: &DbPool) -> Result<Vec<i64>> {
-    Ok(sqlx::query_scalar(
-        r#"SELECT DISTINCT "PlayoutId"
-           FROM "PlayoutProgramScheduleAnchor"
-           ORDER BY "PlayoutId""#,
+async fn persist_scan_refresh_intents(
+    tx: &mut sqlx::Transaction<'_, ersatzrs_infra::db::Db>,
+    refresh_intent: Option<(i64, ersatzrs_domain::ScanPlayoutRefreshReason, &[i64])>,
+) -> Result<()> {
+    if let Some((library_id, reason, playout_ids)) = refresh_intent {
+        ersatzrs_infra::scan_refresh::persist_refresh_intents(tx, library_id, reason, playout_ids)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn complete_scan_refresh_resolution(
+    pool: &DbPool,
+    library_id: i64,
+    generation: i64,
+    reason: ersatzrs_domain::ScanPlayoutRefreshReason,
+) -> Result<()> {
+    let mut tx = ersatzrs_infra::db::begin_write(pool).await?;
+    ersatzrs_infra::scan_refresh::complete_resolution_in_tx(
+        &mut tx, library_id, generation, reason,
     )
-    .fetch_all(pool)
-    .await?)
+    .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 fn paired_ffmpeg_path(ffprobe_path: &str) -> String {
@@ -4203,14 +4555,49 @@ fn decode_library_media_kind(row: &DbRow) -> LibraryMediaKind {
 mod tests {
     use super::{
         is_scannable_for_kind, load_movie_nfo, local_metadata_kind, locate_movie_nfos,
-        locate_music_video_artwork, path_hash, retry_sqlite_busy, EmbeddedFacets,
-        METADATA_KIND_EMBEDDED, METADATA_KIND_FALLBACK, METADATA_KIND_SIDECAR,
+        locate_music_video_artwork, membership_refresh_reason, path_hash, remote_stream_playlist,
+        retry_sqlite_busy, EmbeddedFacets, METADATA_KIND_EMBEDDED, METADATA_KIND_FALLBACK,
+        METADATA_KIND_SIDECAR,
     };
     use ersatzrs_domain::{
         classify_alternate_version, classify_extra_directory_name, classify_extra_video,
-        ExtraParentHint, LibraryMediaKind,
+        ExtraParentHint, LibraryMediaKind, ScanPlayoutRefreshReason,
     };
     use std::path::Path;
+
+    #[test]
+    fn remote_stream_work_orders_manifests_before_definitions_deterministically() {
+        let temp = tempfile::tempdir().expect("remote stream root");
+        let nested = temp.path().join("nested");
+        std::fs::create_dir_all(&nested).expect("nested folder");
+        let mut manifests = vec![
+            temp.path().join("Zulu.playlist.yml"),
+            nested.join("Alpha.playlist.yaml"),
+        ];
+        let mut definitions = vec![temp.path().join("000.yml"), nested.join("Beta.yaml")];
+        for path in manifests.iter().chain(&definitions) {
+            std::fs::write(path, b"fixture").expect("remote stream fixture");
+        }
+
+        manifests.sort();
+        definitions.sort();
+        let expected = manifests
+            .into_iter()
+            .map(|path| (true, path))
+            .chain(definitions.into_iter().map(|path| (false, path)))
+            .collect::<Vec<_>>();
+        let actual = super::collect_remote_stream_files(&temp.path().display().to_string())
+            .iter()
+            .map(|work| {
+                (
+                    matches!(work, super::LocalScanWork::RemoteStreamPlaylist { .. }),
+                    super::work_path(work).to_owned(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(actual, expected);
+    }
 
     #[test]
     fn movie_sidecar_falls_through_release_art_to_the_jellyfin_sidecar() {
@@ -5309,6 +5696,543 @@ broadcasters: [Current Network]
     }
 
     #[cfg(not(feature = "mysql"))]
+    async fn file_test_db(path: &Path) -> sqlx::SqlitePool {
+        use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+        use sqlx::Executor;
+        use std::time::Duration as StdDuration;
+
+        let database_url = format!("sqlite:{}", path.display());
+        let options = database_url
+            .parse::<SqliteConnectOptions>()
+            .expect("sqlite options")
+            .create_if_missing(true)
+            .foreign_keys(true)
+            .busy_timeout(StdDuration::from_secs(5));
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await
+            .expect("connect file-backed sqlite");
+        pool.execute("PRAGMA foreign_keys = ON")
+            .await
+            .expect("foreign keys");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate");
+        pool
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[allow(clippy::too_many_lines)]
+    async fn seed_managed_remote_stream_playlist(
+        pool: &sqlx::SqlitePool,
+        library_root: &Path,
+        package_root: &Path,
+    ) {
+        use sqlx::Executor;
+
+        const ADDON_ID: &str = "org.ersatzrs.addon.fixture";
+        std::fs::create_dir_all(library_root).expect("remote stream library root");
+        std::fs::create_dir_all(package_root).expect("fixture add-on package");
+        std::fs::write(package_root.join("fixture.bin"), b"not executed")
+            .expect("fixture add-on entrypoint");
+        let manifest_path = library_root.join("Fixture.playlist.yml");
+        std::fs::write(
+            &manifest_path,
+            format!(
+                r"name: Fixture
+url: https://example.test/playlist
+addon: {ADDON_ID}
+sync:
+  interval: 24h
+  max_items: 10
+  order: upstream
+  on_removed: trash
+create_playlist: true
+",
+            ),
+        )
+        .expect("playlist manifest");
+
+        let library_path = super::LocalLibraryPath {
+            id: 1,
+            path: library_root.display().to_string(),
+            media_kind: LibraryMediaKind::RemoteStreams,
+        };
+        seed_local_library(pool, &library_path, "Remote Streams", 7).await;
+
+        let addon_manifest = serde_json::json!({
+            "manifest_version": 1,
+            "id": ADDON_ID,
+            "version": "1.0.0",
+            "name": {"en-US": "Fixture"},
+            "summary": {"en-US": "Fixture playlist add-on"},
+            "license": "GPL-3.0-or-later",
+            "source_url": "https://example.test/source",
+            "host_version": "*",
+            "capabilities": [
+                {"id": "addon.check.v1"},
+                {"id": "remote-stream.list.v4"},
+                {"id": "remote-stream.play.v1"}
+            ],
+            "entrypoints": {
+                "any": {"path": "fixture.bin", "kind": "native"}
+            },
+            "permissions": {},
+            "settings": [],
+            "panels": []
+        });
+        let content_sha256 = ersatzrs_infra::addons::calculate_addon_content_sha256(package_root)
+            .await
+            .expect("fixture add-on hash");
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256",
+                   "ContentSha256", "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+               ) VALUES (?, NULL, '1.0.0', 1, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(ADDON_ID)
+        .bind("a".repeat(64))
+        .bind(content_sha256)
+        .bind(addon_manifest.to_string())
+        .bind(package_root.to_string_lossy().into_owned())
+        .bind(&now)
+        .bind(&now)
+        .execute(pool)
+        .await
+        .expect("fixture add-on installation");
+        pool.execute(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+                   "ContentKindOverride", "ReviewState"
+               ) VALUES (
+                   50, 'org.ersatzrs.addon.fixture', 'fixture/list',
+                   'https://example.test/playlist', 'Fixture', 0, 3
+               )"#,
+        )
+        .await
+        .expect("managed add-on list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLibrary" (
+                   "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+               ) VALUES (50, 1, 'Fixture', ?)"#,
+        )
+        .bind(manifest_path.to_string_lossy().into_owned())
+        .execute(pool)
+        .await
+        .expect("managed add-on list library");
+        pool.execute(
+            r#"INSERT INTO "AddonMediaListItem" (
+                   "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank",
+                   "Title", "SourceUrl", "DurationSeconds", "Published",
+                   "ProviderMetadataJson", "ContentKind", "PublishedLiveness"
+               ) VALUES (
+                   50, 'one', 'OldMatch', 4, 0, 'OldMatch',
+                   'https://example.test/one', 60, 1, '{"title":"OldMatch"}', 4, 1
+               )"#,
+        )
+        .await
+        .expect("published add-on list item");
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn playlist_publication_failure_marks_resolution_and_replays_on_restart() {
+        use ersatzrs_domain::ScanPlayoutRefreshReason;
+        use sqlx::Row as _;
+
+        let temp = tempfile::tempdir().expect("playlist fixture");
+        let library_root = temp.path().join("remote-streams");
+        let package_root = temp.path().join("addon-package");
+        let pool = test_db().await;
+        seed_managed_remote_stream_playlist(&pool, &library_root, &package_root).await;
+        let managed_folder = library_root.join("Fixture");
+        std::fs::create_dir_all(&managed_folder).expect("managed folder");
+        let blocked_nfo = managed_folder.join("one.nfo");
+        std::fs::create_dir(&blocked_nfo).expect("NFO publication blocker");
+
+        let failed = super::scan_local_library(
+            &pool,
+            &super::LocalScanConfig {
+                library_id: 1,
+                ffprobe_path: "unused-ffprobe".to_owned(),
+            },
+        )
+        .await
+        .expect("failed file is reported without aborting the library scan");
+        assert_eq!(failed.failed_files, 1, "issues: {:?}", failed.issues);
+        let failed_resolution = sqlx::query(
+            r#"SELECT "Generation", "State", "Reason", "Diagnostic"
+               FROM "ScanRefreshResolution" WHERE "LibraryId" = 1"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("failed refresh resolution");
+        assert_eq!(failed_resolution.get::<i64, _>("Generation"), 1);
+        assert_eq!(failed_resolution.get::<i64, _>("State"), 2);
+        assert_eq!(
+            failed_resolution.get::<String, _>("Reason"),
+            ScanPlayoutRefreshReason::RemoteStreamMembershipMixed.as_str()
+        );
+        assert!(failed_resolution
+            .get::<Option<String>, _>("Diagnostic")
+            .is_some());
+        assert!(!managed_folder.join("one.yml").is_file());
+
+        std::fs::remove_dir(&blocked_nfo).expect("remove NFO publication blocker");
+        let replayed = super::scan_local_library(
+            &pool,
+            &super::LocalScanConfig {
+                library_id: 1,
+                ffprobe_path: "unused-ffprobe".to_owned(),
+            },
+        )
+        .await
+        .expect("restart replay");
+        assert_eq!(replayed.failed_files, 0, "issues: {:?}", replayed.issues);
+        assert!(managed_folder.join("one.yml").is_file());
+        assert!(blocked_nfo.is_file());
+        let replayed_resolution = sqlx::query(
+            r#"SELECT "Generation", "State", "Reason", "Diagnostic"
+               FROM "ScanRefreshResolution" WHERE "LibraryId" = 1"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("replayed refresh resolution");
+        assert_eq!(replayed_resolution.get::<i64, _>("Generation"), 2);
+        assert_eq!(replayed_resolution.get::<i64, _>("State"), 1);
+        assert_eq!(
+            replayed_resolution.get::<String, _>("Reason"),
+            ScanPlayoutRefreshReason::RemoteStreamMembershipAdded.as_str()
+        );
+        assert!(replayed_resolution
+            .get::<Option<String>, _>("Diagnostic")
+            .is_none());
+        let intent_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ScanPlayoutRefreshIntent""#)
+                .fetch_one(&pool)
+                .await
+                .expect("refresh intent count");
+        assert_eq!(intent_count, 0);
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn playlist_crash_after_database_commit_replays_without_losing_intent() {
+        use super::{LocalLibraryPath, PlaylistSyncBoundary};
+        use ersatzrs_domain::ScanPlayoutRefreshReason;
+        use sqlx::{Executor, Row as _};
+
+        let temp = tempfile::tempdir().expect("playlist fixture");
+        let library_root = temp.path().join("remote-streams");
+        let package_root = temp.path().join("addon-package");
+        let database_path = temp.path().join("scan-refresh.db");
+        let manifest_path = library_root.join("Fixture.playlist.yml");
+        let managed_folder = library_root.join("Fixture");
+        let sidecar_path = managed_folder.join(".ersatzrs-playlist.json");
+        let library_path = LocalLibraryPath {
+            id: 1,
+            path: library_root.display().to_string(),
+            media_kind: LibraryMediaKind::RemoteStreams,
+        };
+        let pool = file_test_db(&database_path).await;
+        seed_managed_remote_stream_playlist(&pool, &library_root, &package_root).await;
+
+        let baseline = super::scan_local_library(
+            &pool,
+            &super::LocalScanConfig {
+                library_id: 1,
+                ffprobe_path: "unused-ffprobe".to_owned(),
+            },
+        )
+        .await
+        .expect("initial playlist scan");
+        assert_eq!(baseline.failed_files, 0, "issues: {:?}", baseline.issues);
+        let baseline_sidecar = std::fs::read(&sidecar_path).expect("baseline sidecar");
+        let playlist_id: i64 = sqlx::query_scalar(
+            r#"SELECT "Id" FROM "Playlist"
+               WHERE "ManagedSource" LIKE 'remote-stream-playlist:v1:1:%'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("managed playlist");
+
+        pool.execute("PRAGMA foreign_keys = OFF")
+            .await
+            .expect("disable fixture foreign keys");
+        sqlx::query(
+            r#"INSERT INTO "ProgramSchedule" (
+                   "Id", "FixedStartTimeBehavior", "KeepMultiPartEpisodesTogether", "Name",
+                   "RandomStartPoint", "ShuffleScheduleItems", "TreatCollectionsAsShows"
+               ) VALUES (70, 0, 0, 'Managed playlist schedule', 0, 0, 0);
+               INSERT INTO "ProgramScheduleItem" (
+                   "Id", "CollectionType", "FillWithGroupMode", "GuideMode", "Index",
+                   "MarathonGroupBy", "MarathonShuffleGroups", "MarathonShuffleItems",
+                   "PlaybackOrder", "ProgramScheduleId", "PlaylistId"
+               ) VALUES (71, 6, 0, 0, 0, 0, 0, 0, 0, 70, ?);
+               INSERT INTO "Playout" (
+                   "Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed"
+               ) VALUES (80, 80, 70, 1, 123)"#,
+        )
+        .bind(playlist_id)
+        .execute(&pool)
+        .await
+        .expect("classic managed-playlist dependency");
+        pool.execute(
+            r#"INSERT INTO "AddonMediaListItem" (
+                   "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank",
+                   "Title", "SourceUrl", "DurationSeconds", "Published",
+                   "ProviderMetadataJson", "ContentKind", "PublishedLiveness"
+               ) VALUES (
+                   50, 'two', 'Second', 4, 1, 'Second',
+                   'https://example.test/two', 60, 1, '{"title":"Second"}', 4, 1
+               )"#,
+        )
+        .await
+        .expect("second published add-on list item");
+
+        let interrupted = super::synchronize_remote_stream_playlist_to_boundary(
+            &pool,
+            1,
+            &library_path,
+            &manifest_path,
+            "unused-ffprobe",
+            PlaylistSyncBoundary::DatabaseCommitted,
+        )
+        .await
+        .expect("commit database boundary before simulated crash");
+        assert_eq!(interrupted.len(), 1);
+        assert_eq!(interrupted[0].playout_id, 80);
+        assert_eq!(
+            interrupted[0].reason,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipAdded
+        );
+        assert_eq!(
+            std::fs::read(&sidecar_path).expect("unpublished sidecar"),
+            baseline_sidecar,
+            "the ownership sidecar must not move at the database boundary"
+        );
+        assert!(managed_folder.join("two.yml").is_file());
+        let committed_playlist_items: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+                .bind(playlist_id)
+                .fetch_one(&pool)
+                .await
+                .expect("committed playlist items");
+        assert_eq!(committed_playlist_items, 2);
+        let resolution = sqlx::query(
+            r#"SELECT "Generation", "State" FROM "ScanRefreshResolution"
+               WHERE "LibraryId" = 1"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("unresolved database boundary");
+        assert_eq!(resolution.get::<i64, _>("Generation"), 2);
+        assert_eq!(resolution.get::<i64, _>("State"), 0);
+        let committed_intent = sqlx::query(
+            r#"SELECT "PlayoutId", "LibraryId", "Generation", "State", "Reason"
+               FROM "ScanPlayoutRefreshIntent""#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("committed refresh intent");
+        assert_eq!(committed_intent.get::<i64, _>("PlayoutId"), 80);
+        assert_eq!(committed_intent.get::<Option<i64>, _>("LibraryId"), Some(1));
+        assert_eq!(committed_intent.get::<i64, _>("Generation"), 1);
+        assert_eq!(committed_intent.get::<i64, _>("State"), 0);
+        assert_eq!(
+            committed_intent.get::<String, _>("Reason"),
+            ScanPlayoutRefreshReason::RemoteStreamMembershipAdded.as_str()
+        );
+
+        pool.close().await;
+        drop(pool);
+        let reopened = file_test_db(&database_path).await;
+        let recoverable = ersatzrs_infra::scan_refresh::interrupted_resolutions(&reopened)
+            .await
+            .expect("load interrupted resolution after restart");
+        assert_eq!(recoverable.len(), 1);
+        assert_eq!(recoverable[0].library_id, 1);
+        assert_eq!(recoverable[0].generation, 2);
+
+        let replayed = super::synchronize_remote_stream_playlist(
+            &reopened,
+            1,
+            &library_path,
+            &manifest_path,
+            "unused-ffprobe",
+        )
+        .await
+        .expect("replay and publish interrupted boundary");
+        assert_eq!(replayed.len(), 1);
+        assert_eq!(replayed[0].playout_id, 80);
+        ersatzrs_infra::scan_refresh::complete_interrupted_replay(
+            &reopened,
+            recoverable[0].library_id,
+            recoverable[0].generation,
+        )
+        .await
+        .expect("acknowledge replayed interrupted generation");
+
+        let published_sidecar = std::fs::read(&sidecar_path).expect("published replay sidecar");
+        assert_ne!(published_sidecar, baseline_sidecar);
+        let published_state: serde_json::Value =
+            serde_json::from_slice(&published_sidecar).expect("parse published replay sidecar");
+        assert!(published_state["entries"]
+            .as_array()
+            .expect("sidecar entries")
+            .iter()
+            .any(|entry| entry["provider_id"] == "two"));
+        let completed = sqlx::query(
+            r#"SELECT "Generation", "State", "Reason", "Diagnostic"
+               FROM "ScanRefreshResolution" WHERE "LibraryId" = 1"#,
+        )
+        .fetch_one(&reopened)
+        .await
+        .expect("completed replay resolution");
+        assert_eq!(completed.get::<i64, _>("Generation"), 3);
+        assert_eq!(completed.get::<i64, _>("State"), 1);
+        assert_eq!(
+            completed.get::<String, _>("Reason"),
+            ScanPlayoutRefreshReason::RemoteStreamMembershipAdded.as_str()
+        );
+        assert!(completed.get::<Option<String>, _>("Diagnostic").is_none());
+        let replayed_intents = sqlx::query(
+            r#"SELECT "PlayoutId", "LibraryId", "Generation", "State", "Reason"
+               FROM "ScanPlayoutRefreshIntent" ORDER BY "PlayoutId""#,
+        )
+        .fetch_all(&reopened)
+        .await
+        .expect("replayed refresh intents");
+        assert_eq!(replayed_intents.len(), 1);
+        assert_eq!(replayed_intents[0].get::<i64, _>("PlayoutId"), 80);
+        assert_eq!(
+            replayed_intents[0].get::<Option<i64>, _>("LibraryId"),
+            Some(1)
+        );
+        assert_eq!(replayed_intents[0].get::<i64, _>("Generation"), 2);
+        assert_eq!(replayed_intents[0].get::<i64, _>("State"), 0);
+        assert_eq!(
+            replayed_intents[0].get::<String, _>("Reason"),
+            ScanPlayoutRefreshReason::RemoteStreamMembershipAdded.as_str()
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn manifest_first_preserves_old_search_match_for_invalidation() {
+        use ersatzrs_domain::ScanPlayoutRefreshReason;
+        use sqlx::{Executor, Row as _};
+
+        let temp = tempfile::tempdir().expect("playlist fixture");
+        let library_root = temp.path().join("remote-streams");
+        let package_root = temp.path().join("addon-package");
+        let pool = test_db().await;
+        seed_managed_remote_stream_playlist(&pool, &library_root, &package_root).await;
+
+        let first = super::scan_local_library(
+            &pool,
+            &super::LocalScanConfig {
+                library_id: 1,
+                ffprobe_path: "unused-ffprobe".to_owned(),
+            },
+        )
+        .await
+        .expect("initial playlist scan");
+        assert_eq!(first.failed_files, 0, "issues: {:?}", first.issues);
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "ReviewState" = 2 WHERE "Id" = 50"#)
+            .execute(&pool)
+            .await
+            .expect("finish staged publication");
+
+        let nfo_path = library_root.join("Fixture").join("one.nfo");
+        let old_nfo = std::fs::read_to_string(&nfo_path).expect("generated NFO");
+        let new_nfo = old_nfo.replace("<title>OldMatch</title>", "<title>NewMatch</title>");
+        assert_ne!(new_nfo, old_nfo);
+        std::fs::write(&nfo_path, new_nfo).expect("interrupted-generation NFO");
+
+        let work = super::collect_remote_stream_files(&library_root.display().to_string());
+        assert_eq!(work.len(), 2);
+        assert!(matches!(
+            &work[0],
+            super::LocalScanWork::RemoteStreamPlaylist { .. }
+        ));
+        assert!(matches!(
+            &work[1],
+            super::LocalScanWork::RemoteStream { .. }
+        ));
+
+        pool.execute("PRAGMA foreign_keys = OFF")
+            .await
+            .expect("disable fixture foreign keys");
+        pool.execute(
+            r#"INSERT INTO "ProgramSchedule" (
+                   "Id", "FixedStartTimeBehavior", "KeepMultiPartEpisodesTogether", "Name",
+                   "RandomStartPoint", "ShuffleScheduleItems", "TreatCollectionsAsShows"
+               ) VALUES (70, 0, 0, 'Old metadata search', 0, 0, 0);
+               INSERT INTO "ProgramScheduleItem" (
+                   "Id", "CollectionType", "FillWithGroupMode", "GuideMode", "Index",
+                   "MarathonGroupBy", "MarathonShuffleGroups", "MarathonShuffleItems",
+                   "PlaybackOrder", "ProgramScheduleId", "SearchQuery"
+               ) VALUES (71, 9, 0, 0, 0, 0, 0, 0, 0, 70, 'title = OldMatch');
+               INSERT INTO "Playout" (
+                   "Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed"
+               ) VALUES (80, 80, 70, 1, 123)"#,
+        )
+        .await
+        .expect("classic search dependency");
+
+        let rescanned = super::scan_local_library(
+            &pool,
+            &super::LocalScanConfig {
+                library_id: 1,
+                ffprobe_path: "unused-ffprobe".to_owned(),
+            },
+        )
+        .await
+        .expect("manifest-first rescan");
+        assert_eq!(rescanned.failed_files, 0, "issues: {:?}", rescanned.issues);
+        assert_eq!(rescanned.playout_refreshes.len(), 1);
+        assert_eq!(rescanned.playout_refreshes[0].playout_id, 80);
+        assert_eq!(
+            rescanned.playout_refreshes[0].reason,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced
+        );
+        let persisted_title: String = sqlx::query_scalar(
+            r#"SELECT "Title" FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" = (
+                   SELECT "Id" FROM "RemoteStream" WHERE "ProviderId" = 'one'
+               )"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("rescanned metadata");
+        assert_eq!(persisted_title, "NewMatch");
+        let intent = sqlx::query(r#"SELECT "PlayoutId", "Reason" FROM "ScanPlayoutRefreshIntent""#)
+            .fetch_one(&pool)
+            .await
+            .expect("durable search invalidation");
+        assert_eq!(intent.get::<i64, _>("PlayoutId"), 80);
+        assert_eq!(
+            intent.get::<String, _>("Reason"),
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced.as_str()
+        );
+        let resolution_reason: String = sqlx::query_scalar(
+            r#"SELECT "Reason" FROM "ScanRefreshResolution" WHERE "LibraryId" = 1"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("completed refresh resolution");
+        assert_eq!(
+            resolution_reason,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced.as_str()
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn other_song_and_image_scans_write_and_replace_uniform_facets() {
@@ -5721,7 +6645,8 @@ broadcasters: [Current Network]
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn managed_playlist_keeps_identity_and_replaces_upstream_order() {
-        use super::{affected_playouts_for_remote_stream_membership, synchronize_managed_playlist};
+        use super::synchronize_managed_playlist;
+        use ersatzrs_domain::ScanPlayoutRefreshReason;
         use sqlx::sqlite::SqlitePoolOptions;
         use sqlx::Row as _;
 
@@ -5754,46 +6679,80 @@ broadcasters: [Current Network]
         .expect("user playlist");
 
         let source = "remote-stream-playlist:v1:7:Glamourland.playlist.yml";
-        synchronize_managed_playlist(&pool, source, "Glamourland", true, &[101, 102, 103], true)
-            .await
-            .expect("initial materialization");
+        synchronize_managed_playlist(
+            &pool,
+            source,
+            "Glamourland",
+            true,
+            &[101, 102, 103],
+            true,
+            None,
+        )
+        .await
+        .expect("initial materialization");
         let playlist_id: i64 =
             sqlx::query_scalar(r#"SELECT "Id" FROM "Playlist" WHERE "ManagedSource" = ?"#)
                 .bind(source)
                 .fetch_one(&pool)
                 .await
                 .expect("managed playlist");
-        sqlx::query(
-            r#"INSERT INTO "PlayoutProgramScheduleAnchor"
-               ("CollectionType", "PlaylistId", "PlayoutId") VALUES (70, ?, 77)"#,
+        let generation = ersatzrs_infra::scan_refresh::begin_resolution(
+            &pool,
+            7,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReordered,
         )
-        .bind(playlist_id)
-        .execute(&pool)
         .await
-        .expect("playout anchor");
-        sqlx::query(
-            r#"INSERT INTO "PlayoutProgramScheduleAnchor"
-               ("CollectionType", "PlayoutId") VALUES (2, 88)"#,
+        .expect("begin refresh resolution");
+        synchronize_managed_playlist(
+            &pool,
+            source,
+            "GLAMOURLAND",
+            true,
+            &[103, 101],
+            true,
+            Some((
+                7,
+                ScanPlayoutRefreshReason::RemoteStreamMembershipReordered,
+                &[77],
+            )),
         )
-        .execute(&pool)
         .await
-        .expect("non-playlist playout anchor");
+        .expect("reorder materialization");
+        let resolving_state: i64 = sqlx::query_scalar(
+            r#"SELECT "State" FROM "ScanRefreshResolution" WHERE "LibraryId" = 7"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("resolving refresh resolution");
+        assert_eq!(resolving_state, 0);
+        super::complete_scan_refresh_resolution(
+            &pool,
+            7,
+            generation,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReordered,
+        )
+        .await
+        .expect("complete refresh resolution after publication boundary");
+        synchronize_managed_playlist(&pool, source, "GLAMOURLAND", true, &[103, 101], false, None)
+            .await
+            .expect("unchanged materialization");
+        let intent: (i64, String) =
+            sqlx::query_as(r#"SELECT "PlayoutId", "Reason" FROM "ScanPlayoutRefreshIntent""#)
+                .fetch_one(&pool)
+                .await
+                .expect("durable refresh intent");
+        assert_eq!(intent.0, 77);
         assert_eq!(
-            affected_playouts_for_remote_stream_membership(&pool)
-                .await
-                .expect("affected membership playouts"),
-            [77, 88]
+            intent.1,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReordered.as_str()
         );
-        let affected =
-            synchronize_managed_playlist(&pool, source, "GLAMOURLAND", true, &[103, 101], true)
-                .await
-                .expect("reorder materialization");
-        assert_eq!(affected, vec![77]);
-        let unaffected =
-            synchronize_managed_playlist(&pool, source, "GLAMOURLAND", true, &[103, 101], false)
-                .await
-                .expect("unchanged materialization");
-        assert!(unaffected.is_empty());
+        let resolution_state: i64 = sqlx::query_scalar(
+            r#"SELECT "State" FROM "ScanRefreshResolution" WHERE "LibraryId" = 7"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("completed refresh resolution");
+        assert_eq!(resolution_state, 1);
 
         let row = sqlx::query(
             r#"SELECT "Id", "Name", "IsSystem" FROM "Playlist" WHERE "ManagedSource" = ?"#,
@@ -5825,7 +6784,7 @@ broadcasters: [Current Network]
             [(0, 103, 70), (1, 101, 70)]
         );
 
-        synchronize_managed_playlist(&pool, source, "GLAMOURLAND", false, &[], false)
+        synchronize_managed_playlist(&pool, source, "GLAMOURLAND", false, &[], false, None)
             .await
             .expect("disable managed playlist");
         let managed_count: i64 =
@@ -5841,6 +6800,134 @@ broadcasters: [Current Network]
                 .expect("user count");
         assert_eq!(managed_count, 0);
         assert_eq!(user_count, 1);
+    }
+
+    #[test]
+    fn scan_refresh_reason_requires_stable_identity_proof_for_reidentification() {
+        let replacement = remote_stream_playlist::PlaylistMembershipDelta {
+            changed_provider_ids: vec!["stable-provider".to_owned()],
+            ..Default::default()
+        };
+        assert_eq!(
+            membership_refresh_reason(&replacement, false),
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReplaced
+        );
+        assert_eq!(
+            membership_refresh_reason(&replacement, true),
+            ScanPlayoutRefreshReason::RemoteStreamMembershipReidentified
+        );
+
+        let unrelated_add_remove = remote_stream_playlist::PlaylistMembershipDelta {
+            added_provider_ids: vec!["new-provider".to_owned()],
+            removed_provider_ids: vec!["old-provider".to_owned()],
+            ..Default::default()
+        };
+        assert_eq!(
+            membership_refresh_reason(&unrelated_add_remove, false),
+            ScanPlayoutRefreshReason::RemoteStreamMembershipMixed
+        );
+    }
+
+    #[cfg(not(feature = "mysql"))]
+    #[tokio::test]
+    async fn remote_stream_provider_identity_survives_generated_path_change() {
+        use super::{upsert_local_remote_stream, LocalLibraryPath};
+        use ersatzrs_domain::{AddonMediaListItemAvailability, RemoteStreamLiveness};
+        use ersatzrs_infra::remote_stream::{
+            RemoteStreamDefinition, RemoteStreamSource, ResolvedRemoteStream,
+        };
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::{Executor, Row};
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect sqlite");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate");
+        pool.execute("PRAGMA foreign_keys = OFF")
+            .await
+            .expect("disable fixture foreign keys");
+        let root = tempfile::tempdir().expect("remote stream root");
+        let library_path = LocalLibraryPath {
+            id: 1,
+            path: root.path().display().to_string(),
+            media_kind: LibraryMediaKind::RemoteStreams,
+        };
+        let definition = RemoteStreamDefinition {
+            provider_id: Some("stable-provider".to_owned()),
+            addon: Some("org.ersatzrs.test".to_owned()),
+            url: Some("https://example.test/stream".to_owned()),
+            duration: Some("00:01:00".to_owned()),
+            liveness: Some(RemoteStreamLiveness::Finite),
+            title: Some("Stable".to_owned()),
+            availability: AddonMediaListItemAvailability::Available,
+            ..RemoteStreamDefinition::default()
+        };
+        let resolved = ResolvedRemoteStream {
+            source: RemoteStreamSource::Url("https://example.test/stream".to_owned()),
+            liveness: RemoteStreamLiveness::Finite,
+            is_live: false,
+            configured_duration: Some("00:01:00".to_owned()),
+            fallback_query: None,
+            uses_addon: false,
+        };
+        let first_path = root.path().join("old-generated-id.yml");
+        let second_path = root.path().join("new-generated-id.yml");
+        let third_path = root.path().join("case-only-generated-id.yml");
+
+        let first_id = upsert_local_remote_stream(
+            &pool,
+            &library_path,
+            &first_path,
+            &definition,
+            &resolved,
+            None,
+        )
+        .await
+        .expect("initial remote stream");
+        let second_id = upsert_local_remote_stream(
+            &pool,
+            &library_path,
+            &second_path,
+            &definition,
+            &resolved,
+            None,
+        )
+        .await
+        .expect("reidentified generated path");
+        let mut case_changed_definition = definition.clone();
+        case_changed_definition.provider_id = Some("Stable-Provider".to_owned());
+        let third_id = upsert_local_remote_stream(
+            &pool,
+            &library_path,
+            &third_path,
+            &case_changed_definition,
+            &resolved,
+            None,
+        )
+        .await
+        .expect("case-only provider identity change");
+
+        assert_eq!(second_id, first_id);
+        assert_eq!(third_id, first_id);
+        let row = sqlx::query(
+            r#"SELECT COUNT(*) AS "Count", MAX("mf"."Path") AS "Path"
+               FROM "RemoteStream" AS "rs"
+               JOIN "MediaVersion" AS "mv" ON "mv"."RemoteStreamId" = "rs"."Id"
+               JOIN "MediaFile" AS "mf" ON "mf"."MediaVersionId" = "mv"."Id""#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("remote stream identity rows");
+        assert_eq!(row.get::<i64, _>("Count"), 1);
+        assert_eq!(
+            row.get::<String, _>("Path"),
+            third_path.display().to_string()
+        );
     }
 
     #[cfg(all(not(feature = "mysql"), unix))]

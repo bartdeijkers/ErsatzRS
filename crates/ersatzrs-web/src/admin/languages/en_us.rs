@@ -350,6 +350,18 @@ impl LanguageStrings for EnglishStrings {
         format!("Unable to load playback troubleshooting context: {error}")
     }
 
+    fn scan_refresh_state_message(
+        &self,
+        unresolved_resolutions: u64,
+        stale_resolutions: u64,
+        failed_intents: u64,
+        stale_intents: u64,
+    ) -> String {
+        format!(
+            "Scan refresh state needs attention: {unresolved_resolutions} unresolved impact resolution(s), {stale_resolutions} stale impact resolution(s), {failed_intents} failed playout refresh intent(s), and {stale_intents} stale playout refresh intent(s). Review scanner and scheduling logs, then retry the affected scan or playout refresh."
+        )
+    }
+
     fn playout_reset_prompt(&self, channel: &str, schedule: &str) -> String {
         format!(
             "Enter the time that the playout on channel {channel} with schedule {schedule} should reset every day"
@@ -891,6 +903,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnsupportedPlayoutKind => "Unsupported playout kind.",
         TextKey::ClassicPlayout => "Classic Playout",
         TextKey::ClassicPlayoutState => "Classic Playout State",
+        TextKey::ScanRefreshState => "Scan Refresh State",
         TextKey::BlockPlayout => "Block Playout",
         TextKey::ScriptedPlayout => "Scripted Schedule",
         TextKey::AlternateSchedules => "Alternate Schedules",
@@ -2448,7 +2461,11 @@ fn addon_operation_error_message(code: &str, detail: &str) -> String {
         "unsupported-url" => "The add-on does not support this URL.",
         _ => "The add-on reported a failure.",
     };
-    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+    if detail.trim().is_empty() {
+        summary.to_owned()
+    } else {
+        format!("{summary} {detail}")
+    }
 }
 
 fn addon_media_list_error_message(error: &str) -> String {
@@ -2571,12 +2588,12 @@ fn ffmpeg_profile_error_message(error: &str) -> String {
 mod tests {
     use super::*;
     use crate::admin::i18n::{
-        episode_display_subtitle_text, ffmpeg_profile_error_text, ffmpeg_profile_video_format_text,
-        ffmpeg_tonemap_algorithm_text, filler_error_text, hardware_acceleration_option_text,
-        log_level_text, media_action_error_text, media_browser_error_text, media_kind_text,
-        media_source_error_text, playout_schedule_kind_text, schedule_error_text,
-        scheduling_content_error_text, settings_error_text, addon_media_list_error_text, upload_error_text,
-        watermark_error_text, UiLanguage,
+        addon_media_list_error_text, episode_display_subtitle_text, ffmpeg_profile_error_text,
+        ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text, filler_error_text,
+        hardware_acceleration_option_text, log_level_text, media_action_error_text,
+        media_browser_error_text, media_kind_text, media_source_error_text,
+        playout_schedule_kind_text, schedule_error_text, scheduling_content_error_text,
+        settings_error_text, upload_error_text, watermark_error_text, UiLanguage,
     };
 
     #[test]

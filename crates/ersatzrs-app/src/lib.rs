@@ -13,6 +13,7 @@ pub mod ports;
 pub mod queries;
 
 pub use error::{ApplicationError, Result};
+pub use ersatzrs_domain::{ScanPlayoutRefresh, ScanPlayoutRefreshReason};
 pub use operations::OperationCoordinator;
 pub use ports::{
     AddonIconRead, AddonOverviewRead, AddonRepositoryEdit, AddonRepositoryRead, AddonRuntime,
@@ -23,8 +24,8 @@ pub use ports::{
     MediaSourceRuntimeError, PlaybackPreviewRequest, PlayoutBuildQueue, PlayoutBuildQueueError,
     PlexPinFlow, RemoteServerInfo, RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead,
     RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
-    RemoteStreamPlaylistTroubleshootingRead, ScanRuntime, ScanRuntimeError, ScanWorkQueue,
-    ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
+    RemoteStreamPlaylistTroubleshootingRead, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
+    ScanWorkQueue, ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
     SourceAddonRouting, WindowsStartupStatus,
 };
 
@@ -446,6 +447,8 @@ impl ApplicationServices {
             command,
             self.ports.addon_media_lists(),
             self.ports.scan_runtime(),
+            self.ports.playout_builds(),
+            &self.operations,
         )
         .await
     }
@@ -2749,7 +2752,54 @@ impl ApplicationServices {
         &self,
         work: commands::ScanWorkRequest,
     ) -> commands::ExecuteScanOutcome {
-        execute_scan_work_with_runtime(work, self.ports.scan_runtime(), &self.operations).await
+        execute_scan_work_with_runtime(
+            work,
+            self.ports.scan_runtime(),
+            self.ports.playout_builds(),
+            &self.operations,
+        )
+        .await
+    }
+
+    /// Re-admit durable scan-triggered Refresh intents after process startup.
+    pub async fn recover_scan_playout_refreshes(&self) -> Result<usize> {
+        let report = self
+            .ports
+            .scan_runtime()
+            .recover_playout_refreshes()
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "recover scan-triggered playout refreshes",
+                message: error.to_string(),
+            })?;
+        let count = report.playout_refreshes.len();
+        commands::require_scan_playout_refreshes(
+            report,
+            self.ports.playout_builds(),
+            &self.operations,
+        )?;
+        Ok(count)
+    }
+
+    /// Re-admit pending durable scan-triggered Refresh intents during the
+    /// scheduler cadence without replaying currently building work.
+    pub async fn retry_pending_scan_playout_refreshes(&self) -> Result<usize> {
+        let report = self
+            .ports
+            .scan_runtime()
+            .pending_playout_refreshes()
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "retry pending scan-triggered playout refreshes",
+                message: error.to_string(),
+            })?;
+        let count = report.playout_refreshes.len();
+        commands::require_scan_playout_refreshes(
+            report,
+            self.ports.playout_builds(),
+            &self.operations,
+        )?;
+        Ok(count)
     }
 
     /// Mark the native scan worker available for new commands.
@@ -2838,6 +2888,7 @@ impl ersatzrs_core::maintenance::ScheduledLibraryScanRequester for ApplicationSe
 async fn execute_scan_work_with_runtime(
     work: commands::ScanWorkRequest,
     runtime: &dyn ScanRuntime,
+    playout_builds: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
 ) -> commands::ExecuteScanOutcome {
     let registry = operations.scan_activity();
@@ -2867,15 +2918,21 @@ async fn execute_scan_work_with_runtime(
             let result = runtime
                 .scan_show(provider, library_id, show_id, deep_scan, &progress)
                 .await;
-            if result.is_ok() && deep_scan {
-                runtime.extract_embedded_show_subtitles(show_id).await
-            } else {
-                result
+            match result {
+                Ok(()) if deep_scan => runtime
+                    .extract_embedded_show_subtitles(show_id)
+                    .await
+                    .map(|()| ScanRuntimeReport::default()),
+                Ok(()) => Ok(ScanRuntimeReport::default()),
+                Err(error) => Err(error),
             }
         }
     };
 
-    match result {
+    match result.and_then(|report| {
+        commands::require_scan_playout_refreshes(report, playout_builds, operations)
+            .map_err(|error| ScanRuntimeError::new(error.to_string()))
+    }) {
         Ok(()) => {
             guard.complete();
             commands::ExecuteScanOutcome::Completed
@@ -2904,10 +2961,14 @@ mod scan_execution_tests {
 
     use async_trait::async_trait;
     use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity};
-    use ersatzrs_domain::{EntityId, MediaSourceKind, ScanProgressSink};
+    use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
+    use ersatzrs_domain::{
+        EntityId, MediaSourceKind, ScanPlayoutRefresh, ScanPlayoutRefreshReason, ScanProgressSink,
+    };
 
     use super::{
-        execute_scan_work_with_runtime, OperationCoordinator, ScanRuntime, ScanRuntimeError,
+        execute_scan_work_with_runtime, OperationCoordinator, PlayoutBuildQueue,
+        PlayoutBuildQueueError, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
     };
     use crate::commands::{ExecuteScanOutcome, ScanRequest, ScanWorkRequest};
     use crate::queries::{GetLibraryScanStatus, LibraryScanStatus, ScanOperationState};
@@ -2916,6 +2977,7 @@ mod scan_execution_tests {
     struct FakeRuntime {
         calls: Mutex<Vec<String>>,
         fail_scan: bool,
+        report: ScanRuntimeReport,
     }
 
     impl FakeRuntime {
@@ -2923,6 +2985,15 @@ mod scan_execution_tests {
             Self {
                 calls: Mutex::default(),
                 fail_scan: true,
+                report: ScanRuntimeReport::default(),
+            }
+        }
+
+        fn reporting(playout_refreshes: Vec<ScanPlayoutRefresh>) -> Self {
+            Self {
+                calls: Mutex::default(),
+                fail_scan: false,
+                report: ScanRuntimeReport { playout_refreshes },
             }
         }
     }
@@ -2935,7 +3006,7 @@ mod scan_execution_tests {
             library_id: EntityId,
             deep_scan: bool,
             progress: &dyn ScanProgressSink,
-        ) -> Result<(), ScanRuntimeError> {
+        ) -> Result<ScanRuntimeReport, ScanRuntimeError> {
             self.calls
                 .lock()
                 .expect("calls")
@@ -2946,7 +3017,7 @@ mod scan_execution_tests {
             if self.fail_scan {
                 Err(ScanRuntimeError::new("library failed"))
             } else {
-                Ok(())
+                Ok(self.report.clone())
             }
         }
 
@@ -2981,6 +3052,26 @@ mod scan_execution_tests {
         }
     }
 
+    #[derive(Default)]
+    struct RecordingPlayoutQueue {
+        requests: Mutex<Vec<PlayoutBuildRequest>>,
+    }
+
+    impl PlayoutBuildQueue for RecordingPlayoutQueue {
+        fn enqueue(&self, request: PlayoutBuildRequest) -> Result<(), PlayoutBuildQueueError> {
+            self.requests.lock().expect("requests").push(request);
+            Ok(())
+        }
+    }
+
+    struct UnavailablePlayoutQueue;
+
+    impl PlayoutBuildQueue for UnavailablePlayoutQueue {
+        fn enqueue(&self, _request: PlayoutBuildRequest) -> Result<(), PlayoutBuildQueueError> {
+            Err(PlayoutBuildQueueError::unavailable("scheduler stopped"))
+        }
+    }
+
     fn coordinator() -> OperationCoordinator {
         OperationCoordinator::new(EntityLocker::default(), PlayoutBuildActivity::default())
     }
@@ -3001,6 +3092,7 @@ mod scan_execution_tests {
     async fn worker_execution_records_running_progress_and_success_cleanup() {
         let operations = coordinator();
         let runtime = FakeRuntime::default();
+        let queue = RecordingPlayoutQueue::default();
         let work = admitted(
             &operations,
             ScanRequest::Library {
@@ -3011,7 +3103,7 @@ mod scan_execution_tests {
         );
 
         assert_eq!(
-            execute_scan_work_with_runtime(work, &runtime, &operations).await,
+            execute_scan_work_with_runtime(work, &runtime, &queue, &operations).await,
             ExecuteScanOutcome::Completed
         );
         assert_eq!(
@@ -3033,6 +3125,7 @@ mod scan_execution_tests {
     async fn failed_execution_remains_observable_without_active_progress() {
         let operations = coordinator();
         let runtime = FakeRuntime::failing();
+        let queue = RecordingPlayoutQueue::default();
         let work = admitted(
             &operations,
             ScanRequest::Library {
@@ -3043,7 +3136,7 @@ mod scan_execution_tests {
         );
 
         assert_eq!(
-            execute_scan_work_with_runtime(work, &runtime, &operations).await,
+            execute_scan_work_with_runtime(work, &runtime, &queue, &operations).await,
             ExecuteScanOutcome::Failed {
                 message: "library failed".to_owned(),
             }
@@ -3058,9 +3151,83 @@ mod scan_execution_tests {
     }
 
     #[tokio::test]
+    async fn library_scan_coalesces_duplicate_dependency_refreshes() {
+        let operations = coordinator();
+        let runtime = FakeRuntime::reporting(vec![
+            ScanPlayoutRefresh {
+                playout_id: 80,
+                reason: ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
+            },
+            ScanPlayoutRefresh {
+                playout_id: 80,
+                reason: ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved,
+            },
+            ScanPlayoutRefresh {
+                playout_id: 81,
+                reason: ScanPlayoutRefreshReason::RemoteStreamMembershipReordered,
+            },
+        ]);
+        let queue = RecordingPlayoutQueue::default();
+        let work = admitted(
+            &operations,
+            ScanRequest::Library {
+                provider: MediaSourceKind::Local,
+                library_id: 24,
+                deep_scan: false,
+            },
+        );
+
+        assert_eq!(
+            execute_scan_work_with_runtime(work, &runtime, &queue, &operations).await,
+            ExecuteScanOutcome::Completed
+        );
+        let requests = queue.requests.lock().expect("requests");
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].playout_id, 80);
+        assert_eq!(requests[0].mode, PlayoutBuildMode::Refresh);
+        assert_eq!(requests[1].playout_id, 81);
+        assert_eq!(requests[1].mode, PlayoutBuildMode::Refresh);
+    }
+
+    #[tokio::test]
+    async fn dependency_refresh_queue_failure_keeps_scan_failure_observable() {
+        let operations = coordinator();
+        let runtime = FakeRuntime::reporting(vec![ScanPlayoutRefresh {
+            playout_id: 80,
+            reason: ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
+        }]);
+        let work = admitted(
+            &operations,
+            ScanRequest::Library {
+                provider: MediaSourceKind::Local,
+                library_id: 25,
+                deep_scan: false,
+            },
+        );
+
+        let outcome =
+            execute_scan_work_with_runtime(work, &runtime, &UnavailablePlayoutQueue, &operations)
+                .await;
+        assert!(matches!(
+            outcome,
+            ExecuteScanOutcome::Failed { ref message }
+                if message.contains("remote-stream-membership-added")
+                    && message.contains("scheduler stopped")
+        ));
+        assert!(matches!(
+            operations
+                .scan_activity()
+                .library_status(GetLibraryScanStatus::new(25)),
+            LibraryScanStatus::Failed { ref message }
+                if message.contains("scheduler stopped")
+        ));
+    }
+
+    #[tokio::test]
     async fn deep_show_extracts_subtitles_only_after_success() {
         let operations = coordinator();
         let runtime = FakeRuntime::default();
+        let queue = RecordingPlayoutQueue::default();
         let successful = admitted(
             &operations,
             ScanRequest::Show {
@@ -3071,7 +3238,7 @@ mod scan_execution_tests {
             },
         );
         assert_eq!(
-            execute_scan_work_with_runtime(successful, &runtime, &operations).await,
+            execute_scan_work_with_runtime(successful, &runtime, &queue, &operations).await,
             ExecuteScanOutcome::Completed
         );
         assert_eq!(
@@ -3090,7 +3257,7 @@ mod scan_execution_tests {
             },
         );
         assert!(matches!(
-            execute_scan_work_with_runtime(failed, &failing_runtime, &operations).await,
+            execute_scan_work_with_runtime(failed, &failing_runtime, &queue, &operations).await,
             ExecuteScanOutcome::Failed { .. }
         ));
         assert_eq!(

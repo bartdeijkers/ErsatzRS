@@ -19,9 +19,7 @@ fn episode_display_subtitle(
         (Some(season), Some(episode)) if !show.is_empty() => {
             Some(format!("{show} - temporada {season}, episodio {episode}"))
         }
-        (Some(season), Some(episode)) => {
-            Some(format!("temporada {season}, episodio {episode}"))
-        }
+        (Some(season), Some(episode)) => Some(format!("temporada {season}, episodio {episode}")),
         _ => (!show.is_empty()).then(|| show.to_owned()),
     }
 }
@@ -349,6 +347,18 @@ impl LanguageStrings for LatinAmericanSpanishStrings {
     fn classic_playout_state_message(&self, playouts: &str) -> String {
         format!(
             "El estado de la reproducción clásica no permite una actualización segura para: {playouts}. Usa Restablecer reproducción para estados antiguos o incompatibles; Actualizar nunca borra una ventana sin un punto de control completo."
+        )
+    }
+
+    fn scan_refresh_state_message(
+        &self,
+        unresolved_resolutions: u64,
+        stale_resolutions: u64,
+        failed_intents: u64,
+        stale_intents: u64,
+    ) -> String {
+        format!(
+            "El estado de actualización tras el escaneo requiere atención: {unresolved_resolutions} resoluciones de impacto sin completar, {stale_resolutions} resoluciones de impacto estancadas, {failed_intents} solicitudes fallidas de actualización de playout y {stale_intents} solicitudes estancadas de actualización de playout. Revisa los registros del escáner y de programación y vuelve a intentar el escaneo o la actualización de playout afectados."
         )
     }
 
@@ -899,6 +909,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnsupportedPlayoutKind => "Tipo de playout no soportado.",
         TextKey::ClassicPlayout => "Playout clásico",
         TextKey::ClassicPlayoutState => "Estado del playout clásico",
+        TextKey::ScanRefreshState => "Estado de actualización tras el escaneo",
         TextKey::BlockPlayout => "Playout por bloques",
         TextKey::ScriptedPlayout => "Programación guionizada",
         TextKey::AlternateSchedules => "Programaciones alternativas",
@@ -2554,7 +2565,9 @@ fn media_source_error_message(error: &str) -> String {
 fn addon_operation_error_message(code: &str, detail: &str) -> String {
     let summary = match code {
         "missing-setting" => "Configura el ajuste obligatorio del add-on.",
-        "missing-secret" => "Configura la referencia secreta obligatoria en los ajustes del add-on.",
+        "missing-secret" => {
+            "Configura la referencia secreta obligatoria en los ajustes del add-on."
+        }
         "provider-unreachable" => "El add-on no pudo comunicarse con su proveedor.",
         "provider-rejected" => "El proveedor rechazó la solicitud del add-on.",
         "provider-rate-limited" => "El proveedor limitó temporalmente el add-on.",
@@ -2562,7 +2575,11 @@ fn addon_operation_error_message(code: &str, detail: &str) -> String {
         "unsupported-url" => "El add-on no admite esta URL.",
         _ => "El add-on informó un error.",
     };
-    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+    if detail.trim().is_empty() {
+        summary.to_owned()
+    } else {
+        format!("{summary} {detail}")
+    }
 }
 
 fn addon_media_list_error_message(error: &str) -> String {
@@ -2733,7 +2750,10 @@ mod tests {
         assert_eq!(STRINGS.text(TextKey::BlockPlayout), "Playout por bloques");
         assert_eq!(STRINGS.text(TextKey::PlayoutMode), "Modo del playout");
         assert_eq!(STRINGS.text(TextKey::Playback), "Reproducción");
-        assert_eq!(STRINGS.text(TextKey::PlaybackOrder), "Orden de reproducción");
+        assert_eq!(
+            STRINGS.text(TextKey::PlaybackOrder),
+            "Orden de reproducción"
+        );
         assert_eq!(STRINGS.text(TextKey::StreamingMode), "Modo de emisión");
     }
 

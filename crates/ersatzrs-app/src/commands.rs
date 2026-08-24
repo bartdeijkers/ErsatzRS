@@ -4600,11 +4600,13 @@ pub async fn publish_addon_media_list(
     command: PublishAddonMediaList,
     repository: &dyn AddonMediaListRepository,
     runtime: &dyn ScanRuntime,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
 ) -> crate::Result<()> {
     validate_positive_id(command.id, "addon_media_list_id")?;
     let publication = repository.stage_publication(command.id).await?;
     let publish_result = async {
-        runtime
+        let scan_report = runtime
             .scan_library(MediaSourceKind::Local, publication.library_id, true, &())
             .await
             .map_err(|error| ApplicationError::Unavailable {
@@ -4614,29 +4616,42 @@ pub async fn publish_addon_media_list(
         repository
             .commit_staged_publication(command.id)
             .await
-            .map_err(ApplicationError::from)
+            .map_err(ApplicationError::from)?;
+        Ok::<_, ApplicationError>(scan_report)
     }
     .await;
-    if let Err(error) = publish_result {
-        let original_message = error.to_string();
-        let recovery_result = async {
-            repository
-                .restore_staged_publication(command.id, &original_message)
-                .await?;
-            repository.reconcile_restored_publication(command.id).await
+    let mut scan_report = match publish_result {
+        Ok(report) => report,
+        Err(error) => {
+            let original_message = error.to_string();
+            let recovery_result = async {
+                repository
+                    .restore_staged_publication(command.id, &original_message)
+                    .await?;
+                repository.reconcile_restored_publication(command.id).await
+            }
+            .await;
+            return match recovery_result {
+                Ok(()) => Err(error),
+                Err(recovery_error) => Err(ApplicationError::Unavailable {
+                    operation: "recover add-on media list publication",
+                    message: format!(
+                        "publication failed ({original_message}); recovery failed ({recovery_error})"
+                    ),
+                }),
+            };
         }
-        .await;
-        return match recovery_result {
-            Ok(()) => Err(error),
-            Err(recovery_error) => Err(ApplicationError::Unavailable {
-                operation: "recover add-on media list publication",
-                message: format!(
-                    "publication failed ({original_message}); recovery failed ({recovery_error})"
-                ),
-            }),
-        };
-    }
-    Ok(())
+    };
+    let pending_report = runtime.pending_playout_refreshes().await.map_err(|error| {
+        ApplicationError::Unavailable {
+            operation: "load committed add-on playlist refreshes",
+            message: error.to_string(),
+        }
+    })?;
+    scan_report
+        .playout_refreshes
+        .extend(pending_report.playout_refreshes);
+    require_scan_playout_refreshes(scan_report, queue, operations)
 }
 
 /// Include or exclude one item from publication.
@@ -6019,6 +6034,40 @@ pub(crate) fn request_playout_build(
     }
 }
 
+pub(crate) fn require_scan_playout_refreshes(
+    report: crate::ScanRuntimeReport,
+    queue: &dyn PlayoutBuildQueue,
+    operations: &OperationCoordinator,
+) -> crate::Result<()> {
+    let mut refreshes = std::collections::BTreeMap::new();
+    for refresh in report.playout_refreshes {
+        refreshes
+            .entry(refresh.playout_id)
+            .and_modify(|reason: &mut crate::ScanPlayoutRefreshReason| {
+                *reason = reason.merge(refresh.reason);
+            })
+            .or_insert(refresh.reason);
+    }
+
+    for (playout_id, reason) in refreshes {
+        let outcome = request_playout_build(
+            RequestPlayoutBuild::new(playout_id, PlayoutBuildMode::Refresh),
+            queue,
+            operations,
+        );
+        require_playout_build_outcome(outcome).map_err(|error| ApplicationError::Unavailable {
+            operation: "queue scan-triggered playout refresh",
+            message: format!("{}: {error}", reason.as_str()),
+        })?;
+        tracing::info!(
+            playout_id,
+            reason = reason.as_str(),
+            "scan reconciliation requested a dependency-scoped playout refresh"
+        );
+    }
+    Ok(())
+}
+
 fn require_playout_build(
     command: RequestPlayoutBuild,
     queue: &dyn PlayoutBuildQueue,
@@ -6542,13 +6591,28 @@ mod tests {
 
     #[async_trait]
     impl ScanRuntime for RecordingPublicationRuntime {
+        async fn pending_playout_refreshes(
+            &self,
+        ) -> Result<crate::ScanRuntimeReport, ScanRuntimeError> {
+            self.events
+                .lock()
+                .expect("publication events")
+                .push("pending-refreshes".to_owned());
+            Ok(crate::ScanRuntimeReport {
+                playout_refreshes: vec![ersatzrs_domain::ScanPlayoutRefresh {
+                    playout_id: 77,
+                    reason: ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
+                }],
+            })
+        }
+
         async fn scan_library(
             &self,
             provider: MediaSourceKind,
             library_id: EntityId,
             deep_scan: bool,
             _progress: &dyn ScanProgressSink,
-        ) -> Result<(), ScanRuntimeError> {
+        ) -> Result<crate::ScanRuntimeReport, ScanRuntimeError> {
             self.events
                 .lock()
                 .expect("publication events")
@@ -6556,7 +6620,7 @@ mod tests {
             if self.fail_scan {
                 Err(ScanRuntimeError::new("injected scan failure"))
             } else {
-                Ok(())
+                Ok(crate::ScanRuntimeReport::default())
             }
         }
 
@@ -7568,14 +7632,34 @@ mod tests {
             events: Arc::clone(&events),
             fail_scan: false,
         };
+        let queue = RecordingQueue::default();
+        let operations = coordinator();
 
-        publish_addon_media_list(PublishAddonMediaList { id: 7 }, &repository, &runtime)
-            .await
-            .expect("publish");
+        publish_addon_media_list(
+            PublishAddonMediaList { id: 7 },
+            &repository,
+            &runtime,
+            &queue,
+            &operations,
+        )
+        .await
+        .expect("publish");
 
         assert_eq!(
             *events.lock().expect("publication events"),
-            ["stage:7", "scan:Local:41:true", "commit:7"]
+            [
+                "stage:7",
+                "scan:Local:41:true",
+                "commit:7",
+                "pending-refreshes"
+            ]
+        );
+        assert_eq!(
+            *queue.requests.lock().expect("queued refreshes"),
+            [PlayoutBuildRequest {
+                playout_id: 77,
+                mode: PlayoutBuildMode::Refresh,
+            }]
         );
     }
 
@@ -7592,10 +7676,18 @@ mod tests {
                 events: Arc::clone(&events),
                 fail_scan,
             };
+            let queue = RecordingQueue::default();
+            let operations = coordinator();
 
-            publish_addon_media_list(PublishAddonMediaList { id: 7 }, &repository, &runtime)
-                .await
-                .expect_err("injected publication failure");
+            publish_addon_media_list(
+                PublishAddonMediaList { id: 7 },
+                &repository,
+                &runtime,
+                &queue,
+                &operations,
+            )
+            .await
+            .expect_err("injected publication failure");
 
             let expected = if fail_scan {
                 vec!["stage:7", "scan:Local:41:true", "restore:7", "reconcile:7"]

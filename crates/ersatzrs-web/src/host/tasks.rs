@@ -1,17 +1,34 @@
 use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_infra::addon_media_list_import::AddonMediaListImportCoordinator;
-use ersatzrs_infra::addon_media_list_sync::AddonMediaListSynchronizer;
+use ersatzrs_infra::addon_media_list_sync::{
+    AddonMediaListMatchReport, AddonMediaListSynchronizer,
+};
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_scheduler::runner::{run_scheduler, SchedulerOptions};
+use std::future::Future;
 use std::sync::{atomic::AtomicI32, Arc};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+/// Replay interrupted scan work and admit every durable playout refresh before
+/// mutating background workers are allowed to start.
+///
+/// # Errors
+///
+/// Returns an error when scan recovery or playout refresh admission cannot
+/// complete through the configured application ports.
+pub async fn run_background_task_preflight(
+    application: Arc<ersatzrs_app::ApplicationServices>,
+) -> ersatzrs_app::Result<usize> {
+    application.recover_scan_playout_refreshes().await
+}
+
 /// Spawn the long-running background tasks and return their join handles so the
 /// host can await a clean drain on shutdown. Every task observes `shutdown` and
-/// exits promptly when it is cancelled.
+/// exits promptly when it is cancelled. Call
+/// [`run_background_task_preflight`] successfully before invoking this function.
 pub fn spawn_background_tasks(
     hdhr: HdhrTaskInputs,
     maintenance: MaintenanceTaskInputs,
@@ -26,6 +43,7 @@ pub fn spawn_background_tasks(
         )),
         tokio::spawn(run_addon_media_list_maintenance(
             maintenance.pool.clone(),
+            maintenance.application.clone(),
             shutdown.clone(),
         )),
         tokio::spawn(run_addon_media_list_imports(
@@ -138,7 +156,11 @@ async fn run_maintenance_scheduler(
     }
 }
 
-async fn run_addon_media_list_maintenance(pool: DbPool, shutdown: CancellationToken) {
+async fn run_addon_media_list_maintenance(
+    pool: DbPool,
+    application: Arc<ersatzrs_app::ApplicationServices>,
+    shutdown: CancellationToken,
+) {
     let mut interval = tokio::time::interval(std::time::Duration::from_hours(1));
     loop {
         tokio::select! {
@@ -152,10 +174,58 @@ async fn run_addon_media_list_maintenance(pool: DbPool, shutdown: CancellationTo
         }
 
         let sync = AddonMediaListSynchronizer::new(pool.clone());
-        if let Err(error) = sync.match_due_lists().await {
-            tracing::warn!(error = %error, "failed to match due Add-on media lists");
+        let match_result = sync.match_due_lists_with_report().await;
+        let (matched_lists, reported_refreshes) = match &match_result {
+            Ok(report) => (report.matched_list_count, report.playout_refreshes.len()),
+            Err(error) => {
+                tracing::warn!(error = %error, "failed to match due Add-on media lists");
+                (0, 0)
+            }
+        };
+        let match_failed = match_result.is_err();
+        match admit_periodic_addon_playlist_refreshes(&match_result, || {
+            application.retry_pending_scan_playout_refreshes()
+        })
+        .await
+        {
+            Ok(admitted_refreshes) if reported_refreshes > 0 || admitted_refreshes > 0 => {
+                tracing::info!(
+                    matched_lists,
+                    reported_refreshes,
+                    admitted_refreshes,
+                    match_failed,
+                    "admitted periodic add-on playlist refreshes"
+                );
+            }
+            Ok(_) => {}
+            Err(error) => tracing::warn!(
+                reported_refreshes,
+                match_failed,
+                %error,
+                "failed to admit periodic add-on playlist refreshes"
+            ),
         }
     }
+}
+
+async fn admit_periodic_addon_playlist_refreshes<F, Fut>(
+    match_result: &ersatzrs_core::repositories::Result<AddonMediaListMatchReport>,
+    admit_pending: F,
+) -> ersatzrs_app::Result<usize>
+where
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = ersatzrs_app::Result<usize>>,
+{
+    let admission_required = match match_result {
+        Ok(report) => !report.playout_refreshes.is_empty(),
+        // Earlier lists may already have committed durable intents before a
+        // later list makes the aggregate operation fail.
+        Err(_) => true,
+    };
+    if !admission_required {
+        return Ok(0);
+    }
+    admit_pending().await
 }
 
 async fn run_addon_repository_maintenance(pool: DbPool, shutdown: CancellationToken) {
@@ -203,7 +273,15 @@ fn repository_refresh_is_due(last_refresh: Option<&str>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::repository_refresh_is_due;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use ersatzrs_core::repositories::RepositoryError;
+    use ersatzrs_domain::{ScanPlayoutRefresh, ScanPlayoutRefreshReason};
+
+    use super::{
+        admit_periodic_addon_playlist_refreshes, repository_refresh_is_due,
+        AddonMediaListMatchReport,
+    };
 
     #[test]
     fn repository_refresh_is_due_for_missing_or_old_state() {
@@ -214,5 +292,53 @@ mod tests {
         assert!(repository_refresh_is_due(Some("invalid")));
         assert!(repository_refresh_is_due(Some(&old)));
         assert!(!repository_refresh_is_due(Some(&recent)));
+    }
+
+    #[tokio::test]
+    async fn periodic_match_report_immediately_admits_durable_refreshes() {
+        let match_result = Ok(AddonMediaListMatchReport {
+            matched_list_count: 1,
+            playout_refreshes: vec![ScanPlayoutRefresh {
+                playout_id: 42,
+                reason: ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
+            }],
+        });
+        let admission_calls = AtomicUsize::new(0);
+
+        let admitted = admit_periodic_addon_playlist_refreshes(&match_result, || async {
+            admission_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(1)
+        })
+        .await
+        .expect("admit periodic refresh report");
+
+        assert_eq!(admitted, 1);
+        assert_eq!(admission_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn aggregate_match_error_still_admits_previously_committed_refreshes() {
+        let match_result = Err(RepositoryError::unavailable(
+            "match due add-on media lists",
+            "later list failed",
+        ));
+        let admission_calls = AtomicUsize::new(0);
+
+        let admitted = admit_periodic_addon_playlist_refreshes(&match_result, || async {
+            admission_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(2)
+        })
+        .await
+        .expect("admit durable refreshes committed before aggregate failure");
+
+        assert_eq!(admitted, 2);
+        assert_eq!(admission_calls.load(Ordering::SeqCst), 1);
+        assert!(matches!(
+            match_result,
+            Err(RepositoryError::Unavailable {
+                operation: "match due add-on media lists",
+                ref message,
+            }) if message == "later list failed"
+        ));
     }
 }

@@ -303,10 +303,28 @@ pub async fn run_requested_playout_build(
         return Ok(false);
     };
 
+    let refresh_generation = if matches!(
+        request.mode,
+        PlayoutBuildMode::Refresh | PlayoutBuildMode::Reset
+    ) {
+        crate::scan_refresh::mark_refresh_building(pool, request.playout_id).await?
+    } else {
+        None
+    };
+
     match build_playout(pool, request.playout_id, request.mode, now, hls_sessions).await {
-        Ok(()) => Ok(true),
+        Ok(()) => {
+            if let Some(generation) = refresh_generation {
+                crate::scan_refresh::complete_refresh(pool, request.playout_id, generation).await?;
+            }
+            Ok(true)
+        }
         Err(error) => {
             let message = error.to_string();
+            if let Some(generation) = refresh_generation {
+                crate::scan_refresh::fail_refresh(pool, request.playout_id, generation, &message)
+                    .await?;
+            }
             let repository = SqlitePlayoutRepository(pool.clone());
             repository
                 .upsert_build_status(&PlayoutBuildStatus {

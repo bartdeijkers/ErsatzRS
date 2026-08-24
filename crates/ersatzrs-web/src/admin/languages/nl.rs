@@ -340,6 +340,18 @@ impl LanguageStrings for DutchStrings {
         )
     }
 
+    fn scan_refresh_state_message(
+        &self,
+        unresolved_resolutions: u64,
+        stale_resolutions: u64,
+        failed_intents: u64,
+        stale_intents: u64,
+    ) -> String {
+        format!(
+            "De status van scanvernieuwing vereist aandacht: {unresolved_resolutions} onvoltooide impactbepaling(en), {stale_resolutions} vastgelopen impactbepaling(en), {failed_intents} mislukte vernieuwingsopdracht(en) voor uitzendingen en {stale_intents} vastgelopen vernieuwingsopdracht(en) voor uitzendingen. Controleer de scanner- en planningslogboeken en probeer daarna de betreffende scan of uitzendingsvernieuwing opnieuw."
+        )
+    }
+
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String {
         format!("Kan context voor afspeelprobleemoplossing niet laden: {error}")
     }
@@ -1012,7 +1024,11 @@ fn addon_operation_error_message(code: &str, detail: &str) -> String {
         "unsupported-url" => "De add-on ondersteunt deze URL niet.",
         _ => "De add-on heeft een fout gemeld.",
     };
-    if detail.trim().is_empty() { summary.to_owned() } else { format!("{summary} {detail}") }
+    if detail.trim().is_empty() {
+        summary.to_owned()
+    } else {
+        format!("{summary} {detail}")
+    }
 }
 
 fn addon_media_list_error_message(error: &str) -> String {
@@ -1599,6 +1615,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnsupportedPlayoutKind => "Niet-ondersteund uitzendingstype.",
         TextKey::ClassicPlayout => "Klassieke uitzending",
         TextKey::ClassicPlayoutState => "Status klassieke uitzending",
+        TextKey::ScanRefreshState => "Status van scanvernieuwing",
         TextKey::BlockPlayout => "Blokuitzending",
         TextKey::ScriptedPlayout => "Scripted uitzending",
         TextKey::AlternateSchedules => "Alternatieve schema's",
@@ -2592,12 +2609,13 @@ pub fn text(key: TextKey) -> &'static str {
 mod tests {
     use super::*;
     use crate::admin::i18n::{
-        episode_display_subtitle_text, ffmpeg_loudness_mode_text, ffmpeg_profile_audio_format_text,
-        ffmpeg_profile_error_text, ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text,
-        filler_error_text, hardware_acceleration_option_text, library_kind_text, log_level_text,
+        addon_media_list_error_text, episode_display_subtitle_text, ffmpeg_loudness_mode_text,
+        ffmpeg_profile_audio_format_text, ffmpeg_profile_error_text,
+        ffmpeg_profile_video_format_text, ffmpeg_tonemap_algorithm_text, filler_error_text,
+        hardware_acceleration_option_text, library_kind_text, log_level_text,
         media_action_error_text, media_browser_error_text, media_kind_text,
         media_source_error_text, playout_schedule_kind_text, schedule_error_text,
-        scheduling_content_error_text, settings_error_text, addon_media_list_error_text, upload_error_text,
+        scheduling_content_error_text, settings_error_text, upload_error_text,
         watermark_error_text, UiLanguage,
     };
 
@@ -2790,7 +2808,10 @@ mod tests {
             "custom database failure"
         );
         assert_eq!(
-            addon_media_list_error_text(UiLanguage::Dutch, "add-on media list with id 42 not found"),
+            addon_media_list_error_text(
+                UiLanguage::Dutch,
+                "add-on media list with id 42 not found"
+            ),
             "add-on-lijst bestaat niet."
         );
         assert_eq!(

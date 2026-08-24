@@ -23,6 +23,7 @@ mod playback_data_access;
 mod provider_connectivity;
 mod remote_stream;
 mod remote_stream_playlist;
+mod scan_refresh_state;
 mod search_projection;
 mod source_orientation;
 mod sqlite_connection_defaults;
@@ -59,6 +60,7 @@ pub(super) use remote_stream::{
     RemoteStreamAddonReadinessHealthCheck, RemoteStreamHealthCheck, RemoteStreamScheduleHealthCheck,
 };
 pub(super) use remote_stream_playlist::RemoteStreamPlaylistHealthCheck;
+pub(super) use scan_refresh_state::ScanRefreshStateHealthCheck;
 pub(super) use search_projection::SearchProjectionHealthCheck;
 pub(super) use source_orientation::SourceOrientationHealthCheck;
 pub(super) use sqlite_connection_defaults::SqliteConnectionDefaultsHealthCheck;

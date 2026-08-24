@@ -12,6 +12,7 @@ use ersatzrs_core::repositories::ProgramScheduleRepository;
 use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
 use ersatzrs_domain::{
     ChannelSubtitleMode, CollectionType, PlaybackOrder, PlayoutMode, ProgramScheduleItem,
+    ScanPlayoutRefreshReason,
 };
 use ersatzrs_infra::cache_cleanup::CacheCleanupConfig;
 use ersatzrs_infra::db::DatabaseSchemaStatus;
@@ -280,6 +281,7 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
     common::seed_profile_and_channel(&repos, 1).await;
+    common::seed_media_path(&pool, 1, 1, 1).await;
     sqlx::query(r#"UPDATE "Channel" SET "PlayoutMode" = 1 WHERE "Id" = 1"#)
         .execute(&pool)
         .await
@@ -292,6 +294,16 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     .unwrap();
 
     let locker = EntityLocker::new();
+    let mut intent_tx = ersatzrs_infra::db::begin_write(&pool).await.unwrap();
+    ersatzrs_infra::scan_refresh::persist_refresh_intents(
+        &mut intent_tx,
+        1,
+        ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
+        &[78],
+    )
+    .await
+    .unwrap();
+    intent_tx.commit().await.unwrap();
     assert!(locker.lock_playout(78));
     let skipped = run_requested_playout_build(
         &pool,
@@ -306,6 +318,14 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     .await
     .unwrap();
     assert!(!skipped);
+    assert_eq!(
+        ersatzrs_infra::scan_refresh::pending_refreshes(&pool)
+            .await
+            .unwrap()
+            .len(),
+        1,
+        "a locked build must leave its durable intent pending for the retry sweep"
+    );
     assert!(locker.unlock_playout(78));
 
     let hls_registry = Arc::new(FakeHlsRegistry::default());
@@ -314,7 +334,7 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
         &locker,
         PlayoutBuildRequest {
             playout_id: 78,
-            mode: PlayoutBuildMode::Refresh,
+            mode: PlayoutBuildMode::Reset,
         },
         Utc::now(),
         Some(hls_registry.as_ref()),
@@ -322,6 +342,13 @@ async fn requested_playout_build_uses_locker_and_writes_status() {
     .await
     .unwrap();
     assert!(built);
+    assert!(
+        ersatzrs_infra::scan_refresh::recoverable_refreshes(&pool)
+            .await
+            .unwrap()
+            .is_empty(),
+        "a successful Reset must consume the weaker durable Refresh intent"
+    );
 
     let status = sqlx::query(
         r#"SELECT "Success", "Message"

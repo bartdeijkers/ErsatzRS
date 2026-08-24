@@ -15,7 +15,7 @@ use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
     SchedulingResult,
 };
-use ersatzrs_domain::{EntityId, MediaSourceKind, ScanProgressSink};
+use ersatzrs_domain::{EntityId, MediaSourceKind, ScanPlayoutRefresh, ScanProgressSink};
 use serde::{Deserialize, Serialize};
 
 use crate::commands::ScanWorkRequest;
@@ -216,9 +216,26 @@ impl ScanRuntimeError {
     }
 }
 
+/// Storage-neutral result of one completed native library scan.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ScanRuntimeReport {
+    pub playout_refreshes: Vec<ScanPlayoutRefresh>,
+}
+
 /// Native scanner execution supplied by the composition root.
 #[async_trait]
 pub trait ScanRuntime: Send + Sync {
+    /// Recover membership-triggered refreshes that survived process shutdown.
+    async fn recover_playout_refreshes(&self) -> Result<ScanRuntimeReport, ScanRuntimeError> {
+        Ok(ScanRuntimeReport::default())
+    }
+
+    /// Load pending refresh intents for the normal retry sweep. Unlike startup
+    /// recovery, this must not replay builds that are already in progress.
+    async fn pending_playout_refreshes(&self) -> Result<ScanRuntimeReport, ScanRuntimeError> {
+        Ok(ScanRuntimeReport::default())
+    }
+
     /// Execute one full library scan.
     async fn scan_library(
         &self,
@@ -226,7 +243,7 @@ pub trait ScanRuntime: Send + Sync {
         library_id: EntityId,
         deep_scan: bool,
         progress: &dyn ScanProgressSink,
-    ) -> Result<(), ScanRuntimeError>;
+    ) -> Result<ScanRuntimeReport, ScanRuntimeError>;
 
     /// Execute one provider-specific targeted show scan.
     async fn scan_show(

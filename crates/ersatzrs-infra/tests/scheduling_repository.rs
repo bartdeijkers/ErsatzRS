@@ -1,7 +1,7 @@
 #![cfg(not(feature = "mysql"))]
 mod common;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::content_variants;
@@ -1344,6 +1344,239 @@ async fn scheduling_repository_loads_classic_reference_data_from_sql() {
             .collect::<Vec<_>>(),
         vec![20]
     );
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn classic_scan_impact_resolver_uses_current_dependency_graph_not_runtime_anchors() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+
+    common::seed_media_path(&pool, 2, 2, 2).await;
+    common::seed_media_item(&pool, 50, 2).await;
+    insert_movie(&pool, 50, 500, "Second Library", "2026-03-01T00:00:00Z").await;
+    pool.execute(
+        r#"INSERT INTO "Collection" ("Id", "Name", "UseCustomPlaybackOrder")
+           VALUES (5, 'second-library', 0);
+           INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (5, 50);
+           INSERT INTO "PlaylistGroup" ("Id", "Name") VALUES (42, 'second');
+           INSERT INTO "Playlist" ("Id", "Name", "PlaylistGroupId", "IsSystem")
+           VALUES (40, 'nightly', 42, 0);
+           INSERT INTO "PlaylistItem" (
+               "Id", "Index", "PlaylistId", "CollectionType", "MediaItemId",
+               "PlaybackOrder", "PlayAll"
+           ) VALUES (403, 0, 40, 'Episode', 50, 'Chronological', 1);
+           INSERT INTO "FillerPreset" (
+               "Id", "Name", "FillerMode", "FillerKind", "CollectionType",
+               "PlaylistId", "AllowWatermarks", "UseChaptersAsMediaItems"
+           ) VALUES (60, 'managed playlist filler', 'Count', 'PreRoll', 'Playlist', 4, 0, 0);
+           INSERT INTO "RerunCollection" (
+               "Id", "Name", "CollectionType", "SmartCollectionId",
+               "FirstRunPlaybackOrder", "RerunPlaybackOrder"
+           ) VALUES (6, 'bonus-rerun', 'SmartCollection', 2, 'Chronological', 'Chronological')"#,
+    )
+    .await
+    .unwrap();
+
+    let cases = [
+        (
+            1_101,
+            1_201,
+            ProgramScheduleItem {
+                collection_type: CollectionType::Collection,
+                collection_id: Some(1),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+        (
+            1_102,
+            1_202,
+            ProgramScheduleItem {
+                collection_type: CollectionType::SmartCollection,
+                smart_collection_id: Some(2),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+        (
+            1_103,
+            1_203,
+            ProgramScheduleItem {
+                collection_type: CollectionType::MultiCollection,
+                multi_collection_id: Some(3),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+        (
+            1_104,
+            1_204,
+            ProgramScheduleItem {
+                collection_type: CollectionType::Playlist,
+                playlist_id: Some(4),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+        (
+            1_105,
+            1_205,
+            ProgramScheduleItem {
+                collection_type: CollectionType::Episode,
+                media_item_id: Some(13),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+        (
+            1_106,
+            1_206,
+            ProgramScheduleItem {
+                collection_type: CollectionType::Collection,
+                collection_id: Some(5),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+        (
+            1_107,
+            1_207,
+            ProgramScheduleItem {
+                collection_type: CollectionType::RerunFirstRun,
+                rerun_collection_id: Some(6),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+        (
+            1_108,
+            1_208,
+            ProgramScheduleItem {
+                collection_type: CollectionType::Playlist,
+                playlist_id: Some(40),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+        (
+            1_109,
+            1_209,
+            ProgramScheduleItem {
+                collection_type: CollectionType::Episode,
+                media_item_id: Some(13),
+                pre_roll_filler_id: Some(60),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+        (
+            1_110,
+            1_210,
+            ProgramScheduleItem {
+                collection_type: CollectionType::Collection,
+                collection_id: Some(5),
+                playlist_id: Some(4),
+                ..ProgramScheduleItem::default()
+            },
+        ),
+    ];
+    for (playout_id, schedule_id, item) in cases {
+        seed_classic_impact_playout(&repos, &pool, playout_id, schedule_id, item).await;
+    }
+
+    repos
+        .program_schedule
+        .upsert(&ProgramSchedule {
+            id: 1_305,
+            name: "Alternate smart bonus".to_owned(),
+            ..ProgramSchedule::default()
+        })
+        .await
+        .unwrap();
+    repos
+        .program_schedule
+        .upsert_item(&ProgramScheduleItem {
+            id: 2_305,
+            program_schedule_id: 1_305,
+            collection_type: CollectionType::SmartCollection,
+            smart_collection_id: Some(2),
+            ..ProgramScheduleItem::default()
+        })
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "ProgramScheduleAlternate" (
+               "PlayoutId", "ProgramScheduleId", "Index", "LimitToDateRange",
+               "StartMonth", "StartDay", "EndMonth", "EndDay"
+           ) VALUES (1105, 1305, 0, 0, 1, 1, 12, 31)"#,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        repos
+            .scheduling
+            .classic_playouts_affected_by_scan(&BTreeSet::from([20]), None)
+            .await
+            .unwrap(),
+        [1_101, 1_103, 1_104, 1_109]
+    );
+    assert_eq!(
+        repos
+            .scheduling
+            .classic_playouts_affected_by_scan(&BTreeSet::from([21]), None)
+            .await
+            .unwrap(),
+        [1_102, 1_103, 1_104, 1_105, 1_107, 1_109]
+    );
+    assert_eq!(
+        repos
+            .scheduling
+            .classic_playouts_affected_by_scan(&BTreeSet::new(), Some(4))
+            .await
+            .unwrap(),
+        [1_104, 1_109]
+    );
+    assert_eq!(
+        repos
+            .scheduling
+            .classic_playouts_affected_by_scan(&BTreeSet::from([50]), None)
+            .await
+            .unwrap(),
+        [1_106, 1_108, 1_110]
+    );
+    assert!(repos
+        .scheduling
+        .classic_playouts_affected_by_scan(&BTreeSet::from([999]), None)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
+async fn seed_classic_impact_playout(
+    repos: &Repositories,
+    pool: &SqlitePool,
+    playout_id: i64,
+    schedule_id: i64,
+    mut item: ProgramScheduleItem,
+) {
+    common::seed_profile_and_channel(repos, playout_id).await;
+    repos
+        .program_schedule
+        .upsert(&ProgramSchedule {
+            id: schedule_id,
+            name: format!("Impact {playout_id}"),
+            ..ProgramSchedule::default()
+        })
+        .await
+        .unwrap();
+    item.id = schedule_id + 1_000;
+    item.program_schedule_id = schedule_id;
+    repos.program_schedule.upsert_item(&item).await.unwrap();
+    sqlx::query(
+        r#"INSERT INTO "Playout" (
+               "Id", "ChannelId", "ProgramScheduleId", "ScheduleKind", "Seed"
+           ) VALUES (?, ?, ?, 'Classic', 123)"#,
+    )
+    .bind(playout_id)
+    .bind(playout_id)
+    .bind(schedule_id)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 #[tokio::test]

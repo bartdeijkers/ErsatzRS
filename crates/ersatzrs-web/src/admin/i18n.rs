@@ -1418,6 +1418,7 @@ pub enum TextKey {
     UnsupportedPlayoutKind,
     ClassicPlayout,
     ClassicPlayoutState,
+    ScanRefreshState,
     BlockPlayout,
     ScriptedPlayout,
     AlternateSchedules,
@@ -2803,6 +2804,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::UnsupportedPlayoutKind,
     TextKey::ClassicPlayout,
     TextKey::ClassicPlayoutState,
+    TextKey::ScanRefreshState,
     TextKey::BlockPlayout,
     TextKey::ScriptedPlayout,
     TextKey::AlternateSchedules,
@@ -3242,11 +3244,18 @@ pub fn health_summary(errors: u32, warnings: u32) -> String {
 }
 
 const CLASSIC_PLAYOUT_STATE_TITLE: &str = "Classic Playout State";
+const SCAN_REFRESH_STATE_TITLE: &str = "Scan Refresh State";
 const ADDONS_HEALTH_TITLE: &str = "Add-ons";
 const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str =
     "Classic playout state is not safe to Refresh for: ";
 const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str =
     ". Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
+const SCAN_REFRESH_STATE_MESSAGE_PREFIX: &str = "Scan refresh state needs attention: ";
+const SCAN_REFRESH_UNRESOLVED_RESOLUTION_SEPARATOR: &str = " unresolved impact resolution(s), ";
+const SCAN_REFRESH_STALE_RESOLUTION_SEPARATOR: &str = " stale impact resolution(s), ";
+const SCAN_REFRESH_FAILED_INTENT_SEPARATOR: &str = " failed playout refresh intent(s), and ";
+const SCAN_REFRESH_STALE_INTENT_SUFFIX: &str =
+    " stale playout refresh intent(s). Review scanner and scheduling logs, then retry the affected scan or playout refresh.";
 
 pub fn health_check_title(title: &str) -> String {
     health_check_title_text(use_i18n(), title)
@@ -3255,6 +3264,7 @@ pub fn health_check_title(title: &str) -> String {
 pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
     match title {
         CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
+        SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
         _ => title.to_owned(),
     }
@@ -3283,7 +3293,35 @@ pub fn health_check_message_text(
             return languages_for(language).classic_playout_state_message(playouts);
         }
     }
+    if title == SCAN_REFRESH_STATE_TITLE {
+        if let Some((unresolved_resolutions, stale_resolutions, failed_intents, stale_intents)) =
+            scan_refresh_state_counts(displayed_message)
+        {
+            return languages_for(language).scan_refresh_state_message(
+                unresolved_resolutions,
+                stale_resolutions,
+                failed_intents,
+                stale_intents,
+            );
+        }
+    }
     displayed_message.to_owned()
+}
+
+fn scan_refresh_state_counts(message: &str) -> Option<(u64, u64, u64, u64)> {
+    let message = message.strip_prefix(SCAN_REFRESH_STATE_MESSAGE_PREFIX)?;
+    let (unresolved_resolutions, message) =
+        message.split_once(SCAN_REFRESH_UNRESOLVED_RESOLUTION_SEPARATOR)?;
+    let (stale_resolutions, message) =
+        message.split_once(SCAN_REFRESH_STALE_RESOLUTION_SEPARATOR)?;
+    let (failed_intents, message) = message.split_once(SCAN_REFRESH_FAILED_INTENT_SEPARATOR)?;
+    let stale_intents = message.strip_suffix(SCAN_REFRESH_STALE_INTENT_SUFFIX)?;
+    Some((
+        unresolved_resolutions.parse().ok()?,
+        stale_resolutions.parse().ok()?,
+        failed_intents.parse().ok()?,
+        stale_intents.parse().ok()?,
+    ))
 }
 
 pub fn unable_to_load_playback_troubleshooting(error: impl std::fmt::Display) -> String {
@@ -3424,6 +3462,13 @@ pub trait LanguageStrings: Sync {
     fn provider_path_label(&self, provider: &'static str) -> String;
     fn health_summary(&self, errors: u32, warnings: u32) -> String;
     fn classic_playout_state_message(&self, playouts: &str) -> String;
+    fn scan_refresh_state_message(
+        &self,
+        unresolved_resolutions: u64,
+        stale_resolutions: u64,
+        failed_intents: u64,
+        stale_intents: u64,
+    ) -> String;
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String;
     fn playout_reset_prompt(&self, channel: &str, schedule: &str) -> String;
 }
@@ -3577,6 +3622,33 @@ mod tests {
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(title, CLASSIC_PLAYOUT_STATE_TITLE);
                 assert!(!localized.starts_with(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX));
+            }
+        }
+    }
+
+    #[test]
+    fn scan_refresh_health_text_is_localized_for_every_language() {
+        let message = "Scan refresh state needs attention: 2 unresolved impact resolution(s), 3 stale impact resolution(s), 5 failed playout refresh intent(s), and 7 stale playout refresh intent(s). Review scanner and scheduling logs, then retry the affected scan or playout refresh.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = health_check_title_text(language, SCAN_REFRESH_STATE_TITLE);
+            let localized = health_check_message_text(
+                language,
+                SCAN_REFRESH_STATE_TITLE,
+                message,
+                "17 scan refresh state error(s)",
+            );
+            assert!(!title.trim().is_empty());
+            for count in ["2", "3", "5", "7"] {
+                assert!(
+                    localized.contains(count),
+                    "{}: {localized}",
+                    definition.code
+                );
+            }
+            if definition.code != UiLanguage::English.code() {
+                assert_ne!(title, SCAN_REFRESH_STATE_TITLE);
+                assert!(!localized.starts_with(SCAN_REFRESH_STATE_MESSAGE_PREFIX));
             }
         }
     }

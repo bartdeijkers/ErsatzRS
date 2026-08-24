@@ -34,6 +34,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Remote Stream membership scans now refresh only Classic playouts whose
+  current schedules can consume the changed media or managed playlist. Stable
+  membership deltas produce one reasoned, coalesced refresh intent per playout;
+  the intent commits atomically with playlist reconciliation, survives restart
+  before queue admission, and exposes failed or stale work through health.
+
 - Classic Refresh now restores complete, production-generated day checkpoints
   across process restarts instead of rewinding shuffled media. Checkpoints
   preserve schedule, source, fill-group, Smart Shuffle, Random, and Random

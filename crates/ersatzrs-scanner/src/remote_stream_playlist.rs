@@ -5,6 +5,7 @@
 //! out-of-process host runner and manifest capability contract.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
@@ -164,6 +165,11 @@ pub struct PlaylistEnumeration {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct PlaylistSidecarEntry {
     pub id: String,
+    /// Stable provider identity used to reconcile membership across generated
+    /// file-name or scanner-identity changes. Older sidecars fall back to
+    /// `id`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
     pub file: String,
     pub title: String,
     pub duration_seconds: Option<u64>,
@@ -176,6 +182,11 @@ pub struct PlaylistSidecarEntry {
     pub definition_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nfo_sha256: Option<String>,
+    /// Hash of the effective generated Remote Stream definition and reconciled
+    /// NFO output. This keeps per-entry change detection compact while
+    /// including manifest defaults, tags, and disk-authoritative metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry_etag: Option<String>,
     /// Host-owned artwork state. Its hash distinguishes a generated file from
     /// an operator replacement during later refreshes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -241,13 +252,296 @@ pub struct ManagedPlaylistDefinition {
     pub active: bool,
 }
 
+/// Bounded diagnostic classification for one playlist membership delta.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PlaylistMembershipChangeReason {
+    #[default]
+    Unchanged,
+    Added,
+    Removed,
+    ChangedOrReplaced,
+    Reordered,
+    Mixed,
+}
+
+impl fmt::Display for PlaylistMembershipChangeReason {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Unchanged => "playlist membership unchanged",
+            Self::Added => "playlist membership added",
+            Self::Removed => "playlist membership removed",
+            Self::ChangedOrReplaced => "playlist membership changed or replaced",
+            Self::Reordered => "playlist membership reordered",
+            Self::Mixed => "playlist membership changed in multiple ways",
+        })
+    }
+}
+
+/// Deterministic membership changes keyed by stable provider entry identity.
+///
+/// Identifier vectors are sorted by their case-insensitive provider identity.
+/// `Display` and `Debug` intentionally expose only bounded categories and
+/// counts so diagnostics cannot leak raw provider identifiers.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct PlaylistMembershipDelta {
+    pub added_provider_ids: Vec<String>,
+    pub removed_provider_ids: Vec<String>,
+    pub changed_provider_ids: Vec<String>,
+    pub reordered: bool,
+}
+
+impl PlaylistMembershipDelta {
+    /// Compare active entries in previous and current sidecar state.
+    #[must_use]
+    pub fn between(
+        previous: Option<&PlaylistSidecarState>,
+        current: &PlaylistSidecarState,
+    ) -> Self {
+        let current_by_provider = active_entries_by_provider(current);
+        let Some(previous) = previous else {
+            return Self {
+                added_provider_ids: current_by_provider
+                    .into_values()
+                    .map(|entry| entry.provider_entry_id().to_owned())
+                    .collect(),
+                ..Self::default()
+            };
+        };
+        let previous_by_provider = active_entries_by_provider(previous);
+        let added_provider_ids = current_by_provider
+            .iter()
+            .filter(|(provider_id, _)| !previous_by_provider.contains_key(*provider_id))
+            .map(|(_, entry)| entry.provider_entry_id().to_owned())
+            .collect();
+        let removed_provider_ids = previous_by_provider
+            .iter()
+            .filter(|(provider_id, _)| !current_by_provider.contains_key(*provider_id))
+            .map(|(_, entry)| entry.provider_entry_id().to_owned())
+            .collect();
+        let changed_provider_ids = current_by_provider
+            .iter()
+            .filter_map(|(provider_id, current_entry)| {
+                previous_by_provider
+                    .get(provider_id)
+                    .filter(|previous_entry| {
+                        sidecar_membership_entry_changed(previous_entry, current_entry)
+                    })
+                    .map(|_| current_entry.provider_entry_id().to_owned())
+            })
+            .collect();
+        let previous_common_order = active_provider_order(previous)
+            .into_iter()
+            .filter(|provider_id| current_by_provider.contains_key(provider_id))
+            .collect::<Vec<_>>();
+        let current_common_order = active_provider_order(current)
+            .into_iter()
+            .filter(|provider_id| previous_by_provider.contains_key(provider_id))
+            .collect::<Vec<_>>();
+
+        Self {
+            added_provider_ids,
+            removed_provider_ids,
+            changed_provider_ids,
+            reordered: previous_common_order != current_common_order,
+        }
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.added_provider_ids.is_empty()
+            && self.removed_provider_ids.is_empty()
+            && self.changed_provider_ids.is_empty()
+            && !self.reordered
+    }
+
+    #[must_use]
+    pub fn reason(&self) -> PlaylistMembershipChangeReason {
+        match (
+            !self.added_provider_ids.is_empty(),
+            !self.removed_provider_ids.is_empty(),
+            !self.changed_provider_ids.is_empty(),
+            self.reordered,
+        ) {
+            (false, false, false, false) => PlaylistMembershipChangeReason::Unchanged,
+            (true, false, false, false) => PlaylistMembershipChangeReason::Added,
+            (false, true, false, false) => PlaylistMembershipChangeReason::Removed,
+            (false, false, true, false) => PlaylistMembershipChangeReason::ChangedOrReplaced,
+            (false, false, false, true) => PlaylistMembershipChangeReason::Reordered,
+            _ => PlaylistMembershipChangeReason::Mixed,
+        }
+    }
+}
+
+impl fmt::Debug for PlaylistMembershipDelta {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PlaylistMembershipDelta")
+            .field("reason", &self.reason())
+            .field("added_count", &self.added_provider_ids.len())
+            .field("removed_count", &self.removed_provider_ids.len())
+            .field("changed_count", &self.changed_provider_ids.len())
+            .field("reordered", &self.reordered)
+            .finish()
+    }
+}
+
+impl fmt::Display for PlaylistMembershipDelta {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{} (added={}, removed={}, changed={}, reordered={})",
+            self.reason(),
+            self.added_provider_ids.len(),
+            self.removed_provider_ids.len(),
+            self.changed_provider_ids.len(),
+            self.reordered
+        )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlaylistFileSync {
     pub state: PlaylistSidecarState,
     pub definitions: Vec<ManagedPlaylistDefinition>,
     pub changed: bool,
     pub membership_changed: bool,
+    pub membership_delta: PlaylistMembershipDelta,
     pub enumerated: bool,
+    sidecar_publication: SidecarPublication,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum SidecarPublication {
+    NotNeeded,
+    Staged(PathBuf),
+}
+
+impl PlaylistFileSync {
+    /// Publish the staged successful sidecar after database membership and
+    /// refresh intent have committed. Re-publishing an unchanged cached result
+    /// is a no-op.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the staged sidecar cannot be atomically published.
+    pub fn publish_sidecar(&self) -> Result<()> {
+        if let SidecarPublication::Staged(path) = &self.sidecar_publication {
+            write_json_atomically(path, &self.state)?;
+        }
+        Ok(())
+    }
+}
+
+impl PlaylistSidecarEntry {
+    fn provider_entry_id(&self) -> &str {
+        self.provider_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(&self.id)
+    }
+}
+
+fn active_entries_by_provider(
+    state: &PlaylistSidecarState,
+) -> BTreeMap<String, &PlaylistSidecarEntry> {
+    let mut entries = BTreeMap::new();
+    for entry in state.entries.iter().filter(|entry| entry.active) {
+        entries
+            .entry(entry.provider_entry_id().to_ascii_lowercase())
+            .or_insert(entry);
+    }
+    entries
+}
+
+fn active_provider_order(state: &PlaylistSidecarState) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+    state
+        .entries
+        .iter()
+        .filter(|entry| entry.active)
+        .filter_map(|entry| {
+            let provider_id = entry.provider_entry_id().to_ascii_lowercase();
+            seen.insert(provider_id.clone()).then_some(provider_id)
+        })
+        .collect()
+}
+
+fn sidecar_membership_entry_changed(
+    previous: &PlaylistSidecarEntry,
+    current: &PlaylistSidecarEntry,
+) -> bool {
+    if previous.provider_entry_id() != current.provider_entry_id()
+        || previous.id != current.id
+        || previous.file != current.file
+    {
+        return true;
+    }
+    match (
+        previous.entry_etag.as_deref(),
+        current.entry_etag.as_deref(),
+    ) {
+        (Some(previous_etag), Some(current_etag)) => previous_etag != current_etag,
+        _ => known_output_hashes_changed(previous, current).unwrap_or(true),
+    }
+}
+
+fn known_output_hashes_changed(
+    previous: &PlaylistSidecarEntry,
+    current: &PlaylistSidecarEntry,
+) -> Option<bool> {
+    Some(
+        previous.definition_sha256.as_deref()? != current.definition_sha256.as_deref()?
+            || previous.nfo_sha256.as_deref()? != current.nfo_sha256.as_deref()?,
+    )
+}
+
+fn fresh_cached_playlist_sync(
+    folder: &Path,
+    sidecar_path: &Path,
+    state: &PlaylistSidecarState,
+) -> Result<PlaylistFileSync> {
+    let mut current = state.clone();
+    for entry in &mut current.entries {
+        let nfo_file = entry
+            .nfo_file
+            .as_deref()
+            .or_else(|| state.managed_nfo_files.get(&entry.id).map(String::as_str))
+            .ok_or_else(|| {
+                PlaylistError::Enumeration(format!("managed entry '{}' has no NFO file", entry.id))
+            })?;
+        let nfo_path = folder.join(nfo_file);
+        ersatzrs_infra::addon_media_nfo::adopt_existing(&nfo_path, entry.nfo_sha256.as_deref())
+            .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+        let nfo_bytes = std::fs::read(&nfo_path).map_err(|error| {
+            PlaylistError::Enumeration(format!("unable to read managed NFO: {error}"))
+        })?;
+        let definition_sha256 = entry.definition_sha256.as_deref().ok_or_else(|| {
+            PlaylistError::Enumeration(format!(
+                "managed entry '{}' has no definition hash",
+                entry.id
+            ))
+        })?;
+        let nfo_sha256 = hex_hash(&nfo_bytes);
+        entry.entry_etag = Some(playlist_entry_etag(definition_sha256, &nfo_sha256));
+        entry.nfo_sha256 = Some(nfo_sha256);
+    }
+
+    let membership_delta = PlaylistMembershipDelta::between(Some(state), &current);
+    let membership_changed = !membership_delta.is_empty();
+    let sidecar_publication = if current == *state {
+        SidecarPublication::NotNeeded
+    } else {
+        SidecarPublication::Staged(sidecar_path.to_owned())
+    };
+    Ok(PlaylistFileSync {
+        definitions: definitions_from_state(folder, &current),
+        state: current,
+        changed: membership_changed,
+        membership_changed,
+        membership_delta,
+        enumerated: false,
+        sidecar_publication,
+    })
 }
 
 #[derive(Serialize)]
@@ -262,6 +556,8 @@ struct GeneratedRemoteStreamDefinition<'a> {
     url: &'a str,
     addon: &'a str,
     liveness: RemoteStreamLiveness,
+    /// Compatibility mirror consumed by the existing Remote Stream parser.
+    is_live: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     duration: Option<String>,
     availability: AddonMediaListItemAvailability,
@@ -577,8 +873,29 @@ fn add_playlist_chapter_fragments(
 /// # Errors
 ///
 /// Returns an error when enumeration, generated-file management, or sidecar publication fails.
-#[allow(clippy::too_many_lines)]
 pub async fn sync_playlist_files(
+    pool: &DbPool,
+    manifest_path: &Path,
+    manifest_bytes: &[u8],
+    manifest: &ValidatedPlaylistManifest,
+    runtime: &AddonRuntimeContext,
+) -> Result<PlaylistFileSync> {
+    let sync = stage_playlist_files(pool, manifest_path, manifest_bytes, manifest, runtime).await?;
+    sync.publish_sidecar()?;
+    Ok(sync)
+}
+
+/// Stage generated playlist files and the next successful sidecar without
+/// publishing the sidecar. The scanner uses this to commit SQL membership and
+/// durable Refresh intent first, making a crash at worst replay the same
+/// change instead of losing it.
+///
+/// # Errors
+///
+/// Returns an error when enumeration, generated-file staging, or sidecar-state
+/// preparation fails.
+#[allow(clippy::too_many_lines)]
+pub async fn stage_playlist_files(
     pool: &DbPool,
     manifest_path: &Path,
     manifest_bytes: &[u8],
@@ -609,30 +926,7 @@ pub async fn sync_playlist_files(
                 .to_std()
                 .is_ok_and(|elapsed| elapsed < manifest.interval);
         if cache_is_fresh {
-            for entry in &state.entries {
-                let nfo_file = entry
-                    .nfo_file
-                    .as_deref()
-                    .or_else(|| state.managed_nfo_files.get(&entry.id).map(String::as_str))
-                    .ok_or_else(|| {
-                        PlaylistError::Enumeration(format!(
-                            "managed entry '{}' has no NFO file",
-                            entry.id
-                        ))
-                    })?;
-                ersatzrs_infra::addon_media_nfo::adopt_existing(
-                    &folder.join(nfo_file),
-                    entry.nfo_sha256.as_deref(),
-                )
-                .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
-            }
-            return Ok(PlaylistFileSync {
-                definitions: definitions_from_state(&folder, state),
-                state: state.clone(),
-                changed: false,
-                membership_changed: false,
-                enumerated: false,
-            });
+            return fresh_cached_playlist_sync(&folder, &sidecar_path, state);
         }
     }
 
@@ -827,19 +1121,24 @@ pub async fn sync_playlist_files(
         let nfo_bytes =
             ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &generated_nfo)
                 .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+        let definition_sha256 = hex_hash(&definition_bytes);
+        let nfo_sha256 = hex_hash(&nfo_bytes);
+        let entry_etag = playlist_entry_etag(&definition_sha256, &nfo_sha256);
         write_generated_pair(&path, &definition_bytes, &nfo_path, &nfo_bytes)?;
         managed_files.insert(entry.id.clone(), file.clone());
         managed_nfo_files.insert(entry.id.clone(), nfo_file.clone());
         entries.push(PlaylistSidecarEntry {
             id: entry.id.clone(),
+            provider_id: Some(provider_id.to_owned()),
             file: file.clone(),
             title: entry.title.clone(),
             duration_seconds: entry.duration_seconds,
             active: true,
             nfo_file: Some(nfo_file),
             availability: domain_availability(entry.availability),
-            definition_sha256: Some(hex_hash(&definition_bytes)),
-            nfo_sha256: Some(hex_hash(&nfo_bytes)),
+            definition_sha256: Some(definition_sha256),
+            nfo_sha256: Some(nfo_sha256),
+            entry_etag: Some(entry_etag),
             artwork,
             artwork_roles,
         });
@@ -896,13 +1195,9 @@ pub async fn sync_playlist_files(
         }
     }
 
-    let membership_changed = existing
+    let manifest_changed = existing
         .as_ref()
-        .is_none_or(|state| state.playlist_etag != playlist_etag);
-    let changed = membership_changed
-        || existing
-            .as_ref()
-            .is_none_or(|state| state.manifest_etag != manifest_etag);
+        .is_none_or(|state| state.manifest_etag != manifest_etag);
     let state = PlaylistSidecarState {
         version: 3,
         manifest_etag,
@@ -919,13 +1214,17 @@ pub async fn sync_playlist_files(
         entries,
         overrides,
     };
-    write_json_atomically(&sidecar_path, &state)?;
+    let membership_delta = PlaylistMembershipDelta::between(existing.as_ref(), &state);
+    let membership_changed = !membership_delta.is_empty();
+    let changed = membership_changed || manifest_changed;
     Ok(PlaylistFileSync {
         state,
         definitions,
         changed,
         membership_changed,
+        membership_delta,
         enumerated,
+        sidecar_publication: SidecarPublication::Staged(sidecar_path),
     })
 }
 
@@ -1812,6 +2111,7 @@ fn generated_definition_bytes(
             artwork_urls.push(url);
         }
     }
+    let liveness = effective_entry_liveness(&manifest.manifest.defaults, entry)?;
     let definition = GeneratedRemoteStreamDefinition {
         provider_id: entry.provider_id.as_deref().unwrap_or(&entry.id),
         parent_provider_id: entry.parent_provider_id.as_deref(),
@@ -1819,7 +2119,8 @@ fn generated_definition_bytes(
         fragment_end_seconds: entry.fragment_end_seconds,
         url: &entry.url,
         addon: &manifest.manifest.addon,
-        liveness: effective_entry_liveness(&manifest.manifest.defaults, entry)?,
+        liveness,
+        is_live: liveness.legacy_is_live(),
         duration: entry.duration_seconds.map(format_clock_duration),
         availability: domain_availability(entry.availability),
         availability_reason: entry.availability_reason.as_deref(),
@@ -2657,6 +2958,16 @@ fn playlist_etag(entries: &[PlaylistEntry]) -> Result<String> {
     Ok(hex_hash(&bytes))
 }
 
+fn playlist_entry_etag(definition_sha256: &str, nfo_sha256: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"ersatzrs.remote-stream-playlist.entry-output.v1");
+    hasher.update([0]);
+    hasher.update(definition_sha256.as_bytes());
+    hasher.update([0]);
+    hasher.update(nfo_sha256.as_bytes());
+    bytes_to_hex(&hasher.finalize())
+}
+
 fn hex_hash(value: &[u8]) -> String {
     bytes_to_hex(&Sha256::digest(value))
 }
@@ -2801,6 +3112,470 @@ filter:
 exclude: [skip]
 create_playlist: true
 "#
+    }
+
+    fn membership_entry(
+        provider_id: &str,
+        generated_id: &str,
+        entry_etag: &str,
+    ) -> PlaylistSidecarEntry {
+        PlaylistSidecarEntry {
+            id: generated_id.to_owned(),
+            provider_id: Some(provider_id.to_owned()),
+            file: format!("{generated_id}.yml"),
+            title: format!("Title for {generated_id}"),
+            duration_seconds: Some(60),
+            active: true,
+            nfo_file: Some(format!("{generated_id}.nfo")),
+            availability: AddonMediaListItemAvailability::Available,
+            definition_sha256: Some(format!("definition-{entry_etag}")),
+            nfo_sha256: Some(format!("nfo-{entry_etag}")),
+            entry_etag: Some(entry_etag.to_owned()),
+            artwork: None,
+            artwork_roles: BTreeMap::new(),
+        }
+    }
+
+    fn membership_entry_from_outputs(
+        entry: &PlaylistEntry,
+        definition_bytes: &[u8],
+        nfo_bytes: &[u8],
+    ) -> PlaylistSidecarEntry {
+        let file = managed_file_name(&entry.id);
+        let definition_sha256 = hex_hash(definition_bytes);
+        let nfo_sha256 = hex_hash(nfo_bytes);
+        PlaylistSidecarEntry {
+            id: entry.id.clone(),
+            provider_id: Some(entry.provider_id.as_deref().unwrap_or(&entry.id).to_owned()),
+            nfo_file: Some(managed_nfo_file_name(&file)),
+            file,
+            title: entry.title.clone(),
+            duration_seconds: entry.duration_seconds,
+            active: true,
+            availability: domain_availability(entry.availability),
+            entry_etag: Some(playlist_entry_etag(&definition_sha256, &nfo_sha256)),
+            definition_sha256: Some(definition_sha256),
+            nfo_sha256: Some(nfo_sha256),
+            artwork: None,
+            artwork_roles: BTreeMap::new(),
+        }
+    }
+
+    fn membership_sidecar(entries: Vec<PlaylistSidecarEntry>) -> PlaylistSidecarState {
+        PlaylistSidecarState {
+            version: 3,
+            manifest_etag: "manifest".to_owned(),
+            playlist_etag: "playlist".to_owned(),
+            last_sync: Utc::now(),
+            last_result: PlaylistSyncOutcome {
+                kind: "ok".to_owned(),
+                entries: entries.len(),
+                truncated: false,
+                error: None,
+            },
+            managed_files: BTreeMap::new(),
+            managed_nfo_files: BTreeMap::new(),
+            entries,
+            overrides: PlaylistOverrides::default(),
+        }
+    }
+
+    fn cached_nfo_sidecar(folder: &Path) -> PlaylistSidecarState {
+        let manifest = parse_playlist_manifest(valid_yaml(), Path::new("Fixture.playlist.yml"))
+            .expect("manifest");
+        let mut entry = PlaylistEntry::new("one", "https://example.test/1", "One");
+        entry.provider_id = Some("provider:one".to_owned());
+        let definition = generated_definition_bytes(&manifest, &entry).expect("definition");
+        let nfo = generated_nfo_bytes(&manifest, &entry).expect("NFO");
+        let sidecar_entry = membership_entry_from_outputs(&entry, &definition, &nfo);
+        std::fs::write(folder.join(&sidecar_entry.file), definition).expect("write definition");
+        std::fs::write(folder.join("one.nfo"), nfo).expect("write NFO");
+        let mut state = membership_sidecar(vec![sidecar_entry]);
+        state
+            .managed_files
+            .insert("one".to_owned(), "one.yml".to_owned());
+        state
+            .managed_nfo_files
+            .insert("one".to_owned(), "one.nfo".to_owned());
+        state
+    }
+
+    #[test]
+    fn fresh_cache_nfo_only_effective_metadata_edit_emits_scan_delta() {
+        let temp = tempfile::tempdir().expect("managed folder");
+        let previous = cached_nfo_sidecar(temp.path());
+        let nfo_path = temp.path().join("one.nfo");
+        let original_nfo = std::fs::read_to_string(&nfo_path).expect("generated NFO");
+        let edited_nfo =
+            original_nfo.replacen("<title>One</title>", "<title>Operator One</title>", 1);
+        assert_ne!(edited_nfo, original_nfo);
+        std::fs::write(&nfo_path, &edited_nfo).expect("operator-edited NFO");
+        let sidecar_path = temp.path().join(".ersatzrs-playlist.json");
+
+        let sync = fresh_cached_playlist_sync(temp.path(), &sidecar_path, &previous)
+            .expect("fresh cache reconciliation");
+
+        assert!(!sync.enumerated);
+        assert!(sync.changed);
+        assert!(sync.membership_changed);
+        assert_eq!(sync.membership_delta.changed_provider_ids, ["provider:one"]);
+        assert!(sync.membership_delta.added_provider_ids.is_empty());
+        assert!(sync.membership_delta.removed_provider_ids.is_empty());
+        assert_eq!(
+            sync.membership_delta.reason(),
+            PlaylistMembershipChangeReason::ChangedOrReplaced
+        );
+        let current_entry = &sync.state.entries[0];
+        let nfo_sha256 = hex_hash(edited_nfo.as_bytes());
+        let definition_sha256 = previous.entries[0]
+            .definition_sha256
+            .as_deref()
+            .expect("definition hash");
+        assert_eq!(
+            current_entry.nfo_sha256.as_deref(),
+            Some(nfo_sha256.as_str())
+        );
+        assert_eq!(
+            current_entry.entry_etag,
+            Some(playlist_entry_etag(definition_sha256, &nfo_sha256))
+        );
+        assert_eq!(
+            crate::nfo::parse_other_video_nfo(&nfo_path)
+                .expect("effective NFO")
+                .title
+                .as_deref(),
+            Some("Operator One")
+        );
+        assert_eq!(
+            sync.sidecar_publication,
+            SidecarPublication::Staged(sidecar_path.clone())
+        );
+        sync.publish_sidecar().expect("publish reconciled identity");
+        assert_eq!(
+            load_sidecar(&sidecar_path)
+                .expect("load sidecar")
+                .expect("published sidecar"),
+            sync.state
+        );
+    }
+
+    #[test]
+    fn fresh_cache_unchanged_and_legacy_equivalent_nfo_are_noops() {
+        let temp = tempfile::tempdir().expect("managed folder");
+        let current = cached_nfo_sidecar(temp.path());
+        let sidecar_path = temp.path().join(".ersatzrs-playlist.json");
+
+        let unchanged = fresh_cached_playlist_sync(temp.path(), &sidecar_path, &current)
+            .expect("unchanged fresh cache");
+
+        assert!(!unchanged.changed);
+        assert!(!unchanged.membership_changed);
+        assert_eq!(
+            unchanged.membership_delta,
+            PlaylistMembershipDelta::default()
+        );
+        assert_eq!(unchanged.state, current);
+        assert_eq!(unchanged.sidecar_publication, SidecarPublication::NotNeeded);
+
+        let mut legacy = current;
+        legacy.version = 2;
+        legacy.entries[0].entry_etag = None;
+        let equivalent = fresh_cached_playlist_sync(temp.path(), &sidecar_path, &legacy)
+            .expect("equivalent legacy cache");
+
+        assert!(!equivalent.changed);
+        assert!(!equivalent.membership_changed);
+        assert_eq!(
+            equivalent.membership_delta,
+            PlaylistMembershipDelta::default()
+        );
+        assert_eq!(
+            equivalent.state.entries[0].nfo_sha256,
+            legacy.entries[0].nfo_sha256
+        );
+        assert!(equivalent.state.entries[0].entry_etag.is_some());
+        assert_eq!(
+            equivalent.sidecar_publication,
+            SidecarPublication::Staged(sidecar_path)
+        );
+    }
+
+    #[test]
+    fn fresh_cache_legacy_nfo_without_output_hash_is_conservatively_changed() {
+        let temp = tempfile::tempdir().expect("managed folder");
+        let mut legacy = cached_nfo_sidecar(temp.path());
+        legacy.version = 2;
+        legacy.entries[0].entry_etag = None;
+        legacy.entries[0].nfo_sha256 = None;
+        let sidecar_path = temp.path().join(".ersatzrs-playlist.json");
+
+        let sync = fresh_cached_playlist_sync(temp.path(), &sidecar_path, &legacy)
+            .expect("legacy fresh cache");
+
+        assert!(sync.changed);
+        assert!(sync.membership_changed);
+        assert_eq!(sync.membership_delta.changed_provider_ids, ["provider:one"]);
+        assert!(sync.state.entries[0].nfo_sha256.is_some());
+        assert!(sync.state.entries[0].entry_etag.is_some());
+    }
+
+    #[test]
+    fn membership_delta_is_empty_for_unchanged_sidecars() {
+        let previous = membership_sidecar(vec![
+            membership_entry("provider:one", "one", "one-v1"),
+            membership_entry("provider:two", "two", "two-v1"),
+        ]);
+        let mut current = previous.clone();
+        current.last_sync += chrono::Duration::minutes(5);
+
+        let delta = PlaylistMembershipDelta::between(Some(&previous), &current);
+
+        assert_eq!(delta, PlaylistMembershipDelta::default());
+        assert_eq!(delta.reason(), PlaylistMembershipChangeReason::Unchanged);
+    }
+
+    #[test]
+    fn membership_delta_detects_manifest_default_and_tag_output_changes() {
+        let manifest_path = Path::new("Fixture.playlist.yml");
+        let previous_manifest =
+            parse_playlist_manifest(valid_yaml(), manifest_path).expect("previous manifest");
+        let current_yaml = format!(
+            "{}\ndefaults:\n  content_rating: TV-14\n  year: 2024\ntags:\n  - Featured\n",
+            valid_yaml()
+        );
+        let current_manifest =
+            parse_playlist_manifest(&current_yaml, manifest_path).expect("current manifest");
+        let entry = PlaylistEntry::new("one", "https://example.test/1", "One");
+        let previous_definition =
+            generated_definition_bytes(&previous_manifest, &entry).expect("previous definition");
+        let current_definition =
+            generated_definition_bytes(&current_manifest, &entry).expect("current definition");
+        let temp = tempfile::tempdir().expect("NFO directory");
+        let nfo_path = temp.path().join("one.nfo");
+        let previous_generated_nfo =
+            generated_nfo_bytes(&previous_manifest, &entry).expect("previous generated NFO");
+        let previous_nfo = ersatzrs_infra::addon_media_nfo::reconcile_generated(
+            &nfo_path,
+            &previous_generated_nfo,
+        )
+        .expect("previous effective NFO");
+        let previous = membership_sidecar(vec![membership_entry_from_outputs(
+            &entry,
+            &previous_definition,
+            &previous_nfo,
+        )]);
+        let current_generated_nfo =
+            generated_nfo_bytes(&current_manifest, &entry).expect("current generated NFO");
+        let current_nfo =
+            ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &current_generated_nfo)
+                .expect("current effective NFO");
+        let mut current = membership_sidecar(vec![membership_entry_from_outputs(
+            &entry,
+            &current_definition,
+            &current_nfo,
+        )]);
+        current.manifest_etag = "metadata-defaults-and-tags".to_owned();
+
+        assert_eq!(previous_definition, current_definition);
+        assert_ne!(previous_nfo, current_nfo);
+        let delta = PlaylistMembershipDelta::between(Some(&previous), &current);
+        let membership_changed = !delta.is_empty();
+
+        assert_eq!(delta.changed_provider_ids, ["one"]);
+        assert!(membership_changed);
+    }
+
+    #[test]
+    fn membership_delta_detects_reviewed_nfo_output_changes() {
+        let manifest = parse_playlist_manifest(valid_yaml(), Path::new("Fixture.playlist.yml"))
+            .expect("manifest");
+        let entry = PlaylistEntry::new("one", "https://example.test/1", "One");
+        let definition = generated_definition_bytes(&manifest, &entry).expect("definition");
+        let mut previous_metadata = ersatzrs_core::repositories::AddonMediaListNfoMetadata {
+            title: "One".to_owned(),
+            languages: vec!["en".to_owned()],
+            ..Default::default()
+        };
+        let temp = tempfile::tempdir().expect("NFO directory");
+        let nfo_path = temp.path().join("one.nfo");
+        let previous_generated_nfo =
+            generated_reviewed_nfo_bytes(&manifest, &entry, &previous_metadata, &BTreeMap::new())
+                .expect("previous generated NFO");
+        let previous_nfo = ersatzrs_infra::addon_media_nfo::reconcile_generated(
+            &nfo_path,
+            &previous_generated_nfo,
+        )
+        .expect("previous effective NFO");
+        let previous = membership_sidecar(vec![membership_entry_from_outputs(
+            &entry,
+            &definition,
+            &previous_nfo,
+        )]);
+        previous_metadata.languages = vec!["nl".to_owned()];
+        let current_generated_nfo =
+            generated_reviewed_nfo_bytes(&manifest, &entry, &previous_metadata, &BTreeMap::new())
+                .expect("current generated NFO");
+        let current_nfo =
+            ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &current_generated_nfo)
+                .expect("current effective NFO");
+        let current = membership_sidecar(vec![membership_entry_from_outputs(
+            &entry,
+            &definition,
+            &current_nfo,
+        )]);
+
+        assert_ne!(previous_nfo, current_nfo);
+        let delta = PlaylistMembershipDelta::between(Some(&previous), &current);
+
+        assert_eq!(delta.changed_provider_ids, ["one"]);
+        assert!(!delta.is_empty());
+    }
+
+    #[test]
+    fn membership_delta_ignores_output_equivalent_manifest_and_sidecar_upgrade() {
+        let manifest_path = Path::new("Fixture.playlist.yml");
+        let previous_manifest =
+            parse_playlist_manifest(valid_yaml(), manifest_path).expect("previous manifest");
+        let current_yaml = format!(
+            "{}\ndefaults:\n  content_rating: TV-14\n  year: 2024\ntags:\n  - Featured\n",
+            valid_yaml()
+        );
+        let current_manifest =
+            parse_playlist_manifest(&current_yaml, manifest_path).expect("current manifest");
+        let mut entry = PlaylistEntry::new("one", "https://example.test/1", "One");
+        entry.content_rating = Some("TV-14".to_owned());
+        entry.year = Some(2024);
+        entry.tags = vec!["Featured".to_owned()];
+        let previous_definition =
+            generated_definition_bytes(&previous_manifest, &entry).expect("previous definition");
+        let current_definition =
+            generated_definition_bytes(&current_manifest, &entry).expect("current definition");
+        let temp = tempfile::tempdir().expect("NFO directory");
+        let nfo_path = temp.path().join("one.nfo");
+        let previous_generated_nfo =
+            generated_nfo_bytes(&previous_manifest, &entry).expect("previous generated NFO");
+        let previous_nfo = ersatzrs_infra::addon_media_nfo::reconcile_generated(
+            &nfo_path,
+            &previous_generated_nfo,
+        )
+        .expect("previous effective NFO");
+        let mut previous_entry =
+            membership_entry_from_outputs(&entry, &previous_definition, &previous_nfo);
+        previous_entry.provider_id = None;
+        previous_entry.entry_etag = None;
+        let mut previous = membership_sidecar(vec![previous_entry]);
+        previous.version = 2;
+        previous.manifest_etag = "legacy-manifest".to_owned();
+        let current_generated_nfo =
+            generated_nfo_bytes(&current_manifest, &entry).expect("current generated NFO");
+        let current_nfo =
+            ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &current_generated_nfo)
+                .expect("current effective NFO");
+        let mut current = membership_sidecar(vec![membership_entry_from_outputs(
+            &entry,
+            &current_definition,
+            &current_nfo,
+        )]);
+        current.manifest_etag = "upgraded-manifest".to_owned();
+
+        assert_eq!(previous_definition, current_definition);
+        assert_eq!(previous_nfo, current_nfo);
+        let delta = PlaylistMembershipDelta::between(Some(&previous), &current);
+        let membership_changed = !delta.is_empty();
+
+        assert_eq!(delta, PlaylistMembershipDelta::default());
+        assert!(!membership_changed);
+    }
+
+    #[test]
+    fn membership_delta_distinguishes_additions_and_removals() {
+        let one = membership_sidecar(vec![membership_entry("provider:one", "one", "one-v1")]);
+        let two = membership_sidecar(vec![
+            membership_entry("provider:one", "one", "one-v1"),
+            membership_entry("provider:two", "two", "two-v1"),
+        ]);
+
+        let added = PlaylistMembershipDelta::between(Some(&one), &two);
+        assert_eq!(added.added_provider_ids, ["provider:two"]);
+        assert_eq!(added.reason(), PlaylistMembershipChangeReason::Added);
+
+        let removed = PlaylistMembershipDelta::between(Some(&two), &one);
+        assert_eq!(removed.removed_provider_ids, ["provider:two"]);
+        assert_eq!(removed.reason(), PlaylistMembershipChangeReason::Removed);
+    }
+
+    #[test]
+    fn membership_delta_classifies_stable_identity_replacement_as_changed() {
+        let previous = membership_sidecar(vec![membership_entry(
+            "provider:episode",
+            "old-generated-id",
+            "episode-v1",
+        )]);
+        let current = membership_sidecar(vec![membership_entry(
+            "provider:episode",
+            "replacement-generated-id",
+            "episode-v2",
+        )]);
+
+        let delta = PlaylistMembershipDelta::between(Some(&previous), &current);
+
+        assert_eq!(delta.changed_provider_ids, ["provider:episode"]);
+        assert!(delta.added_provider_ids.is_empty());
+        assert!(delta.removed_provider_ids.is_empty());
+        assert_eq!(
+            delta.reason(),
+            PlaylistMembershipChangeReason::ChangedOrReplaced
+        );
+    }
+
+    #[test]
+    fn membership_delta_detects_relative_reordering() {
+        let previous = membership_sidecar(vec![
+            membership_entry("provider:one", "one", "one-v1"),
+            membership_entry("provider:two", "two", "two-v1"),
+            membership_entry("provider:three", "three", "three-v1"),
+        ]);
+        let current = membership_sidecar(vec![
+            membership_entry("provider:three", "three", "three-v1"),
+            membership_entry("provider:one", "one", "one-v1"),
+            membership_entry("provider:two", "two", "two-v1"),
+        ]);
+
+        let delta = PlaylistMembershipDelta::between(Some(&previous), &current);
+
+        assert!(delta.reordered);
+        assert!(delta.added_provider_ids.is_empty());
+        assert!(delta.removed_provider_ids.is_empty());
+        assert!(delta.changed_provider_ids.is_empty());
+        assert_eq!(delta.reason(), PlaylistMembershipChangeReason::Reordered);
+    }
+
+    #[test]
+    fn membership_delta_is_deterministic_redacted_and_mixed() {
+        let previous = membership_sidecar(vec![
+            membership_entry("provider:alpha", "alpha", "alpha-v1"),
+            membership_entry("provider:beta", "beta", "beta-v1"),
+            membership_entry("provider:gamma", "gamma", "gamma-v1"),
+        ]);
+        let current = membership_sidecar(vec![
+            membership_entry("provider:gamma", "gamma", "gamma-v2"),
+            membership_entry("provider:alpha", "alpha", "alpha-v1"),
+            membership_entry("provider:delta", "delta", "delta-v1"),
+        ]);
+
+        let delta = PlaylistMembershipDelta::between(Some(&previous), &current);
+
+        assert_eq!(delta.added_provider_ids, ["provider:delta"]);
+        assert_eq!(delta.removed_provider_ids, ["provider:beta"]);
+        assert_eq!(delta.changed_provider_ids, ["provider:gamma"]);
+        assert!(delta.reordered);
+        assert_eq!(delta.reason(), PlaylistMembershipChangeReason::Mixed);
+        let diagnostic = delta.to_string();
+        let debug = format!("{delta:?}");
+        for provider_id in ["provider:alpha", "provider:beta", "provider:gamma"] {
+            assert!(!diagnostic.contains(provider_id));
+            assert!(!debug.contains(provider_id));
+        }
     }
 
     #[tokio::test]
@@ -3298,6 +4073,27 @@ create_playlist: true
     }
 
     #[test]
+    fn generated_definitions_include_authoritative_and_legacy_liveness() {
+        let manifest = parse_playlist_manifest(valid_yaml(), Path::new("Fixture.playlist.yml"))
+            .expect("manifest");
+        for (wire, expected, expected_legacy) in [
+            (WireLiveness::Unknown, RemoteStreamLiveness::Unknown, false),
+            (WireLiveness::Finite, RemoteStreamLiveness::Finite, false),
+            (WireLiveness::Live, RemoteStreamLiveness::Live, true),
+        ] {
+            let mut entry = PlaylistEntry::new("one", "https://example.test/1", "One");
+            entry.liveness = Some(wire);
+            let bytes = generated_definition_bytes(&manifest, &entry).expect("definition");
+            let yaml = std::str::from_utf8(&bytes).expect("UTF-8 definition");
+            let parsed = ersatzrs_infra::remote_stream::parse_remote_stream_definition(yaml)
+                .expect("generated definition must parse through production contract");
+
+            assert_eq!(parsed.liveness, Some(expected));
+            assert_eq!(parsed.is_live, expected_legacy);
+        }
+    }
+
+    #[test]
     fn operator_chapters_override_and_can_restore_provider_text() {
         assert_eq!(
             effective_chapter_input(Some("0:00 Corrected"), Some("0:00 Provider")),
@@ -3693,6 +4489,30 @@ create_playlist: true
     }
 
     #[test]
+    fn staged_sidecar_is_invisible_until_database_boundary_publishes_it() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let sidecar_path = temp.path().join(".ersatzrs-playlist.json");
+        let sync = PlaylistFileSync {
+            state: membership_sidecar(Vec::new()),
+            definitions: Vec::new(),
+            changed: true,
+            membership_changed: true,
+            membership_delta: PlaylistMembershipDelta::default(),
+            enumerated: true,
+            sidecar_publication: SidecarPublication::Staged(sidecar_path.clone()),
+        };
+
+        assert!(!sidecar_path.exists());
+        sync.publish_sidecar().expect("publish staged sidecar");
+        assert_eq!(
+            load_sidecar(&sidecar_path)
+                .expect("load published sidecar")
+                .expect("published state"),
+            sync.state
+        );
+    }
+
+    #[test]
     fn sidecar_integrity_keeps_definitions_strict_and_defers_nfo_validation() {
         let temp = tempfile::TempDir::new().expect("temp dir");
         let definition = b"definition";
@@ -3714,6 +4534,7 @@ create_playlist: true
             managed_nfo_files: BTreeMap::from([("entry".to_owned(), "entry.nfo".to_owned())]),
             entries: vec![PlaylistSidecarEntry {
                 id: "entry".to_owned(),
+                provider_id: None,
                 file: "entry.yml".to_owned(),
                 title: "Entry".to_owned(),
                 duration_seconds: None,
@@ -3722,6 +4543,7 @@ create_playlist: true
                 availability: AddonMediaListItemAvailability::Available,
                 definition_sha256: Some(hex_hash(definition)),
                 nfo_sha256: Some(hex_hash(nfo)),
+                entry_etag: None,
                 artwork: None,
                 artwork_roles: BTreeMap::new(),
             }],

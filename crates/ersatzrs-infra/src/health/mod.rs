@@ -27,8 +27,8 @@ use checks::{
     MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck,
     PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck,
     RemoteStreamAddonReadinessHealthCheck, RemoteStreamHealthCheck,
-    RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck, SearchProjectionHealthCheck,
-    SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
+    RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck, ScanRefreshStateHealthCheck,
+    SearchProjectionHealthCheck, SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
     TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
     VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
@@ -54,7 +54,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 35] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 36] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -82,6 +82,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 35] = [
     "Unavailable",
     "Empty Schedule",
     "Classic Playout State",
+    "Scan Refresh State",
     "Mirror Channels",
     "Output Dynamic Range",
     "Dolby Vision",
@@ -247,6 +248,7 @@ fn registered_health_checks(
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),
         Box::new(ClassicPlayoutStateHealthCheck::new(pool.clone())),
+        Box::new(ScanRefreshStateHealthCheck::new(pool.clone())),
         Box::new(MirrorChannelHealthCheck::new(pool.clone())),
         Box::new(OutputDynamicRangeHealthCheck::new(pool.clone())),
         Box::new(DolbyVisionHealthCheck::new(
@@ -922,6 +924,143 @@ mod tests {
                 .check()
                 .await
                 .expect("audit repaired Classic state")
+                .status,
+            HealthCheckStatus::Pass
+        );
+    }
+
+    #[tokio::test]
+    async fn scan_refresh_state_health_ignores_recent_active_work() {
+        let pool = test_pool().await;
+        seed_empty_schedule(&pool).await;
+        seed_library_path(&pool).await;
+        let now = Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"INSERT INTO "ScanRefreshResolution" (
+                   "LibraryId", "Generation", "State", "Reason", "StartedAt", "UpdatedAt"
+               ) VALUES (10, 1, 0, 'remote-stream-membership-added', ?, ?)"#,
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .expect("seed active impact resolution");
+        sqlx::query(
+            r#"INSERT INTO "ScanPlayoutRefreshIntent" (
+                   "PlayoutId", "LibraryId", "Generation", "State", "Reason",
+                   "CreatedAt", "UpdatedAt"
+               ) VALUES (10, 10, 1, 1, 'remote-stream-membership-added', ?, ?)"#,
+        )
+        .bind(&now)
+        .bind(&now)
+        .execute(&pool)
+        .await
+        .expect("seed active playout refresh intent");
+
+        let result = ScanRefreshStateHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("audit active scan refresh work");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
+    async fn scan_refresh_state_health_reports_bounded_aggregate_failures() {
+        let pool = test_pool().await;
+        seed_empty_schedule(&pool).await;
+        seed_library_path(&pool).await;
+        for statement in [
+            r#"INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name")
+               VALUES (11, 1, 10, 'private-provider-8675309')"#,
+            r#"INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+               VALUES (11, 50, 1, 0)"#,
+        ] {
+            pool.execute(statement)
+                .await
+                .expect("seed second scan refresh owner");
+        }
+        let diagnostic = format!("provider-item-id-secret:{}", "x".repeat(4_096));
+        let old = "2020-01-01T00:00:00Z";
+        sqlx::query(
+            r#"INSERT INTO "ScanRefreshResolution" (
+                   "LibraryId", "Generation", "State", "Reason", "Diagnostic",
+                   "StartedAt", "UpdatedAt"
+               ) VALUES (10, 1, 2, 'remote-stream-membership-added', ?, ?, ?)"#,
+        )
+        .bind(&diagnostic)
+        .bind(old)
+        .bind(old)
+        .execute(&pool)
+        .await
+        .expect("seed failed impact resolution");
+        sqlx::query(
+            r#"INSERT INTO "ScanRefreshResolution" (
+                   "LibraryId", "Generation", "State", "Reason", "Diagnostic",
+                   "StartedAt", "UpdatedAt"
+               ) VALUES (11, 1, 0, 'remote-stream-membership-removed', ?, ?, ?)"#,
+        )
+        .bind(&diagnostic)
+        .bind(old)
+        .bind(old)
+        .execute(&pool)
+        .await
+        .expect("seed stale impact resolution");
+        sqlx::query(
+            r#"INSERT INTO "ScanPlayoutRefreshIntent" (
+                   "PlayoutId", "LibraryId", "Generation", "State", "Reason", "Diagnostic",
+                   "CreatedAt", "UpdatedAt"
+               ) VALUES (10, 10, 1, 2, 'remote-stream-membership-added', ?, ?, ?)"#,
+        )
+        .bind(&diagnostic)
+        .bind(old)
+        .bind(old)
+        .execute(&pool)
+        .await
+        .expect("seed failed playout refresh intent");
+        sqlx::query(
+            r#"INSERT INTO "ScanPlayoutRefreshIntent" (
+                   "PlayoutId", "LibraryId", "Generation", "State", "Reason", "Diagnostic",
+                   "CreatedAt", "UpdatedAt"
+               ) VALUES (11, 11, 1, 1, 'remote-stream-membership-removed', ?, ?, ?)"#,
+        )
+        .bind(&diagnostic)
+        .bind(old)
+        .bind(old)
+        .execute(&pool)
+        .await
+        .expect("seed stale playout refresh intent");
+
+        let check = ScanRefreshStateHealthCheck::new(pool.clone());
+        let result = check
+            .check()
+            .await
+            .expect("audit unhealthy scan refresh work");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(result.brief_message, "4 scan refresh state error(s)");
+        assert_eq!(
+            result.link.as_ref().map(|link| link.link.as_str()),
+            Some("/playouts")
+        );
+        assert_eq!(
+            result.message,
+            "Scan refresh state needs attention: 1 unresolved impact resolution(s), 1 stale impact resolution(s), 1 failed playout refresh intent(s), and 1 stale playout refresh intent(s). Review scanner and scheduling logs, then retry the affected scan or playout refresh."
+        );
+        assert!(!result.message.contains("private-provider-8675309"));
+        assert!(!result.message.contains("provider-item-id-secret"));
+        assert!(result.message.len() < diagnostic.len());
+
+        pool.execute(r#"UPDATE "ScanRefreshResolution" SET "State" = 1"#)
+            .await
+            .expect("resolve impact state");
+        pool.execute(r#"DELETE FROM "ScanPlayoutRefreshIntent""#)
+            .await
+            .expect("complete playout refresh intents");
+        assert_eq!(
+            check
+                .check()
+                .await
+                .expect("audit repaired scan refresh work")
                 .status,
             HealthCheckStatus::Pass
         );
