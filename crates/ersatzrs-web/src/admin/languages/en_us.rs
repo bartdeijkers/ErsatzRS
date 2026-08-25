@@ -1092,6 +1092,47 @@ pub fn text(key: TextKey) -> &'static str {
         },
         TextKey::FillWithGroupMode => "Fill With Group Mode (Show or Artist)",
         TextKey::GraphicsElements => "Graphics Elements",
+        TextKey::AddGraphicsElement => "Add Graphics Element",
+        TextKey::DrawtextRendererOption => "Drawtext — dynamic/file-backed",
+        TextKey::DrawtextSettings => "Drawtext Settings",
+        TextKey::DrawvgRendererOption => "Drawvg — static/vector",
+        TextKey::EditGraphicsElement => "Edit Graphics Element",
+        TextKey::FontFile => "Font File",
+        TextKey::FontFileOptionalHelp => {
+            "Optional. Leave empty to use the packaged Roboto font fallback."
+        }
+        TextKey::GraphicsElement => "Graphics Element",
+        TextKey::GraphicsElementConfigInvalid => {
+            "This text graphics element has invalid configuration and was not changed."
+        }
+        TextKey::GraphicsElementKindImage => "Image",
+        TextKey::GraphicsElementKindMotion => "Motion",
+        TextKey::GraphicsElementKindScript => "Script",
+        TextKey::GraphicsElementKindSubtitle => "Subtitle",
+        TextKey::GraphicsElementKindText => "Text",
+        TextKey::GraphicsElementNameTooLong => "Name must be 50 characters or fewer.",
+        TextKey::GraphicsElementNotEditable => "Not editable here",
+        TextKey::GraphicsElementNotFound => "Graphics element not found.",
+        TextKey::GraphicsElementNotText => "Only Text graphics elements can be edited here.",
+        TextKey::GraphicsElementSaved => "Graphics element saved.",
+        TextKey::GraphicsElementSaveFailed => "Graphics element could not be saved.",
+        TextKey::GraphicsElementType => "Type",
+        TextKey::GraphicsExistingDrawvgHelp => {
+            "Existing elements and new elements use Drawvg by default."
+        }
+        TextKey::GraphicsStreamRestartHelp => {
+            "Changes affect newly started streams and do not restart active streams."
+        }
+        TextKey::NoGraphicsElements => "No graphics elements found.",
+        TextKey::RefreshPeriodBounds => "Refresh period must be between 250 and 60000 milliseconds.",
+        TextKey::RefreshPeriodMilliseconds => "Refresh Period (milliseconds)",
+        TextKey::ReloadFrameInterval => "Reload Frame Interval",
+        TextKey::ReloadFrameIntervalBounds => "Reload frame interval must be at least 1.",
+        TextKey::Renderer => "Renderer",
+        TextKey::SaveGraphicsElement => "Save Graphics Element",
+        TextKey::TextTemplate => "Text Template",
+        TextKey::TextTemplateRequired => "Text template is required.",
+        TextKey::TextTemplateTooLong => "Text template must be valid UTF-8 text up to 64 KiB.",
         TextKey::GraphicsIds => "Graphics IDs",
         TextKey::Genres => "Genres",
         TextKey::GroupName => "Group Name",

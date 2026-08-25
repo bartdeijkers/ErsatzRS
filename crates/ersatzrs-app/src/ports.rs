@@ -7,9 +7,10 @@ use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{
     AddonMediaListRepository, AdminMediaRepository, AdminSearchRepository, AdminSettingsRepository,
     BlockRepository, ChannelRepository, CollectionRepository, DecoRepository,
-    FfmpegProfileRepository, FillerRepository, LibraryRepository, MediaItemRepository,
-    MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository, SettingsMutation,
-    TelevisionRepository, TemplateRepository, TroubleshootingRepository, WatermarkRepository,
+    FfmpegProfileRepository, FillerRepository, GraphicsRepository, LibraryRepository,
+    MediaItemRepository, MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository,
+    SettingsMutation, TelevisionRepository, TemplateRepository, TroubleshootingRepository,
+    WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -721,6 +722,7 @@ pub struct ApplicationPorts {
     collections: Arc<dyn CollectionRepository>,
     ffmpeg_profiles: Arc<dyn FfmpegProfileRepository>,
     fillers: Arc<dyn FillerRepository>,
+    graphics: Arc<dyn GraphicsRepository>,
     watermarks: Arc<dyn WatermarkRepository>,
     templates: Arc<dyn TemplateRepository>,
     blocks: Arc<dyn BlockRepository>,
@@ -759,6 +761,7 @@ impl ApplicationPorts {
         collections: Arc<dyn CollectionRepository>,
         ffmpeg_profiles: Arc<dyn FfmpegProfileRepository>,
         fillers: Arc<dyn FillerRepository>,
+        graphics: Arc<dyn GraphicsRepository>,
         watermarks: Arc<dyn WatermarkRepository>,
         templates: Arc<dyn TemplateRepository>,
         blocks: Arc<dyn BlockRepository>,
@@ -792,6 +795,7 @@ impl ApplicationPorts {
             collections,
             ffmpeg_profiles,
             fillers,
+            graphics,
             watermarks,
             templates,
             blocks,
@@ -864,6 +868,12 @@ impl ApplicationPorts {
     #[must_use]
     pub fn fillers(&self) -> &(dyn FillerRepository + 'static) {
         self.fillers.as_ref()
+    }
+
+    /// Graphics-element persistence used by the text graphics admin slice.
+    #[must_use]
+    pub fn graphics(&self) -> &(dyn GraphicsRepository + 'static) {
+        self.graphics.as_ref()
     }
 
     /// Watermark persistence used by admin command and query slices.

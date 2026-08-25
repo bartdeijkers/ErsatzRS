@@ -177,6 +177,10 @@ struct TextYaml {
     epg_entries: i32,
     #[serde(default)]
     text: Option<String>,
+    #[serde(default)]
+    renderer: ersatzrs_domain::TextGraphicsRenderer,
+    #[serde(default)]
+    drawtext: ersatzrs_domain::DrawtextGraphicsConfig,
 }
 
 impl TextYaml {
@@ -197,6 +201,8 @@ impl TextYaml {
             epg_entries: self.epg_entries,
             config: GraphicsElementConfig::Text(TextGraphicsConfig {
                 text: self.text,
+                renderer: self.renderer,
+                drawtext: self.drawtext,
                 fit: self.text_fit,
                 align: self.text_align,
                 width_percent: self.width_percent,

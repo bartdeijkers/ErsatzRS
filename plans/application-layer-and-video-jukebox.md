@@ -5,8 +5,8 @@
 Queued for Phase 10. The Phase 7 application-boundary work is complete; this
 plan now owns the dependency-gated future "The Box" music-video jukebox and its
 add-ons. Phase 10 begins after Phase 9 teletext support closes through
-milestone `p9b-02`. The earlier
-[`drawtext-overlay-leg.md`](drawtext-overlay-leg.md) program establishes a
+milestone `p9b-02`. The completed
+[ADR 0077 drawtext program](../docs/adr/0077-ffmpeg-drawtext-overlay-leg.md) establishes a
 dynamic, reloadable text overlay that Phase 10 can reuse for changing request,
 now/next, or countdown presentation without making it part of the jukebox's
 durable queue contract.

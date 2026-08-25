@@ -15,6 +15,7 @@ pub mod cache_cleanup;
 pub mod channel_playout;
 pub(crate) mod condition;
 pub mod db;
+pub mod dynamic_text;
 pub mod emby;
 pub mod ffmpeg_capabilities;
 pub mod ffmpeg_config;

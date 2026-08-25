@@ -21,6 +21,11 @@ backing = 'list + add/`:id` editor'
 routed  = true
 
 [[route]]
+nav     = '/graphics-elements'
+backing = 'localized all-kind list + text-only add/`:id` editor with drawvg/drawtext selection, hydrated persistence, and HTML POST fallback'
+routed  = true
+
+[[route]]
 nav     = '/media/sources/local'
 backing = 'list + add/`:id/edit`'
 routed  = true

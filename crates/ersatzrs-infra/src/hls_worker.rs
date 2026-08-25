@@ -33,6 +33,7 @@ use ersatzrs_ffmpeg::{
     SourceVideoStream, SubtitleMethod, WatermarkOpacityClock,
 };
 
+use crate::dynamic_text::shutdown_dynamic_text_controllers;
 use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
 use crate::ffmpeg_config::playback_language_preferences;
 use crate::playback::{
@@ -42,8 +43,8 @@ use crate::playback::{
     select_custom_playback_streams, select_pinned_playback_subtitle,
     select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
     subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
-    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsRenderContext, PlaybackProfile,
-    PlaybackSubtitle,
+    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
+    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use crate::remote_stream::{
     decode_persisted_liveness, redact_remote_stream_output, redacted_source_label,
@@ -1022,6 +1023,7 @@ impl HlsSessionWorker {
                 }
             };
             let mut graphics_cleanup_dir = None;
+            let mut dynamic_text_controllers = Vec::new();
             let graphics_overlays = match select_playback_graphics(
                 &pool,
                 &watermark_channel,
@@ -1065,7 +1067,13 @@ impl HlsSessionWorker {
                     )
                     .await
                     {
-                        Ok(overlays) => overlays,
+                        Ok(PlaybackGraphicsArtifacts {
+                            overlays,
+                            dynamic_text_controllers: controllers,
+                        }) => {
+                            dynamic_text_controllers = controllers;
+                            overlays
+                        }
                         Err(error) => {
                             if let Some(path) = &graphics_cleanup_dir {
                                 let _ = tokio::fs::remove_dir_all(path).await;
@@ -1180,6 +1188,7 @@ impl HlsSessionWorker {
                     (refused_hls_process_outcome(&error), None)
                 }
             };
+            shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
             if let Some(path) = graphics_cleanup_dir {
                 let _ = cleanup_working_dir(&path).await;
             }

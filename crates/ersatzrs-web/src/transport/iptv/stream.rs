@@ -35,6 +35,7 @@ use ersatzrs_ffmpeg::{
 use ersatzrs_infra::addons::AddonRuntimeContext;
 use ersatzrs_infra::channel_playout::load_channel_playout_context;
 use ersatzrs_infra::db::DbPool;
+use ersatzrs_infra::dynamic_text::{shutdown_dynamic_text_controllers, DynamicTextController};
 use ersatzrs_infra::ffmpeg_capabilities::{
     learned_hardware_decode_denial, persist_hardware_decode_denial_into_runtime,
 };
@@ -50,8 +51,8 @@ use ersatzrs_infra::playback::{
     select_custom_playback_streams, select_pinned_playback_subtitle,
     select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
     subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
-    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsRenderContext, PlaybackProfile,
-    PlaybackSubtitle,
+    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
+    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use ersatzrs_infra::remote_stream::{
     decode_persisted_liveness, redact_remote_stream_output, remote_stream_input_file,
@@ -536,6 +537,7 @@ async fn serve_channel_stream_with_channel(
         }
     };
     let mut graphics_cleanup_dirs = Vec::new();
+    let mut dynamic_text_controllers = Vec::new();
     let graphics_overlays = match select_playback_graphics(
         &state.pool,
         &channel,
@@ -576,8 +578,12 @@ async fn serve_channel_stream_with_channel(
             )
             .await
             {
-                Ok(overlays) => {
+                Ok(PlaybackGraphicsArtifacts {
+                    overlays,
+                    dynamic_text_controllers: controllers,
+                }) => {
                     graphics_cleanup_dirs.push(graphics_cleanup_dir);
+                    dynamic_text_controllers = controllers;
                     overlays
                 }
                 Err(error) => {
@@ -638,6 +644,7 @@ async fn serve_channel_stream_with_channel(
                 reason = %error,
                 "refusing to transcode an unsupported source"
             );
+            shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
             cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
             return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
         }
@@ -703,6 +710,7 @@ async fn serve_channel_stream_with_channel(
                         &channel,
                         command,
                         graphics_cleanup_dirs,
+                        dynamic_text_controllers,
                         &playback_profile,
                         target_frame_rate,
                         slate_metadata,
@@ -719,6 +727,8 @@ async fn serve_channel_stream_with_channel(
                         channel_number = %channel.number,
                         "failed to load MPEG-TS transcode capacity"
                     );
+                    shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+                    cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
             }
@@ -726,9 +736,11 @@ async fn serve_channel_stream_with_channel(
             None
         };
 
+    let cleanup_on_spawn_failure = graphics_cleanup_dirs.clone();
     match spawn_stream_body(
         &command,
         graphics_cleanup_dirs,
+        dynamic_text_controllers,
         channel.number.clone(),
         state.hls_sessions.clone(),
         capacity_reservation,
@@ -748,6 +760,7 @@ async fn serve_channel_stream_with_channel(
         }
         Err(error) => {
             tracing::error!(%error, "failed to spawn ffmpeg for channel stream");
+            cleanup_stream_artifacts(&cleanup_on_spawn_failure).await;
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
@@ -851,6 +864,7 @@ async fn serve_segmenter_wrapper_stream(
                 channel,
                 command,
                 cleanup_paths,
+                Vec::new(),
                 &playback_profile,
                 target_frame_rate,
                 metadata,
@@ -874,6 +888,7 @@ async fn serve_segmenter_wrapper_stream(
     match spawn_stream_body(
         &command,
         cleanup_paths,
+        Vec::new(),
         channel.number.clone(),
         state.hls_sessions.clone(),
         capacity_reservation,
@@ -981,6 +996,7 @@ async fn serve_legacy_concat_stream(
                 channel,
                 command,
                 Vec::new(),
+                Vec::new(),
                 &playback_profile,
                 target_frame_rate,
                 metadata,
@@ -1003,6 +1019,7 @@ async fn serve_legacy_concat_stream(
 
     match spawn_stream_body(
         &command,
+        Vec::new(),
         Vec::new(),
         channel.number.clone(),
         state.hls_sessions.clone(),
@@ -1125,6 +1142,7 @@ async fn mpeg_ts_capacity_wait_response(
     channel: &Channel,
     command: FfmpegCommand,
     mut cleanup_paths: Vec<PathBuf>,
+    dynamic_text_controllers: Vec<DynamicTextController>,
     playback_profile: &PlaybackProfile,
     target_frame_rate: Option<FrameRate>,
     metadata: OutputMetadata,
@@ -1148,6 +1166,7 @@ async fn mpeg_ts_capacity_wait_response(
             channel_number = %channel.number,
             "failed to build MPEG-TS all-streams-in-use slate"
         );
+        shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
         for path in cleanup_paths {
             cleanup_stream_artifact(&path).await;
         }
@@ -1164,6 +1183,7 @@ async fn mpeg_ts_capacity_wait_response(
         command,
         slate_command,
         cleanup_paths,
+        dynamic_text_controllers,
         channel.number.clone(),
         state.hls_sessions.clone(),
         state.pool.clone(),
@@ -2414,9 +2434,11 @@ fn spawn_stream_process(
     .map_err(|error| StreamSpawnError::Spawn(error.to_string()))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_stream_body(
     command: &FfmpegCommand,
     cleanup_paths: Vec<PathBuf>,
+    dynamic_text_controllers: Vec<DynamicTextController>,
     channel_number: String,
     session_registry: Arc<dyn HlsSessionRegistry>,
     capacity_reservation: Option<ActiveTranscodeReservation>,
@@ -2452,6 +2474,7 @@ fn spawn_stream_body(
         if registered {
             session_registry.remove(&channel_number).await;
         }
+        shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
         for path in cleanup_paths {
             cleanup_stream_artifact(&path).await;
         }
@@ -2465,6 +2488,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
     command: FfmpegCommand,
     slate_command: FfmpegCommand,
     cleanup_paths: Vec<PathBuf>,
+    dynamic_text_controllers: Vec<DynamicTextController>,
     channel_number: String,
     session_registry: Arc<dyn HlsSessionRegistry>,
     pool: DbPool,
@@ -2568,6 +2592,7 @@ fn spawn_stream_body_waiting_for_mpegts_capacity(
         if registered {
             session_registry.remove(&channel_number).await;
         }
+        shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
         for path in cleanup_paths {
             cleanup_stream_artifact(&path).await;
         }
@@ -4207,6 +4232,7 @@ mod tests {
         let body = spawn_stream_body(
             &command,
             Vec::new(),
+            Vec::new(),
             "98".to_owned(),
             Arc::clone(&registry),
             None,
@@ -4274,6 +4300,7 @@ mod tests {
         let body = spawn_stream_body(
             &shell_command("printf done", "echo done"),
             Vec::new(),
+            Vec::new(),
             "91".to_owned(),
             registry,
             Some(reservation),
@@ -4300,6 +4327,7 @@ mod tests {
                 "printf started; sleep 30",
                 "echo started & ping -n 30 127.0.0.1 >NUL",
             ),
+            Vec::new(),
             Vec::new(),
             "92".to_owned(),
             registry,
@@ -4330,6 +4358,7 @@ mod tests {
         let body = spawn_stream_body_waiting_for_mpegts_capacity(
             shell_command("printf content", "echo content"),
             shell_command("printf slate", "echo slate"),
+            Vec::new(),
             Vec::new(),
             "93".to_owned(),
             registry,
@@ -4404,6 +4433,7 @@ mod tests {
             shell_command("printf content", "echo content"),
             shell_command("printf slate", "echo slate"),
             Vec::new(),
+            Vec::new(),
             "94".to_owned(),
             registry,
             pool,
@@ -4461,6 +4491,7 @@ mod tests {
 
         let body = spawn_stream_body(
             &command,
+            Vec::new(),
             Vec::new(),
             "97".to_owned(),
             Arc::clone(&registry),

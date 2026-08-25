@@ -15,17 +15,21 @@ use ersatzrs_domain::{
     Channel, ChannelSubtitleMode, ChannelWatermark, ChannelWatermarkImageSource,
     ChannelWatermarkMode, DecoMode, FFmpegProfile, FillerKind, GraphicsElement,
     GraphicsElementConfig, HardwareAccelerationKind, MotionEndBehavior, Resolution, StreamingMode,
-    VideoScanKind, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
+    TextGraphicsRenderer, VideoScanKind, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
 };
 use ersatzrs_ffmpeg::{
-    ffmpeg_path, ffprobe_path, FrameRate, FrameSize, GraphicsPipelineOverlay,
-    GraphicsRenderContext, GraphicsTemplateRenderer, InputFile, OutputFormat, PixelFormat,
-    SourceAudioCodec, SourceAudioStream, SourceColorParams, SourceVideoCodec, SourceVideoStream,
-    SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint, WatermarkOverlay,
+    ffmpeg_path, ffprobe_path, graphics_element_drawtext_overlay, FrameRate, FrameSize,
+    GraphicsPipelineOverlay, GraphicsRenderContext, GraphicsTemplateRenderer, InputFile,
+    OutputFormat, PixelFormat, SourceAudioCodec, SourceAudioStream, SourceColorParams,
+    SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind, WatermarkFadePoint,
+    WatermarkOverlay,
 };
 use sqlx::Row;
 
 use crate::db::DbPool;
+use crate::dynamic_text::{
+    shutdown_dynamic_text_controllers, DynamicTextController, DynamicTextControllerRequest,
+};
 use crate::ffmpeg_config::use_embedded_subtitles;
 use crate::ffprobe::FfprobeExtractor;
 use crate::file_system_layout::{
@@ -151,6 +155,20 @@ pub struct PlaybackGraphicsRenderContext {
     pub frame_size: FrameSize,
     pub square_pixel_frame_size: FrameSize,
     pub frame_rate: Option<FrameRate>,
+}
+
+/// Rendered `FFmpeg` overlays and the live text controllers they depend on.
+#[derive(Default)]
+pub struct PlaybackGraphicsArtifacts {
+    pub overlays: Vec<GraphicsPipelineOverlay>,
+    pub dynamic_text_controllers: Vec<DynamicTextController>,
+}
+
+impl PlaybackGraphicsArtifacts {
+    /// Stop every live controller. Call this before deleting the graphics directory.
+    pub async fn shutdown(self) {
+        shutdown_dynamic_text_controllers(self.dynamic_text_controllers).await;
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1628,57 +1646,129 @@ pub async fn select_playback_graphics(
 ///
 /// Returns database/template errors from variable assembly or rendering errors
 /// from generated SVG/ASS artifacts.
+#[allow(clippy::too_many_lines)]
 pub async fn render_playback_graphics_overlays(
     pool: &DbPool,
     graphics: &[ResolvedPlaybackGraphicsElement],
     context: &PlaybackGraphicsRenderContext,
     output_dir: impl AsRef<Path>,
-) -> Result<Vec<GraphicsPipelineOverlay>> {
-    let renderer = GraphicsTemplateRenderer::new(output_dir.as_ref());
-    let mut overlays = Vec::new();
-    for resolved in graphics {
-        let variable_context = GraphicsTemplateContext {
-            channel_id: context.channel_id,
-            channel_number: context.channel_number.clone(),
-            media_item_id: context.media_item_id,
-            media_path: context.media_path.clone(),
-            channel_start_time: context.channel_start_time,
-            content_start_time: context.content_start_time,
-            stream_seek_seconds: context.stream_seek_seconds,
-            duration_seconds: context.duration_seconds,
-            frame_width: context.frame_size.width,
-            frame_height: context.frame_size.height,
-            scaled_frame_width: context.square_pixel_frame_size.width,
-            scaled_frame_height: context.square_pixel_frame_size.height,
-            r_frame_rate: context.frame_rate.map(FrameRate::r_frame_rate),
-            frame_rate: context.frame_rate.map(FrameRate::parsed),
-        };
-        let variables = graphics_template_variables(
-            pool,
-            &variable_context,
-            usize::try_from(resolved.element.epg_entries.max(0)).unwrap_or_default(),
-            resolved.variables.as_deref(),
-        )
-        .await?;
-        let element = render_graphics_element_templates(&resolved.element, &variables)?;
-        let scalar_variables = scalar_template_variables(&variables);
-        let render_context = graphics_render_context_with_motion_probe(context, &element).await;
-        for rendered in renderer
-            .render_graphics_elements(
-                std::slice::from_ref(&element),
-                &scalar_variables,
-                &render_context,
+) -> Result<PlaybackGraphicsArtifacts> {
+    let output_dir = output_dir.as_ref().to_path_buf();
+    let renderer = GraphicsTemplateRenderer::new(&output_dir);
+    let mut artifacts = PlaybackGraphicsArtifacts::default();
+    let render_result: Result<()> = async {
+        for resolved in graphics {
+            let variable_context = GraphicsTemplateContext {
+                channel_id: context.channel_id,
+                channel_number: context.channel_number.clone(),
+                media_item_id: context.media_item_id,
+                media_path: context.media_path.clone(),
+                channel_start_time: context.channel_start_time,
+                content_start_time: context.content_start_time,
+                stream_seek_seconds: context.stream_seek_seconds,
+                duration_seconds: context.duration_seconds,
+                frame_width: context.frame_size.width,
+                frame_height: context.frame_size.height,
+                scaled_frame_width: context.square_pixel_frame_size.width,
+                scaled_frame_height: context.square_pixel_frame_size.height,
+                r_frame_rate: context.frame_rate.map(FrameRate::r_frame_rate),
+                frame_rate: context.frame_rate.map(FrameRate::parsed),
+            };
+            let variables = graphics_template_variables(
+                pool,
+                &variable_context,
+                usize::try_from(resolved.element.epg_entries.max(0)).unwrap_or_default(),
+                resolved.variables.as_deref(),
             )
-            .map_err(|error| RepositoryError::Decode {
-                kind: "graphics render",
-                value: error.to_string(),
-            })?
-        {
-            overlays.push(rendered.into_pipeline_overlay());
+            .await?;
+            let element = render_graphics_element_templates(&resolved.element, &variables)?;
+            let render_context = graphics_render_context_with_motion_probe(context, &element).await;
+            let drawtext_config = match &element.config {
+                GraphicsElementConfig::Text(config)
+                    if config.renderer == TextGraphicsRenderer::Drawtext =>
+                {
+                    Some(config)
+                }
+                _ => None,
+            };
+            if let Some(config) = drawtext_config {
+                let Some(template) = config.text.clone() else {
+                    tracing::warn!(
+                        graphics_element_id = element.id,
+                        "skipping dynamic text graphics element without a text template"
+                    );
+                    continue;
+                };
+                let text_file = output_dir.join(format!("{}-dynamic-text.txt", element.id));
+                let controller = match DynamicTextController::start(DynamicTextControllerRequest {
+                    element_id: element.id,
+                    template,
+                    variables,
+                    text_file: text_file.clone(),
+                    refresh_interval_milliseconds: config.drawtext.refresh_interval_milliseconds,
+                    playback_offset_seconds: context.stream_seek_seconds,
+                    playback_duration_seconds: context.duration_seconds,
+                })
+                .await
+                {
+                    Ok(controller) => controller,
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            graphics_element_id = element.id,
+                            "skipping invalid dynamic text graphics element"
+                        );
+                        continue;
+                    }
+                };
+                let overlay_result = graphics_element_drawtext_overlay(
+                    &element,
+                    text_file,
+                    fonts_cache_folder().join("Roboto-Regular.ttf"),
+                    &render_context,
+                )
+                .map_err(|error| error.to_string());
+                let overlay = match overlay_result {
+                    Ok(overlay) => overlay,
+                    Err(error) => {
+                        controller.shutdown().await;
+                        tracing::warn!(
+                            %error,
+                            graphics_element_id = element.id,
+                            "skipping dynamic text graphics element with an invalid overlay"
+                        );
+                        continue;
+                    }
+                };
+                artifacts.overlays.push(overlay);
+                artifacts.dynamic_text_controllers.push(controller);
+            } else {
+                let scalar_variables = scalar_template_variables(&variables);
+                for rendered in renderer
+                    .render_graphics_elements(
+                        std::slice::from_ref(&element),
+                        &scalar_variables,
+                        &render_context,
+                    )
+                    .map_err(|error| RepositoryError::Decode {
+                        kind: "graphics render",
+                        value: error.to_string(),
+                    })?
+                {
+                    artifacts.overlays.push(rendered.into_pipeline_overlay());
+                }
+            }
         }
+        Ok(())
     }
-    overlays.sort_by_key(graphics_overlay_z_index);
-    Ok(overlays)
+    .await;
+    if let Err(error) = render_result {
+        shutdown_dynamic_text_controllers(std::mem::take(&mut artifacts.dynamic_text_controllers))
+            .await;
+        return Err(error);
+    }
+    artifacts.overlays.sort_by_key(graphics_overlay_z_index);
+    Ok(artifacts)
 }
 
 async fn graphics_render_context_with_motion_probe(
@@ -1733,7 +1823,9 @@ fn render_graphics_element_templates(
             GraphicsElementConfig::Image(config)
         }
         GraphicsElementConfig::Text(mut config) => {
-            config.text = render_optional_graphics_template(config.text.as_deref(), variables)?;
+            if config.renderer == TextGraphicsRenderer::Drawvg {
+                config.text = render_optional_graphics_template(config.text.as_deref(), variables)?;
+            }
             config.base_style =
                 render_optional_graphics_template(config.base_style.as_deref(), variables)?;
             config.include_fonts_from =
@@ -1776,6 +1868,7 @@ fn render_optional_graphics_template(
 fn graphics_overlay_z_index(overlay: &GraphicsPipelineOverlay) -> i32 {
     match overlay {
         GraphicsPipelineOverlay::Drawvg { z_index, .. }
+        | GraphicsPipelineOverlay::Drawtext { z_index, .. }
         | GraphicsPipelineOverlay::NativeImage { z_index, .. } => *z_index,
     }
 }

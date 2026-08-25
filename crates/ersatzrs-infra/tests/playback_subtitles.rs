@@ -5,8 +5,8 @@ use ersatzrs_domain::{
     Channel, ChannelMusicVideoCreditsMode, ChannelSubtitleMode, ChannelWatermarkImageSource,
     FillerKind, GraphicsElement, GraphicsElementConfig, GraphicsElementKind, ImageGraphicsConfig,
     MotionEndBehavior, MotionGraphicsConfig, Resolution, StreamingMode, TextGraphicsConfig,
-    CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE, CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID,
-    CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE,
+    TextGraphicsRenderer, CONFIG_KEY_FFMPEG_FALLBACK_SUBTITLE_LANGUAGE_CODE,
+    CONFIG_KEY_FFMPEG_GLOBAL_WATERMARK_ID, CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE,
 };
 use ersatzrs_ffmpeg::{
     DesiredVideoState, FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, PipelineBuilder,
@@ -25,7 +25,7 @@ use ersatzrs_infra::playback::{
     render_playback_graphics_overlays, select_channel_playback_subtitle,
     select_pinned_playback_subtitle, select_playback_graphics, select_playback_subtitle,
     select_playback_watermarks, subtitle_input_for_stream, watermark_fade_points_for_program,
-    PlaybackGraphicsRenderContext, ResolvedPlaybackGraphicsElement,
+    PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext, ResolvedPlaybackGraphicsElement,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::SqlitePool;
@@ -959,12 +959,12 @@ async fn render_playback_graphics_overlays_uses_per_element_variables() {
         frame_rate: Some(FrameRate::DEFAULT),
     };
 
-    let overlays = render_playback_graphics_overlays(&pool, &graphics, &context, &output_dir)
+    let artifacts = render_playback_graphics_overlays(&pool, &graphics, &context, &output_dir)
         .await
         .unwrap();
 
-    assert_eq!(overlays.len(), 1);
-    let GraphicsPipelineOverlay::Drawvg { z_index, filter } = &overlays[0] else {
+    assert_eq!(artifacts.overlays.len(), 1);
+    let GraphicsPipelineOverlay::Drawvg { z_index, filter } = &artifacts.overlays[0] else {
         panic!("expected drawvg overlay");
     };
     assert_eq!(*z_index, 12);
@@ -973,7 +973,154 @@ async fn render_playback_graphics_overlays_uses_per_element_variables() {
     assert!(rendered_script.contains("setcolor"));
     assert!(rendered_script.contains("rect"));
 
+    artifacts.shutdown().await;
     std::fs::remove_dir_all(output_dir).unwrap();
+}
+
+#[test]
+fn legacy_text_graphics_json_defaults_to_drawvg() {
+    let config: TextGraphicsConfig = serde_json::from_str(
+        r#"{"text":"{{ MediaItem_Title }}","text_fit":"none","text_align":"Left"}"#,
+    )
+    .unwrap();
+
+    assert_eq!(config.renderer, TextGraphicsRenderer::Drawvg);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn drawtext_graphics_renders_initial_text_and_refreshes_playback_elapsed() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+    let output_dir = tempfile::tempdir().unwrap();
+    let graphics = vec![ResolvedPlaybackGraphicsElement {
+        element: GraphicsElement {
+            id: 703,
+            name: "live-title".to_owned(),
+            kind: GraphicsElementKind::Text,
+            z_index: 13,
+            config: GraphicsElementConfig::Text(TextGraphicsConfig {
+                text: Some(
+                    "{{ MediaItem_Title }}|{{ Custom }}|{{ Playback.ElapsedMilliseconds }}"
+                        .to_owned(),
+                ),
+                renderer: TextGraphicsRenderer::Drawtext,
+                drawtext: ersatzrs_domain::DrawtextGraphicsConfig {
+                    refresh_interval_milliseconds: 1,
+                    ..ersatzrs_domain::DrawtextGraphicsConfig::default()
+                },
+                ..TextGraphicsConfig::default()
+            }),
+            ..GraphicsElement::default()
+        },
+        variables: Some(r#"{"Custom":"Dynamic"}"#.to_owned()),
+    }];
+    let context = PlaybackGraphicsRenderContext {
+        channel_id: 120,
+        channel_number: "120".to_owned(),
+        media_item_id: 10,
+        media_path: "/media/movie.mkv".to_owned(),
+        channel_start_time: common::fixed_time(),
+        content_start_time: common::fixed_time(),
+        stream_seek_seconds: 12.0,
+        duration_seconds: 3_600.0,
+        frame_size: FrameSize::new(1920, 1080),
+        square_pixel_frame_size: FrameSize::new(1920, 1080),
+        frame_rate: Some(FrameRate::DEFAULT),
+    };
+
+    let artifacts =
+        render_playback_graphics_overlays(&pool, &graphics, &context, output_dir.path())
+            .await
+            .unwrap();
+
+    assert_eq!(artifacts.overlays.len(), 1);
+    assert_eq!(artifacts.dynamic_text_controllers.len(), 1);
+    let GraphicsPipelineOverlay::Drawtext { z_index, filter } = &artifacts.overlays[0] else {
+        panic!("expected drawtext overlay");
+    };
+    assert_eq!(*z_index, 13);
+    assert!(filter.contains("textfile="));
+    let text_file = artifacts.dynamic_text_controllers[0]
+        .text_file()
+        .to_path_buf();
+    let initial = tokio::fs::read_to_string(&text_file).await.unwrap();
+    assert!(initial.starts_with("Movie|Dynamic|12000"));
+
+    let mut refreshed = initial.clone();
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        refreshed = tokio::fs::read_to_string(&text_file).await.unwrap();
+        if refreshed != initial {
+            break;
+        }
+    }
+    assert_ne!(refreshed, initial);
+    assert!(refreshed.starts_with("Movie|Dynamic|"));
+
+    artifacts.shutdown().await;
+}
+
+#[tokio::test]
+async fn invalid_drawtext_element_does_not_suppress_valid_static_graphics() {
+    let pool = common::test_db().await;
+    seed_movie_with_subtitles(&pool).await;
+    let output_dir = tempfile::tempdir().unwrap();
+    let graphics = vec![
+        ResolvedPlaybackGraphicsElement {
+            element: GraphicsElement {
+                id: 704,
+                name: "broken-dynamic".to_owned(),
+                kind: GraphicsElementKind::Text,
+                config: GraphicsElementConfig::Text(TextGraphicsConfig {
+                    text: Some("{{".to_owned()),
+                    renderer: TextGraphicsRenderer::Drawtext,
+                    ..TextGraphicsConfig::default()
+                }),
+                ..GraphicsElement::default()
+            },
+            variables: None,
+        },
+        ResolvedPlaybackGraphicsElement {
+            element: GraphicsElement {
+                id: 705,
+                name: "valid-static".to_owned(),
+                kind: GraphicsElementKind::Text,
+                z_index: 14,
+                config: GraphicsElementConfig::Text(TextGraphicsConfig {
+                    text: Some("Static title".to_owned()),
+                    ..TextGraphicsConfig::default()
+                }),
+                ..GraphicsElement::default()
+            },
+            variables: None,
+        },
+    ];
+    let context = PlaybackGraphicsRenderContext {
+        channel_id: 120,
+        channel_number: "120".to_owned(),
+        media_item_id: 10,
+        media_path: "/media/movie.mkv".to_owned(),
+        channel_start_time: common::fixed_time(),
+        content_start_time: common::fixed_time(),
+        stream_seek_seconds: 0.0,
+        duration_seconds: 3_600.0,
+        frame_size: FrameSize::new(1920, 1080),
+        square_pixel_frame_size: FrameSize::new(1920, 1080),
+        frame_rate: Some(FrameRate::DEFAULT),
+    };
+
+    let artifacts =
+        render_playback_graphics_overlays(&pool, &graphics, &context, output_dir.path())
+            .await
+            .unwrap();
+
+    assert_eq!(artifacts.overlays.len(), 1);
+    assert!(artifacts.dynamic_text_controllers.is_empty());
+    assert!(matches!(
+        artifacts.overlays[0],
+        GraphicsPipelineOverlay::Drawvg { z_index: 14, .. }
+    ));
+    artifacts.shutdown().await;
 }
 
 #[tokio::test]
@@ -1018,16 +1165,16 @@ async fn render_playback_graphics_overlays_bounds_hold_motion_when_probe_fails()
         frame_rate: Some(FrameRate::DEFAULT),
     };
 
-    let overlays = render_playback_graphics_overlays(&pool, &graphics, &context, &output_dir)
+    let artifacts = render_playback_graphics_overlays(&pool, &graphics, &context, &output_dir)
         .await
         .unwrap();
 
-    assert_eq!(overlays.len(), 1);
+    assert_eq!(artifacts.overlays.len(), 1);
     let GraphicsPipelineOverlay::NativeImage {
         z_index,
         input,
         overlay,
-    } = &overlays[0]
+    } = &artifacts.overlays[0]
     else {
         panic!("expected native motion overlay");
     };
@@ -1037,6 +1184,7 @@ async fn render_playback_graphics_overlays_bounds_hold_motion_when_probe_fails()
     assert_eq!(overlay.enable.as_deref(), Some("between(t,4,6.5)"));
     assert!(!overlay.eof_action_pass);
 
+    artifacts.shutdown().await;
     let _ = std::fs::remove_dir_all(output_dir);
 }
 
@@ -1061,13 +1209,18 @@ async fn scheduled_yaml_graphics_composite_all_rendered_kinds_in_final_video() {
     attach_scheduled_graphics(&pool, 1010).await;
 
     let selected = select_scheduled_graphics(&pool).await;
-    let overlays = render_scheduled_graphics(&pool, &selected, &assets, temp.path()).await;
+    let artifacts = render_scheduled_graphics(&pool, &selected, &assets, temp.path()).await;
     assert_eq!(
-        overlays.iter().map(graphics_z_index).collect::<Vec<_>>(),
+        artifacts
+            .overlays
+            .iter()
+            .map(graphics_z_index)
+            .collect::<Vec<_>>(),
         vec![10, 20, 30, 40]
     );
 
-    let stream = encode_scheduled_graphics_stream(&assets.input, overlays).await;
+    let stream = encode_scheduled_graphics_stream(&assets.input, artifacts.overlays.clone()).await;
+    artifacts.shutdown().await;
     let stream_path = temp.path().join("scheduled-graphics.ts");
     std::fs::write(&stream_path, stream).expect("write scheduled graphics stream");
 
@@ -1291,7 +1444,7 @@ async fn render_scheduled_graphics(
     selected: &[ResolvedPlaybackGraphicsElement],
     assets: &ScheduledGraphicsAssets,
     temp: &Path,
-) -> Vec<GraphicsPipelineOverlay> {
+) -> PlaybackGraphicsArtifacts {
     render_playback_graphics_overlays(
         pool,
         selected,
@@ -1317,6 +1470,7 @@ async fn render_scheduled_graphics(
 fn graphics_z_index(overlay: &GraphicsPipelineOverlay) -> i32 {
     match overlay {
         GraphicsPipelineOverlay::Drawvg { z_index, .. }
+        | GraphicsPipelineOverlay::Drawtext { z_index, .. }
         | GraphicsPipelineOverlay::NativeImage { z_index, .. } => *z_index,
     }
 }

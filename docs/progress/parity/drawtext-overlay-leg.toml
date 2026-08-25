@@ -1,17 +1,39 @@
 feature    = 'FFmpeg drawtext overlay leg'
 etv_source = 'ErsatzRS extension of the graphics/overlay pipeline; no direct ErsatzTV `drawtext` equivalent (ErsatzTV renders overlays through its external graphics engine, mirrored here by drawvg — see `drawvg-graphics-engine`).'
 rs_target  = '`crates/ersatzrs-ffmpeg`, `crates/ersatzrs-domain`, `crates/ersatzrs-infra`, `crates/ersatzrs-web`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0077']
 summary    = '''
-In progress. `dtx-a-01` accepted ADR 0077 and delivered the typed FFmpeg 9
-`drawtext` builder and z-ordered pipeline leg for inline or interval-reloaded
-file text, explicit family/file font resolution, layout/styling controls,
-two-layer cross-platform escaping, software-frame hardware bridging, runtime
-capability enforcement, and argv/runtime proof. First-party FFmpeg packaging
-now gates both drawvg/drawtext plus Fontconfig, FreeType, HarfBuzz, and FriBidi.
-`dtx-a-02` remains: add the backward-compatible renderer selector, atomic
-minijinja text-file controller and lifecycle, localized admin controls, health
-coverage, and same-process decoded refresh proof on Linux/WSL/Windows. drawvg
-stays the default for arbitrary vector composition; this leg is additive.
+Ported. ADR 0077's typed FFmpeg 9 drawtext builder and z-ordered pipeline leg
+support inline or interval-reloaded file text, explicit family/file fonts,
+layout/styling controls, two-layer cross-platform escaping, software-frame
+hardware bridging, and runtime capability enforcement. Text graphics persist a
+defaulted drawvg/drawtext renderer choice, so old JSON and new elements remain
+on drawvg unless an operator selects dynamic drawtext. A bounded minijinja
+controller writes the initial UTF-8 file before spawn, refreshes atomically,
+keeps the last good output on failure, and is retained across stream retries
+until process cleanup. The localized editor, health check, package gates, and
+same-process decoded Windows and WSL/Linux proofs close the feature.
+'''
+acceptance = '''
+Existing text graphics deserialize and render through drawvg without migration.
+Operators can select localized drawvg or drawtext behavior, and drawtext uses a
+bounded, atomic, lifecycle-owned minijinja text-file controller without
+rebuilding a running FFmpeg graph. Direct IPTV, HLS, hardware retry, preview,
+health, no-JavaScript, hydration, and packaged FFmpeg runtime paths preserve the
+same contract on supported platforms.
+'''
+evidence = '''
+Completed 2026-08-25. Domain serialization tests prove legacy JSON defaults to
+drawvg and drawtext round-trips. Infra tests cover minijinja live values,
+64-KiB/NUL/BOM bounds, atomic replacement, cadence clamping, drop/shutdown,
+last-good behavior, health findings, playback selection, and isolation of an
+invalid dynamic element from valid static graphics. The localized
+`/graphics-elements` list/add/edit family preserves unexposed config and shared
+columns, rejects non-text rows, and passed focused server tests plus hydration
+lint. Chromium and Firefox passed hydrated add/edit and no-JavaScript
+persistence. One-process decoded reload gates passed with the designated
+ErsatzRS FFmpeg 9 runtime on Windows and a packaged FFmpeg 9 runtime under
+WSL/Linux. First-party packaging commit `7cdef93` gates drawtext, Fontconfig,
+FreeType, HarfBuzz, and FriBidi.
 '''

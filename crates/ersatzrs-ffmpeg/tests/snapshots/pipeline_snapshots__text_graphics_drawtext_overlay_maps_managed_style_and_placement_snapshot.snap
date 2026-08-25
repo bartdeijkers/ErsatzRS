@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+expression: filter
+---
+drawtext=fontfile=X\\:/managed fonts/Roboto-Regular.ttf:textfile=X\\:/dynamic text/clock.txt:reload=1:expansion=none:fontsize=52:x=w-text_w-76.8:y=h-text_h-54:fontcolor=#f8f8f8:alpha=0.85:text_align=R+T:y_align=text:line_spacing=8:borderw=2:bordercolor=#101010:text_shaping=1:fix_bounds=1

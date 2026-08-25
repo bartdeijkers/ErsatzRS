@@ -8,28 +8,30 @@ use ersatzrs_domain::{
     HardwareAccelerationKind, ImageGraphicsConfig, MotionEndBehavior, MotionGraphicsConfig,
     NormalizeLoudnessMode, OutputDynamicRange, Resolution, ScalingBehavior, ScriptGraphicsConfig,
     StreamingMode, StyleDefinition, SubtitleGraphicsConfig, TextAlignment, TextFit,
-    TextGraphicsConfig, VaapiDriver, VideoScanKind, WatermarkLocation, WatermarkSize,
+    TextGraphicsConfig, TextGraphicsRenderer, VaapiDriver, VideoScanKind, WatermarkLocation,
+    WatermarkSize,
 };
 use ersatzrs_ffmpeg::{
     audio_pad_filter, audio_resample_filter, capability_report_for_tests, colorspace_filter,
     cuda_format_filter, cuda_software_fallback_upload_filter, deinterlace_filter,
-    deinterlace_qsv_filter, deinterlace_vaapi_filter, frame_rate_filter, hardware_download_filter,
-    hardware_upload_filter, lower_third_overlay, normalize_loudness_filter, pad_vaapi_filter,
-    song_progress_filter, subtitle_graphics_lavfi_input, subtitle_scale_npp_filter,
-    tonemap_cuda_filter, tonemap_filter, tonemap_qsv_filter, tonemap_vaapi_filter,
-    translate_watermark_opacity_expression, translate_watermark_opacity_expression_with_clock,
-    yadif_cuda_filter, yadif_filter, AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter,
-    ConcatPlaylist, DesiredVideoState, DrawtextAlignment, DrawtextExpansion, DrawtextFilterBuilder,
-    DrawtextFont, DrawtextHorizontalAlignment, DrawtextTextSource, DrawtextVerticalAlignment,
-    DrawtextYAlignment, DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate, FrameSize,
-    FrameState, GraphFailureKind, GraphicsOverlayFilter, GraphicsPipelineOverlay,
-    GraphicsRenderContext, GraphicsTemplateRenderer, HardwareGraphDenial, HardwareGraphOperation,
-    HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat, OutputMetadata, PipelineBuilder,
-    PipelineRequest, PixelFormat, QsvPipelineBuilder, RealtimeMode, RkmppPipelineBuilder,
-    SoftwarePipelineBuilder, SourceAudioCodec, SourceAudioStream, SourceColorParams,
-    SourceVideoCodec, SourceVideoStream, SvgTemplate, TonemapAlgorithm, V4l2m2mPipelineBuilder,
-    VaapiPipelineBuilder, VaapiProfileEntrypoint, VideoToolboxPipelineBuilder, WatermarkFadeKind,
-    WatermarkFadePoint, WatermarkOpacityClock, WatermarkOverlay,
+    deinterlace_qsv_filter, deinterlace_vaapi_filter, frame_rate_filter,
+    graphics_element_drawtext_overlay, hardware_download_filter, hardware_upload_filter,
+    lower_third_overlay, normalize_loudness_filter, pad_vaapi_filter, song_progress_filter,
+    subtitle_graphics_lavfi_input, subtitle_scale_npp_filter, tonemap_cuda_filter, tonemap_filter,
+    tonemap_qsv_filter, tonemap_vaapi_filter, translate_watermark_opacity_expression,
+    translate_watermark_opacity_expression_with_clock, yadif_cuda_filter, yadif_filter,
+    AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter, ConcatPlaylist, DesiredVideoState,
+    DrawtextAlignment, DrawtextExpansion, DrawtextFilterBuilder, DrawtextFont,
+    DrawtextHorizontalAlignment, DrawtextTextSource, DrawtextVerticalAlignment, DrawtextYAlignment,
+    DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate, FrameSize, FrameState,
+    GraphFailureKind, GraphicsOverlayFilter, GraphicsPipelineOverlay, GraphicsRenderContext,
+    GraphicsTemplateRenderer, HardwareGraphDenial, HardwareGraphOperation, HlsOutput, InputFile,
+    NvencPipelineBuilder, OutputFormat, OutputMetadata, PipelineBuilder, PipelineRequest,
+    PixelFormat, QsvPipelineBuilder, RealtimeMode, RkmppPipelineBuilder, SoftwarePipelineBuilder,
+    SourceAudioCodec, SourceAudioStream, SourceColorParams, SourceVideoCodec, SourceVideoStream,
+    SvgTemplate, TonemapAlgorithm, V4l2m2mPipelineBuilder, VaapiPipelineBuilder,
+    VaapiProfileEntrypoint, VideoToolboxPipelineBuilder, WatermarkFadeKind, WatermarkFadePoint,
+    WatermarkOpacityClock, WatermarkOverlay,
 };
 
 fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
@@ -2467,6 +2469,51 @@ fn drawtext_textfile_reload_filter_snapshot() {
     .text_shaping(true)
     .build();
 
+    insta::assert_snapshot!(filter);
+}
+
+#[test]
+fn text_graphics_drawtext_overlay_maps_managed_style_and_placement_snapshot() {
+    let element = GraphicsElement {
+        id: 42,
+        name: "dynamic clock".to_owned(),
+        kind: ersatzrs_domain::GraphicsElementKind::Text,
+        z_index: 12,
+        opacity_percent: Some(85),
+        location: WatermarkLocation::BottomRight,
+        horizontal_margin_percent: Some(4.0),
+        vertical_margin_percent: Some(5.0),
+        config: GraphicsElementConfig::Text(TextGraphicsConfig {
+            text: Some("{{ Now.Time }}".to_owned()),
+            renderer: TextGraphicsRenderer::Drawtext,
+            align: TextAlignment::Right,
+            base_style: Some("clock".to_owned()),
+            styles: vec![StyleDefinition {
+                name: Some("clock".to_owned()),
+                font_size: Some(52.0),
+                text_color: Some("#f8f8f8".to_owned()),
+                halo_color: Some("#101010".to_owned()),
+                halo_width: Some(2.0),
+                line_height: Some(60.0),
+                ..StyleDefinition::default()
+            }],
+            ..TextGraphicsConfig::default()
+        }),
+        ..GraphicsElement::default()
+    };
+
+    let overlay = graphics_element_drawtext_overlay(
+        &element,
+        r"X:\dynamic text\clock.txt",
+        r"X:\managed fonts\Roboto-Regular.ttf",
+        &GraphicsRenderContext::new(FrameSize::new(1920, 1080), FrameSize::new(1920, 1080)),
+    )
+    .expect("drawtext overlay");
+    let GraphicsPipelineOverlay::Drawtext { z_index, filter } = overlay else {
+        panic!("expected drawtext overlay");
+    };
+
+    assert_eq!(z_index, 12);
     insta::assert_snapshot!(filter);
 }
 

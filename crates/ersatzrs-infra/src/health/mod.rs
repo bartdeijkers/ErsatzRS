@@ -20,12 +20,12 @@ mod checks;
 use checks::{
     AddonMediaListHealthCheck, AddonPlatformHealthCheck, ArtworkCardinalityHealthCheck,
     ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck, DolbyVisionHealthCheck,
-    DowngradeHealthCheck, EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck,
-    FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck,
-    FFmpegVersionHealthCheck, FileNotFoundHealthCheck, HardwareAccelerationHealthCheck,
-    HardwareGraphHealthCheck, LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck,
-    MirrorChannelHealthCheck, MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck,
-    PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
+    DowngradeHealthCheck, DynamicTextGraphicsHealthCheck, EmptyScheduleHealthCheck,
+    EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
+    FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
+    HardwareAccelerationHealthCheck, HardwareGraphHealthCheck, LocalTelevisionIdentityHealthCheck,
+    MigrationChecksumHealthCheck, MirrorChannelHealthCheck, MovieMetadataHealthCheck,
+    OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
     ProviderConnectivityHealthCheck, RemoteStreamAddonReadinessHealthCheck,
     RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
     ScanRefreshStateHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
@@ -54,7 +54,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 37] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 38] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -64,6 +64,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 37] = [
     "FFmpeg Runtime",
     "FFmpeg Capabilities",
     "FFmpeg Reports",
+    "Dynamic Text Graphics",
     "Hardware Acceleration",
     "Hardware Graph Capability",
     "Playback Data Access",
@@ -228,6 +229,7 @@ fn registered_health_checks(
         )),
         Box::new(FFmpegCapabilitiesHealthCheck::new(ffmpeg_runtime.clone())),
         Box::new(FFmpegReportsHealthCheck::new(pool.clone())),
+        Box::new(DynamicTextGraphicsHealthCheck::new(pool.clone())),
         Box::new(HardwareAccelerationHealthCheck::new(
             pool.clone(),
             ffmpeg_runtime.clone(),

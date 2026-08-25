@@ -635,6 +635,39 @@ pub enum TextKey {
     FlexibleStartSoonAsPossibleAfterStartTime,
     FillWithGroupMode,
     GraphicsElements,
+    AddGraphicsElement,
+    DrawtextRendererOption,
+    DrawtextSettings,
+    DrawvgRendererOption,
+    EditGraphicsElement,
+    FontFile,
+    FontFileOptionalHelp,
+    GraphicsElement,
+    GraphicsElementConfigInvalid,
+    GraphicsElementKindImage,
+    GraphicsElementKindMotion,
+    GraphicsElementKindScript,
+    GraphicsElementKindSubtitle,
+    GraphicsElementKindText,
+    GraphicsElementNameTooLong,
+    GraphicsElementNotEditable,
+    GraphicsElementNotFound,
+    GraphicsElementNotText,
+    GraphicsElementSaved,
+    GraphicsElementSaveFailed,
+    GraphicsElementType,
+    GraphicsExistingDrawvgHelp,
+    GraphicsStreamRestartHelp,
+    NoGraphicsElements,
+    RefreshPeriodBounds,
+    RefreshPeriodMilliseconds,
+    ReloadFrameInterval,
+    ReloadFrameIntervalBounds,
+    Renderer,
+    SaveGraphicsElement,
+    TextTemplate,
+    TextTemplateRequired,
+    TextTemplateTooLong,
     GraphicsIds,
     Genres,
     GroupName,
@@ -2051,6 +2084,39 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::FlexibleStartSoonAsPossibleAfterStartTime,
     TextKey::FillWithGroupMode,
     TextKey::GraphicsElements,
+    TextKey::AddGraphicsElement,
+    TextKey::DrawtextRendererOption,
+    TextKey::DrawtextSettings,
+    TextKey::DrawvgRendererOption,
+    TextKey::EditGraphicsElement,
+    TextKey::FontFile,
+    TextKey::FontFileOptionalHelp,
+    TextKey::GraphicsElement,
+    TextKey::GraphicsElementConfigInvalid,
+    TextKey::GraphicsElementKindImage,
+    TextKey::GraphicsElementKindMotion,
+    TextKey::GraphicsElementKindScript,
+    TextKey::GraphicsElementKindSubtitle,
+    TextKey::GraphicsElementKindText,
+    TextKey::GraphicsElementNameTooLong,
+    TextKey::GraphicsElementNotEditable,
+    TextKey::GraphicsElementNotFound,
+    TextKey::GraphicsElementNotText,
+    TextKey::GraphicsElementSaved,
+    TextKey::GraphicsElementSaveFailed,
+    TextKey::GraphicsElementType,
+    TextKey::GraphicsExistingDrawvgHelp,
+    TextKey::GraphicsStreamRestartHelp,
+    TextKey::NoGraphicsElements,
+    TextKey::RefreshPeriodBounds,
+    TextKey::RefreshPeriodMilliseconds,
+    TextKey::ReloadFrameInterval,
+    TextKey::ReloadFrameIntervalBounds,
+    TextKey::Renderer,
+    TextKey::SaveGraphicsElement,
+    TextKey::TextTemplate,
+    TextKey::TextTemplateRequired,
+    TextKey::TextTemplateTooLong,
     TextKey::GraphicsElementsMode,
     TextKey::GraphicsIds,
     TextKey::Genres,
@@ -3012,6 +3078,32 @@ pub fn watermark_error_message(error: impl std::fmt::Display) -> String {
 
 pub fn watermark_error_text(language: UiLanguage, error: &str) -> String {
     languages_for(language).watermark_error_message(error)
+}
+
+pub fn graphics_element_error_message(error: impl std::fmt::Display) -> String {
+    let error = error.to_string();
+    let key = if error.contains("name_required") {
+        TextKey::NameRequired
+    } else if error.contains("name_too_long") {
+        TextKey::GraphicsElementNameTooLong
+    } else if error.contains("text_required") {
+        TextKey::TextTemplateRequired
+    } else if error.contains("text_too_long") {
+        TextKey::TextTemplateTooLong
+    } else if error.contains("refresh_interval_out_of_range") {
+        TextKey::RefreshPeriodBounds
+    } else if error.contains("reload_interval_out_of_range") {
+        TextKey::ReloadFrameIntervalBounds
+    } else if error.contains("graphics_element_not_found") {
+        TextKey::GraphicsElementNotFound
+    } else if error.contains("graphics_element_not_text") {
+        TextKey::GraphicsElementNotText
+    } else if error.contains("graphics_element_config_invalid") {
+        TextKey::GraphicsElementConfigInvalid
+    } else {
+        TextKey::GraphicsElementSaveFailed
+    };
+    tr(key).to_owned()
 }
 
 pub fn log_level_label(level: &str) -> String {

@@ -973,7 +973,6 @@ phase      = 'DTX-A — FFmpeg drawtext overlay leg'
 title      = 'Accept and implement the drawtext filter contract'
 status     = 'Complete'
 feature    = 'drawtext-overlay-leg'
-plan       = 'plans/drawtext-overlay-leg.md'
 depends_on = ['amm-g-05']
 acceptance = '''
 ADR 0077 is accepted before implementation. ErsatzRS then exposes a bounded
@@ -1000,9 +999,8 @@ real Windows FFmpeg 9 inline/file render proofs passed. ErsatzRS-ffmpeg commit
 id         = 'dtx-a-02'
 phase      = 'DTX-A — FFmpeg drawtext overlay leg'
 title      = 'Deliver dynamic text selection and runtime proof'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'drawtext-overlay-leg'
-plan       = 'plans/drawtext-overlay-leg.md'
 depends_on = ['dtx-a-01']
 acceptance = '''
 The graphics-element contract and localized admin editor select drawvg for
@@ -1012,7 +1010,19 @@ failure behavior is explicit, existing serialized text elements remain
 compatible, and Linux, WSL, and Windows plus hydration/browser and decoded
 playback tests prove a live overlay update without rebuilding the FFmpeg graph.
 '''
-evidence = ''
+evidence = '''
+Completed 2026-08-25. Text graphics gained a defaulted drawvg/drawtext renderer
+contract and an additive drawtext configuration without a schema migration.
+The infra controller compiles minijinja templates, renders before FFmpeg spawn,
+atomically refreshes bounded UTF-8 files on a clamped cadence, retains the last
+good file after refresh failures, survives direct-stream hardware retries, and
+shuts down before HLS/IPTV/preview cleanup. Invalid dynamic elements are skipped
+without suppressing valid static overlays. `/graphics-elements`, add, and edit
+provide a localized text-only editor with safe persistence and HTML fallback;
+the dynamic-text health check links invalid rows there. Focused domain, FFmpeg,
+infra, web, snapshot, hydration, Chromium, and Firefox tests passed. Decoded
+same-process reload gates passed with ErsatzRS FFmpeg 9 on Windows and WSL/Linux.
+'''
 
 [[milestone]]
 id         = 'p9a-02'

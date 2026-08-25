@@ -9,7 +9,9 @@ use ersatzrs_domain::{
 use mlua::{Lua, Table, Value};
 
 use crate::{
-    subtitle_graphics_lavfi_input, FrameSize, GraphicsPipelineOverlay, InputFile, WatermarkOverlay,
+    subtitle_graphics_lavfi_input, DrawtextAlignment, DrawtextExpansion, DrawtextFilterBuilder,
+    DrawtextFont, DrawtextHorizontalAlignment, DrawtextTextSource, DrawtextVerticalAlignment,
+    DrawtextYAlignment, FrameSize, GraphicsPipelineOverlay, InputFile, WatermarkOverlay,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -287,6 +289,166 @@ pub fn graphics_element_drawvg_filter(
         width: context.frame_size.width,
         height: context.frame_size.height,
         enable: graphics_enable_expression(element),
+    }
+}
+
+/// Build the reloadable drawtext overlay for a text graphics element.
+///
+/// The infrastructure controller owns and atomically refreshes `text_file`;
+/// this function maps the persisted text style and placement snapshot onto the
+/// typed `FFmpeg` 9 filter contract. An exact packaged font file is used by
+/// default so rendering does not depend on host Fontconfig state.
+///
+/// # Errors
+///
+/// Returns an error when `element` is not a text element or has no usable font
+/// selector.
+pub fn graphics_element_drawtext_overlay(
+    element: &GraphicsElement,
+    text_file: impl Into<PathBuf>,
+    default_font_file: impl Into<PathBuf>,
+    context: &GraphicsRenderContext,
+) -> Result<GraphicsPipelineOverlay, GraphicsTemplateError> {
+    let GraphicsElementConfig::Text(config) = &element.config else {
+        return Err(GraphicsTemplateError::MissingField {
+            id: element.id,
+            field: "text config",
+        });
+    };
+    let style = config
+        .styles
+        .iter()
+        .find(|style| style.name.as_deref() == config.base_style.as_deref())
+        .or_else(|| config.styles.first());
+    let font = config
+        .drawtext
+        .font_file
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(DrawtextFont::file)
+        .or_else(|| {
+            style
+                .and_then(|style| style.font_family.as_deref())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(DrawtextFont::family)
+        })
+        .unwrap_or_else(|| DrawtextFont::file(default_font_file.into()));
+    let reload = std::num::NonZeroU32::new(config.drawtext.reload_interval_frames.max(1));
+    let mut builder = DrawtextFilterBuilder::new(
+        DrawtextTextSource::text_file(text_file.into(), reload),
+        font,
+    )
+    .expansion(DrawtextExpansion::None)
+    .text_shaping(true)
+    .fix_bounds(true)
+    .y_alignment(DrawtextYAlignment::Text);
+
+    let font_size = style.and_then(|style| style.font_size).unwrap_or(48.0);
+    builder = builder.font_size(trim_float(f64::from(font_size.max(1.0))));
+    let (x, y, horizontal_alignment) = drawtext_position(element, config.align, context);
+    builder = builder.position(x, y).alignment(DrawtextAlignment::new(
+        horizontal_alignment,
+        DrawtextVerticalAlignment::Top,
+    ));
+
+    if let Some(color) = style
+        .and_then(|style| style.text_color.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        builder = builder.font_color(color);
+    }
+    if let Some(style) = style {
+        if let (Some(width), Some(color)) = (style.halo_width, style.halo_color.as_deref()) {
+            if width.is_finite() && width > 0.0 && !color.trim().is_empty() {
+                if let Ok(width) = format!("{width:.0}").parse::<u32>() {
+                    builder = builder.border(width, color.trim());
+                }
+            }
+        }
+        if let Some(line_height) = style.line_height.filter(|value| value.is_finite()) {
+            let line_spacing = (line_height - font_size).round();
+            if line_spacing >= f32::from(i16::MIN) && line_spacing <= f32::from(i16::MAX) {
+                if let Ok(line_spacing) = format!("{line_spacing:.0}").parse::<i32>() {
+                    builder = builder.line_spacing(line_spacing);
+                }
+            }
+        }
+    }
+    let alpha = element
+        .opacity_expression
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map_or_else(|| static_opacity(element), str::to_owned);
+    builder = builder.alpha(alpha);
+    if let Some(enable) = graphics_enable_expression(element) {
+        builder = builder.enable(enable);
+    }
+
+    Ok(GraphicsPipelineOverlay::drawtext(
+        element.z_index,
+        builder.build(),
+    ))
+}
+
+fn drawtext_position(
+    element: &GraphicsElement,
+    requested_alignment: TextAlignment,
+    context: &GraphicsRenderContext,
+) -> (String, String, DrawtextHorizontalAlignment) {
+    if let (Some(x), Some(y)) = (element.location_x, element.location_y) {
+        let x = match requested_alignment {
+            TextAlignment::Left => trim_float(x),
+            TextAlignment::Center => format!("{}-text_w/2", trim_float(x)),
+            TextAlignment::Right => format!("{}-text_w", trim_float(x)),
+        };
+        return (x, trim_float(y), drawtext_alignment(requested_alignment));
+    }
+
+    let (horizontal_margin, vertical_margin) = margins(element, context);
+    let x_margin = parse_percent(&horizontal_margin) / 100.0 * f64::from(context.frame_size.width);
+    let y_margin = parse_percent(&vertical_margin) / 100.0 * f64::from(context.frame_size.height);
+    let (x, alignment) = match element.location {
+        WatermarkLocation::TopLeft
+        | WatermarkLocation::LeftMiddle
+        | WatermarkLocation::BottomLeft => {
+            (trim_float(x_margin), DrawtextHorizontalAlignment::Left)
+        }
+        WatermarkLocation::TopMiddle
+        | WatermarkLocation::MiddleCenter
+        | WatermarkLocation::BottomMiddle => (
+            "(w-text_w)/2".to_owned(),
+            DrawtextHorizontalAlignment::Center,
+        ),
+        WatermarkLocation::TopRight
+        | WatermarkLocation::RightMiddle
+        | WatermarkLocation::BottomRight => (
+            format!("w-text_w-{}", trim_float(x_margin)),
+            DrawtextHorizontalAlignment::Right,
+        ),
+    };
+    let y = match element.location {
+        WatermarkLocation::TopLeft | WatermarkLocation::TopMiddle | WatermarkLocation::TopRight => {
+            trim_float(y_margin)
+        }
+        WatermarkLocation::LeftMiddle
+        | WatermarkLocation::MiddleCenter
+        | WatermarkLocation::RightMiddle => "(h-text_h)/2".to_owned(),
+        WatermarkLocation::BottomLeft
+        | WatermarkLocation::BottomMiddle
+        | WatermarkLocation::BottomRight => format!("h-text_h-{}", trim_float(y_margin)),
+    };
+    (x, y, alignment)
+}
+
+const fn drawtext_alignment(alignment: TextAlignment) -> DrawtextHorizontalAlignment {
+    match alignment {
+        TextAlignment::Left => DrawtextHorizontalAlignment::Left,
+        TextAlignment::Center => DrawtextHorizontalAlignment::Center,
+        TextAlignment::Right => DrawtextHorizontalAlignment::Right,
     }
 }
 

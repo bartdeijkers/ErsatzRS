@@ -16,6 +16,7 @@ use ersatzrs_ffmpeg::{
 };
 use ersatzrs_infra::{
     db::DbPool,
+    dynamic_text::{shutdown_dynamic_text_controllers, DynamicTextController},
     ffmpeg_config::playback_language_preferences,
     file_system_layout::{
         channel_stream_selectors_folder, list_channel_stream_selectors,
@@ -30,7 +31,8 @@ use ersatzrs_infra::{
         select_custom_playback_streams, select_playback_audio_stream_index,
         select_playback_graphics, select_playback_subtitle, select_playback_watermarks,
         subtitle_input_for_stream, watermark_overlay_for_stream, CustomStreamSelection,
-        PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+        PlaybackGraphicsArtifacts, PlaybackGraphicsRenderContext, PlaybackProfile,
+        PlaybackSubtitle,
     },
     repositories::Repositories,
     subtitles::rebase_burned_text_subtitle_input,
@@ -242,7 +244,10 @@ async fn start_playback_preview(
     });
     let watermark_inputs =
         preview_watermark_inputs(&state.pool, query.watermark.clone(), program_duration).await;
-    let graphics_overlays = preview_graphics_overlays(PreviewGraphicsRequest {
+    let PlaybackGraphicsArtifacts {
+        overlays: graphics_overlays,
+        dynamic_text_controllers,
+    } = preview_graphics_overlays(PreviewGraphicsRequest {
         pool: &state.pool,
         graphics_element_ids: query.graphics_element.clone(),
         media: &media,
@@ -295,7 +300,7 @@ async fn start_playback_preview(
     )?;
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
-    spawn_preview_ffmpeg(&working_dir, command)?;
+    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers)?;
     wait_for_preview_output(&working_dir, output_format).await?;
     Ok(())
 }
@@ -480,7 +485,10 @@ async fn start_channel_playback_preview(
         program_duration,
     )
     .await;
-    let graphics_overlays = preview_channel_graphics_overlays(PreviewChannelGraphicsRequest {
+    let PlaybackGraphicsArtifacts {
+        overlays: graphics_overlays,
+        dynamic_text_controllers,
+    } = preview_channel_graphics_overlays(PreviewChannelGraphicsRequest {
         pool: &state.pool,
         channel: &channel,
         active: &active,
@@ -534,7 +542,7 @@ async fn start_channel_playback_preview(
     )?;
 
     write_ffmpeg_arguments(&working_dir, &command).await?;
-    spawn_preview_ffmpeg(&working_dir, command)?;
+    spawn_preview_ffmpeg(&working_dir, command, dynamic_text_controllers)?;
     wait_for_preview_output(&working_dir, output_format).await?;
     Ok(())
 }
@@ -1158,7 +1166,7 @@ struct PreviewGraphicsRequest<'a> {
 
 async fn preview_graphics_overlays(
     request: PreviewGraphicsRequest<'_>,
-) -> Vec<ersatzrs_ffmpeg::GraphicsPipelineOverlay> {
+) -> PlaybackGraphicsArtifacts {
     let PreviewGraphicsRequest {
         pool,
         graphics_element_ids,
@@ -1171,7 +1179,7 @@ async fn preview_graphics_overlays(
         working_dir,
     } = request;
     if graphics_element_ids.is_empty() {
-        return Vec::new();
+        return PlaybackGraphicsArtifacts::default();
     }
     let frame_size = playback_frame_size(playback_profile);
     let square_pixel_frame_size = source_stream
@@ -1183,7 +1191,7 @@ async fn preview_graphics_overlays(
         Ok(graphics) => graphics,
         Err(error) => {
             tracing::warn!(%error, "failed to resolve troubleshooting graphics");
-            return Vec::new();
+            return PlaybackGraphicsArtifacts::default();
         }
     };
     match render_playback_graphics_overlays(
@@ -1209,7 +1217,7 @@ async fn preview_graphics_overlays(
         Ok(overlays) => overlays,
         Err(error) => {
             tracing::warn!(%error, "failed to render troubleshooting graphics");
-            Vec::new()
+            PlaybackGraphicsArtifacts::default()
         }
     }
 }
@@ -1230,7 +1238,7 @@ struct PreviewChannelGraphicsRequest<'a> {
 
 async fn preview_channel_graphics_overlays(
     request: PreviewChannelGraphicsRequest<'_>,
-) -> Vec<ersatzrs_ffmpeg::GraphicsPipelineOverlay> {
+) -> PlaybackGraphicsArtifacts {
     let PreviewChannelGraphicsRequest {
         pool,
         channel,
@@ -1250,11 +1258,11 @@ async fn preview_channel_graphics_overlays(
         Ok(graphics) => graphics,
         Err(error) => {
             tracing::warn!(%error, channel_id = channel.id, "failed to select troubleshooting channel graphics");
-            return Vec::new();
+            return PlaybackGraphicsArtifacts::default();
         }
     };
     if graphics.is_empty() {
-        return Vec::new();
+        return PlaybackGraphicsArtifacts::default();
     }
     let frame_size = playback_frame_size(playback_profile);
     let square_pixel_frame_size = source_stream
@@ -1286,7 +1294,7 @@ async fn preview_channel_graphics_overlays(
         Ok(overlays) => overlays,
         Err(error) => {
             tracing::warn!(%error, channel_id = channel.id, "failed to render troubleshooting channel graphics");
-            Vec::new()
+            PlaybackGraphicsArtifacts::default()
         }
     }
 }
@@ -1312,7 +1320,11 @@ async fn write_ffmpeg_arguments(working_dir: &FsPath, command: &FfmpegCommand) -
     Ok(())
 }
 
-fn spawn_preview_ffmpeg(working_dir: &FsPath, command: FfmpegCommand) -> ApiResult<()> {
+fn spawn_preview_ffmpeg(
+    working_dir: &FsPath,
+    command: FfmpegCommand,
+    dynamic_text_controllers: Vec<DynamicTextController>,
+) -> ApiResult<()> {
     let report_path = working_dir.join("ffmpeg-troubleshooting.log");
     let mut process = Command::new(&command.executable);
     process
@@ -1337,6 +1349,7 @@ fn spawn_preview_ffmpeg(working_dir: &FsPath, command: FfmpegCommand) -> ApiResu
         working_dir.join("logs.txt"),
         stderr,
         child,
+        dynamic_text_controllers,
     ));
     Ok(())
 }
@@ -1345,6 +1358,7 @@ async fn write_preview_logs(
     log_path: PathBuf,
     stderr: Option<tokio::process::ChildStderr>,
     mut child: tokio::process::Child,
+    dynamic_text_controllers: Vec<DynamicTextController>,
 ) {
     let mut logs = Vec::new();
     if let Some(stderr) = stderr {
@@ -1356,6 +1370,7 @@ async fn write_preview_logs(
         Ok(status) => logs.extend_from_slice(format!("\nexit status: {status}\n").as_bytes()),
         Err(error) => logs.extend_from_slice(format!("\nwait error: {error}\n").as_bytes()),
     }
+    shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
     let _ = tokio::fs::write(log_path, logs).await;
 }
 

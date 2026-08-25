@@ -6,13 +6,17 @@ Accepted (2026-08-25)
 
 ## Implementation
 
-Partial — milestone `dtx-a-01` implements the typed FFmpeg filter and pipeline leg.
-Milestone `dtx-a-02` owns the persisted renderer selector, dynamic text-file
-controller, localized admin UI, and decoded runtime refresh proof.
+Implemented — milestones `dtx-a-01` and `dtx-a-02` are complete. Text graphics
+default to drawvg for backward compatibility and may opt into drawtext through
+the localized graphics-element editor. The minijinja controller renders before
+FFmpeg starts, atomically refreshes bounded UTF-8 text files, preserves the
+last good output on refresh failure, and stops before working-file cleanup.
 
-The first slice is verified by focused builder/pipeline tests and snapshots,
-real Windows FFmpeg 9 inline and file-backed renders, and ErsatzRS-ffmpeg commit
-`7cdef93`, whose release gates require drawtext and the shaping dependencies.
+Focused builder/pipeline snapshots, controller and health tests, Chromium and
+Firefox editor persistence/no-JavaScript coverage, and same-process decoded
+reload gates with packaged FFmpeg 9 on Windows and WSL/Linux verify the complete
+decision. ErsatzRS-ffmpeg commit `7cdef93` supplies the first-party drawtext and
+text-shaping package gates.
 
 ## Context
 

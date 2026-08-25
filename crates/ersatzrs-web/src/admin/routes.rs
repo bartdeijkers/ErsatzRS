@@ -17,6 +17,9 @@ use crate::admin::pages::dev::ComponentsPage;
 use crate::admin::pages::ffmpeg_profiles::{
     editor::FfmpegProfileEditorPage, list::FfmpegProfilesListPage,
 };
+use crate::admin::pages::graphics_elements::{
+    editor::GraphicsElementEditorPage, list::GraphicsElementsListPage,
+};
 use crate::admin::pages::libraries::LibrariesPage;
 use crate::admin::pages::media::addon_lists::{
     AddAddonMediaListPage, AddonMediaListEditorPage, AddonMediaListItemPage, AddonMediaListsPage,
@@ -160,6 +163,16 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("watermarks"), ParamSegment("id"))
                 view=WatermarkEditorPage
+            />
+
+            <Route path=StaticSegment("graphics-elements") view=GraphicsElementsListPage/>
+            <Route
+                path=(StaticSegment("graphics-elements"), StaticSegment("add"))
+                view=GraphicsElementEditorPage
+            />
+            <Route
+                path=(StaticSegment("graphics-elements"), ParamSegment("id"))
+                view=GraphicsElementEditorPage
             />
 
             <Route path=StaticSegment("playouts") view=PlayoutsPage/>

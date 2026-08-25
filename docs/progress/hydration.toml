@@ -33,6 +33,12 @@ routes = ['/watermarks/add', '/watermarks/:id']
 notes  = '2026-07-25: `tests/e2e/watermark-preview.spec.ts` passed in Chromium and Firefox with successful hydration, real native-dimension Actual Size geometry, a centered 4:3 safe-frame guide without an outer 16:9 guideline, deterministic Previous/Next ends and ordering, unsaved-edit confirmation, stable loading/error/ready states, and desktop/mobile containment.'
 
 [[page]]
+name   = 'GraphicsElementsPages'
+status = '✅'
+routes = ['/graphics-elements', '/graphics-elements/add', '/graphics-elements/:id']
+notes  = '2026-08-25: `tests/e2e/graphics-elements.spec.ts` passed Chromium and Firefox with localized list/add/edit routes, stable hydrated drawvg/drawtext switching, safe persistence that preserves unexposed configuration, non-text protection, and add/edit HTML form fallbacks with JavaScript disabled.'
+
+[[page]]
 name   = 'BlockEditorPage'
 status = '✅'
 routes = ['/blocks/:id', '/scheduling/blocks/:id']

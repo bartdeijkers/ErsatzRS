@@ -47,6 +47,10 @@ const ISLAND_ROUTES: IslandRoute[] = [
   { route: '/watermarks', islands: 'WatermarksListIsland' },
   { route: '/watermarks/add', islands: 'WatermarkEditorIsland' },
 
+  // Graphics elements
+  { route: '/graphics-elements', islands: 'GraphicsElementsListIsland' },
+  { route: '/graphics-elements/add', islands: 'GraphicsElementEditorIsland' },
+
   // Scheduling
   { route: '/playouts', islands: 'PlayoutsIsland' },
   { route: '/playouts/add', islands: 'PlayoutEditorIsland' },

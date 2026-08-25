@@ -152,6 +152,7 @@ impl AppState {
                 Arc::new(repositories.collection.clone()),
                 Arc::new(repositories.ffmpeg_profile.clone()),
                 Arc::new(repositories.filler.clone()),
+                Arc::new(repositories.graphics.clone()),
                 Arc::new(repositories.watermark.clone()),
                 Arc::new(repositories.template.clone()),
                 Arc::new(repositories.block.clone()),

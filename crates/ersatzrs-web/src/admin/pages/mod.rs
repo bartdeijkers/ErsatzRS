@@ -2,6 +2,7 @@ pub mod addons;
 pub mod channels;
 pub mod dev;
 pub mod ffmpeg_profiles;
+pub mod graphics_elements;
 pub mod libraries;
 pub mod media;
 pub mod media_sources;

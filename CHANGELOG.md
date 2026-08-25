@@ -19,8 +19,12 @@ release section when tagging a release.
   beside drawvg, with inline or reloadable file text, explicit font resolution,
   layout and styling controls, cross-platform escaping, z-ordered composition,
   hardware-frame bridging, runtime capability enforcement, and first-party
-  package gates for the complete text-shaping stack. Existing graphics remain
-  on drawvg until the separate dynamic renderer/controller slice is selected.
+  package gates for the complete text-shaping stack. Text graphics now expose a
+  localized drawvg/drawtext choice while preserving drawvg for existing JSON;
+  the bounded minijinja controller atomically refreshes live UTF-8 text in the
+  same FFmpeg process, is wired through IPTV/HLS/retry/preview cleanup, reports
+  invalid configurations through health, and has hydrated plus no-JavaScript
+  editor coverage.
 
 - Added focused repository skills for fast Rust iteration, read-only runtime
   incident analysis, stateful Refresh continuity, SQL cardinality/idempotency,

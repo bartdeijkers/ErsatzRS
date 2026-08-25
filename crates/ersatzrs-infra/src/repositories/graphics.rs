@@ -16,6 +16,18 @@ pub struct SqliteGraphicsRepository(pub Pool<crate::db::Db>);
 
 #[async_trait]
 impl GraphicsRepository for SqliteGraphicsRepository {
+    async fn list_elements(&self) -> Result<Vec<GraphicsElement>> {
+        let rows = sqlx::query(
+            r#"SELECT * FROM "GraphicsElement"
+               ORDER BY CASE WHEN COALESCE("Name", '') = '' THEN 1 ELSE 0 END,
+                        "Name" COLLATE NOCASE, "Id""#,
+        )
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        rows.iter().map(map_element).collect()
+    }
+
     async fn get_element(&self, id: EntityId) -> Result<GraphicsElement> {
         let row = sqlx::query(r#"SELECT * FROM "GraphicsElement" WHERE "Id" = ?"#)
             .bind(id)
@@ -48,6 +60,41 @@ impl GraphicsRepository for SqliteGraphicsRepository {
         .await
         .repository()?;
         rows.iter().map(map_element).collect()
+    }
+
+    async fn create_element(&self, element: &GraphicsElement) -> Result<EntityId> {
+        let result = sqlx::query(
+            r#"INSERT INTO "GraphicsElement" (
+                "Name", "Kind", "Path", "ZIndex",
+                "OpacityPercent", "OpacityExpression", "Location",
+                "HorizontalMarginPercent", "VerticalMarginPercent",
+                "LocationX", "LocationY", "Scale", "ScaleWidthPercent",
+                "PlaceWithinSourceContent", "EpgEntries", "Config"
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&element.name)
+        .bind(encode_enum(element.kind))
+        .bind(&element.path)
+        .bind(element.z_index)
+        .bind(element.opacity_percent)
+        .bind(&element.opacity_expression)
+        .bind(encode_enum(element.location))
+        .bind(element.horizontal_margin_percent)
+        .bind(element.vertical_margin_percent)
+        .bind(element.location_x)
+        .bind(element.location_y)
+        .bind(element.scale)
+        .bind(element.scale_width_percent)
+        .bind(element.place_within_source_content)
+        .bind(element.epg_entries)
+        .bind(
+            serde_json::to_string(&element.config)
+                .expect("graphics element config should serialize"),
+        )
+        .execute(&self.0)
+        .await
+        .repository()?;
+        Ok(crate::db::last_insert_id(result))
     }
 
     async fn upsert_element(&self, element: &GraphicsElement) -> Result<()> {

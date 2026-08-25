@@ -94,6 +94,11 @@ pub struct ImageGraphicsConfig {
 #[serde(default)]
 pub struct TextGraphicsConfig {
     pub text: Option<String>,
+    /// Rendering backend. Missing persisted values remain on the historical
+    /// drawvg path, so existing JSON needs no migration.
+    pub renderer: TextGraphicsRenderer,
+    /// Options used only when [`Self::renderer`] is [`TextGraphicsRenderer::Drawtext`].
+    pub drawtext: DrawtextGraphicsConfig,
     #[serde(rename = "text_fit")]
     pub fit: TextFit,
     #[serde(rename = "text_align")]
@@ -102,6 +107,39 @@ pub struct TextGraphicsConfig {
     pub base_style: Option<String>,
     pub include_fonts_from: Option<String>,
     pub styles: Vec<StyleDefinition>,
+}
+
+/// Backend used for text graphics elements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TextGraphicsRenderer {
+    /// Existing static VGS/drawvg rendering.
+    #[default]
+    Drawvg,
+    /// Reloadable UTF-8 text-file rendering through `FFmpeg` drawtext.
+    Drawtext,
+}
+
+/// Drawtext-specific controller and font options.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DrawtextGraphicsConfig {
+    /// Exact font path. When absent, playback uses the packaged Roboto font.
+    pub font_file: Option<String>,
+    /// Controller refresh period. Values are bounded by the controller.
+    pub refresh_interval_milliseconds: u64,
+    /// `FFmpeg` text-file reload interval measured in frames.
+    pub reload_interval_frames: u32,
+}
+
+impl Default for DrawtextGraphicsConfig {
+    fn default() -> Self {
+        Self {
+            font_file: None,
+            refresh_interval_milliseconds: 1_000,
+            reload_interval_frames: 1,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -207,4 +245,35 @@ pub struct BlockItemGraphicsElement {
 pub struct DecoGraphicsElement {
     pub deco_id: EntityId,
     pub graphics_element_id: EntityId,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TextGraphicsConfig, TextGraphicsRenderer};
+
+    #[test]
+    fn legacy_text_graphics_json_defaults_to_drawvg() {
+        let config: TextGraphicsConfig = serde_json::from_str(
+            r#"{"text":"Now: {{ title }}","text_fit":"Wrap","text_align":"Center"}"#,
+        )
+        .expect("legacy text graphics JSON should remain readable");
+
+        assert_eq!(config.renderer, TextGraphicsRenderer::Drawvg);
+        assert_eq!(config.drawtext.refresh_interval_milliseconds, 1_000);
+        assert_eq!(config.drawtext.reload_interval_frames, 1);
+    }
+
+    #[test]
+    fn drawtext_renderer_round_trips_through_json() {
+        let config = TextGraphicsConfig {
+            renderer: TextGraphicsRenderer::Drawtext,
+            ..TextGraphicsConfig::default()
+        };
+
+        let json = serde_json::to_string(&config).expect("drawtext config should serialize");
+        let decoded: TextGraphicsConfig =
+            serde_json::from_str(&json).expect("drawtext config should deserialize");
+
+        assert_eq!(decoded, config);
+    }
 }
