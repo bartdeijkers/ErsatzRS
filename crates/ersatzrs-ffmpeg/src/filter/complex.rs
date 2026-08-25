@@ -3,6 +3,7 @@ use crate::{InputFile, InputKind, SubtitleMethod};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GraphicsOverlayFilter {
     Drawvg(String),
+    Drawtext(String),
     NativeImage { input_index: usize, filter: String },
 }
 
@@ -227,7 +228,7 @@ impl<'a> ComplexFilterBuilder<'a> {
 
         for (index, overlay) in filter_chain.graphics_overlay.iter().enumerate() {
             match overlay {
-                GraphicsOverlayFilter::Drawvg(filter) => {
+                GraphicsOverlayFilter::Drawvg(filter) | GraphicsOverlayFilter::Drawtext(filter) => {
                     let filters = join_filters(std::iter::once(filter));
                     if !filters.is_empty() {
                         let output = format!("[vge{index}]");

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'DTX-A — FFmpeg drawtext overlay leg'
-current_focus = 'DTX-A — Accept and implement the drawtext filter contract'
+current_focus = 'DTX-A — Deliver dynamic text selection and runtime proof'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -11,16 +11,15 @@ overview-first imports with deferred fair-use details. CRF has repaired Classic
 Refresh continuity, dependency-scoped scan invalidation, and AMM-H projected
 television cardinality are complete. AMM-G-06 retains unavailable episodes and
 AMM-G-07 closes the official direct/aggregate URL matrix with retry and NSF live
-playout proof. DTX-A and then Phase 9 teletext remain.
+playout proof. DTX-A01 accepted ADR 0077 and delivered the typed FFmpeg 9
+drawtext filter/pipeline leg plus first-party package gates. DTX-A02 and then
+Phase 9 teletext remain.
 '''
 
 next_steps = '''
-ADR 0080 and AMM-G are complete. Next complete dtx-a-01/dtx-a-02, then resume
+ADR 0080, AMM-G, and dtx-a-01 are complete. Next complete dtx-a-02, then resume
 Phase 9A at p9a-01.
 '''
-
-[[blocking_decision]]
-note = 'Milestone dtx-a-01 must accept proposed ADR 0077 before the drawtext filter, schema, controller, or admin backend-selection contract is implemented.'
 
 [[blocking_decision]]
 note = 'Milestone p9a-01 must accept the teletext product and standards ADR before Phase 9 schema, runtime packaging, selection, or output work starts.'

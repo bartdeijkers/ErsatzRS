@@ -19,8 +19,10 @@ use ersatzrs_ffmpeg::{
     tonemap_cuda_filter, tonemap_filter, tonemap_qsv_filter, tonemap_vaapi_filter,
     translate_watermark_opacity_expression, translate_watermark_opacity_expression_with_clock,
     yadif_cuda_filter, yadif_filter, AmfPipelineBuilder, AudioFilter, ColorParams, ComplexFilter,
-    ConcatPlaylist, DesiredVideoState, DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate,
-    FrameSize, FrameState, GraphFailureKind, GraphicsOverlayFilter, GraphicsPipelineOverlay,
+    ConcatPlaylist, DesiredVideoState, DrawtextAlignment, DrawtextExpansion, DrawtextFilterBuilder,
+    DrawtextFont, DrawtextHorizontalAlignment, DrawtextTextSource, DrawtextVerticalAlignment,
+    DrawtextYAlignment, DrawvgOverlay, FilterChain, FrameDataLocation, FrameRate, FrameSize,
+    FrameState, GraphFailureKind, GraphicsOverlayFilter, GraphicsPipelineOverlay,
     GraphicsRenderContext, GraphicsTemplateRenderer, HardwareGraphDenial, HardwareGraphOperation,
     HlsOutput, InputFile, NvencPipelineBuilder, OutputFormat, OutputMetadata, PipelineBuilder,
     PipelineRequest, PixelFormat, QsvPipelineBuilder, RealtimeMode, RkmppPipelineBuilder,
@@ -2420,6 +2422,55 @@ fn drawvg_lower_third_template_snapshot() {
 }
 
 #[test]
+fn drawtext_inline_filter_escaping_snapshot() {
+    let filter = DrawtextFilterBuilder::new(
+        DrawtextTextSource::inline("Now: 'Live', [channel]; %{pts:hms}"),
+        DrawtextFont::family("Inter:style=Bold"),
+    )
+    .expansion(DrawtextExpansion::Normal)
+    .font_size("h/18")
+    .position("(w-text_w)/2", "h-text_h-48")
+    .font_color("white@0.95")
+    .alpha("if(lt(t,1),t,1)")
+    .alignment(DrawtextAlignment::new(
+        DrawtextHorizontalAlignment::Center,
+        DrawtextVerticalAlignment::Middle,
+    ))
+    .y_alignment(DrawtextYAlignment::Font)
+    .line_spacing(8)
+    .tab_size(4)
+    .border(2, "black@0.8")
+    .shadow(3, 3, "black@0.5")
+    .box_style("black@0.35", "8|12")
+    .box_dimensions(960, 180)
+    .text_shaping(true)
+    .fix_bounds(true)
+    .enable("between(t,0,12)")
+    .build();
+
+    insta::assert_snapshot!(filter);
+}
+
+#[test]
+fn drawtext_textfile_reload_filter_snapshot() {
+    let filter = DrawtextFilterBuilder::new(
+        DrawtextTextSource::text_file(
+            r"X:\dynamic text\now-next.txt",
+            std::num::NonZeroU32::new(25),
+        ),
+        DrawtextFont::file(r"X:\fonts\Roboto Regular.ttf"),
+    )
+    .expansion(DrawtextExpansion::None)
+    .font_size("52")
+    .position("64", "64")
+    .font_color("#f8f8f8")
+    .text_shaping(true)
+    .build();
+
+    insta::assert_snapshot!(filter);
+}
+
+#[test]
 fn concat_playlist_snapshot() {
     let playlist = ConcatPlaylist::new("http", "localhost:8409", "101", "segmenter");
 
@@ -3222,6 +3273,9 @@ fn graphics_element_renderer_writes_drawvg_scripts_snapshot() {
             GraphicsPipelineOverlay::Drawvg { z_index, filter } => {
                 format!("drawvg z={z_index} {filter}")
             }
+            GraphicsPipelineOverlay::Drawtext { z_index, filter } => {
+                format!("drawtext z={z_index} {filter}")
+            }
             GraphicsPipelineOverlay::NativeImage {
                 z_index,
                 input,
@@ -3404,6 +3458,87 @@ fn pipeline_interleaves_native_and_drawvg_graphics_by_z_index_snapshot() {
 }
 
 #[test]
+fn pipeline_interleaves_native_drawtext_and_drawvg_by_z_index_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::drawvg(
+            30,
+            DrawvgOverlay {
+                script_path: "/tmp/ErsatzRS/title.vgs".into(),
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+                enable: None,
+            }
+            .filter(),
+        ));
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::native_image(
+            10,
+            InputFile::graphics_image("/media/logo.png"),
+            WatermarkOverlay {
+                location: WatermarkLocation::TopRight,
+                size: WatermarkSize::Scaled,
+                width_percent: 12.5,
+                opacity: 75,
+                ..WatermarkOverlay::default()
+            },
+        ));
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::drawtext(
+            20,
+            DrawtextFilterBuilder::new(
+                DrawtextTextSource::text_file(
+                    "/cache/graphics/now-next.txt",
+                    std::num::NonZeroU32::new(1),
+                ),
+                DrawtextFont::file("/assets/fonts/Roboto-Regular.ttf"),
+            )
+            .font_size("48")
+            .position("64", "h-text_h-64")
+            .build(),
+        ));
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+
+    insta::assert_snapshot!(command.arguments.join(" "));
+}
+
+#[test]
+fn nvenc_drawtext_downloads_and_reuploads_software_frames_snapshot() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request
+        .graphics_overlays
+        .push(GraphicsPipelineOverlay::drawtext(
+            10,
+            DrawtextFilterBuilder::new(
+                DrawtextTextSource::text_file(
+                    "/cache/graphics/live-clock.txt",
+                    std::num::NonZeroU32::new(1),
+                ),
+                DrawtextFont::file("/assets/fonts/Roboto-Regular.ttf"),
+            )
+            .font_size("48")
+            .position("64", "64")
+            .build(),
+        ));
+
+    let pipeline = NvencPipelineBuilder.build(request.clone());
+    let command = pipeline.command(&request.inputs);
+    let arguments = command.arguments.join(" ");
+
+    assert!(arguments.contains("hwdownload,format=nv12"));
+    assert!(arguments.contains("drawtext=fontfile="));
+    assert!(arguments.contains("hwupload_cuda,scale_cuda=format=nv12"));
+    insta::assert_snapshot!(arguments);
+}
+
+#[test]
 fn pipeline_with_looped_motion_graphics_snapshot() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
     let input =
@@ -3492,6 +3627,7 @@ fn graphics_element_renderer_bounds_hold_motion_snapshot() {
                 overlay.eof_action_pass
             ),
             GraphicsPipelineOverlay::Drawvg { .. } => "drawvg".to_owned(),
+            GraphicsPipelineOverlay::Drawtext { .. } => "drawtext".to_owned(),
         })
         .collect::<Vec<_>>()
         .join("\n");

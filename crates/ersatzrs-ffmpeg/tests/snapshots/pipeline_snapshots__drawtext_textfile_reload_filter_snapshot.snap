@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 2470
+expression: filter
+---
+drawtext=fontfile=X\\:/fonts/Roboto Regular.ttf:textfile=X\\:/dynamic text/now-next.txt:reload=25:expansion=none:fontsize=52:x=64:y=64:fontcolor=#f8f8f8:text_shaping=1

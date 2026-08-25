@@ -211,6 +211,10 @@ pub enum GraphicsPipelineOverlay {
         z_index: i32,
         filter: String,
     },
+    Drawtext {
+        z_index: i32,
+        filter: String,
+    },
     NativeImage {
         z_index: i32,
         input: InputFile,
@@ -228,6 +232,14 @@ impl GraphicsPipelineOverlay {
     }
 
     #[must_use]
+    pub fn drawtext(z_index: i32, filter: impl Into<String>) -> Self {
+        Self::Drawtext {
+            z_index,
+            filter: filter.into(),
+        }
+    }
+
+    #[must_use]
     pub const fn native_image(z_index: i32, input: InputFile, overlay: WatermarkOverlay) -> Self {
         Self::NativeImage {
             z_index,
@@ -238,7 +250,9 @@ impl GraphicsPipelineOverlay {
 
     const fn z_index(&self) -> i32 {
         match self {
-            Self::Drawvg { z_index, .. } | Self::NativeImage { z_index, .. } => *z_index,
+            Self::Drawvg { z_index, .. }
+            | Self::Drawtext { z_index, .. }
+            | Self::NativeImage { z_index, .. } => *z_index,
         }
     }
 }
@@ -1285,14 +1299,25 @@ fn build_transcode_pipeline(
         .graphics_overlays
         .iter()
         .any(|overlay| matches!(overlay, GraphicsPipelineOverlay::NativeImage { .. }));
+    let has_drawtext_graphics = request
+        .graphics_overlays
+        .iter()
+        .any(|overlay| matches!(overlay, GraphicsPipelineOverlay::Drawtext { .. }));
     let has_text_subtitle_burn = request.inputs.iter().any(|input| {
         input.kind == InputKind::Subtitle
             && !input.is_image_based_subtitle
             && input.subtitle_method == Some(SubtitleMethod::Burn)
     });
+    download_hardware_frames_for_drawtext(
+        has_drawtext_graphics,
+        &request.desired,
+        &mut target_state,
+        &mut filter_chain,
+    );
     let use_cuda_overlay = uses_cuda_overlay(effective_acceleration, &request.desired)
         && profile_5_operation(&request).is_none()
-        && !has_text_subtitle_burn;
+        && !has_text_subtitle_burn
+        && !has_drawtext_graphics;
     let force_vaapi_software_overlay = force_vaapi_software_overlay(
         &request.desired,
         has_watermark_overlay,
@@ -1515,12 +1540,17 @@ fn build_transcode_pipeline(
         has_native_graphics_overlay || has_drawvg_graphics,
     );
     let mut graphics_image_index = 0usize;
-    for overlay in request.graphics_overlays {
+    for overlay in std::mem::take(&mut request.graphics_overlays) {
         match overlay {
             GraphicsPipelineOverlay::Drawvg { filter, .. } => {
                 filter_chain
                     .graphics_overlay
                     .push(GraphicsOverlayFilter::Drawvg(filter));
+            }
+            GraphicsPipelineOverlay::Drawtext { filter, .. } => {
+                filter_chain
+                    .graphics_overlay
+                    .push(GraphicsOverlayFilter::Drawtext(filter));
             }
             GraphicsPipelineOverlay::NativeImage {
                 mut input, overlay, ..
@@ -1590,6 +1620,15 @@ fn build_transcode_pipeline(
                 graphics_image_index = graphics_image_index.saturating_add(1);
             }
         }
+    }
+    if has_drawtext_graphics && request.desired.video_format != FFmpegProfileVideoFormat::Copy {
+        upload_software_frames_for_hardware_encoder_filters(
+            effective_acceleration,
+            &mut target_state,
+            &mut filter_chain.pixel_format,
+        );
+        emit_pixel_format_output_option =
+            should_emit_pixel_format_output_option(&request, effective_acceleration, &target_state);
     }
     if request.desired.video_format != FFmpegProfileVideoFormat::Copy
         && effective_acceleration == HardwareAccelerationKind::None
@@ -2611,6 +2650,23 @@ fn download_cuda_frames_for_software_overlay(
         || !has_software_overlay
         || target_state.frame_data_location != crate::FrameDataLocation::Hardware
     {
+        return;
+    }
+
+    filter_chain
+        .video
+        .push(hardware_download_filter(target_state));
+    target_state.frame_data_location = crate::FrameDataLocation::Software;
+    target_state.pixel_format = desired.pixel_format();
+}
+
+fn download_hardware_frames_for_drawtext(
+    has_drawtext: bool,
+    desired: &DesiredVideoState,
+    target_state: &mut FrameState,
+    filter_chain: &mut FilterChain,
+) {
+    if !has_drawtext || target_state.frame_data_location != crate::FrameDataLocation::Hardware {
         return;
     }
 

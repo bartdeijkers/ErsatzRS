@@ -32,6 +32,7 @@ const REQUIRED_FILTERS: &[&str] = &[
     // ErsatzRS intentionally adds drawvg for the in-process graphics engine
     // replacement covered by ADR 0003.
     "drawvg",
+    "drawtext",
     "apad",
     "aresample",
     "color",
@@ -2728,13 +2729,14 @@ h264_nvenc AVOptions:
     }
 
     #[test]
-    fn default_runtime_check_requires_ersatztv_filters_plus_drawvg() {
+    fn default_runtime_check_requires_ersatztv_filters_plus_graphics_filters() {
         let config = FfmpegRuntimeCheckConfig::default();
 
         assert_eq!(
             config.required_filters,
             [
                 "drawvg",
+                "drawtext",
                 "apad",
                 "aresample",
                 "color",

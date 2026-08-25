@@ -1,0 +1,6 @@
+---
+source: crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs
+assertion_line: 2451
+expression: filter
+---
+drawtext=font=Inter\\:style=Bold:text=Now\\: \\\'Live\\\'\, \[channel\]\; %{pts\\:hms}:expansion=normal:fontsize=h/18:x=(w-text_w)/2:y=h-text_h-48:fontcolor=white@0.95:alpha=if(lt(t\,1)\,t\,1):text_align=C+M:y_align=font:line_spacing=8:tabsize=4:borderw=2:bordercolor=black@0.8:shadowx=3:shadowy=3:shadowcolor=black@0.5:box=1:boxcolor=black@0.35:boxborderw=8|12:boxw=960:boxh=180:text_shaping=1:fix_bounds=1:enable=between(t\,0\,12)

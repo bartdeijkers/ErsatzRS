@@ -2,11 +2,13 @@
 
 ## Status
 
-Queued and not implemented. Slots after the Add-on metadata management (AMM)
-program and before Phase 9A teletext, per
+In progress after the Add-on metadata management (AMM) program and before
+Phase 9A teletext, per
 [`docs/progress/phase.toml`](../docs/progress/phase.toml). It starts with the
-blocking `dtx-a-01` decision that accepts ADR 0077. The authoritative execution
-state lives in [`docs/progress/milestones.toml`](../docs/progress/milestones.toml)
+blocking `dtx-a-01` decision that accepted ADR 0077 and delivered the typed
+filter/pipeline leg. `dtx-a-02` is the remaining controller, persistence, UI,
+health, and runtime-proof slice. The authoritative execution state lives in
+[`docs/progress/milestones.toml`](../docs/progress/milestones.toml)
 and [`docs/progress/parity/drawtext-overlay-leg.toml`](../docs/progress/parity/drawtext-overlay-leg.toml);
 this plan owns future sequencing and acceptance boundaries.
 
@@ -25,29 +27,31 @@ for arbitrary vector composition; `drawtext` is the text-specialized dynamic,
 
 ## Current evidence
 
-- `drawtext` occurs zero times across `crates/`. Text graphics render as static
-  VGS through `text_drawvg` in `crates/ersatzrs-ffmpeg/src/graphics/mod.rs`,
-  baked at generation time; there is no reload/live-text path.
-- `crates/ersatzrs-ffmpeg/src/filter/simple.rs::subtitles_filter` is the
-  precedent for filter-path escaping (colons, Windows drive letters) that a
-  `drawtext` builder must mirror for `fontfile`/`textfile` paths.
+- `dtx-a-01` added `DrawtextFilterBuilder` and the ordered drawtext pipeline
+  overlay, including typed inline/file text and family/file font choices,
+  interval reload, FFmpeg 9 layout/styling controls, two-layer escaping, and
+  software-frame hardware bridging.
+- Drawtext is now a required runtime capability. First-party package gates
+  require drawvg/drawtext plus Fontconfig, FreeType, HarfBuzz, and FriBidi and
+  execute a file-backed render before publication.
 - The graphics-element system (`GraphicsElementKind::Text`) has no backend
   selector; adding `drawtext` needs a "dynamic / file-backed" text mode and the
   controller plumbing to write and refresh the reloaded text file.
 
 ## Scope
 
-- `dtx-a-01` — accept ADR 0077 and land the `ersatzrs-ffmpeg` `drawtext` filter
-  builder + pipeline leg (fontfile/fontsdir, `text=`/`textfile=`+`reload=1`,
-  font size and layout, position/colour/alpha, border/shadow/box styling,
-  expression expansion, escaping, and filtergraph snapshots).
+- `dtx-a-01` — complete: accepted ADR 0077 and landed the
+  `ersatzrs-ffmpeg` typed `drawtext` filter builder + pipeline leg (`font` or
+  `fontfile`, inline `text` or `textfile` with a positive reload interval,
+  layout/styling, expansion, escaping, snapshots, and package enforcement).
 - `dtx-a-02` — wire the `drawtext` backend into the app: a dynamic/file-backed
   text graphics mode, controller textfile write/refresh, admin UI backend
   choice, and cross-platform (Linux/WSL/Windows) tests.
 
-## Non-goals before the ADR is accepted
+## Boundaries
 
-- No schema, admin UI, or pipeline wiring before `dtx-a-01` accepts ADR 0077.
+- Persistence, controller, admin UI, and live refresh behavior belong to
+  `dtx-a-02`; they are not hidden inside the low-level filter builder.
 - `drawtext` does not replace `drawvg`; static, vector-rich text stays on
   `drawvg`. This leg is additive.
 

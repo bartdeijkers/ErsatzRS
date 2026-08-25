@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Added
 
+- Accepted ADR 0077 and added a typed FFmpeg 9 `drawtext` filter/pipeline leg
+  beside drawvg, with inline or reloadable file text, explicit font resolution,
+  layout and styling controls, cross-platform escaping, z-ordered composition,
+  hardware-frame bridging, runtime capability enforcement, and first-party
+  package gates for the complete text-shaping stack. Existing graphics remain
+  on drawvg until the separate dynamic renderer/controller slice is selected.
+
 - Added focused repository skills for fast Rust iteration, read-only runtime
   incident analysis, stateful Refresh continuity, SQL cardinality/idempotency,
   durable background work, and Windows dogfood acceptance. New cross-platform

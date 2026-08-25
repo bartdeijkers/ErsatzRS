@@ -971,7 +971,7 @@ evidence = ''
 id         = 'dtx-a-01'
 phase      = 'DTX-A — FFmpeg drawtext overlay leg'
 title      = 'Accept and implement the drawtext filter contract'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'drawtext-overlay-leg'
 plan       = 'plans/drawtext-overlay-leg.md'
 depends_on = ['amm-g-05']
@@ -984,7 +984,17 @@ and expression escaping are correct for every supported platform, drawvg and
 libass behavior remain unchanged, and focused unit and filtergraph snapshot
 tests freeze the command contract.
 '''
-evidence = ''
+evidence = '''
+ADR 0077 was accepted on 2026-08-25. `ersatzrs-ffmpeg` now has a typed
+`DrawtextFilterBuilder`, mutually exclusive inline/file text and family/file
+font choices, interval reload, FFmpeg 9 option coverage, two-layer escaping,
+z-ordered graphics composition, hardware download/upload bridging, and a
+required-runtime-filter check. Four argv snapshots freeze inline escaping,
+Windows paths, mixed overlay order, and NVENC bridging. The focused nextest
+crate gate passed 325 tests with 5 intentional skips; clippy, formatting, and
+real Windows FFmpeg 9 inline/file render proofs passed. ErsatzRS-ffmpeg commit
+`7cdef93` adds drawtext/shaping package gates and is present on its remote main.
+'''
 
 [[milestone]]
 id         = 'dtx-a-02'

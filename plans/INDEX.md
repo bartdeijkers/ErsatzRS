@@ -117,10 +117,11 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Active / actionable
 
-- `drawtext-overlay-leg.md` — queued after AMM and before Phase 9A; adds an
-  additive FFmpeg `drawtext` path for live, reloadable text while retaining
-  `drawvg` as the default static/vector-rich backend. The resulting controller
-  and overlay contract can also be reused by Phase 10's video jukebox.
+- `drawtext-overlay-leg.md` — active after AMM and before Phase 9A. The typed
+  FFmpeg `drawtext` path and package gates are complete; the live text-file
+  controller, renderer selection, localized UI, and runtime proof remain.
+  `drawvg` stays the default static/vector-rich backend, and the resulting
+  controller can also be reused by Phase 10's video jukebox.
 - `addon-nfo-sidecars-and-local-replacements-closeout.md` — blocking handoff
   for generic v2 add-on metadata/NFO sidecars, observable content-kind
   semantics, transactional YAML/NFO publication, exact Local replacements,
