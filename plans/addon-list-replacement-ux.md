@@ -2,10 +2,12 @@
 
 ## Implementation status
 
-Not started. Written 2026-08-17 after fixing the defect that made the
-replacement picker return no candidates at all, and after walking the flow
-end to end against a real unavailable episode. Updated 2026-08-23 with the
-blocking provider-enumeration regression tracked by `amm-g-06`.
+The replacement UX remains not started. Written 2026-08-17 after fixing the
+defect that made the replacement picker return no candidates at all, and after
+walking the flow end to end against a real unavailable episode. Updated
+2026-08-23 with the blocking provider-enumeration regression tracked by
+`amm-g-06`; that blocker was completed on 2026-08-25 by official Beeld & Geluid
+add-on 0.9.1 and its durable host repair regression.
 
 ## Context
 

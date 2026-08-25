@@ -1895,7 +1895,7 @@ progress/parity, migration, and structural web-bundle gates.
 id         = 'amm-g-06'
 phase      = 'AMM-G — Overview-first imports and deferred details'
 title      = 'Retain unavailable Beeld & Geluid series episodes'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-replacement-ux.md'
 depends_on = ['amm-g-05']
@@ -1915,7 +1915,25 @@ survives publication and can receive a Local replacement. Refresh or reimport
 repairs an affected seven-item snapshot without duplicates or provider-order
 drift.
 '''
-evidence = ''
+evidence = '''
+Official add-on commit 113f30b releases Beeld & Geluid 0.9.1. The resumable
+TypeScript parser and legacy POSIX/Windows entrypoints now preserve all source
+query parameters while replacing only pagina, merge duplicate card and
+embedded-JSON candidates by episode identity, retain richer overview text and
+dates, and let explicit isPlayable=false override structural defaults. Frozen
+fixtures use the locked Strip- en cartoontekenen URL with
+alleenafspeelbaar=nee and prove eight provider-ordered items; item
+2101608050040897831 is rank 6, titled Les 7: Cartoon, strook en paginaverhaal,
+first aired 1993-03-07, unavailable/not_playable, and never detail-fetched.
+The complete 39-test native Windows suite and complete 39-test Linux suite pass
+with only opposite-platform tests skipped; Deno fmt/check, PowerShell parsing,
+and the add-on repository's locked Rust tests pass. Host regression
+beeldengeluid_refresh_repairs_missing_unavailable_episode_without_order_drift
+imports seven then eight records, repeats the repaired snapshot without
+identity/rank drift, keeps the detail job NotRequested, assigns a validated
+Local replacement, publishes, and reads the unavailable row back. Focused
+ersatzrs-infra test, check, and all-target Clippy pass.
+'''
 
 [[milestone]]
 id         = 'amm-g-07'

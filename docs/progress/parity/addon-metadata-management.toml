@@ -81,7 +81,8 @@ description = 'Retain every Beeld & Geluid series episode requested by the opera
 discovered  = '2026-08-23'
 adr         = '0079'
 evidence    = 'Live reproduction with the Strip- en cartoontekenen series URL and alleenafspeelbaar=nee returns eight overview episodes, including provider item 2101608050040897831 (Les 7, first aired 1993-03-07) with isPlayable=false. The legacy Windows series paginator discards the input query before adding pagina, so the provider defaults to seven playable items. The v0.9.0 resumable parser retains all eight but first-wins duplicate-candidate merging lets an optimistic card candidate override the later explicit isPlayable=false JSON evidence and incorrectly reports the item as available. The host supports unavailable rows and Local replacements, so omission or misclassification violates that contract. Tracked by runnable milestone amm-g-06 and plans/addon-list-replacement-ux.md.'
-resolved    = false
+resolved    = true
+resolution  = 'Official add-on 0.9.1 (commit 113f30b) preserves series/list/search query parameters across pagination and shares one identity-aware overview merge across resumable and legacy POSIX/Windows paths. Exact eight-item fixtures retain item 2101608050040897831 as unavailable/not_playable without a detail fetch. A durable host regression proves seven-to-eight repair, idempotent order, Local replacement, publication, and review persistence.'
 
 [[debt]]
 id          = 'addon-detail-provider-cooldown-is-fixed'

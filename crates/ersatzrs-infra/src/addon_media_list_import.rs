@@ -2206,6 +2206,9 @@ mod tests {
 
     mod sqlite {
         use super::*;
+        use ersatzrs_core::repositories::AddonMediaListRepository as _;
+
+        use crate::repositories::SqliteAddonMediaListRepository;
 
         async fn fixture() -> (tempfile::TempDir, DbPool, AddonMediaListImportCoordinator) {
             let temporary = tempfile::tempdir().expect("temporary import database");
@@ -2299,12 +2302,6 @@ mod tests {
             provider_list_id: &str,
             item_ids: &[&str],
         ) -> EntityId {
-            let list_id = queue(coordinator, source_url, policy).await;
-            let job = coordinator
-                .claim_import_job()
-                .await
-                .expect("claim overview")
-                .expect("queued overview");
             let records = std::iter::once(list_record(provider_list_id))
                 .chain(item_ids.iter().enumerate().map(|(rank, provider_id)| {
                     item_record(
@@ -2313,21 +2310,213 @@ mod tests {
                         "Overview plot",
                     )
                 }))
-                .collect();
+                .collect::<Vec<_>>();
+            complete_overview(coordinator, source_url, policy, records, "revision-1").await
+        }
+
+        async fn complete_overview(
+            coordinator: &AddonMediaListImportCoordinator,
+            source_url: &str,
+            policy: AddonMediaListDetailPolicy,
+            records: Vec<AddonMediaListRecord>,
+            revision_token: &str,
+        ) -> EntityId {
+            let item_count = records
+                .iter()
+                .filter(|record| matches!(record, AddonMediaListRecord::Item { .. }))
+                .count();
+            let list_id = queue(coordinator, source_url, policy).await;
+            let job = coordinator
+                .claim_import_job()
+                .await
+                .expect("claim overview")
+                .expect("queued overview");
             coordinator
                 .commit_import_page(
                     &job,
                     MediaListDiscoveryPage {
                         complete: true,
                         next_cursor: None,
-                        total_hint: Some(u32::try_from(item_ids.len()).expect("fixture count")),
-                        revision_token: Some("revision-1".to_owned()),
+                        total_hint: Some(u32::try_from(item_count).expect("fixture count")),
+                        revision_token: Some(revision_token.to_owned()),
                         records,
                     },
                 )
                 .await
                 .expect("commit complete overview");
             list_id
+        }
+
+        fn beeldengeluid_item(
+            provider_id: &str,
+            rank: i32,
+            title: &str,
+            release_date: &str,
+            unavailable: bool,
+        ) -> AddonMediaListRecord {
+            let mut value = serde_json::json!({
+                "record_type": "item",
+                "provider_id": provider_id,
+                "rank": rank,
+                "display_title": title,
+                "title": title,
+                "kind": "episode",
+                "source_url": format!(
+                    "https://schatkamer.beeldengeluid.nl/serie/2101608030022428031/strip-en-cartoontekenen/aflevering/{}",
+                    provider_id.trim_start_matches("episode:")
+                ),
+                "metadata": {
+                    "plot": format!("Overview for {title}"),
+                    "release_date": release_date,
+                    "guids": [format!(
+                        "beeldengeluid://{}",
+                        provider_id.trim_start_matches("episode:")
+                    )]
+                }
+            });
+            if unavailable {
+                value["availability"] = serde_json::json!("unavailable");
+                value["availability_reason"] = serde_json::json!("not_playable");
+            }
+            serde_json::from_value(value).expect("Beeld & Geluid overview item")
+        }
+
+        fn beeldengeluid_snapshot(include_lesson_seven: bool) -> Vec<AddonMediaListRecord> {
+            let mut items = vec![
+                ("episode:2101608050040897825", "Les 1", "1993-01-24", false),
+                ("episode:2101608050040897826", "Les 2", "1993-01-31", false),
+                ("episode:2101608050040897827", "Les 3", "1993-02-07", false),
+                ("episode:2101608050040897828", "Les 4", "1993-02-14", false),
+                ("episode:2101608050040897829", "Les 5", "1993-02-21", false),
+                ("episode:2101608050040897830", "Les 6", "1993-02-28", false),
+            ];
+            if include_lesson_seven {
+                items.push((
+                    "episode:2101608050040897831",
+                    "Les 7: Cartoon, strook en paginaverhaal",
+                    "1993-03-07",
+                    true,
+                ));
+            }
+            items.push(("episode:2101608050040897832", "Les 8", "1993-03-14", false));
+
+            std::iter::once(list_record(
+                "serie/2101608030022428031/strip-en-cartoontekenen",
+            ))
+            .chain(items.into_iter().enumerate().map(
+                |(rank, (provider_id, title, release_date, unavailable))| {
+                    beeldengeluid_item(
+                        provider_id,
+                        i32::try_from(rank).expect("fixture rank"),
+                        title,
+                        release_date,
+                        unavailable,
+                    )
+                },
+            ))
+            .collect()
+        }
+
+        async fn configure_managed_storage(pool: &DbPool, root: &std::path::Path) {
+            sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (9000)"#)
+                .execute(pool)
+                .await
+                .expect("managed media source");
+            sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (9000)"#)
+                .execute(pool)
+                .await
+                .expect("managed local source");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaSource" (
+                       "AddonId", "MediaSourceId", "Name", "RootPath"
+                   ) VALUES ('org.example.fixture', 9000, 'fixture add-on', ?)"#,
+            )
+            .bind(root.to_string_lossy().as_ref())
+            .execute(pool)
+            .await
+            .expect("managed add-on source");
+        }
+
+        async fn seed_local_replacement(pool: &DbPool, root: &std::path::Path) {
+            sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (9100)"#)
+                .execute(pool)
+                .await
+                .expect("replacement media source");
+            sqlx::query(r#"INSERT INTO "LocalMediaSource" ("Id") VALUES (9100)"#)
+                .execute(pool)
+                .await
+                .expect("replacement local source");
+            sqlx::query(
+                r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+                   VALUES (9100, 'Local replacements', 'Movies', 9100)"#,
+            )
+            .execute(pool)
+            .await
+            .expect("replacement library");
+            sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (9100)"#)
+                .execute(pool)
+                .await
+                .expect("replacement local library");
+            sqlx::query(
+                r#"INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path")
+                   VALUES (9100, 9100, ?)"#,
+            )
+            .bind(root.to_string_lossy().as_ref())
+            .execute(pool)
+            .await
+            .expect("replacement library path");
+            sqlx::query(
+                r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State")
+                   VALUES (9200, 9100, 0)"#,
+            )
+            .execute(pool)
+            .await
+            .expect("replacement media item");
+            sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (9200)"#)
+                .execute(pool)
+                .await
+                .expect("replacement movie");
+            sqlx::query(
+                r#"INSERT INTO "MovieMetadata" (
+                       "Id", "MovieId", "MetadataKind", "Title", "SortTitle",
+                       "Year", "DateAdded", "DateUpdated"
+                   ) VALUES (
+                       9200, 9200, 0, 'Les 7 local replacement', 'Les 7 local replacement',
+                       1993, '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z'
+                   )"#,
+            )
+            .execute(pool)
+            .await
+            .expect("replacement metadata");
+            sqlx::query(
+                r#"INSERT INTO "MediaVersion" (
+                       "Id", "DateAdded", "DateUpdated", "Duration", "Height", "MovieId",
+                       "VideoScanKind", "Width"
+                   ) VALUES (
+                       9300, '2026-08-25T00:00:00Z', '2026-08-25T00:00:00Z',
+                       '00:22:00', 1080, 9200, 0, 1920
+                   )"#,
+            )
+            .execute(pool)
+            .await
+            .expect("replacement version");
+            sqlx::query(
+                r#"INSERT INTO "MediaFile" ("MediaVersionId", "Path", "PathHash")
+                   VALUES (9300, ?, 'les-7-local-replacement')"#,
+            )
+            .bind(root.join("les-7.mkv").to_string_lossy().as_ref())
+            .execute(pool)
+            .await
+            .expect("replacement file");
+            sqlx::query(
+                r#"INSERT INTO "MediaStream" (
+                       "Index", "MediaStreamKind", "Channels", "Default", "Forced",
+                       "MediaVersionId", "BitsPerRawSample", "AttachedPic"
+                   ) VALUES (0, 1, 0, 1, 0, 9300, 0, 0)"#,
+            )
+            .execute(pool)
+            .await
+            .expect("replacement video stream");
         }
 
         #[tokio::test]
@@ -2411,6 +2600,197 @@ mod tests {
                 "episode:1"
             );
             assert_eq!(rows[1].try_get::<i32, _>("Rank").unwrap(), 1);
+        }
+
+        #[tokio::test]
+        #[allow(clippy::too_many_lines)]
+        async fn beeldengeluid_refresh_repairs_missing_unavailable_episode_without_order_drift() {
+            let (temporary, pool, coordinator) = fixture().await;
+            let managed_root = temporary.path().join("managed");
+            std::fs::create_dir(&managed_root).expect("managed fixture root");
+            configure_managed_storage(&pool, &managed_root).await;
+            let source_url = "https://schatkamer.beeldengeluid.nl/serie/2101608030022428031/strip-en-cartoontekenen?alleenafspeelbaar=nee";
+
+            let list_id = complete_overview(
+                &coordinator,
+                source_url,
+                AddonMediaListDetailPolicy::ManualOnly,
+                beeldengeluid_snapshot(false),
+                "seven-item-snapshot",
+            )
+            .await;
+            let initial_ids: Vec<String> = sqlx::query_scalar(
+                r#"SELECT "ProviderId" FROM "AddonMediaListItem"
+                   WHERE "AddonMediaListId" = ? ORDER BY "Rank", "Id""#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .expect("initial seven-item snapshot");
+            assert_eq!(initial_ids.len(), 7);
+            assert!(!initial_ids
+                .iter()
+                .any(|provider_id| provider_id == "episode:2101608050040897831"));
+
+            let repaired = complete_overview(
+                &coordinator,
+                source_url,
+                AddonMediaListDetailPolicy::ManualOnly,
+                beeldengeluid_snapshot(true),
+                "eight-item-snapshot",
+            )
+            .await;
+            assert_eq!(repaired, list_id);
+            let repaired_rows = sqlx::query(
+                r#"SELECT "Id", "ProviderId", "Rank", "DisplayTitle", "Availability",
+                          "AvailabilityReason", "ProviderMetadataJson"
+                   FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?
+                   ORDER BY "Rank", "Id""#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .expect("repaired eight-item snapshot");
+            assert_eq!(repaired_rows.len(), 8);
+            let repaired_ids = repaired_rows
+                .iter()
+                .map(|row| row.try_get::<String, _>("ProviderId").expect("provider id"))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                repaired_ids,
+                [
+                    "episode:2101608050040897825",
+                    "episode:2101608050040897826",
+                    "episode:2101608050040897827",
+                    "episode:2101608050040897828",
+                    "episode:2101608050040897829",
+                    "episode:2101608050040897830",
+                    "episode:2101608050040897831",
+                    "episode:2101608050040897832",
+                ]
+            );
+            let lesson_seven = &repaired_rows[6];
+            let lesson_seven_id: EntityId = lesson_seven.try_get("Id").expect("Les 7 item id");
+            assert_eq!(lesson_seven.try_get::<i32, _>("Rank").unwrap(), 6);
+            assert_eq!(
+                lesson_seven.try_get::<String, _>("DisplayTitle").unwrap(),
+                "Les 7: Cartoon, strook en paginaverhaal"
+            );
+            assert_eq!(
+                lesson_seven.try_get::<i32, _>("Availability").unwrap(),
+                encode_enum(ersatzrs_domain::AddonMediaListItemAvailability::Unavailable)
+            );
+            assert_eq!(
+                lesson_seven
+                    .try_get::<Option<String>, _>("AvailabilityReason")
+                    .unwrap()
+                    .as_deref(),
+                Some("not_playable")
+            );
+            let metadata: serde_json::Value = serde_json::from_str(
+                &lesson_seven
+                    .try_get::<String, _>("ProviderMetadataJson")
+                    .expect("Les 7 provider metadata"),
+            )
+            .expect("decode Les 7 provider metadata");
+            assert_eq!(metadata["release_date"], "1993-03-07");
+            let detail_state: i32 = sqlx::query_scalar(
+                r#"SELECT "State" FROM "AddonMediaListDetailJob"
+                   WHERE "AddonMediaListItemId" = ?"#,
+            )
+            .bind(lesson_seven_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Les 7 detail state");
+            assert_eq!(
+                detail_state,
+                encode_enum(AddonMediaListDetailState::NotRequested),
+                "an explicitly unavailable overview item must not require a detail fetch"
+            );
+
+            let idempotent = complete_overview(
+                &coordinator,
+                source_url,
+                AddonMediaListDetailPolicy::ManualOnly,
+                beeldengeluid_snapshot(true),
+                "eight-item-snapshot-repeat",
+            )
+            .await;
+            assert_eq!(idempotent, list_id);
+            let repeated: Vec<(EntityId, String, i32)> = sqlx::query_as(
+                r#"SELECT "Id", "ProviderId", "Rank" FROM "AddonMediaListItem"
+                   WHERE "AddonMediaListId" = ? ORDER BY "Rank", "Id""#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .expect("idempotent repaired snapshot");
+            assert_eq!(repeated.len(), 8);
+            assert_eq!(repeated[6].0, lesson_seven_id);
+            assert_eq!(
+                repeated
+                    .iter()
+                    .map(|(_, provider_id, rank)| (provider_id.as_str(), *rank))
+                    .collect::<Vec<_>>(),
+                repaired_ids
+                    .iter()
+                    .enumerate()
+                    .map(|(rank, provider_id)| {
+                        (
+                            provider_id.as_str(),
+                            i32::try_from(rank).expect("fixture rank"),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            );
+
+            let repository = SqliteAddonMediaListRepository(pool.clone());
+            let replacement_root = temporary.path().join("replacement");
+            std::fs::create_dir(&replacement_root).expect("replacement fixture root");
+            seed_local_replacement(&pool, &replacement_root).await;
+            repository
+                .set_replacement(lesson_seven_id, Some((9200, 9300)))
+                .await
+                .expect("assign Local replacement to unavailable Les 7");
+            let review_item = repository
+                .list_items(list_id)
+                .await
+                .expect("review repaired items")
+                .into_iter()
+                .find(|item| item.id == lesson_seven_id)
+                .expect("review contains Les 7");
+            assert_eq!(review_item.replacement_media_item_id, Some(9200));
+            assert_eq!(review_item.replacement_media_version_id, Some(9300));
+            assert!(review_item.replacement_valid);
+
+            repository
+                .publish(list_id)
+                .await
+                .expect("publish repaired overview");
+            let published: bool = sqlx::query_scalar(
+                r#"SELECT "Published" FROM "AddonMediaListItem" WHERE "Id" = ?"#,
+            )
+            .bind(lesson_seven_id)
+            .fetch_one(&pool)
+            .await
+            .expect("published Les 7 row");
+            assert!(published, "the unavailable row must survive publication");
+
+            let item = repository
+                .list_items(list_id)
+                .await
+                .expect("review repaired items")
+                .into_iter()
+                .find(|item| item.id == lesson_seven_id)
+                .expect("review contains Les 7");
+            assert_eq!(
+                item.availability,
+                ersatzrs_domain::AddonMediaListItemAvailability::Unavailable
+            );
+            assert_eq!(item.availability_reason.as_deref(), Some("not_playable"));
+            assert_eq!(item.replacement_media_item_id, Some(9200));
+            assert_eq!(item.replacement_media_version_id, Some(9300));
+            assert!(item.replacement_valid);
         }
 
         #[tokio::test]

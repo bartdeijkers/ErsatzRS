@@ -43,6 +43,15 @@ release section when tagging a release.
 
 ### Fixed
 
+- Beeld & Geluid add-on 0.9.1 now preserves every series, shared-list, and
+  saved-search query parameter while replacing only pagination; merges HTML
+  cards with embedded provider JSON by stable episode identity; and lets
+  explicit `isPlayable=false` evidence override optimistic card defaults. The
+  exact eight-item Strip- en cartoontekenen overview now retains “Les 7” as
+  `unavailable` / `not_playable` without a detail request on Windows and POSIX,
+  so a Local replacement can be selected and published. Reimport also repairs
+  affected seven-item drafts without duplicates or provider-order drift.
+
 - Made canonical skill-mirror validation handle both real Git symlinks on
   Linux and flattened pointer files in Windows checkouts, eliminating a
   platform-specific `xtask` CI failure.
