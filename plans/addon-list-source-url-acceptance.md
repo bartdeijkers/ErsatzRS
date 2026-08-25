@@ -2,9 +2,14 @@
 
 ## Implementation status
 
-Not started. Registered 2026-08-23 after a direct YouTube watch URL resolved
-its list metadata in the Windows admin UI but produced an empty review draft
-that could not publish. Tracked by milestone `amm-g-07`.
+Complete as of 2026-08-25. Official yt-dlp 0.7.1 and Beeld & Geluid 0.9.2
+accept the frozen seven-URL matrix through resumable and legacy Windows/POSIX
+paths. The host rejects invalid zero-item output, retries incomplete generations
+without discarding operator state, and proves every source through non-empty
+review and publication. Chromium and Firefox cover the hydrated retry path;
+Chromium also proves the exact NSF live URL through admin publication, channel,
+schedule, playout, MPEG-TS, and HLS delivery. Tracked by completed milestone
+`amm-g-07`.
 
 ## Context
 

@@ -43,6 +43,15 @@ release section when tagging a release.
 
 ### Fixed
 
+- Official yt-dlp 0.7.1 and Beeld & Geluid 0.9.2 add-ons now accept the full
+  direct-video, playlist, shared-list, dated-search, series, and nested-episode
+  URL matrix on Windows and POSIX. Direct yt-dlp objects become one-item lists
+  with their finite/live behavior intact, provider query parameters and order
+  survive aggregate pagination, and invalid output cannot become a successful
+  empty draft. Existing failed or empty drafts expose a localized retry that
+  replaces only the incomplete generation while preserving operator state;
+  health links directly to that recovery path.
+
 - Beeld & Geluid add-on 0.9.1 now preserves every series, shared-list, and
   saved-search query parameter while replacing only pagination; merges HTML
   cards with embedded provider JSON by stable episode identity; and lets

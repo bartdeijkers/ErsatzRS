@@ -1125,6 +1125,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PauseImport => "Import pauzeren",
         TextKey::ResumeImport => "Import hervatten",
         TextKey::RetryImportNow => "Import nu opnieuw proberen",
+        TextKey::EmptyImportNeedsRetry => "Lege import moet opnieuw worden geprobeerd",
+        TextKey::EmptyImportRetryHelp => "Deze voltooide import bevat geen items. Werk de add-on bij en probeer opnieuw; je lijstinstellingen en bewerkingen blijven behouden.",
         TextKey::CancelImport => "Import annuleren",
         TextKey::OtherPageItemsAffected => "Meer betrokken items staan op andere pagina's",
         TextKey::ElapsedTime => "Verstreken tijd",

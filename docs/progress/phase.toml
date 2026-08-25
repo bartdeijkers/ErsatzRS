@@ -9,14 +9,14 @@ Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
 Lists preserve unknown/finite/live Remote Stream behavior and use resumable
 overview-first imports with deferred fair-use details. CRF has repaired Classic
 Refresh continuity, dependency-scoped scan invalidation, and AMM-H projected
-television cardinality are complete. AMM-G-06 now retains unavailable
-episodes; AMM-G-07 must close the official URL matrix. AMM-G-07, DTX-A, and
-then Phase 9 teletext remain.
+television cardinality are complete. AMM-G-06 retains unavailable episodes and
+AMM-G-07 closes the official direct/aggregate URL matrix with retry and NSF live
+playout proof. DTX-A and then Phase 9 teletext remain.
 '''
 
 next_steps = '''
-ADR 0080 and amm-g-06 are complete. Next close amm-g-07 for official source-URL
-acceptance, continue dtx-a-01/dtx-a-02, and resume Phase 9A at p9a-01.
+ADR 0080 and AMM-G are complete. Next complete dtx-a-01/dtx-a-02, then resume
+Phase 9A at p9a-01.
 '''
 
 [[blocking_decision]]

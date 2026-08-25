@@ -1939,7 +1939,7 @@ ersatzrs-infra test, check, and all-target Clippy pass.
 id         = 'amm-g-07'
 phase      = 'AMM-G — Overview-first imports and deferred details'
 title      = 'Accept direct and aggregate official add-on-list URLs'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-source-url-acceptance.md'
 depends_on = ['amm-g-05']
@@ -1962,7 +1962,27 @@ playout entirely through the Windows admin UI and verifies playable IPTV/HLS
 output with Live semantics. Deterministic add-on, host, health, hydration,
 browser, packaging, and cross-platform regressions pass.
 '''
-evidence = ''
+evidence = '''
+Official add-on commit 70642df publishes yt-dlp 0.7.1 and Beeld & Geluid 0.9.2.
+Frozen adapter tests cover all seven exact source URLs through resumable and
+legacy Windows/POSIX paths: direct yt-dlp roots become one ordered item with
+distinct Live/Finite behavior, aggregate entries remain unique and ordered,
+Beeld & Geluid preserves source queries while replacing only pagination, and a
+nested episode stays a one-item source. The complete native Windows and Linux
+suites each pass 41 tests with only opposite-platform skips; Deno format/check,
+PowerShell parsing, Rust Clippy/tests, signed publication run 32875349304, and
+the public index pass.
+
+Host regressions publish every matrix source from a non-empty review and reject
+invalid zero-item output. Retry supersedes only the latest incomplete provider
+generation, retains list/operator state, and remains distinct from Resume;
+localized editor copy and health link directly to it. Focused infra/web tests,
+all-target Clippy, hydration lint, parity-check web, and Chromium/Firefox retry
+proof pass. A frozen Chromium acceptance imports and publishes the exact NSF
+live URL through the real admin UI, creates channel `nsf live`, its playlist,
+Flood schedule, and playout, then receives real MPEG-TS and HLS segment bytes;
+the add-on producer records only zero seek offsets.
+'''
 
 [[milestone]]
 id         = 'crf-01'

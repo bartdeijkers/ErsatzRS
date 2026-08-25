@@ -350,7 +350,31 @@ function seedAddonLists(testInfo: TestInfo): AddonListSeed {
     availability: 'available',
     content_kind: 'auto',
   });
+  const discoverPageRecord = JSON.stringify({
+    record_type: 'page',
+    complete: true,
+    total_hint: 1,
+    revision_token: 'e2e-fixture-v1',
+  });
   const shell = `#!/bin/sh
+set -eu
+operation=\${1:-list}
+if [ "$operation" = "discover" ]; then
+  request=$(cat)
+  printf '%s\\n' '${discoverPageRecord}'
+  case "$request" in
+    *"${editorSourceUrl}"*)
+      printf '%s\\n' '${editorListRecord}'
+      if [ -f ../${addonId}-recovered.flag ]; then
+        printf '%s\\n' '${editorAvailableRecord}'
+      else
+        printf '%s\\n' '${editorUnavailableRecord}'
+      fi
+      ;;
+    *) printf '%s\\n' '${importListRecord}' '${importItemRecord}' ;;
+  esac
+  exit 0
+fi
 if [ "$ERSATZRS_MEDIA_LIST_URL" = "${editorSourceUrl}" ]; then
   printf '%s\\n' '${editorListRecord}'
   if [ -f ../${addonId}-recovered.flag ]; then
@@ -366,6 +390,18 @@ fi
   chmodSync(join(packageRoot, 'addon.sh'), 0o755);
   const batch = [
     '@echo off',
+    'if /i "%~1"=="discover" (',
+    `  powershell.exe -NoLogo -NoProfile -NonInteractive -Command "$request=[Console]::In.ReadToEnd(); if ($request.Contains('${editorSourceUrl}')) { exit 0 } else { exit 1 }"`,
+    '  if errorlevel 1 goto discover_import',
+    `  echo ${discoverPageRecord}`,
+    `  echo ${editorListRecord}`,
+    `  if exist "..\\${addonId}-recovered.flag" (`,
+    `    echo ${editorAvailableRecord}`,
+    '  ) else (',
+    `    echo ${editorUnavailableRecord}`,
+    '  )',
+    '  exit /b 0',
+    ')',
     `if "%ERSATZRS_MEDIA_LIST_URL%"=="${editorSourceUrl}" (`,
     `  echo ${editorListRecord}`,
     `  if exist "..\\${addonId}-recovered.flag" (`,
@@ -377,6 +413,12 @@ fi
     `  echo ${importListRecord}`,
     `  echo ${importItemRecord}`,
     ')',
+    'exit /b 0',
+    ':discover_import',
+    `echo ${discoverPageRecord}`,
+    `echo ${importListRecord}`,
+    `echo ${importItemRecord}`,
+    'exit /b 0',
     '',
   ].join('\r\n');
   writeFileSync(join(packageRoot, 'addon.cmd'), batch);
@@ -391,7 +433,11 @@ fi
     license: 'Zlib',
     source_url: 'https://example.invalid/e2e-addon',
     host_version: '*',
-    capabilities: [{ id: 'addon.check.v1' }, { id: 'media-list.list.v5' }],
+    capabilities: [
+      { id: 'addon.check.v1' },
+      { id: 'media-list.import.v1' },
+      { id: 'media-list.list.v5' },
+    ],
     dependencies: [],
     entrypoints: {
       any: { path: 'addon.sh', kind: 'posix_shell' },
@@ -480,6 +526,15 @@ INSERT INTO "AddonMediaListItem" (
   ${seed.editorItemId}, ${seed.editorListId}, 'remote:editor-${suffix}',
   '${sqlEscape(seed.replacementTitle)}', 4, 0, '${sqlEscape(seed.replacementTitle)}',
   1, 'fixture_missing', 4
+);
+
+INSERT INTO "AddonMediaListImportJob" (
+  "AddonMediaListId", "Generation", "State", "RecordCapability", "RequestedFolder",
+  "TotalHint", "DiscoveredCount", "CreatedAt", "UpdatedAt", "LastProgressAt", "CompletedAt"
+) VALUES (
+  ${seed.editorListId}, 1, 3, 'media-list.list.v5', 'operator-folder',
+  0, 0, '2026-08-23T00:00:00Z', '2026-08-23T00:00:00Z',
+  '2026-08-23T00:00:00Z', '2026-08-23T00:00:00Z'
 );
 
 INSERT INTO "AddonMediaList" (
@@ -689,6 +744,8 @@ SELECT "ContentKindOverride" FROM "AddonMediaList"
 WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
   AND "ProviderId" = '${sqlEscape(seed.importProviderId)}';
 `)).toBe('2');
+    await page.reload();
+    await waitForHydration(page);
     await expect(page.getByText(seed.importListName)).toBeVisible();
 
     await gotoHydrated(page, '/media/addon-lists');
@@ -809,13 +866,16 @@ WHERE "AddonMediaListItemId" = ${seed.editorItemId};
 `)).toBe('1');
 
     writeFileSync(seed.recoveryFlagPath, 'recovered\n');
-    await gotoHydrated(page, '/media/addon-lists/add');
-    await page.getByLabel('Add-on', { exact: true }).selectOption(seed.addonId);
-    await page.getByLabel('Add-on list URL').fill(seed.editorSourceUrl);
-    await page.getByLabel('Collection Type', { exact: true }).selectOption('other_videos');
-    await page.getByRole('button', { name: /^import$/i }).click();
-    await expect(page).toHaveURL(new RegExp(`/media/addon-lists/${seed.editorListId}\\?import=1$`));
-    await waitForHydration(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
+    await expect(page.getByText('Empty import needs retry', { exact: true })).toBeVisible();
+    await expect(page.getByText(/completed import contains no items/i)).toBeVisible();
+    await page.getByRole('button', { name: /^retry import now$/i }).click();
+    await expect.poll(() => sqlite(`
+SELECT "State" || ',' || "DiscoveredCount"
+FROM "AddonMediaListImportJob"
+WHERE "AddonMediaListId" = ${seed.editorListId}
+ORDER BY "Generation" DESC LIMIT 1;
+`)).toBe('3,1');
     await expect.poll(() => sqlite(`
 SELECT "Availability" FROM "AddonMediaListItem"
 WHERE "Id" = ${seed.editorItemId};

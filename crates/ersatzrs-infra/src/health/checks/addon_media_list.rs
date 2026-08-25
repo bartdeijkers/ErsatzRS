@@ -87,6 +87,9 @@ impl HealthCheck for AddonMediaListHealthCheck {
         let invalid_metadata = invalid_metadata(&self.pool).await?;
         let missing_artwork = missing_artwork(&self.pool).await?;
         let import_failures = import_failures(&self.pool).await?;
+        let import_failure_link = import_failures
+            .first()
+            .map(|(list_id, _)| format!("/media/addon-lists/{list_id}"));
         let detail_worker_failures = detail_worker_failures(&self.pool).await?;
         let detail_wait_setting_failures = detail_wait_setting_failures(&self.pool).await;
         let cooldown_failures = cooldown_failures(&self.pool).await?;
@@ -98,7 +101,7 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .chain(stuck_publications)
             .chain(invalid_metadata)
             .chain(missing_artwork)
-            .chain(import_failures)
+            .chain(import_failures.into_iter().map(|(_, message)| message))
             .chain(detail_worker_failures)
             .chain(detail_wait_setting_failures)
             .chain(cooldown_failures)
@@ -111,7 +114,7 @@ impl HealthCheck for AddonMediaListHealthCheck {
                 failures.join("; "),
                 "One or more add-on media lists failed to refresh",
             )
-            .with_link("/media/addon-lists"));
+            .with_link(import_failure_link.unwrap_or_else(|| "/media/addon-lists".to_owned())));
         }
 
         let disabled = rows
@@ -244,9 +247,10 @@ async fn detail_activity(pool: &Pool<Db>) -> Result<DetailActivity> {
     })
 }
 
-async fn import_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
+async fn import_failures(pool: &Pool<Db>) -> Result<Vec<(i64, String)>> {
     let rows = sqlx::query(
-        r#"SELECT "list"."Name", "job"."State", "job"."Diagnostic",
+        r#"SELECT "list"."Id" AS "ListId", "list"."Name", "job"."State",
+                  "job"."DiscoveredCount", "job"."Diagnostic",
                   "job"."LastProgressAt", "job"."UpdatedAt"
            FROM "AddonMediaListImportJob" AS "job"
            JOIN "AddonMediaList" AS "list" ON "list"."Id" = "job"."AddonMediaListId"
@@ -261,16 +265,29 @@ async fn import_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
     let threshold = chrono::Utc::now() - chrono::Duration::minutes(STUCK_IMPORT_MINUTES);
     let mut failures = Vec::new();
     for row in rows {
+        let list_id = row.try_get::<i64, _>("ListId").map_err(sqlx_error)?;
         let name = row
             .try_get::<String, _>("Name")
             .unwrap_or_else(|_| "List".to_owned());
         let state = row.try_get::<i64, _>("State").map_err(sqlx_error)?;
+        let discovered_count = row
+            .try_get::<i64, _>("DiscoveredCount")
+            .map_err(sqlx_error)?;
+        if state == 3 && discovered_count == 0 {
+            failures.push((
+                list_id,
+                format!(
+                    "{name}: completed provider overview contains no items; update the add-on and retry the import"
+                ),
+            ));
+            continue;
+        }
         if state == 5 {
             let diagnostic = row
                 .try_get::<Option<String>, _>("Diagnostic")
                 .map_err(sqlx_error)?
                 .unwrap_or_else(|| "provider overview needs attention".to_owned());
-            failures.push(format!("{name}: {diagnostic}"));
+            failures.push((list_id, format!("{name}: {diagnostic}")));
             continue;
         }
         if !matches!(state, 0..=2) {
@@ -288,8 +305,11 @@ async fn import_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
         )
         .map_err(|error| HealthCheckError::Database(error.to_string()))?;
         if progress.is_none_or(|progress| progress <= threshold) {
-            failures.push(format!(
-                "{name}: overview import has made no progress for more than {STUCK_IMPORT_MINUTES} minutes"
+            failures.push((
+                list_id,
+                format!(
+                    "{name}: overview import has made no progress for more than {STUCK_IMPORT_MINUTES} minutes"
+                ),
             ));
         }
     }
@@ -698,6 +718,7 @@ mod tests {
                 "AddonMediaListId" INTEGER NOT NULL,
                 "Generation" INTEGER NOT NULL,
                 "State" INTEGER NOT NULL,
+                "DiscoveredCount" INTEGER NOT NULL DEFAULT 0,
                 "Diagnostic" TEXT NULL,
                 "LastProgressAt" TEXT NULL,
                 "UpdatedAt" TEXT NOT NULL
@@ -746,6 +767,39 @@ mod tests {
         assert_eq!(
             result.link.as_ref().map(|link| link.link.as_str()),
             Some("/media/addon-lists")
+        );
+    }
+
+    #[tokio::test]
+    async fn empty_completed_import_links_directly_to_the_retryable_editor() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" ("Id", "AddonId", "Name")
+               VALUES (42, 'org.example.list', 'Empty direct video')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListImportJob" (
+                    "Id", "AddonMediaListId", "Generation", "State", "DiscoveredCount", "UpdatedAt"
+               ) VALUES (7, 42, 1, 3, 0, '2026-08-25T00:00:00Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("empty completed import");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result
+            .message
+            .contains("completed provider overview contains no items"));
+        assert_eq!(
+            result.link.as_ref().map(|link| link.link.as_str()),
+            Some("/media/addon-lists/42")
         );
     }
 

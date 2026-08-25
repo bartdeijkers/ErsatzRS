@@ -1134,6 +1134,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PauseImport => "Wstrzymaj import",
         TextKey::ResumeImport => "Wznów import",
         TextKey::RetryImportNow => "Ponów import teraz",
+        TextKey::EmptyImportNeedsRetry => "Pusty import wymaga ponowienia",
+        TextKey::EmptyImportRetryHelp => "Ten zakończony import nie zawiera elementów. Zaktualizuj dodatek i ponów import; ustawienia oraz zmiany listy zostaną zachowane.",
         TextKey::CancelImport => "Anuluj import",
         TextKey::OtherPageItemsAffected => "Dodatkowe zmieniane elementy są na innych stronach",
         TextKey::ElapsedTime => "Czas trwania",

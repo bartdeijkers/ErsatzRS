@@ -403,6 +403,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PauseImport => "Suspendre l'importation",
         TextKey::ResumeImport => "Reprendre l'importation",
         TextKey::RetryImportNow => "Réessayer l'importation maintenant",
+        TextKey::EmptyImportNeedsRetry => "L'importation vide doit être relancée",
+        TextKey::EmptyImportRetryHelp => "Cette importation terminée ne contient aucun élément. Mettez à jour l'extension, puis réessayez ; les paramètres et modifications de la liste seront conservés.",
         TextKey::CancelImport => "Annuler l'importation",
         TextKey::OtherPageItemsAffected => "D'autres éléments concernés se trouvent sur d'autres pages",
         TextKey::ElapsedTime => "Temps écoulé",

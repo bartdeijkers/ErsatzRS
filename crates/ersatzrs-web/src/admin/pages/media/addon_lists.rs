@@ -316,6 +316,9 @@ fn import_progress_phase(
     policy: AddonMediaListDetailPolicy,
 ) -> TextKey {
     if progress.state == AddonMediaListImportState::Ready {
+        if progress.discovered_count == 0 {
+            return TextKey::EmptyImportNeedsRetry;
+        }
         if progress.detail_pending > 0 {
             return if progress.current_title.is_some() {
                 TextKey::LoadingItemDetails
@@ -328,6 +331,13 @@ fn import_progress_phase(
         }
     }
     import_state_text_key(progress.state)
+}
+
+fn import_can_retry(progress: &AddonMediaListImportProgressRow) -> bool {
+    matches!(
+        progress.state,
+        AddonMediaListImportState::NeedsAttention | AddonMediaListImportState::Cancelled
+    ) || (progress.state == AddonMediaListImportState::Ready && progress.discovered_count == 0)
 }
 
 fn format_clock_duration(seconds: u64) -> String {
@@ -3143,6 +3153,8 @@ fn AddonMediaListEditorIsland(
                 let diagnostic = progress.diagnostic.clone().unwrap_or_default();
                 let has_current_title = !current_title.is_empty();
                 let has_diagnostic = !diagnostic.is_empty();
+                let has_empty_import = state == AddonMediaListImportState::Ready
+                    && progress.discovered_count == 0;
                 let has_detail_failed = progress.detail_failed > 0;
                 let elapsed = elapsed_from(&progress.started_at).unwrap_or_default();
                 let last_progress = progress.last_progress_at.as_deref()
@@ -3187,7 +3199,11 @@ fn AddonMediaListEditorIsland(
                 } else {
                     view! { <progress role="progressbar"></progress> }.into_any()
                 };
-                let contextual_action = match state {
+                let contextual_action = if import_can_retry(&progress) { view! {
+                    <button type="button" class=style::btn_cancel on:click=move |_| {
+                        control_import_action.dispatch((id, AddonMediaListImportAction::Retry));
+                    }>{tr(TextKey::RetryImportNow)}</button>
+                }.into_any() } else { match state {
                     AddonMediaListImportState::Queued => view! {
                         <button type="button" class=style::btn_cancel on:click=move |_| {
                             control_import_action.dispatch((id, AddonMediaListImportAction::Cancel));
@@ -3203,13 +3219,11 @@ fn AddonMediaListEditorIsland(
                             control_import_action.dispatch((id, AddonMediaListImportAction::Resume));
                         }>{tr(TextKey::ResumeImport)}</button>
                     }.into_any(),
-                    AddonMediaListImportState::NeedsAttention | AddonMediaListImportState::Cancelled => view! {
-                        <button type="button" class=style::btn_cancel on:click=move |_| {
-                            control_import_action.dispatch((id, AddonMediaListImportAction::Retry));
-                        }>{tr(TextKey::RetryImportNow)}</button>
-                    }.into_any(),
-                    AddonMediaListImportState::Ready | AddonMediaListImportState::Superseded => ().into_any(),
-                };
+                    AddonMediaListImportState::NeedsAttention
+                    | AddonMediaListImportState::Cancelled
+                    | AddonMediaListImportState::Ready
+                    | AddonMediaListImportState::Superseded => ().into_any(),
+                }};
                 view! {
                     <section class=style::import_progress_card data-import-state=format!("{state:?}")>
                         <span class=style::sr_only aria-live="polite" aria-atomic="true">
@@ -3239,6 +3253,9 @@ fn AddonMediaListEditorIsland(
                             <span style:display=if has_detail_failed { "inline" } else { "none" }>{format!("{} {}", progress.detail_failed, tr(TextKey::Failed))}</span>
                         </p>
                         <p class=style::review_error style:display=if has_diagnostic { "flex" } else { "none" }>{diagnostic}</p>
+                        <p class=style::review_error style:display=if has_empty_import { "flex" } else { "none" }>
+                            {tr(TextKey::EmptyImportRetryHelp)}
+                        </p>
                         <div class=style::import_progress_actions>
                             {contextual_action}
                         </div>
@@ -4184,6 +4201,7 @@ mod tests {
 
         let details = AddonMediaListImportProgressRow {
             state: AddonMediaListImportState::Ready,
+            discovered_count: 8,
             detail_total: 8,
             detail_complete: 2,
             detail_skipped: 1,
@@ -4200,6 +4218,7 @@ mod tests {
 
         let complete_manual = AddonMediaListImportProgressRow {
             state: AddonMediaListImportState::Ready,
+            discovered_count: 1,
             ..AddonMediaListImportProgressRow::default()
         };
         assert_eq!(
@@ -4210,6 +4229,22 @@ mod tests {
             ),
             TextKey::OverviewOnly
         );
+
+        let empty = AddonMediaListImportProgressRow {
+            state: AddonMediaListImportState::Ready,
+            discovered_count: 0,
+            ..AddonMediaListImportProgressRow::default()
+        };
+        assert_eq!(
+            import_progress_phase(&empty, false, AddonMediaListDetailPolicy::ManualOnly),
+            TextKey::EmptyImportNeedsRetry
+        );
+        assert!(import_can_retry(&empty));
+        assert!(!import_can_retry(&AddonMediaListImportProgressRow {
+            state: AddonMediaListImportState::Ready,
+            discovered_count: 1,
+            ..AddonMediaListImportProgressRow::default()
+        }));
     }
 
     #[test]

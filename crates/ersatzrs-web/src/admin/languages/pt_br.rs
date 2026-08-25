@@ -1148,6 +1148,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PauseImport => "Pausar importação",
         TextKey::ResumeImport => "Retomar importação",
         TextKey::RetryImportNow => "Tentar importação novamente agora",
+        TextKey::EmptyImportNeedsRetry => "A importação vazia precisa ser repetida",
+        TextKey::EmptyImportRetryHelp => "Esta importação concluída não contém itens. Atualize o complemento e tente novamente; as configurações e edições da lista serão preservadas.",
         TextKey::CancelImport => "Cancelar importação",
         TextKey::OtherPageItemsAffected => "Outros itens afetados estão em outras páginas",
         TextKey::ElapsedTime => "Tempo decorrido",

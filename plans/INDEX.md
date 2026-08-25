@@ -132,10 +132,10 @@ changelog, and git history for evidence. The authoritative live state is always
   against a real unavailable episode; it also owns the blocking `amm-g-06`
   regression that must retain and correctly classify that episode during
   Beeld & Geluid overview discovery.
-- `addon-list-source-url-acceptance.md` — make direct media URLs valid one-item
-  add-on lists, freeze the seven required yt-dlp and Beeld & Geluid URL shapes,
-  add UI-only failed-draft recovery, and complete the `nsf live` channel,
-  schedule, and playout acceptance scenario under `amm-g-07`.
+- `addon-list-source-url-acceptance.md` — completed `amm-g-07`: direct media
+  URLs are valid one-item add-on lists, the seven required yt-dlp and Beeld &
+  Geluid URL shapes have frozen acceptance, failed drafts recover through the
+  UI, and the `nsf live` channel, schedule, and playout scenario is proven.
 - `playout-refresh-and-addon-tv-deduplication.md` — corrective Windows-dogfood
   plan for real Classic Refresh checkpoints, dependency-scoped scan
   invalidation, safe existing-database behavior, and idempotent add-on

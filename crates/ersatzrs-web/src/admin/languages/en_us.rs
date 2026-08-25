@@ -407,6 +407,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PauseImport => "Pause import",
         TextKey::ResumeImport => "Resume import",
         TextKey::RetryImportNow => "Retry import now",
+        TextKey::EmptyImportNeedsRetry => "Empty import needs retry",
+        TextKey::EmptyImportRetryHelp => "This completed import contains no items. Update the add-on, then retry; your list settings and edits will be preserved.",
         TextKey::CancelImport => "Cancel import",
         TextKey::OtherPageItemsAffected => "Additional affected items are on other pages",
         TextKey::ElapsedTime => "Elapsed time",

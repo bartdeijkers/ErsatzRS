@@ -409,6 +409,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PauseImport => "Import anhalten",
         TextKey::ResumeImport => "Import fortsetzen",
         TextKey::RetryImportNow => "Import jetzt wiederholen",
+        TextKey::EmptyImportNeedsRetry => "Leerer Import muss wiederholt werden",
+        TextKey::EmptyImportRetryHelp => "Dieser abgeschlossene Import enthält keine Elemente. Aktualisieren Sie das Add-on und wiederholen Sie den Import; Ihre Listeneinstellungen und Bearbeitungen bleiben erhalten.",
         TextKey::CancelImport => "Import abbrechen",
         TextKey::OtherPageItemsAffected => "Weitere betroffene Elemente befinden sich auf anderen Seiten",
         TextKey::ElapsedTime => "Verstrichene Zeit",

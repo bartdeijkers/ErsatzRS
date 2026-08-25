@@ -1321,13 +1321,15 @@ impl AddonMediaListImportCoordinator {
         list_id: EntityId,
         action: AddonMediaListImportAction,
     ) -> Result<()> {
+        if action == AddonMediaListImportAction::Retry {
+            return self.retry_import(list_id).await;
+        }
         let now = encode_datetime(Utc::now());
         let (state, cancellation) = match action {
             AddonMediaListImportAction::Pause => (AddonMediaListImportState::Paused, false),
-            AddonMediaListImportAction::Resume | AddonMediaListImportAction::Retry => {
-                (AddonMediaListImportState::Queued, false)
-            }
+            AddonMediaListImportAction::Resume => (AddonMediaListImportState::Queued, false),
             AddonMediaListImportAction::Cancel => (AddonMediaListImportState::Cancelled, true),
+            AddonMediaListImportAction::Retry => unreachable!("retry returned above"),
         };
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaListImportJob"
@@ -1354,6 +1356,86 @@ impl AddonMediaListImportCoordinator {
                 id: list_id,
             });
         }
+        Ok(())
+    }
+
+    async fn retry_import(&self, list_id: EntityId) -> Result<()> {
+        let now = encode_datetime(Utc::now());
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let previous = sqlx::query(
+            r#"SELECT "Id", "Generation", "State", "RecordCapability", "RequestedFolder",
+                      "DiscoveredCount"
+               FROM "AddonMediaListImportJob"
+               WHERE "AddonMediaListId" = ? ORDER BY "Generation" DESC LIMIT 1"#,
+        )
+        .bind(list_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .repository()?
+        .ok_or(RepositoryError::NotFound {
+            kind: "add-on media-list import",
+            id: list_id,
+        })?;
+        let previous_id: EntityId = previous.try_get("Id").repository()?;
+        let previous_generation: i32 = previous.try_get("Generation").repository()?;
+        let previous_state = decode_enum_column("AddonMediaListImportState", &previous, "State")?;
+        let discovered_count: i32 = previous.try_get("DiscoveredCount").repository()?;
+        let retryable = matches!(
+            previous_state,
+            AddonMediaListImportState::NeedsAttention | AddonMediaListImportState::Cancelled
+        ) || (previous_state == AddonMediaListImportState::Ready
+            && discovered_count == 0);
+        if !retryable {
+            return Err(RepositoryError::Conflict(
+                "only failed, cancelled, or empty completed imports can be retried".to_owned(),
+            ));
+        }
+        let generation = previous_generation.checked_add(1).ok_or_else(|| {
+            RepositoryError::Conflict("the import generation limit was reached".to_owned())
+        })?;
+        let record_capability: String = previous.try_get("RecordCapability").repository()?;
+        let requested_folder: Option<String> = previous.try_get("RequestedFolder").repository()?;
+        let superseded = sqlx::query(
+            r#"UPDATE "AddonMediaListImportJob"
+               SET "State" = ?, "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL,
+                   "UpdatedAt" = ?
+               WHERE "Id" = ? AND "State" = ?"#,
+        )
+        .bind(encode_enum(AddonMediaListImportState::Superseded))
+        .bind(&now)
+        .bind(previous_id)
+        .bind(encode_enum(previous_state))
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if superseded.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the import changed while it was being retried".to_owned(),
+            ));
+        }
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListImportJob" (
+                "AddonMediaListId", "Generation", "State", "RecordCapability",
+                "RequestedFolder", "CreatedAt", "UpdatedAt", "LastProgressAt"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(list_id)
+        .bind(generation)
+        .bind(encode_enum(AddonMediaListImportState::Queued))
+        .bind(record_capability)
+        .bind(requested_folder)
+        .bind(&now)
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "LastError" = NULL WHERE "Id" = ?"#)
+            .bind(list_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -2277,6 +2359,28 @@ mod tests {
             .expect("item record")
         }
 
+        fn remote_stream_item_record(
+            provider_id: &str,
+            rank: i32,
+            liveness: &str,
+            duration_seconds: Option<u64>,
+        ) -> AddonMediaListRecord {
+            serde_json::from_value(serde_json::json!({
+                "record_type": "item",
+                "provider_id": provider_id,
+                "rank": rank,
+                "display_title": format!("Remote stream {}", rank + 1),
+                "title": format!("Remote stream {}", rank + 1),
+                "kind": "remote_stream",
+                "source_url": format!("https://www.youtube.com/watch?v={provider_id}"),
+                "availability": "available",
+                "content_kind": "other_video",
+                "liveness": liveness,
+                "duration_seconds": duration_seconds
+            }))
+            .expect("remote stream item record")
+        }
+
         async fn queue(
             coordinator: &AddonMediaListImportCoordinator,
             source_url: &str,
@@ -2600,6 +2704,326 @@ mod tests {
                 "episode:1"
             );
             assert_eq!(rows[1].try_get::<i32, _>("Rank").unwrap(), 1);
+        }
+
+        #[tokio::test]
+        #[allow(clippy::too_many_lines)]
+        async fn empty_completed_overview_retries_after_package_update_without_operator_state_loss()
+        {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let source_url = "https://www.youtube.com/watch?v=mhJRzQsLZGg";
+            let list_id = queue(
+                &coordinator,
+                source_url,
+                AddonMediaListDetailPolicy::ManualOnly,
+            )
+            .await;
+            let empty_job = coordinator
+                .claim_import_job()
+                .await
+                .expect("claim empty provider generation")
+                .expect("empty provider generation");
+            coordinator
+                .commit_import_page(
+                    &empty_job,
+                    MediaListDiscoveryPage {
+                        complete: true,
+                        next_cursor: None,
+                        total_hint: Some(0),
+                        revision_token: Some("broken-package".to_owned()),
+                        records: vec![list_record("youtube/mhJRzQsLZGg")],
+                    },
+                )
+                .await
+                .expect("persist legacy empty provider generation");
+            let empty_progress = coordinator.progress(list_id).await.unwrap().unwrap();
+            assert_eq!(empty_progress.state, AddonMediaListImportState::Ready);
+            assert_eq!(empty_progress.discovered_count, 0);
+
+            sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "AutoRefresh" = 1, "GeneratePlaylist" = 1,
+                       "MetadataOverrideJson" = '{"name":"Operator title"}',
+                       "PresentationKind" = 1, "RequestedPresentationKind" = 1
+                   WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .execute(&pool)
+            .await
+            .expect("set operator-owned list state");
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob" SET "RequestedFolder" = 'operator-folder'
+                   WHERE "Id" = ?"#,
+            )
+            .bind(empty_job.id)
+            .execute(&pool)
+            .await
+            .expect("set requested folder");
+            let operator_state = sqlx::query(
+                r#"SELECT "AddonId", "SourceUrl", "AutoRefresh", "GeneratePlaylist",
+                          "MetadataOverrideJson", "PresentationKind",
+                          "RequestedPresentationKind", "DetailImportPolicy"
+                   FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("operator state before retry");
+
+            coordinator
+                .control_import(list_id, AddonMediaListImportAction::Retry)
+                .await
+                .expect("retry empty provider generation");
+            let generations = sqlx::query(
+                r#"SELECT "Id", "Generation", "State", "RequestedFolder", "DiscoveredCount"
+                   FROM "AddonMediaListImportJob"
+                   WHERE "AddonMediaListId" = ? ORDER BY "Generation""#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .expect("retry generations");
+            assert_eq!(generations.len(), 2);
+            assert_eq!(
+                generations[0].try_get::<i32, _>("State").unwrap(),
+                encode_enum(AddonMediaListImportState::Superseded)
+            );
+            assert_eq!(generations[1].try_get::<i32, _>("Generation").unwrap(), 2);
+            assert_eq!(
+                generations[1].try_get::<i32, _>("State").unwrap(),
+                encode_enum(AddonMediaListImportState::Queued)
+            );
+            assert_eq!(
+                generations[1]
+                    .try_get::<Option<String>, _>("RequestedFolder")
+                    .unwrap()
+                    .as_deref(),
+                Some("operator-folder")
+            );
+            assert_eq!(
+                generations[1].try_get::<i32, _>("DiscoveredCount").unwrap(),
+                0
+            );
+            let retained_state = sqlx::query(
+                r#"SELECT "AddonId", "SourceUrl", "AutoRefresh", "GeneratePlaylist",
+                          "MetadataOverrideJson", "PresentationKind",
+                          "RequestedPresentationKind", "DetailImportPolicy"
+                   FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("operator state after retry");
+            for column in ["AddonId", "SourceUrl", "MetadataOverrideJson"] {
+                assert_eq!(
+                    retained_state.try_get::<String, _>(column).unwrap(),
+                    operator_state.try_get::<String, _>(column).unwrap(),
+                    "retry must preserve {column}"
+                );
+            }
+            for column in [
+                "AutoRefresh",
+                "GeneratePlaylist",
+                "PresentationKind",
+                "RequestedPresentationKind",
+                "DetailImportPolicy",
+            ] {
+                assert_eq!(
+                    retained_state.try_get::<i32, _>(column).unwrap(),
+                    operator_state.try_get::<i32, _>(column).unwrap(),
+                    "retry must preserve {column}"
+                );
+            }
+
+            let repaired_job = coordinator
+                .claim_import_job()
+                .await
+                .expect("claim repaired generation")
+                .expect("repaired provider generation");
+            assert_ne!(repaired_job.id, empty_job.id);
+            assert!(repaired_job.cursor.is_none());
+            assert_eq!(repaired_job.verification_pass, 0);
+            coordinator
+                .commit_import_page(
+                    &repaired_job,
+                    MediaListDiscoveryPage {
+                        complete: true,
+                        next_cursor: None,
+                        total_hint: Some(1),
+                        revision_token: Some("fixed-package".to_owned()),
+                        records: vec![
+                            list_record("youtube/mhJRzQsLZGg"),
+                            item_record("mhJRzQsLZGg", 0, "NSF Live overview"),
+                        ],
+                    },
+                )
+                .await
+                .expect("promote repaired provider generation");
+            let repaired_progress = coordinator.progress(list_id).await.unwrap().unwrap();
+            assert_eq!(repaired_progress.state, AddonMediaListImportState::Ready);
+            assert_eq!(repaired_progress.discovered_count, 1);
+            let repaired_items: Vec<String> = sqlx::query_scalar(
+                r#"SELECT "ProviderId" FROM "AddonMediaListItem"
+                   WHERE "AddonMediaListId" = ? ORDER BY "Rank""#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .expect("repaired review items");
+            assert_eq!(repaired_items, ["mhJRzQsLZGg".to_owned()]);
+        }
+
+        #[tokio::test]
+        #[allow(clippy::too_many_lines)]
+        async fn official_source_url_matrix_reaches_nonempty_review_and_publication() {
+            use ersatzrs_domain::RemoteStreamLiveness;
+
+            let (temporary, pool, coordinator) = fixture().await;
+            let managed_root = temporary.path().join("managed-matrix");
+            std::fs::create_dir(&managed_root).expect("managed matrix root");
+            configure_managed_storage(&pool, &managed_root).await;
+            let matrix = vec![
+                (
+                    "https://www.youtube.com/watch?v=mhJRzQsLZGg",
+                    "youtube/direct/mhJRzQsLZGg",
+                    vec![remote_stream_item_record("mhJRzQsLZGg", 0, "live", None)],
+                    Some(RemoteStreamLiveness::Live),
+                ),
+                (
+                    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "youtube/direct/dQw4w9WgXcQ",
+                    vec![remote_stream_item_record(
+                        "dQw4w9WgXcQ",
+                        0,
+                        "finite",
+                        Some(213),
+                    )],
+                    Some(RemoteStreamLiveness::Finite),
+                ),
+                (
+                    "https://www.youtube.com/playlist?list=PLJ_TJFLc25JRdChhr9sp00ajl7FAeKDx-",
+                    "youtube/playlist/PLJ_TJFLc25JRdChhr9sp00ajl7FAeKDx-",
+                    vec![
+                        remote_stream_item_record("playlist-one", 0, "finite", Some(60)),
+                        remote_stream_item_record("playlist-two", 1, "live", None),
+                        remote_stream_item_record("playlist-three", 2, "finite", Some(90)),
+                    ],
+                    Some(RemoteStreamLiveness::Finite),
+                ),
+                (
+                    "https://schatkamer.beeldengeluid.nl/lijst/14df8d33-ce8a-4680-a83b-0cc2a9c58bcd",
+                    "beeldengeluid/list/14df8d33-ce8a-4680-a83b-0cc2a9c58bcd",
+                    vec![
+                        item_record("shared-list-one", 0, "Shared list one"),
+                        item_record("shared-list-two", 1, "Shared list two"),
+                    ],
+                    None,
+                ),
+                (
+                    "https://schatkamer.beeldengeluid.nl/zoeken?q=reclame&startdatum=01-01-1995&einddatum=01-03-1995",
+                    "beeldengeluid/search/reclame-1995",
+                    vec![
+                        item_record("dated-search-one", 0, "Dated search one"),
+                        item_record("dated-search-two", 1, "Dated search two"),
+                    ],
+                    None,
+                ),
+                (
+                    "https://schatkamer.beeldengeluid.nl/serie/2101608030022669331/de-fascinaties-van-boudewijn-buch",
+                    "beeldengeluid/series/2101608030022669331",
+                    vec![
+                        item_record("series-one", 0, "Series one"),
+                        item_record("series-two", 1, "Series two"),
+                    ],
+                    None,
+                ),
+                (
+                    "https://schatkamer.beeldengeluid.nl/serie/2101608030021828731/ster-reclame/aflevering/2101608040033953431",
+                    "beeldengeluid/episode/2101608040033953431",
+                    vec![item_record(
+                        "episode:2101608040033953431",
+                        0,
+                        "Direct episode",
+                    )],
+                    None,
+                ),
+            ];
+            let repository = SqliteAddonMediaListRepository(pool.clone());
+
+            for (matrix_rank, (source_url, provider_list_id, items, expected_liveness)) in
+                matrix.into_iter().enumerate()
+            {
+                let expected_count = items.len();
+                let records = std::iter::once(AddonMediaListRecord::list(
+                    provider_list_id,
+                    format!("Matrix source {matrix_rank}"),
+                ))
+                .chain(items)
+                .collect::<Vec<_>>();
+                let requested_folder = format!("matrix-{matrix_rank}");
+                let list_id = coordinator
+                    .queue_import(
+                        "org.example.fixture",
+                        &context(source_url),
+                        Some(&requested_folder),
+                        AddonMediaListContentKind::Auto,
+                        AddonMediaListDetailPolicy::ManualOnly,
+                        None,
+                    )
+                    .await
+                    .expect("queue matrix source");
+                let job = coordinator
+                    .claim_import_job()
+                    .await
+                    .expect("claim matrix source")
+                    .expect("queued matrix source");
+                coordinator
+                    .commit_import_page(
+                        &job,
+                        MediaListDiscoveryPage {
+                            complete: true,
+                            next_cursor: None,
+                            total_hint: Some(
+                                u32::try_from(expected_count).expect("matrix item count"),
+                            ),
+                            revision_token: Some(format!("matrix-{matrix_rank}")),
+                            records,
+                        },
+                    )
+                    .await
+                    .expect("commit matrix overview");
+                let progress = coordinator.progress(list_id).await.unwrap().unwrap();
+                assert_eq!(progress.state, AddonMediaListImportState::Ready);
+                assert_eq!(
+                    progress.discovered_count,
+                    u64::try_from(expected_count).expect("matrix item count")
+                );
+                let review = repository
+                    .list_items(list_id)
+                    .await
+                    .expect("load matrix review");
+                assert_eq!(review.len(), expected_count);
+                assert_eq!(
+                    review.iter().map(|item| item.rank).collect::<Vec<_>>(),
+                    (0..i32::try_from(expected_count).expect("matrix ranks")).collect::<Vec<_>>()
+                );
+                if let Some(expected_liveness) = expected_liveness {
+                    assert_eq!(review[0].effective_liveness, expected_liveness);
+                }
+
+                repository
+                    .publish(list_id)
+                    .await
+                    .expect("publish matrix source");
+                let published = repository
+                    .list_items(list_id)
+                    .await
+                    .expect("load published matrix source");
+                assert!(published.iter().all(|item| item.published));
+                if let Some(expected_liveness) = expected_liveness {
+                    assert_eq!(published[0].published_liveness, expected_liveness);
+                }
+            }
         }
 
         #[tokio::test]
