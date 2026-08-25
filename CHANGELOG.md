@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.26-beta] - 2026-08-25
+
 ### Added
 
 - Accepted ADR 0077 and added a typed FFmpeg 9 `drawtext` filter/pipeline leg
@@ -2359,7 +2361,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.25-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.26-beta...HEAD
+[1.0.26-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.25-beta...v1.0.26-beta
 [1.0.25-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.24-beta...v1.0.25-beta
 [1.0.24-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.23-beta...v1.0.24-beta
 [1.0.21-beta.1]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.21-beta...v1.0.21-beta.1
