@@ -56,9 +56,9 @@ select one deterministic non-empty artwork winner, and narrow restart-safe
 SQLite/MySQL repairs remove only safe exact duplicates. Aggregate health and
 runtime-audit diagnostics plus a 27-episode browser proof keep the invariant
 visible without exposing media paths.
-AMM-I tracks Windows dogfood UX gaps in overview visibility,
-draft/publication state, and narrow-screen keyboard/reflow behavior; see
-amm-i-01 and plans/addon-list-import-review-ux.md.
+AMM-I closes overview, draft/publication, no-JS, and reflow gaps with
+authoritative readiness and responsive review proven in both browsers;
+see amm-i-01 and plans/addon-list-import-review-ux.md.
 '''
 
 [[debt]]
@@ -66,8 +66,9 @@ id          = 'addon-list-import-review-ux-obscures-state-and-mobile-actions'
 description = 'Make add-on-list discovery, saved-draft state, publication readiness, navigation, and item review understandable and operable across hydrated, no-JS, keyboard, desktop, and narrow-screen paths.'
 discovered  = '2026-08-26'
 adr         = '0075'
-evidence    = 'A read-only Windows dogfood audit of a 48-item public-series import observed Ready to review and 48 of 48 discovered while the editor still showed zero rows until Save. At 390 and 320 CSS pixels the 1382-pixel interactive review table hid state and row actions behind a scrollbar after roughly 1882 pixels of content. Keyboard focus entered about fourteen translated-off-canvas drawer controls before the page, while the visible label-based menu toggle was not focusable. Source inspection also proved that create and Publish depend on hydration and that the list-level Save fallback substitutes an incomplete request shape. The current live build does expose Add-on lists under Media sources, so the earlier wholly missing navigation link is not claimed as current evidence. Tracked by milestone amm-i-01 and plans/addon-list-import-review-ux.md.'
-resolved    = false
+evidence    = 'Resolved 2026-08-26: a complete overview rematerializes the exact committed keyed rows as Ready is observed; one application-owned readiness projection distinguishes dirty settings, saved revision, blockers, recommendations, optional details, required playback preparation, publishing, and success. Native create, list Save, item Review, and Publish forms execute the same commands as hydration and preserve visible metadata through SSR. The review collection reflows without horizontal overflow at 320/390 pixels, intermediate widths, 200% zoom, and 4K; the mobile drawer is inert while closed and restores focus after Escape. Row mutations expose Saving/Saved/Error, prevent conflicting publication, and reload authoritative state after injected HTTP 500 failure. All supported cultures, scoped dark/light contrast, reduced motion, matched SSR/WASM hydration, 64 focused cross-layer tests, 9 page-state tests, and all 11 dedicated Playwright scenarios in Chromium and Firefox pass. The official Windows/POSIX ready-copy regression also passes in the add-ons repository.'
+resolved    = true
+resolution  = 'Import and review now expose committed state and publication intent directly, remain fully operable without hydration, and use one responsive, accessible workflow from narrow mobile layouts through 4K without weakening ADR 0079 optional-detail semantics.'
 
 [[debt]]
 id          = 'addon-tv-projection-duplicates-artwork-and-list-rows'

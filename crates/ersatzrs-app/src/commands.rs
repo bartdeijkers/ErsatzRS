@@ -4611,6 +4611,14 @@ pub async fn publish_addon_media_list(
     operations: &OperationCoordinator,
 ) -> crate::Result<Option<u64>> {
     validate_positive_id(command.id, "addon_media_list_id")?;
+    let readiness =
+        crate::queries::addon_media_list_publication_readiness(command.id, repository).await?;
+    if let Some(blocker) = readiness.blockers.first() {
+        return validation_error(
+            "publication",
+            format!("publication is blocked by {:?}", blocker.kind),
+        );
+    }
     let pending_details = repository.prepare_publication_details(command.id).await?;
     if pending_details > 0 {
         return Ok(Some(pending_details));
@@ -6348,14 +6356,15 @@ mod tests {
     use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity};
     use ersatzrs_core::repositories::{
         AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
-        AddonMediaListPublication, AddonMediaListReplacementCandidate, AddonMediaListRepository,
-        AdminSettingsRepository, ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow,
-        ChannelValidationState, CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin,
-        CollectionRepository, FfmpegProfileRepository, LibraryRepository, LibraryScanTarget,
-        MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
-        MultiCollectionEditorOptions, MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow,
-        PlaylistEditorAdmin, PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin,
-        PlaylistItemInsert, RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
+        AddonMediaListPublication, AddonMediaListPublicationReadiness,
+        AddonMediaListReplacementCandidate, AddonMediaListRepository, AdminSettingsRepository,
+        ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow, ChannelValidationState,
+        CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin, CollectionRepository,
+        FfmpegProfileRepository, LibraryRepository, LibraryScanTarget, MediaItemSuggestionAdmin,
+        MultiCollectionAdmin, MultiCollectionAdminRow, MultiCollectionEditorOptions,
+        MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow, PlaylistEditorAdmin,
+        PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin, PlaylistItemInsert,
+        RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
         RerunCollectionEditorOptions, RerunCollectionReferenceKind, ScheduleItemAdmin,
         SettingsMutation, SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow,
     };
@@ -6437,6 +6446,17 @@ mod tests {
             _id: EntityId,
         ) -> ersatzrs_core::repositories::Result<Vec<AddonMediaListItemAdminRow>> {
             Ok(Vec::new())
+        }
+
+        async fn publication_readiness(
+            &self,
+            _id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<AddonMediaListPublicationReadiness> {
+            Ok(AddonMediaListPublicationReadiness {
+                required_playback_detail_count: self.pending_publication_details,
+                review_state: ersatzrs_domain::AddonMediaListReviewState::Ready,
+                ..AddonMediaListPublicationReadiness::default()
+            })
         }
 
         async fn search_replacement_candidates(

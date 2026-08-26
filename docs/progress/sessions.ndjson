@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-26","summary":"Completed AMM-I add-on-list import and review UX: authoritative readiness, faithful no-JS forms, responsive keyed review, mutation recovery, keyboard-safe navigation, and Chromium/Firefox acceptance."}
 {"agent":"Codex","date":"2026-08-26","summary":"Audited the live add-on-list import/review UX and opened amm-i-01 with responsive, keyboard, no-JS, and publication-readiness acceptance"}
 {"agent":"Codex","date":"2026-08-26","summary":"Dogfooded the Glamourland add-on-list import through the Windows admin UI and documented runtime, hydration, desktop, mobile, and isolation findings."}
 {"agent":"Codex","date":"2026-08-26","summary":"Improved add-on list review UX with undoable direct and bulk edits, date-gap season numbering, stable rows, and durable finite-duration publication preparation."}
@@ -640,3 +641,4 @@
 {"date":"2026-07-17","agent":"Codex","summary":"Fixed the Windows-only beta release workflow after v1.0.15-beta.6 failed before Rust setup: Git Bash is now placed on PATH before dtolnay/rust-toolchain, avoiding the incompatible Windows WSL bash executable."}
 {"date":"2026-07-17","agent":"Codex","summary":"Fixed the v1.0.15-beta.7 Windows package after runtime proof found missing public CSS and duplicate site/public assets: Stylance now runs for the frontend build, native builds alone skip it, and packaging stages site/pkg only with non-empty CSS and asset-layout assertions."}
 {"date":"2026-07-20","agent":"Codex","summary":"Matched channel-save behavior to ErsatzTV and made manual playout rebuild requests reliably queued with visible activity."}
+{"date":"2026-08-26","agent":"Codex","summary":"Added repository-scoped admin UX design and audit skills plus a WCAG-aware, Tunarr-inspired UI reference and evidence-backed component catalog."}

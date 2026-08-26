@@ -14,6 +14,96 @@ pub enum AddonMediaListPublishResult {
     PreparingPlaybackDetails { item_count: u64 },
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationBlockerKind {
+    OverviewIncomplete,
+    PublicationInProgress,
+    RecoveryRequired,
+    CollectionTitleMissing,
+    InvalidArtwork,
+    NoIncludedItems,
+    MoviePrimaryCount,
+    PlaybackDecisionRequired,
+    PlaybackDetailsUnavailable,
+    PlaybackDetailsFailed,
+    UnavailableWithoutReplacement,
+    ItemTitleMissing,
+    SeasonEpisodeMissing,
+    ArtistMissing,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListPublicationBlocker {
+    pub kind: AddonMediaListPublicationBlockerKind,
+    pub item_rank: Option<i32>,
+    pub item_title: Option<String>,
+    pub count: u64,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListPublicationReadiness {
+    pub included_count: u64,
+    pub blockers: Vec<AddonMediaListPublicationBlocker>,
+    pub recommendation_count: u64,
+    pub required_playback_detail_count: u64,
+    pub required_playback_detail_pending: u64,
+    pub optional_detail_total: u64,
+    pub optional_detail_complete: u64,
+    pub optional_detail_pending: u64,
+    pub saved_revision: i32,
+    pub review_state: AddonMediaListReviewState,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListPublicationReadiness>
+    for AddonMediaListPublicationReadiness
+{
+    fn from(value: ersatzrs_core::repositories::AddonMediaListPublicationReadiness) -> Self {
+        Self {
+            included_count: value.included_count,
+            blockers: value.blockers.into_iter().map(Into::into).collect(),
+            recommendation_count: value.recommendation_count,
+            required_playback_detail_count: value.required_playback_detail_count,
+            required_playback_detail_pending: value.required_playback_detail_pending,
+            optional_detail_total: value.optional_detail_total,
+            optional_detail_complete: value.optional_detail_complete,
+            optional_detail_pending: value.optional_detail_pending,
+            saved_revision: value.saved_revision,
+            review_state: value.review_state,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListPublicationBlocker>
+    for AddonMediaListPublicationBlocker
+{
+    fn from(value: ersatzrs_core::repositories::AddonMediaListPublicationBlocker) -> Self {
+        Self {
+            kind: match value.kind {
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::OverviewIncomplete => AddonMediaListPublicationBlockerKind::OverviewIncomplete,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::PublicationInProgress => AddonMediaListPublicationBlockerKind::PublicationInProgress,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::RecoveryRequired => AddonMediaListPublicationBlockerKind::RecoveryRequired,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::CollectionTitleMissing => AddonMediaListPublicationBlockerKind::CollectionTitleMissing,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::InvalidArtwork => AddonMediaListPublicationBlockerKind::InvalidArtwork,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::NoIncludedItems => AddonMediaListPublicationBlockerKind::NoIncludedItems,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::MoviePrimaryCount => AddonMediaListPublicationBlockerKind::MoviePrimaryCount,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::PlaybackDecisionRequired => AddonMediaListPublicationBlockerKind::PlaybackDecisionRequired,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::PlaybackDetailsUnavailable => AddonMediaListPublicationBlockerKind::PlaybackDetailsUnavailable,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::PlaybackDetailsFailed => AddonMediaListPublicationBlockerKind::PlaybackDetailsFailed,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement => AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::ItemTitleMissing => AddonMediaListPublicationBlockerKind::ItemTitleMissing,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing => AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing,
+                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::ArtistMissing => AddonMediaListPublicationBlockerKind::ArtistMissing,
+            },
+            item_rank: value.item_rank,
+            item_title: value.item_title,
+            count: value.count,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListRow {
     pub id: i64,
@@ -703,6 +793,30 @@ pub async fn get_addon_media_list_form(
 }
 
 #[server]
+pub async fn get_addon_media_list_publication_readiness(
+    id: i64,
+) -> Result<AddonMediaListPublicationReadiness, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    get_addon_media_list_publication_readiness_with_state(&state, id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+pub async fn get_addon_media_list_publication_readiness_with_state(
+    state: &crate::host::state::AppState,
+    id: i64,
+) -> ersatzrs_app::Result<AddonMediaListPublicationReadiness> {
+    state
+        .application
+        .addon_media_list_publication_readiness(id)
+        .await
+        .map(Into::into)
+}
+
+#[server]
 pub async fn list_addon_media_list_items(
     id: i64,
 ) -> Result<Vec<AddonMediaListItemRow>, ServerFnError> {
@@ -1183,20 +1297,24 @@ pub async fn publish_addon_media_list(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    publish_addon_media_list_with_state(&state, id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+pub async fn publish_addon_media_list_with_state(
+    state: &crate::host::state::AppState,
+    id: i64,
+) -> ersatzrs_app::Result<AddonMediaListPublishResult> {
     let pending_details = state
         .application
         .publish_addon_media_list(ersatzrs_app::commands::PublishAddonMediaList { id })
-        .await
-        .map_err(ServerFnError::new)?;
+        .await?;
     if let Some(item_count) = pending_details {
         return Ok(AddonMediaListPublishResult::PreparingPlaybackDetails { item_count });
     }
-    if let Some(library_id) = state
-        .application
-        .addon_media_list_library_id(id)
-        .await
-        .map_err(ServerFnError::new)?
-    {
+    if let Some(library_id) = state.application.addon_media_list_library_id(id).await? {
         let _ = state
             .application
             .request_library_scan(ersatzrs_app::commands::RequestLibraryScan::new(

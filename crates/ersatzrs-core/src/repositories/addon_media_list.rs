@@ -185,6 +185,69 @@ pub struct AddonMediaListImportProgress {
     pub diagnostic: Option<String>,
 }
 
+/// Stable, localizable publication blockers returned by the authoritative
+/// add-on-list readiness projection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationBlockerKind {
+    OverviewIncomplete,
+    PublicationInProgress,
+    RecoveryRequired,
+    CollectionTitleMissing,
+    InvalidArtwork,
+    NoIncludedItems,
+    MoviePrimaryCount,
+    PlaybackDecisionRequired,
+    PlaybackDetailsUnavailable,
+    PlaybackDetailsFailed,
+    UnavailableWithoutReplacement,
+    ItemTitleMissing,
+    SeasonEpisodeMissing,
+    ArtistMissing,
+}
+
+/// One publication blocker with bounded context for localized admin copy.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPublicationBlocker {
+    pub kind: AddonMediaListPublicationBlockerKind,
+    pub item_rank: Option<i32>,
+    pub item_title: Option<String>,
+    pub count: u64,
+}
+
+/// Application-facing readiness state for one saved add-on-list revision.
+///
+/// Recommendations and optional detail progress are deliberately separate
+/// from `blockers`: ADR 0079 permits a verified overview to publish before
+/// optional enrichment completes.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPublicationReadiness {
+    pub included_count: u64,
+    pub blockers: Vec<AddonMediaListPublicationBlocker>,
+    pub recommendation_count: u64,
+    pub required_playback_detail_count: u64,
+    pub required_playback_detail_pending: u64,
+    pub optional_detail_total: u64,
+    pub optional_detail_complete: u64,
+    pub optional_detail_pending: u64,
+    pub saved_revision: i32,
+    pub review_state: AddonMediaListReviewState,
+}
+
+impl AddonMediaListPublicationReadiness {
+    #[must_use]
+    pub fn can_start_publication(&self) -> bool {
+        self.blockers.is_empty()
+            && self.required_playback_detail_count == 0
+            && self.review_state != AddonMediaListReviewState::Publishing
+    }
+
+    #[must_use]
+    pub fn needs_playback_preparation(&self) -> bool {
+        self.blockers.is_empty() && self.required_playback_detail_count > 0
+    }
+}
+
 /// Operator action for one durable overview generation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -351,6 +414,18 @@ pub trait AddonMediaListRepository: Send + Sync {
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>>;
     /// List provider items and replacement state in provider order.
     async fn list_items(&self, id: EntityId) -> Result<Vec<AddonMediaListItemAdminRow>>;
+    /// Classify the exact saved revision before publication without mutating
+    /// import, detail, projection, or library state.
+    async fn publication_readiness(
+        &self,
+        id: EntityId,
+    ) -> Result<AddonMediaListPublicationReadiness> {
+        let _ = id;
+        Err(RepositoryError::unavailable(
+            "add-on publication readiness",
+            "not implemented",
+        ))
+    }
     /// Load one item, its NFO metadata, and derived chapter children.
     async fn get_item_detail(
         &self,

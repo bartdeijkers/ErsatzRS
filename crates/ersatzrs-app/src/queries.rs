@@ -1899,6 +1899,24 @@ pub async fn list_addon_media_list_items(
     repository.list_items(id).await.map_err(Into::into)
 }
 
+/// Load the authoritative publication readiness of one saved add-on-list
+/// revision without mutating discovery, detail, or projection state.
+pub async fn addon_media_list_publication_readiness(
+    id: EntityId,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<ersatzrs_core::repositories::AddonMediaListPublicationReadiness> {
+    if id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "addon_media_list_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    repository
+        .publication_readiness(id)
+        .await
+        .map_err(Into::into)
+}
+
 /// Load one page of provider items in one availability group.
 pub async fn list_addon_media_list_items_page(
     id: EntityId,

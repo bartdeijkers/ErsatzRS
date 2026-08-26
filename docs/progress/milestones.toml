@@ -2123,7 +2123,7 @@ Leptos bundle and the managed ErsatzRS FFmpeg 9 binaries.
 id         = 'amm-i-01'
 phase      = 'AMM-I — Import and review UX correction'
 title      = 'Make add-on-list import and publication state self-explanatory'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-import-review-ux.md'
 depends_on = ['amm-g-07', 'amm-h-01']
@@ -2144,4 +2144,14 @@ keyboard proven. Add-on-capability entry points, long-description disclosure,
 valid progress duration, unescaped official-package ready copy, every supported
 culture, both themes, reduced motion, hydration, and focused Chromium/Firefox
 regressions pass before the parity debt closes.
+'''
+evidence = '''
+The application-owned readiness projection now separates blockers,
+recommendations, optional detail progress, and required playback preparation.
+The SSR and hydrated routes share the same save, review, and publish commands,
+including exact revision checks and mutation recovery. Focused unit,
+repository, localization, hydration, and browser acceptance cover 4K, 320/390
+pixel reflow, 200% zoom, keyboard navigation, both themes, reduced motion,
+no-JS forms, delayed mutations, and HTTP 500 recovery in Chromium and Firefox.
+The full workspace test closeout passes all 2,078 tests and doctests.
 '''

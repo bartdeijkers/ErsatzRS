@@ -1,7 +1,8 @@
 import { expect, Page, TestInfo, test } from '@playwright/test';
+import { createHash } from 'crypto';
 import { execFileSync } from 'child_process';
-import { mkdirSync, writeFileSync } from 'fs';
-import { dirname, join } from 'path';
+import { chmodSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
+import { dirname, join, relative } from 'path';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 
@@ -12,6 +13,9 @@ type MetadataSeed = {
   secondItemId: number;
   firstTitle: string;
   secondTitle: string;
+  noJsProviderId: string;
+  noJsSourceUrl: string;
+  noJsListName: string;
 };
 
 function projectBase(testInfo: TestInfo): number {
@@ -34,6 +38,41 @@ function sqlite(sql: string): string {
     input: `.timeout 10000\n${sql}`,
     encoding: 'utf8',
   }).trim();
+}
+
+function addonContentHash(root: string): string {
+  const files: string[] = [];
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(path);
+      } else if (entry.isFile()) {
+        files.push(path);
+      } else {
+        throw new Error(`Unsupported add-on fixture entry: ${path}`);
+      }
+    }
+  };
+  visit(root);
+  files.sort();
+
+  const hash = createHash('sha256');
+  hash.update(Buffer.from('ersatzrs-addon-content-v1\0'));
+  for (const path of files) {
+    const encodedPath = Buffer.from(relative(root, path).split('\\').join('/'));
+    const pathLength = Buffer.alloc(8);
+    pathLength.writeBigUInt64LE(BigInt(encodedPath.length));
+    const contents = readFileSync(path);
+    const fileLength = Buffer.alloc(8);
+    fileLength.writeBigUInt64LE(BigInt(contents.length));
+    hash.update(pathLength);
+    hash.update(encodedPath);
+    hash.update(fileLength);
+    hash.update(contents);
+    hash.update(Buffer.from([0]));
+  }
+  return hash.digest('hex');
 }
 
 function watchRuntimeErrors(page: Page): string[] {
@@ -77,6 +116,37 @@ async function forceEnglish(page: Page): Promise<void> {
   });
 }
 
+async function contrastAgainstPageBackground(page: Page, selector: string): Promise<number> {
+  return page.locator(selector).first().evaluate((element) => {
+    const parseColor = (value: string): [number, number, number, number] => {
+      const channels = value.match(/[\d.]+/g)?.map(Number) ?? [];
+      if (channels.length < 3) {
+        throw new Error(`Could not parse computed color: ${value}`);
+      }
+      return [channels[0], channels[1], channels[2], channels[3] ?? 1];
+    };
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--color-bg)';
+    element.appendChild(probe);
+    const background = parseColor(getComputedStyle(probe).color);
+    probe.remove();
+    const foreground = parseColor(getComputedStyle(element).color);
+    const composited = foreground.slice(0, 3).map(
+      (channel, index) => channel * foreground[3] + background[index] * (1 - foreground[3]),
+    );
+    const luminance = (channels: number[]): number => channels
+      .map((channel) => channel / 255)
+      .map((channel) => (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4))
+      .reduce((total, channel, index) => total + channel * [0.2126, 0.7152, 0.0722][index], 0);
+    const foregroundLuminance = luminance(composited);
+    const backgroundLuminance = luminance(background.slice(0, 3));
+    return (
+      (Math.max(foregroundLuminance, backgroundLuminance) + 0.05)
+      / (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
+    );
+  });
+}
+
 async function gotoHydrated(page: Page, route: string): Promise<void> {
   const response = await page.goto(route, { waitUntil: 'domcontentloaded' });
   expect(response?.status(), `GET ${route}`).toBe(200);
@@ -111,11 +181,65 @@ function seedMetadataEditor(testInfo: TestInfo): MetadataSeed {
   const libraryPathId = base + 6;
   const firstTitle = `E2E Metadata Primary ${testInfo.project.name}`;
   const secondTitle = `E2E Metadata Review ${testInfo.project.name}`;
+  const noJsProviderId = `fixture/no-js-${suffix}`;
+  const noJsSourceUrl = `https://example.invalid/e2e/${suffix}/no-js-list`;
+  const noJsListName = `E2E No-JS Imported List ${testInfo.project.name}`;
   const folder = join(dirname(dbPath), `e2e-addon-metadata-${suffix}`);
   const packageRoot = join(dirname(dbPath), `e2e-addon-package-${suffix}`);
   mkdirSync(folder, { recursive: true });
   mkdirSync(packageRoot, { recursive: true });
-  writeFileSync(join(packageRoot, 'unused'), 'not invoked\n');
+  writeFileSync(join(packageRoot, 'unused'), 'fixture package marker\n');
+  const noJsListRecord = JSON.stringify({
+    record_type: 'list',
+    provider_id: noJsProviderId,
+    name: noJsListName,
+    description: 'Created through the native HTML import route',
+  });
+  const noJsItemRecord = JSON.stringify({
+    record_type: 'item',
+    provider_id: `remote:no-js-${suffix}`,
+    rank: 0,
+    display_title: `No-JS imported item ${testInfo.project.name}`,
+    title: `No-JS imported item ${testInfo.project.name}`,
+    kind: 'remote_stream',
+    guids: [`fixture://no-js-${suffix}`],
+    source_url: `https://example.invalid/e2e/${suffix}/no-js-item`,
+    duration_seconds: 300,
+    availability: 'available',
+    content_kind: 'other_video',
+  });
+  const noJsPageRecord = JSON.stringify({
+    record_type: 'page',
+    complete: true,
+    total_hint: 1,
+    revision_token: `no-js-${suffix}-v1`,
+  });
+  writeFileSync(
+    join(packageRoot, 'addon.sh'),
+    `#!/bin/sh\nset -eu\nif [ "\${1:-}" = "check" ]; then\n  printf '%s\\n' '{"status":"ready","code":"ready","message":"E2E list fixture is ready."}'\n  exit 0\nfi\nif [ "\${1:-}" = "discover" ]; then\n  cat >/dev/null\n  printf '%s\\n' '${noJsPageRecord}' '${noJsListRecord}' '${noJsItemRecord}'\n  exit 0\nfi\nprintf '%s\\n' '${noJsListRecord}' '${noJsItemRecord}'\n`,
+  );
+  chmodSync(join(packageRoot, 'addon.sh'), 0o755);
+  writeFileSync(
+    join(packageRoot, 'addon.cmd'),
+    [
+      '@echo off',
+      'if /i "%~1"=="check" (',
+      '  echo {"status":"ready","code":"ready","message":"E2E list fixture is ready."}',
+      '  exit /b 0',
+      ')',
+      'if /i "%~1"=="discover" (',
+      `  echo ${noJsPageRecord}`,
+      `  echo ${noJsListRecord}`,
+      `  echo ${noJsItemRecord}`,
+      '  exit /b 0',
+      ')',
+      `echo ${noJsListRecord}`,
+      `echo ${noJsItemRecord}`,
+      'exit /b 0',
+      '',
+    ].join('\r\n'),
+  );
+  const contentSha256 = addonContentHash(packageRoot);
   writeFileSync(
     join(folder, 'primary.yml'),
     [
@@ -151,9 +275,16 @@ function seedMetadataEditor(testInfo: TestInfo): MetadataSeed {
     license: 'Zlib',
     source_url: 'https://example.invalid/e2e-metadata-addon',
     host_version: '*',
-    capabilities: [{ id: 'addon.check.v1' }, { id: 'media-list.list.v4' }],
+    capabilities: [
+      { id: 'addon.check.v1' },
+      { id: 'media-list.import.v1' },
+      { id: 'media-list.list.v4' },
+    ],
     dependencies: [],
-    entrypoints: { any: { path: 'unused', kind: 'native' } },
+    entrypoints: {
+      any: { path: 'addon.sh', kind: 'posix_shell' },
+      'win-x64': { path: 'addon.cmd', kind: 'windows_batch' },
+    },
     permissions: {
       network_hosts: [],
       media_read: false,
@@ -219,6 +350,7 @@ INSERT INTO "AddonInstallation" (
   '2026-08-21T00:00:00Z', '2026-08-21T00:00:00Z', 'verified'
 ) ON CONFLICT("AddonId") DO UPDATE SET
   "Enabled" = 1,
+  "ContentSha256" = excluded."ContentSha256",
   "ManifestJson" = excluded."ManifestJson",
   "InstallPath" = excluded."InstallPath",
   "UpdatedAt" = excluded."UpdatedAt";
@@ -259,7 +391,19 @@ INSERT INTO "AddonMediaListItem" (
    '${sqlEscape(secondProviderMetadata)}', '{}', 1, 1);
 `);
 
-  return { addonId, listId, firstItemId, secondItemId, firstTitle, secondTitle };
+  sqlite(`UPDATE "AddonInstallation" SET "ContentSha256" = '${contentSha256}' WHERE "AddonId" = '${sqlEscape(addonId)}';`);
+
+  return {
+    addonId,
+    listId,
+    firstItemId,
+    secondItemId,
+    firstTitle,
+    secondTitle,
+    noJsProviderId,
+    noJsSourceUrl,
+    noJsListName,
+  };
 }
 
 function seedPaginationItems(seed: MetadataSeed, testInfo: TestInfo): void {
@@ -359,7 +503,357 @@ test.describe('shared add-on metadata editor', () => {
     await expect(
       page.getByText(/request descriptive details manually.*before publication/i),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Import' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Import' })).toBeEnabled();
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('materializes the exact committed overview when discovery becomes ready', async ({
+    page,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    const firstMetadata = JSON.stringify({
+      title: seed.firstTitle,
+      plot: 'Primary item provider summary',
+      release_date: '2026-08-20',
+    });
+    const secondMetadata = JSON.stringify({
+      title: seed.secondTitle,
+      plot: 'Review item provider summary',
+      release_date: '2026-08-21',
+    });
+    sqlite(`
+DELETE FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listId};
+UPDATE "AddonMediaList" SET "ItemCount" = 0 WHERE "Id" = ${seed.listId};
+INSERT INTO "AddonMediaListImportJob" (
+  "AddonMediaListId", "Generation", "State", "RecordCapability", "DiscoveredCount",
+  "OverviewComplete", "NextEligibleAt", "CreatedAt", "UpdatedAt", "LastProgressAt"
+) VALUES (
+  ${seed.listId}, 1, 1, 'media-list.list.v4', 0, 0, '2099-01-01T00:00:00Z',
+  '2026-08-26T10:00:00Z', '2026-08-26T10:00:00Z', '2026-08-26T10:00:00Z'
+);
+`);
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+    const workflowSteps = page.locator('aside[aria-labelledby="addon-list-readiness-heading"] nav');
+    await expect(workflowSteps.locator('[aria-current="step"]')).toHaveCount(1);
+    await expect(workflowSteps.locator('[aria-current="step"]')).toContainText('Import');
+    const collection = page.getByTestId('addon-metadata-items');
+    await expect(collection.locator('li[data-item-id]')).toHaveCount(0);
+
+    sqlite(`
+INSERT INTO "AddonMediaListItem" (
+  "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank", "Title",
+  "SourceUrl", "DurationSeconds", "Availability", "ContentKind", "Included", "Published",
+  "ProviderMetadataJson", "MetadataOverrideJson", "ProviderLiveness", "EffectiveLiveness"
+) VALUES
+  (${seed.firstItemId}, ${seed.listId}, 'item:primary-ready', '${sqlEscape(seed.firstTitle)}', 4, 0,
+   '${sqlEscape(seed.firstTitle)}', 'https://example.invalid/ready/primary', 1200, 0, 0, 1, 0,
+   '${sqlEscape(firstMetadata)}', '{}', 1, 1),
+  (${seed.secondItemId}, ${seed.listId}, 'item:review-ready', '${sqlEscape(seed.secondTitle)}', 4, 1,
+   '${sqlEscape(seed.secondTitle)}', 'https://example.invalid/ready/review', 600, 2, 0, 1, 0,
+   '${sqlEscape(secondMetadata)}', '{}', 1, 1);
+UPDATE "AddonMediaList" SET "ItemCount" = 2 WHERE "Id" = ${seed.listId};
+UPDATE "AddonMediaListImportJob"
+SET "State" = 3, "DiscoveredCount" = 2, "TotalHint" = 2, "OverviewComplete" = 1,
+    "UpdatedAt" = '2026-08-26T10:00:04Z', "LastProgressAt" = '2026-08-26T10:00:04Z',
+    "CompletedAt" = '2026-08-26T10:00:04Z'
+WHERE "AddonMediaListId" = ${seed.listId};
+`);
+
+    await expect(collection.locator('li[data-item-id]')).toHaveCount(2, { timeout: 15_000 });
+    await expect(workflowSteps.locator('[aria-current="step"]')).toContainText('Ready to review');
+    await expect(collection.getByText(seed.firstTitle)).toBeVisible();
+    await expect(collection.getByText(seed.secondTitle)).toBeVisible();
+    const ids = await collection
+      .locator('li[data-item-id]')
+      .evaluateAll((items) => items.map((item) => item.getAttribute('data-item-id')));
+    expect(ids).toEqual([String(seed.firstItemId), String(seed.secondItemId)]);
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('keeps import, save, item review, and explicit publication usable without JavaScript', async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    const seed = seedMetadataEditor(testInfo);
+    const invalidCollectionMetadata = JSON.stringify({
+      title: '',
+      artwork: [{ url: 'http://invalid.example/poster.jpg', role: 'poster' }],
+    });
+    sqlite(`
+UPDATE "AddonMediaList"
+SET "ProviderMetadataJson" = '${sqlEscape(invalidCollectionMetadata)}',
+    "MetadataOverrideJson" = '{}'
+WHERE "Id" = ${seed.listId};
+UPDATE "AddonMediaListItem" SET "Included" = 0 WHERE "Id" = ${seed.secondItemId};
+`);
+    const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+    const noJsPage = await context.newPage();
+    try {
+      await noJsPage.goto(`/media/addon-lists/add?addon_id=${encodeURIComponent(seed.addonId)}`);
+      await expect(noJsPage.getByRole('heading', { name: 'Add add-on list' })).toBeVisible();
+      await expect(noJsPage.getByLabel('Add-on', { exact: true })).toHaveValue(seed.addonId);
+      await noJsPage.getByLabel('Add-on list URL').fill(seed.noJsSourceUrl);
+      await noJsPage.getByRole('button', { name: 'Import overview' }).click();
+      await expect(noJsPage).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/, {
+        timeout: 60_000,
+      });
+      await expect
+        .poll(() => sqlite(`
+SELECT COUNT(*) FROM "AddonMediaList"
+WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
+  AND "ProviderId" = '${sqlEscape(seed.noJsProviderId)}'
+  AND "Name" = '${sqlEscape(seed.noJsListName)}';
+`), { timeout: 60_000 })
+        .toBe('1');
+
+      await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
+      await expect(noJsPage.getByRole('link', { name: /collection needs a title/i })).toBeVisible();
+      await expect(
+        noJsPage.getByRole('link', { name: /artwork must use a valid bounded HTTPS URL/i }),
+      ).toBeVisible();
+      await noJsPage.getByLabel('Title', { exact: true }).fill('No-JS collection title');
+      await noJsPage.getByLabel('Poster', { exact: true }).fill('https://example.invalid/poster.jpg');
+      await noJsPage.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(noJsPage).toHaveURL(/\?status=saved$/);
+      expect(
+        sqlite(`
+SELECT json_extract("MetadataOverrideJson", '$.title') || ',' ||
+       json_extract("MetadataOverrideJson", '$.artwork[0].url')
+FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
+`),
+      ).toBe('No-JS collection title,https://example.invalid/poster.jpg');
+
+      const firstItem = noJsPage
+        .getByTestId('addon-metadata-items')
+        .locator(`li[data-item-id="${seed.firstItemId}"]`);
+      await firstItem.getByRole('link', { name: 'Review item' }).click();
+      await expect(noJsPage).toHaveURL(
+        new RegExp(`/media/addon-lists/${seed.listId}/items/${seed.firstItemId}$`),
+      );
+      await noJsPage.getByLabel('Title', { exact: true }).fill('No-JS reviewed item');
+      await noJsPage.getByLabel('Tags', { exact: true }).fill('native\nreviewed');
+      await noJsPage.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect(noJsPage).toHaveURL(/\?status=saved$/);
+      expect(
+        sqlite(`
+SELECT json_extract("MetadataOverrideJson", '$.title') || ',' ||
+       json_extract("MetadataOverrideJson", '$.tags[1]')
+FROM "AddonMediaListItem" WHERE "Id" = ${seed.firstItemId};
+`),
+      ).toBe('No-JS reviewed item,reviewed');
+      expect(
+        sqlite(`
+SELECT json_extract("MetadataOverrideJson", '$.title')
+FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
+`),
+      ).toBe('No-JS collection title');
+
+      await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
+      await noJsPage
+        .getByRole('checkbox', { name: 'Update list from the provider once each day' })
+        .check();
+      expect(
+        await noJsPage
+          .locator('form#addon_media_lists-list-editor-form :invalid')
+          .evaluateAll((controls) =>
+            controls.map((control) => ({
+              name: control.getAttribute('name'),
+              value: (control as HTMLInputElement).value,
+              validationMessage: (control as HTMLInputElement).validationMessage,
+            })),
+          ),
+      ).toEqual([]);
+      await noJsPage.getByRole('button', { name: 'Save Changes', exact: true }).click();
+      await expect(noJsPage).toHaveURL(/\?status=saved$/);
+      expect(
+        sqlite(`SELECT "AutoRefresh" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`),
+      ).toBe('1');
+
+      await noJsPage.getByRole('button', { name: 'Publish list', exact: true }).click();
+      await expect(noJsPage).toHaveURL(/\?status=published$/, { timeout: 60_000 });
+      expect(
+        sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`),
+      ).toBe('1');
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('reflows review cards and keeps the mobile navigation keyboard-safe', async ({
+    page,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    const longDescription = Array.from(
+      { length: 16 },
+      (_, index) => `Localized provider description sentence ${index + 1}.`,
+    ).join(' ');
+    sqlite(`
+UPDATE "AddonMediaList"
+SET "ProviderMetadataJson" = json_set("ProviderMetadataJson", '$.plot', '${sqlEscape(longDescription)}')
+WHERE "Id" = ${seed.listId};
+`);
+    await page.setViewportSize({ width: 320, height: 800 });
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+
+    const toggle = page.getByRole('button', { name: 'Toggle navigation' });
+    const drawer = page.locator('[data-nav-drawer]');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(drawer).toHaveAttribute('aria-hidden', 'true');
+    await expect(drawer).toHaveAttribute('inert', '');
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(drawer).toHaveAttribute('aria-hidden', 'false');
+    await expect(drawer).not.toHaveAttribute('inert', '');
+    expect(await drawer.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(toggle).toBeFocused();
+    await expect(drawer).toHaveAttribute('inert', '');
+
+    const collection = page.getByTestId('addon-metadata-items');
+    const firstItem = collection.locator('li[data-item-id]').first();
+    for (const label of [
+      'First aired',
+      'Season, Episode',
+      'Media Kind',
+      'Playback behavior',
+      'Status',
+    ]) {
+      await expect(firstItem.getByText(label, { exact: true })).toBeVisible();
+    }
+    await expect(firstItem.getByRole('checkbox', { name: 'Include in publication' })).toBeVisible();
+    const review = firstItem.getByRole('link', { name: 'Review item' });
+    const reviewBox = await review.boundingBox();
+    expect(reviewBox?.height).toBeGreaterThanOrEqual(44);
+    expect(reviewBox?.width).toBeGreaterThanOrEqual(44);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+      ),
+    ).toBe(true);
+    expect(await collection.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(
+      true,
+    );
+
+    const descriptionToggle = page.locator('button[aria-controls="addon-list-description"]');
+    await expect(descriptionToggle).toHaveAttribute('aria-expanded', 'false');
+    await descriptionToggle.click();
+    await expect(descriptionToggle).toHaveAttribute('aria-expanded', 'true');
+
+    for (const width of [390, 900, 1440, 1920, 2560, 3840]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+        ),
+      ).toBe(true);
+      const mainGeometry = await page.locator('main').first().evaluate((main) => ({
+        clientWidth: main.clientWidth,
+        scrollWidth: main.scrollWidth,
+        scrollLeft: main.scrollLeft,
+      }));
+      expect(mainGeometry.scrollLeft).toBe(0);
+      expect(mainGeometry.scrollWidth).toBeLessThanOrEqual(mainGeometry.clientWidth + 1);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const readinessShell = page.locator('aside[aria-labelledby="addon-list-readiness-heading"]');
+    const readinessHeading = page.locator('#addon-list-readiness-heading');
+    await expect(readinessHeading).toHaveCSS('position', 'relative');
+    const readinessHeadingType = await readinessHeading.evaluate((heading) => {
+      const style = getComputedStyle(heading);
+      return {
+        fontSize: Number.parseFloat(style.fontSize),
+        fontWeight: Number.parseInt(style.fontWeight, 10),
+      };
+    });
+    expect(readinessHeadingType.fontSize).toBeLessThanOrEqual(12);
+    expect(readinessHeadingType.fontWeight).toBeLessThan(700);
+    expect(await contrastAgainstPageBackground(page, '#addon-list-readiness-heading')).toBeGreaterThanOrEqual(4.5);
+    await readinessShell.screenshot({
+      path: testInfo.outputPath('addon-list-readiness-wide.png'),
+    });
+    await page.setViewportSize({ width: 3840, height: 2160 });
+    const mainBox = await page.locator('main').first().boundingBox();
+    const editorBox = await page.locator('form#addon_media_lists-list-editor-form').boundingBox();
+    expect(editorBox?.width ?? 0).toBeGreaterThanOrEqual((mainBox?.width ?? 0) - 100);
+    const wideFirstItem = page.getByTestId('addon-metadata-items').locator('li[data-item-id]').first();
+    expect((await wideFirstItem.boundingBox())?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(58);
+    await expect(wideFirstItem.getByRole('link', { name: 'Review item' })).toHaveCount(1);
+    await expect(page.getByTestId('addon-item-column-header')).toBeVisible();
+    await page.getByRole('link', { name: 'Edit metadata' }).click();
+    await expect(page.getByTestId('addon-general-metadata')).toBeVisible();
+    await expect(page.getByTestId('addon-general-metadata')).toBeFocused();
+    expect(await contrastAgainstPageBackground(page, '#addon-list-description')).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastAgainstPageBackground(page, '[data-testid="addon-metadata-conflict-summary"]')).toBeGreaterThanOrEqual(4.5);
+    await page.screenshot({
+      path: testInfo.outputPath('addon-metadata-editor-wide-review.png'),
+      fullPage: false,
+    });
+    await page.getByRole('button', { name: 'Edit metadata' }).click();
+    await page.getByTestId('addon-metadata-items').scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath('addon-metadata-items-wide-review.png'),
+      fullPage: false,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const stickyWorkflow = await page.locator('aside[aria-labelledby="addon-list-readiness-heading"]').boundingBox();
+    expect(stickyWorkflow?.height ?? 0).toBeLessThanOrEqual(844 * 0.3 + 1);
+    await expect(
+      page.locator('aside[aria-labelledby="addon-list-readiness-heading"] [role="status"]').first(),
+    ).toBeVisible();
+    await page.locator('aside[aria-labelledby="addon-list-readiness-heading"]').screenshot({
+      path: testInfo.outputPath('addon-list-readiness-mobile.png'),
+    });
+    await page.getByTestId('addon-metadata-items').locator('li[data-item-id]').first().scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath('addon-metadata-items-mobile-review.png'),
+      fullPage: false,
+    });
+    await page.setViewportSize({ width: 640, height: 900 });
+    await page.evaluate(() => {
+      document.body.style.zoom = '2';
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+      ),
+    ).toBe(true);
+    const zoomedMain = await page.locator('main').first().evaluate((main) => ({
+      clientWidth: main.clientWidth,
+      scrollWidth: main.scrollWidth,
+      scrollLeft: main.scrollLeft,
+    }));
+    expect(zoomedMain.scrollLeft).toBe(0);
+    expect(zoomedMain.scrollWidth).toBeLessThanOrEqual(zoomedMain.clientWidth + 1);
+    await page.evaluate(() => {
+      document.body.style.zoom = '';
+    });
+
+    await page.request.post('/api/settings/ui/save', {
+      form: { is_dark_mode: 'false', language: 'en-us' },
+      maxRedirects: 0,
+    });
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+    await expect(page.locator('[data-theme="light"]')).toBeVisible();
+    expect(await contrastAgainstPageBackground(page, '#addon-list-description')).toBeGreaterThanOrEqual(4.5);
+    expect(await contrastAgainstPageBackground(page, '[data-testid="addon-metadata-conflict-summary"]')).toBeGreaterThanOrEqual(4.5);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+      ),
+    ).toBe(true);
+
+    await forceEnglish(page);
+    await gotoHydrated(page, `/settings/addons/${encodeURIComponent(seed.addonId)}`);
+    await expect(page.getByRole('link', { name: 'Import a list' })).toHaveAttribute(
+      'href',
+      `/media/addon-lists/add?addon_id=${encodeURIComponent(seed.addonId)}`,
+    );
     expect(runtimeErrors).toEqual([]);
   });
 
@@ -402,7 +896,7 @@ FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = ${seed.secondItemI
       .toMatch(/^[12],1$/);
     await expect(
       itemsTable
-        .locator('tbody tr')
+        .locator('li[data-item-id]')
         .filter({ hasText: seed.secondTitle })
         .first()
         .locator('button[aria-busy="true"]'),
@@ -419,6 +913,7 @@ FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = ${seed.secondItemI
     const providerHost = `e2e-duration-${suffix}.invalid`;
     sqlite(`
 UPDATE "AddonMediaListItem" SET "DurationSeconds" = NULL WHERE "Id" = ${seed.firstItemId};
+UPDATE "AddonMediaListItem" SET "Included" = 0 WHERE "Id" = ${seed.secondItemId};
 INSERT INTO "AddonMediaListImportJob" (
   "AddonMediaListId", "Generation", "State", "RecordCapability", "DiscoveredCount",
   "TotalHint", "OverviewComplete", "LastProgressAt", "CreatedAt", "UpdatedAt", "CompletedAt"
@@ -444,9 +939,12 @@ INSERT INTO "AddonProviderHostCooldown" (
     await forceEnglish(page);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
-    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
     await expect(page.getByText(/playback details queued: 1/i)).toBeVisible();
-    await expect(page.getByText(/review the completed details, then publish again/i)).toBeVisible();
+    await expect(page.getByText('Preparing publication', { exact: true })).toBeVisible();
+    await expect(
+      page.locator('aside[aria-labelledby="addon-list-readiness-heading"] nav [aria-current="step"]'),
+    ).toContainText('Publish list');
     await expect
       .poll(() =>
         sqlite(`
@@ -483,13 +981,13 @@ WHERE "Id" = ${seed.firstItemId};
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
     const itemsTable = page.getByTestId('addon-metadata-items');
-    const numberHeader = itemsTable.getByRole('columnheader', { name: 'Number', exact: true });
-    await expect(numberHeader).toBeVisible();
-    await expect(numberHeader.locator('[aria-hidden="true"]')).toHaveText('#');
-    await expect(itemsTable.getByRole('columnheader', { name: 'First aired' })).toBeVisible();
-    await expect(itemsTable.getByRole('columnheader', { name: 'Season, Episode' })).toBeVisible();
-    const firstRow = itemsTable.locator('tbody tr').filter({ hasText: seed.firstTitle }).first();
-    await expect(firstRow.getByText('1', { exact: true })).toBeVisible();
+    const firstRow = itemsTable
+      .locator('li[data-item-id]')
+      .filter({ hasText: seed.firstTitle })
+      .first();
+    await expect(firstRow.locator('[aria-label="Number 1"]')).toHaveText('1');
+    await expect(firstRow.getByText('First aired', { exact: true })).toBeVisible();
+    await expect(firstRow.getByText('Season, Episode', { exact: true })).toBeVisible();
     await expect(firstRow.getByText('2026-08-20', { exact: true })).toBeVisible();
     await expect(firstRow.getByRole('spinbutton', { name: 'Season', exact: true })).toHaveValue('4');
     await expect(firstRow.getByRole('spinbutton', { name: 'Episode', exact: true })).toHaveValue('9');
@@ -503,7 +1001,7 @@ WHERE "Id" = ${seed.firstItemId};
     await expect(itemsTable.getByText('S01E01', { exact: true })).toBeVisible();
     await expect(itemsTable.getByText('S01E24', { exact: true })).toBeVisible();
     const firstPageIds = await itemsTable
-      .locator('tbody tr[data-item-id]')
+      .locator('li[data-item-id]')
       .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-item-id')));
     expect(new Set(firstPageIds).size).toBe(firstPageIds.length);
 
@@ -513,18 +1011,18 @@ WHERE "Id" = ${seed.firstItemId};
     await expect(itemsTable.getByText('S01E25', { exact: true })).toBeVisible();
     await expect(itemsTable.getByText('S01E27', { exact: true })).toBeVisible();
     const secondPageIds = await itemsTable
-      .locator('tbody tr[data-item-id]')
+      .locator('li[data-item-id]')
       .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-item-id')));
     expect(new Set(secondPageIds).size).toBe(secondPageIds.length);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(itemsTable).toBeVisible();
     await expect(page.getByRole('button', { name: 'Previous page' })).toBeVisible();
-    const heroTransition = await page
-      .locator('header[aria-expanded]')
+    const itemTransition = await itemsTable
+      .locator('li[data-item-id]')
       .first()
       .evaluate((element) => getComputedStyle(element).transitionDuration);
-    expect(heroTransition).toBe('0s');
+    expect(itemTransition).toBe('0s');
     expect(runtimeErrors).toEqual([]);
   });
 
@@ -547,9 +1045,14 @@ WHERE "Id" = ${seed.secondItemId};
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
     const itemsTable = page.getByTestId('addon-metadata-items');
-    const firstRow = itemsTable.locator('tbody tr').filter({ hasText: seed.firstTitle }).first();
-    const secondRow = itemsTable.locator('tbody tr').filter({ hasText: seed.secondTitle }).first();
-    await expect(itemsTable.getByRole('columnheader', { name: 'Include in publication' })).toBeVisible();
+    const firstRow = itemsTable
+      .locator('li[data-item-id]')
+      .filter({ hasText: seed.firstTitle })
+      .first();
+    const secondRow = itemsTable
+      .locator('li[data-item-id]')
+      .filter({ hasText: seed.secondTitle })
+      .first();
     await expect(itemsTable.getByRole('checkbox', { name: 'Include in publication' })).toHaveCount(2);
     await expect(itemsTable.getByRole('checkbox', { name: 'Select item' })).toHaveCount(0);
     const firstBehavior = firstRow.getByLabel('Playback behavior');
@@ -611,6 +1114,57 @@ FROM (SELECT * FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listI
     expect(runtimeErrors).toEqual([]);
   });
 
+  test('keeps row persistence explicit during latency and restores failed edits', async ({
+    page,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    sqlite(`
+UPDATE "AddonMediaListItem"
+SET "Included" = 0
+WHERE "Id" = ${seed.secondItemId};
+UPDATE "AddonMediaListItem"
+SET "ProviderLiveness" = 2, "EffectiveLiveness" = 2,
+    "LivenessOverride" = NULL, "LivenessConflict" = 0
+WHERE "Id" = ${seed.firstItemId};
+`);
+
+    let failNextMutation = false;
+    await page.route(/\/api\/apply_addon_media_list_item_review_edits/, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 750));
+      if (failNextMutation) {
+        failNextMutation = false;
+        await route.fulfill({ status: 500, contentType: 'text/plain', body: 'injected mutation failure' });
+      } else {
+        await route.continue();
+      }
+    });
+
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+    const row = page
+      .getByTestId('addon-metadata-items')
+      .locator(`li[data-item-id="${seed.firstItemId}"]`);
+    const behavior = row.getByLabel('Playback behavior');
+    const publish = page.getByRole('button', { name: 'Publish list', exact: true });
+
+    await behavior.selectOption('finite');
+    await expect(row.getByText('Saving...', { exact: true })).toBeVisible();
+    await expect(publish).toBeDisabled();
+    await expect(row.getByText('Saved.', { exact: true })).toBeVisible();
+    await expect(behavior).toHaveValue('finite');
+
+    failNextMutation = true;
+    await behavior.selectOption('live');
+    await expect(row.getByText('Saving...', { exact: true })).toBeVisible();
+    await expect(row.getByText('Error', { exact: true })).toBeVisible();
+    await expect(behavior).toHaveValue('finite');
+    expect(
+      sqlite(`SELECT "LivenessOverride" FROM "AddonMediaListItem" WHERE "Id" = ${seed.firstItemId};`),
+    ).toBe('1');
+    expect(runtimeErrors).toEqual([]);
+  });
+
   test('assigns missing episode numbers in original order and allows a bounded overwrite', async ({
     page,
   }, testInfo) => {
@@ -643,7 +1197,10 @@ WHERE "Id" = ${seed.secondItemId};
     const numberingButton = page.getByRole('button', { name: /^number episodes$/i });
     await expect(numberingButton).toBeVisible();
     const itemsTable = page.getByTestId('addon-metadata-items');
-    const secondRow = itemsTable.locator('tbody tr').filter({ hasText: seed.secondTitle }).first();
+    const secondRow = itemsTable
+      .locator('li[data-item-id]')
+      .filter({ hasText: seed.secondTitle })
+      .first();
     await secondRow.getByRole('spinbutton', { name: 'Season', exact: true }).fill('3');
     await secondRow.getByRole('spinbutton', { name: 'Episode', exact: true }).fill('7');
     await secondRow.getByRole('button', { name: 'Save season and episode' }).click();
@@ -681,7 +1238,10 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
 `),
       )
       .toBe('1,1');
-    const firstRow = itemsTable.locator('tbody tr').filter({ hasText: seed.firstTitle }).first();
+    const firstRow = itemsTable
+      .locator('li[data-item-id]')
+      .filter({ hasText: seed.firstTitle })
+      .first();
     await expect(firstRow.getByRole('spinbutton', { name: 'Season', exact: true })).toHaveValue('4');
     await expect(firstRow.getByRole('spinbutton', { name: 'Episode', exact: true })).toHaveValue('9');
     await expect(secondRow.getByRole('spinbutton', { name: 'Season', exact: true })).toHaveValue('1');
@@ -751,7 +1311,10 @@ FROM (SELECT * FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listI
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
     const editorForm = page.locator('#addon_media_lists-list-editor-form');
-    const hero = editorForm.locator('header[aria-expanded]');
+    const hero = editorForm
+      .locator('header')
+      .filter({ has: page.getByRole('heading', { name: 'Operator draft' }) })
+      .first();
     await expect(hero.getByRole('heading', { name: 'Operator draft' })).toBeVisible();
     await expect(hero.getByText(/1 metadata conflicts/i)).toBeVisible();
     await hero.getByRole('button', { name: /^edit metadata$/i }).click();
@@ -761,17 +1324,20 @@ FROM (SELECT * FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listI
     await expect(editorForm.getByText('Provider original')).toBeVisible();
     await expect(editorForm.getByText('Provider refreshed')).toBeVisible();
 
-    const reviewFilter = page.getByRole('button', { name: /1 need review/i });
+    const reviewFilter = page.getByRole('button', { name: /1 review recommended/i });
     await reviewFilter.click();
     await expect(reviewFilter).toHaveAttribute('aria-pressed', 'true');
     const itemsTable = page.getByTestId('addon-metadata-items');
     await expect(itemsTable.getByText(seed.secondTitle)).toBeVisible();
     await expect(itemsTable.getByText(seed.firstTitle)).toHaveCount(0);
 
-    let reviewRow = itemsTable.locator('tbody tr').filter({ hasText: seed.secondTitle }).first();
-    await reviewRow.getByRole('button', { name: seed.secondTitle, exact: true }).click();
+    let reviewRow = itemsTable
+      .locator('li[data-item-id]')
+      .filter({ hasText: seed.secondTitle })
+      .first();
+    await reviewRow.getByRole('link', { name: 'Review item', exact: true }).click();
     const inlineEditor = itemsTable
-      .getByRole('row')
+      .locator('li[data-item-id]')
       .filter({ has: page.getByLabel(/^tags/i) })
       .first();
     await expect(inlineEditor).toBeVisible();
@@ -787,7 +1353,10 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
       )
       .toBe('tag-120');
 
-    reviewRow = itemsTable.locator('tbody tr').filter({ hasText: seed.secondTitle }).first();
+    reviewRow = itemsTable
+      .locator('li[data-item-id]')
+      .filter({ hasText: seed.secondTitle })
+      .first();
     await reviewRow.getByRole('checkbox', { name: 'Include in publication' }).uncheck();
     await expect
       .poll(() =>
@@ -813,17 +1382,20 @@ UPDATE "AddonMediaList"
 SET "MetadataOverrideJson" = json_set("MetadataOverrideJson", '$.sort_title', 'Concurrent writer')
 WHERE "Id" = ${seed.listId};
 `);
-    await page.getByRole('button', { name: /^save add-on list$/i }).click();
+    await page.getByRole('button', { name: /^save changes$/i }).click();
     await expect(page.getByText(/metadata changed since the editor was loaded/i)).toBeVisible();
 
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     const refreshedForm = page.locator('#addon_media_lists-list-editor-form');
-    const refreshedHero = refreshedForm.locator('header[aria-expanded]');
+    const refreshedHero = refreshedForm
+      .locator('header')
+      .filter({ has: page.getByRole('heading', { name: 'Operator draft' }) })
+      .first();
     await refreshedHero.getByRole('button', { name: /^edit metadata$/i }).click();
     const refreshedPanel = refreshedForm.getByTestId('addon-general-metadata');
     await refreshedPanel.getByRole('textbox', { name: /^title$/i }).fill('Reviewed collection');
     const saveNavigation = page.waitForEvent('framenavigated');
-    await page.getByRole('button', { name: /^save add-on list$/i }).click();
+    await page.getByRole('button', { name: /^save changes$/i }).click();
     await saveNavigation;
     await waitUntilHydrated(page);
     await expect
@@ -836,7 +1408,7 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
       .toBe('Reviewed collection');
 
     const firstPublishNavigation = page.waitForEvent('framenavigated');
-    await page.getByRole('button', { name: /^publish$/i }).click();
+    await page.getByRole('button', { name: /^publish list$/i }).click();
     await firstPublishNavigation;
     await waitUntilHydrated(page);
     await expect
@@ -863,7 +1435,7 @@ WHERE "Id" = ${seed.secondItemId};
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     const reincludeRow = page
       .getByTestId('addon-metadata-items')
-      .locator('tbody tr')
+      .locator('li[data-item-id]')
       .filter({ hasText: seed.secondTitle })
       .first();
     await reincludeRow.getByRole('checkbox', { name: 'Include in publication' }).check();
@@ -873,7 +1445,7 @@ WHERE "Id" = ${seed.secondItemId};
       )
       .toBe('1');
     const secondPublishNavigation = page.waitForEvent('framenavigated');
-    await page.getByRole('button', { name: /^publish$/i }).click();
+    await page.getByRole('button', { name: /^publish list$/i }).click();
     await secondPublishNavigation;
     await waitUntilHydrated(page);
     await expect
@@ -920,7 +1492,7 @@ FROM (
     await expect(typeChangeHelp).toContainText('Remote Streams → Other Videos');
     await expect(page.getByTestId('addon-media-type-change-route')).toBeVisible();
     const typeSaveNavigation = page.waitForEvent('framenavigated');
-    await page.getByRole('button', { name: /^save add-on list$/i }).click();
+    await page.getByRole('button', { name: /^save changes$/i }).click();
     await typeSaveNavigation;
     await waitUntilHydrated(page);
     await expect(page.getByLabel('Collection Type', { exact: true })).toHaveValue('other_videos');
@@ -929,7 +1501,7 @@ FROM (
     );
 
     const typePublishNavigation = page.waitForEvent('framenavigated');
-    await page.getByRole('button', { name: /^publish$/i }).click();
+    await page.getByRole('button', { name: /^publish list$/i }).click();
     await typePublishNavigation;
     await waitUntilHydrated(page);
     await expect(page.getByTestId('addon-media-type-change-help')).toContainText(

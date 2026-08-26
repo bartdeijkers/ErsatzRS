@@ -2,17 +2,106 @@
 
 ## Implementation status
 
-Proposed on 2026-08-26 after a read-only UX audit of the live temporary
+Completed on 2026-08-26 after a read-only UX audit of the live temporary
 Windows dogfood instance documented in
 [`docs/how-to/glamourland-addon-list-ux-walkthrough.md`](../docs/how-to/glamourland-addon-list-ux-walkthrough.md).
-Production behavior is unchanged. Open milestone `amm-i-01` and parity debt
-`addon-list-import-review-ux-obscures-state-and-mobile-actions` own delivery.
+Milestone `amm-i-01` and parity debt
+`addon-list-import-review-ux-obscures-state-and-mobile-actions` are closed.
+The implementation preserves ADR 0079: recommendations and optional details
+remain non-blocking, while application-owned publication blockers remain
+authoritative.
+
+Focused Rust tests, the localization completeness test, hydration lint, and a
+matched Leptos SSR/WASM build pass. The dedicated Playwright suite passes all
+11 scenarios in both Chromium and Firefox, including deterministic Ready
+materialization, JavaScript-disabled import/save/item review/publish, dark and
+light contrast, reduced motion, artificial latency and HTTP 500 recovery,
+320/390/intermediate/4K layouts, and 200% zoom without horizontal overflow.
 
 This is an ErsatzRS product extension. The parity record confirms that
 ErsatzTV has no repository-installed add-on draft equivalent, so the existing
 provider-neutral decisions in ADRs 0072, 0073, 0075, and 0079 are the behavior
 contract. This plan improves how those decisions are presented; it does not
 replace them.
+
+## Source map
+
+- **ErsatzTV UI/pages:** `$ERSATZTV_SRC/ErsatzTV/Pages/TraktLists.razor`,
+  `$ERSATZTV_SRC/ErsatzTV/Pages/TraktListEditor.razor`, and
+  `$ERSATZTV_SRC/ErsatzTV/Shared/AddTraktListDialog.razor` establish the
+  pageable list, explicit add/edit actions, and persisted auto-refresh and
+  generated-playlist settings. ErsatzTV has no add-on draft/review/publish UI.
+- **ErsatzTV components/view models:**
+  `$ERSATZTV_SRC/ErsatzTV/ViewModels/TraktListEditViewModel.cs` and the
+  MudBlazor form/table/dialog primitives used by the three Razor files.
+- **ErsatzTV validators:**
+  `$ERSATZTV_SRC/ErsatzTV.Application/MediaCollections/Commands/AddTraktListHandler.cs`
+  validates URL shapes; `UpdateTraktListHandler.cs` persists the two list
+  settings.
+- **ErsatzTV handlers/services:** `AddTraktListHandler`,
+  `UpdateTraktListHandler`, `MatchTraktListItemsHandler`, and
+  `DeleteTraktListHandler`; the worker channel owns bounded background add,
+  match, and delete work.
+- **ErsatzTV repository/query paths:** `GetTraktListByIdHandler`,
+  `GetPagedTraktListsHandler`, `TvContext.TraktLists`, and
+  `TraktListConfiguration`.
+- **Side effects:** generated-playlist create/delete and matching after save,
+  search-index rebuild after delete, and the entity lock around background
+  mutations.
+- **ErsatzRS target modules:** `ersatzrs-core::repositories::addon_media_list`,
+  `ersatzrs-app::{queries,commands}`, the infrastructure add-on-list
+  repository/import coordinator, `ersatzrs-web` add-on-list server functions,
+  HTML APIs, admin pages, shared layout/navigation, localization, and focused
+  Playwright coverage.
+- **Intentional deviations:** ADRs 0072, 0073, 0075, and 0079 replace the
+  Trakt-only immediate-materialization flow with provider-neutral discovery,
+  review, explicit atomic publication, and optional deferred details.
+
+## Visual source map
+
+- **ErsatzTV layout containers:** a 64-pixel full-width action paper above an
+  extra-large centered container; the editor uses repeated responsive
+  label/control stacks and the list uses a dense table.
+- **ErsatzTV action bars/buttons:** Add or Save is the sole primary action in
+  the top paper; row Edit/Search/Match/Delete actions remain together.
+- **ErsatzTV tables/forms/pagers/dialogs:** server-paged dense list table,
+  labelled auto-refresh/generated-playlist editor rows, a small add dialog,
+  and the shared table pager.
+- **Width/alignment/spacing rules:** extra-large content maximum, 64-pixel
+  action region, 240-pixel desktop action column, responsive stacked form
+  rows, and horizontal overflow only for the legacy comparison table.
+- **Reference screenshots and viewport sizes:** the accepted Windows dogfood
+  walkthrough and live audit at 1278x1304, 390x844, and 320x800 CSS pixels.
+- **ErsatzRS shared primitives/CSS modules to reuse:** Button/action-link
+  semantics, Resource state, Modal/DeleteDialog, page-local pager, semantic
+  tokens, and `addon_lists.module.css` responsive composition.
+- **Known visual deviations:** the ADR-owned review collection, readiness
+  summary, workflow stepper, and sticky state-dependent action have no
+  ErsatzTV counterpart; this plan is their accepted product contract.
+
+## Hydration source map
+
+- **Route/page:** `/media/addon-lists`, `/media/addon-lists/add`,
+  `/media/addon-lists/:id`, `/media/addon-lists/:id/items/:item_id`, and the
+  shared mobile navigation shell.
+- **SSR wrapper:** `AddonMediaListsPage`, `AddAddonMediaListPage`,
+  `AddonMediaListEditorPage`, the item-detail page, and `AppShell` remain
+  server-rendered components.
+- **Island components:** the existing narrow list/add/editor/detail islands;
+  the navigation disclosure remains a shell enhancement rather than moving
+  the entire application shell into one island.
+- **Data boundary:** application-owned publication readiness plus persisted
+  list form, provider-ordered rows, NFO metadata, and durable import progress.
+- **Server functions / API endpoints:** existing add/update/item/import/publish
+  server functions plus faithful native add/save/publish POST handlers using
+  the same application commands.
+- **Fallback HTML / no-JS path:** native import and list-setting forms, an item
+  Review link, server-side stale-revision refusal, and explicit native Publish.
+- **Shared primitives touched:** global navigation disclosure only; review and
+  workflow remain page composites.
+- **Browser proof target:** matched SSR/WASM Chromium and Firefox at wide,
+  intermediate, 390, and 320-pixel widths plus JavaScript-disabled paths and
+  zero hydration-signature errors.
 
 ## Scope, user outcome, and evidence
 
@@ -585,12 +674,13 @@ change.
   publish while optional details are absent. User-facing review advice is
   therefore non-blocking unless application validation identifies a separate
   required condition.
-- The exact rule that currently produces `Need review` still needs a code-level
-  inventory before renaming its presentation. Any member that protects
-  playback, data integrity, or informed choice belongs in Blockers instead.
-- Screen-reader behavior, Windows High Contrast, touch hardware, automated
-  contrast ratios, and 200% zoom were not directly tested during this audit.
-  They remain acceptance work, not conformance claims.
+- The readiness projection now classifies playback, integrity, and informed-
+  choice conditions as blockers while review recommendations and optional
+  details remain advisory. Future rules must preserve that application-owned
+  distinction.
+- Automated dark/light contrast ratios and 200% zoom are covered. Screen-reader
+  announcements, Windows High Contrast, and physical touch hardware remain
+  residual manual evidence; no broader conformance claim is made.
 - The walkthrough did not exercise publication rollback, generated media,
   playlists, or playback. This plan must preserve those ADR 0075 boundaries and
   must not use UX work to weaken atomic publication or health reporting.

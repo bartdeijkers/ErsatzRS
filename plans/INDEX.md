@@ -86,8 +86,10 @@ public open-source project.
 
 ### Repo-local skills
 
-Canonical contracts live under `skills/`; `.claude/skills/` and
-`.codex/skills/` contain exact relative pointers validated by `xtask` tests.
+Canonical contracts live under `skills/`. OpenAI Codex discovers exact content
+mirrors under `.agents/skills/<name>/SKILL.md`; `.claude/skills/` and
+`.codex/skills/` retain exact relative pointers. `xtask` tests validate every
+mirror against its canonical contract.
 
 - `skills/add-migration.md`
 - `skills/changelog-entry.md`
@@ -132,8 +134,8 @@ changelog, and git history for evidence. The authoritative live state is always
   URLs are valid one-item add-on lists, the seven required yt-dlp and Beeld &
   Geluid URL shapes have frozen acceptance, failed drafts recover through the
   UI, and the `nsf live` channel, schedule, and playout scenario is proven.
-- `addon-list-import-review-ux.md` — implementation-ready UX follow-up from a
-  live Windows Glamourland audit: repair mobile drawer focus, faithful no-JS
+- `addon-list-import-review-ux.md` — completed UX follow-up from a live Windows
+  Glamourland audit: repaired mobile drawer focus, faithful no-JS
   actions, automatic Ready-to-review materialization, explicit saved-revision
   and publication readiness, responsive item cards, contextual entry points,
   and bounded progress/copy defects under milestone `amm-i-01`.

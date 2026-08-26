@@ -29,12 +29,6 @@ pub fn AppShell(children: Children) -> impl IntoView {
             class=style::shell
             data-theme=theme
         >
-            <input
-                type="checkbox"
-                id="nav-toggle"
-                class=style::drawer_toggle
-                data-nav-drawer-toggle
-            />
             <TopBar/>
             <div class=style::body>
                 <NavDrawer/>
@@ -289,12 +283,13 @@ fn ThemeStateScript() -> impl IntoView {
 pub fn NavStateHeadScript() -> impl IntoView {
     const SCRIPT: &str = r#"
 (() => {
-  const drawerKey = "ersatzrs.nav.drawer.checked.v1";
+  const drawerKey = "ersatzrs.nav.drawer.open.v2";
+  document.documentElement.dataset.jsEnabled = "true";
 
   try {
     const stored = window.sessionStorage.getItem(drawerKey);
     if (stored === "true" || stored === "false") {
-      document.documentElement.dataset.navDrawerChecked = stored;
+      document.documentElement.dataset.navDrawerOpen = stored;
     }
   } catch {}
 })();
@@ -302,12 +297,12 @@ pub fn NavStateHeadScript() -> impl IntoView {
 
     const STYLE: &str = r#"
 @media (min-width: 768px) {
-  html[data-nav-drawer-checked="true"] [data-nav-drawer] {
+  html[data-nav-drawer-open="false"] [data-nav-drawer] {
     display: none;
   }
 }
 @media (max-width: 767px) {
-  html[data-nav-drawer-checked="true"] [data-nav-drawer] {
+  html[data-nav-drawer-open="true"] [data-nav-drawer] {
     transform: translateX(0);
   }
 }
@@ -323,13 +318,22 @@ pub fn NavStateHeadScript() -> impl IntoView {
 fn TopBar() -> impl IntoView {
     view! {
         <header class=style::topbar>
-            <label for="nav-toggle" class=style::hamburger title=tr(TextKey::ToggleNavigation)>
-                <span style=icon_style(IconName::Menu, "1.25rem") aria-hidden="true"></span>
-            </label>
-
             <a href="/" class=style::logo>
                 <img src="/public/images/ersatzrs.png" alt="ErsatzRS" class=style::logo_image/>
             </a>
+
+            <button
+                id="nav-toggle"
+                type="button"
+                class=style::hamburger
+                title=tr(TextKey::ToggleNavigation)
+                aria-label=tr(TextKey::ToggleNavigation)
+                aria-expanded="true"
+                aria-controls="admin-navigation-drawer"
+                data-nav-drawer-toggle
+            >
+                <span style=icon_style(IconName::Menu, "1.25rem") aria-hidden="true"></span>
+            </button>
 
             <div class=style::flex_1/>
 
@@ -393,8 +397,9 @@ fn NavGroupsStateScript() -> impl IntoView {
 fn NavStateScript() -> impl IntoView {
     const SCRIPT: &str = r#"
 (() => {
-  const drawerKey = "ersatzrs.nav.drawer.checked.v1";
+  const drawerKey = "ersatzrs.nav.drawer.open.v2";
   const groupsKey = "ersatzrs.nav.groups.v1";
+  const mobile = window.matchMedia("(max-width: 767px)");
 
   function storage() {
     try {
@@ -413,23 +418,55 @@ fn NavStateScript() -> impl IntoView {
     }
   }
 
-  function syncRootDrawerState(value) {
-    document.documentElement.dataset.navDrawerChecked = value ? "true" : "false";
+  function syncDrawer(open, toggle, drawer) {
+    document.documentElement.dataset.navDrawerOpen = open ? "true" : "false";
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    drawer.setAttribute("aria-hidden", open ? "false" : "true");
+    if (open) drawer.removeAttribute("inert");
+    else drawer.setAttribute("inert", "");
   }
 
   function initDrawer(store) {
     const toggle = document.querySelector("[data-nav-drawer-toggle]");
-    if (!toggle) return;
+    const drawer = document.querySelector("[data-nav-drawer]");
+    if (!toggle || !drawer) return;
 
     const stored = store?.getItem(drawerKey);
-    if (stored === "true" || stored === "false") {
-      toggle.checked = stored === "true";
-    }
-    syncRootDrawerState(toggle.checked);
+    let open = stored === "true" || stored === "false"
+      ? stored === "true"
+      : !mobile.matches;
+    syncDrawer(open, toggle, drawer);
 
-    toggle.addEventListener("change", () => {
-      syncRootDrawerState(toggle.checked);
-      store?.setItem(drawerKey, toggle.checked ? "true" : "false");
+    function setOpen(next, { restoreFocus = false, persist = true } = {}) {
+      open = next;
+      syncDrawer(open, toggle, drawer);
+      if (persist) {
+        try { store?.setItem(drawerKey, open ? "true" : "false"); } catch {}
+      }
+      if (open && mobile.matches) {
+        drawer.querySelector("a, summary, button, input, select, textarea")?.focus();
+      } else if (restoreFocus) {
+        toggle.focus();
+      }
+    }
+
+    toggle.addEventListener("click", () => {
+      setOpen(!open, { restoreFocus: open });
+    });
+
+    drawer.addEventListener("click", (event) => {
+      if (mobile.matches && event.target.closest("a")) setOpen(false);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && mobile.matches && open) {
+        event.preventDefault();
+        setOpen(false, { restoreFocus: true });
+      }
+    });
+
+    mobile.addEventListener("change", (event) => {
+      setOpen(!event.matches, { persist: false });
     });
   }
 

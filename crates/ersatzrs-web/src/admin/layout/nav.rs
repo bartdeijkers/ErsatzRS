@@ -10,7 +10,7 @@ use super::style;
 #[component]
 pub(super) fn NavDrawer() -> impl IntoView {
     view! {
-        <aside class=style::drawer data-nav-drawer>
+        <aside id="admin-navigation-drawer" class=style::drawer data-nav-drawer>
             <nav class=style::drawer_nav>
                 <NavLink href="/channels" label=tr(TextKey::Channels) icon=IconName::Play/>
                 <NavLink href="/epg" label=tr(TextKey::EpgPreview) icon=IconName::Calendar/>
@@ -20,7 +20,6 @@ pub(super) fn NavDrawer() -> impl IntoView {
 
                 <NavGroup storage_key="media-sources" label=tr(TextKey::MediaSources)>
                     <NavLink href="/media/sources/local" label=tr(TextKey::Local) icon=IconName::Download/>
-                    <NavLink href="/media/addon-lists" label=tr(TextKey::AddonMediaLists) icon=IconName::Download/>
                     <NavLink href="/media/sources/emby" label="Emby" icon=IconName::Download/>
                     <NavLink href="/media/sources/jellyfin" label="Jellyfin" icon=IconName::Download/>
                     <NavLink href="/media/sources/plex" label="Plex" icon=IconName::Download/>
@@ -39,6 +38,7 @@ pub(super) fn NavDrawer() -> impl IntoView {
                 </NavGroup>
 
                 <NavGroup storage_key="lists" label=tr(TextKey::Lists)>
+                    <NavLink href="/media/addon-lists" label=tr(TextKey::AddonMediaLists) icon=IconName::Download/>
                     <NavLink href="/media/collections" label=tr(TextKey::Collections) icon=IconName::Copy/>
                     <NavLink href="/media/smart-collections" label=tr(TextKey::SmartCollections) icon=IconName::Search/>
                     <NavLink href="/media/multi-collections" label=tr(TextKey::MultiCollections) icon=IconName::Copy/>

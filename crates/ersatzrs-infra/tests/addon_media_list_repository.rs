@@ -1,8 +1,8 @@
 mod common;
 
 use ersatzrs_core::repositories::{
-    AddonMediaListItemReviewEdit, AddonMediaListNfoMetadata, AddonMediaListRepository,
-    RepositoryError,
+    AddonMediaListItemReviewEdit, AddonMediaListNfoMetadata, AddonMediaListPublicationBlockerKind,
+    AddonMediaListRepository, RepositoryError,
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListPresentationKind, RemoteStreamLiveness,
@@ -26,6 +26,7 @@ async fn addon_media_list_repository_lists_strict_rows_and_persists_page_size() 
     )
     .await
     .unwrap();
+
     pool.execute(
         r#"INSERT INTO "AddonMediaListItem" (
             "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
@@ -81,6 +82,80 @@ async fn addon_media_list_repository_lists_strict_rows_and_persists_page_size() 
 }
 
 #[tokio::test]
+async fn publication_readiness_distinguishes_blockers_from_optional_review_work() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount",
+              "ProviderMetadataJson"
+           ) VALUES (
+              1, 'org.example.lists', 'fixture/show',
+              'https://example.invalid/show', 'Fixture Show', 0,
+              '{"title":"Fixture Show"}'
+           )"#,
+    )
+    .await
+    .unwrap();
+
+    let empty = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert!(empty
+        .blockers
+        .iter()
+        .any(|blocker| blocker.kind == AddonMediaListPublicationBlockerKind::NoIncludedItems));
+
+    seed_numbering_item(&pool, 10, 1, None, None, true, None, "First").await;
+    pool.execute(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Availability" = 2, "ProviderLiveness" = 2,
+               "EffectiveLiveness" = 2
+           WHERE "Id" = 10"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "AddonMediaListImportJob" (
+              "AddonMediaListId", "Generation", "State", "RecordCapability",
+              "DiscoveredCount", "TotalHint", "OverviewComplete",
+              "CreatedAt", "UpdatedAt", "LastProgressAt", "CompletedAt"
+           ) VALUES (
+              1, 1, 3, 'media-list.list.v4', 1, 1, 1,
+              '2026-08-26T10:00:00Z', '2026-08-26T10:00:00Z',
+              '2026-08-26T10:00:00Z', '2026-08-26T10:00:00Z'
+           )"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "AddonMediaListDetailJob" (
+              "AddonMediaListItemId", "AddonMediaListId", "ProviderHost", "State",
+              "OverviewFingerprint", "OverviewRecordJson", "UpdatedAt"
+           ) VALUES (
+              10, 1, 'example.invalid', 1,
+              'fingerprint', '{}', '2026-08-26T10:00:00Z'
+           )"#,
+    )
+    .await
+    .unwrap();
+
+    let advisory = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert!(advisory.blockers.is_empty(), "{:#?}", advisory.blockers);
+    assert_eq!(advisory.recommendation_count, 1);
+    assert_eq!(advisory.optional_detail_total, 1);
+    assert_eq!(advisory.optional_detail_pending, 1);
+    assert!(advisory.can_start_publication());
+}
+
+#[tokio::test]
 async fn addon_media_list_repository_propagates_closed_pool_failures() {
     let pool = common::test_db().await;
     let repositories = make_repositories(pool.clone());
@@ -119,6 +194,16 @@ async fn publication_refuses_an_incomplete_resumable_overview() {
     .await
     .unwrap();
 
+    let readiness = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert!(readiness
+        .blockers
+        .iter()
+        .any(|blocker| blocker.kind == AddonMediaListPublicationBlockerKind::OverviewIncomplete));
+
     let error = repositories
         .addon_media_lists
         .stage_publication(1)
@@ -137,10 +222,12 @@ async fn publication_prepares_missing_finite_durations_through_durable_detail_jo
     seed_addon(&pool).await;
     pool.execute(
         r#"INSERT INTO "AddonMediaList" (
-              "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount"
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount",
+              "ProviderMetadataJson"
            ) VALUES (
               1, 'org.example.lists', 'fixture/show',
-              'https://example.invalid/show', 'Fixture Show', 1
+              'https://example.invalid/show', 'Fixture Show', 1,
+              '{"title":"Fixture Show"}'
            )"#,
     )
     .await
@@ -165,6 +252,16 @@ async fn publication_prepares_missing_finite_durations_through_durable_detail_jo
     .await
     .unwrap();
 
+    let before = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert!(before.blockers.is_empty(), "{:#?}", before.blockers);
+    assert_eq!(before.required_playback_detail_count, 1);
+    assert_eq!(before.required_playback_detail_pending, 0);
+    assert!(before.needs_playback_preparation());
+
     assert_eq!(
         repositories
             .addon_media_lists
@@ -183,6 +280,12 @@ async fn publication_prepares_missing_finite_durations_through_durable_detail_jo
     assert_eq!(queued.0, 1);
     assert!(queued.1);
     assert!(queued.2.is_some());
+    let preparing = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert_eq!(preparing.required_playback_detail_pending, 1);
 
     pool.execute(r#"UPDATE "AddonMediaListItem" SET "DurationSeconds" = 3600 WHERE "Id" = 10"#)
         .await

@@ -5,7 +5,9 @@ use ersatzrs_core::repositories::{
     AddonMediaListItemAdminRow, AddonMediaListItemCounts, AddonMediaListItemDetail,
     AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict, AddonMediaListNfoForm,
     AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListPublication,
-    AddonMediaListReplacementCandidate, AddonMediaListRepository, RepositoryError, Result,
+    AddonMediaListPublicationBlocker, AddonMediaListPublicationBlockerKind,
+    AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
+    AddonMediaListRepository, RepositoryError, Result,
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
@@ -357,6 +359,21 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
 
     async fn list_items(&self, id: EntityId) -> Result<Vec<AddonMediaListItemAdminRow>> {
         self.query_items(id, None, 0, None).await
+    }
+
+    async fn publication_readiness(
+        &self,
+        id: EntityId,
+    ) -> Result<AddonMediaListPublicationReadiness> {
+        let form = self
+            .get_admin_form(id)
+            .await?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            })?;
+        let items = self.query_items(id, None, 0, None).await?;
+        addon_media_list_publication_readiness(&self.0, &form, &items).await
     }
 
     async fn list_items_page(
@@ -1144,42 +1161,17 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 kind: "add-on media list",
                 id,
             })?;
-        if form.review_state == AddonMediaListReviewState::Publishing {
-            return Err(publication_in_progress());
+        let readiness = self.publication_readiness(id).await?;
+        if let Some(blocker) = readiness.blockers.first() {
+            let message = publication_blocker_message(blocker);
+            record_publication_error(&self.0, id, &message).await?;
+            return Err(RepositoryError::Conflict(message));
         }
-        if let Some(progress) = &form.import_progress {
-            if progress.state != ersatzrs_domain::AddonMediaListImportState::Ready {
-                let message =
-                    "the complete add-on overview must be verified before publication".to_owned();
-                record_publication_error(&self.0, id, &message).await?;
-                return Err(RepositoryError::Conflict(message));
-            }
-        }
-        let active_journal = sqlx::query_scalar::<_, Option<String>>(
-            r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = ?"#,
-        )
-        .bind(id)
-        .fetch_one(&self.0)
-        .await
-        .repository()?;
-        if active_journal
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
-            return Err(RepositoryError::Conflict(
-                "a previous publication is still awaiting recovery".to_owned(),
-            ));
-        }
-        let effective_presentation =
-            if form.requested_presentation_kind == AddonMediaListPresentationKind::Auto {
-                resolve_included_presentation(&self.0, id).await?
-            } else {
-                form.requested_presentation_kind
-            };
-        let items = self.query_items(id, None, 0, None).await?;
-        if let Some(message) =
-            publication_validation_error(&self.0, id, effective_presentation, &items).await?
-        {
+        if readiness.required_playback_detail_count > 0 {
+            let message = format!(
+                "{} included finite item(s) still require playback details",
+                readiness.required_playback_detail_count
+            );
             record_publication_error(&self.0, id, &message).await?;
             return Err(RepositoryError::Conflict(message));
         }
@@ -2546,29 +2538,121 @@ fn publication_in_progress() -> RepositoryError {
     )
 }
 
-async fn publication_validation_error(
+async fn addon_media_list_publication_readiness(
     pool: &Pool<crate::db::Db>,
-    list_id: EntityId,
-    presentation: AddonMediaListPresentationKind,
+    form: &AddonMediaListAdminForm,
     items: &[AddonMediaListItemAdminRow],
-) -> Result<Option<String>> {
-    let list_metadata = load_list_metadata_form(pool, list_id).await?.metadata;
-    if list_metadata.title.trim().is_empty() {
-        return Ok(Some(
-            "collection title is required before publication".to_owned(),
-        ));
-    }
-    if let Some(message) = invalid_artwork_message("collection", &list_metadata) {
-        return Ok(Some(message));
-    }
-
+) -> Result<AddonMediaListPublicationReadiness> {
+    let list_id = form.id;
+    let presentation = if form.requested_presentation_kind == AddonMediaListPresentationKind::Auto {
+        resolve_included_presentation(pool, list_id).await?
+    } else {
+        form.requested_presentation_kind
+    };
     let included = items
         .iter()
         .filter(|item| item.included)
         .collect::<Vec<_>>();
+    let mut blockers = list_publication_blockers(pool, form, presentation, &included).await?;
+    let detail_states = required_playback_detail_states(pool, list_id).await?;
+    let mut item_classification = PublicationItemClassification::default();
+    for item in &included {
+        classify_item_advisory_and_playback(
+            presentation,
+            item,
+            detail_states.get(&item.id).copied().flatten(),
+            &mut item_classification,
+        );
+        item_classification
+            .blockers
+            .extend(item_metadata_blockers(pool, list_id, presentation, item).await?);
+    }
+    blockers.extend(item_classification.blockers);
+    let progress = form.import_progress.as_ref();
+    Ok(AddonMediaListPublicationReadiness {
+        included_count: u64::try_from(included.len()).unwrap_or(u64::MAX),
+        blockers,
+        recommendation_count: item_classification.recommendation_count,
+        required_playback_detail_count: item_classification.required_playback_detail_count,
+        required_playback_detail_pending: item_classification.required_playback_detail_pending,
+        optional_detail_total: progress.map_or(0, |progress| progress.detail_total),
+        optional_detail_complete: progress.map_or(0, |progress| progress.detail_complete),
+        optional_detail_pending: progress.map_or(0, |progress| progress.detail_pending),
+        saved_revision: form.published_revision,
+        review_state: form.review_state,
+    })
+}
+
+async fn list_publication_blockers(
+    pool: &Pool<crate::db::Db>,
+    form: &AddonMediaListAdminForm,
+    presentation: AddonMediaListPresentationKind,
+    included: &[&AddonMediaListItemAdminRow],
+) -> Result<Vec<AddonMediaListPublicationBlocker>> {
+    let list_id = form.id;
+    let mut blockers = Vec::new();
+    if form.review_state == AddonMediaListReviewState::Publishing {
+        blockers.push(publication_blocker(
+            AddonMediaListPublicationBlockerKind::PublicationInProgress,
+            None,
+            None,
+            1,
+        ));
+    }
+    if form
+        .import_progress
+        .as_ref()
+        .is_some_and(|progress| progress.state != ersatzrs_domain::AddonMediaListImportState::Ready)
+    {
+        blockers.push(publication_blocker(
+            AddonMediaListPublicationBlockerKind::OverviewIncomplete,
+            None,
+            None,
+            1,
+        ));
+    }
+    let active_journal = sqlx::query_scalar::<_, Option<String>>(
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    if active_journal
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+    {
+        blockers.push(publication_blocker(
+            AddonMediaListPublicationBlockerKind::RecoveryRequired,
+            None,
+            None,
+            1,
+        ));
+    }
+
+    let list_metadata = load_list_metadata_form(pool, list_id).await?.metadata;
+    if list_metadata.title.trim().is_empty() {
+        blockers.push(publication_blocker(
+            AddonMediaListPublicationBlockerKind::CollectionTitleMissing,
+            None,
+            None,
+            1,
+        ));
+    }
+    if invalid_artwork_message("collection", &list_metadata).is_some() {
+        blockers.push(publication_blocker(
+            AddonMediaListPublicationBlockerKind::InvalidArtwork,
+            None,
+            Some("collection".to_owned()),
+            1,
+        ));
+    }
     if included.is_empty() {
-        return Ok(Some(
-            "at least one item must be included before publication".to_owned(),
+        blockers.push(publication_blocker(
+            AddonMediaListPublicationBlockerKind::NoIncludedItems,
+            None,
+            None,
+            0,
         ));
     }
 
@@ -2581,76 +2665,259 @@ async fn publication_validation_error(
             })
             .count();
         if primary_count != 1 {
-            return Ok(Some(format!(
-                "movie publication requires exactly one included main movie; found {primary_count}"
-            )));
+            blockers.push(publication_blocker(
+                AddonMediaListPublicationBlockerKind::MoviePrimaryCount,
+                None,
+                None,
+                u64::try_from(primary_count).unwrap_or(u64::MAX),
+            ));
         }
     }
+    Ok(blockers)
+}
 
-    for item in included {
-        if item.kind == AddonMediaListItemKind::RemoteStream {
-            match item.effective_liveness {
-                RemoteStreamLiveness::Unknown => {
-                    return Ok(Some(format!(
-                        "{} requires a finite or live playback decision",
-                        item.display_title
-                    )));
-                }
-                RemoteStreamLiveness::Finite
-                    if item.duration_seconds.is_none_or(|duration| duration == 0) =>
-                {
-                    return Ok(Some(format!(
-                        "{} is finite media and requires a positive duration",
-                        item.display_title
-                    )));
-                }
-                RemoteStreamLiveness::Finite | RemoteStreamLiveness::Live => {}
+#[derive(Default)]
+struct PublicationItemClassification {
+    blockers: Vec<AddonMediaListPublicationBlocker>,
+    recommendation_count: u64,
+    required_playback_detail_count: u64,
+    required_playback_detail_pending: u64,
+}
+
+fn classify_item_advisory_and_playback(
+    presentation: AddonMediaListPresentationKind,
+    item: &AddonMediaListItemAdminRow,
+    detail_state: Option<AddonMediaListDetailState>,
+    classification: &mut PublicationItemClassification,
+) {
+    let advisory = item.metadata_conflict_count > 0
+        || item.liveness_conflict
+        || item.availability == AddonMediaListItemAvailability::Unknown
+        || (item.availability == AddonMediaListItemAvailability::Unavailable
+            && item.replacement_valid)
+        || (item.replacement_media_version_id.is_some() && !item.replacement_valid)
+        || (presentation == AddonMediaListPresentationKind::Movies
+            && item.collection_role == AddonMediaListItemRole::Auto);
+    if advisory {
+        classification.recommendation_count = classification.recommendation_count.saturating_add(1);
+    }
+    if item.kind == AddonMediaListItemKind::RemoteStream {
+        match item.effective_liveness {
+            RemoteStreamLiveness::Unknown => {
+                classification.blockers.push(publication_item_blocker(
+                    AddonMediaListPublicationBlockerKind::PlaybackDecisionRequired,
+                    item,
+                ));
+            }
+            RemoteStreamLiveness::Finite
+                if item.duration_seconds.is_none_or(|duration| duration == 0) =>
+            {
+                classify_required_playback_detail(item, detail_state, classification);
+            }
+            RemoteStreamLiveness::Finite | RemoteStreamLiveness::Live => {}
+        }
+    }
+    if item.availability == AddonMediaListItemAvailability::Unavailable && !item.replacement_valid {
+        classification.blockers.push(publication_item_blocker(
+            AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement,
+            item,
+        ));
+    }
+}
+
+fn classify_required_playback_detail(
+    item: &AddonMediaListItemAdminRow,
+    detail_state: Option<AddonMediaListDetailState>,
+    classification: &mut PublicationItemClassification,
+) {
+    match detail_state {
+        None => classification.blockers.push(publication_item_blocker(
+            AddonMediaListPublicationBlockerKind::PlaybackDetailsUnavailable,
+            item,
+        )),
+        Some(AddonMediaListDetailState::Complete | AddonMediaListDetailState::Skipped) => {
+            classification.blockers.push(publication_item_blocker(
+                AddonMediaListPublicationBlockerKind::PlaybackDetailsFailed,
+                item,
+            ));
+        }
+        Some(state) => {
+            classification.required_playback_detail_count = classification
+                .required_playback_detail_count
+                .saturating_add(1);
+            if matches!(
+                state,
+                AddonMediaListDetailState::Queued
+                    | AddonMediaListDetailState::WaitingForSlot
+                    | AddonMediaListDetailState::Running
+                    | AddonMediaListDetailState::WaitingToRetry
+            ) {
+                classification.required_playback_detail_pending = classification
+                    .required_playback_detail_pending
+                    .saturating_add(1);
             }
         }
-        if item.availability == AddonMediaListItemAvailability::Unavailable
-            && !item.replacement_valid
-        {
-            return Ok(Some(format!(
-                "{} is unavailable and has no valid local replacement",
-                item.display_title
-            )));
+    }
+}
+
+async fn item_metadata_blockers(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    presentation: AddonMediaListPresentationKind,
+    item: &AddonMediaListItemAdminRow,
+) -> Result<Vec<AddonMediaListPublicationBlocker>> {
+    let metadata = load_item_metadata_form(pool, list_id, item.id)
+        .await?
+        .metadata;
+    let mut blockers = Vec::new();
+    if metadata.title.trim().is_empty() {
+        blockers.push(publication_item_blocker(
+            AddonMediaListPublicationBlockerKind::ItemTitleMissing,
+            item,
+        ));
+    }
+    if invalid_artwork_message(&item.display_title, &metadata).is_some() {
+        blockers.push(publication_item_blocker(
+            AddonMediaListPublicationBlockerKind::InvalidArtwork,
+            item,
+        ));
+    }
+    if presentation == AddonMediaListPresentationKind::TelevisionShow
+        && (metadata.season.is_none_or(|season| season < 0)
+            || metadata.episode.is_none_or(|episode| episode < 1))
+    {
+        blockers.push(publication_item_blocker(
+            AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing,
+            item,
+        ));
+    }
+    if matches!(
+        presentation,
+        AddonMediaListPresentationKind::MusicVideos | AddonMediaListPresentationKind::Songs
+    ) && metadata
+        .artists
+        .iter()
+        .all(|artist| artist.trim().is_empty())
+    {
+        blockers.push(publication_item_blocker(
+            AddonMediaListPublicationBlockerKind::ArtistMissing,
+            item,
+        ));
+    }
+    Ok(blockers)
+}
+
+fn publication_blocker(
+    kind: AddonMediaListPublicationBlockerKind,
+    item_rank: Option<i32>,
+    item_title: Option<String>,
+    count: u64,
+) -> AddonMediaListPublicationBlocker {
+    AddonMediaListPublicationBlocker {
+        kind,
+        item_rank,
+        item_title,
+        count,
+    }
+}
+
+fn publication_item_blocker(
+    kind: AddonMediaListPublicationBlockerKind,
+    item: &AddonMediaListItemAdminRow,
+) -> AddonMediaListPublicationBlocker {
+    publication_blocker(
+        kind,
+        Some(item.rank.saturating_add(1)),
+        Some(item.display_title.clone()),
+        1,
+    )
+}
+
+async fn required_playback_detail_states(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+) -> Result<std::collections::BTreeMap<EntityId, Option<AddonMediaListDetailState>>> {
+    let rows = sqlx::query(
+        r#"SELECT "item"."Id", "detail"."State" AS "DetailState"
+           FROM "AddonMediaListItem" AS "item"
+           LEFT JOIN "AddonMediaListDetailJob" AS "detail"
+             ON "detail"."AddonMediaListItemId" = "item"."Id"
+           WHERE "item"."AddonMediaListId" = ? AND "item"."Included" = 1
+             AND "item"."Kind" = ? AND "item"."EffectiveLiveness" = ?
+             AND ("item"."DurationSeconds" IS NULL OR "item"."DurationSeconds" <= 0)"#,
+    )
+    .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemKind::RemoteStream,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        RemoteStreamLiveness::Finite,
+    ))
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    rows.iter()
+        .map(|row| {
+            Ok((
+                row.try_get("Id").repository()?,
+                decode_optional_enum_column::<AddonMediaListDetailState>(
+                    "AddonMediaListDetailState",
+                    row,
+                    "DetailState",
+                )?,
+            ))
+        })
+        .collect()
+}
+
+fn publication_blocker_message(blocker: &AddonMediaListPublicationBlocker) -> String {
+    let title = blocker.item_title.as_deref().unwrap_or("item");
+    match blocker.kind {
+        AddonMediaListPublicationBlockerKind::OverviewIncomplete => {
+            "the complete add-on overview must be verified before publication".to_owned()
         }
-        let metadata = load_item_metadata_form(pool, list_id, item.id)
-            .await?
-            .metadata;
-        if metadata.title.trim().is_empty() {
-            return Ok(Some(format!(
-                "item {} requires a title before publication",
-                item.rank.saturating_add(1)
-            )));
+        AddonMediaListPublicationBlockerKind::PublicationInProgress => {
+            "the add-on media list is being published; wait for publication to finish".to_owned()
         }
-        if let Some(message) = invalid_artwork_message(&item.display_title, &metadata) {
-            return Ok(Some(message));
+        AddonMediaListPublicationBlockerKind::RecoveryRequired => {
+            "a previous publication is still awaiting recovery".to_owned()
         }
-        if presentation == AddonMediaListPresentationKind::TelevisionShow
-            && (metadata.season.is_none_or(|season| season < 0)
-                || metadata.episode.is_none_or(|episode| episode < 1))
-        {
-            return Ok(Some(format!(
-                "{} requires a valid season and episode number",
-                item.display_title
-            )));
+        AddonMediaListPublicationBlockerKind::CollectionTitleMissing => {
+            "collection title is required before publication".to_owned()
         }
-        if matches!(
-            presentation,
-            AddonMediaListPresentationKind::MusicVideos | AddonMediaListPresentationKind::Songs
-        ) && metadata
-            .artists
-            .iter()
-            .all(|artist| artist.trim().is_empty())
-        {
-            return Ok(Some(format!(
-                "{} requires at least one artist",
-                item.display_title
-            )));
+        AddonMediaListPublicationBlockerKind::InvalidArtwork => {
+            format!("{title} contains an invalid artwork URL; use a bounded HTTPS URL")
+        }
+        AddonMediaListPublicationBlockerKind::NoIncludedItems => {
+            "at least one item must be included before publication".to_owned()
+        }
+        AddonMediaListPublicationBlockerKind::MoviePrimaryCount => format!(
+            "movie publication requires exactly one included main movie; found {}",
+            blocker.count
+        ),
+        AddonMediaListPublicationBlockerKind::PlaybackDecisionRequired => {
+            format!("{title} requires a finite or live playback decision")
+        }
+        AddonMediaListPublicationBlockerKind::PlaybackDetailsUnavailable => format!(
+            "{title} is finite media but its add-on does not provide item-detail enrichment"
+        ),
+        AddonMediaListPublicationBlockerKind::PlaybackDetailsFailed => {
+            format!("provider details for {title} do not include the required positive duration")
+        }
+        AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement => {
+            format!("{title} is unavailable and has no valid local replacement")
+        }
+        AddonMediaListPublicationBlockerKind::ItemTitleMissing => format!(
+            "item {} requires a title before publication",
+            blocker.item_rank.unwrap_or_default()
+        ),
+        AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing => {
+            format!("{title} requires a valid season and episode number")
+        }
+        AddonMediaListPublicationBlockerKind::ArtistMissing => {
+            format!("{title} requires at least one artist")
         }
     }
-    Ok(None)
 }
 
 fn invalid_artwork_message(owner: &str, metadata: &AddonMediaListNfoMetadata) -> Option<String> {

@@ -15,18 +15,32 @@ release section when tagging a release.
 
 ### Added
 
+- Add repository-scoped admin UX design and audit skills with a Tunarr-inspired
+  semantic HTML/CSS visual contract, WCAG 2.2 and responsive review, deceptive-
+  pattern checks, and an evidence-backed UI component catalog.
+
 - Add undoable direct and bulk add-on-list review controls, cursor-based
   episode numbering, date-gap season detection, and responsive bulk media-kind
   and playback-behavior editing.
 
 ### Changed
 
-- Reopen the add-on-list review UX contract after Windows dogfood exposed an
-  unexplained Ready-to-review save step, ambiguous saved-versus-published state,
-  incomplete no-JS actions, and mobile keyboard/reflow barriers; corrective
-  acceptance now covers explicit readiness and a responsive item workflow.
+- Made every canonical repository skill discoverable through the current
+  `.agents/skills/<name>/SKILL.md` layout while retaining the existing Codex and
+  Claude compatibility pointers, with cross-platform mirror validation to
+  prevent skill contracts from drifting.
 
 ### Fixed
+
+- Keep the add-on-list publication-readiness heading in normal document flow
+  with quieter typography while preserving its information, contrast, and
+  accessible section relationship.
+
+- Make add-on-list import, review, and publication self-explanatory with
+  automatic Ready materialization, authoritative saved-draft and blocker state,
+  faithful no-JavaScript create/save/review/publish forms, actionable readiness,
+  explicit per-row save/error feedback, keyboard-safe mobile navigation, and a
+  compact responsive review layout proven from 320 CSS pixels through 4K.
 
 - Queue playback-required detail enrichment before publishing finite add-on
   streams with missing durations, clarify item-inclusion controls, and keep

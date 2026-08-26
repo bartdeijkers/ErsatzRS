@@ -10,29 +10,33 @@ use ersatzrs_domain::{
     AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListReviewState,
     RemoteStreamLiveness,
 };
+use leptos::html;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::i18n::{
     addon_media_list_error_message, delete_failed, match_status, range_of, save_failed, tr, TextKey,
 };
+#[cfg(feature = "ssr")]
+use crate::admin::server_fns::addon_media_lists::get_addon_media_list_show_nfo;
 use crate::admin::server_fns::addon_media_lists::{
     add_addon_media_list, apply_addon_media_list_content_kind,
     apply_addon_media_list_item_review_edits, change_addon_media_list_addon,
     control_addon_media_list_import, delete_addon_media_list, get_addon_media_list_form,
-    get_addon_media_list_item, get_addon_media_list_show_nfo, get_addon_media_lists_page_size,
-    list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
-    match_addon_media_list, publish_addon_media_list, request_addon_media_list_item_details,
-    request_addon_media_list_presentation, resolve_addon_media_list_provider,
-    save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
-    search_addon_media_list_replacements, set_addon_media_list_item_replacement,
-    set_addon_media_list_item_role, update_addon_media_list, update_addon_media_list_item_chapters,
-    AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListForm,
-    AddonMediaListImportAction, AddonMediaListImportProgressRow, AddonMediaListItemDetail,
-    AddonMediaListItemReviewEdit, AddonMediaListItemRow, AddonMediaListMetadataConflict,
-    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
-    AddonMediaListProviderRow, AddonMediaListPublishResult, AddonMediaListReplacementRow,
-    AddonMediaListRow,
+    get_addon_media_list_item, get_addon_media_list_publication_readiness,
+    get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_providers,
+    list_addon_media_lists, match_addon_media_list, publish_addon_media_list,
+    request_addon_media_list_item_details, request_addon_media_list_presentation,
+    resolve_addon_media_list_provider, save_addon_media_list_item_nfo,
+    save_addon_media_list_show_nfo, search_addon_media_list_replacements,
+    set_addon_media_list_item_replacement, set_addon_media_list_item_role, update_addon_media_list,
+    update_addon_media_list_item_chapters, AddonMediaListArtwork, AddonMediaListArtworkRole,
+    AddonMediaListForm, AddonMediaListImportAction, AddonMediaListImportProgressRow,
+    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListItemRow,
+    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
+    AddonMediaListNfoPerson, AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
+    AddonMediaListPublicationBlockerKind, AddonMediaListPublicationReadiness,
+    AddonMediaListPublishResult, AddonMediaListReplacementRow, AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
@@ -142,16 +146,29 @@ fn ArtworkRoleInput(
         item_id.unwrap_or(0),
         role_name,
     );
+    let native_field_name = if item_id.is_none() {
+        match role {
+            AddonMediaListArtworkRole::Poster => Some("metadata_poster"),
+            AddonMediaListArtworkRole::Fanart => Some("metadata_fanart"),
+            AddonMediaListArtworkRole::Thumb => Some("metadata_thumbnail"),
+            AddonMediaListArtworkRole::Other => None,
+        }
+    } else {
+        None
+    };
+    let initial_url = url.get_untracked();
     view! {
         <div class=style::artwork_role_field>
             <span>{tr(label)}</span>
             <input
                 class=style::boxed_input
                 type="text"
+                name=native_field_name
                 inputmode="url"
                 aria-label=tr(label)
                 data-artwork-role=role_name
                 list=list_name.clone()
+                value=initial_url
                 prop:value=move || url.get()
                 on:input=move |event| url.set(event_target_value(&event))
             />
@@ -276,6 +293,13 @@ struct ReviewUndoEntry {
     snapshots: Vec<AddonMediaListItemReviewEdit>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RowSaveState {
+    Saving,
+    Saved,
+    Error,
+}
+
 type ReviewEditAction = Action<
     (i64, Vec<AddonMediaListItemReviewEdit>, ReviewUndoEntry),
     Result<ReviewUndoEntry, ServerFnError>,
@@ -294,11 +318,18 @@ fn review_snapshot(item: &AddonMediaListItemRow) -> AddonMediaListItemReviewEdit
 
 fn dispatch_review_edit(
     action: ReviewEditAction,
+    row_save_states: RwSignal<BTreeMap<i64, RowSaveState>>,
     list_id: i64,
     previous: AddonMediaListItemReviewEdit,
     desired: AddonMediaListItemReviewEdit,
     label: TextKey,
 ) {
+    if action.pending().get_untracked() {
+        return;
+    }
+    row_save_states.update(|states| {
+        states.insert(desired.item_id, RowSaveState::Saving);
+    });
     action.dispatch((
         list_id,
         vec![desired],
@@ -386,15 +417,28 @@ fn format_clock_duration(seconds: u64) -> String {
     }
 }
 
-fn elapsed_from(started_at: &str) -> Option<String> {
+fn elapsed_between(started_at: &str, ended_at: Option<&str>) -> Option<String> {
     let started = chrono::DateTime::parse_from_rfc3339(started_at).ok()?;
+    let ended = ended_at.map_or_else(
+        || Some(chrono::Utc::now()),
+        |value| {
+            chrono::DateTime::parse_from_rfc3339(value)
+                .ok()
+                .map(|value| value.with_timezone(&chrono::Utc))
+        },
+    )?;
     let seconds = u64::try_from(
-        (chrono::Utc::now() - started.with_timezone(&chrono::Utc))
+        (ended - started.with_timezone(&chrono::Utc))
             .num_seconds()
             .max(0),
     )
     .ok()?;
     Some(format_clock_duration(seconds))
+}
+
+#[cfg(test)]
+fn elapsed_from(started_at: &str) -> Option<String> {
+    elapsed_between(started_at, None)
 }
 
 fn format_progress_timestamp(value: &str) -> Option<String> {
@@ -454,6 +498,7 @@ fn item_row_view(
     search_action: ReplacementSearchAction,
     replacement_action: ReplacementAction,
     review_edit_action: ReviewEditAction,
+    row_save_states: RwSignal<BTreeMap<i64, RowSaveState>>,
     role_action: ItemRoleAction,
     episode_preview: Memo<BTreeMap<i64, (i32, i32)>>,
     episode_numbering_open: RwSignal<bool>,
@@ -463,6 +508,7 @@ fn item_row_view(
     loaded_detail: RwSignal<Option<AddonMediaListItemDetail>>,
     detail_action: ItemDetailAction,
     request_detail_action: DetailRequestAction,
+    detail_request_item: RwSignal<Option<i64>>,
 ) -> AnyView {
     let item_id = item.id;
     let title = item.display_title.clone();
@@ -496,6 +542,7 @@ fn item_row_view(
         .clone()
         .unwrap_or_else(|| tr(TextKey::UnknownAvailability).to_string());
     let row_number = item.rank.saturating_add(1).to_string();
+    let row_aria_label = format!("{} {row_number}", tr(TextKey::Number));
     let is_remote_stream = item.kind == AddonMediaListItemKind::RemoteStream;
     let provider_liveness = item.provider_liveness;
     let liveness_override = item.liveness_override;
@@ -560,277 +607,304 @@ fn item_row_view(
             detail_action.dispatch(item_id);
         }
     };
+    let detail_region_id = format!("addon-list-item-detail-{item_id}");
+    let review_href = format!("/media/addon-lists/{list_id}/items/{item_id}");
     view! {
-        <>
-        <tr
+        <li
             class=move || if episode_preview.with(|preview| preview.contains_key(&item_id)) {
-                format!("{} {}", style::metadata_item_row, style::numbering_preview_row)
+                format!("{} {}", style::metadata_item, style::numbering_preview_row)
             } else {
-                style::metadata_item_row.to_owned()
+                style::metadata_item.to_owned()
             }
-            aria-expanded=move || if open_item.get() == Some(item_id) { "true" } else { "false" }
             data-item-id=item_id
-            on:click=move |_| toggle_editor()
         >
-            <td class=style::number_cell>{row_number}</td>
-            <td class=style::include_cell>
-                <label title=tr(TextKey::IncludeInPublication)>
-                    <input
-                        type="checkbox"
-                        checked=included
-                        aria-label=tr(TextKey::IncludeInPublication)
-                        on:change=move |event| {
-                            event.stop_propagation();
-                            let mut desired = review_state;
-                            desired.included = event_target_checked(&event);
-                            dispatch_review_edit(
-                                review_edit_action,
-                                list_id,
-                                review_state,
-                                desired,
-                                TextKey::IncludeInPublication,
-                            );
-                        }
-                        on:click=|event| event.stop_propagation()
-                    />
-                    <span class=style::visually_hidden>{tr(TextKey::IncludeInPublication)}</span>
-                </label>
-            </td>
-            <td class=style::item_artwork_cell>
-                <span class=style::item_thumbnail>
-                    <img src=thumbnail_url alt="" style:display=if has_thumbnail { "block" } else { "none" }/>
-                    <span style:display=if has_thumbnail { "none" } else { "inline-flex" }>
-                        <span style=icon_style(IconName::Image, "1.15rem") aria-hidden="true"></span>
+            <article aria-labelledby=format!("addon-list-item-title-{item_id}")>
+                <header class=style::item_header>
+                    <span class=style::item_order aria-label=row_aria_label>{row_number}</span>
+                    <span class=style::item_thumbnail>
+                        <img src=thumbnail_url alt="" style:display=if has_thumbnail { "block" } else { "none" }/>
+                        <span style:display=if has_thumbnail { "none" } else { "inline-flex" }>
+                            <span style=icon_style(IconName::Image, "1.15rem") aria-hidden="true"></span>
+                        </span>
                     </span>
-                </span>
-            </td>
-            <td>
-                <button type="button" class=style::row_title on:click=move |event| {
-                    event.stop_propagation();
-                    toggle_editor();
-                }>{title}</button>
-                <small
-                    class=style::row_note
-                    style:display=if has_reason { "" } else { "none" }
-                >{availability_reason}</small>
-                <small class=style::row_note style:display=if has_metadata_summary { "" } else { "none" }>
-                    {if !people_summary.is_empty() && !tags_summary.is_empty() {
-                        format!("{people_summary} · {tags_summary}")
-                    } else if !people_summary.is_empty() {
-                        people_summary
-                    } else {
-                        tags_summary
-                    }}
-                </small>
-            </td>
-            <td class=style::compact_cell>{first_aired}</td>
-            <td class=style::episode_cell>
-                {move || if presentation.get() == AddonMediaListPresentationKind::TelevisionShow {
-                    let preview_current_episode_number = current_episode_number.clone();
-                    view! {
-                        <div class=style::episode_quick_edit>
-                            <input
-                                type="number"
-                                min="0"
-                                step="1"
-                                inputmode="numeric"
-                                aria-label=tr(TextKey::Season)
-                                placeholder="S"
-                                prop:value=move || season_input.get()
-                                on:click=|event| event.stop_propagation()
-                                on:input=move |event| season_input.set(event_target_value(&event))
-                            />
-                            <input
-                                type="number"
-                                min="1"
-                                step="1"
-                                inputmode="numeric"
-                                aria-label=tr(TextKey::Episode)
-                                placeholder="E"
-                                prop:value=move || episode_input.get()
-                                on:click=|event| event.stop_propagation()
-                                on:input=move |event| episode_input.set(event_target_value(&event))
-                            />
-                            <button
-                                type="button"
-                                class=style::episode_apply
-                                aria-label=tr(TextKey::SaveSeasonEpisode)
-                                title=tr(TextKey::SaveSeasonEpisode)
-                                disabled=move || {
-                                    !matches!(season_input.get().trim().parse::<i32>(), Ok(value) if value >= 0)
-                                        || !matches!(episode_input.get().trim().parse::<i32>(), Ok(value) if value >= 1)
-                                }
-                                on:click=move |event| {
-                                    event.stop_propagation();
-                                    let season = season_input.get_untracked().trim().parse::<i32>();
-                                    let episode = episode_input.get_untracked().trim().parse::<i32>();
-                                    if let (Ok(season), Ok(episode)) = (season, episode) {
-                                        let mut desired = review_state;
-                                        desired.season = Some(season);
-                                        desired.episode = Some(episode);
-                                        dispatch_review_edit(
-                                            review_edit_action,
-                                            list_id,
-                                            review_state,
-                                            desired,
-                                            TextKey::SeasonEpisode,
-                                        );
-                                    }
-                                }
-                            >"✓"</button>
-                        </div>
-                        <small class=style::episode_preview>
-                            {move || episode_preview.with(|preview| {
-                                preview.get(&item_id).map_or_else(String::new, |(season, episode)| {
-                                    let next = format!("S{season:02}E{episode:02}");
-                                    if preview_current_episode_number.is_empty() || preview_current_episode_number == next {
-                                        next
-                                    } else {
-                                        format!("{preview_current_episode_number} → {next}")
-                                    }
-                                })
-                            })}
+                    <div class=style::item_identity>
+                        <span
+                            id=format!("addon-list-item-title-{item_id}")
+                            class=style::row_title
+                        >{title}</span>
+                        <small class=style::row_note style:display=if has_reason { "block" } else { "none" }>{availability_reason}</small>
+                        <small class=style::row_note style:display=if has_metadata_summary { "block" } else { "none" }>
+                            {if !people_summary.is_empty() && !tags_summary.is_empty() {
+                                format!("{people_summary} · {tags_summary}")
+                            } else if !people_summary.is_empty() {
+                                people_summary
+                            } else {
+                                tags_summary
+                            }}
                         </small>
-                        <button
-                            type="button"
-                            class=style::start_here
-                            style:display=move || if episode_numbering_open.get() { "inline-flex" } else { "none" }
-                            aria-pressed=move || if episode_numbering_start_item_id.get() == Some(item_id) { "true" } else { "false" }
-                            on:click=move |event| {
-                                event.stop_propagation();
-                                episode_numbering_start_item_id.set(Some(item_id));
-                            }
-                        >{tr(TextKey::StartHere)}</button>
-                    }.into_any()
-                } else {
-                    let display_episode_number = current_episode_number.clone();
-                    view! { <span>{if display_episode_number.is_empty() { "—".to_owned() } else { display_episode_number }}</span> }.into_any()
-                }}
-            </td>
-            <td>
-                {move || if presentation.get() == AddonMediaListPresentationKind::Movies {
-                    view! {
-                        <select
-                            class=style::row_select
-                            aria-label=tr(TextKey::PrimaryFeature)
-                            prop:value=match collection_role {
-                                AddonMediaListItemRole::Auto => "auto",
-                                AddonMediaListItemRole::Primary => "primary",
-                                AddonMediaListItemRole::Extra => "extra",
-                            }
-                            on:click=|event| event.stop_propagation()
+                        <span
+                            class=style::row_save_state
+                            role="status"
+                            aria-live="polite"
+                            data-state=move || row_save_states.with(|states| match states.get(&item_id) {
+                                Some(RowSaveState::Saving) => "saving",
+                                Some(RowSaveState::Saved) => "saved",
+                                Some(RowSaveState::Error) => "error",
+                                None => "",
+                            })
+                            style:display=move || if row_save_states.with(|states| states.contains_key(&item_id)) { "inline-flex" } else { "none" }
+                        >{move || row_save_states.with(|states| match states.get(&item_id) {
+                            Some(RowSaveState::Saving) => tr(TextKey::Saving),
+                            Some(RowSaveState::Saved) => tr(TextKey::Saved),
+                            Some(RowSaveState::Error) => tr(TextKey::Error),
+                            None => "",
+                        })}</span>
+                    </div>
+                    <label class=style::item_include>
+                        <input
+                            type="checkbox"
+                            checked=included
+                            disabled=move || review_edit_action.pending().get() || role_action.pending().get()
                             on:change=move |event| {
-                                event.stop_propagation();
-                                let role = match event_target_value(&event).as_str() {
-                                    "primary" => AddonMediaListItemRole::Primary,
-                                    "extra" => AddonMediaListItemRole::Extra,
-                                    _ => AddonMediaListItemRole::Auto,
-                                };
-                                role_action.dispatch((list_id, item_id, role));
-                            }
-                        >
-                            <option value="auto">{tr(TextKey::NeedReview)}</option>
-                            <option value="primary">{tr(TextKey::PrimaryFeature)}</option>
-                            <option value="extra">{tr(TextKey::MovieExtra)}</option>
-                        </select>
-                    }.into_any()
-                } else {
-                    view! {
-                        <select
-                            class=style::row_select
-                            aria-label=tr(TextKey::MediaKind)
-                            prop:value=content_kind_value(content_kind)
-                            on:click=|event| event.stop_propagation()
-                            on:change=move |event| {
-                                event.stop_propagation();
                                 let mut desired = review_state;
-                                desired.content_kind = content_kind_from_value(&event_target_value(&event));
+                                desired.included = event_target_checked(&event);
                                 dispatch_review_edit(
                                     review_edit_action,
+                                    row_save_states,
                                     list_id,
                                     review_state,
                                     desired,
-                                    TextKey::MediaKind,
+                                    TextKey::IncludeInPublication,
                                 );
                             }
-                        >
-                            <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
-                            <option value="television_episode">{tr(TextKey::TelevisionEpisode)}</option>
-                            <option value="movie">{tr(TextKey::Movie)}</option>
-                            <option value="music_video">{tr(TextKey::MusicVideo)}</option>
-                            <option value="other_video">{tr(TextKey::OtherVideo)}</option>
-                            <option value="song">{tr(TextKey::Song)}</option>
-                            <option value="image">{tr(TextKey::Image)}</option>
-                        </select>
-                    }.into_any()
-                }}
-            </td>
-            <td class=style::liveness_cell>
-                <select
-                    class=style::row_select
-                    aria-label=tr(TextKey::PlaybackBehavior)
-                    style:display=if is_remote_stream { "block" } else { "none" }
-                    prop:value=liveness_override_value(liveness_override)
-                    on:click=|event| event.stop_propagation()
-                    on:change=move |event| {
-                        event.stop_propagation();
-                        let mut desired = review_state;
-                        desired.liveness_override =
-                            liveness_override_from_value(&event_target_value(&event));
-                        dispatch_review_edit(
-                            review_edit_action,
-                            list_id,
-                            review_state,
-                            desired,
-                            TextKey::PlaybackBehavior,
-                        );
-                    }
-                >
-                    <option value="provider">
-                        {format!("{} · {}", tr(TextKey::UseProviderValue), tr(liveness_text_key(provider_liveness)))}
-                    </option>
-                    <option value="finite">{tr(TextKey::FiniteMedia)}</option>
-                    <option value="live">{tr(TextKey::LiveSource)}</option>
-                </select>
-                <small
-                    class=style::liveness_conflict
-                    style:display=if is_remote_stream && liveness_conflict { "block" } else { "none" }
-                >{tr(TextKey::ProviderValueChanged)}</small>
-                <span style:display=if is_remote_stream { "none" } else { "inline" }>"—"</span>
-            </td>
-            <td data-replacement-state=replacement_state title=item.replacement_path.unwrap_or_default()>
-                <span class=move || if base_needs_review
-                    || (presentation.get() == AddonMediaListPresentationKind::Movies
-                        && collection_role == AddonMediaListItemRole::Auto)
-                {
-                    style::review_status
-                } else {
-                    style::ready_status
-                }>
-                    <span style=move || icon_style(
-                        if base_needs_review
-                            || (presentation.get() == AddonMediaListPresentationKind::Movies
-                                && collection_role == AddonMediaListItemRole::Auto)
-                        {
-                            IconName::Warning
-                        } else {
-                            IconName::Check
-                        },
-                        "0.95rem",
-                    ) aria-hidden="true"></span>
-                    {move || if base_needs_review
-                        || (presentation.get() == AddonMediaListPresentationKind::Movies
-                            && collection_role == AddonMediaListItemRole::Auto)
-                    {
-                        tr(TextKey::NeedReview)
-                    } else {
-                        tr(TextKey::Available)
-                    }}
-                </span>
-                <small class=style::row_note>{replacement}</small>
-            </td>
-            <td>
-                <div class=style::row_actions>
+                        />
+                        <span>{tr(TextKey::IncludeInPublication)}</span>
+                    </label>
+                </header>
+
+                <dl class=style::item_fields>
+                    <div class=style::item_field>
+                        <dt>{tr(TextKey::FirstAired)}</dt>
+                        <dd>{first_aired}</dd>
+                    </div>
+                    <div class=style::item_field>
+                        <dt>{tr(TextKey::SeasonEpisode)}</dt>
+                        <dd>
+                            {move || if presentation.get() == AddonMediaListPresentationKind::TelevisionShow {
+                                let preview_current_episode_number = current_episode_number.clone();
+                                view! {
+                                    <div class=style::episode_quick_edit>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="1"
+                                            inputmode="numeric"
+                                            aria-label=tr(TextKey::Season)
+                                            placeholder="S"
+                                            prop:value=move || season_input.get()
+                                            on:input=move |event| season_input.set(event_target_value(&event))
+                                        />
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            step="1"
+                                            inputmode="numeric"
+                                            aria-label=tr(TextKey::Episode)
+                                            placeholder="E"
+                                            prop:value=move || episode_input.get()
+                                            on:input=move |event| episode_input.set(event_target_value(&event))
+                                        />
+                                        <button
+                                            type="button"
+                                            class=style::episode_apply
+                                            aria-label=tr(TextKey::SaveSeasonEpisode)
+                                            title=tr(TextKey::SaveSeasonEpisode)
+                                            disabled=move || {
+                                                review_edit_action.pending().get()
+                                                    || role_action.pending().get()
+                                                    || !matches!(season_input.get().trim().parse::<i32>(), Ok(value) if value >= 0)
+                                                    || !matches!(episode_input.get().trim().parse::<i32>(), Ok(value) if value >= 1)
+                                            }
+                                            on:click=move |_| {
+                                                let season = season_input.get_untracked().trim().parse::<i32>();
+                                                let episode = episode_input.get_untracked().trim().parse::<i32>();
+                                                if let (Ok(season), Ok(episode)) = (season, episode) {
+                                                    let mut desired = review_state;
+                                                    desired.season = Some(season);
+                                                    desired.episode = Some(episode);
+                                                    dispatch_review_edit(
+                                                        review_edit_action,
+                                                        row_save_states,
+                                                        list_id,
+                                                        review_state,
+                                                        desired,
+                                                        TextKey::SeasonEpisode,
+                                                    );
+                                                }
+                                            }
+                                        >"✓"</button>
+                                    </div>
+                                    <small class=style::episode_preview>
+                                        {move || episode_preview.with(|preview| {
+                                            preview.get(&item_id).map_or_else(String::new, |(season, episode)| {
+                                                let next = format!("S{season:02}E{episode:02}");
+                                                if preview_current_episode_number.is_empty() || preview_current_episode_number == next {
+                                                    next
+                                                } else {
+                                                    format!("{preview_current_episode_number} → {next}")
+                                                }
+                                            })
+                                        })}
+                                    </small>
+                                    <button
+                                        type="button"
+                                        class=style::start_here
+                                        style:display=move || if episode_numbering_open.get() { "inline-flex" } else { "none" }
+                                        aria-pressed=move || if episode_numbering_start_item_id.get() == Some(item_id) { "true" } else { "false" }
+                                        on:click=move |_| episode_numbering_start_item_id.set(Some(item_id))
+                                    >{tr(TextKey::StartHere)}</button>
+                                }.into_any()
+                            } else {
+                                let display_episode_number = current_episode_number.clone();
+                                view! { <span>{if display_episode_number.is_empty() { "—".to_owned() } else { display_episode_number }}</span> }.into_any()
+                            }}
+                        </dd>
+                    </div>
+                    <div class=style::item_field>
+                        <dt>{tr(TextKey::MediaKind)}</dt>
+                        <dd>
+                            {move || if presentation.get() == AddonMediaListPresentationKind::Movies {
+                                view! {
+                                    <select
+                                        class=style::row_select
+                                        aria-label=tr(TextKey::PrimaryFeature)
+                                        disabled=move || role_action.pending().get() || review_edit_action.pending().get()
+                                        prop:value=match collection_role {
+                                            AddonMediaListItemRole::Auto => "auto",
+                                            AddonMediaListItemRole::Primary => "primary",
+                                            AddonMediaListItemRole::Extra => "extra",
+                                        }
+                                        on:change=move |event| {
+                                            if role_action.pending().get_untracked() || review_edit_action.pending().get_untracked() {
+                                                return;
+                                            }
+                                            let role = match event_target_value(&event).as_str() {
+                                                "primary" => AddonMediaListItemRole::Primary,
+                                                "extra" => AddonMediaListItemRole::Extra,
+                                                _ => AddonMediaListItemRole::Auto,
+                                            };
+                                            row_save_states.update(|states| {
+                                                states.insert(item_id, RowSaveState::Saving);
+                                            });
+                                            role_action.dispatch((list_id, item_id, role));
+                                        }
+                                    >
+                                        <option value="auto">{tr(TextKey::ReviewRecommended)}</option>
+                                        <option value="primary">{tr(TextKey::PrimaryFeature)}</option>
+                                        <option value="extra">{tr(TextKey::MovieExtra)}</option>
+                                    </select>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <select
+                                        class=style::row_select
+                                        aria-label=tr(TextKey::MediaKind)
+                                        disabled=move || review_edit_action.pending().get() || role_action.pending().get()
+                                        prop:value=content_kind_value(content_kind)
+                                        on:change=move |event| {
+                                            let mut desired = review_state;
+                                            desired.content_kind = content_kind_from_value(&event_target_value(&event));
+                                            dispatch_review_edit(
+                                                review_edit_action,
+                                                row_save_states,
+                                                list_id,
+                                                review_state,
+                                                desired,
+                                                TextKey::MediaKind,
+                                            );
+                                        }
+                                    >
+                                        <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
+                                        <option value="television_episode">{tr(TextKey::TelevisionEpisode)}</option>
+                                        <option value="movie">{tr(TextKey::Movie)}</option>
+                                        <option value="music_video">{tr(TextKey::MusicVideo)}</option>
+                                        <option value="other_video">{tr(TextKey::OtherVideo)}</option>
+                                        <option value="song">{tr(TextKey::Song)}</option>
+                                        <option value="image">{tr(TextKey::Image)}</option>
+                                    </select>
+                                }.into_any()
+                            }}
+                        </dd>
+                    </div>
+                    <div class=style::item_field>
+                        <dt>{tr(TextKey::PlaybackBehavior)}</dt>
+                        <dd>
+                            <select
+                                class=style::row_select
+                                aria-label=tr(TextKey::PlaybackBehavior)
+                                disabled=move || review_edit_action.pending().get() || role_action.pending().get()
+                                style:display=if is_remote_stream { "block" } else { "none" }
+                                prop:value=liveness_override_value(liveness_override)
+                                on:change=move |event| {
+                                    let mut desired = review_state;
+                                    desired.liveness_override = liveness_override_from_value(&event_target_value(&event));
+                                    dispatch_review_edit(
+                                        review_edit_action,
+                                        row_save_states,
+                                        list_id,
+                                        review_state,
+                                        desired,
+                                        TextKey::PlaybackBehavior,
+                                    );
+                                }
+                            >
+                                <option value="provider">
+                                    {format!("{} · {}", tr(TextKey::UseProviderValue), tr(liveness_text_key(provider_liveness)))}
+                                </option>
+                                <option value="finite">{tr(TextKey::FiniteMedia)}</option>
+                                <option value="live">{tr(TextKey::LiveSource)}</option>
+                            </select>
+                            <small class=style::liveness_conflict style:display=if is_remote_stream && liveness_conflict { "block" } else { "none" }>{tr(TextKey::ProviderValueChanged)}</small>
+                            <span style:display=if is_remote_stream { "none" } else { "inline" }>"—"</span>
+                        </dd>
+                    </div>
+                    <div class=style::item_field data-replacement-state=replacement_state title=item.replacement_path.unwrap_or_default()>
+                        <dt>{tr(TextKey::Status)}</dt>
+                        <dd>
+                            <span class=move || if base_needs_review
+                                || (presentation.get() == AddonMediaListPresentationKind::Movies
+                                    && collection_role == AddonMediaListItemRole::Auto)
+                            {
+                                style::review_status
+                            } else {
+                                style::ready_status
+                            }>
+                                <span style=move || icon_style(
+                                    if base_needs_review
+                                        || (presentation.get() == AddonMediaListPresentationKind::Movies
+                                            && collection_role == AddonMediaListItemRole::Auto)
+                                    {
+                                        IconName::Warning
+                                    } else {
+                                        IconName::Check
+                                    },
+                                    "0.95rem",
+                                ) aria-hidden="true"></span>
+                                {move || if base_needs_review
+                                    || (presentation.get() == AddonMediaListPresentationKind::Movies
+                                        && collection_role == AddonMediaListItemRole::Auto)
+                                {
+                                    tr(TextKey::ReviewRecommended)
+                                } else {
+                                    tr(TextKey::Available)
+                                }}
+                            </span>
+                            <small class=style::row_note>{replacement}</small>
+                        </dd>
+                    </div>
+                </dl>
+
+                <footer class=style::item_actions>
                     <button
                         type="button"
                         class=style::detail_action
@@ -842,11 +916,11 @@ fn item_row_view(
                             }
                         }
                         aria-label=detail_action_label
-                        aria-busy=if detail_pending { "true" } else { "false" }
+                        aria-busy=move || if detail_pending || (request_detail_action.pending().get() && detail_request_item.get() == Some(item_id)) { "true" } else { "false" }
                         style:display=if item.parent_provider_id.is_none() { "inline-flex" } else { "none" }
                         disabled=move || !can_request_details || request_detail_action.pending().get()
-                        on:click=move |event| {
-                            event.stop_propagation();
+                        on:click=move |_| {
+                            detail_request_item.set(Some(item_id));
                             request_detail_action.dispatch((list_id, item_id));
                         }
                     >
@@ -872,8 +946,7 @@ fn item_row_view(
                         class=style::icon_button
                         title=tr(TextKey::Replace)
                         aria-label=tr(TextKey::Replace)
-                        on:click=move |event| {
-                            event.stop_propagation();
+                        on:click=move |_| {
                             replacement_target.set(Some(item_id));
                             replacement_query.set(search_title.clone());
                             search_action.dispatch(search_title.clone());
@@ -881,39 +954,39 @@ fn item_row_view(
                     >
                         <span style=icon_style(IconName::FindReplace, "1.25rem") aria-hidden="true"></span>
                     </button>
-                    <button
-                        type="button"
+                    <a
                         class=style::icon_button
-                        title=tr(TextKey::EditMetadata)
-                        aria-label=tr(TextKey::EditMetadata)
+                        href=review_href
+                        title=tr(TextKey::ReviewItem)
+                        aria-label=tr(TextKey::ReviewItem)
+                        aria-expanded=move || if open_item.get() == Some(item_id) { "true" } else { "false" }
+                        aria-controls=detail_region_id.clone()
                         on:click=move |event| {
-                            event.stop_propagation();
+                            event.prevent_default();
                             toggle_editor();
                         }
                     >
                         <span style=icon_style(IconName::Edit, "1.2rem") aria-hidden="true"></span>
-                    </button>
+                        <span>{tr(TextKey::ReviewItem)}</span>
+                    </a>
                     <button
                         type="button"
                         class=style::icon_button
                         title=tr(TextKey::Clear)
                         aria-label=tr(TextKey::Clear)
                         disabled=!has_replacement
-                        on:click=move |event| {
-                            event.stop_propagation();
+                        on:click=move |_| {
                             replacement_action.dispatch((item_id, None));
                         }
                     >
                         <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
                     </button>
-                </div>
-            </td>
-        </tr>
-        <tr
-            class=style::metadata_accordion_row
-            style:display=move || if open_item.get() == Some(item_id) { "table-row" } else { "none" }
-        >
-            <td colspan="10">
+                </footer>
+                <div
+                    id=detail_region_id
+                    class=style::metadata_accordion
+                    style:display=move || if open_item.get() == Some(item_id) { "block" } else { "none" }
+                >
                 {move || loaded_detail.get().map_or_else(
                     || view! { <p class=style::inline_loading>{tr(TextKey::Loading)}</p> }.into_any(),
                     |detail| view! {
@@ -926,9 +999,9 @@ fn item_row_view(
                         />
                     }.into_any(),
                 )}
-            </td>
-        </tr>
-        </>
+                </div>
+            </article>
+        </li>
     }
     .into_any()
 }
@@ -1364,21 +1437,33 @@ fn AddonMediaListsIsland(
 
     view! {
         <div class=style::page>
-            <div class=style::action_bar>
-                <a class=style::btn_add href="/media/addon-lists/add">
-                    <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::AddAddonMediaList)}</span>
-                </a>
-            </div>
             <section class=style::content>
-                <h1 class=style::page_title>{tr(TextKey::AddonMediaLists)}</h1>
+                <header class=style::list_heading>
+                    <h1 class=style::page_title>{tr(TextKey::AddonMediaLists)}</h1>
+                    <a
+                        class=style::btn_add
+                        href="/media/addon-lists/add"
+                        style:display=move || if current_data.with(|(rows, _)| rows.is_empty()) { "none" } else { "inline-flex" }
+                    >
+                        <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                        <span>{tr(TextKey::AddAddonMediaList)}</span>
+                    </a>
+                </header>
                 <div class=style::divider/>
                 <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
                     {initial_error_message}
                 </p>
+                <div class=style::empty_state style:display=move || if current_data.with(|(rows, _)| rows.is_empty()) { "grid" } else { "none" }>
+                    <p>{tr(TextKey::NoAddonMediaListsYet)}</p>
+                    <a class=style::btn_add href="/media/addon-lists/add">
+                        <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
+                        <span>{tr(TextKey::AddAddonMediaList)}</span>
+                    </a>
+                </div>
 
                 {move || {
                     let (rows, total) = current_data.get();
+                    let has_rows = !rows.is_empty();
                     let size = page_size.get().max(1);
                     let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
                         .unwrap_or(u32::MAX)
@@ -1392,7 +1477,7 @@ fn AddonMediaListsIsland(
                     let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
 
                     view! {
-                                <div class=style::table_wrap>
+                                <div class=style::table_wrap style:display=if has_rows { "block" } else { "none" }>
                                     <table>
                                         <colgroup>
                                             <col/>
@@ -1409,14 +1494,7 @@ fn AddonMediaListsIsland(
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {if rows.is_empty() {
-                                                view! {
-                                                    <tr>
-                                                        <td class=style::empty_cell colspan="4">{tr(TextKey::NoAddonMediaListsYet)}</td>
-                                                    </tr>
-                                                }.into_any()
-                                            } else {
-                                                rows.into_iter().map(|row| {
+                                            {rows.into_iter().map(|row| {
                                                     let id = row.id;
                                                     let provider_id = row.provider_id.clone();
                                                     let addon_id = row.addon_id.clone();
@@ -1505,12 +1583,11 @@ fn AddonMediaListsIsland(
                                                             </td>
                                                         </tr>
                                                     }
-                                                }).collect_view().into_any()
-                                            }}
+                                                }).collect_view()}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div class=style::pager>
+                                <div class=style::pager style:display=if total == 0 { "none" } else { "flex" }>
                                     <span>{format!("{}:", tr(TextKey::RowsPerPage))}</span>
                                     <select
                                         class=style::page_size
@@ -1838,20 +1915,46 @@ const fn presentation_text_key(presentation: AddonMediaListPresentationKind) -> 
 /// step.
 #[component]
 pub fn AddAddonMediaListPage() -> impl IntoView {
-    let providers = Resource::new_blocking(|| (), |()| list_addon_media_list_providers());
-    view! {
-        <Suspense fallback=admin_loading_resource_view>
-            {move || providers.get().map(|result| admin_result_view(result, |providers| view! {
-                <AddAddonMediaListPageIsland providers=providers/>
-            }.into_any()))}
-        </Suspense>
-    }
+    let query = use_query_map();
+    let initial_addon_id =
+        query.with_untracked(|params| params.get("addon_id").unwrap_or_default());
+    admin_result_view(
+        load_addon_media_list_providers_initial(),
+        move |providers| {
+            view! {
+                <AddAddonMediaListPageIsland providers=providers initial_addon_id=initial_addon_id/>
+            }
+            .into_any()
+        },
+    )
+}
+
+#[cfg(feature = "ssr")]
+fn load_addon_media_list_providers_initial() -> Result<Vec<AddonMediaListProviderRow>, String> {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current()
+            .block_on(list_addon_media_list_providers())
+            .map_err(|error| error.to_string())
+    })
+}
+
+#[cfg(not(feature = "ssr"))]
+fn load_addon_media_list_providers_initial() -> Result<Vec<AddonMediaListProviderRow>, String> {
+    Err("add-on list providers are loaded by server-side rendering".to_owned())
 }
 
 #[island]
-fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> impl IntoView {
-    let addon_id = RwSignal::new(String::new());
-    let addon_chosen = RwSignal::new(false);
+fn AddAddonMediaListPageIsland(
+    providers: Vec<AddonMediaListProviderRow>,
+    initial_addon_id: String,
+) -> impl IntoView {
+    let context_addon_name = providers
+        .iter()
+        .find(|provider| provider.addon_id == initial_addon_id)
+        .map(|provider| provider.name.clone());
+    let has_addon_context = context_addon_name.is_some();
+    let addon_id = RwSignal::new(initial_addon_id.clone());
+    let addon_chosen = RwSignal::new(!initial_addon_id.is_empty());
     let source_url = RwSignal::new(String::new());
     let folder_name = RwSignal::new(String::new());
     let presentation = RwSignal::new(AddonMediaListPresentationKind::TelevisionShow);
@@ -1956,7 +2059,11 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                     </ol>
                 </header>
 
-                <form class=style::source_card on:submit=move |event| {
+                <form
+                    class=style::source_card
+                    method="post"
+                    action="/api/addon-lists/add"
+                    on:submit=move |event| {
                     event.prevent_default();
                     if source_url.with(|value| !value.trim().is_empty()) {
                         import_action.dispatch((
@@ -1969,13 +2076,19 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                             load_item_details.get_untracked(),
                         ));
                     }
-                }>
+                    }
+                >
+                    <p class=style::context_notice style:display=if has_addon_context { "flex" } else { "none" } role="status">
+                        <span style=icon_style(IconName::Check, "1rem") aria-hidden="true"></span>
+                        <span>{format!("{}: {}", tr(TextKey::AddonContextSelected), context_addon_name.unwrap_or_default())}</span>
+                    </p>
                     <label class=style::source_url_field>
                         <span class=style::field_label>{tr(TextKey::AddonMediaListUrl)}</span>
                         <input
                             class=style::boxed_input
                             type="url"
                             name="source_url"
+                            required
                             placeholder="https://example.invalid/list"
                             prop:value=move || source_url.get()
                             on:input=move |event| source_url.set(event_target_value(&event))
@@ -2012,8 +2125,11 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                             addon_id.set(value);
                         }>
                             <option value="">{tr(TextKey::AddonAutoDetect)}</option>
-                            {providers.into_iter().map(|provider| view! {
-                                <option value=provider.addon_id>{provider.name}</option>
+                            {providers.into_iter().map(|provider| {
+                                let selected = provider.addon_id == initial_addon_id;
+                                view! {
+                                    <option value=provider.addon_id selected=selected>{provider.name}</option>
+                                }
                             }).collect_view()}
                         </select>
                     </label>
@@ -2047,7 +2163,7 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                                 <span>{tr(TextKey::AutomaticRefresh)}</span>
                             </span>
                             <label class=style::compact_toggle>
-                                <input type="checkbox" prop:checked=move || auto_refresh.get() on:change=move |event| auto_refresh.set(event_target_checked(&event))/>
+                                <input type="checkbox" name="auto_refresh" value="true" prop:checked=move || auto_refresh.get() on:change=move |event| auto_refresh.set(event_target_checked(&event))/>
                                 <span>{tr(TextKey::UpdateAddonMediaListDaily)}</span>
                             </label>
                         </div>
@@ -2058,11 +2174,11 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                             <span style=icon_style(IconName::Folder, "1.05rem") aria-hidden="true"></span>
                             <span>{tr(TextKey::AddonMediaListFolder)}</span>
                         </span>
-                        <input class=style::boxed_input type="text" prop:value=move || folder_name.get() on:input=move |event| folder_name.set(event_target_value(&event)) placeholder=tr(TextKey::AddonMediaListFolderHelp)/>
+                        <input class=style::boxed_input type="text" name="folder_name" prop:value=move || folder_name.get() on:input=move |event| folder_name.set(event_target_value(&event)) placeholder=tr(TextKey::AddonMediaListFolderHelp)/>
                     </label>
 
                     <label class=style::playlist_option>
-                        <input type="checkbox" prop:checked=move || generate_playlist.get() on:change=move |event| generate_playlist.set(event_target_checked(&event))/>
+                        <input type="checkbox" name="generate_playlist" value="true" prop:checked=move || generate_playlist.get() on:change=move |event| generate_playlist.set(event_target_checked(&event))/>
                         <span>
                             <b>{tr(TextKey::GeneratePlaylist)}</b>
                             <small>{tr(TextKey::GeneratePlaylistFromSortedAddonMediaListItems)}</small>
@@ -2070,7 +2186,7 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
                     </label>
 
                     <label class=style::playlist_option>
-                        <input type="checkbox" prop:checked=move || load_item_details.get() on:change=move |event| load_item_details.set(event_target_checked(&event))/>
+                        <input type="checkbox" name="load_item_details" value="true" prop:checked=move || load_item_details.get() on:change=move |event| load_item_details.set(event_target_checked(&event))/>
                         <span>
                             <b>{tr(TextKey::LoadItemDetailsAfterPublishing)}</b>
                             <small>{move || tr(if load_item_details.get() {
@@ -2083,9 +2199,9 @@ fn AddAddonMediaListPageIsland(providers: Vec<AddonMediaListProviderRow>) -> imp
 
                     <footer class=style::import_footer>
                         <p>{tr(TextKey::MetadataDraftNotice)}</p>
-                        <button class=style::btn_add type="submit" disabled=move || source_url.with(|value| value.trim().is_empty()) || import_action.pending().get()>
+                        <button class=style::btn_add type="submit" disabled=move || import_action.pending().get()>
                             <span style=icon_style(IconName::Download, "1.1rem") aria-hidden="true"></span>
-                            <span>{tr(TextKey::Import)}</span>
+                            <span>{tr(TextKey::ImportOverview)}</span>
                         </button>
                     </footer>
                 </form>
@@ -2104,42 +2220,68 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
             .unwrap_or(0)
     });
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
-    let initial = Resource::new_blocking(
-        move || id,
-        |id| async move {
-            let form = get_addon_media_list_form(id).await?;
-            let items = list_addon_media_list_items(id).await?;
-            let show_nfo = get_addon_media_list_show_nfo(id).await?;
-            let providers = list_addon_media_list_providers().await?;
-            Ok::<_, ServerFnError>((form, items, show_nfo, providers))
+    let status = query.with_untracked(|params| params.get("status").unwrap_or_default());
+    admin_result_view(
+        load_addon_media_list_editor_initial(id),
+        move |(initial_form, initial_items, initial_readiness, initial_show_nfo, providers)| {
+            view! {
+                <AddonMediaListEditorIsland
+                    id=id
+                    initial_error=error
+                    initial_status=status
+                    initial_form=initial_form
+                    initial_items=initial_items
+                    initial_readiness=initial_readiness
+                    initial_show_nfo=initial_show_nfo
+                    providers=providers
+                />
+            }
+            .into_any()
         },
-    );
+    )
+}
 
-    view! {
-        <Suspense fallback=admin_loading_resource_view>
-            {move || {
-                let error = error.clone();
-                initial.get().map(move |result| admin_result_view(result, |(initial_form, initial_items, initial_show_nfo, providers)| {
-                    view! {
-                        <AddonMediaListEditorIsland
-                            id=id
-                            initial_error=error.clone()
-                            initial_form=initial_form
-                            initial_items=initial_items
-                            initial_show_nfo=initial_show_nfo
-                            providers=providers
-                        />
-                    }
-                    .into_any()
-                }))
-            }}
-        </Suspense>
-    }
+type AddonMediaListEditorInitial = (
+    Option<AddonMediaListForm>,
+    Vec<AddonMediaListItemRow>,
+    AddonMediaListPublicationReadiness,
+    AddonMediaListNfoForm,
+    Vec<AddonMediaListProviderRow>,
+);
+
+#[cfg(feature = "ssr")]
+fn load_addon_media_list_editor_initial(id: i64) -> Result<AddonMediaListEditorInitial, String> {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async move {
+            let form = get_addon_media_list_form(id)
+                .await
+                .map_err(|error| error.to_string())?;
+            let items = list_addon_media_list_items(id)
+                .await
+                .map_err(|error| error.to_string())?;
+            let readiness = get_addon_media_list_publication_readiness(id)
+                .await
+                .map_err(|error| error.to_string())?;
+            let show_nfo = get_addon_media_list_show_nfo(id)
+                .await
+                .map_err(|error| error.to_string())?;
+            let providers = list_addon_media_list_providers()
+                .await
+                .map_err(|error| error.to_string())?;
+            Ok((form, items, readiness, show_nfo, providers))
+        })
+    })
+}
+
+#[cfg(not(feature = "ssr"))]
+fn load_addon_media_list_editor_initial(_id: i64) -> Result<AddonMediaListEditorInitial, String> {
+    Err("the add-on list editor is loaded by server-side rendering".to_owned())
 }
 
 #[component]
 pub fn AddonMediaListItemPage() -> impl IntoView {
     let params = use_params_map();
+    let query = use_query_map();
     let list_id = params.with(|params| {
         params
             .get("id")
@@ -2152,24 +2294,59 @@ pub fn AddonMediaListItemPage() -> impl IntoView {
             .and_then(|value| value.parse::<i64>().ok())
             .unwrap_or_default()
     });
-    let initial = Resource::new_blocking(
-        move || (list_id, item_id),
-        |(list_id, item_id)| get_addon_media_list_item(list_id, item_id),
-    );
-    view! {
-        <Suspense fallback=admin_loading_resource_view>
-            {move || initial.get().map(|result| admin_result_view(result, move |detail| {
-                detail.map_or_else(
-                    || view! { <p class=style::empty>{tr(TextKey::AddonMediaListNotFound)}</p> }.into_any(),
-                    |detail| view! { <AddonMediaListItemIsland list_id=list_id detail=detail/> }.into_any(),
-                )
-            }))}
-        </Suspense>
-    }
+    let status = query.with_untracked(|params| params.get("status").unwrap_or_default());
+    let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
+    admin_result_view(
+        load_addon_media_list_item_initial(list_id, item_id),
+        move |detail| {
+            detail.map_or_else(
+                || {
+                    view! { <p class=style::empty>{tr(TextKey::AddonMediaListNotFound)}</p> }
+                        .into_any()
+                },
+                |detail| {
+                    view! {
+                        <AddonMediaListItemIsland
+                            list_id=list_id
+                            detail=detail
+                            initial_status=status
+                            initial_error=error
+                        />
+                    }
+                    .into_any()
+                },
+            )
+        },
+    )
+}
+
+#[cfg(feature = "ssr")]
+fn load_addon_media_list_item_initial(
+    list_id: i64,
+    item_id: i64,
+) -> Result<Option<AddonMediaListItemDetail>, String> {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current()
+            .block_on(get_addon_media_list_item(list_id, item_id))
+            .map_err(|error| error.to_string())
+    })
+}
+
+#[cfg(not(feature = "ssr"))]
+fn load_addon_media_list_item_initial(
+    _list_id: i64,
+    _item_id: i64,
+) -> Result<Option<AddonMediaListItemDetail>, String> {
+    Err("the add-on list item editor is loaded by server-side rendering".to_owned())
 }
 
 #[island]
-fn AddonMediaListItemIsland(list_id: i64, detail: AddonMediaListItemDetail) -> impl IntoView {
+fn AddonMediaListItemIsland(
+    list_id: i64,
+    detail: AddonMediaListItemDetail,
+    initial_status: String,
+    initial_error: String,
+) -> impl IntoView {
     let item_id = detail.item.id;
     let original = detail.nfo.metadata.clone();
     let etag = detail.nfo.etag.clone();
@@ -2243,11 +2420,13 @@ fn AddonMediaListItemIsland(list_id: i64, detail: AddonMediaListItemDetail) -> i
         metadata.tags = line_values(&tags.get_untracked());
         metadata
     };
+    let native_etag = etag.clone();
     view! {
         <div class=style::page>
             <div class=style::action_bar>
                 <a class=style::icon_button href=format!("/media/addon-lists/{list_id}")>{tr(TextKey::Back)}</a>
-                <button type="button" class=style::btn_add on:click=move |_| {
+                <button form="addon-list-item-review-form" type="submit" class=style::btn_add on:click=move |event| {
+                    event.prevent_default();
                     let chapter_input = if chapters_dirty.get_untracked() {
                         chapters.get_untracked()
                     } else {
@@ -2257,18 +2436,28 @@ fn AddonMediaListItemIsland(list_id: i64, detail: AddonMediaListItemDetail) -> i
                     save_action.dispatch((build_metadata(), etag.clone(), chapter_input));
                 }>{tr(TextKey::Save)}</button>
             </div>
-            <section class=style::editor>
+            <form
+                id="addon-list-item-review-form"
+                class=style::editor
+                method="post"
+                action="/api/addon-lists/items/review"
+            >
                 <h1 class=style::page_title>{detail.item.display_title}</h1>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Title)}</span><input class=style::text_input prop:value=move || title.get() on:input=move |event| title.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Summary)}</span><textarea class=style::text_input rows="8" prop:value=move || plot.get() on:input=move |event| plot.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Season)}</span><input class=style::text_input inputmode="numeric" prop:value=move || season.get() on:input=move |event| season.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Episode)}</span><input class=style::text_input inputmode="numeric" prop:value=move || episode.get() on:input=move |event| episode.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Genres)}</span><input class=style::text_input prop:value=move || genres.get() on:input=move |event| genres.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Tags)}</span><textarea class=style::tag_input rows="4" spellcheck="false" prop:value=move || tags.get() on:input=move |event| tags.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::ChapterInput)}</span><textarea class=style::text_input rows="8" prop:value=move || chapters.get() on:input=move |event| {
+                <p class=style::draft_note role="status" style:display=if initial_status == "saved" { "flex" } else { "none" }>{tr(TextKey::Saved)}</p>
+                <p class=style::review_error role="alert" style:display=if initial_error.is_empty() { "none" } else { "flex" }>{tr(TextKey::AddonMediaListSaveFailed)}</p>
+                <input type="hidden" name="list_id" value=list_id.to_string()/>
+                <input type="hidden" name="item_id" value=item_id.to_string()/>
+                <input type="hidden" name="etag" value=native_etag/>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Title)}</span><input class=style::text_input name="title" value=title.get_untracked() prop:value=move || title.get() on:input=move |event| title.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Summary)}</span><textarea class=style::text_input name="plot" rows="8" prop:value=move || plot.get() on:input=move |event| plot.set(event_target_value(&event))>{plot.get_untracked()}</textarea></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Season)}</span><input class=style::text_input name="season" inputmode="numeric" value=season.get_untracked() prop:value=move || season.get() on:input=move |event| season.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Episode)}</span><input class=style::text_input name="episode" inputmode="numeric" value=episode.get_untracked() prop:value=move || episode.get() on:input=move |event| episode.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Genres)}</span><input class=style::text_input name="genres" value=genres.get_untracked() prop:value=move || genres.get() on:input=move |event| genres.set(event_target_value(&event))/></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Tags)}</span><textarea class=style::tag_input name="tags" rows="4" spellcheck="false" prop:value=move || tags.get() on:input=move |event| tags.set(event_target_value(&event))>{tags.get_untracked()}</textarea></label>
+                <label class=style::field_row><span class=style::field_label>{tr(TextKey::ChapterInput)}</span><textarea class=style::text_input name="chapter_input" rows="8" prop:value=move || chapters.get() on:input=move |event| {
                     chapters.set(event_target_value(&event));
                     chapters_dirty.set(true);
-                }/></label>
+                }>{chapters.get_untracked()}</textarea></label>
                 {(!provider_chapters.is_empty()).then(|| view! {
                     <button type="button" class=style::btn_cancel on:click=move |_| {
                         chapters.set(provider_chapters.clone());
@@ -2277,7 +2466,7 @@ fn AddonMediaListItemIsland(list_id: i64, detail: AddonMediaListItemDetail) -> i
                         restore_action.dispatch(());
                     }>{tr(TextKey::RestoreProviderChapters)}</button>
                 })}
-            </section>
+            </form>
         </div>
     }
 }
@@ -2558,16 +2747,133 @@ const fn item_section_help(presentation: AddonMediaListPresentationKind) -> Text
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PublicationPrimaryAction {
+    None,
+    Save,
+    Prepare,
+    Publish,
+    Publishing,
+}
+
+fn publication_primary_action(
+    settings_dirty: bool,
+    readiness: &AddonMediaListPublicationReadiness,
+) -> PublicationPrimaryAction {
+    if settings_dirty {
+        PublicationPrimaryAction::Save
+    } else if readiness.review_state == AddonMediaListReviewState::Publishing {
+        PublicationPrimaryAction::Publishing
+    } else if !readiness.blockers.is_empty() {
+        PublicationPrimaryAction::None
+    } else if readiness.required_playback_detail_count > 0 {
+        if readiness.required_playback_detail_pending > 0 {
+            PublicationPrimaryAction::None
+        } else {
+            PublicationPrimaryAction::Prepare
+        }
+    } else if readiness.review_state == AddonMediaListReviewState::Published {
+        PublicationPrimaryAction::None
+    } else {
+        PublicationPrimaryAction::Publish
+    }
+}
+
+const fn publication_blocker_text_key(kind: AddonMediaListPublicationBlockerKind) -> TextKey {
+    match kind {
+        AddonMediaListPublicationBlockerKind::OverviewIncomplete => {
+            TextKey::BlockerOverviewIncomplete
+        }
+        AddonMediaListPublicationBlockerKind::PublicationInProgress => {
+            TextKey::BlockerPublicationInProgress
+        }
+        AddonMediaListPublicationBlockerKind::RecoveryRequired => TextKey::BlockerRecoveryRequired,
+        AddonMediaListPublicationBlockerKind::CollectionTitleMissing => {
+            TextKey::BlockerCollectionTitleMissing
+        }
+        AddonMediaListPublicationBlockerKind::InvalidArtwork => TextKey::BlockerInvalidArtwork,
+        AddonMediaListPublicationBlockerKind::NoIncludedItems => TextKey::BlockerNoIncludedItems,
+        AddonMediaListPublicationBlockerKind::MoviePrimaryCount => {
+            TextKey::BlockerMoviePrimaryCount
+        }
+        AddonMediaListPublicationBlockerKind::PlaybackDecisionRequired => {
+            TextKey::BlockerPlaybackDecisionRequired
+        }
+        AddonMediaListPublicationBlockerKind::PlaybackDetailsUnavailable => {
+            TextKey::BlockerPlaybackDetailsUnavailable
+        }
+        AddonMediaListPublicationBlockerKind::PlaybackDetailsFailed => {
+            TextKey::BlockerPlaybackDetailsFailed
+        }
+        AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement => {
+            TextKey::BlockerUnavailableWithoutReplacement
+        }
+        AddonMediaListPublicationBlockerKind::ItemTitleMissing => TextKey::BlockerItemTitleMissing,
+        AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing => {
+            TextKey::BlockerSeasonEpisodeMissing
+        }
+        AddonMediaListPublicationBlockerKind::ArtistMissing => TextKey::BlockerArtistMissing,
+    }
+}
+
+fn publication_blocker_label(blocker: &AddonMediaListPublicationBlocker) -> String {
+    let message = tr(publication_blocker_text_key(blocker.kind));
+    blocker
+        .item_title
+        .as_ref()
+        .map_or_else(|| message.to_owned(), |title| format!("{title}: {message}"))
+}
+
+const fn publication_blocker_href(kind: AddonMediaListPublicationBlockerKind) -> &'static str {
+    match kind {
+        AddonMediaListPublicationBlockerKind::CollectionTitleMissing
+        | AddonMediaListPublicationBlockerKind::InvalidArtwork => "#addon-list-general-metadata",
+        AddonMediaListPublicationBlockerKind::OverviewIncomplete
+        | AddonMediaListPublicationBlockerKind::PublicationInProgress
+        | AddonMediaListPublicationBlockerKind::RecoveryRequired => "#addon-list-import-progress",
+        AddonMediaListPublicationBlockerKind::NoIncludedItems
+        | AddonMediaListPublicationBlockerKind::MoviePrimaryCount
+        | AddonMediaListPublicationBlockerKind::PlaybackDecisionRequired
+        | AddonMediaListPublicationBlockerKind::PlaybackDetailsUnavailable
+        | AddonMediaListPublicationBlockerKind::PlaybackDetailsFailed
+        | AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement
+        | AddonMediaListPublicationBlockerKind::ItemTitleMissing
+        | AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing
+        | AddonMediaListPublicationBlockerKind::ArtistMissing => "#addon-list-items-heading",
+    }
+}
+
+const fn publication_blocker_targets_metadata(kind: AddonMediaListPublicationBlockerKind) -> bool {
+    matches!(
+        kind,
+        AddonMediaListPublicationBlockerKind::CollectionTitleMissing
+            | AddonMediaListPublicationBlockerKind::InvalidArtwork
+    )
+}
+
 #[island]
 fn AddonMediaListEditorIsland(
     id: i64,
     initial_error: String,
+    initial_status: String,
     initial_form: Option<AddonMediaListForm>,
     initial_items: Vec<AddonMediaListItemRow>,
+    initial_readiness: AddonMediaListPublicationReadiness,
     initial_show_nfo: AddonMediaListNfoForm,
     providers: Vec<AddonMediaListProviderRow>,
 ) -> impl IntoView {
-    let has_initial_error = !initial_error.is_empty();
+    let initial_error_key = match initial_error.as_str() {
+        "unsaved" => Some(TextKey::PublishUnsavedChanges),
+        "blocked" => Some(TextKey::PublicationBlocked),
+        "" => None,
+        _ => Some(TextKey::AddonMediaListSaveFailed),
+    };
+    let initial_status_key = match initial_status.as_str() {
+        "saved" => Some(TextKey::DraftSaved),
+        "published" => Some(TextKey::Published),
+        "preparing" => Some(TextKey::PreparingPublication),
+        _ => None,
+    };
     let form = initial_form.unwrap_or_default();
     let form_found = form.id != 0 || id == 0;
     let form_id = RwSignal::new(form.id);
@@ -2578,6 +2884,7 @@ fn AddonMediaListEditorIsland(
     let auto_refresh = RwSignal::new(form.auto_refresh);
     let generate_playlist = RwSignal::new(form.generate_playlist);
     let detail_import_policy = RwSignal::new(form.detail_import_policy);
+    let publication_readiness = RwSignal::new(initial_readiness);
     let import_progress = RwSignal::new(form.import_progress.clone());
     let published_revision = RwSignal::new(form.published_revision);
     let poll_epoch = RwSignal::new(0_u64);
@@ -2605,8 +2912,11 @@ fn AddonMediaListEditorIsland(
     let published_presentation_kind = form.presentation_kind;
     let has_published_projection = form.published_revision > 0;
     let general_metadata_open = RwSignal::new(false);
+    let general_metadata_panel_ref = NodeRef::<html::Div>::new();
+    let description_expanded = RwSignal::new(false);
     let is_draft = form.review_state != AddonMediaListReviewState::Published;
     let show_metadata = initial_show_nfo.metadata.clone();
+    let saved_show_metadata = show_metadata.clone();
     let show_metadata_conflicts = initial_show_nfo.conflicts.clone();
     let show_metadata_conflict_count = show_metadata_conflicts.len();
     let show_etag = RwSignal::new(initial_show_nfo.etag.clone());
@@ -2687,6 +2997,71 @@ fn AddonMediaListEditorIsland(
     let replacement_target = RwSignal::new(None::<i64>);
     let replacement_query = RwSignal::new(String::new());
     let replacement_results = RwSignal::new(Vec::<AddonMediaListReplacementRow>::new());
+    let saved_auto_refresh = form.auto_refresh;
+    let saved_generate_playlist = form.generate_playlist;
+    let saved_detail_import_policy = form.detail_import_policy;
+    let saved_content_kind_override = form.content_kind_override;
+    let saved_presentation_kind = form.requested_presentation_kind;
+    let settings_dirty = Memo::new(move |_| {
+        auto_refresh.get() != saved_auto_refresh
+            || generate_playlist.get() != saved_generate_playlist
+            || detail_import_policy.get() != saved_detail_import_policy
+            || content_kind_override.get() != saved_content_kind_override
+            || presentation_kind.get() != saved_presentation_kind
+            || show_title.get() != saved_show_metadata.title
+            || non_empty_value(&show_original_title.get()) != saved_show_metadata.original_title
+            || non_empty_value(&show_sort_title.get()) != saved_show_metadata.sort_title
+            || non_empty_value(&show_plot.get()) != saved_show_metadata.plot
+            || show_year.get().trim().parse::<i32>().ok() != saved_show_metadata.year
+            || comma_values(&show_genres.get()) != saved_show_metadata.genres
+            || line_values(&show_tags.get()) != saved_show_metadata.tags
+            || comma_values(&show_studios.get()) != saved_show_metadata.studios
+            || comma_values(&show_directors.get()) != saved_show_metadata.directors
+            || comma_values(&show_writers.get()) != saved_show_metadata.writers
+            || comma_values(&show_artists.get()) != saved_show_metadata.artists
+            || comma_values(&show_languages.get()) != saved_show_metadata.languages
+            || people_values(&show_people.get()) != saved_show_metadata.people
+            || artwork_values(
+                &saved_show_metadata.artwork,
+                [
+                    (&show_poster.get(), AddonMediaListArtworkRole::Poster),
+                    (&show_fanart.get(), AddonMediaListArtworkRole::Fanart),
+                    (&show_thumbnail.get(), AddonMediaListArtworkRole::Thumb),
+                ],
+            ) != saved_show_metadata.artwork
+    });
+    let primary_action = Memo::new(move |_| {
+        publication_readiness
+            .with(|readiness| publication_primary_action(settings_dirty.get(), readiness))
+    });
+    let import_step_active = Memo::new(move |_| {
+        import_progress.with(|progress| {
+            progress.as_ref().is_some_and(|progress| {
+                progress.state != AddonMediaListImportState::Ready && published_revision.get() == 0
+            })
+        })
+    });
+    let publish_step_active = Memo::new(move |_| {
+        publication_readiness.with(|readiness| {
+            readiness.review_state == AddonMediaListReviewState::Publishing
+                || readiness.required_playback_detail_pending > 0
+        })
+    });
+    let published_step_complete = Memo::new(move |_| {
+        publication_readiness
+            .with(|readiness| readiness.review_state == AddonMediaListReviewState::Published)
+    });
+
+    #[cfg(target_arch = "wasm32")]
+    Effect::new(move |_| {
+        if general_metadata_open.get() {
+            if let Some(panel) = general_metadata_panel_ref.get() {
+                leptos::leptos_dom::helpers::request_animation_frame(move || {
+                    let _ = panel.focus();
+                });
+            }
+        }
+    });
 
     let save_action = Action::new(
         |value: &(
@@ -2699,9 +3074,7 @@ fn AddonMediaListEditorIsland(
             async move {
                 let id = form.id;
                 update_addon_media_list(form).await?;
-                if !show_metadata.title.trim().is_empty() {
-                    save_addon_media_list_show_nfo(id, show_metadata, show_etag).await?;
-                }
+                save_addon_media_list_show_nfo(id, show_metadata, show_etag).await?;
                 request_addon_media_list_presentation(id, presentation_kind, None).await
             }
         },
@@ -2723,6 +3096,7 @@ fn AddonMediaListEditorIsland(
     // Keep one provider-ordered overview for every collection type. Availability
     // is a review status, not a separate navigation hierarchy.
     let items = RwSignal::new(initial_items);
+    let row_save_states = RwSignal::new(BTreeMap::<i64, RowSaveState>::new());
     let bulk_scope_value = RwSignal::new("all".to_owned());
     let bulk_content_kind_value = RwSignal::new("unchanged".to_owned());
     let bulk_liveness_value = RwSignal::new("unchanged".to_owned());
@@ -2922,6 +3296,8 @@ fn AddonMediaListEditorIsland(
         })
     });
     let reload_items_action = Action::new(|id: &i64| list_addon_media_list_items(*id));
+    let reload_readiness_action =
+        Action::new(|id: &i64| get_addon_media_list_publication_readiness(*id));
     let review_edit_action = Action::new(
         |value: &(i64, Vec<AddonMediaListItemReviewEdit>, ReviewUndoEntry)| {
             let (id, edits, undo) = value.clone();
@@ -2950,18 +3326,39 @@ fn AddonMediaListEditorIsland(
         let (list_id, item_id) = *value;
         async move { request_addon_media_list_item_details(list_id, item_id).await }
     });
+    let detail_request_item = RwSignal::new(None::<i64>);
     let control_import_action = Action::new(|value: &(i64, AddonMediaListImportAction)| {
         let (list_id, action) = *value;
         async move { control_addon_media_list_import(list_id, action).await }
     });
     let publish_action = Action::new(|id: &i64| publish_addon_media_list(*id));
+    let row_mutation_pending = Memo::new(move |_| {
+        review_edit_action.pending().get()
+            || undo_review_edit_action.pending().get()
+            || item_role_action.pending().get()
+            || replacement_action.pending().get()
+            || request_detail_action.pending().get()
+    });
     let reload_items = move || {
         reload_items_action.dispatch(id);
     };
     Effect::new(move |_| {
         if let Some(result) = reload_items_action.value().get() {
             match result {
-                Ok(next) => items.set(next),
+                Ok(next) => {
+                    items.set(next);
+                    reload_readiness_action.dispatch(id);
+                }
+                Err(error) => {
+                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
+                }
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = reload_readiness_action.value().get() {
+            match result {
+                Ok(next) => publication_readiness.set(next),
                 Err(error) => {
                     toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
                 }
@@ -2990,6 +3387,7 @@ fn AddonMediaListEditorIsland(
     });
     Effect::new(move |_| {
         if let Some(result) = request_detail_action.value().get() {
+            detail_request_item.set(None);
             match result {
                 Ok(()) => {
                     reload_items();
@@ -3030,6 +3428,7 @@ fn AddonMediaListEditorIsland(
             leptos::task::spawn_local(async move {
                 let mut previous_item_marker = import_progress.get_untracked().map(|progress| {
                     (
+                        progress.state,
                         progress.discovered_count,
                         progress.detail_complete,
                         progress.detail_skipped,
@@ -3054,6 +3453,7 @@ fn AddonMediaListEditorIsland(
                             error_delay_ms = 0;
                             let next_marker = next_form.import_progress.as_ref().map(|progress| {
                                 (
+                                    progress.state,
                                     progress.discovered_count,
                                     progress.detail_complete,
                                     progress.detail_skipped,
@@ -3121,11 +3521,30 @@ fn AddonMediaListEditorIsland(
     Effect::new(move |_| {
         if let Some(result) = item_role_action.value().get() {
             match result {
-                Ok(()) => reload_items(),
-                Err(error) => toast.push(
-                    save_failed(addon_media_list_error_message(error)),
-                    ToastSeverity::Error,
-                ),
+                Ok(()) => {
+                    row_save_states.update(|states| {
+                        for state in states.values_mut() {
+                            if *state == RowSaveState::Saving {
+                                *state = RowSaveState::Saved;
+                            }
+                        }
+                    });
+                    reload_items();
+                }
+                Err(error) => {
+                    row_save_states.update(|states| {
+                        for state in states.values_mut() {
+                            if *state == RowSaveState::Saving {
+                                *state = RowSaveState::Error;
+                            }
+                        }
+                    });
+                    reload_items();
+                    toast.push(
+                        save_failed(addon_media_list_error_message(error)),
+                        ToastSeverity::Error,
+                    );
+                }
             }
         }
     });
@@ -3133,14 +3552,31 @@ fn AddonMediaListEditorIsland(
         if let Some(result) = review_edit_action.value().get() {
             match result {
                 Ok(undo) => {
+                    row_save_states.update(|states| {
+                        for state in states.values_mut() {
+                            if *state == RowSaveState::Saving {
+                                *state = RowSaveState::Saved;
+                            }
+                        }
+                    });
                     last_review_undo.set(Some(undo));
                     toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
                     reload_items();
                 }
-                Err(error) => toast.push(
-                    save_failed(addon_media_list_error_message(error)),
-                    ToastSeverity::Error,
-                ),
+                Err(error) => {
+                    row_save_states.update(|states| {
+                        for state in states.values_mut() {
+                            if *state == RowSaveState::Saving {
+                                *state = RowSaveState::Error;
+                            }
+                        }
+                    });
+                    reload_items();
+                    toast.push(
+                        save_failed(addon_media_list_error_message(error)),
+                        ToastSeverity::Error,
+                    );
+                }
             }
         }
     });
@@ -3171,14 +3607,11 @@ fn AddonMediaListEditorIsland(
                 }
                 Ok(AddonMediaListPublishResult::PreparingPlaybackDetails { item_count }) => {
                     toast.push(
-                        format!(
-                            "{}: {item_count}. {}",
-                            tr(TextKey::PlaybackDetailsQueued),
-                            tr(TextKey::PublishAgainAfterDetails)
-                        ),
+                        format!("{}: {item_count}", tr(TextKey::PlaybackDetailsQueued)),
                         ToastSeverity::Info,
                     );
                     reload_items();
+                    reload_readiness_action.dispatch(id);
                     if !poll_running.get_untracked() {
                         poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
                     }
@@ -3266,13 +3699,140 @@ fn AddonMediaListEditorIsland(
 
     view! {
         <div class=style::page>
-            <div class=style::action_bar>
+            <aside class=style::workflow_shell aria-labelledby="addon-list-readiness-heading">
+                <nav aria-label=tr(TextKey::PublicationReadiness)>
+                    <ol class=style::workflow_steps>
+                        <li
+                            class=move || if import_step_active.get() { style::workflow_current } else { style::workflow_complete }
+                            aria-current=move || import_step_active.get().then_some("step")
+                        >
+                            <b>"1"</b><span>{tr(TextKey::Import)}</span>
+                        </li>
+                        <li
+                            class=move || if published_step_complete.get() || publish_step_active.get() {
+                                style::workflow_complete
+                            } else if !import_step_active.get() {
+                                style::workflow_current
+                            } else {
+                                ""
+                            }
+                            aria-current=move || (!import_step_active.get() && !publish_step_active.get() && !published_step_complete.get()).then_some("step")
+                        >
+                            <b>"2"</b><span>{tr(TextKey::ReadyToReview)}</span>
+                        </li>
+                        <li
+                            class=move || if published_step_complete.get() {
+                                style::workflow_complete
+                            } else if publish_step_active.get() {
+                                style::workflow_current
+                            } else {
+                                ""
+                            }
+                            aria-current=move || (publish_step_active.get() && !published_step_complete.get()).then_some("step")
+                        >
+                            <b>"3"</b><span>{tr(TextKey::PublishList)}</span>
+                        </li>
+                    </ol>
+                </nav>
+                <section class=style::readiness_summary>
+                    <div>
+                        <h2 id="addon-list-readiness-heading">{tr(TextKey::PublicationReadiness)}</h2>
+                        <p class=style::revision_state role="status" aria-live="polite">
+                            <strong>{move || match primary_action.get() {
+                                PublicationPrimaryAction::Save => tr(TextKey::UnsavedChanges),
+                                PublicationPrimaryAction::Prepare => tr(TextKey::PreparePublication),
+                                PublicationPrimaryAction::Publishing => tr(TextKey::Publishing),
+                                PublicationPrimaryAction::None
+                                    if publication_readiness.with(|readiness| readiness.required_playback_detail_pending > 0) => tr(TextKey::PreparingPublication),
+                                PublicationPrimaryAction::None
+                                    if publication_readiness.with(|readiness| readiness.review_state == AddonMediaListReviewState::Published) => tr(TextKey::Published),
+                                PublicationPrimaryAction::None | PublicationPrimaryAction::Publish => tr(TextKey::DraftSaved),
+                            }}</strong>
+                            <span>{move || format!("{} {}", tr(TextKey::SavedRevision), publication_readiness.with(|readiness| readiness.saved_revision))}</span>
+                        </p>
+                        <p>{tr(TextKey::PublishSavedRevisionHelp)}</p>
+                        <p>{tr(TextKey::ChangesSavedImmediately)}</p>
+                    </div>
+                    <dl class=style::readiness_metrics>
+                        <div>
+                            <dt>{tr(TextKey::IncludeInPublication)}</dt>
+                            <dd><a href="#addon-list-items-heading">{move || publication_readiness.with(|readiness| readiness.included_count)}</a></dd>
+                        </div>
+                        <div>
+                            <dt>{tr(TextKey::PublicationBlockers)}</dt>
+                            <dd><a href="#addon-list-publication-blockers">{move || publication_readiness.with(|readiness| readiness.blockers.len())}</a></dd>
+                        </div>
+                        <div>
+                            <dt>{tr(TextKey::ReviewRecommendations)}</dt>
+                            <dd>
+                                <a
+                                    href="#addon-list-items-heading"
+                                    on:click=move |_| {
+                                        need_review_filter.set(true);
+                                        item_page.set(0);
+                                    }
+                                >{move || publication_readiness.with(|readiness| readiness.recommendation_count)}</a>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>{tr(TextKey::OptionalDetails)}</dt>
+                            <dd><a href="#addon-list-items-heading">{move || publication_readiness.with(|readiness| format!("{} / {}", readiness.optional_detail_complete, readiness.optional_detail_total))}</a></dd>
+                        </div>
+                    </dl>
+                    {move || publication_readiness.with(|readiness| {
+                        if readiness.blockers.is_empty() {
+                            view! { <p class=style::readiness_ok>{tr(TextKey::NoPublicationBlockers)}</p> }.into_any()
+                        } else {
+                            view! {
+                                <ul id="addon-list-publication-blockers" class=style::blocker_list aria-label=tr(TextKey::PublicationBlockers)>
+                                    {readiness.blockers.iter().map(|blocker| {
+                                        let kind = blocker.kind;
+                                        view! {
+                                        <li>
+                                            <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
+                                            <a
+                                                href=publication_blocker_href(kind)
+                                                on:click=move |_| {
+                                                    if publication_blocker_targets_metadata(kind) {
+                                                        general_metadata_open.set(true);
+                                                    } else if publication_blocker_href(kind) == "#addon-list-items-heading" {
+                                                        need_review_filter.set(true);
+                                                        item_page.set(0);
+                                                    }
+                                                }
+                                            >{publication_blocker_label(blocker)}</a>
+                                        </li>
+                                    }}).collect_view()}
+                                </ul>
+                            }.into_any()
+                        }
+                    })}
+                    <p
+                        class=style::preparation_state
+                        style:display=move || if publication_readiness.with(|readiness| readiness.required_playback_detail_count > 0) { "flex" } else { "none" }
+                    >
+                        <span style=icon_style(IconName::Clock, "1rem") aria-hidden="true"></span>
+                        <span>{move || publication_readiness.with(|readiness| format!("{}: {}", tr(TextKey::PreparePublication), readiness.required_playback_detail_count))}</span>
+                    </p>
+                    <p class=style::workflow_message style:display=if initial_error_key.is_some() { "flex" } else { "none" } role="alert">
+                        {initial_error_key.map(tr).unwrap_or_default()}
+                    </p>
+                    <p class=style::workflow_message style:display=if initial_status_key.is_some() { "flex" } else { "none" } role="status">
+                        {initial_status_key.map(tr).unwrap_or_default()}
+                    </p>
+                </section>
+                <div class=format!("{} {}", style::workflow_action, style::js_only)>
                 <button
                     form="addon_media_lists-list-editor-form"
                     type="submit"
                     class=style::btn_add
+                    disabled=move || row_mutation_pending.get() || save_action.pending().get()
+                    style:display=move || if primary_action.get() == PublicationPrimaryAction::Save { "inline-flex" } else { "none" }
                     on:click=move |event| {
                         event.prevent_default();
+                        if row_mutation_pending.get_untracked() || save_action.pending().get_untracked() {
+                            return;
+                        }
                         let mut next_show_metadata = show_metadata.clone();
                         next_show_metadata.title = show_title.get_untracked();
                         next_show_metadata.original_title = non_empty_value(&show_original_title.get_untracked());
@@ -3316,9 +3876,129 @@ fn AddonMediaListEditorIsland(
                     }
                 >
                     <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::SaveAddonMediaList)}</span>
+                    <span>{tr(TextKey::SaveChanges)}</span>
                 </button>
-            </div>
+                <button
+                    form="addon_media_lists-list-editor-form"
+                    type="submit"
+                    formaction="/api/addon-lists/publish"
+                    formmethod="post"
+                    class=style::btn_add
+                    disabled=move || row_mutation_pending.get() || publish_action.pending().get()
+                    style:display=move || if matches!(primary_action.get(), PublicationPrimaryAction::Prepare | PublicationPrimaryAction::Publish) { "inline-flex" } else { "none" }
+                    on:click=move |event| {
+                        event.prevent_default();
+                        if row_mutation_pending.get_untracked() || publish_action.pending().get_untracked() {
+                            return;
+                        }
+                        publish_action.dispatch(id);
+                    }
+                >
+                    <span style=icon_style(IconName::Upload, "1.125rem") aria-hidden="true"></span>
+                    <span>{move || if primary_action.get() == PublicationPrimaryAction::Prepare {
+                        tr(TextKey::PreparePublication)
+                    } else {
+                        tr(TextKey::PublishList)
+                    }}</span>
+                </button>
+                <button
+                    type="button"
+                    class=style::btn_add
+                    disabled=true
+                    style:display=move || if primary_action.get() == PublicationPrimaryAction::Publishing { "inline-flex" } else { "none" }
+                >
+                    <span style=icon_style(IconName::Clock, "1.125rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::Publishing)}</span>
+                </button>
+                </div>
+                <noscript>
+                    <div class=style::nojs_workflow_actions>
+                        <button
+                            form="addon_media_lists-list-editor-form"
+                            type="submit"
+                            class=style::btn_add
+                        >
+                            <span style=icon_style(IconName::Save, "1.125rem") aria-hidden="true"></span>
+                            <span>{tr(TextKey::SaveChanges)}</span>
+                        </button>
+                        <button
+                            form="addon_media_lists-list-editor-form"
+                            type="submit"
+                            formaction="/api/addon-lists/publish"
+                            formmethod="post"
+                            class=style::btn_add
+                        >
+                            <span style=icon_style(IconName::Upload, "1.125rem") aria-hidden="true"></span>
+                            <span>{tr(TextKey::PublishList)}</span>
+                        </button>
+                    </div>
+                </noscript>
+            </aside>
+
+            <details class=style::mobile_readiness_details>
+                <summary>{tr(TextKey::PublicationReadiness)}</summary>
+                <dl class=style::readiness_metrics>
+                    <div>
+                        <dt>{tr(TextKey::IncludeInPublication)}</dt>
+                        <dd><a href="#addon-list-items-heading">{move || publication_readiness.with(|readiness| readiness.included_count)}</a></dd>
+                    </div>
+                    <div>
+                        <dt>{tr(TextKey::PublicationBlockers)}</dt>
+                        <dd>{move || publication_readiness.with(|readiness| readiness.blockers.len())}</dd>
+                    </div>
+                    <div>
+                        <dt>{tr(TextKey::ReviewRecommendations)}</dt>
+                        <dd>
+                            <a
+                                href="#addon-list-items-heading"
+                                on:click=move |_| {
+                                    need_review_filter.set(true);
+                                    item_page.set(0);
+                                }
+                            >{move || publication_readiness.with(|readiness| readiness.recommendation_count)}</a>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>{tr(TextKey::OptionalDetails)}</dt>
+                        <dd><a href="#addon-list-items-heading">{move || publication_readiness.with(|readiness| format!("{} / {}", readiness.optional_detail_complete, readiness.optional_detail_total))}</a></dd>
+                    </div>
+                </dl>
+                {move || publication_readiness.with(|readiness| {
+                    if readiness.blockers.is_empty() {
+                        view! { <p class=style::readiness_ok>{tr(TextKey::NoPublicationBlockers)}</p> }.into_any()
+                    } else {
+                        view! {
+                            <ul class=style::blocker_list aria-label=tr(TextKey::PublicationBlockers)>
+                                {readiness.blockers.iter().map(|blocker| {
+                                    let kind = blocker.kind;
+                                    view! {
+                                        <li>
+                                            <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
+                                            <a
+                                                href=publication_blocker_href(kind)
+                                                on:click=move |_| {
+                                                    if publication_blocker_targets_metadata(kind) {
+                                                        general_metadata_open.set(true);
+                                                    } else if publication_blocker_href(kind) == "#addon-list-items-heading" {
+                                                        need_review_filter.set(true);
+                                                        item_page.set(0);
+                                                    }
+                                                }
+                                            >{publication_blocker_label(blocker)}</a>
+                                        </li>
+                                    }
+                                }).collect_view()}
+                            </ul>
+                        }.into_any()
+                    }
+                })}
+                <p class=style::workflow_message style:display=if initial_error_key.is_some() { "flex" } else { "none" } role="alert">
+                    {initial_error_key.map(tr).unwrap_or_default()}
+                </p>
+                <p class=style::workflow_message style:display=if initial_status_key.is_some() { "flex" } else { "none" } role="status">
+                    {initial_status_key.map(tr).unwrap_or_default()}
+                </p>
+            </details>
 
             {move || import_progress.get().map(|progress| {
                 let state = progress.state;
@@ -3340,7 +4020,18 @@ fn AddonMediaListEditorIsland(
                 let has_empty_import = state == AddonMediaListImportState::Ready
                     && progress.discovered_count == 0;
                 let has_detail_failed = progress.detail_failed > 0;
-                let elapsed = elapsed_from(&progress.started_at).unwrap_or_default();
+                let completed = state == AddonMediaListImportState::Ready;
+                let elapsed = elapsed_between(
+                    &progress.started_at,
+                    completed.then_some(progress.last_progress_at.as_deref()).flatten(),
+                )
+                .unwrap_or_default();
+                let has_elapsed = !elapsed.is_empty();
+                let elapsed_label = if completed {
+                    TextKey::CompletedIn
+                } else {
+                    TextKey::ElapsedTime
+                };
                 let last_progress = progress.last_progress_at.as_deref()
                     .and_then(format_progress_timestamp)
                     .unwrap_or_default();
@@ -3409,7 +4100,7 @@ fn AddonMediaListEditorIsland(
                     | AddonMediaListImportState::Superseded => ().into_any(),
                 }};
                 view! {
-                    <section class=style::import_progress_card data-import-state=format!("{state:?}")>
+                    <section id="addon-list-import-progress" class=style::import_progress_card data-import-state=format!("{state:?}")>
                         <span class=style::sr_only aria-live="polite" aria-atomic="true">
                             {move || progress_live_summary.get()}
                         </span>
@@ -3427,7 +4118,7 @@ fn AddonMediaListEditorIsland(
                         {progress_element}
                         <p style:display=if has_current_title { "block" } else { "none" }>{current_title}</p>
                         <p class=style::import_progress_details>
-                            <span>{format!("{}: {elapsed}", tr(TextKey::ElapsedTime))}</span>
+                            <span style:display=if has_elapsed { "inline" } else { "none" }>{format!("{}: {elapsed}", tr(elapsed_label))}</span>
                             <span style:display=if has_last_progress { "inline" } else { "none" }>{format!("{}: {last_progress}", tr(TextKey::LastSuccessfulProgress))}</span>
                             <span style:display=if has_estimate { "inline" } else { "none" }>{format!("{}: {estimate}", tr(TextKey::EstimatedRemainingTime))}</span>
                         </p>
@@ -3454,30 +4145,55 @@ fn AddonMediaListEditorIsland(
                 class=style::editor
                 style:display=move || if form_found { "" } else { "none" }
             >
-                            <header
-                                class=style::metadata_hero
-                                aria-expanded=move || if general_metadata_open.get() { "true" } else { "false" }
-                                on:click=move |_| general_metadata_open.update(|open| *open = !*open)
-                            >
+                            <noscript>
+                                <style>"#addon-list-general-metadata { display: grid !important; } [data-metadata-toggle] { display: none !important; }"</style>
+                            </noscript>
+                            <header class=style::metadata_hero>
                                 <span class=style::metadata_hero_icon style=move || icon_style(presentation_icon(presentation_kind.get()), "1.6rem") aria-hidden="true"></span>
                                 <div>
                                     <h1>{move || show_title.get()}</h1>
                                     <p class=style::metadata_type>{move || tr(presentation_text_key(presentation_kind.get()))}</p>
-                                    <p class=style::metadata_description>{move || show_plot.get()}</p>
+                                    <p
+                                        id="addon-list-description"
+                                        class=move || if description_expanded.get() {
+                                            format!("{} {}", style::metadata_description, style::description_expanded)
+                                        } else {
+                                            style::metadata_description.to_owned()
+                                        }
+                                    >{move || show_plot.get()}</p>
+                                    <button
+                                        type="button"
+                                        class=format!("{} {}", style::description_toggle, style::js_only)
+                                        hidden=move || show_plot.with(|plot| plot.chars().count() <= 160)
+                                        aria-expanded=move || if description_expanded.get() { "true" } else { "false" }
+                                        aria-controls="addon-list-description"
+                                        on:click=move |_| description_expanded.update(|expanded| *expanded = !*expanded)
+                                    >
+                                        {move || tr(if description_expanded.get() { TextKey::ShowLess } else { TextKey::ShowFullDescription })}
+                                    </button>
                                     <p
                                         class=style::metadata_hero_conflict
+                                        data-testid="addon-metadata-conflict-summary"
                                         style:display=if show_metadata_conflict_count == 0 { "none" } else { "inline-flex" }
                                     >
                                         <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
                                         <span>{format!("{} {}", show_metadata_conflict_count, tr(TextKey::MetadataConflicts))}</span>
                                     </p>
+                                    <a
+                                        class=style::metadata_review_link
+                                        href="#addon-list-general-metadata"
+                                        data-metadata-toggle
+                                        on:click=move |_| general_metadata_open.set(true)
+                                    >{tr(TextKey::EditMetadata)}</a>
                                 </div>
                                 <button
                                     type="button"
                                     class=style::metadata_hero_edit
+                                    data-metadata-toggle
                                     title=tr(TextKey::EditMetadata)
                                     aria-label=tr(TextKey::EditMetadata)
                                     aria-expanded=move || if general_metadata_open.get() { "true" } else { "false" }
+                                    aria-controls="addon-list-general-metadata"
                                     on:click=move |event| {
                                         event.stop_propagation();
                                         general_metadata_open.update(|open| *open = !*open);
@@ -3490,9 +4206,6 @@ fn AddonMediaListEditorIsland(
                                 <span style=icon_style(IconName::Info, "1rem") aria-hidden="true"></span>
                                 <span>{tr(TextKey::MetadataDraftNotice)}</span>
                             </p>
-                            <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
-                                {tr(TextKey::AddonMediaListSaveFailed)}
-                            </p>
                             <p class=style::empty style:display=move || if has_presentation_error { "" } else { "none" }>
                                 {presentation_error}
                             </p>
@@ -3501,8 +4214,7 @@ fn AddonMediaListEditorIsland(
                                 <span>{review_error}</span>
                             </p>
                             <input type="hidden" name="id" value=move || form_id.get().to_string()/>
-                            <input type="hidden" name="addon_id" value=addon_id/>
-                            <input type="hidden" name="source_url" value=source_url/>
+                            <input type="hidden" name="metadata_etag" value=move || show_etag.get()/>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::AddonMediaListUrl)}</div>
                                 <div class=style::url_summary>
@@ -3621,66 +4333,71 @@ fn AddonMediaListEditorIsland(
                                 <input class=style::text_input value=display_folder disabled/>
                             </div>
                             <div
+                                id="addon-list-general-metadata"
                                 class=style::general_metadata_panel
                                 data-testid="addon-general-metadata"
+                                node_ref=general_metadata_panel_ref
+                                tabindex="-1"
+                                aria-labelledby="addon-list-general-metadata-heading"
                                 style:display=move || if general_metadata_open.get() { "grid" } else { "none" }
                             >
+                            <h2 id="addon-list-general-metadata-heading" class=style::metadata_panel_heading>{tr(TextKey::EditMetadata)}</h2>
                             <MetadataConflictSummary conflicts=show_metadata_conflicts.clone()/>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Title)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::Title) prop:value=move || show_title.get() on:input=move |event| show_title.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_title" aria-label=tr(TextKey::Title) required value=show_title.get_untracked() prop:value=move || show_title.get() on:input=move |event| show_title.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::OriginalTitle)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::OriginalTitle) prop:value=move || show_original_title.get() on:input=move |event| show_original_title.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_original_title" aria-label=tr(TextKey::OriginalTitle) value=show_original_title.get_untracked() prop:value=move || show_original_title.get() on:input=move |event| show_original_title.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::SortTitle)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::SortTitle) prop:value=move || show_sort_title.get() on:input=move |event| show_sort_title.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_sort_title" aria-label=tr(TextKey::SortTitle) value=show_sort_title.get_untracked() prop:value=move || show_sort_title.get() on:input=move |event| show_sort_title.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Year)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::Year) inputmode="numeric" prop:value=move || show_year.get() on:input=move |event| show_year.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_year" aria-label=tr(TextKey::Year) inputmode="numeric" value=show_year.get_untracked() prop:value=move || show_year.get() on:input=move |event| show_year.set(event_target_value(&event))/>
                             </div>
-                            <div class=style::field_row>
+                            <div class=format!("{} {}", style::field_row, style::metadata_wide_row)>
                                 <div class=style::field_label>{tr(TextKey::Summary)}</div>
-                                <textarea class=style::boxed_textarea aria-label=tr(TextKey::Summary) rows="4" prop:value=move || show_plot.get() on:input=move |event| show_plot.set(event_target_value(&event))/>
+                                <textarea class=style::boxed_textarea name="metadata_plot" aria-label=tr(TextKey::Summary) rows="4" prop:value=move || show_plot.get() on:input=move |event| show_plot.set(event_target_value(&event))>{show_plot.get_untracked()}</textarea>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Genres)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::Genres) prop:value=move || show_genres.get() on:input=move |event| show_genres.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_genres" aria-label=tr(TextKey::Genres) value=show_genres.get_untracked() prop:value=move || show_genres.get() on:input=move |event| show_genres.set(event_target_value(&event))/>
                             </div>
                             <div class=format!("{} {}", style::field_row, style::general_tag_row)>
                                 <div class=style::field_label>{tr(TextKey::Tags)}</div>
                                 <div class=style::tag_field>
-                                    <textarea class=style::tag_input aria-label=tr(TextKey::Tags) rows="4" spellcheck="false" prop:value=move || show_tags.get() on:input=move |event| show_tags.set(event_target_value(&event))/>
+                                    <textarea class=style::tag_input name="metadata_tags" aria-label=tr(TextKey::Tags) rows="4" spellcheck="false" prop:value=move || show_tags.get() on:input=move |event| show_tags.set(event_target_value(&event))>{show_tags.get_untracked()}</textarea>
                                     <small>{move || format!("{} · {}", line_values(&show_tags.get()).len(), tr(TextKey::OneTagPerLine))}</small>
                                 </div>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Studios)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::Studios) prop:value=move || show_studios.get() on:input=move |event| show_studios.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_studios" aria-label=tr(TextKey::Studios) value=show_studios.get_untracked() prop:value=move || show_studios.get() on:input=move |event| show_studios.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Directors)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::Directors) prop:value=move || show_directors.get() on:input=move |event| show_directors.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_directors" aria-label=tr(TextKey::Directors) value=show_directors.get_untracked() prop:value=move || show_directors.get() on:input=move |event| show_directors.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Writers)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::Writers) prop:value=move || show_writers.get() on:input=move |event| show_writers.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_writers" aria-label=tr(TextKey::Writers) value=show_writers.get_untracked() prop:value=move || show_writers.get() on:input=move |event| show_writers.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Artists)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::Artists) prop:value=move || show_artists.get() on:input=move |event| show_artists.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_artists" aria-label=tr(TextKey::Artists) value=show_artists.get_untracked() prop:value=move || show_artists.get() on:input=move |event| show_artists.set(event_target_value(&event))/>
                             </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::Languages)}</div>
-                                <input class=style::text_input aria-label=tr(TextKey::Languages) prop:value=move || show_languages.get() on:input=move |event| show_languages.set(event_target_value(&event))/>
+                                <input class=style::text_input name="metadata_languages" aria-label=tr(TextKey::Languages) value=show_languages.get_untracked() prop:value=move || show_languages.get() on:input=move |event| show_languages.set(event_target_value(&event))/>
                             </div>
                             <div class=format!("{} {}", style::field_row, style::general_tag_row)>
                                 <div class=style::field_label>{tr(TextKey::CastAndCredits)}</div>
                                 <div>
-                                    <textarea class=style::boxed_textarea aria-label=tr(TextKey::CastAndCredits) rows="3" spellcheck="false" prop:value=move || show_people.get() on:input=move |event| show_people.set(event_target_value(&event))/>
+                                    <textarea class=style::boxed_textarea name="metadata_people" aria-label=tr(TextKey::CastAndCredits) rows="3" spellcheck="false" prop:value=move || show_people.get() on:input=move |event| show_people.set(event_target_value(&event))>{show_people.get_untracked()}</textarea>
                                     <small class=style::field_hint>{tr(TextKey::OneCreditPerLine)}</small>
                                 </div>
                             </div>
@@ -3908,6 +4625,11 @@ fn AddonMediaListEditorIsland(
                                         })
                                         .collect::<Vec<_>>();
                                     if !desired.is_empty() {
+                                        row_save_states.update(|states| {
+                                            for edit in &desired {
+                                                states.insert(edit.item_id, RowSaveState::Saving);
+                                            }
+                                        });
                                         review_edit_action.dispatch((
                                             id,
                                             desired,
@@ -3938,7 +4660,7 @@ fn AddonMediaListEditorIsland(
                             }
                         >
                             <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
-                            <span>{move || format!("{} {}", need_review_count.get(), tr(TextKey::NeedReview))}</span>
+                            <span>{move || format!("{} {}", need_review_count.get(), tr(TextKey::ReviewRecommended))}</span>
                         </button>
                     </div>
                     <section class=style::bulk_edit_toolbar aria-label=tr(TextKey::BulkEdit)>
@@ -4044,6 +4766,11 @@ fn AddonMediaListEditorIsland(
                                     }
                                 }
                                 if !desired.is_empty() {
+                                    row_save_states.update(|states| {
+                                        for edit in &desired {
+                                            states.insert(edit.item_id, RowSaveState::Saving);
+                                        }
+                                    });
                                     review_edit_action.dispatch((
                                         id,
                                         desired,
@@ -4056,28 +4783,16 @@ fn AddonMediaListEditorIsland(
                             }
                         >{move || format!("{} ({})", tr(TextKey::Apply), bulk_scope_count.get())}</button>
                     </section>
-                    <div class=style::table_wrap>
-                        <table data-testid="addon-metadata-items">
-                            <thead>
-                                <tr>
-                                    <th class=style::number_cell aria-label=tr(TextKey::Number)>
-                                        <span aria-hidden="true">"#"</span>
-                                    </th>
-                                    <th>{tr(TextKey::IncludeInPublication)}</th>
-                                    <th class=style::item_artwork_cell/>
-                                    <th>{tr(TextKey::Name)}</th>
-                                    <th>{tr(TextKey::FirstAired)}</th>
-                                    <th>{tr(TextKey::SeasonEpisode)}</th>
-                                    <th>{tr(TextKey::MediaKind)}</th>
-                                    <th>{tr(TextKey::PlaybackBehavior)}</th>
-                                    <th>{tr(TextKey::Status)}</th>
-                                    <th/>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr style:display=move || if filtered_item_count.get() == 0 { "table-row" } else { "none" }>
-                                    <td class=style::empty_cell colspan="10">{tr(TextKey::NoItemsToDisplay)}</td>
-                                </tr>
+                    <div class=style::review_collection>
+                        <p class=style::empty style:display=move || if filtered_item_count.get() == 0 { "block" } else { "none" }>
+                            {tr(TextKey::NoItemsToDisplay)}
+                        </p>
+                        <div class=style::item_column_header data-testid="addon-item-column-header" aria-hidden="true">
+                            <span>{tr(TextKey::Title)}</span>
+                            <span>{tr(TextKey::Details)}</span>
+                            <span>{tr(TextKey::Actions)}</span>
+                        </div>
+                        <ol class=style::metadata_items data-testid="addon-metadata-items">
                                 <For
                                     each=move || {
                                         let (start, end, _, _, _) = item_page_range.get();
@@ -4092,7 +4807,19 @@ fn AddonMediaListEditorIsland(
                                             .take(end.saturating_sub(start))
                                             .collect::<Vec<_>>()
                                     }
-                                    key=|item| format!("{}:{item:?}", item.id)
+                                    key=move |item| format!(
+                                        "{}:{:?}:{}:{:?}:{:?}:{:?}:{:?}:{}:{:?}:{:?}",
+                                        item.id,
+                                        item.content_kind,
+                                        item.included,
+                                        item.liveness_override,
+                                        item.season,
+                                        item.episode,
+                                        item.collection_role,
+                                        item.replacement_media_version_id.unwrap_or_default(),
+                                        item.detail_state,
+                                        row_save_states.with(|states| states.get(&item.id).copied()),
+                                    )
                                     children=move |item| item_row_view(
                                         id,
                                         item,
@@ -4101,6 +4828,7 @@ fn AddonMediaListEditorIsland(
                                         search_action,
                                         replacement_action,
                                         review_edit_action,
+                                        row_save_states,
                                         item_role_action,
                                         episode_numbering_row_preview,
                                         episode_numbering_open,
@@ -4110,10 +4838,10 @@ fn AddonMediaListEditorIsland(
                                         loaded_detail,
                                         item_detail_action,
                                         request_detail_action,
+                                        detail_request_item,
                                     )
                                 />
-                            </tbody>
-                        </table>
+                        </ol>
                     </div>
                     <nav class=style::pager aria-label=tr(TextKey::RowsPerPage)>
                         <span>{format!("{}:", tr(TextKey::RowsPerPage))}</span>
@@ -4167,32 +4895,6 @@ fn AddonMediaListEditorIsland(
                         </div>
                     </nav>
                 </section>
-                <footer class=style::publication_footer>
-                    <div>
-                        <h3>{tr(TextKey::PublishMetadata)}</h3>
-                        <p>{tr(TextKey::MetadataDraftNotice)}</p>
-                    </div>
-                    <button
-                        type="button"
-                        class=style::btn_add
-                        disabled=move || {
-                            publish_action.pending().get()
-                                || import_progress.with(|progress| {
-                                    progress.as_ref().is_some_and(|progress| {
-                                        progress.state != AddonMediaListImportState::Ready
-                                            || (published_revision.get() == 0
-                                                && progress.detail_pending > 0)
-                                    })
-                                })
-                        }
-                        on:click=move |_| {
-                            publish_action.dispatch(id);
-                        }
-                    >
-                        <span style=icon_style(IconName::Upload, "1.125rem") aria-hidden="true"></span>
-                        <span>{tr(TextKey::PublishMetadata)}</span>
-                    </button>
-                </footer>
                 <Modal
                     open=apply_content_kind_open
                     title=tr(TextKey::ApplyToAllItems).to_owned()
@@ -4576,6 +5278,64 @@ mod tests {
         assert_eq!(format_clock_duration(0), "00:00");
         assert_eq!(format_clock_duration(65), "01:05");
         assert_eq!(format_clock_duration(3_661), "01:01:01");
+        assert_eq!(
+            elapsed_between("2026-08-26T10:00:00Z", Some("2026-08-26T10:01:05Z")),
+            Some("01:05".to_owned())
+        );
         assert!(elapsed_from("not-a-timestamp").is_none());
+    }
+
+    #[test]
+    fn publication_primary_action_tracks_the_exact_saved_state() {
+        let mut readiness = AddonMediaListPublicationReadiness {
+            included_count: 48,
+            recommendation_count: 48,
+            review_state: AddonMediaListReviewState::Ready,
+            ..AddonMediaListPublicationReadiness::default()
+        };
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::Publish
+        );
+        assert_eq!(
+            publication_primary_action(true, &readiness),
+            PublicationPrimaryAction::Save
+        );
+
+        readiness.required_playback_detail_count = 2;
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::Prepare
+        );
+        readiness.required_playback_detail_pending = 2;
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::None
+        );
+
+        readiness.required_playback_detail_count = 0;
+        readiness.required_playback_detail_pending = 0;
+        readiness.blockers.push(AddonMediaListPublicationBlocker {
+            kind: AddonMediaListPublicationBlockerKind::NoIncludedItems,
+            item_rank: None,
+            item_title: None,
+            count: 0,
+        });
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::None
+        );
+
+        readiness.blockers.clear();
+        readiness.review_state = AddonMediaListReviewState::Publishing;
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::Publishing
+        );
+        readiness.review_state = AddonMediaListReviewState::Published;
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::None
+        );
     }
 }

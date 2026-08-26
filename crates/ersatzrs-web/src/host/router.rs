@@ -310,6 +310,14 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::addon_media_lists::save_addon_media_list_form),
         )
         .route(
+            "/api/addon-lists/publish",
+            post(api::addon_media_lists::publish_addon_media_list_form),
+        )
+        .route(
+            "/api/addon-lists/items/review",
+            post(api::addon_media_lists::save_addon_media_list_item_review_form),
+        )
+        .route(
             "/api/addon-lists/delete",
             post(api::addon_media_lists::delete_addon_media_list_form),
         )

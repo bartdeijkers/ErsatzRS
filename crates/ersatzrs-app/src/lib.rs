@@ -379,6 +379,15 @@ impl ApplicationServices {
         queries::list_addon_media_list_items(id, self.ports.addon_media_lists()).await
     }
 
+    /// Load blockers, recommendations, detail progress, and the saved revision
+    /// used by the add-on-list publication command.
+    pub async fn addon_media_list_publication_readiness(
+        &self,
+        id: i64,
+    ) -> Result<ersatzrs_core::repositories::AddonMediaListPublicationReadiness> {
+        queries::addon_media_list_publication_readiness(id, self.ports.addon_media_lists()).await
+    }
+
     pub async fn get_addon_media_list_item(
         &self,
         list_id: i64,

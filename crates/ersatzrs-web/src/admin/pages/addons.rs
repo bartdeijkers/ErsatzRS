@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_addon_contract::{
     AddonDependency, AddonPanel, AddonPanelBlock, AddonPermissions, AddonSettingDefinition,
-    AddonSettingKind,
+    AddonSettingKind, CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1,
+    CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4,
+    CAPABILITY_MEDIA_LIST_LIST_V5,
 };
 use leptos::{html, prelude::*};
 use leptos_router::hooks::{use_params_map, use_query_map};
@@ -1118,6 +1120,8 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
         _ => false,
     };
     let can_install = compatible && install_target.is_some() && update_available;
+    let can_import_list = is_enabled && supports_media_list_import(&permissions.0);
+    let import_list_href = format!("/media/addon-lists/add?addon_id={addon_id}");
     let selected_offer_note = is_installed
         .then(|| {
             selected_offer.as_ref().map(|offer| {
@@ -1154,6 +1158,12 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
     let addon_id_for_toggle = addon_id.clone();
     let addon_id_for_uninstall = addon_id.clone();
     let summary_for_modal = summary.clone();
+    let modal_name = name.clone();
+    let modal_version = version.clone();
+    let modal_trust = trust.clone();
+    let modal_source = source_id.clone();
+    let install_permissions = permissions.clone();
+    let toggle_permissions = permissions.clone();
 
     view! {
         <main class=style::detail data-testid="addon-detail-page">
@@ -1168,6 +1178,11 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
                     {selected_offer_note.map(|note| view! { <p class=style::muted>{note}</p> })}
                 </div>
                 <div class=style::hero_actions>
+                    <a
+                        class=style::btn_primary
+                        href=import_list_href
+                        style:display=if can_import_list { "inline-flex" } else { "none" }
+                    >{tr(TextKey::ImportAList)}</a>
                     <button type="button" class=style::btn_primary disabled=!can_install on:click=move |_| install_confirm.set(true)>
                         {if is_installed { tr(TextKey::UpdateAddon) } else { tr(TextKey::Install) }}
                     </button>
@@ -1232,24 +1247,44 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
 
             {panels.into_iter().map(panel_view).collect_view()}
 
-            <Modal open=install_confirm title=tr(TextKey::Install).to_owned() on_close=Callback::new(move |confirmed| {
+            <Modal open=install_confirm title=format!("{} · {} {}", tr(TextKey::Install), modal_name, modal_version) on_close=Callback::new(move |confirmed| {
                 if confirmed {
                     if let Some(target) = install_target.clone() { install_action.dispatch(target); }
                 }
             })>
+                <p>{format!("{}: {} · {}: {}", tr(TextKey::Source), modal_source, tr(TextKey::Status), modal_trust)}</p>
+                <p>{tr(TextKey::InstallLeavesDisabled)}</p>
                 <p>{tr(TextKey::ThirdPartyRepositoryWarning)}</p>
-                {permissions_view(&permissions.0, &permissions.1)}
+                {permissions_view(&install_permissions.0, &install_permissions.1)}
             </Modal>
             <Modal open=toggle_confirm title=if is_enabled { tr(TextKey::Disable).to_owned() } else { tr(TextKey::Enable).to_owned() } on_close=Callback::new(move |confirmed| {
                 if confirmed {
                     if is_enabled { disable_action.dispatch(addon_id_for_toggle.clone()); } else { enable_action.dispatch(addon_id_for_toggle.clone()); }
                 }
-            })><p>{summary_for_modal.clone()}</p></Modal>
+            })>
+                <p>{summary_for_modal.clone()}</p>
+                <p style:display=if is_enabled { "none" } else { "block" }>{tr(TextKey::EnableActivatesPermissions)}</p>
+                {permissions_view(&toggle_permissions.0, &toggle_permissions.1)}
+            </Modal>
             <Modal open=uninstall_confirm title=tr(TextKey::Uninstall).to_owned() destructive=true on_close=Callback::new(move |confirmed| {
                 if confirmed { uninstall_action.dispatch(addon_id_for_uninstall.clone()); }
             })><p>{tr(TextKey::ThisActionCannotBeUndone)}</p></Modal>
         </main>
     }
+}
+
+fn supports_media_list_import(capabilities: &[String]) -> bool {
+    capabilities.iter().any(|capability| {
+        matches!(
+            capability.as_str(),
+            CAPABILITY_MEDIA_LIST_IMPORT_V1
+                | CAPABILITY_MEDIA_LIST_LIST_V1
+                | CAPABILITY_MEDIA_LIST_LIST_V2
+                | CAPABILITY_MEDIA_LIST_LIST_V3
+                | CAPABILITY_MEDIA_LIST_LIST_V4
+                | CAPABILITY_MEDIA_LIST_LIST_V5
+        )
+    })
 }
 
 fn select_offer(detail: &AddonDetail, source: Option<&str>) -> Option<AvailableAddonRow> {
@@ -1589,8 +1624,12 @@ fn reload_page() {
 
 #[cfg(test)]
 mod tests {
-    use super::{localized_for_code, updates_empty_message};
+    use super::{localized_for_code, supports_media_list_import, updates_empty_message};
     use crate::admin::i18n::{tr, TextKey};
+    use ersatzrs_addon_contract::{
+        CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1,
+        CAPABILITY_MEDIA_LIST_LIST_V5,
+    };
     use std::collections::BTreeMap;
 
     #[test]
@@ -1629,5 +1668,19 @@ mod tests {
         ]);
         assert_eq!(localized_for_code(&values, "de-de"), "Deutsch");
         assert_eq!(localized_for_code(&values, "unknown"), "English");
+    }
+
+    #[test]
+    fn list_import_entry_point_accepts_every_supported_contract_generation() {
+        for capability in [
+            CAPABILITY_MEDIA_LIST_LIST_V1,
+            CAPABILITY_MEDIA_LIST_LIST_V5,
+            CAPABILITY_MEDIA_LIST_IMPORT_V1,
+        ] {
+            assert!(supports_media_list_import(&[capability.to_owned()]));
+        }
+        assert!(!supports_media_list_import(&[
+            "remote-stream.play.v1".to_owned()
+        ]));
     }
 }
