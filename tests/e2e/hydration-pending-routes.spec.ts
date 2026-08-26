@@ -736,7 +736,7 @@ SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
     await page.getByLabel('Add-on', { exact: true }).selectOption(seed.addonId);
     await page.getByLabel('Collection Type', { exact: true }).selectOption('movies');
     await page.getByLabel('Storage folder').fill(`E2E Import ${testInfo.project.name}`);
-    await page.getByRole('button', { name: /^import$/i }).click();
+    await page.getByRole('button', { name: 'Import overview' }).click();
     await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
     await waitForHydration(page);
     await expect.poll(() => sqlite(`
@@ -779,7 +779,7 @@ SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = ${seed.deleteListId};
     await page.locator('input[name="auto_refresh"]').check();
     await page.locator('input[name="generate_playlist"]').uncheck();
     const saveNavigation = page.waitForEvent('framenavigated');
-    await page.getByRole('button', { name: /^save add-on list$/i }).click();
+    await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
     await saveNavigation;
     await expect(page).toHaveURL(new RegExp(`/media/addon-lists/${seed.editorListId}$`));
     await waitForHydration(page);
@@ -802,7 +802,7 @@ SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ${generatedPlaylistId};
     const replacementRow = () =>
       page
         .getByTestId('addon-metadata-items')
-        .locator('tbody tr')
+        .locator('li[data-item-id]')
         .filter({ hasText: seed.replacementTitle })
         .first();
     let itemRow = replacementRow();

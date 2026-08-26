@@ -452,9 +452,9 @@ test.describe('AMM-G07 NSF live acceptance', () => {
       .getByRole('checkbox', { name: 'Create playlist in original order' })
       .check();
     await page
-      .getByRole('checkbox', { name: 'Load item details after publishing' })
+      .getByRole('checkbox', { name: 'Load item details automatically' })
       .uncheck();
-    await page.getByRole('button', { name: /^import$/i }).click();
+    await page.getByRole('button', { name: 'Import overview' }).click();
     await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
     await waitForHydration(page);
 
@@ -488,7 +488,7 @@ FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${listId};
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForHydration(page);
     await expect(page.getByText('NSF Live', { exact: true }).first()).toBeVisible();
-    const publish = page.getByRole('button', { name: /^publish$/i });
+    const publish = page.getByRole('button', { name: 'Publish list', exact: true });
     await expect(publish).toBeEnabled();
     const publishNavigation = page.waitForEvent('framenavigated', { timeout: 120_000 });
     await publish.click();
