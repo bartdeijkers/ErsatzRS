@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.27-beta] - 2026-08-26
+
 ### Added
 
 - Add repository-scoped admin UX design and audit skills with a Tunarr-inspired
@@ -2394,7 +2396,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.26-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.27-beta...HEAD
+[1.0.27-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.26-beta...v1.0.27-beta
 [1.0.26-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.25-beta...v1.0.26-beta
 [1.0.25-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.24-beta...v1.0.25-beta
 [1.0.24-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.23-beta...v1.0.24-beta
