@@ -2,8 +2,8 @@
 
 use ersatzrs_core::locking::PlayoutBuildAdmission;
 use ersatzrs_core::repositories::{
-    AddonMediaListRepository, AdminSettingsRepository, BlockAdminRow, BlockItemAdmin,
-    BlockRepository, ChannelEditorForm, ChannelNumberUpdate, ChannelRepository,
+    AddonMediaListItemReviewEdit, AddonMediaListRepository, AdminSettingsRepository, BlockAdminRow,
+    BlockItemAdmin, BlockRepository, ChannelEditorForm, ChannelNumberUpdate, ChannelRepository,
     ChannelValidationError, ChannelValidationState, CollectionRepository, DecoAdminRecord,
     DecoBreakContentAdmin, DecoRepository, DecoTemplateItemAdmin, FfmpegProfileRepository,
     FillerRepository, LibraryRepository, MediaItemRepository, MultiCollectionItem,
@@ -4483,6 +4483,13 @@ pub struct ApplyAddonMediaListContentKind {
     pub content_kind: ersatzrs_domain::AddonMediaListContentKind,
 }
 
+/// Apply exact quick-review snapshots atomically, including undo snapshots.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApplyAddonMediaListItemReviewEdits {
+    pub id: EntityId,
+    pub edits: Vec<AddonMediaListItemReviewEdit>,
+}
+
 /// Assign consecutive episode numbers to included top-level list entries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AssignAddonMediaListEpisodeNumbers {
@@ -4602,8 +4609,12 @@ pub async fn publish_addon_media_list(
     runtime: &dyn ScanRuntime,
     queue: &dyn PlayoutBuildQueue,
     operations: &OperationCoordinator,
-) -> crate::Result<()> {
+) -> crate::Result<Option<u64>> {
     validate_positive_id(command.id, "addon_media_list_id")?;
+    let pending_details = repository.prepare_publication_details(command.id).await?;
+    if pending_details > 0 {
+        return Ok(Some(pending_details));
+    }
     let publication = repository.stage_publication(command.id).await?;
     let publish_result = async {
         let scan_report = runtime
@@ -4651,7 +4662,8 @@ pub async fn publish_addon_media_list(
     scan_report
         .playout_refreshes
         .extend(pending_report.playout_refreshes);
-    require_scan_playout_refreshes(scan_report, queue, operations)
+    require_scan_playout_refreshes(scan_report, queue, operations)?;
+    Ok(None)
 }
 
 /// Include or exclude one item from publication.
@@ -4797,6 +4809,43 @@ pub async fn apply_addon_media_list_content_kind(
     validate_positive_id(command.id, "addon_media_list_id")?;
     repository
         .apply_list_content_kind(command.id, command.content_kind)
+        .await
+        .map_err(Into::into)
+}
+
+/// Apply a bounded set of exact operator-owned quick-review snapshots.
+pub async fn apply_addon_media_list_item_review_edits(
+    command: ApplyAddonMediaListItemReviewEdits,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<u64> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    if command.edits.is_empty() {
+        return validation_error("edits", "must contain at least one item");
+    }
+    if command.edits.len() > 10_000 {
+        return validation_error("edits", "must contain at most 10000 items");
+    }
+    let mut item_ids = std::collections::BTreeSet::new();
+    for edit in &command.edits {
+        validate_positive_id(edit.item_id, "addon_media_list_item_id")?;
+        if !item_ids.insert(edit.item_id) {
+            return validation_error("edits", "contains a duplicate item identity");
+        }
+        if edit.season.is_some_and(|season| season < 0) {
+            return validation_error("season", "must be zero or greater");
+        }
+        if edit.episode.is_some_and(|episode| episode < 1) {
+            return validation_error("episode", "must be one or greater");
+        }
+        if edit.liveness_override == Some(ersatzrs_domain::RemoteStreamLiveness::Unknown) {
+            return validation_error(
+                "liveness_override",
+                "use no override to restore the provider value",
+            );
+        }
+    }
+    repository
+        .apply_item_review_edits(command.id, &command.edits)
         .await
         .map_err(Into::into)
 }
@@ -6362,6 +6411,7 @@ mod tests {
         item_content_kinds: Mutex<Vec<(EntityId, ersatzrs_domain::AddonMediaListContentKind)>>,
         episode_number_assignments: Mutex<Vec<EpisodeNumberAssignment>>,
         publication_events: Arc<Mutex<Vec<String>>>,
+        pending_publication_details: u64,
         fail_publication_commit: bool,
     }
 
@@ -6437,6 +6487,13 @@ mod tests {
 
         async fn match_items(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<()> {
             Ok(())
+        }
+
+        async fn prepare_publication_details(
+            &self,
+            _id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<u64> {
+            Ok(self.pending_publication_details)
         }
 
         async fn stage_publication(
@@ -7661,6 +7718,36 @@ mod tests {
                 mode: PlayoutBuildMode::Refresh,
             }]
         );
+    }
+
+    #[tokio::test]
+    async fn add_on_media_list_publication_defers_scanning_for_required_details() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let repository = RecordingAddonMediaListRepository {
+            publication_events: Arc::clone(&events),
+            pending_publication_details: 3,
+            ..Default::default()
+        };
+        let runtime = RecordingPublicationRuntime {
+            events: Arc::clone(&events),
+            fail_scan: false,
+        };
+        let queue = RecordingQueue::default();
+        let operations = coordinator();
+
+        let outcome = publish_addon_media_list(
+            PublishAddonMediaList { id: 7 },
+            &repository,
+            &runtime,
+            &queue,
+            &operations,
+        )
+        .await
+        .expect("prepare playback details");
+
+        assert_eq!(outcome, Some(3));
+        assert!(events.lock().expect("publication events").is_empty());
+        assert!(queue.requests.lock().expect("queued refreshes").is_empty());
     }
 
     #[tokio::test]

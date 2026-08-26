@@ -8,6 +8,12 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AddonMediaListPublishResult {
+    Published,
+    PreparingPlaybackDetails { item_count: u64 },
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListRow {
     pub id: i64,
@@ -161,6 +167,33 @@ pub struct AddonMediaListItemRow {
     pub metadata_conflict_count: u32,
     pub detail_state: AddonMediaListDetailState,
     pub detail_diagnostic: Option<String>,
+}
+
+/// Exact operator-owned values for one quick table edit or undo snapshot.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListItemReviewEdit {
+    pub item_id: i64,
+    pub content_kind: AddonMediaListContentKind,
+    pub included: bool,
+    pub liveness_override: Option<RemoteStreamLiveness>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<AddonMediaListItemReviewEdit>
+    for ersatzrs_core::repositories::AddonMediaListItemReviewEdit
+{
+    fn from(edit: AddonMediaListItemReviewEdit) -> Self {
+        Self {
+            item_id: edit.item_id,
+            content_kind: edit.content_kind,
+            included: edit.included,
+            liveness_override: edit.liveness_override,
+            season: edit.season,
+            episode: edit.episode,
+        }
+    }
 }
 
 /// Per-availability entry totals for one list.
@@ -890,6 +923,26 @@ pub async fn apply_addon_media_list_content_kind(
         .map_err(ServerFnError::new)
 }
 
+/// Atomically apply quick-review values or a prior undo snapshot.
+#[server]
+pub async fn apply_addon_media_list_item_review_edits(
+    id: i64,
+    edits: Vec<AddonMediaListItemReviewEdit>,
+) -> Result<u64, ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .apply_addon_media_list_item_review_edits(
+            ersatzrs_app::commands::ApplyAddonMediaListItemReviewEdits {
+                id,
+                edits: edits.into_iter().map(Into::into).collect(),
+            },
+        )
+        .await
+        .map_err(ServerFnError::new)
+}
+
 /// Assign one season and consecutive episode numbers in original provider order.
 #[server]
 pub async fn assign_addon_media_list_episode_numbers(
@@ -1124,15 +1177,20 @@ pub async fn match_addon_media_list(id: i64) -> Result<(), ServerFnError> {
 
 /// Publish the reviewed metadata snapshot, then scan its managed library.
 #[server]
-pub async fn publish_addon_media_list(id: i64) -> Result<(), ServerFnError> {
+pub async fn publish_addon_media_list(
+    id: i64,
+) -> Result<AddonMediaListPublishResult, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    state
+    let pending_details = state
         .application
         .publish_addon_media_list(ersatzrs_app::commands::PublishAddonMediaList { id })
         .await
         .map_err(ServerFnError::new)?;
+    if let Some(item_count) = pending_details {
+        return Ok(AddonMediaListPublishResult::PreparingPlaybackDetails { item_count });
+    }
     if let Some(library_id) = state
         .application
         .addon_media_list_library_id(id)
@@ -1146,7 +1204,7 @@ pub async fn publish_addon_media_list(id: i64) -> Result<(), ServerFnError> {
             ))
             .await;
     }
-    Ok(())
+    Ok(AddonMediaListPublishResult::Published)
 }
 
 #[server]

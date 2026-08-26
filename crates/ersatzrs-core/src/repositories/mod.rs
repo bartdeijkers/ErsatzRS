@@ -29,9 +29,10 @@ pub use addon_media_list::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListArtwork,
     AddonMediaListArtworkRole, AddonMediaListArtworkUpload, AddonMediaListImportAction,
     AddonMediaListImportProgress, AddonMediaListItemAdminRow, AddonMediaListItemCounts,
-    AddonMediaListItemDetail, AddonMediaListMetadataConflict, AddonMediaListNfoForm,
-    AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListNfoPerson,
-    AddonMediaListPublication, AddonMediaListReplacementCandidate, AddonMediaListRepository,
+    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict,
+    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoOwnership,
+    AddonMediaListNfoPerson, AddonMediaListPublication, AddonMediaListReplacementCandidate,
+    AddonMediaListRepository,
 };
 pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,

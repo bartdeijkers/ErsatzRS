@@ -3,9 +3,9 @@ use ersatzrs_core::repositories::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListArtwork,
     AddonMediaListArtworkRole, AddonMediaListArtworkUpload, AddonMediaListImportAction,
     AddonMediaListItemAdminRow, AddonMediaListItemCounts, AddonMediaListItemDetail,
-    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
-    AddonMediaListNfoOwnership, AddonMediaListPublication, AddonMediaListReplacementCandidate,
-    AddonMediaListRepository, RepositoryError, Result,
+    AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict, AddonMediaListNfoForm,
+    AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListPublication,
+    AddonMediaListReplacementCandidate, AddonMediaListRepository, RepositoryError, Result,
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
@@ -24,7 +24,9 @@ use crate::metadata::{
     artwork_identity, artwork_kind, replace_artwork, replace_guids, replace_metadata_languages,
     replace_people, replace_strings, ArtworkRef, PersonRef,
 };
-use crate::repositories::common::{decode_bool_column, decode_optional_datetime};
+use crate::repositories::common::{
+    decode_bool_column, decode_optional_datetime, decode_optional_enum_column,
+};
 use crate::repositories::SqlxResultExt as _;
 
 const PAGE_SIZE_KEY: &str = "pages.addon_media_lists.page_size";
@@ -553,6 +555,124 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         Ok(updated.rows_affected())
     }
 
+    async fn apply_item_review_edits(
+        &self,
+        id: EntityId,
+        edits: &[AddonMediaListItemReviewEdit],
+    ) -> Result<u64> {
+        const MAX_BULK_ITEMS: usize = 10_000;
+        if edits.len() > MAX_BULK_ITEMS {
+            return Err(RepositoryError::Conflict(format!(
+                "a review-table edit may contain at most {MAX_BULK_ITEMS} items"
+            )));
+        }
+        let unique_ids = edits
+            .iter()
+            .map(|edit| edit.item_id)
+            .collect::<std::collections::BTreeSet<_>>();
+        if unique_ids.len() != edits.len() {
+            return Err(RepositoryError::Conflict(
+                "a review-table edit contains duplicate item identities".to_owned(),
+            ));
+        }
+
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let review_state: Option<i32> =
+            sqlx::query_scalar(r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(id)
+                .fetch_optional(&mut *tx)
+                .await
+                .repository()?;
+        let Some(review_state) = review_state else {
+            return Err(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            });
+        };
+        if review_state
+            == crate::repositories::common::encode_enum(AddonMediaListReviewState::Publishing)
+        {
+            return Err(publication_in_progress());
+        }
+
+        for edit in edits {
+            let row = sqlx::query(
+                r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson", "MetadataConflictJson"
+                   FROM "AddonMediaListItem"
+                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+            )
+            .bind(edit.item_id)
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .repository()?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media list item",
+                id: edit.item_id,
+            })?;
+            let provider_json: String = row.try_get("ProviderMetadataJson").repository()?;
+            let override_json: String = row.try_get("MetadataOverrideJson").repository()?;
+            let conflict_json: Option<String> = row.try_get("MetadataConflictJson").repository()?;
+            let mut form =
+                metadata_form_from_json(&provider_json, &override_json, conflict_json.as_deref())?;
+            form.metadata.season = edit.season;
+            form.metadata.episode = edit.episode;
+            form.conflicts.remove("season");
+            form.conflicts.remove("episode");
+            let overrides =
+                metadata_override_json(&metadata_json_value(&provider_json)?, &form.metadata)?;
+            let conflicts = if form.conflicts.is_empty() {
+                None
+            } else {
+                Some(serde_json::to_string(&form.conflicts).map_err(|error| {
+                    RepositoryError::Decode {
+                        kind: "add-on metadata conflicts",
+                        value: error.to_string(),
+                    }
+                })?)
+            };
+            let content_kind = crate::repositories::common::encode_enum(edit.content_kind);
+            let liveness = edit
+                .liveness_override
+                .map(crate::repositories::common::encode_enum);
+            let updated = sqlx::query(
+                r#"UPDATE "AddonMediaListItem"
+                   SET "ContentKind" = ?, "Included" = ?,
+                       "LivenessOverride" = CASE WHEN "Kind" = 4 THEN ? ELSE "LivenessOverride" END,
+                       "EffectiveLiveness" = CASE WHEN "Kind" = 4 THEN COALESCE(?, "ProviderLiveness") ELSE "EffectiveLiveness" END,
+                       "LivenessConflict" = CASE WHEN "Kind" = 4 THEN 0 ELSE "LivenessConflict" END,
+                       "MetadataOverrideJson" = ?, "MetadataConflictJson" = ?
+                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+            )
+            .bind(content_kind)
+            .bind(edit.included)
+            .bind(liveness)
+            .bind(liveness)
+            .bind(overrides)
+            .bind(conflicts)
+            .bind(edit.item_id)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(RepositoryError::NotFound {
+                    kind: "add-on media list item",
+                    id: edit.item_id,
+                });
+            }
+        }
+
+        if !edits.is_empty() {
+            mark_list_ready_tx(&mut tx, id).await?;
+        }
+        tx.commit().await.repository()?;
+        u64::try_from(edits.len()).map_err(|_| RepositoryError::Decode {
+            kind: "updated review-table item count",
+            value: edits.len().to_string(),
+        })
+    }
+
     async fn assign_episode_numbers(
         &self,
         id: EntityId,
@@ -904,6 +1024,116 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         AddonMediaListSynchronizer::new(self.0.clone())
             .match_list_items(id)
             .await
+    }
+
+    async fn prepare_publication_details(&self, id: EntityId) -> Result<u64> {
+        let form = self
+            .get_admin_form(id)
+            .await?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            })?;
+        if form.review_state == AddonMediaListReviewState::Publishing {
+            return Err(publication_in_progress());
+        }
+        let rows = sqlx::query(
+            r#"SELECT "item"."Id", "item"."DisplayTitle",
+                      "detail"."State" AS "DetailState", "detail"."ResultRecordJson"
+               FROM "AddonMediaListItem" AS "item"
+               LEFT JOIN "AddonMediaListDetailJob" AS "detail"
+                 ON "detail"."AddonMediaListItemId" = "item"."Id"
+               WHERE "item"."AddonMediaListId" = ? AND "item"."Included" = 1
+                 AND "item"."Kind" = ? AND "item"."EffectiveLiveness" = ?
+                 AND ("item"."DurationSeconds" IS NULL OR "item"."DurationSeconds" <= 0)
+               ORDER BY "item"."Rank", "item"."Id""#,
+        )
+        .bind(id)
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListItemKind::RemoteStream,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            RemoteStreamLiveness::Finite,
+        ))
+        .fetch_all(&self.0)
+        .await
+        .repository()?;
+        if rows.is_empty() {
+            return Ok(0);
+        }
+
+        for row in &rows {
+            let title: String = row.try_get("DisplayTitle").repository()?;
+            let state = decode_optional_enum_column::<AddonMediaListDetailState>(
+                "AddonMediaListDetailState",
+                row,
+                "DetailState",
+            )?;
+            let Some(state) = state else {
+                return Err(RepositoryError::Conflict(format!(
+                    "{title} is finite media but its add-on does not provide item-detail enrichment"
+                )));
+            };
+            if matches!(
+                state,
+                AddonMediaListDetailState::Complete | AddonMediaListDetailState::Skipped
+            ) {
+                return Err(RepositoryError::Conflict(format!(
+                    "provider details for {title} do not include the required positive duration"
+                )));
+            }
+        }
+
+        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        for row in &rows {
+            let item_id: EntityId = row.try_get("Id").repository()?;
+            let updated = sqlx::query(
+                r#"UPDATE "AddonMediaListDetailJob"
+                   SET "State" = CASE
+                           WHEN "State" IN (?, ?, ?) THEN "State"
+                           WHEN "ResultRecordJson" IS NOT NULL THEN ?
+                           ELSE ?
+                       END,
+                       "ManualPriority" = 1,
+                       "RequestedAt" = COALESCE("RequestedAt", ?),
+                       "NextEligibleAt" = NULL, "Diagnostic" = NULL, "UpdatedAt" = ?
+                   WHERE "AddonMediaListId" = ? AND "AddonMediaListItemId" = ?"#,
+            )
+            .bind(crate::repositories::common::encode_enum(
+                AddonMediaListDetailState::Running,
+            ))
+            .bind(crate::repositories::common::encode_enum(
+                AddonMediaListDetailState::Complete,
+            ))
+            .bind(crate::repositories::common::encode_enum(
+                AddonMediaListDetailState::Skipped,
+            ))
+            .bind(crate::repositories::common::encode_enum(
+                AddonMediaListDetailState::Running,
+            ))
+            .bind(crate::repositories::common::encode_enum(
+                AddonMediaListDetailState::Queued,
+            ))
+            .bind(&now)
+            .bind(&now)
+            .bind(id)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the required item-detail work changed while publication was being prepared"
+                        .to_owned(),
+                ));
+            }
+        }
+        tx.commit().await.repository()?;
+        u64::try_from(rows.len()).map_err(|error| RepositoryError::Decode {
+            kind: "add-on publication detail count",
+            value: error.to_string(),
+        })
     }
 
     async fn stage_publication(&self, id: EntityId) -> Result<AddonMediaListPublication> {

@@ -24,10 +24,9 @@ be republished as any supported library type without running the provider a
 second time; the stored provider snapshot, source order, inclusion, and
 operator overrides remain the durable control plane while only the media
 projection changes.
-Television drafts also provide atomic, provider-free bulk numbering in original
-provider order. Operators can assign one season in bounded batches, preserve
-existing numbering by default, skip occupied episode identities, and still
-correct every result through the item accordion before publication.
+Television drafts provide direct row editing plus atomic, provider-order
+numbering from any included item. Bounded or date-gap-detected assignments and
+responsive bulk media-kind/playback edits share one-step undo.
 AMM-F implements ADR 0078: Remote Stream remains the live-or-on-demand type and
 one provider-neutral unknown/finite/live value now crosses the frozen add-on
 contract, provider and operator snapshots, Publish, refresh, generated
@@ -57,7 +56,18 @@ select one deterministic non-empty artwork winner, and narrow restart-safe
 SQLite/MySQL repairs remove only safe exact duplicates. Aggregate health and
 runtime-audit diagnostics plus a 27-episode browser proof keep the invariant
 visible without exposing media paths.
+AMM-I tracks Windows dogfood UX gaps in overview visibility,
+draft/publication state, and narrow-screen keyboard/reflow behavior; see
+amm-i-01 and plans/addon-list-import-review-ux.md.
 '''
+
+[[debt]]
+id          = 'addon-list-import-review-ux-obscures-state-and-mobile-actions'
+description = 'Make add-on-list discovery, saved-draft state, publication readiness, navigation, and item review understandable and operable across hydrated, no-JS, keyboard, desktop, and narrow-screen paths.'
+discovered  = '2026-08-26'
+adr         = '0075'
+evidence    = 'A read-only Windows dogfood audit of a 48-item public-series import observed Ready to review and 48 of 48 discovered while the editor still showed zero rows until Save. At 390 and 320 CSS pixels the 1382-pixel interactive review table hid state and row actions behind a scrollbar after roughly 1882 pixels of content. Keyboard focus entered about fourteen translated-off-canvas drawer controls before the page, while the visible label-based menu toggle was not focusable. Source inspection also proved that create and Publish depend on hydration and that the list-level Save fallback substitutes an incomplete request shape. The current live build does expose Add-on lists under Media sources, so the earlier wholly missing navigation link is not claimed as current evidence. Tracked by milestone amm-i-01 and plans/addon-list-import-review-ux.md.'
+resolved    = false
 
 [[debt]]
 id          = 'addon-tv-projection-duplicates-artwork-and-list-rows'
@@ -143,8 +153,26 @@ id          = 'missing-addon-episode-numbering-is-slow-to-repair'
 description = 'Let an operator assign season and episode identities efficiently when an add-on cannot provide them, without editing every row separately.'
 discovered  = '2026-08-22'
 adr         = '0075'
-evidence    = 'Resolved by the localized television-only numbering accordion, atomic provider-order override operation, bounded multi-season batches, safe preservation and collision skipping for existing identities, effective-metadata row labels, and repository, application, hydration, Chromium, and Playwright MCP regressions.'
+evidence    = 'Resolved by direct per-row season/episode spinbuttons, a movable provider-order cursor, configurable first-air-date gap season detection, atomic undoable override operations, bounded batches, safe preservation and collision skipping for existing identities, effective-metadata row labels, and repository, application, hydration, and Chromium regressions.'
 resolved    = true
+
+[[debt]]
+id          = 'addon-list-review-actions-are-ambiguous-and-not-undoable'
+description = 'Make inclusion versus review state explicit and support responsive, undoable bulk media-kind and playback-behavior edits without losing stable row identity.'
+discovered  = '2026-08-26'
+adr         = '0075'
+evidence    = 'The shared editor now has one labelled Include in publication control per item, removes the ambiguous review-selection checkbox, applies media kind and playback behavior to All items, Current page, or Items needing review, and retains one atomic undo snapshot. Keyed rows use provider-backed item identity so hydrated updates cannot visually multiply repeated-title broadcasts. Chromium covers desktop, mobile, reduced-motion, persistence, and undo behavior.'
+resolved    = true
+resolution  = 'Review intent is labelled at the control, bulk scope is explicit and responsive, mutations are atomic and undoable, and row identity is independent of display title.'
+
+[[debt]]
+id          = 'finite-addon-items-can-reach-publication-without-duration'
+description = 'Acquire playback-required duration details before publishing included finite streams instead of failing the scanner validation after publication begins.'
+discovered  = '2026-08-26'
+adr         = '0079'
+evidence    = 'Publication preparation selects only included finite remote streams with missing or non-positive durations, promotes their existing durable detail jobs without resetting running or terminal work, and returns a typed Preparing playback details result. The hydrated editor polls progress and retries publication after completion; repository and application regressions plus Chromium cover the prerequisite and the precise terminal conflict.'
+resolved    = true
+resolution  = 'Finite media cannot enter publication until durable detail enrichment supplies a positive duration; live items remain exempt and terminal missing-duration results fail explicitly.'
 
 [[debt]]
 id          = 'official-addons-do-not-share-a-complete-editor-contract'

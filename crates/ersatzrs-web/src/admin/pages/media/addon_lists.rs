@@ -17,22 +17,22 @@ use crate::admin::i18n::{
     addon_media_list_error_message, delete_failed, match_status, range_of, save_failed, tr, TextKey,
 };
 use crate::admin::server_fns::addon_media_lists::{
-    add_addon_media_list, apply_addon_media_list_content_kind, apply_addon_media_list_liveness,
-    assign_addon_media_list_episode_numbers, change_addon_media_list_addon,
+    add_addon_media_list, apply_addon_media_list_content_kind,
+    apply_addon_media_list_item_review_edits, change_addon_media_list_addon,
     control_addon_media_list_import, delete_addon_media_list, get_addon_media_list_form,
     get_addon_media_list_item, get_addon_media_list_show_nfo, get_addon_media_lists_page_size,
     list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
     match_addon_media_list, publish_addon_media_list, request_addon_media_list_item_details,
     request_addon_media_list_presentation, resolve_addon_media_list_provider,
     save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
-    search_addon_media_list_replacements, set_addon_media_list_item_content_kind,
-    set_addon_media_list_item_included, set_addon_media_list_item_liveness,
-    set_addon_media_list_item_replacement, set_addon_media_list_item_role, update_addon_media_list,
-    update_addon_media_list_item_chapters, AddonMediaListArtwork, AddonMediaListArtworkRole,
-    AddonMediaListForm, AddonMediaListImportAction, AddonMediaListImportProgressRow,
-    AddonMediaListItemDetail, AddonMediaListItemRow, AddonMediaListMetadataConflict,
+    search_addon_media_list_replacements, set_addon_media_list_item_replacement,
+    set_addon_media_list_item_role, update_addon_media_list, update_addon_media_list_item_chapters,
+    AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListForm,
+    AddonMediaListImportAction, AddonMediaListImportProgressRow, AddonMediaListItemDetail,
+    AddonMediaListItemReviewEdit, AddonMediaListItemRow, AddonMediaListMetadataConflict,
     AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
-    AddonMediaListProviderRow, AddonMediaListReplacementRow, AddonMediaListRow,
+    AddonMediaListProviderRow, AddonMediaListPublishResult, AddonMediaListReplacementRow,
+    AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
@@ -263,16 +263,51 @@ const DEFAULT_ITEM_PAGE_SIZE: u32 = 25;
 
 /// Setting or clearing the local replacement of one entry.
 type ReplacementAction = Action<(i64, Option<(i64, i64)>), Result<(), ServerFnError>>;
-/// Setting the descriptive classification of one entry.
-type ContentKindAction = Action<(i64, AddonMediaListContentKind), Result<(), ServerFnError>>;
-type InclusionAction = Action<(i64, i64, bool), Result<(), ServerFnError>>;
 type ItemRoleAction = Action<(i64, i64, AddonMediaListItemRole), Result<(), ServerFnError>>;
-type LivenessAction = Action<(i64, i64, Option<RemoteStreamLiveness>), Result<(), ServerFnError>>;
 type ItemDetailAction = Action<i64, Result<Option<AddonMediaListItemDetail>, ServerFnError>>;
 type DetailRequestAction = Action<(i64, i64), Result<(), ServerFnError>>;
 /// Searching local media that could replace one entry.
 type ReplacementSearchAction =
     Action<String, Result<Vec<AddonMediaListReplacementRow>, ServerFnError>>;
+
+#[derive(Clone, Debug)]
+struct ReviewUndoEntry {
+    label: String,
+    snapshots: Vec<AddonMediaListItemReviewEdit>,
+}
+
+type ReviewEditAction = Action<
+    (i64, Vec<AddonMediaListItemReviewEdit>, ReviewUndoEntry),
+    Result<ReviewUndoEntry, ServerFnError>,
+>;
+
+fn review_snapshot(item: &AddonMediaListItemRow) -> AddonMediaListItemReviewEdit {
+    AddonMediaListItemReviewEdit {
+        item_id: item.id,
+        content_kind: item.content_kind,
+        included: item.included,
+        liveness_override: item.liveness_override,
+        season: item.season,
+        episode: item.episode,
+    }
+}
+
+fn dispatch_review_edit(
+    action: ReviewEditAction,
+    list_id: i64,
+    previous: AddonMediaListItemReviewEdit,
+    desired: AddonMediaListItemReviewEdit,
+    label: TextKey,
+) {
+    action.dispatch((
+        list_id,
+        vec![desired],
+        ReviewUndoEntry {
+            label: tr(label).to_string(),
+            snapshots: vec![previous],
+        },
+    ));
+}
 
 const fn liveness_text_key(liveness: RemoteStreamLiveness) -> TextKey {
     match liveness {
@@ -418,12 +453,11 @@ fn item_row_view(
     replacement_query: RwSignal<String>,
     search_action: ReplacementSearchAction,
     replacement_action: ReplacementAction,
-    content_kind_action: ContentKindAction,
-    inclusion_action: InclusionAction,
+    review_edit_action: ReviewEditAction,
     role_action: ItemRoleAction,
-    liveness_action: LivenessAction,
-    selected_items: RwSignal<BTreeSet<i64>>,
     episode_preview: Memo<BTreeMap<i64, (i32, i32)>>,
+    episode_numbering_open: RwSignal<bool>,
+    episode_numbering_start_item_id: RwSignal<Option<i64>>,
     presentation: RwSignal<AddonMediaListPresentationKind>,
     open_item: RwSignal<Option<i64>>,
     loaded_detail: RwSignal<Option<AddonMediaListItemDetail>>,
@@ -449,6 +483,7 @@ fn item_row_view(
             .unwrap_or_else(|| tr(TextKey::NoReplacement).to_string())
     };
     let content_kind = item.content_kind;
+    let review_state = review_snapshot(&item);
     let collection_role = item.collection_role;
     let included = item.included;
     let current_episode_number = item
@@ -507,6 +542,14 @@ fn item_row_view(
             && (item.season.is_none() || item.episode.is_none()));
     let availability_reason = item.availability_reason.unwrap_or_default();
     let has_reason = !availability_reason.is_empty();
+    let season_input = RwSignal::new(
+        item.season
+            .map_or_else(String::new, |value| value.to_string()),
+    );
+    let episode_input = RwSignal::new(
+        item.episode
+            .map_or_else(String::new, |value| value.to_string()),
+    );
     let toggle_editor = move || {
         if open_item.get_untracked() == Some(item_id) {
             open_item.set(None);
@@ -526,40 +569,32 @@ fn item_row_view(
                 style::metadata_item_row.to_owned()
             }
             aria-expanded=move || if open_item.get() == Some(item_id) { "true" } else { "false" }
+            data-item-id=item_id
             on:click=move |_| toggle_editor()
         >
-            <td class=style::selection_cell>
-                <input
-                    type="checkbox"
-                    aria-label=tr(TextKey::SelectItem)
-                    style:visibility=if is_remote_stream { "visible" } else { "hidden" }
-                    prop:checked=move || selected_items.with(|selected| selected.contains(&item_id))
-                    on:change=move |event| {
-                        event.stop_propagation();
-                        let checked = event_target_checked(&event);
-                        selected_items.update(|selected| {
-                            if checked {
-                                selected.insert(item_id);
-                            } else {
-                                selected.remove(&item_id);
-                            }
-                        });
-                    }
-                    on:click=|event| event.stop_propagation()
-                />
-            </td>
             <td class=style::number_cell>{row_number}</td>
-            <td>
-                <input
-                    type="checkbox"
-                    checked=included
-                    aria-label=tr(TextKey::IncludeItem)
-                    on:change=move |event| {
-                        event.stop_propagation();
-                        inclusion_action.dispatch((list_id, item_id, event_target_checked(&event)));
-                    }
-                    on:click=|event| event.stop_propagation()
-                />
+            <td class=style::include_cell>
+                <label title=tr(TextKey::IncludeInPublication)>
+                    <input
+                        type="checkbox"
+                        checked=included
+                        aria-label=tr(TextKey::IncludeInPublication)
+                        on:change=move |event| {
+                            event.stop_propagation();
+                            let mut desired = review_state;
+                            desired.included = event_target_checked(&event);
+                            dispatch_review_edit(
+                                review_edit_action,
+                                list_id,
+                                review_state,
+                                desired,
+                                TextKey::IncludeInPublication,
+                            );
+                        }
+                        on:click=|event| event.stop_propagation()
+                    />
+                    <span class=style::visually_hidden>{tr(TextKey::IncludeInPublication)}</span>
+                </label>
             </td>
             <td class=style::item_artwork_cell>
                 <span class=style::item_thumbnail>
@@ -590,21 +625,86 @@ fn item_row_view(
             </td>
             <td class=style::compact_cell>{first_aired}</td>
             <td class=style::episode_cell>
-                {move || {
-                    if let Some((season, episode)) =
-                        episode_preview.with(|preview| preview.get(&item_id).copied())
-                    {
-                        let next = format!("S{season:02}E{episode:02}");
-                        if current_episode_number.is_empty() || current_episode_number == next {
-                            next
-                        } else {
-                            format!("{current_episode_number} → {next}")
-                        }
-                    } else if current_episode_number.is_empty() {
-                        "—".to_owned()
-                    } else {
-                        current_episode_number.clone()
-                    }
+                {move || if presentation.get() == AddonMediaListPresentationKind::TelevisionShow {
+                    let preview_current_episode_number = current_episode_number.clone();
+                    view! {
+                        <div class=style::episode_quick_edit>
+                            <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                inputmode="numeric"
+                                aria-label=tr(TextKey::Season)
+                                placeholder="S"
+                                prop:value=move || season_input.get()
+                                on:click=|event| event.stop_propagation()
+                                on:input=move |event| season_input.set(event_target_value(&event))
+                            />
+                            <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                inputmode="numeric"
+                                aria-label=tr(TextKey::Episode)
+                                placeholder="E"
+                                prop:value=move || episode_input.get()
+                                on:click=|event| event.stop_propagation()
+                                on:input=move |event| episode_input.set(event_target_value(&event))
+                            />
+                            <button
+                                type="button"
+                                class=style::episode_apply
+                                aria-label=tr(TextKey::SaveSeasonEpisode)
+                                title=tr(TextKey::SaveSeasonEpisode)
+                                disabled=move || {
+                                    !matches!(season_input.get().trim().parse::<i32>(), Ok(value) if value >= 0)
+                                        || !matches!(episode_input.get().trim().parse::<i32>(), Ok(value) if value >= 1)
+                                }
+                                on:click=move |event| {
+                                    event.stop_propagation();
+                                    let season = season_input.get_untracked().trim().parse::<i32>();
+                                    let episode = episode_input.get_untracked().trim().parse::<i32>();
+                                    if let (Ok(season), Ok(episode)) = (season, episode) {
+                                        let mut desired = review_state;
+                                        desired.season = Some(season);
+                                        desired.episode = Some(episode);
+                                        dispatch_review_edit(
+                                            review_edit_action,
+                                            list_id,
+                                            review_state,
+                                            desired,
+                                            TextKey::SeasonEpisode,
+                                        );
+                                    }
+                                }
+                            >"✓"</button>
+                        </div>
+                        <small class=style::episode_preview>
+                            {move || episode_preview.with(|preview| {
+                                preview.get(&item_id).map_or_else(String::new, |(season, episode)| {
+                                    let next = format!("S{season:02}E{episode:02}");
+                                    if preview_current_episode_number.is_empty() || preview_current_episode_number == next {
+                                        next
+                                    } else {
+                                        format!("{preview_current_episode_number} → {next}")
+                                    }
+                                })
+                            })}
+                        </small>
+                        <button
+                            type="button"
+                            class=style::start_here
+                            style:display=move || if episode_numbering_open.get() { "inline-flex" } else { "none" }
+                            aria-pressed=move || if episode_numbering_start_item_id.get() == Some(item_id) { "true" } else { "false" }
+                            on:click=move |event| {
+                                event.stop_propagation();
+                                episode_numbering_start_item_id.set(Some(item_id));
+                            }
+                        >{tr(TextKey::StartHere)}</button>
+                    }.into_any()
+                } else {
+                    let display_episode_number = current_episode_number.clone();
+                    view! { <span>{if display_episode_number.is_empty() { "—".to_owned() } else { display_episode_number }}</span> }.into_any()
                 }}
             </td>
             <td>
@@ -643,10 +743,15 @@ fn item_row_view(
                             on:click=|event| event.stop_propagation()
                             on:change=move |event| {
                                 event.stop_propagation();
-                                content_kind_action.dispatch((
-                                    item_id,
-                                    content_kind_from_value(&event_target_value(&event)),
-                                ));
+                                let mut desired = review_state;
+                                desired.content_kind = content_kind_from_value(&event_target_value(&event));
+                                dispatch_review_edit(
+                                    review_edit_action,
+                                    list_id,
+                                    review_state,
+                                    desired,
+                                    TextKey::MediaKind,
+                                );
                             }
                         >
                             <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
@@ -669,11 +774,16 @@ fn item_row_view(
                     on:click=|event| event.stop_propagation()
                     on:change=move |event| {
                         event.stop_propagation();
-                        liveness_action.dispatch((
+                        let mut desired = review_state;
+                        desired.liveness_override =
+                            liveness_override_from_value(&event_target_value(&event));
+                        dispatch_review_edit(
+                            review_edit_action,
                             list_id,
-                            item_id,
-                            liveness_override_from_value(&event_target_value(&event)),
-                        ));
+                            review_state,
+                            desired,
+                            TextKey::PlaybackBehavior,
+                        );
                     }
                 >
                     <option value="provider">
@@ -803,7 +913,7 @@ fn item_row_view(
             class=style::metadata_accordion_row
             style:display=move || if open_item.get() == Some(item_id) { "table-row" } else { "none" }
         >
-            <td colspan="11">
+            <td colspan="10">
                 {move || loaded_detail.get().map_or_else(
                     || view! { <p class=style::inline_loading>{tr(TextKey::Loading)}</p> }.into_any(),
                     |detail| view! {
@@ -2280,73 +2390,146 @@ fn item_needs_review(
             && item.collection_role == AddonMediaListItemRole::Auto)
 }
 
+fn bulk_scope_items(
+    items: &[AddonMediaListItemRow],
+    scope: &str,
+    presentation: AddonMediaListPresentationKind,
+    current_filter_needs_review: bool,
+    page_start: usize,
+    page_end: usize,
+) -> Vec<AddonMediaListItemRow> {
+    match scope {
+        "current_page" => items
+            .iter()
+            .filter(|item| !current_filter_needs_review || item_needs_review(item, presentation))
+            .skip(page_start)
+            .take(page_end.saturating_sub(page_start))
+            .cloned()
+            .collect(),
+        "needs_review" => items
+            .iter()
+            .filter(|item| item_needs_review(item, presentation))
+            .cloned()
+            .collect(),
+        _ => items.to_vec(),
+    }
+}
+
+#[cfg(test)]
 fn episode_numbering_preview_values(
     items: &[AddonMediaListItemRow],
+    start_item_id: Option<i64>,
     season: i32,
     starting_episode: i32,
     count: usize,
     replace_existing: bool,
 ) -> Vec<i32> {
+    let assignments = episode_numbering_preview_assignments(
+        items,
+        start_item_id,
+        season,
+        starting_episode,
+        count,
+        replace_existing,
+    );
+    items
+        .iter()
+        .filter_map(|item| assignments.get(&item.id).map(|(_, episode)| *episode))
+        .collect()
+}
+
+fn numbering_candidates(
+    items: &[AddonMediaListItemRow],
+    start_item_id: Option<i64>,
+) -> Vec<&AddonMediaListItemRow> {
     let candidates = items
         .iter()
         .filter(|item| item.included && item.parent_provider_id.is_none())
         .collect::<Vec<_>>();
-    let mut occupied = BTreeSet::new();
-    if replace_existing {
-        occupied.extend(
-            candidates
-                .iter()
-                .skip(count)
-                .filter(|item| item.season == Some(season))
-                .filter_map(|item| item.episode.filter(|value| *value >= 1)),
-        );
-    } else {
-        occupied.extend(
-            candidates
-                .iter()
-                .filter(|item| item.season == Some(season))
-                .filter_map(|item| item.episode.filter(|value| *value >= 1)),
-        );
-    }
-    let mut values = Vec::with_capacity(count);
-    let mut episode = starting_episode;
-    while values.len() < count {
-        while occupied.contains(&episode) {
-            let Some(next) = episode.checked_add(1) else {
-                return values;
-            };
-            episode = next;
-        }
-        values.push(episode);
-        occupied.insert(episode);
-        episode = episode.saturating_add(1);
-    }
-    values
+    let start = start_item_id
+        .and_then(|item_id| candidates.iter().position(|item| item.id == item_id))
+        .unwrap_or(0);
+    candidates.into_iter().skip(start).collect()
 }
 
 fn episode_numbering_preview_assignments(
     items: &[AddonMediaListItemRow],
+    start_item_id: Option<i64>,
     season: i32,
     starting_episode: i32,
     count: usize,
     replace_existing: bool,
 ) -> BTreeMap<i64, (i32, i32)> {
-    let item_ids = items
-        .iter()
-        .filter(|item| item.included && item.parent_provider_id.is_none())
+    let targets = numbering_candidates(items, start_item_id)
+        .into_iter()
         .filter(|item| {
             replace_existing
                 || item.season.is_none_or(|value| value < 0)
                 || item.episode.is_none_or(|value| value < 1)
         })
         .take(count)
-        .map(|item| item.id);
-    let values =
-        episode_numbering_preview_values(items, season, starting_episode, count, replace_existing);
-    item_ids
-        .zip(values)
-        .map(|(item_id, episode)| (item_id, (season, episode)))
-        .collect()
+        .collect::<Vec<_>>();
+    let target_ids = targets.iter().map(|item| item.id).collect::<BTreeSet<_>>();
+    let mut occupied = BTreeSet::new();
+    occupied.extend(
+        items
+            .iter()
+            .filter(|item| item.included && item.parent_provider_id.is_none())
+            .filter(|item| !target_ids.contains(&item.id))
+            .filter(|item| item.season == Some(season))
+            .filter_map(|item| item.episode.filter(|value| *value >= 1)),
+    );
+    let mut assignments = BTreeMap::new();
+    let mut episode = starting_episode;
+    for item in targets {
+        while occupied.contains(&episode) {
+            let Some(next) = episode.checked_add(1) else {
+                return assignments;
+            };
+            episode = next;
+        }
+        assignments.insert(item.id, (season, episode));
+        occupied.insert(episode);
+        episode = episode.saturating_add(1);
+    }
+    assignments
+}
+
+fn parse_first_aired(value: Option<&str>) -> Option<chrono::NaiveDate> {
+    let value = value?.trim();
+    let date = value.get(..10).unwrap_or(value);
+    chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()
+}
+
+fn auto_detect_episode_assignments(
+    items: &[AddonMediaListItemRow],
+    start_item_id: Option<i64>,
+    starting_season: i32,
+    minimum_gap_days: i64,
+    count: usize,
+) -> BTreeMap<i64, (i32, i32)> {
+    let mut assignments = BTreeMap::new();
+    let mut season = starting_season;
+    let mut episode = 0_i32;
+    let mut previous_known_date = None;
+    for item in numbering_candidates(items, start_item_id)
+        .into_iter()
+        .take(count)
+    {
+        let first_aired = parse_first_aired(item.first_aired.as_deref());
+        if let (Some(previous), Some(current)) = (previous_known_date, first_aired) {
+            if current.signed_duration_since(previous).num_days() >= minimum_gap_days {
+                season = season.saturating_add(1);
+                episode = 0;
+            }
+        }
+        if first_aired.is_some() {
+            previous_known_date = first_aired;
+        }
+        episode = episode.saturating_add(1);
+        assignments.insert(item.id, (season, episode));
+    }
+    assignments
 }
 
 const fn item_section_heading(presentation: AddonMediaListPresentationKind) -> TextKey {
@@ -2496,20 +2679,9 @@ fn AddonMediaListEditorIsland(
     let episode_numbering_start = RwSignal::new("1".to_owned());
     let episode_numbering_count = RwSignal::new(String::new());
     let replace_existing_episode_numbers = RwSignal::new(false);
-    let assign_episode_numbers_action =
-        Action::new(|value: &(i64, i32, i32, Option<u32>, bool)| {
-            let (id, season, starting_episode, item_count, missing_only) = *value;
-            async move {
-                assign_addon_media_list_episode_numbers(
-                    id,
-                    season,
-                    starting_episode,
-                    item_count,
-                    missing_only,
-                )
-                .await
-            }
-        });
+    let episode_numbering_start_item_id = RwSignal::new(None::<i64>);
+    let episode_numbering_auto_detect = RwSignal::new(false);
+    let episode_numbering_minimum_gap_days = RwSignal::new("90".to_owned());
     let checked_auto_refresh = form.auto_refresh;
     let checked_generate_playlist = form.generate_playlist;
     let replacement_target = RwSignal::new(None::<i64>);
@@ -2551,29 +2723,13 @@ fn AddonMediaListEditorIsland(
     // Keep one provider-ordered overview for every collection type. Availability
     // is a review status, not a separate navigation hierarchy.
     let items = RwSignal::new(initial_items);
-    let selected_items = RwSignal::new(BTreeSet::<i64>::new());
-    let bulk_liveness_value = RwSignal::new("provider".to_owned());
+    let bulk_scope_value = RwSignal::new("all".to_owned());
+    let bulk_content_kind_value = RwSignal::new("unchanged".to_owned());
+    let bulk_liveness_value = RwSignal::new("unchanged".to_owned());
+    let last_review_undo = RwSignal::new(None::<ReviewUndoEntry>);
     let need_review_filter = RwSignal::new(false);
     let item_page = RwSignal::new(0_u32);
     let item_page_size = RwSignal::new(DEFAULT_ITEM_PAGE_SIZE);
-    let remote_item_ids = Memo::new(move |_| {
-        items.with(|items| {
-            items
-                .iter()
-                .filter(|item| item.kind == AddonMediaListItemKind::RemoteStream)
-                .map(|item| item.id)
-                .collect::<Vec<_>>()
-        })
-    });
-    let selected_remote_count = Memo::new(move |_| {
-        let remote_ids = remote_item_ids.get();
-        selected_items.with(|selected| {
-            remote_ids
-                .iter()
-                .filter(|item_id| selected.contains(item_id))
-                .count()
-        })
-    });
     let need_review_count = Memo::new(move |_| {
         items.with(|items| {
             items
@@ -2594,11 +2750,11 @@ fn AddonMediaListEditorIsland(
     });
     let episode_numbering_candidate_count = Memo::new(move |_| {
         items.with(|items| {
-            items
-                .iter()
-                .filter(|item| item.included && item.parent_provider_id.is_none())
+            numbering_candidates(items, episode_numbering_start_item_id.get())
+                .into_iter()
                 .filter(|item| {
-                    replace_existing_episode_numbers.get()
+                    episode_numbering_auto_detect.get()
+                        || replace_existing_episode_numbers.get()
                         || item.season.is_none_or(|value| value < 0)
                         || item.episode.is_none_or(|value| value < 1)
                 })
@@ -2619,31 +2775,6 @@ fn AddonMediaListEditorIsland(
             }
         })
     });
-    let episode_numbering_preview = Memo::new(move |_| {
-        let season = episode_numbering_season
-            .get()
-            .trim()
-            .parse::<i32>()
-            .ok()
-            .filter(|value| *value >= 0)?;
-        let starting_episode = episode_numbering_start
-            .get()
-            .trim()
-            .parse::<i32>()
-            .ok()
-            .filter(|value| *value >= 1)?;
-        let count = episode_numbering_assignment_count.get();
-        let values = items.with(|items| {
-            episode_numbering_preview_values(
-                items,
-                season,
-                starting_episode,
-                count,
-                replace_existing_episode_numbers.get(),
-            )
-        });
-        Some((season, values))
-    });
     let episode_numbering_row_preview = Memo::new(move |_| {
         if !episode_numbering_open.get()
             || presentation_kind.get() != AddonMediaListPresentationKind::TelevisionShow
@@ -2659,24 +2790,66 @@ fn AddonMediaListEditorIsland(
         else {
             return BTreeMap::new();
         };
-        let Some(starting_episode) = episode_numbering_start
-            .get()
-            .trim()
-            .parse::<i32>()
-            .ok()
-            .filter(|value| *value >= 1)
-        else {
-            return BTreeMap::new();
+        let starting_episode = if episode_numbering_auto_detect.get() {
+            1
+        } else {
+            let Some(starting_episode) = episode_numbering_start
+                .get()
+                .trim()
+                .parse::<i32>()
+                .ok()
+                .filter(|value| *value >= 1)
+            else {
+                return BTreeMap::new();
+            };
+            starting_episode
         };
         let count = episode_numbering_assignment_count.get();
         items.with(|items| {
-            episode_numbering_preview_assignments(
-                items,
-                season,
-                starting_episode,
-                count,
-                replace_existing_episode_numbers.get(),
-            )
+            if episode_numbering_auto_detect.get() {
+                let Some(minimum_gap_days) = episode_numbering_minimum_gap_days
+                    .get()
+                    .trim()
+                    .parse::<i64>()
+                    .ok()
+                    .filter(|value| *value >= 1)
+                else {
+                    return BTreeMap::new();
+                };
+                auto_detect_episode_assignments(
+                    items,
+                    episode_numbering_start_item_id.get(),
+                    season,
+                    minimum_gap_days,
+                    count,
+                )
+            } else {
+                episode_numbering_preview_assignments(
+                    items,
+                    episode_numbering_start_item_id.get(),
+                    season,
+                    starting_episode,
+                    count,
+                    replace_existing_episode_numbers.get(),
+                )
+            }
+        })
+    });
+    let episode_numbering_preview = Memo::new(move |_| {
+        let assignments = episode_numbering_row_preview.get();
+        if assignments.is_empty() {
+            return None;
+        }
+        items.with(|items| {
+            let ordered = items
+                .iter()
+                .filter_map(|item| assignments.get(&item.id).copied())
+                .collect::<Vec<_>>();
+            ordered
+                .first()
+                .copied()
+                .zip(ordered.last().copied())
+                .map(|(first, last)| (ordered.len(), first, last))
         })
     });
     let item_page_range = Memo::new(move |_| {
@@ -2702,6 +2875,20 @@ fn AddonMediaListEditorIsland(
             start.saturating_add(size as usize).min(total)
         };
         (start, end, total, page, total_pages)
+    });
+    let bulk_scope_count = Memo::new(move |_| {
+        let (start, end, _, _, _) = item_page_range.get();
+        items.with(|items| {
+            bulk_scope_items(
+                items,
+                &bulk_scope_value.get(),
+                presentation_kind.get(),
+                need_review_filter.get(),
+                start,
+                end,
+            )
+            .len()
+        })
     });
     let episode_numbering_off_page_count = Memo::new(move |_| {
         let preview = episode_numbering_row_preview.get();
@@ -2735,30 +2922,24 @@ fn AddonMediaListEditorIsland(
         })
     });
     let reload_items_action = Action::new(|id: &i64| list_addon_media_list_items(*id));
-    let item_content_kind_action = Action::new(|value: &(i64, AddonMediaListContentKind)| {
-        let (item_id, content_kind) = *value;
-        async move { set_addon_media_list_item_content_kind(item_id, content_kind).await }
-    });
-    let item_inclusion_action = Action::new(|value: &(i64, i64, bool)| {
-        let (list_id, item_id, included) = *value;
-        async move { set_addon_media_list_item_included(list_id, item_id, included).await }
-    });
+    let review_edit_action = Action::new(
+        |value: &(i64, Vec<AddonMediaListItemReviewEdit>, ReviewUndoEntry)| {
+            let (id, edits, undo) = value.clone();
+            async move {
+                apply_addon_media_list_item_review_edits(id, edits).await?;
+                Ok(undo)
+            }
+        },
+    );
+    let undo_review_edit_action =
+        Action::new(|value: &(i64, Vec<AddonMediaListItemReviewEdit>)| {
+            let (id, snapshots) = value.clone();
+            async move { apply_addon_media_list_item_review_edits(id, snapshots).await }
+        });
     let item_role_action = Action::new(|value: &(i64, i64, AddonMediaListItemRole)| {
         let (list_id, item_id, role) = *value;
         async move { set_addon_media_list_item_role(list_id, item_id, role).await }
     });
-    let item_liveness_action = Action::new(|value: &(i64, i64, Option<RemoteStreamLiveness>)| {
-        let (list_id, item_id, liveness) = *value;
-        async move { set_addon_media_list_item_liveness(list_id, item_id, liveness).await }
-    });
-    let bulk_liveness_action =
-        Action::new(|value: &(i64, Option<RemoteStreamLiveness>, Vec<i64>)| {
-            let (id, liveness, item_ids) = value.clone();
-            async move {
-                let item_ids = (!item_ids.is_empty()).then_some(item_ids);
-                apply_addon_media_list_liveness(id, liveness, item_ids).await
-            }
-        });
     let open_item = RwSignal::new(None::<i64>);
     let loaded_detail = RwSignal::new(None::<AddonMediaListItemDetail>);
     let item_detail_action = Action::new(move |item_id: &i64| {
@@ -2938,15 +3119,6 @@ fn AddonMediaListEditorIsland(
         }
     });
     Effect::new(move |_| {
-        if let Some(result) = item_inclusion_action.value().get() {
-            match result {
-                Ok(()) => reload_items(),
-                Err(error) => toast.push(
-                    save_failed(addon_media_list_error_message(error)),
-                    ToastSeverity::Error,
-                ),
-            }
-        }
         if let Some(result) = item_role_action.value().get() {
             match result {
                 Ok(()) => reload_items(),
@@ -2956,19 +3128,12 @@ fn AddonMediaListEditorIsland(
                 ),
             }
         }
-        if let Some(result) = item_liveness_action.value().get() {
+    });
+    Effect::new(move |_| {
+        if let Some(result) = review_edit_action.value().get() {
             match result {
-                Ok(()) => reload_items(),
-                Err(error) => toast.push(
-                    save_failed(addon_media_list_error_message(error)),
-                    ToastSeverity::Error,
-                ),
-            }
-        }
-        if let Some(result) = bulk_liveness_action.value().get() {
-            match result {
-                Ok(_) => {
-                    selected_items.set(BTreeSet::new());
+                Ok(undo) => {
+                    last_review_undo.set(Some(undo));
                     toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
                     reload_items();
                 }
@@ -2978,11 +3143,45 @@ fn AddonMediaListEditorIsland(
                 ),
             }
         }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = undo_review_edit_action.value().get() {
+            match result {
+                Ok(_) => {
+                    last_review_undo.set(None);
+                    toast.push(
+                        tr(TextKey::ChangeUndone).to_string(),
+                        ToastSeverity::Success,
+                    );
+                    reload_items();
+                }
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
         if let Some(result) = publish_action.value().get() {
             match result {
-                Ok(()) => {
+                Ok(AddonMediaListPublishResult::Published) => {
                     toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
                     set_browser_location(&format!("/media/addon-lists/{id}"));
+                }
+                Ok(AddonMediaListPublishResult::PreparingPlaybackDetails { item_count }) => {
+                    toast.push(
+                        format!(
+                            "{}: {item_count}. {}",
+                            tr(TextKey::PlaybackDetailsQueued),
+                            tr(TextKey::PublishAgainAfterDetails)
+                        ),
+                        ToastSeverity::Info,
+                    );
+                    reload_items();
+                    if !poll_running.get_untracked() {
+                        poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
+                    }
                 }
                 Err(error) => toast.push(
                     save_failed(addon_media_list_error_message(error)),
@@ -2995,21 +3194,6 @@ fn AddonMediaListEditorIsland(
         if let Some(result) = apply_content_kind_action.value().get() {
             match result {
                 Ok(_) => {
-                    toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
-                    reload_items();
-                }
-                Err(error) => toast.push(
-                    save_failed(addon_media_list_error_message(error)),
-                    ToastSeverity::Error,
-                ),
-            }
-        }
-    });
-    Effect::new(move |_| {
-        if let Some(result) = assign_episode_numbers_action.value().get() {
-            match result {
-                Ok(_) => {
-                    episode_numbering_open.set(false);
                     toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
                     reload_items();
                 }
@@ -3576,6 +3760,33 @@ fn AddonMediaListEditorIsland(
                         style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow && episode_numbering_open.get() { "grid" } else { "none" }
                     >
                         <p>{tr(TextKey::NumberEpisodesHelp)}</p>
+                        <div class=style::numbering_mode>
+                            <label class=style::checkbox_row>
+                                <input
+                                    type="checkbox"
+                                    prop:checked=move || episode_numbering_auto_detect.get()
+                                    on:change=move |event| {
+                                        episode_numbering_auto_detect.set(event_target_checked(&event));
+                                    }
+                                />
+                                <small>{tr(TextKey::AutoDetectSeasons)}</small>
+                            </label>
+                            <small>{tr(TextKey::AutoDetectSeasonsHelp)}</small>
+                        </div>
+                        <div class=style::numbering_cursor>
+                            <span>{tr(TextKey::NumberingStartsAt)}</span>
+                            <strong>{move || episode_numbering_start_item_id.get().and_then(|item_id| {
+                                items.with(|items| items.iter().find(|item| item.id == item_id).map(|item| {
+                                    format!("#{} · {}", item.rank.saturating_add(1), item.display_title)
+                                }))
+                            }).unwrap_or_else(|| tr(TextKey::FirstIncludedItem).to_string())}</strong>
+                            <button
+                                type="button"
+                                class=style::start_here
+                                disabled=move || episode_numbering_start_item_id.get().is_none()
+                                on:click=move |_| episode_numbering_start_item_id.set(None)
+                            >{tr(TextKey::StartWithFirstItem)}</button>
+                        </div>
                         <div class=style::numbering_fields>
                             <label class=style::metadata_field>
                                 <span>{tr(TextKey::Season)}</span>
@@ -3585,6 +3796,7 @@ fn AddonMediaListEditorIsland(
                                     min="0"
                                     step="1"
                                     inputmode="numeric"
+                                    aria-label=tr(TextKey::Season)
                                     prop:value=move || episode_numbering_season.get()
                                     on:input=move |event| episode_numbering_season.set(event_target_value(&event))
                                 />
@@ -3597,6 +3809,8 @@ fn AddonMediaListEditorIsland(
                                     min="1"
                                     step="1"
                                     inputmode="numeric"
+                                    aria-label=tr(TextKey::FirstEpisode)
+                                    disabled=move || episode_numbering_auto_detect.get()
                                     prop:value=move || episode_numbering_start.get()
                                     on:input=move |event| episode_numbering_start.set(event_target_value(&event))
                                 />
@@ -3609,9 +3823,26 @@ fn AddonMediaListEditorIsland(
                                     min="1"
                                     step="1"
                                     inputmode="numeric"
+                                    aria-label=tr(TextKey::NumberToAssign)
                                     placeholder=tr(TextKey::AllRemaining)
                                     prop:value=move || episode_numbering_count.get()
                                     on:input=move |event| episode_numbering_count.set(event_target_value(&event))
+                                />
+                            </label>
+                            <label
+                                class=style::metadata_field
+                                style:display=move || if episode_numbering_auto_detect.get() { "grid" } else { "none" }
+                            >
+                                <span>{tr(TextKey::MinimumSeasonGapDays)}</span>
+                                <input
+                                    class=style::boxed_input
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    inputmode="numeric"
+                                    aria-label=tr(TextKey::MinimumSeasonGapDays)
+                                    prop:value=move || episode_numbering_minimum_gap_days.get()
+                                    on:input=move |event| episode_numbering_minimum_gap_days.set(event_target_value(&event))
                                 />
                             </label>
                         </div>
@@ -3620,6 +3851,7 @@ fn AddonMediaListEditorIsland(
                                 <label class=style::checkbox_row>
                                     <input
                                         type="checkbox"
+                                        disabled=move || episode_numbering_auto_detect.get()
                                         prop:checked=move || replace_existing_episode_numbers.get()
                                         on:change=move |event| replace_existing_episode_numbers.set(event_target_checked(&event))
                                     />
@@ -3628,10 +3860,8 @@ fn AddonMediaListEditorIsland(
                                 <small class=style::numbering_preview aria-live="polite">
                                     {move || {
                                         match episode_numbering_preview.get() {
-                                            Some((season, values)) if !values.is_empty() => {
-                                                let first = values[0];
-                                                let last = values[values.len() - 1];
-                                                format!("{} {} · S{season:02}E{first:02}–S{season:02}E{last:02}", values.len(), tr(TextKey::Episodes))
+                                            Some((count, (first_season, first_episode), (last_season, last_episode))) => {
+                                                format!("{count} {} · S{first_season:02}E{first_episode:02}–S{last_season:02}E{last_episode:02}", tr(TextKey::Episodes))
                                             }
                                             _ => format!("0 {}", tr(TextKey::Episodes)),
                                         }
@@ -3649,83 +3879,50 @@ fn AddonMediaListEditorIsland(
                                 type="button"
                                 class=style::btn_add
                                 disabled=move || {
-                                    assign_episode_numbers_action.pending().get()
+                                    review_edit_action.pending().get()
                                         || episode_numbering_assignment_count.get() == 0
                                         || !matches!(episode_numbering_season.get().trim().parse::<i32>(), Ok(value) if value >= 0)
-                                        || !matches!(episode_numbering_start.get().trim().parse::<i32>(), Ok(value) if value >= 1)
+                                        || (!episode_numbering_auto_detect.get()
+                                            && !matches!(episode_numbering_start.get().trim().parse::<i32>(), Ok(value) if value >= 1))
+                                        || (episode_numbering_auto_detect.get()
+                                            && !matches!(episode_numbering_minimum_gap_days.get().trim().parse::<i64>(), Ok(value) if value >= 1))
                                 }
                                 on:click=move |_| {
-                                    let season = episode_numbering_season.get_untracked().trim().parse::<i32>();
-                                    let starting_episode = episode_numbering_start.get_untracked().trim().parse::<i32>();
-                                    let item_count = episode_numbering_count.with_untracked(|value| {
-                                        let value = value.trim();
-                                        if value.is_empty() { Some(None) } else { value.parse::<u32>().ok().map(Some) }
+                                    let assignments = episode_numbering_row_preview.get_untracked();
+                                    let previous = items.with_untracked(|items| {
+                                        items
+                                            .iter()
+                                            .filter(|item| assignments.contains_key(&item.id))
+                                            .map(review_snapshot)
+                                            .collect::<Vec<_>>()
                                     });
-                                    if let (Ok(season), Ok(starting_episode), Some(item_count)) = (season, starting_episode, item_count) {
-                                        assign_episode_numbers_action.dispatch((
+                                    let desired = previous
+                                        .iter()
+                                        .map(|snapshot| {
+                                            let mut desired = *snapshot;
+                                            if let Some((season, episode)) = assignments.get(&snapshot.item_id) {
+                                                desired.season = Some(*season);
+                                                desired.episode = Some(*episode);
+                                            }
+                                            desired
+                                        })
+                                        .collect::<Vec<_>>();
+                                    if !desired.is_empty() {
+                                        review_edit_action.dispatch((
                                             id,
-                                            season,
-                                            starting_episode,
-                                            item_count,
-                                            !replace_existing_episode_numbers.get_untracked(),
+                                            desired,
+                                            ReviewUndoEntry {
+                                                label: tr(TextKey::NumberEpisodes).to_string(),
+                                                snapshots: previous,
+                                            },
                                         ));
+                                        episode_numbering_open.set(false);
                                     }
                                 }
                             >
                                 <span>{tr(TextKey::Apply)}</span>
                             </button>
                         </div>
-                    </section>
-                    <section
-                        class=style::liveness_bulk_toolbar
-                        aria-label=tr(TextKey::PlaybackBehavior)
-                        style:display=move || if remote_item_ids.with(Vec::is_empty) { "none" } else { "flex" }
-                    >
-                        <label>
-                            <span>{tr(TextKey::PlaybackBehavior)}</span>
-                            <select
-                                class=style::page_size
-                                prop:value=move || bulk_liveness_value.get()
-                                on:change=move |event| bulk_liveness_value.set(event_target_value(&event))
-                            >
-                                <option value="provider">{tr(TextKey::UseProviderValue)}</option>
-                                <option value="finite">{tr(TextKey::FiniteMedia)}</option>
-                                <option value="live">{tr(TextKey::LiveSource)}</option>
-                            </select>
-                        </label>
-                        <button
-                            type="button"
-                            class=style::numbering_toggle
-                            disabled=move || selected_remote_count.get() == 0 || bulk_liveness_action.pending().get()
-                            on:click=move |_| {
-                                let remote_ids = remote_item_ids.get();
-                                let item_ids = selected_items.with_untracked(|selected| {
-                                    remote_ids
-                                        .into_iter()
-                                        .filter(|item_id| selected.contains(item_id))
-                                        .collect::<Vec<_>>()
-                                });
-                                bulk_liveness_action.dispatch((
-                                    id,
-                                    liveness_override_from_value(&bulk_liveness_value.get_untracked()),
-                                    item_ids,
-                                ));
-                            }
-                        >
-                            {move || format!("{} ({})", tr(TextKey::ApplyToSelected), selected_remote_count.get())}
-                        </button>
-                        <button
-                            type="button"
-                            class=style::numbering_toggle
-                            disabled=move || remote_item_ids.with(Vec::is_empty) || bulk_liveness_action.pending().get()
-                            on:click=move |_| {
-                                bulk_liveness_action.dispatch((
-                                    id,
-                                    liveness_override_from_value(&bulk_liveness_value.get_untracked()),
-                                    Vec::new(),
-                                ));
-                            }
-                        >{tr(TextKey::ApplyToAllRemoteStreams)}</button>
                     </section>
                     <div class=style::discovery_summary aria-live="polite">
                         <strong>{move || format!("{} {}", items.with(Vec::len), tr(TextKey::Discovered))}</strong>
@@ -3744,32 +3941,129 @@ fn AddonMediaListEditorIsland(
                             <span>{move || format!("{} {}", need_review_count.get(), tr(TextKey::NeedReview))}</span>
                         </button>
                     </div>
+                    <section class=style::bulk_edit_toolbar aria-label=tr(TextKey::BulkEdit)>
+                        <label>
+                            <span>{tr(TextKey::Scope)}</span>
+                            <select
+                                class=style::page_size
+                                aria-label=tr(TextKey::Scope)
+                                prop:value=move || bulk_scope_value.get()
+                                on:change=move |event| bulk_scope_value.set(event_target_value(&event))
+                            >
+                                <option value="all">{tr(TextKey::AllItems)}</option>
+                                <option value="current_page">{tr(TextKey::CurrentPage)}</option>
+                                <option value="needs_review">{tr(TextKey::ItemsNeedingReview)}</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>{tr(TextKey::MediaKind)}</span>
+                            <select
+                                class=style::page_size
+                                aria-label=format!("{} · {}", tr(TextKey::BulkEdit), tr(TextKey::MediaKind))
+                                prop:value=move || bulk_content_kind_value.get()
+                                on:change=move |event| bulk_content_kind_value.set(event_target_value(&event))
+                            >
+                                <option value="unchanged">{tr(TextKey::KeepCurrentValue)}</option>
+                                <option value="auto">{tr(TextKey::LeaveEmptyToAutoDetect)}</option>
+                                <option value="television_episode">{tr(TextKey::TelevisionEpisode)}</option>
+                                <option value="movie">{tr(TextKey::Movie)}</option>
+                                <option value="music_video">{tr(TextKey::MusicVideo)}</option>
+                                <option value="other_video">{tr(TextKey::OtherVideo)}</option>
+                                <option value="song">{tr(TextKey::Song)}</option>
+                                <option value="image">{tr(TextKey::Image)}</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>{tr(TextKey::PlaybackBehavior)}</span>
+                            <select
+                                class=style::page_size
+                                aria-label=format!("{} · {}", tr(TextKey::BulkEdit), tr(TextKey::PlaybackBehavior))
+                                prop:value=move || bulk_liveness_value.get()
+                                on:change=move |event| bulk_liveness_value.set(event_target_value(&event))
+                            >
+                                <option value="unchanged">{tr(TextKey::KeepCurrentValue)}</option>
+                                <option value="provider">{tr(TextKey::UseProviderValue)}</option>
+                                <option value="finite">{tr(TextKey::FiniteMedia)}</option>
+                                <option value="live">{tr(TextKey::LiveSource)}</option>
+                            </select>
+                        </label>
+                        <button
+                            type="button"
+                            class=style::undo_button
+                            disabled=move || last_review_undo.with(Option::is_none) || undo_review_edit_action.pending().get()
+                            on:click=move |_| {
+                                if let Some(undo) = last_review_undo.get_untracked() {
+                                    undo_review_edit_action.dispatch((id, undo.snapshots));
+                                }
+                            }
+                        >
+                            {move || last_review_undo.with(|undo| undo.as_ref().map_or_else(
+                                || tr(TextKey::UndoLastChange).to_string(),
+                                |undo| format!("{}: {}", tr(TextKey::Undo), undo.label),
+                            ))}
+                        </button>
+                        <button
+                            type="button"
+                            class=style::btn_add
+                            disabled=move || {
+                                review_edit_action.pending().get()
+                                    || bulk_scope_count.get() == 0
+                                    || (bulk_content_kind_value.get() == "unchanged"
+                                        && bulk_liveness_value.get() == "unchanged")
+                            }
+                            on:click=move |_| {
+                                let (start, end, _, _, _) = item_page_range.get_untracked();
+                                let scoped = items.with_untracked(|items| {
+                                    bulk_scope_items(
+                                        items,
+                                        &bulk_scope_value.get_untracked(),
+                                        presentation_kind.get_untracked(),
+                                        need_review_filter.get_untracked(),
+                                        start,
+                                        end,
+                                    )
+                                });
+                                let content_kind = bulk_content_kind_value.get_untracked();
+                                let liveness = bulk_liveness_value.get_untracked();
+                                let mut previous = Vec::new();
+                                let mut desired = Vec::new();
+                                for item in scoped {
+                                    let before = review_snapshot(&item);
+                                    let mut after = before;
+                                    if content_kind != "unchanged" {
+                                        after.content_kind = content_kind_from_value(&content_kind);
+                                    }
+                                    if liveness != "unchanged"
+                                        && item.kind == AddonMediaListItemKind::RemoteStream
+                                    {
+                                        after.liveness_override = liveness_override_from_value(&liveness);
+                                    }
+                                    if before != after {
+                                        previous.push(before);
+                                        desired.push(after);
+                                    }
+                                }
+                                if !desired.is_empty() {
+                                    review_edit_action.dispatch((
+                                        id,
+                                        desired,
+                                        ReviewUndoEntry {
+                                            label: tr(TextKey::BulkEdit).to_string(),
+                                            snapshots: previous,
+                                        },
+                                    ));
+                                }
+                            }
+                        >{move || format!("{} ({})", tr(TextKey::Apply), bulk_scope_count.get())}</button>
+                    </section>
                     <div class=style::table_wrap>
                         <table data-testid="addon-metadata-items">
                             <thead>
                                 <tr>
-                                    <th class=style::selection_cell>
-                                        <input
-                                            type="checkbox"
-                                            aria-label=tr(TextKey::SelectItem)
-                                            style:visibility=move || if remote_item_ids.with(Vec::is_empty) { "hidden" } else { "visible" }
-                                            prop:checked=move || {
-                                                let total = remote_item_ids.with(Vec::len);
-                                                total > 0 && selected_remote_count.get() == total
-                                            }
-                                            on:change=move |event| {
-                                                if event_target_checked(&event) {
-                                                    selected_items.set(remote_item_ids.get().into_iter().collect());
-                                                } else {
-                                                    selected_items.set(BTreeSet::new());
-                                                }
-                                            }
-                                        />
-                                    </th>
                                     <th class=style::number_cell aria-label=tr(TextKey::Number)>
                                         <span aria-hidden="true">"#"</span>
                                     </th>
-                                    <th>{tr(TextKey::IncludeItem)}</th>
+                                    <th>{tr(TextKey::IncludeInPublication)}</th>
                                     <th class=style::item_artwork_cell/>
                                     <th>{tr(TextKey::Name)}</th>
                                     <th>{tr(TextKey::FirstAired)}</th>
@@ -3781,45 +4075,43 @@ fn AddonMediaListEditorIsland(
                                 </tr>
                             </thead>
                             <tbody>
-                                {move || {
-                                    let (start, end, _, _, _) = item_page_range.get();
-                                    let rows = items
-                                        .get()
-                                        .into_iter()
-                                        .filter(|item| {
-                                            !need_review_filter.get()
-                                                || item_needs_review(item, presentation_kind.get())
-                                        })
-                                        .skip(start)
-                                        .take(end.saturating_sub(start))
-                                        .collect::<Vec<_>>();
-                                    if rows.is_empty() {
-                                        return view! {
-                                            <tr><td class=style::empty_cell colspan="11">{tr(TextKey::NoItemsToDisplay)}</td></tr>
-                                        }.into_any();
+                                <tr style:display=move || if filtered_item_count.get() == 0 { "table-row" } else { "none" }>
+                                    <td class=style::empty_cell colspan="10">{tr(TextKey::NoItemsToDisplay)}</td>
+                                </tr>
+                                <For
+                                    each=move || {
+                                        let (start, end, _, _, _) = item_page_range.get();
+                                        items
+                                            .get()
+                                            .into_iter()
+                                            .filter(|item| {
+                                                !need_review_filter.get()
+                                                    || item_needs_review(item, presentation_kind.get())
+                                            })
+                                            .skip(start)
+                                            .take(end.saturating_sub(start))
+                                            .collect::<Vec<_>>()
                                     }
-                                    rows.into_iter().map(|item| {
-                                        item_row_view(
-                                            id,
-                                            item,
-                                            replacement_target,
-                                            replacement_query,
-                                            search_action,
-                                            replacement_action,
-                                            item_content_kind_action,
-                                            item_inclusion_action,
-                                            item_role_action,
-                                            item_liveness_action,
-                                            selected_items,
-                                            episode_numbering_row_preview,
-                                            presentation_kind,
-                                            open_item,
-                                            loaded_detail,
-                                            item_detail_action,
-                                            request_detail_action,
-                                        )
-                                    }).collect_view().into_any()
-                                }}
+                                    key=|item| format!("{}:{item:?}", item.id)
+                                    children=move |item| item_row_view(
+                                        id,
+                                        item,
+                                        replacement_target,
+                                        replacement_query,
+                                        search_action,
+                                        replacement_action,
+                                        review_edit_action,
+                                        item_role_action,
+                                        episode_numbering_row_preview,
+                                        episode_numbering_open,
+                                        episode_numbering_start_item_id,
+                                        presentation_kind,
+                                        open_item,
+                                        loaded_detail,
+                                        item_detail_action,
+                                        request_detail_action,
+                                    )
+                                />
                             </tbody>
                         </table>
                     </div>
@@ -3888,6 +4180,8 @@ fn AddonMediaListEditorIsland(
                                 || import_progress.with(|progress| {
                                     progress.as_ref().is_some_and(|progress| {
                                         progress.state != AddonMediaListImportState::Ready
+                                            || (published_revision.get() == 0
+                                                && progress.detail_pending > 0)
                                     })
                                 })
                         }
@@ -4118,8 +4412,11 @@ mod tests {
             },
             AddonMediaListItemRow {
                 id: 2,
-                season: Some(3),
-                episode: Some(4),
+                included: true,
+                ..AddonMediaListItemRow::default()
+            },
+            AddonMediaListItemRow {
+                id: 4,
                 included: true,
                 ..AddonMediaListItemRow::default()
             },
@@ -4133,11 +4430,11 @@ mod tests {
         ];
 
         assert_eq!(
-            episode_numbering_preview_values(&items, 2, 3, 2, false),
+            episode_numbering_preview_values(&items, None, 2, 3, 2, false),
             [5, 6]
         );
         assert_eq!(
-            episode_numbering_preview_values(&items, 2, 3, 2, true),
+            episode_numbering_preview_values(&items, None, 2, 3, 2, true),
             [3, 5]
         );
     }
@@ -4176,12 +4473,39 @@ mod tests {
         ];
 
         assert_eq!(
-            episode_numbering_preview_assignments(&items, 1, 1, 5, false),
+            episode_numbering_preview_assignments(&items, None, 1, 1, 5, false),
             BTreeMap::from([(1, (1, 1)), (5, (1, 2))])
         );
         assert_eq!(
-            episode_numbering_preview_assignments(&items, 1, 1, 2, true),
+            episode_numbering_preview_assignments(&items, None, 1, 1, 2, true),
             BTreeMap::from([(1, (1, 1)), (4, (1, 2))])
+        );
+    }
+
+    #[test]
+    fn numbering_can_start_at_a_selected_row_and_detect_date_gaps() {
+        let items = [
+            (1, Some("2020-01-01")),
+            (2, None),
+            (3, Some("2020-02-01")),
+            (4, Some("2020-06-15")),
+        ]
+        .into_iter()
+        .map(|(id, first_aired)| AddonMediaListItemRow {
+            id,
+            included: true,
+            first_aired: first_aired.map(str::to_owned),
+            ..AddonMediaListItemRow::default()
+        })
+        .collect::<Vec<_>>();
+
+        assert_eq!(
+            auto_detect_episode_assignments(&items, None, 1, 90, 4),
+            BTreeMap::from([(1, (1, 1)), (2, (1, 2)), (3, (1, 3)), (4, (2, 1)),])
+        );
+        assert_eq!(
+            episode_numbering_preview_assignments(&items, Some(3), 4, 7, 2, true),
+            BTreeMap::from([(3, (4, 7)), (4, (4, 8))])
         );
     }
 

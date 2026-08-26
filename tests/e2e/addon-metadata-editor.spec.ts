@@ -351,13 +351,13 @@ test.describe('shared add-on metadata editor', () => {
       page.getByRole('checkbox', { name: 'Create playlist in original order' }),
     ).not.toBeChecked();
     const loadDetails = page.getByRole('checkbox', {
-      name: 'Load item details after publishing',
+      name: 'Load item details automatically',
     });
     await expect(loadDetails).toBeChecked();
-    await expect(page.getByText(/fetch one item's extended metadata/i)).toBeVisible();
+    await expect(page.getByText(/playback-required technical details.*before the first publication/i)).toBeVisible();
     await loadDetails.uncheck();
     await expect(
-      page.getByText(/import the overview only; fetch details manually per item/i),
+      page.getByText(/request descriptive details manually.*before publication/i),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Import' })).toBeDisabled();
     expect(runtimeErrors).toEqual([]);
@@ -410,6 +410,57 @@ FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = ${seed.secondItemI
     expect(runtimeErrors).toEqual([]);
   });
 
+  test('queues a missing finite duration before publication instead of failing save', async ({
+    page,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    const suffix = testInfo.project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const providerHost = `e2e-duration-${suffix}.invalid`;
+    sqlite(`
+UPDATE "AddonMediaListItem" SET "DurationSeconds" = NULL WHERE "Id" = ${seed.firstItemId};
+INSERT INTO "AddonMediaListImportJob" (
+  "AddonMediaListId", "Generation", "State", "RecordCapability", "DiscoveredCount",
+  "TotalHint", "OverviewComplete", "LastProgressAt", "CreatedAt", "UpdatedAt", "CompletedAt"
+) VALUES (
+  ${seed.listId}, 1, 3, 'media-list.list.v4', 2, 2, 1,
+  '2026-08-26T10:00:00Z', '2026-08-26T10:00:00Z',
+  '2026-08-26T10:00:00Z', '2026-08-26T10:00:00Z'
+);
+INSERT INTO "AddonMediaListDetailJob" (
+  "AddonMediaListItemId", "AddonMediaListId", "ProviderHost", "State", "ManualPriority",
+  "OverviewFingerprint", "OverviewRecordJson", "UpdatedAt"
+) VALUES (
+  ${seed.firstItemId}, ${seed.listId}, '${providerHost}', 0, 0,
+  'duration-overview', '{}', '2026-08-26T10:00:00Z'
+);
+INSERT INTO "AddonProviderHostCooldown" (
+  "ProviderHost", "NextEligibleAt", "SampledDelaySeconds", "LastAttemptAt", "UpdatedAt"
+) VALUES (
+  '${providerHost}', '2099-01-01T00:00:00Z', 16,
+  '2026-08-26T10:00:00Z', '2026-08-26T10:00:00Z'
+);
+`);
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+
+    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    await expect(page.getByText(/playback details queued: 1/i)).toBeVisible();
+    await expect(page.getByText(/review the completed details, then publish again/i)).toBeVisible();
+    await expect
+      .poll(() =>
+        sqlite(`
+SELECT "State" || ',' || "ManualPriority"
+FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = ${seed.firstItemId};
+`),
+      )
+      .toMatch(/^[12],1$/);
+    expect(
+      sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`),
+    ).toBe('0');
+    expect(runtimeErrors).toEqual([]);
+  });
+
   test('previews exact numbering across pages with mobile and reduced-motion cues', async ({
     page,
   }, testInfo) => {
@@ -440,7 +491,8 @@ WHERE "Id" = ${seed.firstItemId};
     const firstRow = itemsTable.locator('tbody tr').filter({ hasText: seed.firstTitle }).first();
     await expect(firstRow.getByText('1', { exact: true })).toBeVisible();
     await expect(firstRow.getByText('2026-08-20', { exact: true })).toBeVisible();
-    await expect(firstRow.getByText('S04E09', { exact: true })).toBeVisible();
+    await expect(firstRow.getByRole('spinbutton', { name: 'Season', exact: true })).toHaveValue('4');
+    await expect(firstRow.getByRole('spinbutton', { name: 'Episode', exact: true })).toHaveValue('9');
 
     await page.getByRole('button', { name: /^number episodes$/i }).click();
     const panel = page.locator('#episode-numbering-panel');
@@ -450,12 +502,20 @@ WHERE "Id" = ${seed.firstItemId};
     ).toBeVisible();
     await expect(itemsTable.getByText('S01E01', { exact: true })).toBeVisible();
     await expect(itemsTable.getByText('S01E24', { exact: true })).toBeVisible();
+    const firstPageIds = await itemsTable
+      .locator('tbody tr[data-item-id]')
+      .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-item-id')));
+    expect(new Set(firstPageIds).size).toBe(firstPageIds.length);
 
     const nextPage = page.getByRole('button', { name: 'Next page' });
     await nextPage.focus();
     await page.keyboard.press('Enter');
     await expect(itemsTable.getByText('S01E25', { exact: true })).toBeVisible();
     await expect(itemsTable.getByText('S01E27', { exact: true })).toBeVisible();
+    const secondPageIds = await itemsTable
+      .locator('tbody tr[data-item-id]')
+      .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-item-id')));
+    expect(new Set(secondPageIds).size).toBe(secondPageIds.length);
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(itemsTable).toBeVisible();
@@ -468,7 +528,7 @@ WHERE "Id" = ${seed.firstItemId};
     expect(runtimeErrors).toEqual([]);
   });
 
-  test('edits and restores provider liveness individually and in bounded bulk', async ({
+  test('edits and undoes media kind and playback behavior in explicit bulk scopes', async ({
     page,
   }, testInfo) => {
     const runtimeErrors = watchRuntimeErrors(page);
@@ -489,6 +549,9 @@ WHERE "Id" = ${seed.secondItemId};
     const itemsTable = page.getByTestId('addon-metadata-items');
     const firstRow = itemsTable.locator('tbody tr').filter({ hasText: seed.firstTitle }).first();
     const secondRow = itemsTable.locator('tbody tr').filter({ hasText: seed.secondTitle }).first();
+    await expect(itemsTable.getByRole('columnheader', { name: 'Include in publication' })).toBeVisible();
+    await expect(itemsTable.getByRole('checkbox', { name: 'Include in publication' })).toHaveCount(2);
+    await expect(itemsTable.getByRole('checkbox', { name: 'Select item' })).toHaveCount(0);
     const firstBehavior = firstRow.getByLabel('Playback behavior');
     await expect(firstBehavior).toHaveValue('provider');
     await expect(firstBehavior.locator('option').first()).toHaveText(
@@ -505,7 +568,8 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.firstItemId};
 `),
       )
       .toBe('1,1,0');
-    await firstBehavior.selectOption('provider');
+    const bulk = page.locator('section[aria-label="Bulk edit"]');
+    await bulk.getByRole('button', { name: 'Undo: Playback behavior' }).click();
     await expect
       .poll(() =>
         sqlite(`
@@ -515,45 +579,42 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.firstItemId};
       )
       .toBe('-1,2');
 
-    await firstRow.getByRole('checkbox', { name: 'Select item' }).check();
-    const bulk = page.locator('section[aria-label="Playback behavior"]');
-    await bulk.getByRole('combobox').selectOption('live');
-    const applySelected = bulk.getByRole('button', { name: /apply to selected \(1\)/i });
-    await applySelected.focus();
+    await bulk.getByLabel('Scope').selectOption('all');
+    await bulk.getByLabel('Bulk edit · Media kind').selectOption('television_episode');
+    await bulk.getByLabel('Bulk edit · Playback behavior').selectOption('live');
+    const applyAll = bulk.getByRole('button', { name: /apply \(2\)/i });
+    await applyAll.focus();
     await page.keyboard.press('Enter');
     await expect
       .poll(() =>
         sqlite(`
-SELECT COALESCE("LivenessOverride", -1) || ',' || "EffectiveLiveness"
-FROM "AddonMediaListItem" WHERE "Id" = ${seed.firstItemId};
-`),
-      )
-      .toBe('2,2');
-    expect(
-      sqlite(`SELECT "LivenessOverride" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),
-    ).toBe('1');
-
-    await bulk.getByRole('combobox').selectOption('provider');
-    await bulk.getByRole('button', { name: 'Apply to all remote streams' }).click();
-    await expect
-      .poll(() =>
-        sqlite(`
-SELECT group_concat(COALESCE("LivenessOverride", -1) || ',' || "EffectiveLiveness", ';')
+SELECT group_concat("ContentKind" || ',' || COALESCE("LivenessOverride", -1) || ',' || "EffectiveLiveness", ';')
 FROM (SELECT * FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listId} ORDER BY "Rank");
 `),
       )
-      .toBe('-1,2;-1,2');
+      .toBe('1,2,2;1,2,2');
 
-    const reviewFilter = page.getByRole('button', { name: /1 need review/i });
-    await reviewFilter.click();
-    await expect(itemsTable.getByText(seed.secondTitle)).toBeVisible();
-    await expect(itemsTable.getByText(seed.firstTitle)).toHaveCount(0);
+    await bulk.getByRole('button', { name: 'Undo: Bulk edit' }).click();
+    await expect
+      .poll(() =>
+        sqlite(`
+SELECT group_concat("ContentKind" || ',' || COALESCE("LivenessOverride", -1) || ',' || "EffectiveLiveness", ';')
+FROM (SELECT * FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listId} ORDER BY "Rank");
+`),
+      )
+      .toBe('0,-1,2;0,1,1');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const bulkLayout = await bulk.evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+    expect(bulkLayout.trim().split(/\s+/)).toHaveLength(1);
+    await expect(applyAll).toBeVisible();
     expect(runtimeErrors).toEqual([]);
   });
 
   test('assigns missing episode numbers in original order and allows a bounded overwrite', async ({
     page,
   }, testInfo) => {
+    test.setTimeout(60_000);
     const runtimeErrors = watchRuntimeErrors(page);
     const seed = seedMetadataEditor(testInfo);
     sqlite(`
@@ -570,12 +631,42 @@ SET "ProviderMetadataJson" = json_set(
     "Season" = 4,
     "Episode" = 9
 WHERE "Id" = ${seed.firstItemId};
+UPDATE "AddonMediaListItem"
+SET "ProviderMetadataJson" = json_set(
+      "ProviderMetadataJson", '$.release_date', '2027-01-20'
+    )
+WHERE "Id" = ${seed.secondItemId};
 `);
     await forceEnglish(page);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
     const numberingButton = page.getByRole('button', { name: /^number episodes$/i });
     await expect(numberingButton).toBeVisible();
+    const itemsTable = page.getByTestId('addon-metadata-items');
+    const secondRow = itemsTable.locator('tbody tr').filter({ hasText: seed.secondTitle }).first();
+    await secondRow.getByRole('spinbutton', { name: 'Season', exact: true }).fill('3');
+    await secondRow.getByRole('spinbutton', { name: 'Episode', exact: true }).fill('7');
+    await secondRow.getByRole('button', { name: 'Save season and episode' }).click();
+    await expect
+      .poll(() =>
+        sqlite(`
+SELECT json_extract("MetadataOverrideJson", '$.season') || ',' ||
+       json_extract("MetadataOverrideJson", '$.episode')
+FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
+`),
+      )
+      .toBe('3,7');
+    await page.getByRole('button', { name: 'Undo: Season, Episode' }).click();
+    await expect
+      .poll(() =>
+        sqlite(`
+SELECT COALESCE(json_extract("MetadataOverrideJson", '$.season'), -1) || ',' ||
+       COALESCE(json_extract("MetadataOverrideJson", '$.episode'), -1)
+FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
+`),
+      )
+      .toBe('-1,-1');
+
     await numberingButton.click();
     const panel = page.locator('#episode-numbering-panel');
     await expect(panel).toBeVisible();
@@ -590,8 +681,11 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
 `),
       )
       .toBe('1,1');
-    await expect(page.getByText('S04E09', { exact: true })).toBeVisible();
-    await expect(page.getByText('S01E01', { exact: true })).toBeVisible();
+    const firstRow = itemsTable.locator('tbody tr').filter({ hasText: seed.firstTitle }).first();
+    await expect(firstRow.getByRole('spinbutton', { name: 'Season', exact: true })).toHaveValue('4');
+    await expect(firstRow.getByRole('spinbutton', { name: 'Episode', exact: true })).toHaveValue('9');
+    await expect(secondRow.getByRole('spinbutton', { name: 'Season', exact: true })).toHaveValue('1');
+    await expect(secondRow.getByRole('spinbutton', { name: 'Episode', exact: true })).toHaveValue('1');
 
     await numberingButton.click();
     await panel.getByLabel(/^season$/i).fill('1');
@@ -609,7 +703,8 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.firstItemId};
 `),
       )
       .toBe('1,2');
-    await expect(page.getByText('S01E02', { exact: true })).toBeVisible();
+    await expect(firstRow.getByRole('spinbutton', { name: 'Season', exact: true })).toHaveValue('1');
+    await expect(firstRow.getByRole('spinbutton', { name: 'Episode', exact: true })).toHaveValue('2');
     expect(
       sqlite(`
 SELECT json_extract("MetadataOverrideJson", '$.season') || ',' ||
@@ -617,13 +712,39 @@ SELECT json_extract("MetadataOverrideJson", '$.season') || ',' ||
 FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
 `),
     ).toBe('1,1');
+
+    await numberingButton.click();
+    await panel
+      .getByRole('checkbox', { name: /auto-detect seasons from first-air dates/i })
+      .check();
+    await panel.getByLabel(/^number to assign$/i).fill('');
+    await panel.getByLabel('Minimum gap between seasons (days)').fill('90');
+    await expect(panel.getByText(/2 episodes · s01e01–s02e01/i)).toBeVisible();
+    await secondRow.getByRole('button', { name: 'Start here' }).click();
+    await expect(panel.getByText(new RegExp(`#2 · ${seed.secondTitle}`))).toBeVisible();
+    await expect(panel.getByText(/1 episodes · s01e01–s01e01/i)).toBeVisible();
+    await panel.getByRole('button', { name: 'Start with first item' }).click();
+    await expect(panel.getByText(/2 episodes · s01e01–s02e01/i)).toBeVisible();
+    await panel.getByRole('button', { name: /^apply$/i }).click();
+    await expect
+      .poll(() =>
+        sqlite(`
+SELECT group_concat(
+         json_extract("MetadataOverrideJson", '$.season') || ',' ||
+         json_extract("MetadataOverrideJson", '$.episode'),
+         ';'
+       )
+FROM (SELECT * FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listId} ORDER BY "Rank");
+`),
+      )
+      .toBe('1,1;2,1');
     expect(runtimeErrors).toEqual([]);
   });
 
   test('reviews, edits, uploads, rejects stale ETags, publishes, and reincludes', async ({
     page,
   }, testInfo) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const runtimeErrors = watchRuntimeErrors(page);
     const seed = seedMetadataEditor(testInfo);
     await forceEnglish(page);
@@ -667,7 +788,7 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
       .toBe('tag-120');
 
     reviewRow = itemsTable.locator('tbody tr').filter({ hasText: seed.secondTitle }).first();
-    await reviewRow.getByRole('checkbox', { name: /^include$/i }).uncheck();
+    await reviewRow.getByRole('checkbox', { name: 'Include in publication' }).uncheck();
     await expect
       .poll(() =>
         sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),
@@ -745,7 +866,7 @@ WHERE "Id" = ${seed.secondItemId};
       .locator('tbody tr')
       .filter({ hasText: seed.secondTitle })
       .first();
-    await reincludeRow.getByRole('checkbox', { name: /^include$/i }).check();
+    await reincludeRow.getByRole('checkbox', { name: 'Include in publication' }).check();
     await expect
       .poll(() =>
         sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),

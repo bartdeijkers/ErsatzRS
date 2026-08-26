@@ -13,6 +13,25 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Add undoable direct and bulk add-on-list review controls, cursor-based
+  episode numbering, date-gap season detection, and responsive bulk media-kind
+  and playback-behavior editing.
+
+### Changed
+
+- Reopen the add-on-list review UX contract after Windows dogfood exposed an
+  unexplained Ready-to-review save step, ambiguous saved-versus-published state,
+  incomplete no-JS actions, and mobile keyboard/reflow barriers; corrective
+  acceptance now covers explicit readiness and a responsive item workflow.
+
+### Fixed
+
+- Queue playback-required detail enrichment before publishing finite add-on
+  streams with missing durations, clarify item-inclusion controls, and keep
+  provider-distinct rows stable while the review table updates.
+
 ## [1.0.26-beta] - 2026-08-25
 
 ### Added

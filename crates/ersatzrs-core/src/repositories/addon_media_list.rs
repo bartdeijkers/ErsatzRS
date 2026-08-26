@@ -154,6 +154,20 @@ pub struct AddonMediaListItemAdminRow {
     pub detail_diagnostic: Option<String>,
 }
 
+/// Exact operator-owned fields written by one quick review-table edit.
+///
+/// Keeping the complete small snapshot makes the same atomic operation usable
+/// for inline edits, bounded bulk edits, episode numbering, and one-step undo.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListItemReviewEdit {
+    pub item_id: EntityId,
+    pub content_kind: AddonMediaListContentKind,
+    pub included: bool,
+    pub liveness_override: Option<RemoteStreamLiveness>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
+}
+
 /// Durable progress reconstructed from overview and item-detail job tables.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListImportProgress {
@@ -434,6 +448,13 @@ pub trait AddonMediaListRepository: Send + Sync {
     async fn managed_library_id(&self, id: EntityId) -> Result<Option<EntityId>>;
     /// Rerun local matching without invoking the provider.
     async fn match_items(&self, id: EntityId) -> Result<()>;
+    /// Queue durable detail work required to make the included playback
+    /// snapshot publishable, returning the number of items still being
+    /// prepared. A zero count means publication can proceed immediately.
+    async fn prepare_publication_details(&self, id: EntityId) -> Result<u64> {
+        let _ = id;
+        Ok(0)
+    }
     /// Stage the included draft for managed file generation.
     async fn stage_publication(&self, id: EntityId) -> Result<AddonMediaListPublication> {
         let _ = id;
@@ -587,6 +608,18 @@ pub trait AddonMediaListRepository: Send + Sync {
         id: EntityId,
         content_kind: AddonMediaListContentKind,
     ) -> Result<u64>;
+    /// Atomically apply exact operator-owned review-table snapshots.
+    async fn apply_item_review_edits(
+        &self,
+        id: EntityId,
+        edits: &[AddonMediaListItemReviewEdit],
+    ) -> Result<u64> {
+        let _ = (id, edits);
+        Err(RepositoryError::unavailable(
+            "apply add-on item review edits",
+            "not implemented",
+        ))
+    }
     /// Assign one season and consecutive episode numbers in provider order.
     ///
     /// Only included top-level entries participate. When `missing_only` is

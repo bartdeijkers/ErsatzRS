@@ -442,7 +442,7 @@ impl ApplicationServices {
     pub async fn publish_addon_media_list(
         &self,
         command: commands::PublishAddonMediaList,
-    ) -> Result<()> {
+    ) -> Result<Option<u64>> {
         commands::publish_addon_media_list(
             command,
             self.ports.addon_media_lists(),
@@ -551,6 +551,15 @@ impl ApplicationServices {
         command: commands::ApplyAddonMediaListContentKind,
     ) -> Result<u64> {
         commands::apply_addon_media_list_content_kind(command, self.ports.addon_media_lists()).await
+    }
+
+    /// Apply exact quick-review snapshots atomically.
+    pub async fn apply_addon_media_list_item_review_edits(
+        &self,
+        command: commands::ApplyAddonMediaListItemReviewEdits,
+    ) -> Result<u64> {
+        commands::apply_addon_media_list_item_review_edits(command, self.ports.addon_media_lists())
+            .await
     }
 
     /// Assign consecutive episode numbers to included top-level entries.

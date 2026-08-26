@@ -91,6 +91,7 @@ Contributor how-to guides:
 - [Add a migration](how-to/add-migration.md)
 - [Run tests](how-to/testing.md)
 - [Run snapshot tests](how-to/snapshot-tests.md)
+- [Evaluate the Glamourland add-on-list import UX](how-to/glamourland-addon-list-ux-walkthrough.md)
 - [Reproduce an HLS content-timing deviation](how-to/reproduce-hls-content-timing-deviation.md)
 
 Release-maintainer how-to guides:

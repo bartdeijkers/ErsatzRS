@@ -2118,3 +2118,30 @@ refresh, and restart. Focused repository, health, localization, runtime-audit,
 Chromium, and Firefox proofs pass; both browser projects used the matched
 Leptos bundle and the managed ErsatzRS FFmpeg 9 binaries.
 '''
+
+[[milestone]]
+id         = 'amm-i-01'
+phase      = 'AMM-I — Import and review UX correction'
+title      = 'Make add-on-list import and publication state self-explanatory'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-import-review-ux.md'
+depends_on = ['amm-g-07', 'amm-h-01']
+acceptance = '''
+A completed overview populates the review collection with the exact committed
+item count without Save, navigation, reload, or duplicate rows. One persistent
+workflow distinguishes unsaved list settings, the saved draft revision,
+publication blockers, non-blocking review recommendations, optional detail
+progress, required playback preparation, publishing, and success; a clean
+overview remains publishable with recommendations or zero optional details.
+Create, list-level Save, item Review, and explicit Publish retain faithful
+no-JS behavior through the same application commands as hydration. At 320 CSS
+pixels and 200% zoom, the keyed review collection exposes provider order,
+inclusion, first-air date, season/episode, kind, playback behavior, status, and
+actions without horizontal scrolling. The closed mobile drawer is absent from
+the tab order; its native toggle, open focus, Escape close, and focus return are
+keyboard proven. Add-on-capability entry points, long-description disclosure,
+valid progress duration, unescaped official-package ready copy, every supported
+culture, both themes, reduced motion, hydration, and focused Chromium/Firefox
+regressions pass before the parity debt closes.
+'''

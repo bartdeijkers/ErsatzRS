@@ -1,9 +1,12 @@
 mod common;
 
 use ersatzrs_core::repositories::{
-    AddonMediaListNfoMetadata, AddonMediaListRepository, RepositoryError,
+    AddonMediaListItemReviewEdit, AddonMediaListNfoMetadata, AddonMediaListRepository,
+    RepositoryError,
 };
-use ersatzrs_domain::AddonMediaListPresentationKind;
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListPresentationKind, RemoteStreamLiveness,
+};
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::Executor;
 
@@ -128,6 +131,73 @@ async fn publication_refuses_an_incomplete_resumable_overview() {
 }
 
 #[tokio::test]
+async fn publication_prepares_missing_finite_durations_through_durable_detail_jobs() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount"
+           ) VALUES (
+              1, 'org.example.lists', 'fixture/show',
+              'https://example.invalid/show', 'Fixture Show', 1
+           )"#,
+    )
+    .await
+    .unwrap();
+    seed_numbering_item(&pool, 10, 1, None, None, true, None, "First").await;
+    pool.execute(
+        r#"UPDATE "AddonMediaListItem"
+           SET "ProviderLiveness" = 1, "EffectiveLiveness" = 1,
+               "DurationSeconds" = NULL
+           WHERE "Id" = 10"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "AddonMediaListDetailJob" (
+              "AddonMediaListItemId", "AddonMediaListId", "ProviderHost",
+              "OverviewFingerprint", "OverviewRecordJson", "UpdatedAt"
+           ) VALUES (
+              10, 1, 'example.invalid', 'fingerprint', '{}', '2026-08-26T10:00:00Z'
+           )"#,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .prepare_publication_details(1)
+            .await
+            .unwrap(),
+        1
+    );
+    let queued: (i32, bool, Option<String>) = sqlx::query_as(
+        r#"SELECT "State", "ManualPriority", "RequestedAt"
+           FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = 10"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(queued.0, 1);
+    assert!(queued.1);
+    assert!(queued.2.is_some());
+
+    pool.execute(r#"UPDATE "AddonMediaListItem" SET "DurationSeconds" = 3600 WHERE "Id" = 10"#)
+        .await
+        .unwrap();
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .prepare_publication_details(1)
+            .await
+            .unwrap(),
+        0
+    );
+}
+
+#[tokio::test]
 async fn episode_numbering_uses_provider_order_and_preserves_other_operator_metadata() {
     let pool = common::test_db().await;
     let repositories = make_repositories(pool.clone());
@@ -214,6 +284,87 @@ async fn episode_numbering_uses_provider_order_and_preserves_other_operator_meta
         .unwrap(),
         1
     );
+}
+
+#[tokio::test]
+async fn quick_review_edits_and_undo_snapshots_are_atomic() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+              "ItemCount", "ReviewState"
+           ) VALUES (
+              1, 'org.example.lists', 'fixture/show',
+              'https://example.invalid/show', 'Fixture Show', 2, 2
+           )"#,
+    )
+    .await
+    .unwrap();
+    seed_numbering_item(&pool, 10, 1, None, None, true, None, "First").await;
+    seed_numbering_item(&pool, 11, 2, None, None, true, None, "Second").await;
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem"
+           SET "ProviderLiveness" = 2, "EffectiveLiveness" = 2
+           WHERE "AddonMediaListId" = 1"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let original = AddonMediaListItemReviewEdit {
+        item_id: 10,
+        content_kind: AddonMediaListContentKind::Auto,
+        included: true,
+        liveness_override: None,
+        season: None,
+        episode: None,
+    };
+    let changed = AddonMediaListItemReviewEdit {
+        content_kind: AddonMediaListContentKind::TelevisionEpisode,
+        included: false,
+        liveness_override: Some(RemoteStreamLiveness::Finite),
+        season: Some(3),
+        episode: Some(8),
+        ..original
+    };
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .apply_item_review_edits(1, &[changed])
+            .await
+            .unwrap(),
+        1
+    );
+    let rows = repositories.addon_media_lists.list_items(1).await.unwrap();
+    let row = rows.iter().find(|row| row.id == 10).unwrap();
+    assert_eq!(
+        row.content_kind,
+        AddonMediaListContentKind::TelevisionEpisode
+    );
+    assert!(!row.included);
+    assert_eq!(row.liveness_override, Some(RemoteStreamLiveness::Finite));
+    assert_eq!((row.season, row.episode), (Some(3), Some(8)));
+
+    repositories
+        .addon_media_lists
+        .apply_item_review_edits(1, &[original])
+        .await
+        .unwrap();
+    let rows = repositories.addon_media_lists.list_items(1).await.unwrap();
+    let row = rows.iter().find(|row| row.id == 10).unwrap();
+    assert_eq!(row.content_kind, AddonMediaListContentKind::Auto);
+    assert!(row.included);
+    assert_eq!(row.liveness_override, None);
+    assert_eq!((row.season, row.episode), (None, None));
+
+    let error = repositories
+        .addon_media_lists
+        .apply_item_review_edits(1, &[changed, changed])
+        .await
+        .expect_err("duplicate identities must reject the whole transaction");
+    assert!(matches!(error, RepositoryError::Conflict(_)));
 }
 
 async fn seed_addon(pool: &sqlx::SqlitePool) {
