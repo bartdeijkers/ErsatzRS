@@ -27,6 +27,10 @@ supported combinations. Procedures and background are indexed from the
 - [Add-on runtime](addon-runtime.md)
 - [Add-on media lists](addon-media-lists.md)
 
+## Admin UI system
+
+- [Admin UI design and component reference](ui/README.md)
+
 ## Contributor lookup
 
 - [Web crate structure](web-crate-structure.md)

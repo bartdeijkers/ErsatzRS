@@ -282,10 +282,11 @@ agent framework finds it:
 - `CODEX.md` → symlink to `AGENTS.md` — read by OpenAI Codex CLI.
 - `.github/copilot-instructions.md` — loaded by GitHub Copilot Chat (browser
   and VS Code). Contains a short pointer to this file plus key commands.
-- `skills/` — canonical repo-local skill contracts. Agent-specific skill
-  directories under `.claude/skills/` and `.codex/skills/` are compatibility
-  mirrors only; update `skills/` first and keep prompts pointed at canonical
-  paths such as `skills/parity-slice.md`.
+- `skills/` — canonical repo-local skill contracts. Discoverable OpenAI skill
+  packages under `.agents/skills/<name>/SKILL.md` are exact content mirrors;
+  `.claude/skills/` and `.codex/skills/` retain legacy compatibility pointers.
+  Update `skills/` first and keep prompts pointed at canonical paths such as
+  `skills/parity-slice.md`; `xtask` tests enforce every mirror.
 
 ## Contract Index
 

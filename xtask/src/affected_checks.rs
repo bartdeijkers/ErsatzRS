@@ -230,6 +230,7 @@ impl Recommendations {
             || path.starts_with("plans/")
             || matches!(path, "STATUS.md" | "CHANGELOG.md");
         self.skills |= path.starts_with("skills/")
+            || path.starts_with(".agents/skills/")
             || path.starts_with(".codex/skills/")
             || path.starts_with(".claude/skills/");
 
@@ -286,7 +287,7 @@ impl Recommendations {
         }
         if self.skills {
             output.push_str(
-                "  Verify each .codex/.claude skill pointer matches its canonical skills/ file.\n",
+                "  Verify each .agents skill package and .codex/.claude pointer matches its canonical skills/ file.\n",
             );
         }
 
@@ -379,6 +380,16 @@ mod tests {
     }
 
     #[test]
+    fn classifies_modern_agent_skill_packages() {
+        let recommendations = Recommendations::from_paths(BTreeSet::from([
+            ".agents/skills/example/SKILL.md".to_owned(),
+        ]));
+        assert!(recommendations
+            .render(false)
+            .contains(".agents skill package"));
+    }
+
+    #[test]
     fn canonical_skills_have_valid_frontmatter_and_exact_mirror_pointers() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -400,6 +411,15 @@ mod tests {
             assert!(contents.contains(&format!("name: {name}")));
             assert!(contents.contains("\ndescription: ") || contents.contains("\r\ndescription: "));
 
+            let agents_path = root.join(".agents/skills").join(name).join("SKILL.md");
+            let agents_contents = fs::read_to_string(&agents_path).unwrap_or_else(|error| {
+                panic!("missing .agents skill package for {name}: {error}")
+            });
+            assert_eq!(
+                agents_contents, contents,
+                ".agents skill package for {name} must exactly mirror skills/{name}.md"
+            );
+
             let expected = format!("../../skills/{name}.md");
             for mirror in [".codex/skills", ".claude/skills"] {
                 let mirror_path = root.join(mirror).join(format!("{name}.md"));
@@ -418,5 +438,23 @@ mod tests {
             }
         }
         assert!(skill_count >= 17, "expected canonical skill catalog");
+
+        let agents_skill_count = fs::read_dir(root.join(".agents/skills"))
+            .expect("read .agents skills")
+            .map(|entry| entry.expect(".agents skill entry"))
+            .filter(|entry| entry.path().is_dir())
+            .map(|entry| {
+                let name = entry.file_name();
+                let name = name.to_str().expect("UTF-8 .agents skill name");
+                assert!(
+                    root.join("skills").join(format!("{name}.md")).is_file(),
+                    "orphan .agents skill package: {name}"
+                );
+            })
+            .count();
+        assert_eq!(
+            agents_skill_count, skill_count,
+            ".agents catalog must be exact"
+        );
     }
 }
