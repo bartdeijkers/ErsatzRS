@@ -56,6 +56,12 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           cargo test -p ersatzrs-platform --target x86_64-pc-windows-msvc windows_startup
+      - name: Verify web bundle (wasm checksum gate)
+        shell: bash
+        env:
+          ERSATZRS_WEB_BIN: ${{ github.workspace }}/target/x86_64-pc-windows-msvc/release/ersatzrs-web.exe
+          ERSATZRS_SITE_ROOT: ${{ github.workspace }}/target/site
+        run: scripts/release/verify-web-bundle.sh
       - name: Stage archive
         shell: pwsh
         run: |

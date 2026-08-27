@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>ErsatzRS add-on list — publication readiness layout proposals</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #0d0f12;
+      --app: #141619;
+      --surface: #1b1e22;
+      --surface-raised: #22262b;
+      --surface-soft: #17191d;
+      --line: #343941;
+      --line-strong: #4a515b;
+      --text: #f0f2f5;
+      --text-soft: #cbd0d7;
+      --muted: #9299a4;
+      --primary: #63bd6d;
+      --primary-strong: #168d30;
+      --warning: #ffc857;
+      --blue: #7bbbe2;
+      --radius: 5px;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--canvas); color: var(--text); font-size: 15px; line-height: 1.5; }
+    button, summary { font: inherit; }
+    button, a, summary { -webkit-tap-highlight-color: transparent; }
+    button:focus-visible, a:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 3px;
+    }
+
+    .study-header {
+      padding: 2rem clamp(1rem, 4vw, 4rem);
+      border-bottom: 1px solid var(--line);
+      background: #111318;
+    }
+    .study-header > * { max-width: 78rem; margin-inline: auto; }
+    .eyebrow { margin: 0 0 .35rem; color: var(--primary); font-size: .75rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    .study-header h1 { margin: 0; font-size: clamp(1.75rem, 3vw, 2.65rem); line-height: 1.12; letter-spacing: -.035em; }
+    .study-header .lede { max-width: 74ch; margin: .8rem 0 0; color: var(--text-soft); }
+    .evidence {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      margin-top: 1.4rem;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--line);
+    }
+    .evidence div { padding: .85rem 1rem; background: var(--surface-soft); }
+    .evidence strong { display: block; color: var(--text); font-size: 1.05rem; }
+    .evidence span { color: var(--muted); font-size: .78rem; }
+
+    .proposal-index {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .6rem;
+      max-width: 78rem;
+      margin: 1rem auto 0;
+    }
+    .proposal-index a {
+      min-height: 2.75rem;
+      padding: .65rem .9rem;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      color: var(--text-soft);
+      text-decoration: none;
+    }
+    .proposal-index a:first-child { border-color: #477a4e; background: #1c2a1f; color: var(--text); }
+
+    .study-main { display: grid; gap: 3rem; padding: 3rem clamp(.75rem, 3vw, 3rem) 5rem; }
+    .proposal { width: min(100%, 96rem); margin-inline: auto; scroll-margin-top: 1rem; }
+    .proposal-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: end; margin-bottom: 1rem; }
+    .proposal-heading h2 { margin: 0; font-size: clamp(1.35rem, 2.3vw, 2rem); letter-spacing: -.02em; }
+    .proposal-heading p { max-width: 72ch; margin: .35rem 0 0; color: var(--muted); }
+    .recommendation {
+      align-self: start;
+      padding: .4rem .65rem;
+      border: 1px solid #4b8052;
+      border-radius: 999px;
+      background: #1b2b1e;
+      color: #bde7c1;
+      font-size: .72rem;
+      font-weight: 750;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .tradeoff {
+      align-self: start;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 650;
+    }
+
+    .mock-shell {
+      display: grid;
+      grid-template-columns: 13rem minmax(0, 1fr);
+      min-height: 47rem;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: .45rem;
+      background: var(--app);
+      box-shadow: 0 1.2rem 3rem rgb(0 0 0 / 28%);
+    }
+    .mock-nav { padding: 1.35rem 0; border-right: 1px solid #292d33; background: #0d0f12; }
+    .mock-brand { padding: 0 1.15rem 1.35rem; font-size: 1.15rem; font-weight: 800; }
+    .mock-nav h3 { margin: .9rem 1.15rem .35rem; color: #727a86; font-size: .66rem; letter-spacing: .09em; text-transform: uppercase; }
+    .mock-nav a { display: block; padding: .58rem 1.15rem; border-left: 3px solid transparent; color: #aeb5be; text-decoration: none; }
+    .mock-nav a.active { border-left-color: var(--primary); background: #1d2222; color: var(--text); }
+    .mock-main { min-width: 0; padding: 1.5rem clamp(1rem, 2.5vw, 2rem) 2rem; }
+    .back-link { display: inline-flex; min-height: 2.5rem; align-items: center; color: var(--blue); text-decoration: none; }
+
+    .collection-hero {
+      display: grid;
+      grid-template-columns: 3.8rem minmax(0, 1fr) auto;
+      gap: 1rem;
+      align-items: start;
+      margin: .65rem 0 1.35rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--line);
+    }
+    .poster { width: 3.8rem; aspect-ratio: .78; border: 1px solid #ffffff1c; border-radius: 3px; background: linear-gradient(145deg, #486a77, #795264); }
+    .collection-hero h3 { margin: 0; font-size: clamp(1.65rem, 3vw, 2.25rem); line-height: 1.08; letter-spacing: -.035em; }
+    .collection-type { margin: .25rem 0 0; color: var(--blue); font-size: .78rem; font-weight: 700; }
+    .description { max-width: 70ch; margin: .6rem 0 0; color: var(--text-soft); font-size: .88rem; }
+    .edit-link { min-height: 2.75rem; padding: .65rem .8rem; color: var(--text-soft); text-decoration: none; white-space: nowrap; }
+
+    .button-primary {
+      display: inline-flex;
+      min-height: 2.75rem;
+      align-items: center;
+      justify-content: center;
+      padding: .65rem 1rem;
+      border: 0;
+      border-radius: var(--radius);
+      background: var(--primary-strong);
+      color: white;
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .025em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .button-secondary {
+      display: inline-flex;
+      min-height: 2.75rem;
+      align-items: center;
+      justify-content: center;
+      padding: .65rem .9rem;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--text-soft);
+      cursor: pointer;
+    }
+
+    .steps { display: flex; gap: .75rem; margin: 0; padding: 0; list-style: none; }
+    .steps li { display: flex; align-items: center; gap: .35rem; color: var(--muted); font-size: .72rem; white-space: nowrap; }
+    .steps b { display: grid; width: 1.6rem; height: 1.6rem; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; font-size: .68rem; }
+    .steps .done, .steps .current { color: var(--text-soft); font-weight: 700; }
+    .steps .done b { border-color: var(--primary); color: var(--primary); }
+    .steps .current b { border-color: var(--primary); background: var(--primary); color: #0c160e; }
+
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(5.5rem, 1fr)); gap: .75rem; margin: 0; }
+    .metrics div { min-width: 0; }
+    .metrics dt { color: var(--muted); font-size: .68rem; font-weight: 650; }
+    .metrics dd { margin: .12rem 0 0; font-size: 1rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+    .metrics a { color: inherit; text-underline-offset: .18em; }
+
+    .readiness-band {
+      display: grid;
+      grid-template-columns: minmax(18rem, .9fr) minmax(24rem, 1.35fr) auto;
+      gap: 1rem 1.5rem;
+      align-items: center;
+      margin-bottom: .8rem;
+      padding: 1rem 1.15rem;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--primary);
+      border-radius: var(--radius);
+      background: var(--surface-soft);
+    }
+    .readiness-band h4 { margin: .45rem 0 0; font-size: .9rem; }
+    .readiness-band p { margin: .15rem 0 0; color: var(--muted); font-size: .75rem; }
+
+    .blocker-callout {
+      display: flex;
+      gap: .75rem;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      padding: .75rem 1rem;
+      border: 1px solid #6c5629;
+      border-radius: var(--radius);
+      background: #2a2418;
+      color: var(--warning);
+      font-size: .82rem;
+    }
+    .blocker-callout a { color: inherit; font-weight: 700; text-underline-offset: .18em; }
+    .blocker-callout span:last-child { margin-left: auto; color: #d2c6a9; font-size: .72rem; }
+
+    .metadata-summary {
+      display: grid;
+      grid-template-columns: 3rem minmax(0, 1fr) auto;
+      gap: .9rem;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      padding: .85rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .metadata-summary .thumb { width: 3rem; height: 3rem; background: linear-gradient(145deg, #486a77, #795264); }
+    .metadata-summary h4 { margin: 0; font-size: .95rem; }
+    .metadata-summary p { margin: .18rem 0 0; color: var(--muted); font-size: .74rem; }
+
+    .media-section { min-width: 0; }
+    .section-heading { display: flex; gap: 1rem; align-items: end; justify-content: space-between; margin: 0 0 .75rem; }
+    .section-heading h4 { margin: 0; font-size: 1.2rem; }
+    .section-heading p { margin: .15rem 0 0; color: var(--muted); font-size: .78rem; }
+    .section-count { color: var(--muted); font-size: .75rem; white-space: nowrap; }
+    .bulk-toolbar { display: flex; flex-wrap: wrap; gap: .55rem; margin-bottom: .7rem; padding: .7rem; border: 1px solid var(--line); background: var(--surface-soft); }
+    .bulk-toolbar span { display: inline-flex; min-height: 2.5rem; align-items: center; padding: 0 .75rem; border-bottom: 1px solid var(--line-strong); color: var(--text-soft); font-size: .75rem; }
+    .items { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--line); }
+    .item {
+      display: grid;
+      grid-template-columns: 2rem minmax(10rem, 1.35fr) minmax(7rem, .6fr) minmax(9rem, .75fr) auto;
+      gap: .75rem;
+      align-items: center;
+      min-height: 4.5rem;
+      padding: .7rem .85rem;
+      background: var(--surface);
+    }
+    .item.warning { box-shadow: inset 3px 0 var(--warning); background: #221f18; }
+    .rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .item strong, .item small { display: block; }
+    .item small { color: var(--muted); font-size: .7rem; }
+    .numbering { color: var(--text-soft); font-size: .78rem; }
+    .status { color: var(--muted); font-size: .75rem; }
+    .status.warning { color: var(--warning); }
+    .row-action { min-height: 2.5rem; padding: .45rem .65rem; border: 0; background: transparent; color: var(--blue); cursor: pointer; }
+
+    .workspace-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem); gap: 1.3rem; align-items: start; }
+    .workspace-content { min-width: 0; }
+    .readiness-rail {
+      display: grid;
+      gap: 1rem;
+      padding: 1.1rem;
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--primary);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .readiness-rail h4 { margin: 0; font-size: 1rem; }
+    .readiness-rail > p { margin: -.6rem 0 0; color: var(--muted); font-size: .76rem; }
+    .readiness-rail .steps { display: grid; gap: .55rem; }
+    .readiness-rail .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .readiness-rail .rail-blocker { margin: 0; padding: .75rem; border-left: 3px solid var(--warning); background: #2a2418; color: var(--warning); font-size: .77rem; }
+    .readiness-rail .button-primary { width: 100%; }
+    .rail-note { padding-top: .8rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .7rem; }
+
+    .quiet-workflow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .7rem 1.5rem;
+      align-items: center;
+      margin: -.35rem 0 1.2rem;
+      color: var(--muted);
+      font-size: .75rem;
+    }
+    .quiet-workflow strong { color: var(--text-soft); }
+    .quiet-workflow a { color: var(--blue); }
+    .media-review-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 1rem;
+      align-items: end;
+      margin-top: 1.5rem;
+      padding-top: 1.35rem;
+      border-top: 1px solid var(--line);
+    }
+    .media-review-header h4 { margin: 0; font-size: 1.3rem; }
+    .media-review-header p { margin: .2rem 0 0; color: var(--muted); font-size: .78rem; }
+    .review-metrics { display: flex; gap: 1.2rem; }
+    .review-metrics span { color: var(--muted); font-size: .72rem; }
+    .review-metrics strong { display: block; color: var(--text); font-size: 1.1rem; }
+    .context-blocker { margin: .8rem 0; }
+    .publication-footer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 1.25rem;
+      align-items: center;
+      margin-top: 1.2rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--primary);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .publication-footer h4 { margin: 0; }
+    .publication-footer p { margin: .2rem 0 0; color: var(--muted); font-size: .75rem; }
+    details.readiness-details { margin-top: .8rem; border-top: 1px solid var(--line); }
+    details.readiness-details summary { min-height: 2.75rem; padding: .7rem 0; color: var(--blue); cursor: pointer; }
+    details.readiness-details .metrics { padding-bottom: .8rem; }
+
+    .proposal-analysis {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      margin: 1rem 0 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--line);
+    }
+    .proposal-analysis div { padding: .85rem 1rem; background: var(--surface-soft); }
+    .proposal-analysis dt { color: var(--muted); font-size: .68rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+    .proposal-analysis dd { margin: .3rem 0 0; color: var(--text-soft); font-size: .8rem; }
+
+    .design-contract {
+      width: min(100%, 78rem);
+      margin: 0 auto;
+      padding: 1.4rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-soft);
+    }
+    .design-contract h2 { margin: 0 0 .8rem; font-size: 1.25rem; }
+    .contract-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 2rem; }
+    .contract-grid h3 { margin: 0 0 .35rem; font-size: .88rem; }
+    .contract-grid ul { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: .78rem; }
+    .contract-grid li + li { margin-top: .28rem; }
+
+    @media (max-width: 1280px) {
+      .readiness-band { grid-template-columns: 1fr auto; }
+      .readiness-band .metrics { grid-column: 1 / -1; grid-row: 2; }
+      .workspace-grid { grid-template-columns: 1fr; }
+      .readiness-rail { grid-row: 1; grid-template-columns: 1fr; }
+      .readiness-rail .steps { display: flex; overflow-x: auto; padding-bottom: .25rem; }
+      .readiness-rail .metrics { grid-template-columns: repeat(4, minmax(5.5rem, 1fr)); }
+    }
+
+    @media (max-width: 820px) {
+      .evidence, .proposal-analysis, .contract-grid { grid-template-columns: 1fr; }
+      .proposal-heading { grid-template-columns: 1fr; }
+      .mock-shell { grid-template-columns: 1fr; }
+      .mock-nav { display: none; }
+      .mock-main { padding: 1rem; }
+      .collection-hero { grid-template-columns: 3.2rem minmax(0, 1fr); }
+      .poster { width: 3.2rem; }
+      .edit-link { grid-column: 2; justify-self: start; padding-left: 0; }
+      .readiness-band { grid-template-columns: 1fr; }
+      .readiness-band .metrics { grid-column: auto; grid-row: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .readiness-band .button-primary { width: 100%; }
+      .blocker-callout { align-items: flex-start; flex-direction: column; }
+      .blocker-callout span:last-child { margin-left: 0; }
+      .metadata-summary { grid-template-columns: 3rem minmax(0, 1fr); }
+      .metadata-summary .button-secondary { grid-column: 1 / -1; }
+      .section-heading, .media-review-header { align-items: flex-start; grid-template-columns: 1fr; flex-direction: column; }
+      .section-count { white-space: normal; }
+      .item { grid-template-columns: 1.5rem minmax(0, 1fr) auto; }
+      .item .numbering { grid-column: 2; }
+      .item .status { grid-column: 2; }
+      .item .row-action { grid-column: 3; grid-row: 1 / 4; }
+      .readiness-rail { grid-template-columns: 1fr; }
+      .readiness-rail .steps { display: flex; overflow-x: auto; padding-bottom: .25rem; }
+      .readiness-rail .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .review-metrics { justify-content: flex-start; }
+      .publication-footer { grid-template-columns: 1fr; }
+      .publication-footer .button-primary { width: 100%; }
+    }
+
+    @media (max-width: 420px) {
+      .study-header { padding: 1.35rem 1rem; }
+      .study-main { padding-inline: .5rem; }
+      .proposal-index a { width: 100%; }
+      .steps { width: 100%; overflow-x: auto; padding-bottom: .25rem; }
+      .bulk-toolbar span { width: 100%; }
+      .review-metrics { display: grid; grid-template-columns: repeat(2, 1fr); width: 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <header class="study-header">
+    <p class="eyebrow">Add-on list design study · 2026-08-27</p>
+    <h1>Publication readiness without an obstructing page-wide aside</h1>
+    <p class="lede">All three proposals restore the collection as the first page-level object, keep publication state in normal document flow, group repeated blockers, and preserve one explicit action for the current state. Proposal A is the recommended balance for frequent review work.</p>
+    <div class="evidence" aria-label="Live layout evidence">
+      <div><strong>221 px</strong><span>Current desktop readiness height at 1440 × 900</span></div>
+      <div><strong>y = 432</strong><span>Current desktop collection-title start position</span></div>
+      <div><strong>y = 417</strong><span>Current mobile collection-title start position</span></div>
+    </div>
+    <nav class="proposal-index" aria-label="Layout proposals">
+      <a href="#proposal-a">A · Header status band</a>
+      <a href="#proposal-b">B · Review workspace rail</a>
+      <a href="#proposal-c">C · Contextual publish footer</a>
+    </nav>
+  </header>
+
+  <main class="study-main">
+    <article class="proposal" id="proposal-a">
+      <header class="proposal-heading">
+        <div><p class="eyebrow">Proposal A</p><h2>Collection-first header with a compact status band</h2><p>The collection identity and description lead. A non-sticky band then combines the workflow, readiness metrics and current action in one bounded decision region.</p></div>
+        <span class="recommendation">Recommended</span>
+      </header>
+      <div class="mock-shell">
+        <nav class="mock-nav" aria-label="Main navigation preview"><div class="mock-brand">ErsatzRS</div><h3>Media</h3><a href="#">Movies</a><a href="#">TV Shows</a><a href="#">Music Videos</a><a href="#">Songs</a><a href="#">Images</a><a class="active" href="#">Add-on Lists</a></nav>
+        <main class="mock-main">
+          <a class="back-link" href="#">← Add-on Lists</a>
+          <header class="collection-hero"><div class="poster" aria-hidden="true"></div><div><h3>GLAMOURLAND</h3><p class="collection-type">TV Shows · Beeld &amp; Geluid · 48 items</p><p class="description">Satire, waarin Gert-Jan Dröge de high society te kijk zet. Dröge bezoekt feestjes, borrels, vernissages, partijtjes en andere gebeurtenissen.</p></div><a class="edit-link" href="#metadata-a">Edit metadata</a></header>
+          <section class="readiness-band" aria-labelledby="readiness-a-heading">
+            <div><ol class="steps" aria-label="Publication workflow"><li class="done"><b>1</b> Import</li><li class="current" aria-current="step"><b>2</b> Review</li><li><b>3</b> Publish</li></ol><h4 id="readiness-a-heading">Prepare publication</h4><p>Draft saved · revision 0</p></div>
+            <dl class="metrics"><div><dt>Included</dt><dd><a href="#items-a">48</a></dd></div><div><dt>Blockers</dt><dd><a href="#blocker-a">48</a></dd></div><div><dt>Recommendations</dt><dd>0</dd></div><div><dt>Optional details</dt><dd>0 / 48</dd></div></dl>
+            <button class="button-primary" type="button">Prepare publication</button>
+          </section>
+          <div class="blocker-callout" id="blocker-a"><span aria-hidden="true">△</span><a href="#items-a">48 items need a valid season and episode number</a><span>Opens Number episodes</span></div>
+          <section class="metadata-summary" id="metadata-a" aria-labelledby="metadata-a-heading"><div class="thumb" aria-hidden="true"></div><div><h4 id="metadata-a-heading">TV Show metadata</h4><p>Provider metadata · no conflicts · collection settings saved</p></div><button class="button-secondary" type="button">Edit metadata</button></section>
+          <section class="media-section" id="items-a" aria-labelledby="items-a-heading"><header class="section-heading"><div><h4 id="items-a-heading">Episodes</h4><p>Review item identity and numbering; provider order remains unchanged.</p></div><span class="section-count">48 included · 48 blockers</span></header><div class="bulk-toolbar" aria-label="Bulk edit preview"><span>Scope · All items</span><span>Media kind · Keep current</span><button class="button-secondary" type="button">Number episodes</button></div><div class="items"><div class="item warning"><span class="rank">1</span><div><strong>GLAMOURLAND · Episode 1</strong><small>First aired 1990-10-06</small></div><span class="numbering">Season — · Episode —</span><span class="status warning">△ Numbering required</span><button class="row-action" type="button">Review</button></div><div class="item"><span class="rank">2</span><div><strong>GLAMOURLAND · Episode 2</strong><small>First aired 1990-10-13</small></div><span class="numbering">Season 1 · Episode 2</span><span class="status">Available</span><button class="row-action" type="button">Review</button></div></div></section>
+        </main>
+      </div>
+      <dl class="proposal-analysis"><div><dt>Best for</dt><dd>Balanced everyday use: state stays visible near the top without owning the viewport.</dd></div><div><dt>Responsive model</dt><dd>The band stacks after the collection header; metrics become a 2 × 2 grid and the action becomes full width.</dd></div><div><dt>Tradeoff</dt><dd>Readiness is no longer continuously visible after scrolling, which is intentional; the action reappears at the publication footer or on return to top.</dd></div></dl>
+    </article>
+
+    <article class="proposal" id="proposal-b">
+      <header class="proposal-heading"><div><p class="eyebrow">Proposal B</p><h2>Review workspace with a dedicated right rail</h2><p>On wide layouts, publication readiness becomes a secondary column aligned with the review workspace. It never overlays or spans the content; when the combined columns need more than 1280px it moves into the normal flow under the collection header.</p></div><span class="tradeoff">Strong desktop overview</span></header>
+      <div class="mock-shell">
+        <nav class="mock-nav" aria-label="Main navigation preview"><div class="mock-brand">ErsatzRS</div><h3>Media</h3><a href="#">Movies</a><a href="#">TV Shows</a><a href="#">Music Videos</a><a href="#">Songs</a><a href="#">Images</a><a class="active" href="#">Add-on Lists</a></nav>
+        <main class="mock-main">
+          <a class="back-link" href="#">← Add-on Lists</a>
+          <header class="collection-hero"><div class="poster" aria-hidden="true"></div><div><h3>GLAMOURLAND</h3><p class="collection-type">TV Shows · Beeld &amp; Geluid · 48 items</p><p class="description">Satire, waarin Gert-Jan Dröge de high society te kijk zet. Provider metadata remains the baseline until an operator changes a field.</p></div><a class="edit-link" href="#metadata-b">Edit metadata</a></header>
+          <div class="workspace-grid">
+            <div class="workspace-content"><section class="metadata-summary" id="metadata-b" aria-labelledby="metadata-b-heading"><div class="thumb" aria-hidden="true"></div><div><h4 id="metadata-b-heading">TV Show metadata</h4><p>Provider metadata · no conflicts · collection settings saved</p></div><button class="button-secondary" type="button">Edit metadata</button></section><section class="media-section" id="items-b" aria-labelledby="items-b-heading"><header class="section-heading"><div><h4 id="items-b-heading">Episodes</h4><p>Review and resolve the affected rows.</p></div><span class="section-count">48 included</span></header><div class="bulk-toolbar" aria-label="Bulk edit preview"><span>Scope · All items</span><button class="button-secondary" type="button">Number episodes</button></div><div class="items"><div class="item warning"><span class="rank">1</span><div><strong>GLAMOURLAND · Episode 1</strong><small>First aired 1990-10-06</small></div><span class="numbering">Season — · Episode —</span><span class="status warning">△ Numbering required</span><button class="row-action" type="button">Review</button></div><div class="item warning"><span class="rank">2</span><div><strong>GLAMOURLAND · Episode 2</strong><small>First aired 1990-10-13</small></div><span class="numbering">Season — · Episode —</span><span class="status warning">△ Numbering required</span><button class="row-action" type="button">Review</button></div><div class="item"><span class="rank">3</span><div><strong>GLAMOURLAND · Episode 3</strong><small>First aired 1990-10-20</small></div><span class="numbering">Season 1 · Episode 3</span><span class="status">Available</span><button class="row-action" type="button">Review</button></div></div></section></div>
+            <section class="readiness-rail" aria-labelledby="readiness-b-heading"><div><h4 id="readiness-b-heading">Publication readiness</h4><p>Draft saved · revision 0</p></div><ol class="steps" aria-label="Publication workflow"><li class="done"><b>1</b> Import</li><li class="current" aria-current="step"><b>2</b> Review</li><li><b>3</b> Publish</li></ol><dl class="metrics"><div><dt>Included</dt><dd>48</dd></div><div><dt>Blockers</dt><dd>48</dd></div><div><dt>Advice</dt><dd>0</dd></div><div><dt>Details</dt><dd>0 / 48</dd></div></dl><p class="rail-blocker">△ 48 items need a valid season and episode number.</p><button class="button-primary" type="button">Prepare publication</button><p class="rail-note">Changes to individual items are saved immediately and can be undone.</p></section>
+          </div>
+        </main>
+      </div>
+      <dl class="proposal-analysis"><div><dt>Best for</dt><dd>Wide desktop operators who want review state and rows visible at the same time.</dd></div><div><dt>Responsive model</dt><dd>The rail becomes a horizontal flow section at intermediate widths and a single-column card on narrow screens.</dd></div><div><dt>Tradeoff</dt><dd>The review list loses some width on desktop, so this is less suitable when dense row controls need every available column.</dd></div></dl>
+    </article>
+
+    <article class="proposal" id="proposal-c">
+      <header class="proposal-heading"><div><p class="eyebrow">Proposal C</p><h2>Contextual blockers with publication at the end of review</h2><p>The quietest option. The top shows only saved state and workflow position; blocker counts live with the episode task, while the publication decision follows the reviewed rows.</p></div><span class="tradeoff">Lowest visual chrome</span></header>
+      <div class="mock-shell">
+        <nav class="mock-nav" aria-label="Main navigation preview"><div class="mock-brand">ErsatzRS</div><h3>Media</h3><a href="#">Movies</a><a href="#">TV Shows</a><a href="#">Music Videos</a><a href="#">Songs</a><a href="#">Images</a><a class="active" href="#">Add-on Lists</a></nav>
+        <main class="mock-main">
+          <a class="back-link" href="#">← Add-on Lists</a>
+          <header class="collection-hero"><div class="poster" aria-hidden="true"></div><div><h3>GLAMOURLAND</h3><p class="collection-type">TV Shows · Beeld &amp; Geluid · 48 items</p><p class="description">Satire, waarin Gert-Jan Dröge de high society te kijk zet. Dröge bezoekt feestjes, borrels, vernissages en andere gebeurtenissen.</p></div><a class="edit-link" href="#metadata-c">Edit metadata</a></header>
+          <div class="quiet-workflow" role="status"><strong>Draft saved · revision 0</strong><span>Step 2 of 3 · Review</span><a href="#publication-c">Publication status</a></div>
+          <section class="metadata-summary" id="metadata-c" aria-labelledby="metadata-c-heading"><div class="thumb" aria-hidden="true"></div><div><h4 id="metadata-c-heading">TV Show metadata</h4><p>Provider metadata · no conflicts · collection settings saved</p></div><button class="button-secondary" type="button">Edit metadata</button></section>
+          <section class="media-section" id="items-c" aria-labelledby="items-c-heading"><header class="media-review-header"><div><h4 id="items-c-heading">Episodes</h4><p>Resolve blockers where the affected items are reviewed.</p></div><div class="review-metrics" aria-label="Review totals"><span><strong>48</strong>Included</span><span><strong>48</strong>Blockers</span><span><strong>0</strong>Advice</span></div></header><div class="blocker-callout context-blocker"><span aria-hidden="true">△</span><a href="#items-c">48 items need a valid season and episode number</a><span>Number all episodes</span></div><div class="bulk-toolbar" aria-label="Bulk edit preview"><span>Scope · All items</span><span>Media kind · Keep current</span><button class="button-secondary" type="button">Number episodes</button></div><div class="items"><div class="item warning"><span class="rank">1</span><div><strong>GLAMOURLAND · Episode 1</strong><small>First aired 1990-10-06</small></div><span class="numbering">Season — · Episode —</span><span class="status warning">△ Numbering required</span><button class="row-action" type="button">Review</button></div><div class="item warning"><span class="rank">2</span><div><strong>GLAMOURLAND · Episode 2</strong><small>First aired 1990-10-13</small></div><span class="numbering">Season — · Episode —</span><span class="status warning">△ Numbering required</span><button class="row-action" type="button">Review</button></div></div></section>
+          <section class="publication-footer" id="publication-c" aria-labelledby="publication-c-heading"><div><h4 id="publication-c-heading">Prepare publication</h4><p>48 included items · 48 blockers · optional details 0 / 48. Publish uses the exact saved revision.</p><details class="readiness-details"><summary>Show all publication details</summary><dl class="metrics"><div><dt>Included</dt><dd>48</dd></div><div><dt>Blockers</dt><dd>48</dd></div><div><dt>Advice</dt><dd>0</dd></div><div><dt>Details</dt><dd>0 / 48</dd></div></dl></details></div><button class="button-primary" type="button">Prepare publication</button></section>
+        </main>
+      </div>
+      <dl class="proposal-analysis"><div><dt>Best for</dt><dd>Experienced operators who work top-to-bottom and want the metadata and rows to dominate.</dd></div><div><dt>Responsive model</dt><dd>Metrics remain with the Media heading; the final action stacks full width and native details disclose secondary publication data.</dd></div><div><dt>Tradeoff</dt><dd>The primary publication action is farther down the page, so returning users may need a direct “Publication status” anchor.</dd></div></dl>
+    </article>
+
+    <section class="design-contract" aria-labelledby="contract-heading">
+      <h2 id="contract-heading">Shared implementation contract</h2>
+      <div class="contract-grid">
+        <div><h3>Semantics and accessibility</h3><ul><li>Use a page header for collection identity, a labelled section for readiness, and a nav only for the three workflow steps.</li><li>No sticky or fixed readiness surface; keyboard focus cannot be obscured by publication chrome.</li><li>Keep native buttons, links and details semantics, visible focus, 44px primary targets, and live status only for state changes.</li></ul></div>
+        <div><h3>Responsive and localization</h3><ul><li>Reflow at 320 CSS pixels without page-level horizontal scrolling.</li><li>Allow long translated labels and blocker text to wrap; never depend on single-line metrics.</li><li>At intermediate widths, reduce columns before hiding supporting copy.</li></ul></div>
+        <div><h3>State behavior</h3><ul><li>Loading retains a stable readiness section with aria-busy; errors use a recoverable alert in the same region.</li><li>Blocked, ready, preparing, publishing and published states change the heading, status and sole primary action without moving the collection header.</li><li>No-JS keeps native Save, Prepare and Publish forms in the same decision region.</li></ul></div>
+        <div><h3>Implementation map</h3><ul><li>Reuse the current publication-readiness signals and actions inside AddonMediaListEditorIsland; change composition, not server contracts.</li><li>Keep grouped blockers and item anchors. Extend the shared Button family only if production adoption is chosen.</li><li>Verify dark/light themes, 320/390/intermediate/wide widths, 200% zoom, keyboard order, long localization and matched SSR/WASM hydration.</li></ul></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

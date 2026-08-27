@@ -17,7 +17,6 @@ use leptos_router::hooks::{use_params_map, use_query_map};
 use crate::admin::i18n::{
     addon_media_list_error_message, delete_failed, match_status, range_of, save_failed, tr, TextKey,
 };
-#[cfg(feature = "ssr")]
 use crate::admin::server_fns::addon_media_lists::get_addon_media_list_show_nfo;
 use crate::admin::server_fns::addon_media_lists::{
     add_addon_media_list, apply_addon_media_list_content_kind,
@@ -529,6 +528,7 @@ fn item_row_view(
             .unwrap_or_else(|| tr(TextKey::NoReplacement).to_string())
     };
     let content_kind = item.content_kind;
+    let item_is_episode = content_kind == AddonMediaListContentKind::TelevisionEpisode;
     let review_state = review_snapshot(&item);
     let collection_role = item.collection_role;
     let included = item.included;
@@ -585,8 +585,12 @@ fn item_row_view(
         || item.title.trim().is_empty()
         || (is_remote_stream
             && (effective_liveness == RemoteStreamLiveness::Unknown || liveness_conflict))
-        || (presentation.get_untracked() == AddonMediaListPresentationKind::TelevisionShow
+        || ((item_is_episode
+            || presentation.get_untracked() == AddonMediaListPresentationKind::TelevisionShow)
             && (item.season.is_none() || item.episode.is_none()));
+    let season_episode_missing = item.season.is_none_or(|season| season < 0)
+        || item.episode.is_none_or(|episode| episode < 1);
+    let season_episode_warning_id = format!("addon-list-item-numbering-warning-{item_id}");
     let availability_reason = item.availability_reason.unwrap_or_default();
     let has_reason = !availability_reason.is_empty();
     let season_input = RwSignal::new(
@@ -690,7 +694,9 @@ fn item_row_view(
                     <div class=style::item_field>
                         <dt>{tr(TextKey::SeasonEpisode)}</dt>
                         <dd>
-                            {move || if presentation.get() == AddonMediaListPresentationKind::TelevisionShow {
+                            {move || if item_is_episode
+                                || presentation.get() == AddonMediaListPresentationKind::TelevisionShow
+                            {
                                 let preview_current_episode_number = current_episode_number.clone();
                                 view! {
                                     <div class=style::episode_quick_edit>
@@ -700,6 +706,8 @@ fn item_row_view(
                                             step="1"
                                             inputmode="numeric"
                                             aria-label=tr(TextKey::Season)
+                                            aria-invalid=move || if season_episode_missing { "true" } else { "false" }
+                                            aria-describedby=season_episode_warning_id.clone()
                                             placeholder="S"
                                             prop:value=move || season_input.get()
                                             on:input=move |event| season_input.set(event_target_value(&event))
@@ -710,6 +718,8 @@ fn item_row_view(
                                             step="1"
                                             inputmode="numeric"
                                             aria-label=tr(TextKey::Episode)
+                                            aria-invalid=move || if season_episode_missing { "true" } else { "false" }
+                                            aria-describedby=season_episode_warning_id.clone()
                                             placeholder="E"
                                             prop:value=move || episode_input.get()
                                             on:input=move |event| episode_input.set(event_target_value(&event))
@@ -744,6 +754,11 @@ fn item_row_view(
                                             }
                                         >"✓"</button>
                                     </div>
+                                    <small
+                                        id=season_episode_warning_id.clone()
+                                        class=style::item_field_warning
+                                        style:display=move || if season_episode_missing { "block" } else { "none" }
+                                    >{tr(TextKey::BlockerSeasonEpisodeMissing)}</small>
                                     <small class=style::episode_preview>
                                         {move || episode_preview.with(|preview| {
                                             preview.get(&item_id).map_or_else(String::new, |(season, episode)| {
@@ -871,7 +886,10 @@ fn item_row_view(
                     <div class=style::item_field data-replacement-state=replacement_state title=item.replacement_path.unwrap_or_default()>
                         <dt>{tr(TextKey::Status)}</dt>
                         <dd>
-                            <span class=move || if base_needs_review
+                            <span class=move || if ((item_is_episode
+                                || presentation.get() == AddonMediaListPresentationKind::TelevisionShow)
+                                && season_episode_missing)
+                                || base_needs_review
                                 || (presentation.get() == AddonMediaListPresentationKind::Movies
                                     && collection_role == AddonMediaListItemRole::Auto)
                             {
@@ -880,7 +898,10 @@ fn item_row_view(
                                 style::ready_status
                             }>
                                 <span style=move || icon_style(
-                                    if base_needs_review
+                                    if ((item_is_episode
+                                        || presentation.get() == AddonMediaListPresentationKind::TelevisionShow)
+                                        && season_episode_missing)
+                                        || base_needs_review
                                         || (presentation.get() == AddonMediaListPresentationKind::Movies
                                             && collection_role == AddonMediaListItemRole::Auto)
                                     {
@@ -890,7 +911,12 @@ fn item_row_view(
                                     },
                                     "0.95rem",
                                 ) aria-hidden="true"></span>
-                                {move || if base_needs_review
+                                {move || if (item_is_episode
+                                    || presentation.get() == AddonMediaListPresentationKind::TelevisionShow)
+                                    && season_episode_missing
+                                {
+                                    tr(TextKey::BlockerSeasonEpisodeMissing)
+                                } else if base_needs_review
                                     || (presentation.get() == AddonMediaListPresentationKind::Movies
                                         && collection_role == AddonMediaListItemRole::Auto)
                                 {
@@ -2573,7 +2599,8 @@ fn item_needs_review(
         || item.title.trim().is_empty()
         || (item.kind == AddonMediaListItemKind::RemoteStream
             && (item.effective_liveness == RemoteStreamLiveness::Unknown || item.liveness_conflict))
-        || (presentation == AddonMediaListPresentationKind::TelevisionShow
+        || ((item.content_kind == AddonMediaListContentKind::TelevisionEpisode
+            || presentation == AddonMediaListPresentationKind::TelevisionShow)
             && (item.season.is_none() || item.episode.is_none()))
         || (presentation == AddonMediaListPresentationKind::Movies
             && item.collection_role == AddonMediaListItemRole::Auto)
@@ -2816,12 +2843,46 @@ const fn publication_blocker_text_key(kind: AddonMediaListPublicationBlockerKind
     }
 }
 
-fn publication_blocker_label(blocker: &AddonMediaListPublicationBlocker) -> String {
-    let message = tr(publication_blocker_text_key(blocker.kind));
-    blocker
-        .item_title
-        .as_ref()
-        .map_or_else(|| message.to_owned(), |title| format!("{title}: {message}"))
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PublicationBlockerGroup {
+    kind: AddonMediaListPublicationBlockerKind,
+    item_count: u64,
+    first_item_title: Option<String>,
+    item_scoped: bool,
+}
+
+fn publication_blocker_groups(
+    blockers: &[AddonMediaListPublicationBlocker],
+) -> Vec<PublicationBlockerGroup> {
+    let mut groups = Vec::<PublicationBlockerGroup>::new();
+    for blocker in blockers {
+        let item_scoped = blocker.item_rank.is_some();
+        if let Some(group) = groups
+            .iter_mut()
+            .find(|group| group.kind == blocker.kind && group.item_scoped == item_scoped)
+        {
+            group.item_count = group.item_count.saturating_add(u64::from(item_scoped));
+        } else {
+            groups.push(PublicationBlockerGroup {
+                kind: blocker.kind,
+                item_count: u64::from(item_scoped),
+                first_item_title: item_scoped.then(|| blocker.item_title.clone()).flatten(),
+                item_scoped,
+            });
+        }
+    }
+    groups
+}
+
+fn publication_blocker_group_label(group: &PublicationBlockerGroup) -> String {
+    let message = tr(publication_blocker_text_key(group.kind));
+    if group.item_count > 1 {
+        format!("{} {} · {message}", group.item_count, tr(TextKey::Items))
+    } else if let Some(title) = group.first_item_title.as_deref() {
+        format!("{title}: {message}")
+    } else {
+        message.to_owned()
+    }
 }
 
 const fn publication_blocker_href(kind: AddonMediaListPublicationBlockerKind) -> &'static str {
@@ -2916,7 +2977,7 @@ fn AddonMediaListEditorIsland(
     let description_expanded = RwSignal::new(false);
     let is_draft = form.review_state != AddonMediaListReviewState::Published;
     let show_metadata = initial_show_nfo.metadata.clone();
-    let saved_show_metadata = show_metadata.clone();
+    let saved_show_metadata = RwSignal::new(show_metadata.clone());
     let show_metadata_conflicts = initial_show_nfo.conflicts.clone();
     let show_metadata_conflict_count = show_metadata_conflicts.len();
     let show_etag = RwSignal::new(initial_show_nfo.etag.clone());
@@ -3002,33 +3063,38 @@ fn AddonMediaListEditorIsland(
     let saved_detail_import_policy = form.detail_import_policy;
     let saved_content_kind_override = form.content_kind_override;
     let saved_presentation_kind = form.requested_presentation_kind;
+    let metadata_dirty = Memo::new(move |_| {
+        saved_show_metadata.with(|saved| {
+            show_title.get() != saved.title
+                || non_empty_value(&show_original_title.get()) != saved.original_title
+                || non_empty_value(&show_sort_title.get()) != saved.sort_title
+                || non_empty_value(&show_plot.get()) != saved.plot
+                || show_year.get().trim().parse::<i32>().ok() != saved.year
+                || comma_values(&show_genres.get()) != saved.genres
+                || line_values(&show_tags.get()) != saved.tags
+                || comma_values(&show_studios.get()) != saved.studios
+                || comma_values(&show_directors.get()) != saved.directors
+                || comma_values(&show_writers.get()) != saved.writers
+                || comma_values(&show_artists.get()) != saved.artists
+                || comma_values(&show_languages.get()) != saved.languages
+                || people_values(&show_people.get()) != saved.people
+                || artwork_values(
+                    &saved.artwork,
+                    [
+                        (&show_poster.get(), AddonMediaListArtworkRole::Poster),
+                        (&show_fanart.get(), AddonMediaListArtworkRole::Fanart),
+                        (&show_thumbnail.get(), AddonMediaListArtworkRole::Thumb),
+                    ],
+                ) != saved.artwork
+        })
+    });
     let settings_dirty = Memo::new(move |_| {
         auto_refresh.get() != saved_auto_refresh
             || generate_playlist.get() != saved_generate_playlist
             || detail_import_policy.get() != saved_detail_import_policy
             || content_kind_override.get() != saved_content_kind_override
             || presentation_kind.get() != saved_presentation_kind
-            || show_title.get() != saved_show_metadata.title
-            || non_empty_value(&show_original_title.get()) != saved_show_metadata.original_title
-            || non_empty_value(&show_sort_title.get()) != saved_show_metadata.sort_title
-            || non_empty_value(&show_plot.get()) != saved_show_metadata.plot
-            || show_year.get().trim().parse::<i32>().ok() != saved_show_metadata.year
-            || comma_values(&show_genres.get()) != saved_show_metadata.genres
-            || line_values(&show_tags.get()) != saved_show_metadata.tags
-            || comma_values(&show_studios.get()) != saved_show_metadata.studios
-            || comma_values(&show_directors.get()) != saved_show_metadata.directors
-            || comma_values(&show_writers.get()) != saved_show_metadata.writers
-            || comma_values(&show_artists.get()) != saved_show_metadata.artists
-            || comma_values(&show_languages.get()) != saved_show_metadata.languages
-            || people_values(&show_people.get()) != saved_show_metadata.people
-            || artwork_values(
-                &saved_show_metadata.artwork,
-                [
-                    (&show_poster.get(), AddonMediaListArtworkRole::Poster),
-                    (&show_fanart.get(), AddonMediaListArtworkRole::Fanart),
-                    (&show_thumbnail.get(), AddonMediaListArtworkRole::Thumb),
-                ],
-            ) != saved_show_metadata.artwork
+            || metadata_dirty.get()
     });
     let primary_action = Memo::new(move |_| {
         publication_readiness
@@ -3096,6 +3162,14 @@ fn AddonMediaListEditorIsland(
     // Keep one provider-ordered overview for every collection type. Availability
     // is a review status, not a separate navigation hierarchy.
     let items = RwSignal::new(initial_items);
+    let episode_numbering_available = Memo::new(move |_| {
+        presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow
+            || items.with(|items| {
+                items
+                    .iter()
+                    .any(|item| item.content_kind == AddonMediaListContentKind::TelevisionEpisode)
+            })
+    });
     let row_save_states = RwSignal::new(BTreeMap::<i64, RowSaveState>::new());
     let bulk_scope_value = RwSignal::new("all".to_owned());
     let bulk_content_kind_value = RwSignal::new("unchanged".to_owned());
@@ -3150,9 +3224,7 @@ fn AddonMediaListEditorIsland(
         })
     });
     let episode_numbering_row_preview = Memo::new(move |_| {
-        if !episode_numbering_open.get()
-            || presentation_kind.get() != AddonMediaListPresentationKind::TelevisionShow
-        {
+        if !episode_numbering_open.get() || !episode_numbering_available.get() {
             return BTreeMap::new();
         }
         let Some(season) = episode_numbering_season
@@ -3298,6 +3370,7 @@ fn AddonMediaListEditorIsland(
     let reload_items_action = Action::new(|id: &i64| list_addon_media_list_items(*id));
     let reload_readiness_action =
         Action::new(|id: &i64| get_addon_media_list_publication_readiness(*id));
+    let reload_show_nfo_action = Action::new(|id: &i64| get_addon_media_list_show_nfo(*id));
     let review_edit_action = Action::new(
         |value: &(i64, Vec<AddonMediaListItemReviewEdit>, ReviewUndoEntry)| {
             let (id, edits, undo) = value.clone();
@@ -3359,6 +3432,47 @@ fn AddonMediaListEditorIsland(
         if let Some(result) = reload_readiness_action.value().get() {
             match result {
                 Ok(next) => publication_readiness.set(next),
+                Err(error) => {
+                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
+                }
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = reload_show_nfo_action.value().get() {
+            match result {
+                Ok(next) if !metadata_dirty.get_untracked() => {
+                    let metadata = next.metadata;
+                    let poster =
+                        artwork_value(&metadata.artwork, AddonMediaListArtworkRole::Poster);
+                    let fanart =
+                        artwork_value(&metadata.artwork, AddonMediaListArtworkRole::Fanart);
+                    let thumbnail =
+                        artwork_value(&metadata.artwork, AddonMediaListArtworkRole::Thumb);
+                    show_etag.set(next.etag);
+                    show_title.set(metadata.title.clone());
+                    show_original_title.set(metadata.original_title.clone().unwrap_or_default());
+                    show_sort_title.set(metadata.sort_title.clone().unwrap_or_default());
+                    show_plot.set(metadata.plot.clone().unwrap_or_default());
+                    show_year.set(
+                        metadata
+                            .year
+                            .map_or_else(String::new, |value| value.to_string()),
+                    );
+                    show_genres.set(metadata.genres.join(", "));
+                    show_tags.set(metadata.tags.join("\n"));
+                    show_studios.set(metadata.studios.join(", "));
+                    show_directors.set(metadata.directors.join(", "));
+                    show_writers.set(metadata.writers.join(", "));
+                    show_artists.set(metadata.artists.join(", "));
+                    show_languages.set(metadata.languages.join(", "));
+                    show_people.set(people_lines(&metadata.people));
+                    show_poster.set(poster);
+                    show_fanart.set(fanart);
+                    show_thumbnail.set(thumbnail);
+                    saved_show_metadata.set(metadata);
+                }
+                Ok(_) => {}
                 Err(error) => {
                     toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
                 }
@@ -3485,8 +3599,17 @@ fn AddonMediaListEditorIsland(
                             }
                             import_progress.set(next_form.import_progress);
                             if next_marker != previous_item_marker {
+                                let became_ready =
+                                    next_marker.as_ref().is_some_and(|(state, ..)| {
+                                        *state == AddonMediaListImportState::Ready
+                                    }) && previous_item_marker.as_ref().is_none_or(
+                                        |(state, ..)| *state != AddonMediaListImportState::Ready,
+                                    );
                                 previous_item_marker = next_marker;
                                 reload_items_action.dispatch(id);
+                                if became_ready {
+                                    reload_show_nfo_action.dispatch(id);
+                                }
                             }
                             let should_stop = import_progress.with_untracked(|progress| {
                                 progress.as_ref().is_some_and(|progress| {
@@ -3699,7 +3822,68 @@ fn AddonMediaListEditorIsland(
 
     view! {
         <div class=style::page>
-            <aside class=style::workflow_shell aria-labelledby="addon-list-readiness-heading">
+            <header
+                class=style::metadata_hero
+                style:display=move || if form_found { "grid" } else { "none" }
+            >
+                <span class=style::metadata_hero_icon style=move || icon_style(presentation_icon(presentation_kind.get()), "1.6rem") aria-hidden="true"></span>
+                <div>
+                    <h1>{move || show_title.get()}</h1>
+                    <p class=style::metadata_type>{move || tr(presentation_text_key(presentation_kind.get()))}</p>
+                    <p
+                        id="addon-list-description"
+                        class=move || if description_expanded.get() {
+                            format!("{} {}", style::metadata_description, style::description_expanded)
+                        } else {
+                            style::metadata_description.to_owned()
+                        }
+                    >{move || show_plot.get()}</p>
+                    <button
+                        type="button"
+                        class=format!("{} {}", style::description_toggle, style::js_only)
+                        hidden=move || show_plot.with(|plot| plot.chars().count() <= 160)
+                        aria-expanded=move || if description_expanded.get() { "true" } else { "false" }
+                        aria-controls="addon-list-description"
+                        on:click=move |_| description_expanded.update(|expanded| *expanded = !*expanded)
+                    >
+                        {move || tr(if description_expanded.get() { TextKey::ShowLess } else { TextKey::ShowFullDescription })}
+                    </button>
+                    <p
+                        class=style::metadata_hero_conflict
+                        data-testid="addon-metadata-conflict-summary"
+                        style:display=if show_metadata_conflict_count == 0 { "none" } else { "inline-flex" }
+                    >
+                        <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
+                        <span>{format!("{} {}", show_metadata_conflict_count, tr(TextKey::MetadataConflicts))}</span>
+                    </p>
+                    <a
+                        class=style::metadata_review_link
+                        href="#addon-list-general-metadata"
+                        data-metadata-toggle
+                        on:click=move |_| general_metadata_open.set(true)
+                    >{tr(TextKey::EditMetadata)}</a>
+                </div>
+                <button
+                    type="button"
+                    class=style::metadata_hero_edit
+                    data-metadata-toggle
+                    title=tr(TextKey::EditMetadata)
+                    aria-label=tr(TextKey::EditMetadata)
+                    aria-expanded=move || if general_metadata_open.get() { "true" } else { "false" }
+                    aria-controls="addon-list-general-metadata"
+                    on:click=move |event| {
+                        event.stop_propagation();
+                        general_metadata_open.update(|open| *open = !*open);
+                    }
+                >
+                    <span style=icon_style(IconName::Edit, "1.2rem") aria-hidden="true"></span>
+                </button>
+            </header>
+            <div
+                class=style::review_workspace
+                style:display=move || if form_found { "grid" } else { "none" }
+            >
+            <section class=style::workflow_shell aria-labelledby="addon-list-readiness-heading">
                 <nav aria-label=tr(TextKey::PublicationReadiness)>
                     <ol class=style::workflow_steps>
                         <li
@@ -3779,34 +3963,10 @@ fn AddonMediaListEditorIsland(
                             <dd><a href="#addon-list-items-heading">{move || publication_readiness.with(|readiness| format!("{} / {}", readiness.optional_detail_complete, readiness.optional_detail_total))}</a></dd>
                         </div>
                     </dl>
-                    {move || publication_readiness.with(|readiness| {
-                        if readiness.blockers.is_empty() {
-                            view! { <p class=style::readiness_ok>{tr(TextKey::NoPublicationBlockers)}</p> }.into_any()
-                        } else {
-                            view! {
-                                <ul id="addon-list-publication-blockers" class=style::blocker_list aria-label=tr(TextKey::PublicationBlockers)>
-                                    {readiness.blockers.iter().map(|blocker| {
-                                        let kind = blocker.kind;
-                                        view! {
-                                        <li>
-                                            <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
-                                            <a
-                                                href=publication_blocker_href(kind)
-                                                on:click=move |_| {
-                                                    if publication_blocker_targets_metadata(kind) {
-                                                        general_metadata_open.set(true);
-                                                    } else if publication_blocker_href(kind) == "#addon-list-items-heading" {
-                                                        need_review_filter.set(true);
-                                                        item_page.set(0);
-                                                    }
-                                                }
-                                            >{publication_blocker_label(blocker)}</a>
-                                        </li>
-                                    }}).collect_view()}
-                                </ul>
-                            }.into_any()
-                        }
-                    })}
+                    <p
+                        class=style::readiness_ok
+                        style:display=move || if publication_readiness.with(|readiness| readiness.blockers.is_empty()) { "flex" } else { "none" }
+                    >{tr(TextKey::NoPublicationBlockers)}</p>
                     <p
                         class=style::preparation_state
                         style:display=move || if publication_readiness.with(|readiness| readiness.required_playback_detail_count > 0) { "flex" } else { "none" }
@@ -3933,72 +4093,44 @@ fn AddonMediaListEditorIsland(
                         </button>
                     </div>
                 </noscript>
-            </aside>
+            <section
+                id="addon-list-publication-blockers"
+                class=style::readiness_details
+                aria-labelledby="addon-list-publication-blockers-heading"
+                style:display=move || if publication_readiness.with(|readiness| readiness.blockers.is_empty()) { "none" } else { "grid" }
+            >
+                <h2 id="addon-list-publication-blockers-heading">{tr(TextKey::PublicationBlockers)}</h2>
+                <ul class=style::blocker_list aria-label=tr(TextKey::PublicationBlockers)>
+                    {move || publication_readiness.with(|readiness| {
+                        publication_blocker_groups(&readiness.blockers).into_iter().map(|group| {
+                            let kind = group.kind;
+                            view! {
+                                <li>
+                                    <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
+                                    <a
+                                        href=publication_blocker_href(kind)
+                                        on:click=move |_| {
+                                            if kind == AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing {
+                                                episode_numbering_open.set(true);
+                                                need_review_filter.set(false);
+                                                item_page.set(0);
+                                            } else if publication_blocker_targets_metadata(kind) {
+                                                general_metadata_open.set(true);
+                                            } else if publication_blocker_href(kind) == "#addon-list-items-heading" {
+                                                need_review_filter.set(true);
+                                                item_page.set(0);
+                                            }
+                                        }
+                                    >{publication_blocker_group_label(&group)}</a>
+                                </li>
+                            }
+                        }).collect_view()
+                    })}
+                </ul>
+            </section>
+            </section>
 
-            <details class=style::mobile_readiness_details>
-                <summary>{tr(TextKey::PublicationReadiness)}</summary>
-                <dl class=style::readiness_metrics>
-                    <div>
-                        <dt>{tr(TextKey::IncludeInPublication)}</dt>
-                        <dd><a href="#addon-list-items-heading">{move || publication_readiness.with(|readiness| readiness.included_count)}</a></dd>
-                    </div>
-                    <div>
-                        <dt>{tr(TextKey::PublicationBlockers)}</dt>
-                        <dd>{move || publication_readiness.with(|readiness| readiness.blockers.len())}</dd>
-                    </div>
-                    <div>
-                        <dt>{tr(TextKey::ReviewRecommendations)}</dt>
-                        <dd>
-                            <a
-                                href="#addon-list-items-heading"
-                                on:click=move |_| {
-                                    need_review_filter.set(true);
-                                    item_page.set(0);
-                                }
-                            >{move || publication_readiness.with(|readiness| readiness.recommendation_count)}</a>
-                        </dd>
-                    </div>
-                    <div>
-                        <dt>{tr(TextKey::OptionalDetails)}</dt>
-                        <dd><a href="#addon-list-items-heading">{move || publication_readiness.with(|readiness| format!("{} / {}", readiness.optional_detail_complete, readiness.optional_detail_total))}</a></dd>
-                    </div>
-                </dl>
-                {move || publication_readiness.with(|readiness| {
-                    if readiness.blockers.is_empty() {
-                        view! { <p class=style::readiness_ok>{tr(TextKey::NoPublicationBlockers)}</p> }.into_any()
-                    } else {
-                        view! {
-                            <ul class=style::blocker_list aria-label=tr(TextKey::PublicationBlockers)>
-                                {readiness.blockers.iter().map(|blocker| {
-                                    let kind = blocker.kind;
-                                    view! {
-                                        <li>
-                                            <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
-                                            <a
-                                                href=publication_blocker_href(kind)
-                                                on:click=move |_| {
-                                                    if publication_blocker_targets_metadata(kind) {
-                                                        general_metadata_open.set(true);
-                                                    } else if publication_blocker_href(kind) == "#addon-list-items-heading" {
-                                                        need_review_filter.set(true);
-                                                        item_page.set(0);
-                                                    }
-                                                }
-                                            >{publication_blocker_label(blocker)}</a>
-                                        </li>
-                                    }
-                                }).collect_view()}
-                            </ul>
-                        }.into_any()
-                    }
-                })}
-                <p class=style::workflow_message style:display=if initial_error_key.is_some() { "flex" } else { "none" } role="alert">
-                    {initial_error_key.map(tr).unwrap_or_default()}
-                </p>
-                <p class=style::workflow_message style:display=if initial_status_key.is_some() { "flex" } else { "none" } role="status">
-                    {initial_status_key.map(tr).unwrap_or_default()}
-                </p>
-            </details>
+            <div class=style::review_main>
 
             {move || import_progress.get().map(|progress| {
                 let state = progress.state;
@@ -4148,60 +4280,6 @@ fn AddonMediaListEditorIsland(
                             <noscript>
                                 <style>"#addon-list-general-metadata { display: grid !important; } [data-metadata-toggle] { display: none !important; }"</style>
                             </noscript>
-                            <header class=style::metadata_hero>
-                                <span class=style::metadata_hero_icon style=move || icon_style(presentation_icon(presentation_kind.get()), "1.6rem") aria-hidden="true"></span>
-                                <div>
-                                    <h1>{move || show_title.get()}</h1>
-                                    <p class=style::metadata_type>{move || tr(presentation_text_key(presentation_kind.get()))}</p>
-                                    <p
-                                        id="addon-list-description"
-                                        class=move || if description_expanded.get() {
-                                            format!("{} {}", style::metadata_description, style::description_expanded)
-                                        } else {
-                                            style::metadata_description.to_owned()
-                                        }
-                                    >{move || show_plot.get()}</p>
-                                    <button
-                                        type="button"
-                                        class=format!("{} {}", style::description_toggle, style::js_only)
-                                        hidden=move || show_plot.with(|plot| plot.chars().count() <= 160)
-                                        aria-expanded=move || if description_expanded.get() { "true" } else { "false" }
-                                        aria-controls="addon-list-description"
-                                        on:click=move |_| description_expanded.update(|expanded| *expanded = !*expanded)
-                                    >
-                                        {move || tr(if description_expanded.get() { TextKey::ShowLess } else { TextKey::ShowFullDescription })}
-                                    </button>
-                                    <p
-                                        class=style::metadata_hero_conflict
-                                        data-testid="addon-metadata-conflict-summary"
-                                        style:display=if show_metadata_conflict_count == 0 { "none" } else { "inline-flex" }
-                                    >
-                                        <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
-                                        <span>{format!("{} {}", show_metadata_conflict_count, tr(TextKey::MetadataConflicts))}</span>
-                                    </p>
-                                    <a
-                                        class=style::metadata_review_link
-                                        href="#addon-list-general-metadata"
-                                        data-metadata-toggle
-                                        on:click=move |_| general_metadata_open.set(true)
-                                    >{tr(TextKey::EditMetadata)}</a>
-                                </div>
-                                <button
-                                    type="button"
-                                    class=style::metadata_hero_edit
-                                    data-metadata-toggle
-                                    title=tr(TextKey::EditMetadata)
-                                    aria-label=tr(TextKey::EditMetadata)
-                                    aria-expanded=move || if general_metadata_open.get() { "true" } else { "false" }
-                                    aria-controls="addon-list-general-metadata"
-                                    on:click=move |event| {
-                                        event.stop_propagation();
-                                        general_metadata_open.update(|open| *open = !*open);
-                                    }
-                                >
-                                    <span style=icon_style(IconName::Edit, "1.2rem") aria-hidden="true"></span>
-                                </button>
-                            </header>
                             <p class=style::draft_note style:display=if is_draft { "" } else { "none" }>
                                 <span style=icon_style(IconName::Info, "1rem") aria-hidden="true"></span>
                                 <span>{tr(TextKey::MetadataDraftNotice)}</span>
@@ -4461,7 +4539,7 @@ fn AddonMediaListEditorIsland(
                         <button
                             type="button"
                             class=style::numbering_toggle
-                            style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow { "inline-flex" } else { "none" }
+                            style:display=move || if episode_numbering_available.get() { "inline-flex" } else { "none" }
                             aria-expanded=move || if episode_numbering_open.get() { "true" } else { "false" }
                             aria-controls="episode-numbering-panel"
                             on:click=move |_| episode_numbering_open.update(|open| *open = !*open)
@@ -4474,7 +4552,7 @@ fn AddonMediaListEditorIsland(
                         id="episode-numbering-panel"
                         class=style::numbering_panel
                         aria-label=tr(TextKey::NumberEpisodes)
-                        style:display=move || if presentation_kind.get() == AddonMediaListPresentationKind::TelevisionShow && episode_numbering_open.get() { "grid" } else { "none" }
+                        style:display=move || if episode_numbering_available.get() && episode_numbering_open.get() { "grid" } else { "none" }
                     >
                         <p>{tr(TextKey::NumberEpisodesHelp)}</p>
                         <div class=style::numbering_mode>
@@ -5030,6 +5108,8 @@ fn AddonMediaListEditorIsland(
                     </div>
                 </div>
             </section>
+            </div>
+            </div>
             <p
                 class=style::empty
                 style:display=move || if form_found { "none" } else { "" }
@@ -5100,6 +5180,23 @@ mod tests {
     fn item_page_sizes_offer_an_unbounded_choice_and_the_default() {
         assert!(ITEM_PAGE_SIZES.contains(&0));
         assert!(ITEM_PAGE_SIZES.contains(&DEFAULT_ITEM_PAGE_SIZE));
+    }
+
+    #[test]
+    fn detected_episode_needs_numbering_when_collection_presentation_is_auto() {
+        let item = AddonMediaListItemRow {
+            title: "Detected episode".to_owned(),
+            availability: AddonMediaListItemAvailability::Available,
+            content_kind: AddonMediaListContentKind::TelevisionEpisode,
+            season: None,
+            episode: None,
+            ..AddonMediaListItemRow::default()
+        };
+
+        assert!(item_needs_review(
+            &item,
+            AddonMediaListPresentationKind::Auto
+        ));
     }
 
     #[test]
@@ -5283,6 +5380,38 @@ mod tests {
             Some("01:05".to_owned())
         );
         assert!(elapsed_from("not-a-timestamp").is_none());
+    }
+
+    #[test]
+    fn publication_blockers_group_repeated_item_failures_without_losing_global_reasons() {
+        let mut blockers = (0..48)
+            .map(|rank| AddonMediaListPublicationBlocker {
+                kind: AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing,
+                item_rank: Some(rank + 1),
+                item_title: Some(format!("Episode {}", rank + 1)),
+                count: 1,
+            })
+            .collect::<Vec<_>>();
+        blockers.push(AddonMediaListPublicationBlocker {
+            kind: AddonMediaListPublicationBlockerKind::CollectionTitleMissing,
+            item_rank: None,
+            item_title: None,
+            count: 1,
+        });
+
+        let groups = publication_blocker_groups(&blockers);
+
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].item_count, 48);
+        assert_eq!(
+            publication_blocker_group_label(&groups[0]),
+            "48 Items · Enter a valid season and episode number."
+        );
+        assert_eq!(groups[1].item_count, 0);
+        assert_eq!(
+            publication_blocker_group_label(&groups[1]),
+            "The collection needs a title."
+        );
     }
 
     #[test]

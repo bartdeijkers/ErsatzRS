@@ -34,10 +34,37 @@ function sqlite(sql: string): string {
   if (!dbPath) {
     throw new Error('E2E_DB_PATH or ERSATZRS_DB_PATH is required for metadata editor seeding');
   }
-  return execFileSync('sqlite3', [dbPath], {
-    input: `.timeout 10000\n${sql}`,
-    encoding: 'utf8',
-  }).trim();
+  const input = `.timeout 10000\n${sql}`;
+  try {
+    return execFileSync('sqlite3', [dbPath], {
+      input,
+      encoding: 'utf8',
+    }).trim();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+
+    const pythonSqlite = [
+      'import sqlite3, sys',
+      'path = sys.argv[1]',
+      'script = sys.stdin.read().split("\\n", 1)[1]',
+      'connection = sqlite3.connect(path, timeout=10)',
+      'statement = script.strip()',
+      'if statement.lstrip().upper().startswith(("SELECT", "WITH", "PRAGMA")) and statement.count(";") <= 1:',
+      '    cursor = connection.execute(statement)',
+      '    for row in cursor.fetchall():',
+      '        print("|".join("" if value is None else str(value) for value in row))',
+      'else:',
+      '    connection.executescript(script)',
+      'connection.commit()',
+      'connection.close()',
+    ].join('\n');
+    return execFileSync('python', ['-c', pythonSqlite, dbPath], {
+      input,
+      encoding: 'utf8',
+    }).trim();
+  }
 }
 
 function addonContentHash(root: string): string {
@@ -430,6 +457,34 @@ INSERT INTO "AddonMediaListItem" (
 `);
 }
 
+function seedHighCardinalityNumberingBlockers(seed: MetadataSeed, testInfo: TestInfo): void {
+  const suffix = testInfo.project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const values = Array.from({ length: 48 }, (_, rank) => {
+    const itemId = seed.secondItemId + 1_000 + rank;
+    const title = `Glamourland episode ${rank + 1}`;
+    const metadata = JSON.stringify({ title, release_date: `1986-09-${String((rank % 28) + 1).padStart(2, '0')}` });
+    return `
+  (${itemId}, ${seed.listId}, 'item:numbering-${suffix}-${rank}', '${sqlEscape(title)}', 4, ${rank},
+   '${sqlEscape(title)}', 'https://example.invalid/e2e/${suffix}/numbering-${rank}', 1800, 0, 1, 1, 0,
+   '${sqlEscape(metadata)}', '{}', 1, 1)`;
+  }).join(',');
+
+  sqlite(`
+DELETE FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listId};
+UPDATE "AddonMediaList"
+SET "Name" = 'Glamourland', "ItemCount" = 48, "ReviewState" = 1,
+    "PresentationKind" = 2, "RequestedPresentationKind" = 2,
+    "ProviderMetadataJson" = '{"title":"Glamourland","plot":"Provider collection summary"}',
+    "MetadataOverrideJson" = '{}', "MetadataConflictJson" = NULL
+WHERE "Id" = ${seed.listId};
+INSERT INTO "AddonMediaListItem" (
+  "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank", "Title",
+  "SourceUrl", "DurationSeconds", "Availability", "ContentKind", "Included", "Published",
+  "ProviderMetadataJson", "MetadataOverrideJson", "ProviderLiveness", "EffectiveLiveness"
+) VALUES${values};
+`);
+}
+
 function seedDetailProgress(seed: MetadataSeed, testInfo: TestInfo): void {
   const suffix = testInfo.project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const providerHost = `e2e-${suffix}.invalid`;
@@ -553,7 +608,11 @@ INSERT INTO "AddonMediaListItem" (
   (${seed.secondItemId}, ${seed.listId}, 'item:review-ready', '${sqlEscape(seed.secondTitle)}', 4, 1,
    '${sqlEscape(seed.secondTitle)}', 'https://example.invalid/ready/review', 600, 2, 0, 1, 0,
    '${sqlEscape(secondMetadata)}', '{}', 1, 1);
-UPDATE "AddonMediaList" SET "ItemCount" = 2 WHERE "Id" = ${seed.listId};
+UPDATE "AddonMediaList"
+SET "ItemCount" = 2,
+    "ProviderMetadataJson" = '{"title":"Glamourland","plot":"Imported collection summary"}',
+    "MetadataOverrideJson" = '{}', "MetadataConflictJson" = NULL
+WHERE "Id" = ${seed.listId};
 UPDATE "AddonMediaListImportJob"
 SET "State" = 3, "DiscoveredCount" = 2, "TotalHint" = 2, "OverviewComplete" = 1,
     "UpdatedAt" = '2026-08-26T10:00:04Z', "LastProgressAt" = '2026-08-26T10:00:04Z',
@@ -565,6 +624,7 @@ WHERE "AddonMediaListId" = ${seed.listId};
     await expect(workflowSteps.locator('[aria-current="step"]')).toContainText('Ready to review');
     await expect(collection.getByText(seed.firstTitle)).toBeVisible();
     await expect(collection.getByText(seed.secondTitle)).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Glamourland', exact: true })).toBeVisible();
     const ids = await collection
       .locator('li[data-item-id]')
       .evaluateAll((items) => items.map((item) => item.getAttribute('data-item-id')));
@@ -680,6 +740,68 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
     } finally {
       await context.close();
     }
+  });
+
+  test('keeps grouped blockers in a non-sticky responsive readiness rail', async ({
+    page,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    seedHighCardinalityNumberingBlockers(seed, testInfo);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+
+    const readinessShell = page.locator(
+      'section[aria-labelledby="addon-list-readiness-heading"]',
+    );
+    const collectionHero = page.locator('#addon-list-description').locator('xpath=ancestor::header');
+    const itemHeading = page.locator('#addon-list-items-heading');
+    const [shellBox, heroBox, itemHeadingBox] = await Promise.all([
+      readinessShell.boundingBox(),
+      collectionHero.boundingBox(),
+      itemHeading.boundingBox(),
+    ]);
+    expect(await readinessShell.evaluate((element) => getComputedStyle(element).position)).toBe(
+      'static',
+    );
+    expect(heroBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
+      shellBox?.y ?? Number.NEGATIVE_INFINITY,
+    );
+    expect(shellBox?.x ?? 0).toBeGreaterThan(itemHeadingBox?.x ?? Number.POSITIVE_INFINITY);
+
+    const blockerPanel = page.locator('#addon-list-publication-blockers');
+    const groupedBlockers = blockerPanel.getByRole('list', { name: 'Blockers' }).locator(':scope > li');
+    await expect(groupedBlockers).toHaveCount(1);
+    const numberingBlocker = groupedBlockers.getByRole('link', {
+      name: /48 items.*valid season and episode number/i,
+    });
+    await expect(numberingBlocker).toBeVisible();
+
+    const firstItem = page.getByTestId('addon-metadata-items').locator('li[data-item-id]').first();
+    await expect(firstItem.getByText('Enter a valid season and episode number.', { exact: true })).toHaveCount(2);
+
+    await page.setViewportSize({ width: 1180, height: 900 });
+    const [stackedShellBox, stackedItemHeadingBox] = await Promise.all([
+      readinessShell.boundingBox(),
+      itemHeading.boundingBox(),
+    ]);
+    expect(stackedShellBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
+      stackedItemHeadingBox?.y ?? Number.NEGATIVE_INFINITY,
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+      ),
+    ).toBe(true);
+
+    await numberingBlocker.click();
+    await expect(page.locator('#episode-numbering-panel')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^number episodes$/i })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(runtimeErrors).toEqual([]);
   });
 
   test('reflows review cards and keeps the mobile navigation keyboard-safe', async ({

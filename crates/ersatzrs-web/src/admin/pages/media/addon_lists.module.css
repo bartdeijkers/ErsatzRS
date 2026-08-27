@@ -33,36 +33,66 @@
 }
 
 .workflow-shell {
-    position: sticky;
-    top: 0;
-    z-index: 8;
+    position: static;
     display: grid;
-    grid-template-columns: auto minmax(20rem, 1fr) auto;
-    gap: 1rem 1.5rem;
+    grid-column: 2;
+    grid-row: 1;
+    gap: 1rem;
     align-items: start;
-    width: calc(100% + 3.75rem);
-    margin: -1.875rem -1.875rem 1rem;
-    padding: 0.85rem 1.5rem;
-    border-bottom: 1px solid var(--color-table-line);
-    background: color-mix(in srgb, var(--color-bg) 96%, transparent);
-    box-shadow: 0 0.35rem 0.8rem rgb(0 0 0 / 12%);
-    backdrop-filter: blur(10px);
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--color-surface) 82%, transparent);
 }
 
-.mobile-readiness-details {
-    display: none;
+.review-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
+    gap: 1.5rem;
+    align-items: start;
+    width: 100%;
+    min-width: 0;
+}
+
+.review-main {
+    display: grid;
+    grid-column: 1;
+    grid-row: 1;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.readiness-details {
+    display: grid;
+    gap: 0.5rem;
+    width: 100%;
+    margin: 0;
+    padding: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--color-warning) 38%, var(--color-border));
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--color-warning) 6%, var(--color-surface));
+}
+
+.readiness-details h2 {
+    margin: 0;
+    color: var(--color-gray-100);
+    font-size: 0.78rem;
+    font-weight: 700;
 }
 
 .workflow-steps {
-    display: flex;
-    gap: 0.65rem;
+    display: grid;
+    gap: 0.4rem;
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
 .workflow-steps li {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 0.35rem;
     color: var(--color-muted);
@@ -106,9 +136,9 @@
 .readiness-summary h2 {
     position: relative;
     margin: 0;
-    color: var(--color-muted);
-    font-size: 0.72rem;
-    font-weight: 600;
+    color: var(--color-gray-100);
+    font-size: 1rem;
+    font-weight: 700;
     line-height: 1.35;
 }
 
@@ -131,7 +161,7 @@
 
 .readiness-metrics {
     display: grid;
-    grid-template-columns: repeat(4, minmax(7rem, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
     margin: 0;
 }
@@ -205,9 +235,13 @@
 
 .workflow-action {
     display: flex;
-    align-self: center;
-    justify-content: flex-end;
-    min-width: 10rem;
+    align-self: stretch;
+    justify-content: stretch;
+    width: 100%;
+}
+
+.workflow-action .btn-add {
+    width: 100%;
 }
 
 .js-only {
@@ -222,8 +256,12 @@
     display: flex;
     flex-wrap: wrap;
     align-self: center;
-    justify-content: flex-end;
+    justify-content: stretch;
     gap: 0.5rem;
+}
+
+.nojs-workflow-actions .btn-add {
+    flex: 1 1 100%;
 }
 
 .content,
@@ -834,6 +872,14 @@ tbody tr:hover {
     color: var(--color-primary);
     font-size: 0.7rem;
     font-weight: 700;
+}
+
+.item-field-warning {
+    margin-top: 0.2rem;
+    color: var(--color-warning);
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.35;
 }
 
 .start-here {
@@ -2033,6 +2079,43 @@ tbody tr:hover {
     cursor: default;
 }
 
+@media (max-width: 1280px) {
+    .review-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .workflow-shell {
+        grid-column: 1;
+        grid-row: 1;
+        grid-template-columns: minmax(10rem, 0.65fr) minmax(20rem, 1.4fr) auto;
+    }
+
+    .workflow-shell > nav {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .workflow-shell > .readiness-summary {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .workflow-shell > .workflow-action,
+    .workflow-shell > noscript {
+        grid-column: 3;
+        grid-row: 1;
+    }
+
+    .workflow-shell > .readiness-details {
+        grid-column: 1 / -1;
+    }
+
+    .review-main {
+        grid-column: 1;
+        grid-row: 2;
+    }
+}
+
 @media (max-width: 760px) {
     .action-bar {
         width: calc(100% + 3rem);
@@ -2041,57 +2124,38 @@ tbody tr:hover {
     }
 
     .workflow-shell {
-        position: sticky;
+        position: static;
+        grid-column: 1;
+        grid-row: 1;
         grid-template-columns: minmax(0, 1fr);
-        gap: 0.45rem;
-        width: calc(100% + 3rem);
-        max-height: 30vh;
-        margin: -1.5rem -1.5rem 1rem;
-        padding: 0.55rem 1rem 0.7rem;
-        overflow: hidden;
+        gap: 0.85rem;
+        width: 100%;
+        margin: 0;
+        padding: 0.85rem;
     }
 
     .workflow-shell > nav,
-    .workflow-shell .readiness-summary > div > h2,
-    .workflow-shell .readiness-summary > div > p:not(.revision-state),
-    .workflow-shell .readiness-metrics,
-    .workflow-shell .blocker-list,
-    .workflow-shell .readiness-ok,
-    .workflow-shell .preparation-state,
-    .workflow-shell .workflow-message {
-        display: none;
+    .workflow-shell > .readiness-summary,
+    .workflow-shell > .workflow-action,
+    .workflow-shell > noscript,
+    .workflow-shell > .readiness-details {
+        grid-column: 1;
+        grid-row: auto;
     }
 
-    .workflow-shell .readiness-summary {
-        gap: 0;
+    .workflow-steps {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.25rem;
     }
 
-    .workflow-shell .revision-state {
-        align-items: baseline;
-        justify-content: space-between;
-        font-size: 0.75rem;
+    .workflow-steps li {
+        align-items: flex-start;
+        flex-direction: column;
+        white-space: normal;
     }
 
-    .mobile-readiness-details {
-        display: block;
-        width: 100%;
-        margin: 0 0 1rem;
-        padding: 0.75rem;
-        border: 1px solid var(--color-border);
-        border-radius: var(--radius);
-        background: var(--color-surface);
-    }
-
-    .mobile-readiness-details > summary {
-        min-height: 2.75rem;
-        color: var(--color-gray-100);
-        font-weight: 700;
-        cursor: pointer;
-    }
-
-    .mobile-readiness-details .readiness-metrics {
+    .readiness-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        margin-top: 0.65rem;
     }
 
     .workflow-action,
@@ -2317,20 +2381,6 @@ tbody tr:hover {
 }
 
 @media (min-width: 761px) and (max-width: 1180px) {
-    .workflow-shell {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .workflow-action,
-    .nojs-workflow-actions {
-        width: 100%;
-        justify-content: flex-start;
-    }
-
-    .readiness-metrics {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .item-fields {
         grid-template-columns: repeat(3, minmax(10rem, 1fr));
     }

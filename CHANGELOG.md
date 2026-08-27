@@ -13,6 +13,24 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.28-beta] - 2026-08-27
+
+### Changed
+
+- Rework add-on-list review around the collection: publication readiness now
+  uses a non-sticky secondary rail on wide screens and returns to normal flow
+  before the review workspace becomes cramped.
+
+- Reject Windows beta publication when the packaged server and hydration
+  assets fail the structural web-bundle consistency gate.
+
+### Fixed
+
+- Keep large add-on-list validation sets usable by grouping repeated blockers
+  in the publication-readiness rail, showing the blocking reason on affected
+  rows, opening episode numbering directly, and refreshing collection metadata
+  when overview import becomes ready without overwriting operator edits.
+
 ## [1.0.27-beta] - 2026-08-26
 
 ### Added
@@ -2396,7 +2414,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.27-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.28-beta...HEAD
+[1.0.28-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.27-beta...v1.0.28-beta
 [1.0.27-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.26-beta...v1.0.27-beta
 [1.0.26-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.25-beta...v1.0.26-beta
 [1.0.25-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.24-beta...v1.0.25-beta
