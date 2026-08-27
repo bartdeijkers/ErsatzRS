@@ -40,6 +40,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 Update `CHANGELOG.md` and any release notes in the same commit if the release
 requires them.
 
+Push that commit and satisfy the mandatory
+[release-candidate CI gate](../../BUILD.md#release-candidate-ci-gate). Do not
+create the tag until the exact candidate SHA has a completed, successful CI
+run.
+
 ## Push the release tag
 
 Create and push an annotated tag:

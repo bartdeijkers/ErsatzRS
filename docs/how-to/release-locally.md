@@ -115,6 +115,11 @@ git commit -m "fix(release): prepare local Windows archive"
 git push origin HEAD
 ```
 
+Before creating the tag, satisfy the mandatory
+[release-candidate CI gate](../../BUILD.md#release-candidate-ci-gate). A local
+archive or focused browser run does not replace successful CI for the exact
+candidate SHA.
+
 Create and push an annotated tag:
 
 ```powershell

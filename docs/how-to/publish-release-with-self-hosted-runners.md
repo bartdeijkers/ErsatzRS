@@ -97,6 +97,10 @@ canonical job and matrix definition. Before tagging, confirm that:
 Commit and validate any required workflow correction before tagging. Do not
 make an uncommitted runner change on the release host.
 
+Push the final candidate commit and satisfy the mandatory
+[release-candidate CI gate](../../BUILD.md#release-candidate-ci-gate) before
+creating the tag.
+
 ## Push the release tag
 
 Create and push the annotated tag:

@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-27","summary":"Published v1.0.28-beta as a Windows-only prerelease after focused Proposal B package verification; documented the mandatory exact-SHA CI-before-tag gate."}
 {"agent":"Codex","date":"2026-08-27","summary":"Prepared the v1.0.28-beta Windows-only release candidate with Proposal B add-on-list review, a beta SSR-WASM bundle gate, focused browser proof, workspace clippy, and a green 2,080-test closeout."}
 {"agent":"Codex","date":"2026-08-27","summary":"Implemented Proposal B for add-on list review with a collection-first, non-sticky responsive publication-readiness rail and verified it with matched hydration plus focused Playwright."}
 {"agent":"Codex","date":"2026-08-27","summary":"Created three responsive add-on-list publication-readiness layout proposals after auditing the live sticky aside against the accepted artifacts."}

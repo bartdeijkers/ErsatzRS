@@ -13,6 +13,11 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Require a completed, successful CI run for the exact release-candidate
+  commit before creating any alpha, beta, or normal release tag.
+
 ## [1.0.28-beta] - 2026-08-27
 
 ### Changed

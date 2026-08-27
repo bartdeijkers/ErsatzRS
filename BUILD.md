@@ -143,6 +143,28 @@ the runner. This is unrelated to the local interactive dev target-dir and its
 stale-binary trap below — this mechanism only sets `CARGO_TARGET_DIR` inside
 the GitHub Actions job environment and never touches `.cargo/config.toml`.
 
+## Release-candidate CI gate
+
+Before creating any alpha, beta, or normal release tag, push the exact
+candidate commit and wait for its automatic `CI` workflow to complete
+successfully. Local closeout checks and focused Playwright regressions are
+useful before the push, but they do not replace this pre-tag gate.
+
+```bash
+candidate=$(git rev-parse HEAD)
+git push origin HEAD
+gh run list --workflow ci.yml --event push --commit "$candidate" --limit 1 \
+  --json databaseId,headSha,status,conclusion,url
+gh run watch <run-id> --exit-status
+gh run view <run-id> --json headSha,status,conclusion,url
+```
+
+Create the release tag only when the final `gh run view` output reports the
+same full `headSha`, `status: completed`, and `conclusion: success`. A failed,
+cancelled, queued, or in-progress run is not release evidence. Any commit or
+amend after the successful run creates a new candidate SHA and requires a new
+successful CI run before tagging.
+
 ## Windows development
 
 Windows contributors use [`run.ps1`](run.ps1) — a PowerShell 7+ port of
