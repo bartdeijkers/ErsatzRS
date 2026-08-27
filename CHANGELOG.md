@@ -31,6 +31,9 @@ release section when tagging a release.
   rows, opening episode numbering directly, and refreshing collection metadata
   when overview import becomes ready without overwriting operator edits.
 
+- Keep the Proposal B publication-readiness flow within the add-on-list review
+  workspace at intermediate viewport widths.
+
 ## [1.0.27-beta] - 2026-08-26
 
 ### Added

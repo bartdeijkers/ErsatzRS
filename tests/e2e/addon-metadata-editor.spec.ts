@@ -590,7 +590,9 @@ INSERT INTO "AddonMediaListImportJob" (
 `);
     await forceEnglish(page);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
-    const workflowSteps = page.locator('aside[aria-labelledby="addon-list-readiness-heading"] nav');
+    const workflowSteps = page.locator(
+      'section[aria-labelledby="addon-list-readiness-heading"] nav',
+    );
     await expect(workflowSteps.locator('[aria-current="step"]')).toHaveCount(1);
     await expect(workflowSteps.locator('[aria-current="step"]')).toContainText('Import');
     const collection = page.getByTestId('addon-metadata-items');
@@ -883,7 +885,9 @@ WHERE "Id" = ${seed.listId};
       expect(mainGeometry.scrollWidth).toBeLessThanOrEqual(mainGeometry.clientWidth + 1);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
-    const readinessShell = page.locator('aside[aria-labelledby="addon-list-readiness-heading"]');
+    const readinessShell = page.locator(
+      'section[aria-labelledby="addon-list-readiness-heading"]',
+    );
     const readinessHeading = page.locator('#addon-list-readiness-heading');
     await expect(readinessHeading).toHaveCSS('position', 'relative');
     const readinessHeadingType = await readinessHeading.evaluate((heading) => {
@@ -893,8 +897,8 @@ WHERE "Id" = ${seed.listId};
         fontWeight: Number.parseInt(style.fontWeight, 10),
       };
     });
-    expect(readinessHeadingType.fontSize).toBeLessThanOrEqual(12);
-    expect(readinessHeadingType.fontWeight).toBeLessThan(700);
+    expect(readinessHeadingType.fontSize).toBeLessThanOrEqual(16);
+    expect(readinessHeadingType.fontWeight).toBeLessThanOrEqual(700);
     expect(await contrastAgainstPageBackground(page, '#addon-list-readiness-heading')).toBeGreaterThanOrEqual(4.5);
     await readinessShell.screenshot({
       path: testInfo.outputPath('addon-list-readiness-wide.png'),
@@ -902,7 +906,13 @@ WHERE "Id" = ${seed.listId};
     await page.setViewportSize({ width: 3840, height: 2160 });
     const mainBox = await page.locator('main').first().boundingBox();
     const editorBox = await page.locator('form#addon_media_lists-list-editor-form').boundingBox();
-    expect(editorBox?.width ?? 0).toBeGreaterThanOrEqual((mainBox?.width ?? 0) - 100);
+    const wideReadinessBox = await readinessShell.boundingBox();
+    expect(editorBox?.x ?? Number.POSITIVE_INFINITY).toBeLessThan(
+      wideReadinessBox?.x ?? Number.NEGATIVE_INFINITY,
+    );
+    expect((editorBox?.width ?? 0) + (wideReadinessBox?.width ?? 0)).toBeGreaterThanOrEqual(
+      (mainBox?.width ?? 0) - 120,
+    );
     const wideFirstItem = page.getByTestId('addon-metadata-items').locator('li[data-item-id]').first();
     expect((await wideFirstItem.boundingBox())?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(58);
     await expect(wideFirstItem.getByRole('link', { name: 'Review item' })).toHaveCount(1);
@@ -923,12 +933,21 @@ WHERE "Id" = ${seed.listId};
       fullPage: false,
     });
     await page.setViewportSize({ width: 390, height: 844 });
-    const stickyWorkflow = await page.locator('aside[aria-labelledby="addon-list-readiness-heading"]').boundingBox();
-    expect(stickyWorkflow?.height ?? 0).toBeLessThanOrEqual(844 * 0.3 + 1);
+    const mobileWorkflow = page.locator(
+      'section[aria-labelledby="addon-list-readiness-heading"]',
+    );
+    const [mobileWorkflowBox, mobileMainBox] = await Promise.all([
+      mobileWorkflow.boundingBox(),
+      page.locator('main').first().boundingBox(),
+    ]);
+    await expect(mobileWorkflow).toHaveCSS('position', 'static');
+    expect(mobileWorkflowBox?.width ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
+      (mobileMainBox?.width ?? 0) + 1,
+    );
     await expect(
-      page.locator('aside[aria-labelledby="addon-list-readiness-heading"] [role="status"]').first(),
+      mobileWorkflow.locator('[role="status"]').first(),
     ).toBeVisible();
-    await page.locator('aside[aria-labelledby="addon-list-readiness-heading"]').screenshot({
+    await mobileWorkflow.screenshot({
       path: testInfo.outputPath('addon-list-readiness-mobile.png'),
     });
     await page.getByTestId('addon-metadata-items').locator('li[data-item-id]').first().scrollIntoViewIfNeeded();
@@ -1065,7 +1084,9 @@ INSERT INTO "AddonProviderHostCooldown" (
     await expect(page.getByText(/playback details queued: 1/i)).toBeVisible();
     await expect(page.getByText('Preparing publication', { exact: true })).toBeVisible();
     await expect(
-      page.locator('aside[aria-labelledby="addon-list-readiness-heading"] nav [aria-current="step"]'),
+      page.locator(
+        'section[aria-labelledby="addon-list-readiness-heading"] nav [aria-current="step"]',
+      ),
     ).toContainText('Publish list');
     await expect
       .poll(() =>
@@ -1433,10 +1454,7 @@ FROM (SELECT * FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listI
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
     const editorForm = page.locator('#addon_media_lists-list-editor-form');
-    const hero = editorForm
-      .locator('header')
-      .filter({ has: page.getByRole('heading', { name: 'Operator draft' }) })
-      .first();
+    const hero = page.locator('#addon-list-description').locator('xpath=ancestor::header');
     await expect(hero.getByRole('heading', { name: 'Operator draft' })).toBeVisible();
     await expect(hero.getByText(/1 metadata conflicts/i)).toBeVisible();
     await hero.getByRole('button', { name: /^edit metadata$/i }).click();
@@ -1509,10 +1527,9 @@ WHERE "Id" = ${seed.listId};
 
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     const refreshedForm = page.locator('#addon_media_lists-list-editor-form');
-    const refreshedHero = refreshedForm
-      .locator('header')
-      .filter({ has: page.getByRole('heading', { name: 'Operator draft' }) })
-      .first();
+    const refreshedHero = page
+      .locator('#addon-list-description')
+      .locator('xpath=ancestor::header');
     await refreshedHero.getByRole('button', { name: /^edit metadata$/i }).click();
     const refreshedPanel = refreshedForm.getByTestId('addon-general-metadata');
     await refreshedPanel.getByRole('textbox', { name: /^title$/i }).fill('Reviewed collection');

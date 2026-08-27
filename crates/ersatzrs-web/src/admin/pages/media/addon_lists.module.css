@@ -2087,7 +2087,7 @@ tbody tr:hover {
     .workflow-shell {
         grid-column: 1;
         grid-row: 1;
-        grid-template-columns: minmax(10rem, 0.65fr) minmax(20rem, 1.4fr) auto;
+        grid-template-columns: minmax(9rem, 0.65fr) minmax(0, 1.4fr) auto;
     }
 
     .workflow-shell > nav {
