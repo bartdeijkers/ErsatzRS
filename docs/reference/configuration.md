@@ -183,20 +183,13 @@ Release bundles contain `ersatzrs-healthcheck` (or
 
 The Docker image uses this binary for its container health check.
 
-## Trusted add-on repositories
+## Local add-on repositories
 
-New databases seed an official ErsatzRS add-on source row. In the current
-development tree its public key is intentionally empty, so it cannot refresh
-until a release pins the production key. To replace the complete list for an
-immutable deployment, set:
-
-| Variable | Purpose |
-|---|---|
-| `ERSATZRS_ADDONS__TRUSTED_REPOSITORIES_FILE` | Filesystem path to the authoritative repository allowlist TOML file |
-
-While this variable is set, database-only sources are not trusted and the
-repository editor is read-only. The exact file schema, path behavior, and
-replacement semantics are in the [add-on repository reference](addon-repositories.md).
+Settings > Add-ons > Sources shows the profile-specific directory where
+ErsatzRS discovers operator-managed Git checkouts. Repository credentials and
+Git configuration remain outside ErsatzRS. The same page accepts complete
+offline repository ZIPs. Both paths require the off-by-default Unknown Sources
+setting; see the [add-on repository reference](addon-repositories.md).
 
 ## Database-backed settings pages
 
@@ -211,7 +204,7 @@ Use the admin UI for settings that can be loaded after database startup:
 | **Settings** -> **Playout** | playout build horizon and scheduling behavior |
 | **Settings** -> **UI** | language, theme, and per-user Windows login startup |
 | **Settings** -> **XMLTV** | guide days, time zone, and block behavior |
-| **Settings** -> **Add-ons** | trusted repositories, install/update state, readiness, manifest-declared settings, and the default remote stream processor |
+| **Settings** -> **Add-ons** | local checkout and offline-bundle sources, install/update state, readiness, manifest-declared settings, and the default remote stream processor |
 
 These values live in the database and move with a database backup.
 

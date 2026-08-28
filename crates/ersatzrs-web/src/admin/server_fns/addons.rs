@@ -6,13 +6,9 @@ use serde::{Deserialize, Serialize};
 pub struct AddonRepositoryRow {
     pub id: String,
     pub name: String,
-    pub index_url: String,
-    pub public_key: String,
-    pub is_official: bool,
-    pub is_enabled: bool,
-    pub trust_tier: String,
-    pub last_sequence: Option<u64>,
-    pub last_refresh: Option<String>,
+    pub kind: String,
+    pub root_path: String,
+    pub last_scan: String,
     pub last_error: Option<String>,
 }
 
@@ -53,10 +49,10 @@ pub struct InstalledAddonRow {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonOverview {
     pub unverified_sources_enabled: bool,
+    pub checkout_path: String,
     /// Add-on used for source URLs no installed package claims, if configured.
     pub default_remote_stream_addon: Option<String>,
     pub detail_wait: AddonDetailWaitSettingsForm,
-    pub repositories_are_deployment_managed: bool,
     pub repositories: Vec<AddonRepositoryRow>,
     pub available: Vec<AvailableAddonRow>,
     pub installed: Vec<InstalledAddonRow>,
@@ -83,15 +79,6 @@ pub struct AddonDetail {
     pub installed: Option<InstalledAddonRow>,
     pub offers: Vec<AvailableAddonRow>,
     pub repositories: Vec<AddonRepositoryRow>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AddonRepositoryEditor {
-    pub id: String,
-    pub name: String,
-    pub index_url: String,
-    pub public_key: String,
-    pub is_enabled: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -196,40 +183,12 @@ pub async fn set_default_remote_stream_addon(addon_id: String) -> Result<(), Ser
 }
 
 #[server]
-pub async fn save_addon_repository(repository: AddonRepositoryEditor) -> Result<(), ServerFnError> {
+pub async fn scan_addon_repositories() -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     expect_context::<AppState>()
         .application
-        .save_addon_repository(ersatzrs_app::AddonRepositoryEdit {
-            id: repository.id,
-            name: repository.name,
-            index_url: repository.index_url,
-            public_key: repository.public_key,
-            is_enabled: repository.is_enabled,
-        })
-        .await
-        .map_err(ServerFnError::new)
-}
-
-#[server]
-pub async fn remove_addon_repository(repository_id: String) -> Result<(), ServerFnError> {
-    use crate::host::state::AppState;
-
-    expect_context::<AppState>()
-        .application
-        .remove_addon_repository(repository_id)
-        .await
-        .map_err(ServerFnError::new)
-}
-
-#[server]
-pub async fn refresh_addon_repository(repository_id: String) -> Result<(), ServerFnError> {
-    use crate::host::state::AppState;
-
-    expect_context::<AppState>()
-        .application
-        .refresh_addon_repository(repository_id)
+        .scan_addon_repositories()
         .await
         .map_err(ServerFnError::new)
 }
@@ -238,12 +197,13 @@ pub async fn refresh_addon_repository(repository_id: String) -> Result<(), Serve
 pub async fn install_addon_package(
     repository_id: String,
     addon_id: String,
+    adopt_legacy: bool,
 ) -> Result<(), ServerFnError> {
     use crate::host::state::AppState;
 
     expect_context::<AppState>()
         .application
-        .install_addon(repository_id, addon_id)
+        .install_addon(repository_id, addon_id, adopt_legacy)
         .await
         .map_err(ServerFnError::new)
 }
@@ -314,24 +274,20 @@ impl From<ersatzrs_app::AddonOverviewRead> for AddonOverview {
     fn from(value: ersatzrs_app::AddonOverviewRead) -> Self {
         Self {
             unverified_sources_enabled: value.unverified_sources_enabled,
+            checkout_path: value.checkout_path,
             // Loaded alongside the overview rather than through the read model,
             // which the add-on lifecycle owns.
             default_remote_stream_addon: None,
             detail_wait: AddonDetailWaitSettingsForm::default(),
-            repositories_are_deployment_managed: value.repositories_are_deployment_managed,
             repositories: value
                 .repositories
                 .into_iter()
                 .map(|item| AddonRepositoryRow {
                     id: item.id,
                     name: item.name,
-                    index_url: item.index_url,
-                    public_key: item.public_key,
-                    is_official: item.is_official,
-                    is_enabled: item.is_enabled,
-                    trust_tier: item.trust_tier,
-                    last_sequence: item.last_sequence,
-                    last_refresh: item.last_refresh,
+                    kind: item.kind,
+                    root_path: item.root_path,
+                    last_scan: item.last_scan,
                     last_error: item.last_error,
                 })
                 .collect(),

@@ -16,10 +16,9 @@ use crate::admin::i18n::{provide_i18n_context, tr, use_i18n, TextKey};
 use crate::admin::server_fns::addons::load_addon_detail;
 use crate::admin::server_fns::addons::{
     check_addon_package, disable_addon_package, enable_addon_package, install_addon_package,
-    load_addon_overview, refresh_addon_repository, remove_addon_repository,
-    save_addon_configuration, save_addon_detail_wait_settings, save_addon_repository,
-    set_default_remote_stream_addon, set_unverified_addon_sources, uninstall_addon_package,
-    AddonDetail, AddonDetailWaitSettingsForm, AddonOverview, AddonRepositoryEditor,
+    load_addon_overview, save_addon_configuration, save_addon_detail_wait_settings,
+    scan_addon_repositories, set_default_remote_stream_addon, set_unverified_addon_sources,
+    uninstall_addon_package, AddonDetail, AddonDetailWaitSettingsForm, AddonOverview,
     AddonRepositoryRow, AddonSettingEditor, AddonSettingRow, AvailableAddonRow, InstalledAddonRow,
 };
 use crate::admin::ui::primitives::dialog::Modal;
@@ -123,21 +122,6 @@ fn AddonsSettingsIsland(
         }
     });
 
-    let editor = RepositoryEditor {
-        open: RwSignal::new(false),
-        editing: RwSignal::new(false),
-        id: RwSignal::new(String::new()),
-        name: RwSignal::new(String::new()),
-        url: RwSignal::new(String::new()),
-        key: RwSignal::new(String::new()),
-    };
-    let removal = RemovalPrompt {
-        open: RwSignal::new(false),
-        // The action needs the id; the confirmation names the repository the
-        // way the operator does.
-        id: RwSignal::new(String::new()),
-        name: RwSignal::new(String::new()),
-    };
     let pickers = FilePickers {
         addon: NodeRef::<html::Input>::new(),
         addon_name: RwSignal::new(String::new()),
@@ -146,46 +130,16 @@ fn AddonsSettingsIsland(
     };
     let unknown_sources_confirm_open = RwSignal::new(false);
 
-    let save_repository_action =
-        Action::new(move |editor: &AddonRepositoryEditor| save_addon_repository(editor.clone()));
-    let refresh_action = Action::new(move |id: &String| refresh_addon_repository(id.clone()));
-    let remove_action = Action::new(move |id: &String| remove_addon_repository(id.clone()));
+    let scan_action = Action::new(move |(): &()| scan_addon_repositories());
     let unknown_sources_action =
         Action::new(move |enabled: &bool| set_unverified_addon_sources(*enabled));
     let default_remote_stream_action =
         Action::new(move |addon_id: &String| set_default_remote_stream_addon(addon_id.clone()));
-    let refresh_all_action = Action::new(move |ids: &Vec<String>| {
-        let ids = ids.clone();
-        async move {
-            let mut failures = Vec::new();
-            for id in ids {
-                if let Err(error) = refresh_addon_repository(id.clone()).await {
-                    failures.push(format!("{id}: {error}"));
-                }
-            }
-            if failures.is_empty() {
-                Ok(())
-            } else {
-                Err(ServerFnError::new(failures.join("; ")))
-            }
-        }
-    });
-
-    Effect::new(move |_| match save_repository_action.value().get() {
-        Some(Ok(())) => {
-            editor.open.set(false);
-            overview.refetch();
-        }
-        Some(Err(error)) => toast.push(error.to_string(), ToastSeverity::Error),
-        None => {}
-    });
-    Effect::new(move |_| action_result(refresh_action.value().get(), overview, toast));
-    Effect::new(move |_| action_result(remove_action.value().get(), overview, toast));
+    Effect::new(move |_| action_result(scan_action.value().get(), overview, toast));
     Effect::new(move |_| action_result(unknown_sources_action.value().get(), overview, toast));
     Effect::new(move |_| {
         action_result(default_remote_stream_action.value().get(), overview, toast);
     });
-    Effect::new(move |_| action_result(refresh_all_action.value().get(), overview, toast));
     Effect::new(move |_| match detail_wait.save.value().get() {
         Some(Ok(())) => {
             toast.push(tr(TextKey::Saved).to_owned(), ToastSeverity::Success);
@@ -216,7 +170,7 @@ fn AddonsSettingsIsland(
         #[cfg(target_arch = "wasm32")]
         if let Some(input) = pickers.repository.get() {
             leptos::task::spawn_local(async move {
-                match upload_selected_file(input, "/api/addons/repository-package").await {
+                match upload_selected_file(input, "/api/addons/repository-bundle").await {
                     Ok(()) => {
                         toast.push(
                             tr(TextKey::AddRepository).to_owned(),
@@ -240,20 +194,8 @@ fn AddonsSettingsIsland(
                 <button
                     type="button"
                     class=style::btn_secondary
-                    on:click=move |_| {
-                        let ids = current
-                            .get_untracked()
-                            .map(|data| {
-                                data.repositories
-                                    .into_iter()
-                                    .filter(|repository| repository.is_enabled)
-                                    .map(|repository| repository.id)
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        refresh_all_action.dispatch(ids);
-                    }
-                >{tr(TextKey::CheckForUpdates)}</button>
+                    on:click=move |_| { scan_action.dispatch(()); }
+                >{tr(TextKey::Refresh)}</button>
             </header>
 
             {move || current.get().map(|data| manager_body(
@@ -261,10 +203,7 @@ fn AddonsSettingsIsland(
                 &view_name,
                 &search_value,
                 &filter_value,
-                editor,
-                removal,
                 pickers,
-                RepositoryActions { save: save_repository_action, refresh: refresh_action },
                 detail_wait,
                 toast,
                 unknown_sources_confirm_open,
@@ -285,91 +224,8 @@ fn AddonsSettingsIsland(
             >
                 <p>{tr(TextKey::UnknownSourcesHelp)}</p>
             </Modal>
-            <Modal
-                open=removal.open
-                title=tr(TextKey::ConfirmDelete).to_owned()
-                destructive=true
-                on_close=Callback::new(move |confirmed| {
-                    if confirmed {
-                        remove_action.dispatch(removal.id.get_untracked());
-                    }
-                })
-            >
-                <p>{tr(TextKey::AreYouSureDelete)}" "<strong>{move || removal.name.get()}</strong>"?"</p>
-            </Modal>
-            <Modal
-                open=editor.open
-                title=Signal::derive(move || {
-                    if editor.editing.get() {
-                        tr(TextKey::EditRepository).to_owned()
-                    } else {
-                        tr(TextKey::AddRepository).to_owned()
-                    }
-                })
-                confirm_label=Some(tr(TextKey::Save))
-                confirm_disabled=Signal::derive(move || {
-                    editor.name.get().trim().is_empty()
-                        || editor.url.get().trim().is_empty()
-                        || editor.id.get().trim().is_empty()
-                })
-                on_close=Callback::new(move |confirmed| {
-                    if confirmed {
-                        save_repository_action.dispatch(AddonRepositoryEditor {
-                            id: editor.id.get_untracked(),
-                            name: editor.name.get_untracked(),
-                            index_url: editor.url.get_untracked(),
-                            public_key: editor.key.get_untracked(),
-                            is_enabled: true,
-                        });
-                    }
-                })
-            >
-                <div class=style::repository_editor data-testid="addon-repository-editor">
-                    <label for="addon-repository-name">
-                        {tr(TextKey::Name)}
-                        <input id="addon-repository-name" prop:value=move || editor.name.get() on:input=move |event| editor.name.set(event_target_value(&event))/>
-                    </label>
-                    <label for="addon-repository-url">
-                        {tr(TextKey::RepositoryUrl)}
-                        <input id="addon-repository-url" prop:value=move || editor.url.get() on:input=move |event| editor.url.set(event_target_value(&event))/>
-                    </label>
-                    <label for="addon-repository-id">
-                        {tr(TextKey::Id)}
-                        // The id is the repository's identity, not a field of
-                        // it: editing one through this box would silently
-                        // target a different source.
-                        <input id="addon-repository-id" readonly=move || editor.editing.get() prop:value=move || editor.id.get() on:input=move |event| editor.id.set(event_target_value(&event))/>
-                    </label>
-                    <label for="addon-repository-key">
-                        {tr(TextKey::PublicSigningKey)}
-                        <textarea id="addon-repository-key" prop:value=move || editor.key.get() on:input=move |event| editor.key.set(event_target_value(&event))></textarea>
-                    </label>
-                </div>
-            </Modal>
         </main>
     }
-}
-
-/// The signals behind the repository add/edit dialog.
-#[derive(Clone, Copy)]
-struct RepositoryEditor {
-    open: RwSignal<bool>,
-    /// Editing an existing repository rather than adding one, which decides
-    /// the dialog title and freezes the id.
-    editing: RwSignal<bool>,
-    id: RwSignal<String>,
-    name: RwSignal<String>,
-    url: RwSignal<String>,
-    key: RwSignal<String>,
-}
-
-/// The two server actions a repository row can dispatch. They belong to the
-/// island so their results reach the shared effects that refetch the overview
-/// and surface failures.
-#[derive(Clone, Copy)]
-struct RepositoryActions {
-    save: Action<AddonRepositoryEditor, Result<(), ServerFnError>>,
-    refresh: Action<String, Result<(), ServerFnError>>,
 }
 
 #[derive(Clone, Copy)]
@@ -377,14 +233,6 @@ struct DetailWaitEditor {
     minimum: RwSignal<String>,
     maximum: RwSignal<String>,
     save: Action<AddonDetailWaitSettingsForm, Result<(), ServerFnError>>,
-}
-
-/// The repository the delete confirmation is about.
-#[derive(Clone, Copy)]
-struct RemovalPrompt {
-    open: RwSignal<bool>,
-    id: RwSignal<String>,
-    name: RwSignal<String>,
 }
 
 /// The two local-package pickers in the Sources view. The names are kept
@@ -404,10 +252,7 @@ fn manager_body(
     view_name: &str,
     search_value: &str,
     filter_value: &str,
-    editor: RepositoryEditor,
-    removal: RemovalPrompt,
     pickers: FilePickers,
-    actions: RepositoryActions,
     detail_wait: DetailWaitEditor,
     toast: ToastStore,
     unknown_sources_confirm_open: RwSignal<bool>,
@@ -421,7 +266,12 @@ fn manager_body(
     let installed_versions = data
         .installed
         .iter()
-        .map(|item| (item.addon_id.clone(), item.version.clone()))
+        .map(|item| {
+            (
+                item.addon_id.clone(),
+                (item.version.clone(), item.trust_tier.clone()),
+            )
+        })
         .collect::<BTreeMap<_, _>>();
     let update_ids = data
         .available
@@ -429,12 +279,20 @@ fn manager_body(
         .filter(|offer| {
             installed_versions
                 .get(&offer.addon.id)
-                .and_then(|version| semver::Version::parse(version).ok())
-                .is_some_and(|version| offer.addon.version > version)
+                .and_then(|(version, trust)| {
+                    semver::Version::parse(version)
+                        .ok()
+                        .map(|version| (version, trust))
+                })
+                .is_some_and(|(version, trust)| {
+                    offer.addon.version > version
+                        || (trust == "legacy" && offer.addon.version == version)
+                })
         })
         .map(|offer| offer.addon.id.clone())
         .collect::<BTreeSet<_>>();
     let source_count = data.repositories.len();
+    let checkout_path = data.checkout_path.clone();
     let has_repositories = !data.repositories.is_empty();
     let offers_per_repository =
         data.available
@@ -447,7 +305,7 @@ fn manager_body(
     let repository_tiers = data
         .repositories
         .iter()
-        .map(|repository| (repository.id.clone(), repository.trust_tier.clone()))
+        .map(|repository| (repository.id.clone(), repository.kind.clone()))
         .collect::<BTreeMap<_, _>>();
     let installed_cards = data
         .installed
@@ -456,7 +314,7 @@ fn manager_body(
         .filter(|item| match filter_value {
             "enabled" => item.enabled,
             "disabled" => !item.enabled,
-            "verified" | "unverified" | "sideloaded" => item.trust_tier == filter_value,
+            "local" | "sideloaded" | "legacy" => item.trust_tier == filter_value,
             _ => true,
         })
         .cloned()
@@ -477,7 +335,6 @@ fn manager_body(
         .filter(|item| update_ids.contains(&item.addon.id))
         .cloned()
         .collect::<Vec<_>>();
-    let managed = data.repositories_are_deployment_managed;
     let unknown_enabled = data.unverified_sources_enabled;
     // Only an enabled package that can actually play a remote stream may be the
     // fallback, mirroring the check the save path enforces server-side.
@@ -657,23 +514,9 @@ fn manager_body(
             <div class=style::section>
                 <div class=style::section_header>
                     <h2 class=style::section_heading>{tr(TextKey::AddonRepositories)}</h2>
-                    <button
-                        type="button"
-                        class=style::btn_primary
-                        disabled=managed
-                        title=managed.then(|| tr(TextKey::DeploymentManagedRepositories))
-                        on:click=move |_| {
-                            editor.editing.set(false);
-                            editor.id.set(String::new());
-                            editor.name.set(String::new());
-                            editor.url.set(String::new());
-                            editor.key.set(String::new());
-                            editor.open.set(true);
-                        }
-                    >{tr(TextKey::AddRepository)}</button>
+                    <code class=style::checkout_path>{checkout_path}</code>
                 </div>
                 <div class=style::section_divider></div>
-                <p class=style::muted style:display=if managed { "" } else { "none" }>{tr(TextKey::DeploymentManagedRepositories)}</p>
                 <p class=style::empty style:display=if has_repositories { "none" } else { "" }>{tr(TextKey::NoRepositories)}</p>
                 <div class=source_style::path_table_wrap style:display=if has_repositories { "" } else { "none" }>
                     <table class=style::repo_table>
@@ -688,7 +531,7 @@ fn manager_body(
                         </thead>
                         <tbody>
                             {data.repositories.into_iter().map(|repository| {
-                                repository_row(repository, &offers_per_repository, managed, unknown_enabled, editor, removal, actions)
+                                repository_row(repository, &offers_per_repository)
                             }).collect_view()}
                         </tbody>
                     </table>
@@ -726,8 +569,8 @@ fn manager_body(
                     <span class=style::file_row_label>{tr(TextKey::RepositoryPackage)}</span>
                     <label
                         class=style::file_button
-                        aria-disabled=!unknown_enabled || managed
-                        title=if managed { Some(tr(TextKey::DeploymentManagedRepositories)) } else if unknown_enabled { None } else { Some(tr(TextKey::UnknownSourcesRequired)) }
+                        aria-disabled=!unknown_enabled
+                        title=(!unknown_enabled).then(|| tr(TextKey::UnknownSourcesRequired))
                     >
                         {tr(TextKey::ChooseFile)}
                         <input
@@ -735,7 +578,7 @@ fn manager_body(
                             class=style::file_input
                             type="file"
                             accept=".zip,application/zip"
-                            disabled=!unknown_enabled || managed
+                            disabled=!unknown_enabled
                             on:change=move |event| pickers.repository_name.set(chosen_file_name(&event_target_value(&event)))
                         />
                     </label>
@@ -745,7 +588,7 @@ fn manager_body(
                             if name.is_empty() { tr(TextKey::NoFileSelected).to_owned() } else { name }
                         }}
                     </span>
-                    <button type="button" class=style::btn_secondary disabled=!unknown_enabled || managed on:click=upload_repository>{tr(TextKey::Install)}</button>
+                    <button type="button" class=style::btn_secondary disabled=!unknown_enabled on:click=upload_repository>{tr(TextKey::Install)}</button>
                 </div>
             </div>
         </section>
@@ -753,53 +596,10 @@ fn manager_body(
     .into_any()
 }
 
-/// One repository row: what it is, how fresh it is, and what can be done to it.
-///
-/// Every action that cannot run says why in its `title`, because a row of
-/// evenly greyed-out buttons is the shape this page had before and it explained
-/// nothing.
+/// One local source row: its identity, on-disk location, last scan, and error.
 #[allow(clippy::needless_pass_by_value)]
-fn repository_row(
-    repository: AddonRepositoryRow,
-    offers: &BTreeMap<String, usize>,
-    managed: bool,
-    unknown_enabled: bool,
-    editor: RepositoryEditor,
-    removal: RemovalPrompt,
-    actions: RepositoryActions,
-) -> AnyView {
+fn repository_row(repository: AddonRepositoryRow, offers: &BTreeMap<String, usize>) -> AnyView {
     let offered = offers.get(&repository.id).copied().unwrap_or_default();
-    let keyless_official = repository.is_official && repository.public_key.trim().is_empty();
-    let unverified_without_opt_in = repository.trust_tier == "unverified" && !unknown_enabled;
-    let refresh_title = if keyless_official {
-        Some(tr(TextKey::NoSigningKeyPinned))
-    } else if unverified_without_opt_in {
-        Some(tr(TextKey::UnknownSourcesRequired))
-    } else {
-        None
-    };
-    let delete_title = if managed {
-        Some(tr(TextKey::DeploymentManagedRepositories))
-    } else if repository.is_official {
-        Some(tr(TextKey::OfficialRepositoryProtected))
-    } else {
-        None
-    };
-    let managed_title = managed.then(|| tr(TextKey::DeploymentManagedRepositories));
-    let refresh_id = repository.id.clone();
-    let remove_id = repository.id.clone();
-    let remove_name = repository.name.clone();
-    let edit_id = repository.id.clone();
-    let edit_name = repository.name.clone();
-    let edit_url = repository.index_url.clone();
-    let edit_key = repository.public_key.clone();
-    let toggle_editor = AddonRepositoryEditor {
-        id: repository.id.clone(),
-        name: repository.name.clone(),
-        index_url: repository.index_url.clone(),
-        public_key: repository.public_key.clone(),
-        is_enabled: !repository.is_enabled,
-    };
     let last_error = repository.last_error.clone();
     view! {
         <tr data-testid="addon-repository-row">
@@ -807,72 +607,27 @@ fn repository_row(
                 <div class=style::repo_name>
                     <div class=style::card_title_row>
                         <strong>{repository.name}</strong>
-                        {status_badge(&repository.trust_tier)}
-                        {repository.is_official.then(|| status_badge("official"))}
+                        {status_badge(&repository.kind)}
                     </div>
                     <span class=style::muted>{repository.id}</span>
-                    <span class=style::muted>{repository.index_url}</span>
+                    <span class=style::muted>{repository.root_path}</span>
                 </div>
             </td>
             <td>{offered}</td>
-            <td class=source_style::cell_muted>{refresh_timestamp(repository.last_refresh.as_deref())}</td>
+            <td class=source_style::cell_muted>{refresh_timestamp(Some(&repository.last_scan))}</td>
             <td>
                 <div class=style::repo_status>
-                    {status_badge(if repository.is_enabled { "enabled" } else { "disabled" })}
+                    {status_badge(if repository.last_error.is_some() { "warning" } else { "ready" })}
                     {last_error.map(|error| view! { <span class=style::error>{error}</span> })}
                 </div>
             </td>
-            <td class=style::repo_actions_cell>
-                <div class=source_style::row_actions>
-                    <button
-                        type="button"
-                        class=source_style::row_btn
-                        disabled=refresh_title.is_some()
-                        title=refresh_title
-                        on:click=move |_| { actions.refresh.dispatch(refresh_id.clone()); }
-                    >{tr(TextKey::Refresh)}</button>
-                    <button
-                        type="button"
-                        class=source_style::row_btn
-                        disabled=managed
-                        title=managed_title
-                        on:click=move |_| {
-                            editor.editing.set(true);
-                            editor.id.set(edit_id.clone());
-                            editor.name.set(edit_name.clone());
-                            editor.url.set(edit_url.clone());
-                            editor.key.set(edit_key.clone());
-                            editor.open.set(true);
-                        }
-                    >{tr(TextKey::Edit)}</button>
-                    <button
-                        type="button"
-                        class=source_style::row_btn
-                        disabled=managed
-                        title=managed_title
-                        on:click=move |_| { actions.save.dispatch(toggle_editor.clone()); }
-                    >{if repository.is_enabled { tr(TextKey::Disable) } else { tr(TextKey::Enable) }}</button>
-                    <button
-                        type="button"
-                        class=source_style::row_btn_del
-                        disabled=delete_title.is_some()
-                        title=delete_title
-                        on:click=move |_| {
-                            removal.id.set(remove_id.clone());
-                            removal.name.set(remove_name.clone());
-                            removal.open.set(true);
-                        }
-                    >{tr(TextKey::Delete)}</button>
-                </div>
-            </td>
+            <td/>
         </tr>
     }
     .into_any()
 }
 
-/// Render a stored RFC 3339 refresh time as a plain local-looking stamp, or say
-/// the catalogue has never been fetched. Freshness is the fact an operator
-/// opens this view for, and it was the one fact the page never showed.
+/// Render a stored RFC 3339 scan time as a plain local-looking stamp.
 fn refresh_timestamp(value: Option<&str>) -> String {
     value
         .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
@@ -902,7 +657,7 @@ fn chosen_file_name(value: &str) -> String {
 /// The counts used to sit in a four-card summary band above the tabs, which
 /// spent a quarter of the viewport restating what the tab strip already names.
 /// `Installed add-ons` carries both of its numbers as `enabled/installed`;
-/// `Browse add-ons` carries none, because a catalogue total says nothing about
+/// `Browse add-ons` carries none, because an offer total says nothing about
 /// this server.
 fn manager_tab(
     view: &'static str,
@@ -923,9 +678,9 @@ fn filter_options(view_name: &str, selected: &str) -> AnyView {
         view! {
             <option value="enabled" selected=selected == "enabled">{tr(TextKey::Enabled)}</option>
             <option value="disabled" selected=selected == "disabled">{tr(TextKey::Disabled)}</option>
-            <option value="verified" selected=selected == "verified">{tr(TextKey::Verified)}</option>
-            <option value="unverified" selected=selected == "unverified">{tr(TextKey::Unverified)}</option>
+            <option value="local" selected=selected == "local">{tr(TextKey::Local)}</option>
             <option value="sideloaded" selected=selected == "sideloaded">{tr(TextKey::Sideloaded)}</option>
+            <option value="legacy" selected=selected == "legacy">{tr(TextKey::LegacyUnmanaged)}</option>
         }
         .into_any()
     } else {
@@ -1043,6 +798,12 @@ fn status_badge(code: &str) -> AnyView {
         "enabled" => tr(TextKey::Enabled).to_owned(),
         "disabled" => tr(TextKey::Disabled).to_owned(),
         "official" => tr(TextKey::Official).to_owned(),
+        "local" => tr(TextKey::Local).to_owned(),
+        "checkout" => tr(TextKey::GitCheckout).to_owned(),
+        "bundle" => tr(TextKey::OfflineBundle).to_owned(),
+        "legacy" => tr(TextKey::LegacyUnmanaged).to_owned(),
+        "ready" => tr(TextKey::Available).to_owned(),
+        "warning" => tr(TextKey::Warning).to_owned(),
         "incompatible" => tr(TextKey::Incompatible).to_owned(),
         "unavailable" => tr(TextKey::PackageUnavailable).to_owned(),
         _ => code.to_owned(),
@@ -1066,12 +827,19 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
     let selected_offer = select_offer(&detail, source.as_deref());
     let installed = detail.installed.clone();
     let addon_id = detail.addon_id.clone();
-    let install_target = selected_offer
+    let adopt_legacy = installed
         .as_ref()
-        .map(|offer| (offer.repository_id.clone(), offer.addon.id.clone()));
+        .is_some_and(|item| item.trust_tier == "legacy");
+    let install_target = selected_offer.as_ref().map(|offer| {
+        (
+            offer.repository_id.clone(),
+            offer.addon.id.clone(),
+            adopt_legacy,
+        )
+    });
 
-    let install_action = Action::new(move |target: &(String, String)| {
-        install_addon_package(target.0.clone(), target.1.clone())
+    let install_action = Action::new(move |target: &(String, String, bool)| {
+        install_addon_package(target.0.clone(), target.1.clone(), target.2)
     });
     let check_action = Action::new(move |id: &String| check_addon_package(id.clone()));
     let enable_action = Action::new(move |id: &String| enable_addon_package(id.clone()));
@@ -1105,7 +873,7 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
         version,
         trust,
         source_id,
-        compatible,
+        _compatible,
         permissions,
         dependencies,
         license,
@@ -1114,12 +882,18 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
     let is_installed = installed.is_some();
     let is_enabled = installed.as_ref().is_some_and(|item| item.enabled);
     let update_available = match (&installed, &selected_offer) {
-        (Some(installed), Some(offer)) => semver::Version::parse(&installed.version)
-            .is_ok_and(|version| offer.addon.version > version),
+        (Some(installed), Some(offer)) => {
+            semver::Version::parse(&installed.version).is_ok_and(|version| {
+                offer.addon.version > version || (adopt_legacy && offer.addon.version == version)
+            })
+        }
         (None, Some(_)) => true,
         _ => false,
     };
-    let can_install = compatible && install_target.is_some() && update_available;
+    let offer_installable = selected_offer
+        .as_ref()
+        .is_some_and(|offer| offer.host_compatible && offer.package_available);
+    let can_install = offer_installable && install_target.is_some() && update_available;
     let can_import_list = is_enabled && supports_media_list_import(&permissions.0);
     let import_list_href = format!("/media/addon-lists/add?addon_id={addon_id}");
     let selected_offer_note = is_installed
@@ -1158,10 +932,20 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
     let addon_id_for_toggle = addon_id.clone();
     let addon_id_for_uninstall = addon_id.clone();
     let summary_for_modal = summary.clone();
-    let modal_name = name.clone();
-    let modal_version = version.clone();
-    let modal_trust = trust.clone();
-    let modal_source = source_id.clone();
+    let modal_name = selected_offer
+        .as_ref()
+        .map_or_else(|| name.clone(), |offer| localized(&offer.addon.name));
+    let modal_version = selected_offer
+        .as_ref()
+        .map_or_else(|| version.clone(), |offer| offer.addon.version.to_string());
+    let modal_source = selected_offer
+        .as_ref()
+        .map_or_else(|| source_id.clone(), |offer| offer.repository_id.clone());
+    let modal_trust = detail
+        .repositories
+        .iter()
+        .find(|repository| repository.id == modal_source)
+        .map_or_else(|| trust.clone(), |repository| repository.kind.clone());
     let install_permissions = permissions.clone();
     let toggle_permissions = permissions.clone();
 
@@ -1253,6 +1037,7 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
                 }
             })>
                 <p>{format!("{}: {} · {}: {}", tr(TextKey::Source), modal_source, tr(TextKey::Status), modal_trust)}</p>
+                <p style:display=if adopt_legacy { "block" } else { "none" }>{tr(TextKey::LegacyAdoptionHelp)}</p>
                 <p>{tr(TextKey::InstallLeavesDisabled)}</p>
                 <p>{tr(TextKey::ThirdPartyRepositoryWarning)}</p>
                 {permissions_view(&install_permissions.0, &install_permissions.1)}
@@ -1302,13 +1087,6 @@ fn select_offer(detail: &AddonDetail, source: Option<&str>) -> Option<AvailableA
                         .offers
                         .iter()
                         .find(|offer| offer.repository_id == source)
-                })
-            })
-        })
-        .or_else(|| {
-            detail.offers.iter().find(|offer| {
-                detail.repositories.iter().any(|repository| {
-                    repository.id == offer.repository_id && repository.is_official
                 })
             })
         })
@@ -1384,10 +1162,7 @@ fn detail_identity(
         .repositories
         .iter()
         .find(|repository| repository.id == offer.repository_id)
-        .map_or_else(
-            || "unverified".to_owned(),
-            |repository| repository.trust_tier.clone(),
-        );
+        .map_or_else(|| "local".to_owned(), |repository| repository.kind.clone());
     (
         localized(&offer.addon.name),
         localized(&offer.addon.summary),

@@ -148,23 +148,24 @@ ADR: [0057](../adr/0057-direct-remote-stream-pipelines-and-playlist-actions.md)
 
 ErsatzTV supports one YAML definition per Remote Stream but has no contract for
 enumerating an upstream series or playlist. ErsatzRS recognizes distinct
-playlist manifests, executes only installed and enabled signed add-ons with the
+playlist manifests, executes only installed and enabled immutable add-ons with the
 versioned list/play capabilities, owns generated definitions through a
 versioned sidecar, and can maintain an ordered read-only playlist through an
 explicit source marker. Playback resolves media URLs only when an item plays.
 
 ADR: [0065](../adr/0065-managed-remote-stream-playlists.md)
 
-## Signed repository-backed add-ons
+## Local repository-backed add-ons
 
 ErsatzTV has no repository-backed extension lifecycle. ErsatzRS uses detached
-Ed25519-signed catalogs, immutable verified packages, an administrator or
-deployment-owned trust allowlist, manifest-rendered settings and panels, and
+operator-managed Git checkouts or complete offline repository bundles,
+immutable installed snapshots, manifest-rendered settings and panels, and
 out-of-process capability calls. This replaces the earlier raw Remote Stream
 script and named extractor configuration without introducing a native plugin
-ABI.
+ABI or making ErsatzRS own Git credentials.
 
-ADR: [0066](../adr/0066-repository-backed-add-ons.md)
+ADRs: [0066](../adr/0066-repository-backed-add-ons.md),
+[0081](../adr/0081-use-local-addon-repositories.md)
 
 ## Provider lists through add-ons
 

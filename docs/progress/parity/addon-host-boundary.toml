@@ -2,7 +2,7 @@ feature    = 'ErsatzRS/ErsatzRS-addons contract boundary hygiene'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no out-of-process add-on boundary to port'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-core/src/addon_media_list.rs`, `crates/ersatzrs-scanner/src/remote_stream_playlist.rs`, `crates/ersatzrs-app/src/commands.rs`, `crates/ersatzrs-web/src/admin/i18n.rs`, and the separate `bartdeijkers/ErsatzRS-addons` repository'
 status     = 'Ported'
-adr        = ['0066', '0068', '0069', '0070']
+adr        = ['0066', '0068', '0069', '0070', '0081']
 
 summary = '''
 A 2026-08-15 review of the add-on backend found the host/package division
@@ -26,11 +26,11 @@ Each debt item below has a standalone plan under `plans/` and a milestone under
 the `Add-on boundary` phase in `milestones.toml`. Milestones ab-01 through
 ab-07 are complete. ADR 0069 retired the native Trakt package and its private
 cross-repository dependency while retaining the repo-local reference add-on and
-shared conformance proof. One host-owned executable now validates manifests and
-catalogs, while the official repository uses a separate Rust publisher instead
-of the Python builder. Exact-SHA host CI and official-repository publication,
-detached signing, GitHub Pages deployment, and live catalog/signature probes
-close the remaining executable-boundary debt.
+shared conformance proof. One host-owned executable validates add-on and local
+repository manifests. ADR 0081 removes the public catalog, publisher/signing
+boundary, and GitHub Pages deployment: the private official repository is a
+self-contained checkout and offline bundle, acquired by operator tooling while
+the host validates and snapshots its contents.
 
 The 2026-08-17 ADR 0070 amendment removed its former host exception. Schatkamer
 URL grammar and normalization now live with HTTP scraping, classification,

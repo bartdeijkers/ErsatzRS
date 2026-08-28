@@ -2,7 +2,7 @@ feature    = 'Remote Stream playlists'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Core/Streaming/YamlRemoteStreamDefinition.cs` has no playlist-ingestion equivalent; this is an ErsatzRS extension'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-infra/src/{addons,remote_stream}.rs`, `crates/ersatzrs-scanner`, `crates/ersatzrs-web`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0065', '0066', '0068', '0070', '0071', '0078']
+adr        = ['0065', '0066', '0068', '0070', '0071', '0078', '0081']
 
 summary = '''
 Completed in Phase 8D/8E through milestones P8D-01 through P8E-03. ADR 0065
@@ -13,12 +13,13 @@ installed, enabled add-on with `remote-stream.list.v1` and
 `remote-stream.play.v1`; raw commands and the named extractor setting are
 rejected.
 
-The host verifies signed catalogs, immutable packages, declared capabilities,
-settings, host/RID compatibility, and installed-content hashes before bounded
-out-of-process invocation. A network-free scanner regression proves generated
-definitions, tag facets, and upstream order through the real scheduling
-repository. The separate official repository packages standalone POSIX and
-Windows Beeld & Geluid implementations plus an operator-supplied yt-dlp adapter.
+The host validates local offers, immutable packages, capabilities, settings,
+compatibility, and hashes before bounded invocation. ADR 0081 makes repository
+acquisition an operator-owned Git checkout or offline bundle with no host
+catalog request. A network-free scanner regression proves definitions, tag
+facets, and upstream order. The separate official repository packages POSIX
+and Windows Beeld & Geluid implementations plus an operator-supplied yt-dlp
+adapter.
 ADR 0068 keeps provider and language knowledge in add-ons while the host
 generically projects v2 metadata to managed NFO sidecars and supports exact
 Local replacements for explicitly unavailable list items. Beeld & Geluid

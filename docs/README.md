@@ -37,10 +37,10 @@ and [release bundle reference](reference/release-bundle.md).
 
 ## Extend ErsatzRS with add-ons
 
-The add-on host exists in the current development tree, but the official
-repository and production public key have not yet been published. Check the
-[add-on reference](reference/addons.md) before relying on this workflow in a
-release build.
+The add-on host exists in the current development tree. The private official
+repository is acquired through an operator-managed checkout or complete
+offline bundle; check the [add-on reference](reference/addons.md) before
+relying on this workflow in a release build.
 
 - [Install and manage an add-on](how-to/manage-addons.md)
 - [Understand the add-on trust boundary](explanation/addon-trust-boundary.md)

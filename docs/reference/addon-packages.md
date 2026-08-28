@@ -8,8 +8,8 @@ combinations are rejected.
 
 The distribution mechanism for Rust add-ons is the independently versioned
 `ersatzrs-addon-contract` crate in the canonical ErsatzRS GitHub repository.
-Contract version `0.2.0` is the current source version. When that version is
-released, its implementation receives the immutable `addon-contract-v0.2.0`
+Contract version `0.3.0` is the current source version. When that version is
+released, its implementation receives the immutable `addon-contract-v0.3.0`
 tag. Add-ons pin the tag's full commit SHA:
 
 ```toml
@@ -39,14 +39,12 @@ implementation is available as the `reference_addon` Cargo example.
 
 ## Standalone contract validation
 
-Validate package manifests, repository-package manifests, and generated
-repository catalogs through the same Rust types and `validate()` methods used
-by the host:
+Validate package manifests and local repository manifests through the same Rust
+types and `validate()` methods used by the host:
 
 ```bash
 cargo xtask validate-addon-manifest path/to/addon.toml
 cargo xtask validate-addon-manifest path/to/repository.toml
-cargo xtask validate-addon-manifest --kind catalog path/to/index-v1.json
 ```
 
 The dependency-light `ersatzrs-addon-validator` binary exposes the same checks
@@ -57,10 +55,9 @@ output through the exact host parser:
 ersatzrs-addon-validator --kind media-list-output captured-media-list.ndjson
 ```
 
-Publication-specific checks such as package
-directory naming, icon bytes, artifact presence, ZIP construction, and catalog
-assembly remain the publisher's responsibility; they are not a second manifest
-contract.
+Repository-specific checks such as package directory naming, icon bytes, and
+artifact presence remain part of the host's local source scan; they are not a
+second manifest contract.
 
 ## Package limits
 
@@ -163,7 +160,7 @@ confine the child process or prevent it from contacting other destinations.
 See [ADR 0066](../adr/0066-repository-backed-add-ons.md#what-trust-does-not-mean)
 for the runtime trust boundary.
 
-The catalog repeats identity, version, display/source metadata, host range,
-capabilities, and permissions. Repository installation succeeds only when
-those values match the package manifest exactly. Sideload installation has no
-catalog cross-check and records the locally supplied archive digest instead.
+A local repository offer is derived directly from `addon.toml` and a
+deterministic content-tree hash. Installation succeeds only while the source
+still matches that scanned fingerprint. Direct add-on ZIP installation has no
+repository cross-check and records the locally supplied archive digest instead.

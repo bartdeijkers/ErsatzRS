@@ -54,6 +54,18 @@ pub fn addon_packages_folder() -> PathBuf {
     app_state_folder().join("addons").join("packages")
 }
 
+/// Operator-managed Git checkouts discovered as local add-on repositories.
+#[must_use]
+pub fn addon_checkouts_folder() -> PathBuf {
+    app_state_folder().join("addons").join("checkouts")
+}
+
+/// Host-managed snapshots extracted from uploaded offline repository bundles.
+#[must_use]
+pub fn addon_repository_bundles_folder() -> PathBuf {
+    app_state_folder().join("addons").join("repository-bundles")
+}
+
 /// Persistent private data root for one installed add-on.
 #[must_use]
 pub fn addon_data_folder(data_namespace: &str, addon_id: &str) -> PathBuf {

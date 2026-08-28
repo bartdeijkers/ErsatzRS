@@ -88,8 +88,6 @@
 
 .search,
 .select,
-.repository-editor input,
-.repository-editor textarea,
 .setting input,
 .setting select,
 .detail-wait-fields input {
@@ -204,17 +202,7 @@
     border-radius: var(--radius);
 }
 
-.repository-editor { display: grid; gap: 0.8rem; }
-.repository-editor label, .setting label { display: grid; gap: 0.3rem; }
-.repository-editor input, .repository-editor textarea {
-    padding: 0.55rem 0.7rem;
-    color: var(--color-on-surface);
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-}
-.repository-editor textarea { min-height: 6rem; resize: vertical; }
-.repository-editor input[readonly] { color: var(--color-muted); }
+.setting label { display: grid; gap: 0.3rem; }
 
 /* Sources view: three labelled sections in the Settings house style. */
 .section { display: grid; gap: 0.6rem; }
@@ -238,6 +226,16 @@
 
 .section-divider { height: 1px; background: var(--color-border); opacity: 0.75; }
 .section-help { max-width: 62rem; margin: 0; color: var(--color-muted); }
+.checkout-path {
+    display: block;
+    max-width: 100%;
+    padding: 0.55rem 0.7rem;
+    overflow-x: auto;
+    color: var(--color-gray-200);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+}
 
 .detail-wait-fields {
     display: grid;
@@ -275,9 +273,6 @@
 .repo-name { display: grid; gap: 0.2rem; min-width: 0; }
 .repo-name span { font-size: 0.78rem; }
 .repo-status { display: grid; gap: 0.3rem; justify-items: start; }
-.repo-actions-cell { text-align: right; }
-.repo-actions-cell > div { justify-content: flex-end; }
-
 .file-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
 .file-row-label { min-width: 11rem; color: var(--color-gray-300); font-size: 0.85rem; }
 .file-name { color: var(--color-muted); font-size: 0.8rem; overflow-wrap: anywhere; }

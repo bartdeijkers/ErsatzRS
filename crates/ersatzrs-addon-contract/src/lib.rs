@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
 pub const ADDON_MANIFEST_VERSION: u32 = 4;
 /// Current repository-index schema. Schema v1 remains readable.
 pub const ADDON_REPOSITORY_SCHEMA_VERSION: u32 = 2;
+/// Current schema for an offline add-on repository checkout or bundle.
+pub const LOCAL_ADDON_REPOSITORY_SCHEMA_VERSION: u32 = 1;
 /// Health capability implemented by every executable add-on.
 pub const CAPABILITY_ADDON_CHECK_V1: &str = "addon.check.v1";
 /// Enumerate a Remote Stream playlist as bounded `NDJSON`.
@@ -1169,7 +1171,7 @@ pub fn validate_contract_document(
             manifest.validate()?;
         }
         ContractDocumentKind::RepositoryManifest => {
-            let manifest: RepositoryManifest =
+            let manifest: LocalRepositoryManifest =
                 parse_toml_document("repository manifest", contents)?;
             manifest.validate()?;
         }
@@ -2003,6 +2005,7 @@ pub enum AddonTrustTier {
     Verified,
     Unverified,
     Sideloaded,
+    Local,
 }
 
 impl AddonTrustTier {
@@ -2012,7 +2015,48 @@ impl AddonTrustTier {
             Self::Verified => "verified",
             Self::Unverified => "unverified",
             Self::Sideloaded => "sideloaded",
+            Self::Local => "local",
         }
+    }
+}
+
+/// Strict metadata at the root of a local repository checkout or offline ZIP.
+///
+/// The repository contains add-ons below `addons/<id>/`. It deliberately has
+/// no URL, signing key, or credential field: acquiring a Git checkout remains
+/// an operator action and an offline bundle is self-contained.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LocalRepositoryManifest {
+    pub schema_version: u32,
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: BTreeMap<String, String>,
+}
+
+impl LocalRepositoryManifest {
+    /// Validate repository identity and localized display metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an unsupported schema, invalid identity, empty
+    /// name, or a description without the required English fallback.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        if self.schema_version != LOCAL_ADDON_REPOSITORY_SCHEMA_VERSION {
+            return invalid(
+                "schema_version",
+                "unsupported local repository schema version",
+            );
+        }
+        validate_addon_id(&self.id)?;
+        if self.name.trim().is_empty() || self.name.len() > 200 {
+            return invalid("name", "must be between 1 and 200 characters");
+        }
+        if !self.description.is_empty() {
+            require_english(&self.description, "description")?;
+        }
+        Ok(())
     }
 }
 
@@ -3283,6 +3327,38 @@ mod tests {
             description: localized("Example repository"),
         };
         manifest.validate().expect("valid repository package");
+    }
+
+    #[test]
+    fn local_repository_manifest_has_no_network_trust_fields() {
+        let manifest = LocalRepositoryManifest {
+            schema_version: LOCAL_ADDON_REPOSITORY_SCHEMA_VERSION,
+            id: "org.example.addons".to_owned(),
+            name: "Example add-ons".to_owned(),
+            description: localized("Example local repository"),
+        };
+        manifest.validate().expect("valid local repository");
+
+        let document = r#"
+schema_version = 1
+id = "org.example.addons"
+name = "Example add-ons"
+
+[description]
+"en-US" = "Example local repository"
+"#;
+        validate_contract_document(ContractDocumentKind::RepositoryManifest, document)
+            .expect("valid standalone local repository document");
+
+        let remote_document = document.replace(
+            "[description]",
+            "index_url = \"https://example.test/index.json\"\n\n[description]",
+        );
+        assert!(validate_contract_document(
+            ContractDocumentKind::RepositoryManifest,
+            &remote_document
+        )
+        .is_err());
     }
 
     fn valid_repository_index() -> AddonRepositoryIndex {

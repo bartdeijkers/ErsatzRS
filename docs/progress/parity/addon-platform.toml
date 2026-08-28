@@ -1,39 +1,39 @@
-feature    = 'Repository-backed add-on platform with tiered trust'
+feature    = 'Local add-on repository platform'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-backed extension equivalent'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-app`, `crates/ersatzrs-infra/src/addons.rs`, `crates/ersatzrs-infra/src/health/checks/addon_platform.rs`, `crates/ersatzrs-web/src/admin/pages/addons.rs`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0051', '0066', '0067', '0072', '0074', '0079']
+adr        = ['0051', '0066', '0067', '0072', '0074', '0079', '0081']
 
 summary = '''
-The host implementation is substantial: strict package and catalog schemas,
-detached Ed25519 catalog verification, replaceable trust roots, rollback and
-expiry protection, bounded safe ZIP installation, immutable package/content
+ADR 0081 supersedes the active HTTPS catalog and signing model from ADR 0066.
+Operators clone or pull repositories with their own Git tooling into the fixed
+profile checkout directory, or upload a complete offline repository ZIP.
+ErsatzRS owns no Git process or credentials and performs no repository network
+fetch. A strict `repository.toml` plus `addons/<id>/` contract is shared by both
+paths; scanning atomically records validated offers, and installation copies
+only one explicitly selected add-on into the immutable managed package store.
+
+The off-by-default Unknown Sources gate covers checkout scans, offline bundles,
+and individual add-on ZIPs. Checkout and bundle sources have persisted scan
+state and health findings. Updates remain manual per add-on after a pull/rescan
+or replacement bundle. Source revisions and content fingerprints prevent a
+mutated checkout or stale UI action from changing the installed snapshot.
+Existing catalog installations remain runnable as legacy unmanaged packages;
+an explicit adoption confirmation can bind one to a local offer while
+preserving settings and its data namespace.
+
+The separate private official repository is itself the complete local source
+for standalone Beeld & Geluid and operator-supplied yt-dlp adapters on all six
+release RIDs. Its CI validates manifests and publishes an offline bundle
+artifact without a signing key, public catalog, or GitHub Pages deployment.
+
+The host still provides bounded safe ZIP extraction, immutable package/content
 integrity, manual update/enable lifecycle, manifest-rendered settings and
 declarative panels, secret references, required-dependency lifecycle guards,
-repository/install compare-and-swap protection, conditional signed-catalog
-refresh, repository-ID-scoped persistent data, managed Unix process-group and
-Windows Job Object ownership, health, and localized Settings > Add-ons
-administration.
-
-The separate official multi-add-on repository source tree builds deterministic
-packages for standalone Beeld & Geluid and operator-supplied yt-dlp adapters on
-all six release RIDs. It is intentionally not published from this worktree and
-the main repository seed intentionally has no production public key until the
-maintainer provisions the private signing key directly in the publisher's
-secret store.
-
-ADR 0066's Kodi-shaped distribution model is implemented with verified,
-unverified, and sideloaded trust tiers, a single off-by-default unknown-sources
-gate, bounded repository and add-on ZIP installation, official-source
-fail-closed behavior, persistent tier-aware health reporting, schema-v2
-optional icons, and manual source-owned updates. Per ADR 0074 an update no
-longer takes a working add-on out of service: the host runs the post-update
-readiness check itself and re-enables the add-on when it passes, and holds it
-disabled for review only when the new version declares a permission the
-previous one did not. The localized manager provides
-Installed, Browse, Updates, and Sources views plus canonical
-`/settings/addons/{addon_id}` detail pages for metadata, permissions,
-configuration, readiness, source offers, and lifecycle actions.
+managed Unix process-group and Windows Job Object ownership, health, and the
+localized Installed, Browse, Updates, Sources, and detail-page administration.
+Per ADR 0074 a successful update is re-enabled after readiness when it adds no
+new permission; otherwise it remains disabled for operator review.
 
 Schema-v4 add-ons can declare `default_source_hosts`: the hosts a package
 offers to process, as a statement separate from `permissions.network_hosts`
@@ -86,11 +86,12 @@ resolved    = false
 
 [[debt]]
 id          = 'official-addon-repository-is-not-published'
-description = 'Publish the separate official repository, provision its Ed25519 private key directly in the release secret store, and pin only the corresponding raw public key in the main repository seed.'
+description = 'Replace the planned public signed official catalog with a private operator-acquired repository and offline bundle artifact.'
 discovered  = '2026-08-11'
-evidence    = 'The local repository source, deterministic package builder, source-contract tests, exact-byte signing workflow, and GitHub Pages workflow exist. Publication and production key provisioning require explicit external authorization and secret handling outside agent context.'
-adr         = '0066'
-resolved    = false
+evidence    = 'ADR 0081 removes public catalog publication, signing-key provisioning, and the seeded trust root. The private repository carries root repository.toml plus addons/<id>/ and its CI produces a complete offline ZIP artifact.'
+adr         = '0081'
+resolved    = true
+resolution  = 'Operators acquire the private checkout with their own Git credentials or install its offline bundle; ErsatzRS never receives repository credentials or refreshes a public feed.'
 
 [[debt]]
 id          = 'tiered-trust-model-is-not-implemented'
@@ -112,12 +113,12 @@ resolution  = 'The seeded official repository cannot refresh without its pinned 
 
 [[debt]]
 id          = 'repository-packages-are-not-installable'
-description = 'Add the ADR 0066 repository package: a bounded zip carrying a strict `repository.toml` (id, name, index URL, optional public key) whose installation creates the trust record, gated by the unverified-sources setting and refused while deployment-managed or targeting an official repository.'
+description = 'Install a complete bounded offline repository ZIP that carries repository.toml and addons/<id>/ without installing every contained add-on.'
 discovered  = '2026-08-12'
-evidence    = '`RepositoryManifest` is a strict shared contract and `install_repository_from_package` performs bounded safe extraction, gate enforcement, deployment-file refusal, and official-row protection. The multipart API and Sources UI expose the install path.'
-adr         = '0066'
+evidence    = '`LocalRepositoryManifest` is the strict shared contract and `install_local_repository_bundle` performs bounded safe extraction, source-kind conflict checks, atomic offer replacement, and cleanup of the superseded bundle. The multipart API and Sources UI expose the install path.'
+adr         = '0081'
 resolved    = true
-resolution  = 'A repository ZIP containing root `repository.toml` can create or update a database-backed source after the administrator accepts unknown sources; key presence determines subsequent catalog verification.'
+resolution  = 'A complete repository ZIP creates or replaces a local bundle source after the administrator accepts Unknown Sources; each contained add-on remains a separate manual installation or update.'
 
 [[debt]]
 id          = 'addon-packages-cannot-be-sideloaded'

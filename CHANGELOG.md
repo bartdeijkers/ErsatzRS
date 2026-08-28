@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Changed
 
+- Replace public HTTPS add-on catalogs, signing keys, and automatic refreshes
+  with operator-managed local Git checkouts and complete offline repository
+  ZIPs. Add-ons are still installed and updated individually as immutable
+  snapshots behind the off-by-default Unknown Sources gate; existing catalog
+  installations remain runnable as legacy unmanaged packages and can be
+  explicitly adopted by a local source without losing settings or data.
+
 - Require a completed, successful CI run for the exact release-candidate
   commit before creating any alpha, beta, or normal release tag.
 

@@ -1,70 +1,59 @@
 use async_trait::async_trait;
 use ersatzrs_app::{
-    AddonIconRead, AddonOverviewRead, AddonRepositoryEdit, AddonRepositoryRead, AddonRuntime,
-    AddonRuntimeError, AddonSettingEdit, AddonSettingRead, AvailableAddonRead, InstalledAddonRead,
-    SourceAddonRouting,
+    AddonIconRead, AddonOverviewRead, AddonRepositoryRead, AddonRuntime, AddonRuntimeError,
+    AddonSettingEdit, AddonSettingRead, AvailableAddonRead, InstalledAddonRead, SourceAddonRouting,
 };
 use ersatzrs_infra::addon_source_routing::{resolve_source_addon, ResolvedSourceAddon};
 use ersatzrs_infra::addons::{
-    check_addon, disable_addon, enable_addon, install_addon, install_addon_from_package,
-    install_repository_from_package, list_available_addons, list_installed_addons,
-    list_trusted_repositories, load_addon_settings, load_installed_addon, refresh_repository,
-    remove_trusted_repository, repositories_are_deployment_managed, save_addon_setting,
-    save_trusted_repository, set_default_remote_stream_addon, set_unverified_sources_enabled,
+    check_addon, disable_addon, enable_addon, ensure_addon_checkouts_folder,
+    install_addon_from_local_source, install_addon_from_package, install_local_repository_bundle,
+    list_installed_addons, list_local_addon_sources, list_local_available_addons,
+    load_addon_settings, load_installed_addon, load_local_addon_icon, save_addon_setting,
+    scan_local_addon_repositories, set_default_remote_stream_addon, set_unverified_sources_enabled,
     uninstall_addon, unverified_sources_enabled, AddonRuntimeContext, AddonSecretReferenceKind,
-    AddonSettingValue, TrustedAddonRepository,
+    AddonSettingValue, LocalAddonSource,
 };
 use ersatzrs_infra::db::DbPool;
 
 #[derive(Clone)]
 pub struct NativeAddonRuntime {
     pool: DbPool,
-    client: reqwest::Client,
 }
 
 impl NativeAddonRuntime {
     #[must_use]
     pub fn new(pool: DbPool) -> Self {
-        Self {
-            pool,
-            client: addon_repository_client(),
-        }
+        Self { pool }
     }
-}
-
-pub(crate) fn addon_repository_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new())
 }
 
 #[async_trait]
 impl AddonRuntime for NativeAddonRuntime {
     async fn overview(&self) -> Result<AddonOverviewRead, AddonRuntimeError> {
-        let repositories = list_trusted_repositories(&self.pool)
+        let repositories = list_local_addon_sources(&self.pool)
             .await
             .map_err(runtime_error)?
             .into_iter()
             .map(map_repository)
             .collect();
-        let available = list_available_addons(&self.pool)
+        let available = list_local_available_addons(&self.pool)
             .await
             .map_err(runtime_error)?
             .into_iter()
-            .map(|value| AvailableAddonRead {
-                icon_url: value.addon.icon.as_ref().map(|_| {
+            .map(|value| {
+                let icon_url = value.has_local_icon.then(|| {
                     format!(
-                        "/api/addons/catalog-icon/{}/{}",
+                        "/api/addons/source-icon/{}/{}",
                         value.repository_id, value.addon.id
                     )
-                }),
-                repository_id: value.repository_id,
-                addon: value.addon,
-                host_compatible: value.host_compatible,
-                package_available: value.package_available,
+                });
+                AvailableAddonRead {
+                    icon_url,
+                    repository_id: value.repository_id,
+                    addon: value.addon,
+                    host_compatible: value.host_compatible,
+                    package_available: value.package_available,
+                }
             })
             .collect();
         let mut installed = Vec::new();
@@ -94,16 +83,22 @@ impl AddonRuntime for NativeAddonRuntime {
                 &stored_settings,
             )
             .map_err(runtime_error)?;
+            let is_legacy = value.source_id.is_none() && value.repository_id.is_some();
+            let provenance_id = value.source_id.clone().or(value.repository_id);
             installed.push(InstalledAddonRead {
                 icon_url: manifest
                     .icon
                     .as_ref()
                     .map(|_| format!("/api/addons/installed-icon/{}", value.addon_id)),
                 addon_id: value.addon_id,
-                repository_id: value.repository_id,
+                repository_id: provenance_id,
                 version: value.version.to_string(),
                 enabled: value.enabled,
-                trust_tier: value.trust_tier.as_str().to_owned(),
+                trust_tier: if is_legacy {
+                    "legacy".to_owned()
+                } else {
+                    value.trust_tier.as_str().to_owned()
+                },
                 manifest,
                 settings,
                 last_check_code: value.last_check_code,
@@ -117,7 +112,11 @@ impl AddonRuntime for NativeAddonRuntime {
             unverified_sources_enabled: unverified_sources_enabled(&self.pool)
                 .await
                 .map_err(runtime_error)?,
-            repositories_are_deployment_managed: repositories_are_deployment_managed(),
+            checkout_path: ensure_addon_checkouts_folder()
+                .await
+                .map_err(runtime_error)?
+                .to_string_lossy()
+                .into_owned(),
             repositories,
             available,
             installed,
@@ -153,36 +152,24 @@ impl AddonRuntime for NativeAddonRuntime {
         }))
     }
 
-    async fn save_repository(
+    async fn source_icon(
         &self,
-        repository: AddonRepositoryEdit,
-    ) -> Result<(), AddonRuntimeError> {
-        save_trusted_repository(
-            &self.pool,
-            &TrustedAddonRepository {
-                id: repository.id,
-                name: repository.name,
-                index_url: repository.index_url,
-                public_key: repository.public_key,
-                is_official: false,
-                is_enabled: repository.is_enabled,
-                last_sequence: None,
-                last_refresh: None,
-                last_error: None,
-            },
-        )
-        .await
-        .map_err(runtime_error)
-    }
-
-    async fn remove_repository(&self, repository_id: String) -> Result<(), AddonRuntimeError> {
-        remove_trusted_repository(&self.pool, &repository_id)
+        source_id: String,
+        addon_id: String,
+    ) -> Result<Option<AddonIconRead>, AddonRuntimeError> {
+        load_local_addon_icon(&self.pool, &source_id, &addon_id)
             .await
+            .map(|icon| {
+                icon.map(|icon| AddonIconRead {
+                    bytes: icon.bytes,
+                    content_type: icon.media_type.as_mime_type().to_owned(),
+                })
+            })
             .map_err(runtime_error)
     }
 
-    async fn refresh_repository(&self, repository_id: String) -> Result<(), AddonRuntimeError> {
-        refresh_repository(&self.pool, &self.client, &repository_id)
+    async fn scan_repositories(&self) -> Result<(), AddonRuntimeError> {
+        scan_local_addon_repositories(&self.pool)
             .await
             .map(|_| ())
             .map_err(runtime_error)
@@ -192,12 +179,13 @@ impl AddonRuntime for NativeAddonRuntime {
         &self,
         repository_id: String,
         addon_id: String,
+        adopt_legacy: bool,
     ) -> Result<(), AddonRuntimeError> {
-        install_addon(
+        install_addon_from_local_source(
             &self.pool,
-            &self.client,
             &repository_id,
             &addon_id,
+            adopt_legacy,
             &runtime_context(),
         )
         .await
@@ -253,13 +241,9 @@ impl AddonRuntime for NativeAddonRuntime {
             .map_err(runtime_error)
     }
 
-    async fn install_repository_from_package(
-        &self,
-        archive: Vec<u8>,
-    ) -> Result<(), AddonRuntimeError> {
-        install_repository_from_package(&self.pool, archive)
+    async fn install_repository_bundle(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError> {
+        install_local_repository_bundle(&self.pool, archive)
             .await
-            .map(|_| ())
             .map_err(runtime_error)
     }
 
@@ -330,18 +314,13 @@ fn valid_icon_bytes(bytes: &[u8], media_type: ersatzrs_addon_contract::AddonIcon
     }
 }
 
-fn map_repository(value: TrustedAddonRepository) -> AddonRepositoryRead {
-    let trust_tier = value.trust_tier().as_str().to_owned();
+fn map_repository(value: LocalAddonSource) -> AddonRepositoryRead {
     AddonRepositoryRead {
         id: value.id,
         name: value.name,
-        index_url: value.index_url,
-        public_key: value.public_key,
-        is_official: value.is_official,
-        is_enabled: value.is_enabled,
-        trust_tier,
-        last_sequence: value.last_sequence,
-        last_refresh: value.last_refresh,
+        kind: value.kind,
+        root_path: value.root_path.to_string_lossy().into_owned(),
+        last_scan: value.last_scan,
         last_error: value.last_error,
     }
 }

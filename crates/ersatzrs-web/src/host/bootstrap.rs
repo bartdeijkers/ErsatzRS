@@ -107,6 +107,31 @@ const STREAMING_FONT_FILES: &[(&str, &[u8])] = &[
 ];
 static LOG_FILTER_RELOAD: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
 
+async fn scan_local_addon_repositories_on_startup(pool: &ersatzrs_infra::db::DbPool) {
+    if let Err(error) = ersatzrs_infra::addons::ensure_addon_checkouts_folder().await {
+        tracing::warn!(%error, "failed to prepare local add-on checkout folder");
+        return;
+    }
+    match ersatzrs_infra::addons::unverified_sources_enabled(pool).await {
+        Ok(true) => match ersatzrs_infra::addons::scan_local_addon_repositories(pool).await {
+            Ok(scanned) => {
+                tracing::info!(scanned, "local add-on repository startup scan complete");
+            }
+            Err(error) => tracing::warn!(
+                %error,
+                "local add-on repository startup scan failed"
+            ),
+        },
+        Ok(false) => tracing::debug!(
+            "local add-on repository startup scan skipped because unknown sources are disabled"
+        ),
+        Err(error) => tracing::warn!(
+            %error,
+            "failed to read the unknown-sources setting for local add-on discovery"
+        ),
+    }
+}
+
 pub async fn run() {
     let startup = ersatzrs_infra::db::bootstrap_media_server_database()
         .await
@@ -165,6 +190,8 @@ pub async fn run() {
     )
     .await
     .expect("failed to build application state");
+
+    scan_local_addon_repositories_on_startup(&app_state.pool).await;
 
     let recovered_refreshes =
         super::tasks::run_background_task_preflight(app_state.application.clone())

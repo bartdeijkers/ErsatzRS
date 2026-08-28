@@ -4,31 +4,27 @@ ErsatzRS add-ons are separately packaged programs that the host starts as
 bounded child processes. Provenance, package integrity, and process separation
 reduce different risks; none provides operating-system confinement.
 
-## Why trust has three tiers
+## Why source provenance remains visible
 
-A mandatory signing key for every publisher would exclude private, offline,
-and local-development packages and make operating key infrastructure the entry
-price for a third-party repository. ErsatzRS therefore records how each
-installation was obtained instead of presenting every source as equally
-trusted.
+ErsatzRS records how each installation was obtained instead of presenting
+every local file as equally supported.
 
-- **Verified** means a repository's identity and Ed25519 public key are pinned.
-  The detached signature authenticates exact catalog bytes, which in turn pin
-  each package URL, size, and digest.
-- **Unverified** means an HTTPS repository has no signing key. Its package
-  sizes and digests still protect against accidental corruption, but origin
-  authenticity rests on TLS and the repository host.
-- **Sideloaded** means the operator supplied a local ZIP with no catalog. The
-  host validates and hashes that package, but there is no publisher provenance
-  or automatic update source.
+- **Local** means an operator-managed checkout or uploaded offline repository
+  supplied a validated offer. The installed runtime is an immutable copy, not
+  the mutable checkout.
+- **Sideloaded** means the operator supplied an individual add-on ZIP. The host
+  validates and hashes it, but it has no repository update source.
+- **Legacy catalog · unmanaged** means the package came from the retired HTTPS
+  catalog model. It remains runnable but has no active update source until the
+  operator explicitly adopts a local offer.
 
-Unverified and sideloaded installs are behind one off-by-default **Unknown
-sources** gate. The tier remains attached to the installation so the add-on
-detail page, source manager, and health report can show the actual support and
-risk context later. Disabling the gate prevents new unverified activity; it
+Local repository scans, bundles, and sideloads are behind one off-by-default
+**Unknown sources** gate. Provenance remains attached to the installation so
+the detail page, source manager, and health report can show its support and
+risk context later. Disabling the gate prevents new local-source activity; it
 does not pretend existing code disappeared.
 
-The exact catalog and package formats are defined by the [repository
+The exact local repository and package formats are defined by the [repository
 contract](../reference/addon-repositories.md) and [package
 contract](../reference/addon-packages.md).
 
@@ -54,9 +50,10 @@ does not install a portable operating-system sandbox or firewall policy.
 An enabled malicious add-on can therefore attempt anything allowed to the
 ErsatzRS service account, regardless of its trust badge. Run ErsatzRS with the
 least filesystem and network access it needs, review requested permissions, and
-treat a repository key as a publisher identity rather than a safety
-certificate.
+treat source provenance as an audit aid rather than a safety certificate.
 
-[ADR 0066](../adr/0066-repository-backed-add-ons.md) owns the tiered-trust and
-out-of-process decision. The [runtime contract](../reference/addon-runtime.md)
-owns the exact implemented invocation behavior.
+[ADR 0066](../adr/0066-repository-backed-add-ons.md) owns the out-of-process
+decision; [ADR 0081](../adr/0081-use-local-addon-repositories.md) owns local
+acquisition and legacy adoption. The [runtime
+contract](../reference/addon-runtime.md) owns the exact implemented invocation
+behavior.

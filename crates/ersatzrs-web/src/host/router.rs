@@ -94,17 +94,17 @@ pub fn build_app(app_state: AppState) -> Router {
             get(api::addon_media_lists::uploaded_artwork),
         )
         .route(
-            "/api/addons/repository-package",
-            post(api::addons::upload_repository_package)
-                .layer(DefaultBodyLimit::max(256 * 1024 + 64 * 1024)),
+            "/api/addons/repository-bundle",
+            post(api::addons::upload_repository_bundle)
+                .layer(DefaultBodyLimit::max(512 * 1024 * 1024 + 1024 * 1024)),
         )
         .route(
             "/api/addons/installed-icon/{addon_id}",
             get(api::addons::installed_icon),
         )
         .route(
-            "/api/addons/catalog-icon/{repository_id}/{addon_id}",
-            get(api::addons::catalog_icon),
+            "/api/addons/source-icon/{source_id}/{addon_id}",
+            get(api::addons::source_icon),
         )
         .route(
             "/api/blocks/items/save",

@@ -1,4 +1,4 @@
-//! Signed repository catalogs and out-of-process add-on lifecycle management.
+//! Local repository snapshots and out-of-process add-on lifecycle management.
 //!
 //! Add-ons are data plus executables. They never load into the ErsatzRS
 //! process, and their manifests can only select host-controlled launch modes.
@@ -17,13 +17,14 @@ use ersatzrs_addon_contract::{
     sanitize_addon_diagnostic_code, validate_addon_id, AddonCheckResult, AddonCheckStatus,
     AddonEntrypointKind, AddonIconMediaType, AddonManifest, AddonOperationError,
     AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon, CatalogPackage,
-    RepositoryManifest, CAPABILITY_ADDON_CHECK_V1, CAPABILITY_MEDIA_LIST_IMPORT_V1,
-    CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3,
-    CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5, CAPABILITY_REMOTE_STREAM_ITEM_V1,
-    CAPABILITY_REMOTE_STREAM_ITEM_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
-    CAPABILITY_REMOTE_STREAM_LIST_V4, CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED,
-    OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
+    LocalRepositoryManifest, RepositoryManifest, CAPABILITY_ADDON_CHECK_V1,
+    CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
+    CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5,
+    CAPABILITY_REMOTE_STREAM_ITEM_V1, CAPABILITY_REMOTE_STREAM_ITEM_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
+    CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET,
+    OPERATION_CODE_MISSING_SETTING,
 };
 use futures_util::StreamExt as _;
 #[cfg(windows)]
@@ -44,7 +45,10 @@ use crate::addon_media_storage::{
     effective_storage_path, ensure_media_source_in_transaction, prepare_storage_root,
 };
 use crate::db::{DbPool, DbRow};
-use crate::file_system_layout::{addon_cache_folder, addon_data_folder, addon_packages_folder};
+use crate::file_system_layout::{
+    addon_cache_folder, addon_checkouts_folder, addon_data_folder, addon_packages_folder,
+    addon_repository_bundles_folder,
+};
 use crate::repositories::common::{decode_bool_column, decode_optional_string_column};
 use crate::repositories::SqlxResultExt as _;
 
@@ -149,13 +153,32 @@ impl TrustedAddonRepository {
     }
 }
 
-/// Catalog item paired with the repository that signed it.
+/// Add-on offer paired with its source.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AvailableAddon {
     pub repository_id: String,
     pub addon: CatalogAddon,
     pub host_compatible: bool,
     pub package_available: bool,
+    pub has_local_icon: bool,
+}
+
+/// Bounded icon loaded from one unchanged local repository offer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalAddonIcon {
+    pub bytes: Vec<u8>,
+    pub media_type: AddonIconMediaType,
+}
+
+/// One operator-managed checkout or uploaded offline repository bundle.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalAddonSource {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub root_path: PathBuf,
+    pub last_scan: String,
+    pub last_error: Option<String>,
 }
 
 /// Persisted package selected as the active version of one add-on.
@@ -163,6 +186,7 @@ pub struct AvailableAddon {
 pub struct InstalledAddon {
     pub addon_id: String,
     pub repository_id: Option<String>,
+    pub source_id: Option<String>,
     pub version: Version,
     pub enabled: bool,
     pub trust_tier: AddonTrustTier,
@@ -819,6 +843,7 @@ pub async fn list_available_addons(pool: &DbPool) -> Result<Vec<AvailableAddon>,
             package_available: addon.packages.contains_key(rid)
                 || addon.packages.contains_key("any"),
             repository_id: repository.id.clone(),
+            has_local_icon: false,
             addon,
         }));
     }
@@ -911,6 +936,792 @@ pub async fn install_addon(
         runtime,
     )
     .await
+}
+
+/// Ensure the operator-managed checkout root exists and return its path.
+///
+/// # Errors
+///
+/// Returns an error when the state directory cannot be created.
+pub async fn ensure_addon_checkouts_folder() -> Result<PathBuf, AddonError> {
+    let path = addon_checkouts_folder();
+    tokio::fs::create_dir_all(&path)
+        .await
+        .map_err(package_io_error)?;
+    Ok(path)
+}
+
+/// Scan every direct child of the operator-managed checkout directory.
+///
+/// Git acquisition is deliberately outside ErsatzRS. Each valid checkout is
+/// reconciled atomically; a failed scan leaves its previous offers intact.
+///
+/// # Errors
+///
+/// Returns an error when unknown sources are disabled or the checkout root
+/// cannot be enumerated. Individual invalid repositories are recorded/logged
+/// without preventing other checkouts from being discovered.
+pub async fn scan_local_addon_repositories(pool: &DbPool) -> Result<usize, AddonError> {
+    if !unverified_sources_enabled(pool).await? {
+        return Err(AddonError::Trust(
+            "enable unknown sources before scanning local add-on repositories".to_owned(),
+        ));
+    }
+    let checkout_root = ensure_addon_checkouts_folder().await?;
+    let mut entries = tokio::fs::read_dir(&checkout_root)
+        .await
+        .map_err(package_io_error)?;
+    let mut scanned = 0_usize;
+    let mut discovered_roots = BTreeSet::new();
+    while let Some(entry) = entries.next_entry().await.map_err(package_io_error)? {
+        if !entry.file_type().await.map_err(package_io_error)?.is_dir() {
+            continue;
+        }
+        let path = entry.path();
+        let recorded_path = canonicalize_addon_path(&path).await.unwrap_or(path.clone());
+        discovered_roots.insert(recorded_path.to_string_lossy().into_owned());
+        match scan_local_repository_root(pool, &path, "checkout").await {
+            Ok(()) => scanned = scanned.saturating_add(1),
+            Err(error) => {
+                record_local_source_scan_error(pool, &recorded_path, &error).await;
+                tracing::warn!(path = %path.display(), %error, "local add-on repository scan failed");
+            }
+        }
+    }
+    reconcile_missing_checkout_sources(pool, &discovered_roots).await?;
+    Ok(scanned)
+}
+
+/// List local checkout and offline-bundle sources.
+///
+/// # Errors
+///
+/// Returns an error when source state cannot be decoded.
+pub async fn list_local_addon_sources(pool: &DbPool) -> Result<Vec<LocalAddonSource>, AddonError> {
+    let rows = sqlx::query(
+        r#"SELECT "Id", "Name", "Kind", "RootPath", "LastScan", "LastError"
+           FROM "AddonSource" ORDER BY "Name", "Id""#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(database_error)?;
+    rows.iter()
+        .map(|row| {
+            Ok(LocalAddonSource {
+                id: row.try_get("Id").repository().map_err(repository_error)?,
+                name: row.try_get("Name").repository().map_err(repository_error)?,
+                kind: row.try_get("Kind").repository().map_err(repository_error)?,
+                root_path: PathBuf::from(
+                    row.try_get::<String, _>("RootPath")
+                        .repository()
+                        .map_err(repository_error)?,
+                ),
+                last_scan: row
+                    .try_get("LastScan")
+                    .repository()
+                    .map_err(repository_error)?,
+                last_error: decode_optional_string_column(row, "LastError")
+                    .map_err(repository_error)?,
+            })
+        })
+        .collect()
+}
+
+/// List add-on offers from the last valid local-source scans.
+///
+/// The existing catalog-shaped read model is retained at the application
+/// boundary so the mature manager/detail UI can keep its card and permission
+/// rendering. Package URLs are inert local placeholders and are never fetched.
+///
+/// # Errors
+///
+/// Returns an error when persisted source or manifest state is invalid.
+pub async fn list_local_available_addons(pool: &DbPool) -> Result<Vec<AvailableAddon>, AddonError> {
+    let rows = sqlx::query(
+        r#"SELECT "SourceId", "AddonId", "ManifestJson", "ContentSha256"
+           FROM "AddonSourceOffer" ORDER BY "SourceId", "AddonId""#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(database_error)?;
+    let host = host_version()?;
+    let rid = current_rid()?;
+    let mut offers = Vec::with_capacity(rows.len());
+    for row in rows {
+        let source_id: String = row
+            .try_get("SourceId")
+            .repository()
+            .map_err(repository_error)?;
+        let manifest_json: String = row
+            .try_get("ManifestJson")
+            .repository()
+            .map_err(repository_error)?;
+        let manifest: AddonManifest = serde_json::from_str(&manifest_json).map_err(|_| {
+            AddonError::Validation("stored local add-on manifest is invalid".to_owned())
+        })?;
+        manifest
+            .validate()
+            .map_err(|error| AddonError::Validation(error.to_string()))?;
+        let digest: String = row
+            .try_get("ContentSha256")
+            .repository()
+            .map_err(repository_error)?;
+        let addon = catalog_view_from_manifest(&manifest, rid, &digest);
+        offers.push(AvailableAddon {
+            repository_id: source_id,
+            host_compatible: manifest.host_version.matches(&host),
+            package_available: manifest.entrypoint_for(rid).is_some(),
+            has_local_icon: manifest.icon.is_some(),
+            addon,
+        });
+    }
+    offers.sort_by(|left, right| {
+        localized_name(&left.addon)
+            .cmp(localized_name(&right.addon))
+            .then_with(|| left.addon.id.cmp(&right.addon.id))
+            .then_with(|| left.repository_id.cmp(&right.repository_id))
+    });
+    Ok(offers)
+}
+
+/// Load an offer icon only while the local source still matches its scan.
+///
+/// # Errors
+///
+/// Returns an error when persisted source state is invalid, the checkout has
+/// changed since its scan, or the declared icon is no longer safe and valid.
+pub async fn load_local_addon_icon(
+    pool: &DbPool,
+    source_id: &str,
+    addon_id: &str,
+) -> Result<Option<LocalAddonIcon>, AddonError> {
+    let Some(row) = sqlx::query(
+        r#"SELECT source."RootPath", offer."RelativePath", offer."ManifestJson",
+                  offer."ContentSha256"
+           FROM "AddonSourceOffer" AS offer
+           JOIN "AddonSource" AS source ON source."Id" = offer."SourceId"
+           WHERE offer."SourceId" = ? AND offer."AddonId" = ?"#,
+    )
+    .bind(source_id)
+    .bind(addon_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(database_error)?
+    else {
+        return Ok(None);
+    };
+    let manifest: AddonManifest = serde_json::from_str(
+        &row.try_get::<String, _>("ManifestJson")
+            .repository()
+            .map_err(repository_error)?,
+    )
+    .map_err(|_| AddonError::Validation("stored local add-on manifest is invalid".to_owned()))?;
+    let Some(icon) = manifest.icon else {
+        return Ok(None);
+    };
+    let root = PathBuf::from(
+        row.try_get::<String, _>("RootPath")
+            .repository()
+            .map_err(repository_error)?,
+    )
+    .join(
+        row.try_get::<String, _>("RelativePath")
+            .repository()
+            .map_err(repository_error)?,
+    );
+    let expected_digest: String = row
+        .try_get("ContentSha256")
+        .repository()
+        .map_err(repository_error)?;
+    if hash_addon_tree(root.clone()).await? != expected_digest {
+        return Err(AddonError::Trust(
+            "local repository changed after its last scan; rescan before loading artwork"
+                .to_owned(),
+        ));
+    }
+    let icon_path = root.join(icon.path);
+    let metadata = tokio::fs::metadata(&icon_path)
+        .await
+        .map_err(package_io_error)?;
+    if !metadata.is_file() || metadata.len() > 2 * 1024 * 1024 {
+        return Err(AddonError::Validation(
+            "local offer icon is not a bounded regular file".to_owned(),
+        ));
+    }
+    let bytes = tokio::fs::read(icon_path).await.map_err(package_io_error)?;
+    if !valid_icon_bytes(&bytes, icon.media_type) {
+        return Err(AddonError::Validation(
+            "local offer icon bytes do not match the declared media type".to_owned(),
+        ));
+    }
+    Ok(Some(LocalAddonIcon {
+        bytes,
+        media_type: icon.media_type,
+    }))
+}
+
+/// Import a self-contained offline repository bundle.
+///
+/// # Errors
+///
+/// Returns an error for a disabled trust gate, unsafe archive, invalid local
+/// repository layout, or source-kind identity conflict.
+pub async fn install_local_repository_bundle(
+    pool: &DbPool,
+    archive: Vec<u8>,
+) -> Result<(), AddonError> {
+    if !unverified_sources_enabled(pool).await? {
+        return Err(AddonError::Trust(
+            "enable unknown sources before installing a local repository bundle".to_owned(),
+        ));
+    }
+    if archive.is_empty() || archive.len() as u64 > 512 * 1024 * 1024 {
+        return Err(AddonError::Validation(
+            "repository bundle is empty or too large".to_owned(),
+        ));
+    }
+    let bundle_root = addon_repository_bundles_folder();
+    tokio::fs::create_dir_all(&bundle_root)
+        .await
+        .map_err(package_io_error)?;
+    let staging = bundle_root.join(format!(".staging-{}", Uuid::new_v4()));
+    tokio::fs::create_dir_all(&staging)
+        .await
+        .map_err(package_io_error)?;
+    let extraction_path = staging.clone();
+    let extraction =
+        tokio::task::spawn_blocking(move || extract_zip_safely(&archive, &extraction_path))
+            .await
+            .map_err(|_| AddonError::Package("repository extraction task failed".to_owned()))?;
+    let result = async {
+        extraction?;
+        let manifest = read_local_repository_manifest(&staging).await?;
+        let existing =
+            sqlx::query(r#"SELECT "Kind", "RootPath" FROM "AddonSource" WHERE "Id" = ?"#)
+                .bind(&manifest.id)
+                .fetch_optional(pool)
+                .await
+                .map_err(database_error)?;
+        let previous_root = if let Some(row) = existing {
+            let kind: String = row.try_get("Kind").repository().map_err(repository_error)?;
+            if kind != "bundle" {
+                return Err(AddonError::Trust(
+                    "a checkout already owns this local repository identity".to_owned(),
+                ));
+            }
+            Some(PathBuf::from(
+                row.try_get::<String, _>("RootPath")
+                    .repository()
+                    .map_err(repository_error)?,
+            ))
+        } else {
+            None
+        };
+        let digest = hash_addon_tree(staging.clone()).await?;
+        let destination = bundle_root.join(&manifest.id).join(&digest[..16]);
+        if destination.exists() {
+            tokio::fs::remove_dir_all(&staging)
+                .await
+                .map_err(package_io_error)?;
+        } else {
+            if let Some(parent) = destination.parent() {
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .map_err(package_io_error)?;
+            }
+            tokio::fs::rename(&staging, &destination)
+                .await
+                .map_err(package_io_error)?;
+        }
+        scan_local_repository_root(pool, &destination, "bundle").await?;
+        if let Some(previous_root) = previous_root.filter(|path| path != &destination) {
+            if let Err(error) = tokio::fs::remove_dir_all(&previous_root).await {
+                tracing::warn!(
+                    path = %previous_root.display(),
+                    %error,
+                    "failed to remove replaced offline add-on repository bundle"
+                );
+            }
+        }
+        Ok(())
+    }
+    .await;
+    if result.is_err() {
+        let _ = tokio::fs::remove_dir_all(&staging).await;
+    }
+    result
+}
+
+/// Install or update one exact offer from a local source snapshot.
+///
+/// `adopt_legacy` is the only path that may replace a catalog-owned package or
+/// accept the same semantic version. Settings and the existing data namespace
+/// are preserved in that explicit transition.
+///
+/// # Errors
+///
+/// Returns an error for stale source contents, incompatible manifests, source
+/// conflicts, downgrades, or persistence races.
+pub async fn install_addon_from_local_source(
+    pool: &DbPool,
+    source_id: &str,
+    addon_id: &str,
+    adopt_legacy: bool,
+    runtime: &AddonRuntimeContext,
+) -> Result<InstalledAddon, AddonError> {
+    if !unverified_sources_enabled(pool).await? {
+        return Err(AddonError::Trust(
+            "enable unknown sources before installing from a local repository".to_owned(),
+        ));
+    }
+    let row = sqlx::query(
+        r#"SELECT source."RootPath", source."StateRevision", offer."ManifestJson",
+                  offer."RelativePath", offer."ContentSha256"
+           FROM "AddonSourceOffer" AS offer
+           JOIN "AddonSource" AS source ON source."Id" = offer."SourceId"
+           WHERE offer."SourceId" = ? AND offer."AddonId" = ?"#,
+    )
+    .bind(source_id)
+    .bind(addon_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(database_error)?
+    .ok_or_else(|| AddonError::NotFound("add-on is not offered by this local source".to_owned()))?;
+    let root = PathBuf::from(
+        row.try_get::<String, _>("RootPath")
+            .repository()
+            .map_err(repository_error)?,
+    );
+    let relative: String = row
+        .try_get("RelativePath")
+        .repository()
+        .map_err(repository_error)?;
+    let source_revision: i64 = row
+        .try_get("StateRevision")
+        .repository()
+        .map_err(repository_error)?;
+    let expected_digest: String = row
+        .try_get("ContentSha256")
+        .repository()
+        .map_err(repository_error)?;
+    let addon_root = root.join(relative);
+    let manifest = validate_extracted_manifest(&addon_root, current_rid()?).await?;
+    if manifest.id != addon_id {
+        return Err(AddonError::Trust(
+            "local offer identity changed after scan".to_owned(),
+        ));
+    }
+    let actual_digest = hash_addon_tree(addon_root.clone()).await?;
+    if actual_digest != expected_digest {
+        return Err(AddonError::Trust(
+            "local repository changed after its last scan; rescan before installing".to_owned(),
+        ));
+    }
+    if !manifest.host_version.matches(&host_version()?) {
+        return Err(AddonError::Validation(
+            "add-on does not support this ErsatzRS version".to_owned(),
+        ));
+    }
+    let previous = load_installed_addon(pool, addon_id).await?;
+    if let Some(previous) = &previous {
+        let legacy = previous.source_id.is_none() && previous.repository_id.is_some();
+        if legacy && !adopt_legacy {
+            return Err(AddonError::Trust(
+                "confirm adoption before replacing a legacy catalog installation".to_owned(),
+            ));
+        }
+        if !legacy && previous.source_id.as_deref() != Some(source_id) {
+            return Err(AddonError::Trust(
+                "installed add-on belongs to a different source".to_owned(),
+            ));
+        }
+        if manifest.version < previous.version {
+            return Err(AddonError::Trust(
+                "local source would downgrade the installed add-on".to_owned(),
+            ));
+        }
+        if manifest.version == previous.version && !legacy {
+            return Err(AddonError::Validation(
+                "this add-on version is already installed".to_owned(),
+            ));
+        }
+    }
+    let archive = archive_local_addon(addon_root).await?;
+    let package_sha256 = sha256_hex(&archive);
+    let staged = stage_sideload_package(current_rid()?, archive, package_sha256).await?;
+    persist_local_addon(pool, source_id, source_revision, previous.as_ref(), &staged).await?;
+    restore_enabled_after_update(pool, addon_id, previous.as_ref(), &staged.manifest, runtime)
+        .await;
+    load_installed_addon(pool, addon_id)
+        .await?
+        .ok_or_else(|| AddonError::Database("local add-on was not persisted".to_owned()))
+}
+
+async fn scan_local_repository_root(
+    pool: &DbPool,
+    root: &Path,
+    kind: &str,
+) -> Result<(), AddonError> {
+    let manifest = read_local_repository_manifest(root).await?;
+    let canonical_root = canonicalize_addon_path(root)
+        .await
+        .map_err(package_io_error)?;
+    let offers = collect_local_offers(&canonical_root).await?;
+    let manifest_json = serde_json::to_string(&manifest).map_err(|_| {
+        AddonError::Validation("repository manifest could not be stored".to_owned())
+    })?;
+    let mut fingerprint = Sha256::new();
+    fingerprint.update(manifest_json.as_bytes());
+    for (addon, _, digest) in &offers {
+        fingerprint.update(addon.id.as_bytes());
+        fingerprint.update(digest.as_bytes());
+    }
+    let content_sha256 = hex_digest(fingerprint.finalize());
+    let root_path = canonical_root.to_string_lossy().into_owned();
+    let now = Utc::now().to_rfc3339();
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
+    let existing_kind =
+        sqlx::query_scalar::<_, String>(r#"SELECT "Kind" FROM "AddonSource" WHERE "Id" = ?"#)
+            .bind(&manifest.id)
+            .fetch_optional(&mut *transaction)
+            .await
+            .map_err(database_error)?;
+    if existing_kind
+        .as_deref()
+        .is_some_and(|existing| existing != kind)
+    {
+        return Err(AddonError::Trust(
+            "another local source kind already owns this repository identity".to_owned(),
+        ));
+    }
+    sqlx::query(
+        r#"INSERT INTO "AddonSource" (
+               "Id", "Name", "Kind", "RootPath", "ManifestJson", "ContentSha256",
+               "LastScan", "LastError", "StateRevision"
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 1)
+           ON CONFLICT("Id") DO UPDATE SET
+               "Name" = excluded."Name", "RootPath" = excluded."RootPath",
+               "ManifestJson" = excluded."ManifestJson",
+               "ContentSha256" = excluded."ContentSha256", "LastScan" = excluded."LastScan",
+               "LastError" = NULL, "StateRevision" = "AddonSource"."StateRevision" + 1"#,
+    )
+    .bind(&manifest.id)
+    .bind(&manifest.name)
+    .bind(kind)
+    .bind(root_path)
+    .bind(manifest_json)
+    .bind(content_sha256)
+    .bind(now)
+    .execute(&mut *transaction)
+    .await
+    .map_err(database_error)?;
+    sqlx::query(r#"DELETE FROM "AddonSourceOffer" WHERE "SourceId" = ?"#)
+        .bind(&manifest.id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(database_error)?;
+    for (addon, relative, digest) in offers {
+        let addon_json = serde_json::to_string(&addon).map_err(|_| {
+            AddonError::Validation("add-on manifest could not be stored".to_owned())
+        })?;
+        sqlx::query(
+            r#"INSERT INTO "AddonSourceOffer" (
+                   "SourceId", "AddonId", "Version", "ManifestJson", "RelativePath", "ContentSha256"
+               ) VALUES (?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(&manifest.id)
+        .bind(&addon.id)
+        .bind(addon.version.to_string())
+        .bind(addon_json)
+        .bind(relative)
+        .bind(digest)
+        .execute(&mut *transaction)
+        .await
+        .map_err(database_error)?;
+    }
+    transaction.commit().await.map_err(database_error)
+}
+
+async fn collect_local_offers(
+    repository_root: &Path,
+) -> Result<Vec<(AddonManifest, String, String)>, AddonError> {
+    let mut entries = tokio::fs::read_dir(repository_root.join("addons"))
+        .await
+        .map_err(|_| AddonError::Validation("repository has no addons directory".to_owned()))?;
+    let mut offers = Vec::new();
+    while let Some(entry) = entries.next_entry().await.map_err(package_io_error)? {
+        let file_type = entry.file_type().await.map_err(package_io_error)?;
+        if !file_type.is_dir() || file_type.is_symlink() {
+            continue;
+        }
+        let addon_directory = entry.path();
+        let addon = validate_local_offer_manifest(&addon_directory, current_rid()?).await?;
+        let folder_name = entry.file_name().to_string_lossy().into_owned();
+        if folder_name != addon.id {
+            return Err(AddonError::Validation(
+                "add-on folder name must match its manifest identity".to_owned(),
+            ));
+        }
+        let digest = hash_addon_tree(addon_directory).await?;
+        offers.push((addon, format!("addons/{folder_name}"), digest));
+    }
+    if offers.is_empty() {
+        return Err(AddonError::Validation(
+            "repository contains no compatible add-ons".to_owned(),
+        ));
+    }
+    offers.sort_by(|left, right| left.0.id.cmp(&right.0.id));
+    Ok(offers)
+}
+
+async fn read_local_repository_manifest(
+    root: &Path,
+) -> Result<LocalRepositoryManifest, AddonError> {
+    let path = root.join("repository.toml");
+    let metadata = tokio::fs::metadata(&path)
+        .await
+        .map_err(|_| AddonError::Validation("repository has no root repository.toml".to_owned()))?;
+    if !metadata.is_file() || metadata.len() > MAX_REPOSITORY_FILE_BYTES as u64 {
+        return Err(AddonError::Validation(
+            "repository.toml is not a bounded regular file".to_owned(),
+        ));
+    }
+    let text = tokio::fs::read_to_string(path)
+        .await
+        .map_err(|_| AddonError::Validation("repository.toml is not UTF-8".to_owned()))?;
+    let manifest: LocalRepositoryManifest = toml::from_str(&text).map_err(|_| {
+        AddonError::Validation("repository.toml does not match the local schema".to_owned())
+    })?;
+    manifest
+        .validate()
+        .map_err(|error| AddonError::Validation(error.to_string()))?;
+    Ok(manifest)
+}
+
+async fn record_local_source_scan_error(pool: &DbPool, path: &Path, error: &AddonError) {
+    let _ = sqlx::query(r#"UPDATE "AddonSource" SET "LastError" = ? WHERE "RootPath" = ?"#)
+        .bind(bounded_text(&error.to_string(), 1_024))
+        .bind(path.to_string_lossy().into_owned())
+        .execute(pool)
+        .await;
+}
+
+async fn reconcile_missing_checkout_sources(
+    pool: &DbPool,
+    discovered_roots: &BTreeSet<String>,
+) -> Result<(), AddonError> {
+    let rows =
+        sqlx::query(r#"SELECT "Id", "RootPath" FROM "AddonSource" WHERE "Kind" = 'checkout'"#)
+            .fetch_all(pool)
+            .await
+            .map_err(database_error)?;
+    for row in rows {
+        let source_id: String = row.try_get("Id").repository().map_err(repository_error)?;
+        let root_path: String = row
+            .try_get("RootPath")
+            .repository()
+            .map_err(repository_error)?;
+        if discovered_roots.contains(&root_path) {
+            continue;
+        }
+        let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
+        sqlx::query(r#"DELETE FROM "AddonSourceOffer" WHERE "SourceId" = ?"#)
+            .bind(&source_id)
+            .execute(&mut *transaction)
+            .await
+            .map_err(database_error)?;
+        sqlx::query(
+            r#"UPDATE "AddonSource"
+               SET "LastError" = 'checkout directory is missing',
+                   "StateRevision" = "StateRevision" + 1
+               WHERE "Id" = ? AND "RootPath" = ?"#,
+        )
+        .bind(&source_id)
+        .bind(&root_path)
+        .execute(&mut *transaction)
+        .await
+        .map_err(database_error)?;
+        transaction.commit().await.map_err(database_error)?;
+    }
+    Ok(())
+}
+
+fn catalog_view_from_manifest(manifest: &AddonManifest, rid: &str, digest: &str) -> CatalogAddon {
+    CatalogAddon {
+        id: manifest.id.clone(),
+        version: manifest.version.clone(),
+        name: manifest.name.clone(),
+        summary: manifest.summary.clone(),
+        icon: None,
+        license: manifest.license.clone(),
+        source_url: manifest.source_url.clone(),
+        host_version: manifest.host_version.clone(),
+        capabilities: manifest
+            .capabilities
+            .iter()
+            .map(|capability| capability.id.clone())
+            .collect(),
+        dependencies: manifest.dependencies.clone(),
+        permissions: manifest.permissions.clone(),
+        packages: BTreeMap::from([(
+            rid.to_owned(),
+            CatalogPackage {
+                url: format!("https://local.invalid/{digest}.zip"),
+                sha256: digest.to_owned(),
+                size: 1,
+            },
+        )]),
+    }
+}
+
+async fn archive_local_addon(root: PathBuf) -> Result<Vec<u8>, AddonError> {
+    tokio::task::spawn_blocking(move || archive_local_addon_sync(&root))
+        .await
+        .map_err(|_| AddonError::Package("local package archive task failed".to_owned()))?
+}
+
+fn archive_local_addon_sync(root: &Path) -> Result<Vec<u8>, AddonError> {
+    let root = dunce::canonicalize(root).map_err(package_io_error)?;
+    let mut directories = vec![root.clone()];
+    let mut files = Vec::new();
+    while let Some(directory) = directories.pop() {
+        for entry in std::fs::read_dir(directory).map_err(package_io_error)? {
+            let entry = entry.map_err(package_io_error)?;
+            let kind = entry.file_type().map_err(package_io_error)?;
+            if kind.is_symlink() {
+                return Err(AddonError::Package(
+                    "local add-on contains a symlink".to_owned(),
+                ));
+            }
+            if kind.is_dir() {
+                directories.push(entry.path());
+            } else if kind.is_file() {
+                files.push(entry.path());
+            }
+        }
+    }
+    files.sort();
+    if files.len() > MAX_ARCHIVE_ENTRIES {
+        return Err(AddonError::Package(
+            "local add-on contains too many files".to_owned(),
+        ));
+    }
+    let cursor = std::io::Cursor::new(Vec::new());
+    let mut writer = zip::ZipWriter::new(cursor);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o755);
+    let mut total = 0_u64;
+    for path in files {
+        let relative = path
+            .strip_prefix(&root)
+            .map_err(|_| AddonError::Package("local add-on path escaped its root".to_owned()))?;
+        let name = relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        let bytes = std::fs::read(&path).map_err(package_io_error)?;
+        total = total.saturating_add(bytes.len() as u64);
+        if total > MAX_EXTRACTED_BYTES {
+            return Err(AddonError::Package(
+                "local add-on exceeds its extracted size limit".to_owned(),
+            ));
+        }
+        writer
+            .start_file(name, options)
+            .map_err(|error| AddonError::Package(error.to_string()))?;
+        writer.write_all(&bytes).map_err(package_io_error)?;
+    }
+    let bytes = writer
+        .finish()
+        .map_err(|error| AddonError::Package(error.to_string()))?
+        .into_inner();
+    if bytes.len() as u64 > MAX_PACKAGE_BYTES {
+        return Err(AddonError::Package(
+            "local add-on package exceeds its size limit".to_owned(),
+        ));
+    }
+    Ok(bytes)
+}
+
+async fn persist_local_addon(
+    pool: &DbPool,
+    source_id: &str,
+    source_revision: i64,
+    previous: Option<&InstalledAddon>,
+    staged: &StagedAddonPackage,
+) -> Result<(), AddonError> {
+    let now = Utc::now().to_rfc3339();
+    let manifest_json = serde_json::to_string(&staged.manifest)
+        .map_err(|_| AddonError::Validation("manifest could not be persisted".to_owned()))?;
+    let install_path = staged.destination.to_string_lossy().into_owned();
+    let state_revision = Uuid::new_v4().to_string();
+    let data_namespace = previous.map_or(source_id, |item| item.data_namespace.as_str());
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
+    lock_addon_lifecycle(&mut transaction).await?;
+    let changed = if let Some(previous) = previous {
+        sqlx::query(
+            r#"UPDATE "AddonInstallation"
+               SET "RepositoryId" = NULL, "SourceId" = ?, "TrustTier" = 'local',
+                   "Version" = ?, "Enabled" = 0, "PackageSha256" = ?,
+                   "ContentSha256" = ?, "ManifestJson" = ?, "InstallPath" = ?,
+                   "DataNamespace" = ?, "UpdatedAt" = ?, "StateRevision" = ?,
+                   "LastCheckCode" = NULL, "LastCheckMessage" = NULL,
+                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL
+               WHERE "AddonId" = ? AND "StateRevision" = ?
+                 AND EXISTS (SELECT 1 FROM "AddonSource" WHERE "Id" = ? AND "StateRevision" = ?)"#,
+        )
+        .bind(source_id)
+        .bind(staged.manifest.version.to_string())
+        .bind(&staged.package_sha256)
+        .bind(&staged.content_sha256)
+        .bind(&manifest_json)
+        .bind(&install_path)
+        .bind(data_namespace)
+        .bind(&now)
+        .bind(&state_revision)
+        .bind(&staged.manifest.id)
+        .bind(&previous.state_revision)
+        .bind(source_id)
+        .bind(source_revision)
+        .execute(&mut *transaction)
+        .await
+        .map_err(database_error)?
+    } else {
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "RepositoryId", "SourceId", "TrustTier", "Version", "Enabled",
+                   "PackageSha256", "ContentSha256", "ManifestJson", "InstallPath",
+                   "DataNamespace", "InstalledAt", "UpdatedAt", "StateRevision"
+               ) SELECT ?, NULL, ?, 'local', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?
+               WHERE EXISTS (SELECT 1 FROM "AddonSource" WHERE "Id" = ? AND "StateRevision" = ?)
+                 AND NOT EXISTS (SELECT 1 FROM "AddonInstallation" WHERE "AddonId" = ?)"#,
+        )
+        .bind(&staged.manifest.id)
+        .bind(source_id)
+        .bind(staged.manifest.version.to_string())
+        .bind(&staged.package_sha256)
+        .bind(&staged.content_sha256)
+        .bind(&manifest_json)
+        .bind(&install_path)
+        .bind(source_id)
+        .bind(&now)
+        .bind(&now)
+        .bind(&state_revision)
+        .bind(source_id)
+        .bind(source_revision)
+        .bind(&staged.manifest.id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(database_error)?
+    };
+    if changed.rows_affected() != 1 {
+        return Err(AddonError::Trust(
+            "local source or installed add-on changed during installation".to_owned(),
+        ));
+    }
+    transaction.commit().await.map_err(database_error)
 }
 
 /// Install or update an add-on from locally supplied package bytes.
@@ -1448,6 +2259,35 @@ async fn validate_extracted_manifest(
     extracted_root: &Path,
     rid: &str,
 ) -> Result<AddonManifest, AddonError> {
+    let manifest = read_extracted_manifest(extracted_root).await?;
+    let entrypoint = manifest.entrypoint_for(rid).ok_or_else(|| {
+        AddonError::Validation("manifest has no entrypoint for this platform".to_owned())
+    })?;
+    let entrypoint_path = extracted_root.join(&entrypoint.path);
+    if !entrypoint_path.is_file() {
+        return Err(AddonError::Validation(
+            "manifest entrypoint is missing from package".to_owned(),
+        ));
+    }
+    Ok(manifest)
+}
+
+async fn validate_local_offer_manifest(
+    extracted_root: &Path,
+    rid: &str,
+) -> Result<AddonManifest, AddonError> {
+    let manifest = read_extracted_manifest(extracted_root).await?;
+    if let Some(entrypoint) = manifest.entrypoint_for(rid) {
+        if !extracted_root.join(&entrypoint.path).is_file() {
+            return Err(AddonError::Validation(
+                "manifest entrypoint is missing from local repository".to_owned(),
+            ));
+        }
+    }
+    Ok(manifest)
+}
+
+async fn read_extracted_manifest(extracted_root: &Path) -> Result<AddonManifest, AddonError> {
     let manifest_path = extracted_root.join("addon.toml");
     let manifest_metadata = tokio::fs::metadata(&manifest_path)
         .await
@@ -1466,15 +2306,6 @@ async fn validate_extracted_manifest(
     manifest
         .validate()
         .map_err(|error| AddonError::Validation(error.to_string()))?;
-    let entrypoint = manifest.entrypoint_for(rid).ok_or_else(|| {
-        AddonError::Validation("manifest has no entrypoint for this platform".to_owned())
-    })?;
-    let entrypoint_path = extracted_root.join(&entrypoint.path);
-    if !entrypoint_path.is_file() {
-        return Err(AddonError::Validation(
-            "manifest entrypoint is missing from package".to_owned(),
-        ));
-    }
     if let Some(icon) = &manifest.icon {
         let icon_path = extracted_root.join(&icon.path);
         let metadata = tokio::fs::metadata(&icon_path).await.map_err(|_| {
@@ -1548,7 +2379,7 @@ fn ensure_manifest_matches_catalog(
 /// Returns an error when a row or its stored manifest cannot be decoded.
 pub async fn list_installed_addons(pool: &DbPool) -> Result<Vec<InstalledAddon>, AddonError> {
     let rows = sqlx::query(
-        r#"SELECT "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
+        r#"SELECT "AddonId", "RepositoryId", "SourceId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
                   "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
            FROM "AddonInstallation" ORDER BY "AddonId""#,
@@ -1569,7 +2400,7 @@ pub async fn load_installed_addon(
     addon_id: &str,
 ) -> Result<Option<InstalledAddon>, AddonError> {
     let row = sqlx::query(
-        r#"SELECT "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
+        r#"SELECT "AddonId", "RepositoryId", "SourceId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
                   "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
            FROM "AddonInstallation" WHERE "AddonId" = ?"#,
@@ -1603,7 +2434,7 @@ async fn load_installed_addon_in_transaction(
     addon_id: &str,
 ) -> Result<Option<InstalledAddon>, AddonError> {
     let row = sqlx::query(
-        r#"SELECT "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
+        r#"SELECT "AddonId", "RepositoryId", "SourceId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
                   "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
            FROM "AddonInstallation" WHERE "AddonId" = ?"#,
@@ -1619,7 +2450,7 @@ async fn list_installed_addons_in_transaction(
     transaction: &mut Transaction<'_, crate::db::Db>,
 ) -> Result<Vec<InstalledAddon>, AddonError> {
     let rows = sqlx::query(
-        r#"SELECT "AddonId", "RepositoryId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
+        r#"SELECT "AddonId", "RepositoryId", "SourceId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
                   "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
            FROM "AddonInstallation" ORDER BY "AddonId""#,
@@ -3405,6 +4236,7 @@ fn installed_from_row(row: &DbRow) -> Result<InstalledAddon, AddonError> {
         addon_id,
         repository_id: decode_optional_string_column(row, "RepositoryId")
             .map_err(repository_error)?,
+        source_id: decode_optional_string_column(row, "SourceId").map_err(repository_error)?,
         version,
         enabled: decode_bool_column(row, "Enabled").map_err(repository_error)?,
         trust_tier: match row
@@ -3416,6 +4248,7 @@ fn installed_from_row(row: &DbRow) -> Result<InstalledAddon, AddonError> {
             "verified" => AddonTrustTier::Verified,
             "unverified" => AddonTrustTier::Unverified,
             "sideloaded" => AddonTrustTier::Sideloaded,
+            "local" => AddonTrustTier::Local,
             _ => {
                 return Err(AddonError::Validation(
                     "stored add-on trust tier is invalid".to_owned(),
@@ -3525,32 +4358,6 @@ async fn load_catalog_cache(
             .map_err(repository_error)?,
         is_enabled: decode_bool_column(&row, "IsEnabled").map_err(repository_error)?,
     })
-}
-
-/// Revalidate stored catalog structure and its pinned public key for health
-/// reporting. The detached signature was verified before this JSON was stored.
-pub(crate) fn validate_stored_catalog_state(
-    repository_id: &str,
-    public_key: &str,
-    catalog_json: &str,
-) -> Result<(), AddonError> {
-    if !public_key.trim().is_empty() {
-        decode_public_key(public_key)?;
-    }
-    let index: AddonRepositoryIndex = serde_json::from_str(catalog_json)
-        .map_err(|_| AddonError::Validation("stored catalog is invalid".to_owned()))?;
-    let repository = TrustedAddonRepository {
-        id: repository_id.to_owned(),
-        name: repository_id.to_owned(),
-        index_url: OFFICIAL_REPOSITORY_INDEX_URL.to_owned(),
-        public_key: public_key.to_owned(),
-        is_official: false,
-        is_enabled: true,
-        last_sequence: None,
-        last_refresh: None,
-        last_error: None,
-    };
-    validate_catalog(&index, &repository, Utc::now())
 }
 
 fn validate_repeated_catalog_sequence(
@@ -3997,7 +4804,8 @@ mod tests {
     use super::*;
     use ed25519_dalek::{Signer as _, SigningKey};
     use ersatzrs_addon_contract::{
-        AddonCapability, AddonDependency, AddonEntrypoint, AddonPermissions, ADDON_MANIFEST_VERSION,
+        AddonCapability, AddonDependency, AddonEntrypoint, AddonPackageIcon, AddonPermissions,
+        ADDON_MANIFEST_VERSION,
     };
     use httpmock::{Method::GET, MockServer};
     use std::io::Cursor;
@@ -4570,10 +5378,84 @@ mod tests {
         .expect_err("sideload must be gated");
         assert!(addon_error.to_string().contains("unverified sources"));
 
-        let repository_error = install_repository_from_package(&pool, b"not a zip".to_vec())
+        let repository_error = install_local_repository_bundle(&pool, b"not a zip".to_vec())
             .await
             .expect_err("repository package must be gated");
-        assert!(repository_error.to_string().contains("unverified sources"));
+        assert!(repository_error.to_string().contains("unknown sources"));
+    }
+
+    #[tokio::test]
+    async fn local_repository_scan_replaces_offers_only_after_full_validation() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+        let repository_root = temp.path().join("repository");
+        let addon_id = "org.ersatzrs.addon.local-fixture";
+        let addon_root = repository_root.join("addons").join(addon_id);
+        std::fs::create_dir_all(&addon_root).expect("create local repository");
+        let repository = LocalRepositoryManifest {
+            schema_version: ersatzrs_addon_contract::LOCAL_ADDON_REPOSITORY_SCHEMA_VERSION,
+            id: "org.ersatzrs.repository.fixture".to_owned(),
+            name: "Fixture repository".to_owned(),
+            description: localized("Fixture local repository"),
+        };
+        std::fs::write(
+            repository_root.join("repository.toml"),
+            toml::to_string(&repository).expect("serialize repository"),
+        )
+        .expect("write repository manifest");
+        let mut addon = fixture_manifest(addon_id);
+        addon.icon = Some(AddonPackageIcon {
+            path: "icon.png".to_owned(),
+            media_type: AddonIconMediaType::Png,
+        });
+        std::fs::write(
+            addon_root.join("addon.toml"),
+            toml::to_string(&addon).expect("serialize add-on"),
+        )
+        .expect("write add-on manifest");
+        std::fs::write(addon_root.join("addon.sh"), b"#!/bin/sh\n").expect("write entrypoint");
+        let icon_bytes = b"\x89PNG\r\n\x1a\nfixture";
+        std::fs::write(addon_root.join("icon.png"), icon_bytes).expect("write icon");
+
+        scan_local_repository_root(&pool, &repository_root, "checkout")
+            .await
+            .expect("scan local repository");
+        let sources = list_local_addon_sources(&pool)
+            .await
+            .expect("list local sources");
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].id, repository.id);
+        assert_eq!(sources[0].kind, "checkout");
+        let offers = list_local_available_addons(&pool)
+            .await
+            .expect("list local offers");
+        assert_eq!(offers.len(), 1);
+        assert_eq!(offers[0].repository_id, repository.id);
+        assert_eq!(offers[0].addon.id, addon_id);
+        assert!(offers[0].has_local_icon);
+        let icon = load_local_addon_icon(&pool, &repository.id, addon_id)
+            .await
+            .expect("load local icon")
+            .expect("local icon");
+        assert_eq!(icon.bytes, icon_bytes);
+        assert_eq!(icon.media_type, AddonIconMediaType::Png);
+
+        std::fs::write(addon_root.join("addon.toml"), b"invalid = true\n")
+            .expect("break add-on manifest");
+        scan_local_repository_root(&pool, &repository_root, "checkout")
+            .await
+            .expect_err("invalid rescan must fail");
+        let preserved = list_local_available_addons(&pool)
+            .await
+            .expect("list preserved offers");
+        assert_eq!(preserved.len(), 1);
+        assert_eq!(preserved[0].addon.id, addon_id);
+        assert!(load_local_addon_icon(&pool, &repository.id, addon_id)
+            .await
+            .is_err());
     }
 
     #[tokio::test]

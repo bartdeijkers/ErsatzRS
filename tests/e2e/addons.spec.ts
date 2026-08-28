@@ -77,13 +77,40 @@ function resetFixtures(): void {
     database
       .prepare('DELETE FROM "AddonInstallation" WHERE "AddonId" = ?')
       .run(FIXTURE_ADDON_ID);
-    database.prepare('DELETE FROM "AddonRepository" WHERE "Id" = ?').run(FIXTURE_REPOSITORY_ID);
+    database.prepare('DELETE FROM "AddonSourceOffer" WHERE "SourceId" = ?').run(FIXTURE_REPOSITORY_ID);
+    database.prepare('DELETE FROM "AddonSource" WHERE "Id" = ?').run(FIXTURE_REPOSITORY_ID);
     database
       .prepare('DELETE FROM "ConfigElement" WHERE "Key" = ?')
       .run('addons.allow_unverified_sources');
     database
       .prepare('DELETE FROM "ConfigElement" WHERE "Key" IN (?, ?)')
       .run('addons.detail_wait.minimum_seconds', 'addons.detail_wait.maximum_seconds');
+  } finally {
+    database.close();
+  }
+}
+
+function seedLocalRepository(): void {
+  const database = openDatabase();
+  try {
+    database
+      .prepare(`
+        INSERT INTO "AddonSource" (
+          "Id", "Name", "Kind", "RootPath", "ManifestJson", "ContentSha256",
+          "LastScan", "LastError", "StateRevision"
+        ) VALUES (?, 'Example add-ons', 'checkout', 'e2e-addon-repository', ?, ?, ?, NULL, 1)
+      `)
+      .run(
+        FIXTURE_REPOSITORY_ID,
+        JSON.stringify({
+          schema_version: 1,
+          id: FIXTURE_REPOSITORY_ID,
+          name: 'Example add-ons',
+          description: { 'en-US': 'Local repository fixture' },
+        }),
+        '2'.repeat(64),
+        '2026-08-28T10:00:00Z',
+      );
   } finally {
     database.close();
   }
@@ -117,6 +144,7 @@ function seedInstalledAddon(): void {
 test.beforeEach(async ({ request }) => {
   resetFixtures();
   seedInstalledAddon();
+  seedLocalRepository();
   await request.post('/api/settings/ui/save', {
     form: { is_dark_mode: 'true', language: 'en-us' },
     maxRedirects: 0,
@@ -179,41 +207,22 @@ test('validates and round-trips the global item-detail pacing range', async ({ p
   await expect(page.getByTestId('addon-detail-wait-maximum')).toHaveValue('11');
 });
 
-test('manages trusted repositories through the hydrated settings page', async ({ page }) => {
+test('shows local repository sources without remote catalog controls', async ({ page }) => {
   await page.goto('/settings/addons?view=sources');
   await waitForHydration(page);
   await expect(page.getByRole('heading', { name: 'Add-ons', exact: true })).toBeVisible();
-  await expect(page.getByTestId('addon-repository-row').filter({ hasText: 'Official ErsatzRS add-ons' })).toBeVisible();
-
-  await page.locator('button').filter({ hasText: 'Add repository' }).click();
-  const editor = page.getByTestId('addon-repository-editor');
-  await editor.locator('#addon-repository-name').fill('Example add-ons');
-  await editor.locator('#addon-repository-url').fill('https://example.test/addons/index-v1.json');
-  await editor.locator('#addon-repository-id').fill(FIXTURE_REPOSITORY_ID);
-  await editor
-    .locator('#addon-repository-key')
-    .fill('11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=');
-  // The editor is a dialog now, so Save lives in the dialog footer beside
-  // Cancel rather than inside the field group.
-  await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
-
   const row = page.getByTestId('addon-repository-row').filter({ hasText: 'Example add-ons' });
   await expect(row).toBeVisible();
-  await expect(row).toContainText('Never');
-
-  // Editing an existing repository keeps its identity: the id is shown but not
-  // editable, and the dialog says which flow the operator is in.
-  await row.getByRole('button', { name: 'Edit' }).click();
-  const editDialog = page.getByRole('dialog');
-  await expect(editDialog.getByRole('heading', { name: 'Edit repository' })).toBeVisible();
-  await expect(editor.locator('#addon-repository-id')).toHaveAttribute('readonly', '');
-  await editDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-
-  await row.getByRole('button', { name: 'Delete' }).click();
-  const deleteDialog = page.getByRole('dialog');
-  await expect(deleteDialog).toContainText('Example add-ons');
-  await deleteDialog.getByRole('button', { name: 'Confirm' }).click();
-  await expect(row).toHaveCount(0);
+  await expect(row).toContainText(FIXTURE_REPOSITORY_ID);
+  await expect(row).toContainText('e2e-addon-repository');
+  await expect(row).toContainText('Git checkout');
+  await expect(page.getByRole('button', { name: 'Add repository' })).toHaveCount(0);
+  await expect(page.getByTestId('addon-repository-editor')).toHaveCount(0);
+  await expect(page.getByText('Add-on package', { exact: true })).toBeVisible();
+  await expect(page.getByText('Repository package', { exact: true })).toBeVisible();
+  await expect(page.locator('input[type="file"]')).toHaveCount(2);
+  await expect(page.locator('input[type="file"]').first()).toBeDisabled();
+  await expect(page.locator('input[type="file"]').last()).toBeDisabled();
 });
 
 test('renders declarative panels and persists normal and secret-reference settings', async ({

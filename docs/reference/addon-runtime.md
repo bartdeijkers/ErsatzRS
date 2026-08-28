@@ -85,14 +85,15 @@ includes `PATH`, and v1 does not install a portable OS sandbox.
 
 ## Persistence and lifecycle
 
-`AddonRepository`, `AddonInstallation`, and `AddonSetting` own repository,
-active package, and configuration state. `RemoteStream.AddonId` is a restricting
+`AddonSource`, `AddonSourceOffer`, `AddonInstallation`, and `AddonSetting` own
+local source, active package, and configuration state. `RemoteStream.AddonId` is a restricting
 foreign key to the active installation. Packages are installed in immutable
 version/hash/RID paths and their content hash is revalidated before each
 invocation. On Unix, extraction normalizes directories to `0755` and files to
 `0444` or `0555`, stripping group/world write access. Data and cache use
-separate repository-scoped per-add-on roots, so an add-on with the same ID from
-a different configured repository ID cannot inherit retained private state.
+separate source-scoped per-add-on roots, so an add-on with the same ID from a
+different local source cannot inherit retained private state. Explicit legacy
+adoption preserves the historical namespace instead of silently switching it.
 
 New installs and updates are disabled by default. Enable validates settings,
 required dependency versions, RID and host compatibility, package integrity,
@@ -104,11 +105,11 @@ add-on media lists through the normal administration flow.
 Forced uninstall detaches Remote Stream references and removes owned media-list
 snapshots plus their generated system playlists. Uninstall removes package
 executables and disposable cache but retains the installation's
-repository-scoped persistent add-on data.
-Removing a repository retains installed packages while clearing their stored
-repository association; their stable data namespace remains retained. Changing
-a repository URL or public key clears its catalog, refresh sequence,
-validators, and refresh state.
+source-scoped persistent add-on data. Removing a checkout withdraws its offers
+and records the missing source while retaining installed immutable packages and
+their stable data namespace. Replacing an offline bundle atomically changes
+only its validated offers; running packages change only after an explicit
+per-add-on update.
 
 Environment-backed secret values and operation URLs are exactly redacted from
 add-on-controlled output. When a file-backed secret is configured, ErsatzRS

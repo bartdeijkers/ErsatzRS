@@ -23,32 +23,31 @@ impl HealthCheck for AddonPlatformHealthCheck {
     }
 
     async fn check(&self) -> Result<HealthCheckResult> {
-        let repositories = sqlx::query(
-            r#"SELECT "Id", "PublicKey", "IsOfficial", "IsEnabled", "LastError", "CatalogJson"
-               FROM "AddonRepository" ORDER BY "Id""#,
+        let sources = sqlx::query(
+            r#"SELECT "Id", "Kind", "LastError"
+               FROM "AddonSource" ORDER BY "Id""#,
         )
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_error)?;
         let installations = sqlx::query(
-            r#"SELECT "AddonId", "Enabled", "TrustTier", "ManifestJson", "InstallPath", "ContentSha256", "LastCheckCode", "LastCheckStatus"
+            r#"SELECT "AddonId", "SourceId", "RepositoryId", "Enabled", "TrustTier", "ManifestJson", "InstallPath", "ContentSha256", "LastCheckCode", "LastCheckStatus"
                FROM "AddonInstallation" ORDER BY "AddonId""#,
         )
         .fetch_all(&self.pool)
         .await
         .map_err(sqlx_error)?;
 
-        let has_catalog_state = repositories.iter().any(repository_has_state);
-        if installations.is_empty() && !has_catalog_state {
+        if installations.is_empty() && sources.is_empty() {
             return Ok(HealthCheckResult::not_applicable(self.title()));
         }
 
         let mut failures = Vec::new();
         let mut warnings = Vec::new();
-        for row in repositories {
-            let (failure, warning) = repository_findings(&row);
-            failures.extend(failure);
-            warnings.extend(warning);
+        for row in sources {
+            if let Some(warning) = local_source_finding(&row) {
+                warnings.push(warning);
+            }
         }
 
         let host_version = Version::parse(env!("CARGO_PKG_VERSION")).ok();
@@ -128,58 +127,17 @@ async fn default_remote_stream_addon_finding(pool: &Pool<Db>, usable: &[String])
     ))
 }
 
-fn repository_has_state(row: &DbRow) -> bool {
-    row.try_get::<Option<String>, _>("CatalogJson")
-        .ok()
-        .flatten()
-        .is_some()
-        || row
-            .try_get::<Option<String>, _>("LastError")
-            .ok()
-            .flatten()
-            .is_some()
-}
-
-fn repository_findings(row: &DbRow) -> (Option<String>, Option<String>) {
-    if !row
-        .try_get::<i64, _>("IsEnabled")
-        .is_ok_and(|value| value != 0)
-    {
-        return (None, None);
-    }
+fn local_source_finding(row: &DbRow) -> Option<String> {
     let id = row
         .try_get::<String, _>("Id")
-        .unwrap_or_else(|_| "repository".to_owned());
-    let catalog_json = row
-        .try_get::<Option<String>, _>("CatalogJson")
-        .ok()
-        .flatten();
-    let has_refresh_error = row
-        .try_get::<Option<String>, _>("LastError")
+        .unwrap_or_else(|_| "local repository".to_owned());
+    let kind = row
+        .try_get::<String, _>("Kind")
+        .unwrap_or_else(|_| "local".to_owned());
+    row.try_get::<Option<String>, _>("LastError")
         .ok()
         .flatten()
-        .is_some();
-    let public_key = row.try_get::<String, _>("PublicKey").unwrap_or_default();
-    let is_official = row
-        .try_get::<i64, _>("IsOfficial")
-        .is_ok_and(|value| value != 0);
-    let failure = if is_official && public_key.trim().is_empty() {
-        Some(format!("{id} has no public signing key"))
-    } else if catalog_json.as_deref().is_some_and(|catalog| {
-        crate::addons::validate_stored_catalog_state(&id, &public_key, catalog).is_err()
-    }) {
-        Some(format!("{id} has an invalid or expired signed catalog"))
-    } else {
-        None
-    };
-    let warning = if has_refresh_error {
-        Some(format!("{id} last refresh failed"))
-    } else if public_key.trim().is_empty() {
-        Some(format!("{id} is an unverified repository"))
-    } else {
-        None
-    };
-    (failure, warning)
+        .map(|error| format!("{kind} source {id} last scan failed: {error}"))
 }
 
 #[allow(clippy::too_many_lines)]
@@ -282,6 +240,21 @@ async fn installation_findings(
             "{id} last reported {} readiness ({})",
             status.as_str(),
             last_check_code.as_deref().unwrap_or("no code")
+        ))
+    } else if enabled
+        && row
+            .try_get::<Option<String>, _>("SourceId")
+            .ok()
+            .flatten()
+            .is_none()
+        && row
+            .try_get::<Option<String>, _>("RepositoryId")
+            .ok()
+            .flatten()
+            .is_some()
+    {
+        Some(format!(
+            "{id} is a legacy catalog installation with no managed update source"
         ))
     } else if enabled && trust_tier != "verified" {
         Some(format!("{id} is enabled with {trust_tier} trust"))

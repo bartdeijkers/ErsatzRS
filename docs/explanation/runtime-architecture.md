@@ -13,8 +13,8 @@ flowchart LR
     Client -->|loads playlists, guide data, and streams| System
     Sources[Local media and provider systems] -->|supply files and metadata| System
     System -->|retrieves metadata and media| Sources
-    Repository[Trusted add-on repository] -->|publishes signed catalogs and packages| System
-    System -->|downloads configured catalogs and packages| Repository
+    Admin -->|clones a checkout or uploads an offline bundle| Repository[Local add-on repository]
+    Repository -->|supplies validated package files| System
     System -->|starts versioned capability operations| Addon[Installed add-on executable]
     Addon -->|returns health, metadata, or media bytes| System
     System -->|probes and transforms media| MediaTools[FFmpeg and ffprobe]
@@ -22,7 +22,7 @@ flowchart LR
 
 ErsatzRS owns channel construction, scheduling, guide projection, streaming,
 administration, and the persisted application model. Media providers, user
-libraries, client applications, and configured add-on repositories remain
+libraries, client applications, and operator-managed add-on repositories remain
 outside that ownership boundary. The product-facing routes and supported source
 types are listed in the [HTTP](../reference/http-endpoints.md) and
 [media-source](../reference/media-source-support.md) references.
@@ -34,7 +34,7 @@ flowchart LR
     Admin[Administrator browser]
     Client[IPTV / HLS / HDHomeRun client]
     Sources[Media files and provider systems]
-    Repository[Trusted add-on repository]
+    Repository[Operator-managed checkout<br/>or offline bundle]
     Addon[Installed add-on<br/>external child application]
     MediaTools[FFmpeg and ffprobe<br/>external child applications]
 
@@ -57,7 +57,8 @@ flowchart LR
     Scanner -->|scans files and provider metadata| Sources
     Web -->|stores packages and runtime state| State
     Scanner -->|reads installed package state| State
-    Web -->|downloads signed catalogs and packages over HTTPS| Repository
+    Admin -->|updates checkout or uploads bundle| Repository
+    Web -->|scans manifests and package files| Repository
     Web -->|starts bounded capability operations| Addon
     Scanner -->|starts list and play operations| Addon
     Web -->|probes and transcodes media| MediaTools
@@ -65,20 +66,21 @@ flowchart LR
     Addon -->|may invoke managed tools| MediaTools
 ```
 
-The web host embeds the long-running scheduler, scan worker, catalog refresh,
-and streaming lifecycles; those are not separately deployed containers. The
+The web host embeds the long-running scheduler, scan workers, local repository
+discovery, and streaming lifecycles; those are not separately deployed containers. The
 scanner executable is a separate one-shot application. The Windows launcher is
 a real application only on Windows, and the healthcheck binary is a small
 readiness client.
 
 Installed add-ons and media tools cross an external child-process boundary;
 they are not ErsatzRS crates or dynamically loaded libraries.
-The database owns repository, installation, setting, media, schedule, and
-playout state; the managed state directories own verified packages and
+The database owns local-source, installation, setting, media, schedule, and
+playout state; the managed state directories own immutable packages and
 per-add-on data. [ADR 0051](../adr/0051-application-boundary-and-composition-root.md)
 owns the application/composition-root decision, and
-[ADR 0066](../adr/0066-repository-backed-add-ons.md) owns the add-on
-boundary. [ADR 0080](../adr/0080-standardize-on-sqlite.md) owns the SQLite-only
+[ADR 0066](../adr/0066-repository-backed-add-ons.md) owns the add-on process
+boundary, as amended by [ADR 0081](../adr/0081-use-local-addon-repositories.md)
+for local acquisition. [ADR 0080](../adr/0080-standardize-on-sqlite.md) owns the SQLite-only
 database boundary; the database file stays on one host and is not shared by
 active-active servers.
 
@@ -86,8 +88,8 @@ active-active servers.
 
 The current view is grounded in the executable entry points, web composition
 root, scanner integration, SQL migrations, and process-spawn paths in this
-source tree. It shows a generic configured add-on repository; publication of a
-particular official repository is release state, not a new runtime container.
+source tree. The repository node is operator-managed input, not a network
+service or an ErsatzRS-owned Git process.
 
 Teletext runtime components and the Phase 10 video-jukebox request API are not
 shown because they do not yet have implementation evidence. They must not be

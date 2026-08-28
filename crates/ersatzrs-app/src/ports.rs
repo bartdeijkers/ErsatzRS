@@ -443,22 +443,18 @@ pub trait RemoteStreamPlaylistRuntime: Send + Sync {
     ) -> Result<RemoteStreamPlaylistTroubleshootingRead, RemoteStreamPlaylistRuntimeError>;
 }
 
-/// One trusted repository shown on the add-on settings page.
+/// One local checkout or offline bundle shown on the add-on settings page.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonRepositoryRead {
     pub id: String,
     pub name: String,
-    pub index_url: String,
-    pub public_key: String,
-    pub is_official: bool,
-    pub is_enabled: bool,
-    pub trust_tier: String,
-    pub last_sequence: Option<u64>,
-    pub last_refresh: Option<String>,
+    pub kind: String,
+    pub root_path: String,
+    pub last_scan: String,
     pub last_error: Option<String>,
 }
 
-/// One signed catalog entry paired with its source repository.
+/// One validated local offer paired with its source repository.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AvailableAddonRead {
     pub repository_id: String,
@@ -499,7 +495,7 @@ pub struct InstalledAddonRead {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonOverviewRead {
     pub unverified_sources_enabled: bool,
-    pub repositories_are_deployment_managed: bool,
+    pub checkout_path: String,
     pub repositories: Vec<AddonRepositoryRead>,
     pub available: Vec<AvailableAddonRead>,
     pub installed: Vec<InstalledAddonRead>,
@@ -510,16 +506,6 @@ pub struct AddonOverviewRead {
 pub struct AddonIconRead {
     pub bytes: Vec<u8>,
     pub content_type: String,
-}
-
-/// Editable trusted repository identity. Public signing keys are not secrets.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AddonRepositoryEdit {
-    pub id: String,
-    pub name: String,
-    pub index_url: String,
-    pub public_key: String,
-    pub is_enabled: bool,
 }
 
 /// Editable setting value. Secret kinds carry a reference, never secret bytes.
@@ -575,7 +561,7 @@ impl SourceAddonRouting {
     }
 }
 
-/// Signed catalog, package, configuration, and process lifecycle operations.
+/// Local source, package, configuration, and process lifecycle operations.
 #[async_trait]
 pub trait AddonRuntime: Send + Sync {
     async fn overview(&self) -> Result<AddonOverviewRead, AddonRuntimeError>;
@@ -583,16 +569,17 @@ pub trait AddonRuntime: Send + Sync {
         &self,
         addon_id: String,
     ) -> Result<Option<AddonIconRead>, AddonRuntimeError>;
-    async fn save_repository(
+    async fn source_icon(
         &self,
-        repository: AddonRepositoryEdit,
-    ) -> Result<(), AddonRuntimeError>;
-    async fn remove_repository(&self, repository_id: String) -> Result<(), AddonRuntimeError>;
-    async fn refresh_repository(&self, repository_id: String) -> Result<(), AddonRuntimeError>;
+        source_id: String,
+        addon_id: String,
+    ) -> Result<Option<AddonIconRead>, AddonRuntimeError>;
+    async fn scan_repositories(&self) -> Result<(), AddonRuntimeError>;
     async fn install(
         &self,
         repository_id: String,
         addon_id: String,
+        adopt_legacy: bool,
     ) -> Result<(), AddonRuntimeError>;
     async fn set_unverified_sources(&self, enabled: bool) -> Result<(), AddonRuntimeError>;
     /// Select the add-on that should process one operator-supplied source URL.
@@ -607,10 +594,7 @@ pub trait AddonRuntime: Send + Sync {
         addon_id: Option<String>,
     ) -> Result<(), AddonRuntimeError>;
     async fn install_from_package(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError>;
-    async fn install_repository_from_package(
-        &self,
-        archive: Vec<u8>,
-    ) -> Result<(), AddonRuntimeError>;
+    async fn install_repository_bundle(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError>;
     async fn save_setting(&self, setting: AddonSettingEdit) -> Result<(), AddonRuntimeError>;
     async fn check(&self, addon_id: String) -> Result<String, AddonRuntimeError>;
     async fn enable(&self, addon_id: String) -> Result<String, AddonRuntimeError>;

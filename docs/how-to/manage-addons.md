@@ -8,12 +8,10 @@ written as enabled over installed. Each card opens a dedicated detail route at
 `/settings/addons/<add-on-id>`.
 
 **Sources** holds three sections: **Unknown sources** (the risk opt-in),
-**Add-on repositories** (the trusted sources, listed with the number of add-ons
-they offer and when their catalogue was last refreshed), and **Install from
-file** (local add-on and repository packages). Actions that cannot run say why
-when hovered: an official repository cannot be removed, a deployment-managed
-list cannot be edited, and an unverified source cannot refresh until unknown
-sources are enabled. The **Default remote stream processor** sits on
+**Add-on repositories** (local Git checkouts and uploaded offline bundles,
+listed with their offer count and last scan), and **Install from file**
+(individual add-on ZIPs and complete repository ZIPs). The page also shows the
+fixed checkout directory. The **Default remote stream processor** sits on
 **Installed add-ons**, with the add-ons it chooses between.
 
 The [platform reference](../reference/addons.md) lists the supported
@@ -21,15 +19,18 @@ capabilities. Do not put executable commands in media YAML.
 
 ## Install from a repository
 
-1. Open **Settings > Add-ons > Sources** and refresh the intended repository.
-2. Open **Browse**, search for the add-on, and select its card.
-3. On the detail page, review its source, trust tier, version, capabilities,
+1. Open **Settings > Add-ons > Sources** and enable **Unknown sources**.
+2. Clone a repository as one direct child of the displayed checkout directory,
+   or upload its complete repository ZIP under **Install from file**.
+3. Select **Refresh** after cloning or pulling a checkout.
+4. Open **Browse**, search for the add-on, and select its card.
+5. On the detail page, review its source, trust tier, version, capabilities,
    dependencies, network hosts, media access, managed FFmpeg access, and
    external commands.
-4. Select **Install** and confirm. A new package starts disabled.
-5. Configure every required setting on the same detail page.
-6. Select **Check** and resolve any unavailable dependency.
-7. Select **Enable**.
+6. Select **Install** and confirm. A new package starts disabled.
+7. Configure every required setting on the same detail page.
+8. Select **Check** and resolve any unavailable dependency.
+9. Select **Enable**.
 
 The task is complete when the detail page shows a successful readiness result
 and **Enabled** state. **Check** validates readiness but never enables a package.
@@ -65,25 +66,22 @@ packages.
 The package layout and limits are defined by the [package
 reference](../reference/addon-packages.md).
 
-## Add an unverified repository
+## Maintain a local repository
 
-After enabling unknown sources, use either workflow:
+ErsatzRS does not run Git. Pull a checkout with the same operator tooling and
+credentials used to clone it, then select **Refresh**. A successful scan
+replaces the complete offer set; a failed scan preserves the last valid offers
+and adds a health warning. Removing the checkout withdraws its offers without
+deleting immutable installed packages.
 
-- Select **Add repository** and enter its reverse-DNS ID, display name,
-  credential-free HTTPS index URL, and optional raw Ed25519 public key. Save
-  stays disabled until the name, URL, and ID are filled in. Editing an existing
-  repository shows its ID read-only; that ID is the source's identity, so
-  pointing at another one means adding a repository, not editing this one.
-- Choose a repository ZIP and select **Install**. Its root must contain the
-  strict `repository.toml` described by the [repository
-  reference](../reference/addon-repositories.md).
+An offline repository ZIP must contain root `repository.toml` plus the complete
+`addons/<id>/` tree described by the [repository
+reference](../reference/addon-repositories.md). Uploading a newer bundle
+replaces that source, but each add-on update still requires confirmation.
 
-A source with a public key is **Verified** after the initial trust record is
-accepted; subsequent catalogs must carry a valid detached signature. A source
-without a key is **Unverified** and relies on HTTPS plus catalog package
-digests. Review the source before refreshing or installing from it.
-
-Removing a repository does not remove packages already installed from it.
+Former catalog installations are labelled **Legacy catalog · unmanaged**. If
+a local repository offers the same add-on, its update dialog explicitly asks
+to adopt that source. Adoption preserves settings and persistent data.
 
 ## Configure secrets by reference
 
@@ -100,16 +98,6 @@ outside the admin UI. Clear an optional secret setting by saving it with no
 reference; this also disables the add-on until it passes a fresh check and is
 enabled again.
 
-## Replace repository administration for a deployment
-
-Create the authoritative TOML file defined by the [repository
-reference](../reference/addon-repositories.md), set
-`ERSATZRS_ADDONS__TRUSTED_REPOSITORIES_FILE` to its path, and restart ErsatzRS.
-Confirm that **Sources** is read-only and lists only the file's entries.
-
-Keep private signing keys only in repository publishers' secret stores;
-ErsatzRS needs public keys only.
-
 ## Disable or uninstall
 
 **Disable** blocks new invocations. A stream already owned by a playback
@@ -120,6 +108,7 @@ Uninstalling is blocked while any installed package or Remote Stream still
 requires it. Persistent add-on data is retained in its origin-scoped namespace;
 package executables and disposable cache are removed.
 
-Use **Support > Health Checks** to find expired catalogs, failed refreshes,
-modified package content, incompatible manifests, unverified enabled packages,
-and installed packages without a readiness result.
+Use **Support > Health Checks** to find failed local-source scans, missing
+checkouts, modified package content, incompatible manifests, locally sourced
+enabled packages, legacy unmanaged installations, and installed packages
+without a readiness result.

@@ -55,11 +55,11 @@ from the same archive as the server binary.
 Official archives and images do not include FFmpeg or ffprobe. On first startup,
 ErsatzRS downloads and validates the matching first-party runtime under the
 application state directory, then reuses or updates that managed copy.
-Third-party tools such as `yt-dlp` are not bundled. Their signed add-on packages
-can be installed independently through **Settings > Add-ons** in builds that
-contain the add-on host, while operators install any manifest-declared external
-executable separately. The currently published beta predates that host, and the
-official add-on repository and production public key are not published yet.
+Third-party tools such as `yt-dlp` are not bundled. Their add-on packages can be
+installed independently from operator-managed checkouts or offline repository
+bundles through **Settings > Add-ons** in builds that contain the add-on host,
+while operators install any manifest-declared external executable separately.
+The currently published beta predates that host.
 
 See the [configuration reference](configuration.md) for offline overrides.
 

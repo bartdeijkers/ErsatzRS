@@ -16,8 +16,8 @@ pub use error::{ApplicationError, Result};
 pub use ersatzrs_domain::{ScanPlayoutRefresh, ScanPlayoutRefreshReason};
 pub use operations::OperationCoordinator;
 pub use ports::{
-    AddonIconRead, AddonOverviewRead, AddonRepositoryEdit, AddonRepositoryRead, AddonRuntime,
-    AddonRuntimeError, AddonSettingEdit, AddonSettingRead, AdminFfmpegRuntimeRead, AdminHealthRead,
+    AddonIconRead, AddonOverviewRead, AddonRepositoryRead, AddonRuntime, AddonRuntimeError,
+    AddonSettingEdit, AddonSettingRead, AdminFfmpegRuntimeRead, AdminHealthRead,
     AdminHealthRuntime, AdminHealthRuntimeError, AdminTroubleshootingRuntime,
     AdminTroubleshootingRuntimeError, ApplicationPorts, AvailableAddonRead, BlockPreviewBuilder,
     ChannelRuntime, ChannelRuntimeError, InstalledAddonRead, MediaSourceRuntime,
@@ -92,33 +92,28 @@ impl ApplicationServices {
         self.ports.addons().installed_icon(addon_id).await
     }
 
-    pub async fn save_addon_repository(
+    pub async fn addon_source_icon(
         &self,
-        repository: AddonRepositoryEdit,
-    ) -> std::result::Result<(), AddonRuntimeError> {
-        self.ports.addons().save_repository(repository).await
+        source_id: String,
+        addon_id: String,
+    ) -> std::result::Result<Option<AddonIconRead>, AddonRuntimeError> {
+        self.ports.addons().source_icon(source_id, addon_id).await
     }
 
-    pub async fn remove_addon_repository(
-        &self,
-        repository_id: String,
-    ) -> std::result::Result<(), AddonRuntimeError> {
-        self.ports.addons().remove_repository(repository_id).await
-    }
-
-    pub async fn refresh_addon_repository(
-        &self,
-        repository_id: String,
-    ) -> std::result::Result<(), AddonRuntimeError> {
-        self.ports.addons().refresh_repository(repository_id).await
+    pub async fn scan_addon_repositories(&self) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().scan_repositories().await
     }
 
     pub async fn install_addon(
         &self,
         repository_id: String,
         addon_id: String,
+        adopt_legacy: bool,
     ) -> std::result::Result<(), AddonRuntimeError> {
-        self.ports.addons().install(repository_id, addon_id).await
+        self.ports
+            .addons()
+            .install(repository_id, addon_id, adopt_legacy)
+            .await
     }
 
     pub async fn set_unverified_addon_sources(
@@ -165,14 +160,11 @@ impl ApplicationServices {
         self.ports.addons().install_from_package(archive).await
     }
 
-    pub async fn install_addon_repository_from_package(
+    pub async fn install_addon_repository_bundle(
         &self,
         archive: Vec<u8>,
     ) -> std::result::Result<(), AddonRuntimeError> {
-        self.ports
-            .addons()
-            .install_repository_from_package(archive)
-            .await
+        self.ports.addons().install_repository_bundle(archive).await
     }
 
     pub async fn save_addon_setting(

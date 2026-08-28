@@ -8,7 +8,7 @@ or let an installed add-on resolve a provider URL when playback starts.
 Create a directory that the ErsatzRS service account can read and place Remote
 Stream definitions there. For a direct source, also confirm that FFmpeg on the
 ErsatzRS host can reach the source URL. Provider URLs require an installed,
-enabled add-on; the official add-on repository is not published yet.
+enabled add-on acquired from a local checkout or offline repository bundle.
 
 ## Create the library
 
@@ -46,8 +46,8 @@ subdirectory.
 
 ## Use a provider add-on
 
-This part requires a development build plus a configured trusted repository.
-The official repository and its production public key are not published yet.
+Install the private official repository through the checkout or offline-bundle
+workflow in [Install and manage add-ons](manage-addons.md).
 
 A package may also require external programs that ErsatzRS does not supply. The
 yt-dlp add-on needs both yt-dlp and a JavaScript runtime (deno) on the `PATH` of

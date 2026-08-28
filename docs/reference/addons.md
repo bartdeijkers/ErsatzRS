@@ -1,9 +1,9 @@
 # Add-on platform reference
 
-The tiered-trust add-on host is implemented in the current source tree. The platform
-remains in development until the official repository is published and its
-production public key is pinned; existing beta archives do not gain add-on
-support retroactively.
+The local-source add-on host is implemented in the current source tree.
+Repositories are acquired through operator-managed Git checkouts or complete
+offline bundles; existing beta archives do not gain add-on support
+retroactively.
 
 ## Supported capabilities
 
@@ -32,7 +32,7 @@ video-jukebox request API.
 ## Reference set
 
 - [Package manifest, layout, permissions, and limits](addon-packages.md)
-- [Repository trust, catalog, allowlist, and refresh](addon-repositories.md)
+- [Local checkout, offline bundle, scan, and update contract](addon-repositories.md)
 - [Invocation, environment, persistence, and lifecycle](addon-runtime.md)
 - [Add-on media-list NDJSON contract](addon-media-lists.md)
 - [Remote Stream playlist and NDJSON contracts](remote-stream-playlist-manifests.md)
