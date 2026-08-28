@@ -36,6 +36,11 @@ release section when tagging a release.
 - Require a completed, successful CI run for the exact release-candidate
   commit before creating any alpha, beta, or normal release tag.
 
+### Fixed
+
+- Keep add-on detail pages hydrated while they render the shared Settings
+  route tabs inside the island boundary.
+
 ## [1.0.28-beta] - 2026-08-27
 
 ### Changed

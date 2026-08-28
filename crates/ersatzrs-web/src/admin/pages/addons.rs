@@ -23,7 +23,9 @@ use crate::admin::server_fns::addons::{
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::resource_state::AdminErrorState;
-use crate::admin::ui::primitives::settings_navigation::SettingsPageLayout;
+use crate::admin::ui::primitives::settings_navigation::{
+    SettingsPageLayout, SettingsPageLayoutForPath,
+};
 use crate::admin::ui::primitives::toast::{load_or_notify, use_toast, ToastSeverity, ToastStore};
 
 stylance::import_crate_style!(style, "src/admin/pages/addons.module.css");
@@ -66,18 +68,22 @@ pub fn AddonDetailPage() -> impl IntoView {
     let query = use_query_map();
     let addon_id = params.with_untracked(|params| params.get("addon_id").unwrap_or_default());
     let source = query.with_untracked(|params| params.get("source"));
-    let content = match load_addon_detail_initial(addon_id) {
+    match load_addon_detail_initial(addon_id) {
         Ok(Some(detail)) => view! { <AddonDetailIsland detail source/> }.into_any(),
         Ok(None) => view! {
-            <div class=style::not_found>
-                <h1>{tr(TextKey::AddonNotFound)}</h1>
-                <a href="/settings/addons">{tr(TextKey::BackToAddons)}</a>
-            </div>
+            <SettingsPageLayout>
+                <div class=style::not_found>
+                    <h1>{tr(TextKey::AddonNotFound)}</h1>
+                    <a href="/settings/addons">{tr(TextKey::BackToAddons)}</a>
+                </div>
+            </SettingsPageLayout>
         }
         .into_any(),
-        Err(error) => view! { <AdminErrorState error/> }.into_any(),
-    };
-    view! { <SettingsPageLayout>{content}</SettingsPageLayout> }
+        Err(error) => view! {
+            <SettingsPageLayout><AdminErrorState error/></SettingsPageLayout>
+        }
+        .into_any(),
+    }
 }
 
 fn load_addon_detail_initial(addon_id: String) -> Result<Option<AddonDetail>, String> {
@@ -956,7 +962,8 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
     let toggle_permissions = permissions.clone();
 
     view! {
-        <main class=style::detail data-testid="addon-detail-page">
+        <SettingsPageLayoutForPath current_path="/settings/addons">
+            <main class=style::detail data-testid="addon-detail-page">
             <a class=style::back href="/settings/addons">{"← "}{tr(TextKey::BackToAddons)}</a>
             <header class=style::detail_hero>
                 {addon_icon(icon_url, &name)}
@@ -1060,7 +1067,8 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
             <Modal open=uninstall_confirm title=tr(TextKey::Uninstall).to_owned() destructive=true on_close=Callback::new(move |confirmed| {
                 if confirmed { uninstall_action.dispatch(addon_id_for_uninstall.clone()); }
             })><p>{tr(TextKey::ThisActionCannotBeUndone)}</p></Modal>
-        </main>
+            </main>
+        </SettingsPageLayoutForPath>
     }
 }
 

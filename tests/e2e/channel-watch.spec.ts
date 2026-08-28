@@ -321,7 +321,7 @@ async function waitForHydration(page: Page): Promise<void> {
 async function findChannelRow(page: Page, channelName: string): Promise<Locator> {
   const rows = page.getByRole('row');
   const channelRow = rows.filter({ hasText: channelName });
-  const nextPage = page.getByRole('button', { name: '›', exact: true });
+  const nextPage = page.getByRole('button', { name: 'Next page', exact: true });
 
   for (let pageIndex = 0; pageIndex < 100; pageIndex += 1) {
     if ((await channelRow.count()) > 0) return channelRow;

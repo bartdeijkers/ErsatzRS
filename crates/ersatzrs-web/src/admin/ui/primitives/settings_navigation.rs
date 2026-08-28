@@ -46,12 +46,47 @@ pub fn SettingsRouteTabs() -> impl IntoView {
     }
 }
 
+/// Settings route navigation for a hydration island with a known active route.
+///
+/// Islands provide their own hydration owner, so they cannot depend on the
+/// native router context being available inside the island boundary.
+#[component]
+pub fn SettingsRouteTabsForPath(current_path: &'static str) -> impl IntoView {
+    view! {
+        <nav class=style::tabs aria-label=tr(TextKey::Settings) data-settings-route-tabs>
+            {SETTINGS_ROUTES.into_iter().map(|(href, label)| {
+                let is_active = is_settings_route_active(current_path, href);
+                view! {
+                    <a
+                        href=href
+                        class=if is_active { style::tab_active } else { style::tab }
+                        aria-current=is_active.then_some("page")
+                    >
+                        {tr(label)}
+                    </a>
+                }
+            }).collect_view()}
+        </nav>
+    }
+}
+
 /// Stable settings frame shared by regular forms and add-on manager pages.
 #[component]
 pub fn SettingsPageLayout(children: Children) -> impl IntoView {
     view! {
         <div class=style::layout data-settings-page-layout>
             <SettingsRouteTabs/>
+            <div class=style::content>{children()}</div>
+        </div>
+    }
+}
+
+/// Stable settings frame for a hydration island with a fixed active route.
+#[component]
+pub fn SettingsPageLayoutForPath(current_path: &'static str, children: Children) -> impl IntoView {
+    view! {
+        <div class=style::layout data-settings-page-layout>
+            <SettingsRouteTabsForPath current_path/>
             <div class=style::content>{children()}</div>
         </div>
     }

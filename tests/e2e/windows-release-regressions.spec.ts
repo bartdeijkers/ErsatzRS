@@ -219,7 +219,8 @@ test.describe('Windows release interaction regressions', () => {
     await gotoHydrated(page, '/system/logs');
     await page.getByRole('combobox', { name: 'Rows per page' }).selectOption('25');
     await expect(page.getByRole('button', { name: 'Next page' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Last page' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Previous page' })).toBeVisible();
+    await expect(page.locator('[data-pagination]')).toBeVisible();
     await expect(page.locator('body')).not.toContainText('last_page on');
     await expect(page.locator('body')).not.toContainText('u32::try_from');
 
