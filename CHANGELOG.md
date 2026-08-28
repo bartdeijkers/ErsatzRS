@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.29-beta] - 2026-08-28
+
 ### Changed
 
 - Rework desktop Settings around one global navigation entry, localized route
