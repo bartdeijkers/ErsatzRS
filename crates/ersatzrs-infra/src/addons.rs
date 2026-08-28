@@ -5495,28 +5495,6 @@ mod tests {
         assert!(!installed.enabled);
     }
 
-    #[tokio::test]
-    async fn official_repository_never_falls_back_to_unverified_refresh() {
-        let temp = tempfile::tempdir().expect("temp directory");
-        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
-        let pool = crate::db::init(&database_url)
-            .await
-            .expect("initialize database");
-        set_unverified_sources_enabled(&pool, true)
-            .await
-            .expect("enable gate");
-        sqlx::query(r#"UPDATE "AddonRepository" SET "PublicKey" = '' WHERE "Id" = ?"#)
-            .bind(OFFICIAL_REPOSITORY_ID)
-            .execute(&pool)
-            .await
-            .expect("simulate missing official key");
-
-        let error = refresh_repository(&pool, &reqwest::Client::new(), OFFICIAL_REPOSITORY_ID)
-            .await
-            .expect_err("keyless official repository must fail");
-        assert!(error.to_string().contains("official repository"));
-    }
-
     #[test]
     fn only_new_privileges_hold_an_updated_add_on_disabled() {
         let previous = {
@@ -5856,149 +5834,22 @@ mod tests {
         assert!(load_installed_addon(&pool, &manifest.id).await.is_err());
     }
 
-    /// Fresh database plus the official repository row the migration seeds.
-    async fn seeded_official_repository() -> (tempfile::TempDir, DbPool, TrustedAddonRepository) {
+    #[tokio::test]
+    async fn migration_removes_the_seeded_network_repository_from_fresh_databases() {
         let temp = tempfile::tempdir().expect("temp directory");
         let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
         let pool = crate::db::init(&database_url)
             .await
             .expect("initialize database");
-        let seeded = load_repository_row(&pool, OFFICIAL_REPOSITORY_ID)
-            .await
-            .expect("load repository")
-            .expect("seeded repository");
-        (temp, pool, seeded)
-    }
 
-    /// Give the seeded official repository cached catalog state, then pin a new
-    /// public key over it. Returns the pinned key and the reloaded row.
-    async fn pin_official_public_key(
-        pool: &DbPool,
-        seeded: TrustedAddonRepository,
-    ) -> (String, TrustedAddonRepository) {
-        let signing_key = SigningKey::from_bytes(&[9; 32]);
-        let public_key = base64::engine::general_purpose::STANDARD
-            .encode(signing_key.verifying_key().as_bytes());
-        sqlx::query(
-            r#"UPDATE "AddonRepository"
-               SET "LastSequence" = 7, "CatalogJson" = 'old',
-                   "CatalogEtag" = 'old-etag', "CatalogLastModified" = 'old-date'
-               WHERE "Id" = ?"#,
-        )
-        .bind(OFFICIAL_REPOSITORY_ID)
-        .execute(pool)
-        .await
-        .expect("seed previous trust state");
-        save_trusted_repository(
-            pool,
-            &TrustedAddonRepository {
-                public_key: public_key.clone(),
-                is_official: false,
-                ..seeded
-            },
-        )
-        .await
-        .expect("pin public key");
-        let updated = load_repository_row(pool, OFFICIAL_REPOSITORY_ID)
-            .await
-            .expect("reload repository")
-            .expect("updated repository");
-        (public_key, updated)
-    }
-
-    #[tokio::test]
-    async fn migration_seeds_an_operator_replaceable_official_repository() {
-        let (_temp, _pool, seeded) = seeded_official_repository().await;
-        assert!(seeded.is_official);
-        assert_eq!(seeded.index_url, OFFICIAL_REPOSITORY_INDEX_URL);
-        // The 202608111200 seed shipped an empty key because the official
-        // repository was not published yet; 202608121200 pins the production
-        // key, so a fresh database must now come up able to verify the signed
-        // catalog rather than failing every refresh.
-        assert!(
-            !seeded.public_key.is_empty(),
-            "the official repository must ship with its production public key"
-        );
-        decode_public_key(&seeded.public_key).expect("seeded key is a canonical Ed25519 key");
-    }
-
-    #[tokio::test]
-    async fn pinning_a_new_official_public_key_clears_cached_catalog_state() {
-        let (_temp, pool, seeded) = seeded_official_repository().await;
-        let (public_key, updated) = pin_official_public_key(&pool, seeded).await;
-
-        // The official flag is owned by the migration, not by the caller.
-        assert!(updated.is_official);
-        assert_eq!(updated.public_key, public_key);
-        assert_eq!(updated.last_sequence, None);
-        let catalog = load_catalog_json(&pool, OFFICIAL_REPOSITORY_ID)
-            .await
-            .expect("load cleared catalog");
-        assert_eq!(catalog, None);
-        let cleared_cache = load_catalog_cache(&pool, OFFICIAL_REPOSITORY_ID)
-            .await
-            .expect("load cleared cache");
-        assert!(cleared_cache.raw_json.is_none());
-        assert!(cleared_cache.etag.is_none());
-        assert!(cleared_cache.last_modified.is_none());
-        assert_eq!(cleared_cache.public_key, public_key);
-    }
-
-    #[tokio::test]
-    async fn saving_unchanged_official_trust_state_preserves_cached_catalog_state() {
-        let (_temp, pool, seeded) = seeded_official_repository().await;
-        let (_public_key, updated) = pin_official_public_key(&pool, seeded).await;
-
-        sqlx::query(
-            r#"UPDATE "AddonRepository"
-               SET "LastSequence" = 8, "CatalogJson" = 'preserved',
-                   "CatalogEtag" = 'preserved-etag',
-                   "CatalogLastModified" = 'preserved-date'
-               WHERE "Id" = ?"#,
-        )
-        .bind(OFFICIAL_REPOSITORY_ID)
-        .execute(&pool)
-        .await
-        .expect("seed same-trust state");
-        save_trusted_repository(
-            &pool,
-            &TrustedAddonRepository {
-                name: "Renamed official add-ons".to_owned(),
-                ..updated
-            },
-        )
-        .await
-        .expect("update display metadata");
-        let preserved = load_catalog_json(&pool, OFFICIAL_REPOSITORY_ID)
-            .await
-            .expect("load preserved catalog");
-        assert_eq!(preserved.as_deref(), Some("preserved"));
-        let preserved_cache = load_catalog_cache(&pool, OFFICIAL_REPOSITORY_ID)
-            .await
-            .expect("load preserved cache");
-        assert_eq!(preserved_cache.etag.as_deref(), Some("preserved-etag"));
-        assert_eq!(
-            preserved_cache.last_modified.as_deref(),
-            Some("preserved-date")
-        );
         let repository = load_repository_row(&pool, OFFICIAL_REPOSITORY_ID)
             .await
-            .expect("load unchanged repository")
-            .expect("unchanged repository");
-        save_trusted_repository(&pool, &repository)
+            .expect("load repository");
+        assert_eq!(repository, None);
+        assert!(list_trusted_repositories(&pool)
             .await
-            .expect("reconcile unchanged repository");
-        let unchanged_cache = load_catalog_cache(&pool, OFFICIAL_REPOSITORY_ID)
-            .await
-            .expect("load unchanged cache");
-        assert_eq!(
-            unchanged_cache.state_revision,
-            preserved_cache.state_revision
-        );
-        assert_eq!(
-            unchanged_cache.catalog_revision,
-            preserved_cache.catalog_revision
-        );
+            .expect("list repositories")
+            .is_empty());
     }
 
     #[tokio::test]
