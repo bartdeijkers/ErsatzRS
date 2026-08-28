@@ -12,6 +12,7 @@ use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::resource_state::{
     AdminErrorState, AdminLoadState, AdminLoadingState, AdminResourceState,
 };
+use crate::admin::ui::primitives::settings_navigation::SettingsPageLayout;
 
 stylance::import_crate_style!(style, "src/admin/pages/settings.module.css");
 
@@ -20,9 +21,11 @@ pub fn FfmpegSettingsPage() -> impl IntoView {
     let data: Resource<Result<FfmpegSettingsPageData, ServerFnError>> =
         Resource::new_blocking(|| (), |()| load_ffmpeg_settings());
     view! {
-        <Suspense fallback=loading_resource_view>
-            {move || data.get().map(|result| settings_result_view(result, |value| render_ffmpeg(value).into_any()))}
-        </Suspense>
+        <SettingsPageLayout>
+            <Suspense fallback=loading_resource_view>
+                {move || data.get().map(|result| settings_result_view(result, |value| render_ffmpeg(value).into_any()))}
+            </Suspense>
+        </SettingsPageLayout>
     }
 }
 
@@ -31,9 +34,11 @@ pub fn LoggingSettingsPage() -> impl IntoView {
     let data: Resource<Result<LoggingSettingsForm, ServerFnError>> =
         Resource::new_blocking(|| (), |()| load_logging_settings());
     view! {
-        <Suspense fallback=loading_resource_view>
-            {move || data.get().map(|result| settings_result_view(result, |value| render_logging(value).into_any()))}
-        </Suspense>
+        <SettingsPageLayout>
+            <Suspense fallback=loading_resource_view>
+                {move || data.get().map(|result| settings_result_view(result, |value| render_logging(value).into_any()))}
+            </Suspense>
+        </SettingsPageLayout>
     }
 }
 
@@ -42,9 +47,11 @@ pub fn HdhrSettingsPage() -> impl IntoView {
     let data: Resource<Result<HdhrSettingsForm, ServerFnError>> =
         Resource::new_blocking(|| (), |()| load_hdhr_settings());
     view! {
-        <Suspense fallback=loading_resource_view>
-            {move || data.get().map(|result| settings_result_view(result, |value| render_hdhr(value).into_any()))}
-        </Suspense>
+        <SettingsPageLayout>
+            <Suspense fallback=loading_resource_view>
+                {move || data.get().map(|result| settings_result_view(result, |value| render_hdhr(value).into_any()))}
+            </Suspense>
+        </SettingsPageLayout>
     }
 }
 
@@ -53,9 +60,11 @@ pub fn ScannerSettingsPage() -> impl IntoView {
     let data: Resource<Result<ScannerSettingsForm, ServerFnError>> =
         Resource::new_blocking(|| (), |()| load_scanner_settings());
     view! {
-        <Suspense fallback=loading_resource_view>
-            {move || data.get().map(|result| settings_result_view(result, |value| render_scanner(value).into_any()))}
-        </Suspense>
+        <SettingsPageLayout>
+            <Suspense fallback=loading_resource_view>
+                {move || data.get().map(|result| settings_result_view(result, |value| render_scanner(value).into_any()))}
+            </Suspense>
+        </SettingsPageLayout>
     }
 }
 
@@ -64,9 +73,11 @@ pub fn PlayoutSettingsPage() -> impl IntoView {
     let data: Resource<Result<PlayoutSettingsForm, ServerFnError>> =
         Resource::new_blocking(|| (), |()| load_playout_settings());
     view! {
-        <Suspense fallback=loading_resource_view>
-            {move || data.get().map(|result| settings_result_view(result, |value| render_playout(value).into_any()))}
-        </Suspense>
+        <SettingsPageLayout>
+            <Suspense fallback=loading_resource_view>
+                {move || data.get().map(|result| settings_result_view(result, |value| render_playout(value).into_any()))}
+            </Suspense>
+        </SettingsPageLayout>
     }
 }
 
@@ -75,9 +86,11 @@ pub fn UiSettingsPage() -> impl IntoView {
     let data: Resource<Result<UiSettingsPageData, ServerFnError>> =
         Resource::new_blocking(|| (), |()| load_ui_settings());
     view! {
-        <Suspense fallback=loading_resource_view>
-            {move || data.get().map(|result| settings_result_view(result, |value| render_ui(value).into_any()))}
-        </Suspense>
+        <SettingsPageLayout>
+            <Suspense fallback=loading_resource_view>
+                {move || data.get().map(|result| settings_result_view(result, |value| render_ui(value).into_any()))}
+            </Suspense>
+        </SettingsPageLayout>
     }
 }
 
@@ -86,9 +99,11 @@ pub fn XmltvSettingsPage() -> impl IntoView {
     let data: Resource<Result<XmltvSettingsForm, ServerFnError>> =
         Resource::new_blocking(|| (), |()| load_xmltv_settings());
     view! {
-        <Suspense fallback=loading_resource_view>
-            {move || data.get().map(|result| settings_result_view(result, |value| render_xmltv(value).into_any()))}
-        </Suspense>
+        <SettingsPageLayout>
+            <Suspense fallback=loading_resource_view>
+                {move || data.get().map(|result| settings_result_view(result, |value| render_xmltv(value).into_any()))}
+            </Suspense>
+        </SettingsPageLayout>
     }
 }
 
@@ -165,129 +180,76 @@ fn render_ffmpeg(data: FfmpegSettingsPageData) -> impl IntoView {
     let ffprobe_autodetect_help = auto_detect_help(&data.ffprobe_resolved);
     view! {
         <SettingsForm title=tr(TextKey::Ffmpeg) action="/api/settings/ffmpeg/save">
-            <Field label=tr(TextKey::FfmpegPath)>
-                <input class=style::input name="ffmpeg_path" value=form.ffmpeg_path placeholder=data.ffmpeg_resolved/>
-                <p class=style::help>{tr(TextKey::FfmpegPathHelp)}</p>
-                <p class=style::help>{ffmpeg_autodetect_help}</p>
-            </Field>
-            <Field label=tr(TextKey::FfprobePath)>
-                <input class=style::input name="ffprobe_path" value=form.ffprobe_path placeholder=data.ffprobe_resolved/>
-                <p class=style::help>{tr(TextKey::FfprobePathHelp)}</p>
-                <p class=style::help>{ffprobe_autodetect_help}</p>
-            </Field>
-            <Field label=tr(TextKey::DefaultFfmpegProfile)>
-                <Select
-                    name="default_ffmpeg_profile_id"
-                    selected=form.default_ffmpeg_profile_id.to_string()
-                    options=data.ffmpeg_profiles
-                    include_none=false
-                />
-                <p class=style::help>{tr(TextKey::DefaultFfmpegProfileHelp)}</p>
-            </Field>
-            <Field label=tr(TextKey::PreferredAudioLanguage)>
-                <Select
-                    name="preferred_audio_language_code"
-                    selected=form.preferred_audio_language_code
-                    options=audio_languages
-                    include_none=false
-                />
-            </Field>
-            <Field label=tr(TextKey::DefaultSubtitleLanguage)>
-                <Select
-                    name="preferred_subtitle_language_code"
-                    selected=form.preferred_subtitle_language_code
-                    options=default_subtitle_languages
-                    include_none=true
-                />
-            </Field>
-            <Field label=tr(TextKey::FallbackSubtitleLanguage)>
-                <Select
-                    name="fallback_subtitle_language_code"
-                    selected=form.fallback_subtitle_language_code
-                    options=fallback_subtitle_languages
-                    include_none=true
-                />
-            </Field>
-            <CheckboxField
-                label=tr(TextKey::UseEmbeddedSubtitles)
-                name="use_embedded_subtitles"
-                checked=form.use_embedded_subtitles
-                caption=None
-            />
-            <CheckboxField
-                label=tr(TextKey::ExtractEmbeddedSubtitles)
-                name="extract_embedded_subtitles"
-                checked=form.extract_embedded_subtitles
-                caption=None
-                disabled=!form.use_embedded_subtitles
-            />
-            <CheckboxField
-                label=tr(TextKey::ProbeForInterlacedFrames)
-                name="probe_for_interlaced_frames"
-                checked=form.probe_for_interlaced_frames
-                caption=None
-            />
-            <CheckboxField
-                label=tr(TextKey::SaveTroubleshootingReportsToDisk)
-                name="save_reports"
-                checked=form.save_reports
-                caption=None
-            />
-            <Field label=tr(TextKey::GlobalWatermark)>
-                <Select
-                    name="global_watermark_id"
-                    selected=form.global_watermark_id.map(|v| v.to_string()).unwrap_or_default()
-                    options=data.watermarks
-                    include_none=true
-                />
-            </Field>
-            <Field label=tr(TextKey::GlobalFallbackFiller)>
-                <Select
-                    name="global_fallback_filler_id"
-                    selected=form.global_fallback_filler_id.map(|v| v.to_string()).unwrap_or_default()
-                    options=data.fallback_fillers
-                    include_none=true
-                />
-            </Field>
-            <Field label=tr(TextKey::HlsSegmenterIdleTimeout)>
-                <input class=style::input name="hls_segmenter_idle_timeout" type="number" min="30" required value=form.hls_segmenter_idle_timeout/>
-                <p class=style::help>{tr(TextKey::HlsSegmenterIdleTimeoutHelp)}</p>
-            </Field>
-            <Field label=tr(TextKey::WorkAheadSegmenterLimit)>
-                <input class=style::input name="work_ahead_segmenter_limit" type="number" min="0" required value=form.work_ahead_segmenter_limit/>
-                <p class=style::help>{tr(TextKey::WorkAheadSegmenterLimitHelp)}</p>
-            </Field>
-            <Field label=tr(TextKey::ActiveTranscodeLimit)>
-                <input class=style::input name="active_transcode_limit" type="number" min="1" required value=form.active_transcode_limit/>
-                <p class=style::help>{tr(TextKey::ActiveTranscodeLimitHelp)}</p>
-                <p class=style::help>{active_transcode_readout(active_transcode_capacity)}</p>
-                <p class=style::help>{active_transcode_suggestion(active_transcode_capacity)}</p>
-            </Field>
-            <Field label=tr(TextKey::HlsSegmenterInitialSegmentCount)>
-                <input class=style::input name="initial_segment_count" type="number" min="1" required value=form.initial_segment_count/>
-                <p class=style::help>{tr(TextKey::HlsSegmenterInitialSegmentCountHelp)}</p>
-            </Field>
-            <Field label=tr(TextKey::HlsDirectOutputFormat)>
-                <Select
-                    name="hls_direct_output_format"
-                    selected=form.hls_direct_output_format.to_string()
-                    options=vec![
+            <SettingsSection title=tr(TextKey::FfmpegRuntime)>
+                <Field label=tr(TextKey::FfmpegPath)>
+                    <input class=style::input name="ffmpeg_path" value=form.ffmpeg_path placeholder=data.ffmpeg_resolved/>
+                    <p class=style::help>{tr(TextKey::FfmpegPathHelp)}</p>
+                    <p class=style::help>{ffmpeg_autodetect_help}</p>
+                </Field>
+                <Field label=tr(TextKey::FfprobePath)>
+                    <input class=style::input name="ffprobe_path" value=form.ffprobe_path placeholder=data.ffprobe_resolved/>
+                    <p class=style::help>{tr(TextKey::FfprobePathHelp)}</p>
+                    <p class=style::help>{ffprobe_autodetect_help}</p>
+                </Field>
+                <Field label=tr(TextKey::DefaultFfmpegProfile)>
+                    <Select name="default_ffmpeg_profile_id" selected=form.default_ffmpeg_profile_id.to_string() options=data.ffmpeg_profiles include_none=false/>
+                    <p class=style::help>{tr(TextKey::DefaultFfmpegProfileHelp)}</p>
+                </Field>
+            </SettingsSection>
+            <SettingsSection title=tr(TextKey::Language)>
+                <Field label=tr(TextKey::PreferredAudioLanguage)>
+                    <Select name="preferred_audio_language_code" selected=form.preferred_audio_language_code options=audio_languages include_none=false/>
+                </Field>
+                <Field label=tr(TextKey::DefaultSubtitleLanguage)>
+                    <Select name="preferred_subtitle_language_code" selected=form.preferred_subtitle_language_code options=default_subtitle_languages include_none=true/>
+                </Field>
+                <Field label=tr(TextKey::FallbackSubtitleLanguage)>
+                    <Select name="fallback_subtitle_language_code" selected=form.fallback_subtitle_language_code options=fallback_subtitle_languages include_none=true/>
+                </Field>
+                <CheckboxField label=tr(TextKey::UseEmbeddedSubtitles) name="use_embedded_subtitles" checked=form.use_embedded_subtitles caption=None/>
+                <CheckboxField label=tr(TextKey::ExtractEmbeddedSubtitles) name="extract_embedded_subtitles" checked=form.extract_embedded_subtitles caption=None disabled=!form.use_embedded_subtitles/>
+            </SettingsSection>
+            <SettingsSection title=tr(TextKey::Playback)>
+                <Field label=tr(TextKey::HlsSegmenterIdleTimeout)>
+                    <input class=style::input name="hls_segmenter_idle_timeout" type="number" min="30" required value=form.hls_segmenter_idle_timeout/>
+                    <p class=style::help>{tr(TextKey::HlsSegmenterIdleTimeoutHelp)}</p>
+                </Field>
+                <Field label=tr(TextKey::WorkAheadSegmenterLimit)>
+                    <input class=style::input name="work_ahead_segmenter_limit" type="number" min="0" required value=form.work_ahead_segmenter_limit/>
+                    <p class=style::help>{tr(TextKey::WorkAheadSegmenterLimitHelp)}</p>
+                </Field>
+                <Field label=tr(TextKey::ActiveTranscodeLimit)>
+                    <input class=style::input name="active_transcode_limit" type="number" min="1" required value=form.active_transcode_limit/>
+                    <p class=style::help>{tr(TextKey::ActiveTranscodeLimitHelp)}</p>
+                    <p class=style::help>{active_transcode_readout(active_transcode_capacity)}</p>
+                    <p class=style::help>{active_transcode_suggestion(active_transcode_capacity)}</p>
+                </Field>
+                <Field label=tr(TextKey::HlsSegmenterInitialSegmentCount)>
+                    <input class=style::input name="initial_segment_count" type="number" min="1" required value=form.initial_segment_count/>
+                    <p class=style::help>{tr(TextKey::HlsSegmenterInitialSegmentCountHelp)}</p>
+                </Field>
+            </SettingsSection>
+            <SettingsSection title=tr(TextKey::General)>
+                <CheckboxField label=tr(TextKey::ProbeForInterlacedFrames) name="probe_for_interlaced_frames" checked=form.probe_for_interlaced_frames caption=None/>
+                <CheckboxField label=tr(TextKey::SaveTroubleshootingReportsToDisk) name="save_reports" checked=form.save_reports caption=None/>
+                <Field label=tr(TextKey::GlobalWatermark)>
+                    <Select name="global_watermark_id" selected=form.global_watermark_id.map(|v| v.to_string()).unwrap_or_default() options=data.watermarks include_none=true/>
+                </Field>
+                <Field label=tr(TextKey::GlobalFallbackFiller)>
+                    <Select name="global_fallback_filler_id" selected=form.global_fallback_filler_id.map(|v| v.to_string()).unwrap_or_default() options=data.fallback_fillers include_none=true/>
+                </Field>
+                <Field label=tr(TextKey::HlsDirectOutputFormat)>
+                    <Select name="hls_direct_output_format" selected=form.hls_direct_output_format.to_string() options=vec![
                         SelectOption { value: "2".to_owned(), label: "MPEG-TS".to_owned() },
                         SelectOption { value: "3".to_owned(), label: "MP4".to_owned() },
                         SelectOption { value: "1".to_owned(), label: "MKV".to_owned() },
-                    ]
-                    include_none=false
-                />
-            </Field>
-            <Field label=tr(TextKey::DefaultMpegTsScript)>
-                <Select
-                    name="default_mpeg_ts_script"
-                    selected=form.default_mpeg_ts_script
-                    options=mpeg_ts_scripts
-                    include_none=false
-                />
-                <p class=style::help>{tr(TextKey::DefaultMpegTsScriptHelp)}</p>
-            </Field>
+                    ] include_none=false/>
+                </Field>
+                <Field label=tr(TextKey::DefaultMpegTsScript)>
+                    <Select name="default_mpeg_ts_script" selected=form.default_mpeg_ts_script options=mpeg_ts_scripts include_none=false/>
+                    <p class=style::help>{tr(TextKey::DefaultMpegTsScriptHelp)}</p>
+                </Field>
+            </SettingsSection>
         </SettingsForm>
         <script inner_html=embedded_subtitle_dependency_script()></script>
         <section class=style::content>
@@ -398,14 +360,23 @@ fn active_transcode_suggestion(capacity: ActiveTranscodeCapacityStatus) -> Strin
 
 fn render_logging(form: LoggingSettingsForm) -> impl IntoView {
     let levels = log_level_options();
+    let default_levels = levels.clone();
+    let http_levels = levels.clone();
+    let scanning_levels = levels.clone();
+    let scheduling_levels = levels.clone();
+    let searching_levels = levels.clone();
     view! {
         <SettingsForm title=tr(TextKey::Logging) action="/api/settings/logging/save">
-            <SelectField label=tr(TextKey::DefaultMinimumLogLevel) name="default_minimum_log_level" selected=form.default_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label=tr(TextKey::ScanningMinimumLogLevel) name="scanning_minimum_log_level" selected=form.scanning_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label=tr(TextKey::SchedulingMinimumLogLevel) name="scheduling_minimum_log_level" selected=form.scheduling_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label=tr(TextKey::SearchingMinimumLogLevel) name="searching_minimum_log_level" selected=form.searching_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label=tr(TextKey::StreamingMinimumLogLevel) name="streaming_minimum_log_level" selected=form.streaming_minimum_log_level options=levels.clone() include_none=false/>
-            <SelectField label=tr(TextKey::HttpMinimumLogLevel) name="http_minimum_log_level" selected=form.http_minimum_log_level options=levels include_none=false/>
+            <SettingsSection title=tr(TextKey::General)>
+                <SelectField label=tr(TextKey::DefaultMinimumLogLevel) name="default_minimum_log_level" selected=form.default_minimum_log_level options=default_levels include_none=false/>
+                <SelectField label=tr(TextKey::HttpMinimumLogLevel) name="http_minimum_log_level" selected=form.http_minimum_log_level options=http_levels include_none=false/>
+            </SettingsSection>
+            <SettingsSection title=tr(TextKey::Logging)>
+                <SelectField label=tr(TextKey::ScanningMinimumLogLevel) name="scanning_minimum_log_level" selected=form.scanning_minimum_log_level options=scanning_levels include_none=false/>
+                <SelectField label=tr(TextKey::SchedulingMinimumLogLevel) name="scheduling_minimum_log_level" selected=form.scheduling_minimum_log_level options=scheduling_levels include_none=false/>
+                <SelectField label=tr(TextKey::SearchingMinimumLogLevel) name="searching_minimum_log_level" selected=form.searching_minimum_log_level options=searching_levels include_none=false/>
+                <SelectField label=tr(TextKey::StreamingMinimumLogLevel) name="streaming_minimum_log_level" selected=form.streaming_minimum_log_level options=levels include_none=false/>
+            </SettingsSection>
         </SettingsForm>
     }
 }
@@ -413,12 +384,14 @@ fn render_logging(form: LoggingSettingsForm) -> impl IntoView {
 fn render_hdhr(form: HdhrSettingsForm) -> impl IntoView {
     view! {
         <SettingsForm title=tr(TextKey::HdHomeRun) action="/api/settings/hdhr/save">
-            <Field label=tr(TextKey::Uuid)>
-                <input class=style::input name="uuid" disabled value=form.uuid/>
-            </Field>
-            <Field label=tr(TextKey::TunerCount)>
-                <input class=style::input name="tuner_count" type="number" min="1" required value=form.tuner_count/>
-            </Field>
+            <SettingsSection title=tr(TextKey::General)>
+                <Field label=tr(TextKey::Uuid)>
+                    <input class=style::input name="uuid" disabled value=form.uuid/>
+                </Field>
+                <Field label=tr(TextKey::TunerCount)>
+                    <input class=style::input name="tuner_count" type="number" min="1" required value=form.tuner_count/>
+                </Field>
+            </SettingsSection>
         </SettingsForm>
     }
 }
@@ -426,12 +399,14 @@ fn render_hdhr(form: HdhrSettingsForm) -> impl IntoView {
 fn render_scanner(form: ScannerSettingsForm) -> impl IntoView {
     view! {
         <SettingsForm title=tr(TextKey::Scanner) action="/api/settings/scanner/save">
-            <Field label=tr(TextKey::LibraryRefreshInterval)>
-                <div class=style::input_with_adornment>
-                    <input class=style::input name="library_refresh_interval" type="number" min="0" max="999999" required value=form.library_refresh_interval/>
-                    <span class=style::adornment>{tr(TextKey::Hours)}</span>
-                </div>
-            </Field>
+            <SettingsSection title=tr(TextKey::General)>
+                <Field label=tr(TextKey::LibraryRefreshInterval)>
+                    <div class=style::input_with_adornment>
+                        <input class=style::input name="library_refresh_interval" type="number" min="0" max="999999" required value=form.library_refresh_interval/>
+                        <span class=style::adornment>{tr(TextKey::Hours)}</span>
+                    </div>
+                </Field>
+            </SettingsSection>
         </SettingsForm>
     }
 }
@@ -439,18 +414,15 @@ fn render_scanner(form: ScannerSettingsForm) -> impl IntoView {
 fn render_playout(form: PlayoutSettingsForm) -> impl IntoView {
     view! {
         <SettingsForm title=tr(TextKey::Playout) action="/api/settings/playout/save">
-            <Field label=tr(TextKey::DaysToBuild)>
-                <input class=style::input name="days_to_build" type="number" min="1" required value=form.days_to_build/>
-            </Field>
-            <CheckboxField
-                label=tr(TextKey::SkipMissingItems)
-                name="skip_missing_items"
-                checked=form.skip_missing_items
-                caption=Some(tr(TextKey::SkipMissingItemsHelp))
-            />
-            <Field label=tr(TextKey::ScriptedScheduleTimeout)>
-                <input class=style::input name="scripted_schedule_timeout_seconds" type="number" min="10" required value=form.scripted_schedule_timeout_seconds/>
-            </Field>
+            <SettingsSection title=tr(TextKey::General)>
+                <Field label=tr(TextKey::DaysToBuild)>
+                    <input class=style::input name="days_to_build" type="number" min="1" required value=form.days_to_build/>
+                </Field>
+                <CheckboxField label=tr(TextKey::SkipMissingItems) name="skip_missing_items" checked=form.skip_missing_items caption=Some(tr(TextKey::SkipMissingItemsHelp))/>
+                <Field label=tr(TextKey::ScriptedScheduleTimeout)>
+                    <input class=style::input name="scripted_schedule_timeout_seconds" type="number" min="10" required value=form.scripted_schedule_timeout_seconds/>
+                </Field>
+            </SettingsSection>
         </SettingsForm>
     }
 }
@@ -460,23 +432,19 @@ fn render_ui(data: UiSettingsPageData) -> impl IntoView {
     let windows_startup = windows_startup_controls(data.windows_startup);
     view! {
         <SettingsForm title=tr(TextKey::Ui) action="/api/settings/ui/save">
-            <SelectField
-                label=tr(TextKey::Theme)
-                name="is_dark_mode"
-                selected=if form.is_dark_mode { "true".to_owned() } else { "false".to_owned() }
-                options=vec![
-                    SelectOption { value: "true".to_owned(), label: tr(TextKey::Dark).to_owned() },
-                    SelectOption { value: "false".to_owned(), label: tr(TextKey::Light).to_owned() },
-                ]
-                include_none=false
-            />
-            <SelectField
-                label=tr(TextKey::Language)
-                name="language"
-                selected=form.language
-                options=supported_ui_language_options()
-                include_none=false
-            />
+            <SettingsSection title=tr(TextKey::General)>
+                <SelectField
+                    label=tr(TextKey::Theme)
+                    name="is_dark_mode"
+                    selected=if form.is_dark_mode { "true".to_owned() } else { "false".to_owned() }
+                    options=vec![
+                        SelectOption { value: "true".to_owned(), label: tr(TextKey::Dark).to_owned() },
+                        SelectOption { value: "false".to_owned(), label: tr(TextKey::Light).to_owned() },
+                    ]
+                    include_none=false
+                />
+                <SelectField label=tr(TextKey::Language) name="language" selected=form.language options=supported_ui_language_options() include_none=false/>
+            </SettingsSection>
             {windows_startup}
         </SettingsForm>
     }
@@ -507,9 +475,8 @@ fn windows_startup_controls(status: WindowsStartupStatusForm) -> Option<AnyView>
 
     Some(
         view! {
-            <section data-windows-startup-state=state>
-                <h2 class=style::section_title>{tr(TextKey::WindowsStartup)}</h2>
-                <div class=style::divider></div>
+            <SettingsSection title=tr(TextKey::WindowsStartup)>
+                <div data-windows-startup-state=state>
                 <CheckboxField
                     label=tr(TextKey::StartWithWindows)
                     name="windows_startup_enabled"
@@ -520,7 +487,8 @@ fn windows_startup_controls(status: WindowsStartupStatusForm) -> Option<AnyView>
                 {(!disabled).then(|| view! {
                     <input type="hidden" name="windows_startup_present" value="true"/>
                 })}
-            </section>
+                </div>
+            </SettingsSection>
         }
         .into_any(),
     )
@@ -529,29 +497,31 @@ fn windows_startup_controls(status: WindowsStartupStatusForm) -> Option<AnyView>
 fn render_xmltv(form: XmltvSettingsForm) -> impl IntoView {
     view! {
         <SettingsForm title=tr(TextKey::Xmltv) action="/api/settings/xmltv/save">
-            <Field label=tr(TextKey::DaysToBuild)>
-                <input class=style::input name="days_to_build" type="number" min="1" required value=form.days_to_build/>
-            </Field>
-            <SelectField
-                label=tr(TextKey::XmltvTimeZone)
-                name="time_zone"
-                selected=form.time_zone
-                options=vec![
-                    SelectOption { value: "Local".to_owned(), label: tr(TextKey::Local).to_owned() },
-                    SelectOption { value: "Utc".to_owned(), label: "UTC".to_owned() },
-                ]
-                include_none=false
-            />
-            <SelectField
-                label=tr(TextKey::XmltvBlockBehavior)
-                name="block_behavior"
-                selected=form.block_behavior
-                options=vec![
-                    SelectOption { value: "SplitTimeEvenly".to_owned(), label: tr(TextKey::SplitTimeEvenly).to_owned() },
-                    SelectOption { value: "UseActualTimes".to_owned(), label: tr(TextKey::UseActualTimes).to_owned() },
-                ]
-                include_none=false
-            />
+            <SettingsSection title=tr(TextKey::General)>
+                <Field label=tr(TextKey::DaysToBuild)>
+                    <input class=style::input name="days_to_build" type="number" min="1" required value=form.days_to_build/>
+                </Field>
+                <SelectField
+                    label=tr(TextKey::XmltvTimeZone)
+                    name="time_zone"
+                    selected=form.time_zone
+                    options=vec![
+                        SelectOption { value: "Local".to_owned(), label: tr(TextKey::Local).to_owned() },
+                        SelectOption { value: "Utc".to_owned(), label: "UTC".to_owned() },
+                    ]
+                    include_none=false
+                />
+                <SelectField
+                    label=tr(TextKey::XmltvBlockBehavior)
+                    name="block_behavior"
+                    selected=form.block_behavior
+                    options=vec![
+                        SelectOption { value: "SplitTimeEvenly".to_owned(), label: tr(TextKey::SplitTimeEvenly).to_owned() },
+                        SelectOption { value: "UseActualTimes".to_owned(), label: tr(TextKey::UseActualTimes).to_owned() },
+                    ]
+                    include_none=false
+                />
+            </SettingsSection>
         </SettingsForm>
     }
 }
@@ -559,33 +529,41 @@ fn render_xmltv(form: XmltvSettingsForm) -> impl IntoView {
 #[component]
 fn SettingsForm(title: &'static str, action: &'static str, children: Children) -> impl IntoView {
     view! {
-        <div class=style::page>
-            <form method="post" action=action class=style::form>
-                <div class=style::action_bar>
-                    <button class=style::button type="submit">
-                        <span style=icon_style(IconName::Save, "1rem") aria-hidden="true"></span>
-                        {tr(TextKey::SaveSettings)}
-                    </button>
-                </div>
-                <div class=style::content_scroll>
-                    <section class=style::content>
-                        <h1 class=style::title>{title}</h1>
-                        <div class=style::divider></div>
-                        {children()}
-                    </section>
-                </div>
-            </form>
-        </div>
+        <form method="post" action=action class=style::form>
+            <div class=style::action_bar>
+                <strong class=style::action_title>{title}</strong>
+                <button class=style::button type="submit">
+                    <span style=icon_style(IconName::Save, "1rem") aria-hidden="true"></span>
+                    {tr(TextKey::SaveSettings)}
+                </button>
+            </div>
+            <div class=style::content_scroll>
+                <header class=style::page_header>
+                    <h1 class=style::title>{title}</h1>
+                </header>
+                <div class=style::section_grid>{children()}</div>
+            </div>
+        </form>
+    }
+}
+
+#[component]
+fn SettingsSection(title: &'static str, children: Children) -> impl IntoView {
+    view! {
+        <section class=style::settings_section>
+            <h2 class=style::section_title>{title}</h2>
+            <div class=style::section_fields>{children()}</div>
+        </section>
     }
 }
 
 #[component]
 fn Field(label: &'static str, children: Children) -> impl IntoView {
     view! {
-        <div class=style::field_row>
-            <div class=style::label>{label}</div>
+        <label class=style::field_row>
+            <span class=style::label>{label}</span>
             <div>{children()}</div>
-        </div>
+        </label>
     }
 }
 

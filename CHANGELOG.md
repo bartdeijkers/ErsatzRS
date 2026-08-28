@@ -15,6 +15,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Rework desktop Settings around one global navigation entry, localized route
+  tabs, responsive section cards, and a standardized sticky save action. Logs
+  now uses the full content width with a compact search toolbar, accessible
+  sorting, and the shared localized pagination controls.
+
 - Replace public HTTPS add-on catalogs, signing keys, and automatic refreshes
   with operator-managed local Git checkouts and complete offline repository
   ZIPs. Add-ons are still installed and updated individually as immutable

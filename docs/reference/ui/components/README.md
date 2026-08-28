@@ -24,3 +24,4 @@ part of the contract until source and focused evidence close them.
 | [Pagination](pagination.md) | Implemented | Broad across `/media/*` | Range reporting, page size, and previous/next navigation |
 | [Resource state](resource-state.md) | Implemented | Broad | Stable loading, ready, empty, and failed resource markup |
 | [Navigation drawer](navigation-drawer.md) | Implemented | Global shell | Responsive primary admin navigation with keyboard-safe disclosure |
+| [Settings route tabs](settings-route-tabs.md) | Implemented | Broad across Settings | Settings subpage navigation without expanding the global drawer |

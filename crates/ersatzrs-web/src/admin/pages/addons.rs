@@ -23,6 +23,7 @@ use crate::admin::server_fns::addons::{
 };
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::resource_state::AdminErrorState;
+use crate::admin::ui::primitives::settings_navigation::SettingsPageLayout;
 use crate::admin::ui::primitives::toast::{load_or_notify, use_toast, ToastSeverity, ToastStore};
 
 stylance::import_crate_style!(style, "src/admin/pages/addons.module.css");
@@ -52,7 +53,11 @@ pub fn AddonsSettingsPage() -> impl IntoView {
             params.get("state").unwrap_or_else(|| "all".to_owned()),
         )
     });
-    view! { <AddonsSettingsIsland initial_view initial_search initial_filter/> }
+    view! {
+        <SettingsPageLayout>
+            <AddonsSettingsIsland initial_view initial_search initial_filter/>
+        </SettingsPageLayout>
+    }
 }
 
 #[component]
@@ -61,7 +66,7 @@ pub fn AddonDetailPage() -> impl IntoView {
     let query = use_query_map();
     let addon_id = params.with_untracked(|params| params.get("addon_id").unwrap_or_default());
     let source = query.with_untracked(|params| params.get("source"));
-    match load_addon_detail_initial(addon_id) {
+    let content = match load_addon_detail_initial(addon_id) {
         Ok(Some(detail)) => view! { <AddonDetailIsland detail source/> }.into_any(),
         Ok(None) => view! {
             <div class=style::not_found>
@@ -71,7 +76,8 @@ pub fn AddonDetailPage() -> impl IntoView {
         }
         .into_any(),
         Err(error) => view! { <AdminErrorState error/> }.into_any(),
-    }
+    };
+    view! { <SettingsPageLayout>{content}</SettingsPageLayout> }
 }
 
 fn load_addon_detail_initial(addon_id: String) -> Result<Option<AddonDetail>, String> {

@@ -527,6 +527,40 @@ test.describe('settings i18n parity', () => {
     });
   }
 
+  test('settings use one drawer entry and route tabs own page navigation', async ({
+    browserName,
+    page,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'The navigation contract is language-independent; Chromium avoids duplicate global settings writes',
+    );
+    await switchLanguage(page, 'en-us');
+    await page.goto('/settings/ffmpeg');
+
+    const drawer = page.locator('#admin-navigation-drawer');
+    await expect(drawer.locator('a[href^="/settings/"]')).toHaveCount(1);
+    await expect(drawer.getByRole('link', { name: 'Settings', exact: true })).toHaveAttribute(
+      'href',
+      '/settings/ffmpeg',
+    );
+
+    const tabs = page.locator('[data-settings-route-tabs]');
+    await expect(tabs.getByRole('link')).toHaveCount(8);
+    await expect(tabs.getByRole('link', { name: 'FFmpeg', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await tabs.getByRole('link', { name: 'Logging', exact: true }).click();
+    await expect(page).toHaveURL(/\/settings\/logging$/);
+    await expect(
+      page.locator('[data-settings-route-tabs]').getByRole('link', { name: 'Logging', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+    await expect(drawer.getByRole('link', { name: 'Settings', exact: true })).toHaveClass(
+      /nav-link-active/,
+    );
+  });
+
   test('ffmpeg playback language preferences use the Kodi list and persist und', async ({
     browserName,
     page,

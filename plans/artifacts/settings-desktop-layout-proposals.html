@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>ErsatzRS settings desktop layout proposals</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #090b0e;
+      --app: #101318;
+      --nav: #0d1014;
+      --surface: #181c22;
+      --surface-raised: #20252d;
+      --surface-soft: #14181e;
+      --line: #313844;
+      --line-strong: #4a5563;
+      --text: #f1f4f7;
+      --text-soft: #c8cfd7;
+      --muted: #929ca8;
+      --primary: #63bd6d;
+      --primary-strong: #168d30;
+      --primary-soft: #1a2b1e;
+      --blue: #7dbbe4;
+      --warning: #f3bd54;
+      --error: #ee7c7c;
+      --radius: 6px;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--canvas); color: var(--text); font-size: 15px; line-height: 1.5; }
+    button, input, select { font: inherit; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 3px;
+    }
+    button { cursor: pointer; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .study-header {
+      padding: 2.5rem clamp(1rem, 4vw, 4rem) 2rem;
+      border-bottom: 1px solid var(--line);
+      background: #0e1116;
+    }
+    .study-header > * { width: min(100%, 92rem); margin-inline: auto; }
+    .eyebrow { margin: 0 0 .4rem; color: var(--primary); font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    h1 { max-width: 24ch; margin: 0; font-size: clamp(2rem, 4vw, 3.5rem); line-height: 1.04; letter-spacing: -.045em; }
+    .lede { max-width: 78ch; margin: 1rem 0 0; color: var(--text-soft); }
+    .principle {
+      margin-top: 1.25rem;
+      padding: .9rem 1rem;
+      border: 1px solid #456c4a;
+      border-left: 3px solid var(--primary);
+      border-radius: var(--radius);
+      background: var(--primary-soft);
+      color: #d9e9db;
+      font-size: .82rem;
+    }
+    .index { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1rem; }
+    .index a {
+      display: inline-flex;
+      min-height: 2.75rem;
+      align-items: center;
+      padding: .6rem .85rem;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      color: var(--text-soft);
+      text-decoration: none;
+    }
+    .index a.recommended { border-color: #477a4e; background: var(--primary-soft); color: var(--text); }
+
+    .study-main { display: grid; gap: 4rem; padding: 3rem clamp(.7rem, 3vw, 3rem) 5rem; }
+    .component-kit, .proposal, .decision { width: min(100%, 104rem); margin-inline: auto; scroll-margin-top: 1rem; }
+    .section-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem; align-items: end; margin-bottom: 1rem; }
+    .section-heading h2, .decision h2 { margin: 0; font-size: clamp(1.45rem, 2.5vw, 2.1rem); line-height: 1.2; letter-spacing: -.025em; }
+    .section-heading p { max-width: 80ch; margin: .35rem 0 0; color: var(--muted); }
+    .badge {
+      align-self: start;
+      padding: .38rem .65rem;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      color: var(--text-soft);
+      font-size: .68rem;
+      font-weight: 800;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .badge.recommended { border-color: #4c8053; background: var(--primary-soft); color: #c6ebca; }
+
+    .kit-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .7rem; }
+    .kit-item { padding: .85rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); }
+    .kit-item strong { display: block; margin-bottom: .2rem; font-size: .78rem; }
+    .kit-item span { color: var(--muted); font-size: .69rem; }
+
+    .prototype-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+    .frame-label { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: .45rem; }
+    .frame-label strong { font-size: .78rem; }
+    .frame-label span { color: var(--muted); font-size: .66rem; }
+    .mock-shell {
+      display: grid;
+      grid-template-columns: 8.5rem minmax(0, 1fr);
+      min-height: 42rem;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--app);
+      box-shadow: 0 1.25rem 3rem rgb(0 0 0 / 28%);
+    }
+    .app-nav { padding: .9rem .45rem; border-right: 1px solid #282e36; background: var(--nav); }
+    .brand { padding: .1rem .45rem .9rem; color: var(--primary); font-size: .9rem; font-weight: 850; }
+    .app-nav h3 { margin: .65rem .45rem .2rem; color: #737d89; font-size: .56rem; letter-spacing: .09em; text-transform: uppercase; }
+    .app-nav a { display: block; min-height: 1.9rem; padding: .35rem .45rem; border-radius: 4px; color: #aeb7c1; font-size: .65rem; text-decoration: none; }
+    .app-nav a.active { background: var(--primary-soft); color: var(--primary); font-weight: 700; }
+    .app { min-width: 0; }
+    .topbar { display: flex; min-height: 2.75rem; align-items: center; gap: .55rem; padding: 0 .8rem; border-bottom: 1px solid var(--line); background: #15191f; color: var(--muted); font-size: .62rem; }
+    .topbar strong { color: var(--text-soft); }
+    .topbar span:last-child { margin-left: auto; }
+    .page { min-width: 0; padding: .95rem; }
+
+    /* Shared components used in every proposal. */
+    .page-header { display: flex; gap: .8rem; align-items: start; justify-content: space-between; margin-bottom: .8rem; }
+    .page-header h3 { margin: 0; font-size: 1.2rem; line-height: 1.15; letter-spacing: -.02em; }
+    .page-header p { margin: .25rem 0 0; color: var(--muted); font-size: .65rem; }
+    .button-primary, .button-secondary {
+      display: inline-flex;
+      min-height: 2.25rem;
+      align-items: center;
+      justify-content: center;
+      padding: .45rem .7rem;
+      border-radius: var(--radius);
+      font-size: .66rem;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+    .button-primary { border: 0; background: var(--primary-strong); color: white; }
+    .button-secondary { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text-soft); }
+    .settings-section { padding: .8rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .settings-section h4 { margin: 0; font-size: .76rem; }
+    .settings-section > p { margin: .15rem 0 .65rem; color: var(--muted); font-size: .61rem; }
+    .field-row { display: grid; grid-template-columns: minmax(7rem, .8fr) minmax(9rem, 1.2fr); gap: .6rem; align-items: center; min-height: 2.85rem; padding: .4rem 0; border-top: 1px solid #29303a; }
+    .field-row:first-of-type { border-top: 0; }
+    .field-row label, .field-label { color: var(--text-soft); font-size: .64rem; }
+    .field-row small { display: block; margin-top: .18rem; color: var(--muted); font-size: .57rem; }
+    input, select { width: 100%; min-height: 2.1rem; padding: .4rem .55rem; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #11151a; color: var(--text); font-size: .64rem; }
+    .check { display: flex; align-items: center; gap: .4rem; color: var(--text-soft); font-size: .62rem; }
+    .check input { width: .9rem; min-height: .9rem; accent-color: var(--primary); }
+    .page-toolbar { display: flex; flex-wrap: wrap; gap: .45rem; align-items: end; margin-bottom: .55rem; padding: .55rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); }
+    .page-toolbar .search { flex: 1 1 13rem; }
+    .page-toolbar .compact-control { flex: 0 1 6.5rem; }
+    .page-toolbar label { display: block; margin-bottom: .15rem; color: var(--muted); font-size: .55rem; font-weight: 700; }
+    .result-count { margin-left: auto; padding-bottom: .42rem; color: var(--muted); font-size: .58rem; font-variant-numeric: tabular-nums; }
+    .data-surface { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; color: var(--text-soft); font-size: .59rem; }
+    th { height: 2.2rem; padding: 0 .5rem; background: var(--surface-raised); color: var(--text); font-weight: 750; text-align: left; white-space: nowrap; }
+    td { padding: .42rem .5rem; border-top: 1px solid #2b313a; vertical-align: top; }
+    .timestamp { width: 8.2rem; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .level { width: 3.8rem; font-weight: 800; }
+    .level.info { color: var(--blue); }
+    .level.warn { color: var(--warning); }
+    .level.error { color: var(--error); }
+    .message { min-width: 15rem; overflow-wrap: anywhere; }
+    .pagination { display: flex; min-height: 2.5rem; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .55rem; padding: .35rem .5rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .57rem; }
+    .pagination button { min-width: 1.85rem; min-height: 1.85rem; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--blue); }
+
+    /* Proposal-specific composition only. */
+    .rail-composition { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: .75rem; align-items: start; }
+    .section-nav { padding: .3rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); }
+    .section-nav a { display: block; min-height: 1.9rem; padding: .38rem .45rem; border-radius: 4px; color: var(--muted); font-size: .6rem; text-decoration: none; }
+    .section-nav a.current { background: var(--surface-raised); box-shadow: inset 2px 0 var(--primary); color: var(--text); }
+    .section-stack { display: grid; gap: .55rem; min-width: 0; }
+
+    .route-tabs { display: flex; gap: .2rem; margin-bottom: .7rem; overflow-x: auto; border-bottom: 1px solid var(--line); }
+    .route-tabs a { min-height: 2.15rem; flex: 0 0 auto; padding: .5rem .55rem; border-bottom: 2px solid transparent; color: var(--muted); font-size: .58rem; font-weight: 700; text-decoration: none; }
+    .route-tabs a.current { border-bottom-color: var(--primary); color: var(--text); }
+    .card-composition { display: grid; grid-template-columns: repeat(2, minmax(12rem, 1fr)); gap: .55rem; }
+    .card-composition .field-row { grid-template-columns: 1fr; gap: .2rem; align-items: start; }
+    .sticky-action { display: flex; min-height: 3rem; align-items: center; justify-content: space-between; margin: -.95rem -.95rem .75rem; padding: .45rem .95rem; border-bottom: 1px solid var(--line); background: rgb(16 19 24 / 94%); }
+    .sticky-action strong { display: block; font-size: .66rem; }
+    .sticky-action span { display: block; color: var(--muted); font-size: .55rem; }
+
+    .document-composition { display: grid; grid-template-columns: minmax(0, 1fr) 8.5rem; gap: .8rem; align-items: start; }
+    .document-form { display: grid; gap: .75rem; }
+    .document-form .settings-section { padding: .2rem 0 .75rem; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+    .page-outline { position: sticky; top: .5rem; padding-left: .65rem; border-left: 1px solid var(--line); }
+    .page-outline strong { display: block; margin-bottom: .25rem; color: var(--muted); font-size: .55rem; letter-spacing: .07em; text-transform: uppercase; }
+    .page-outline a { display: block; padding: .25rem 0; color: var(--muted); font-size: .58rem; text-decoration: none; }
+    .page-outline a.current { color: var(--text); font-weight: 700; }
+    .log-stream { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .log-row { display: grid; grid-template-columns: 7.8rem 3.5rem minmax(0, 1fr); gap: .5rem; padding: .45rem .55rem; border-top: 1px solid #2b313a; font-size: .59rem; }
+    .log-row:first-child { border-top: 0; }
+    .log-row .message { min-width: 0; }
+
+    .proposal-notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; margin-top: .75rem; }
+    .proposal-notes div { padding: .7rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); }
+    .proposal-notes strong { display: block; margin-bottom: .15rem; font-size: .68rem; }
+    .proposal-notes span { color: var(--muted); font-size: .62rem; }
+
+    .comparison-wrap { margin-top: 1rem; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    .comparison { min-width: 52rem; font-size: .7rem; }
+    .comparison th, .comparison td { padding: .7rem; }
+    .acceptance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin-top: .8rem; }
+    .acceptance section { padding: .85rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); }
+    .acceptance h3 { margin: 0 0 .4rem; font-size: .78rem; }
+    .acceptance ul { margin: 0; padding-left: 1.1rem; color: var(--text-soft); font-size: .65rem; }
+    .acceptance li + li { margin-top: .25rem; }
+
+    @media (max-width: 1180px) {
+      .prototype-pair { grid-template-columns: 1fr; }
+      .mock-shell { min-height: 38rem; }
+      .kit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+      .section-heading { grid-template-columns: 1fr; }
+      .mock-shell { grid-template-columns: 1fr; }
+      .app-nav { display: none; }
+      .rail-composition, .document-composition { grid-template-columns: 1fr; }
+      .section-nav, .page-outline { position: static; display: flex; gap: .2rem; overflow-x: auto; padding: .25rem; border: 1px solid var(--line); border-radius: var(--radius); }
+      .section-nav a, .page-outline a { flex: 0 0 auto; padding: .38rem .45rem; }
+      .page-outline strong { display: none; }
+      .card-composition, .acceptance { grid-template-columns: 1fr; }
+      .field-row { grid-template-columns: 1fr; gap: .2rem; align-items: start; }
+      .proposal-notes { grid-template-columns: 1fr; }
+      .page-header { flex-direction: column; }
+      .page-header .button-primary { width: 100%; }
+      .log-row { grid-template-columns: minmax(7rem, 1fr) auto; }
+      .log-row .message { grid-column: 1 / -1; }
+    }
+    @media (max-width: 420px) {
+      .study-main { padding-inline: .45rem; }
+      .page { padding: .65rem; }
+      .sticky-action { margin: -.65rem -.65rem .7rem; padding-inline: .65rem; }
+      .sticky-action span { display: none; }
+      .kit-grid { grid-template-columns: 1fr; }
+      .page-toolbar .search, .page-toolbar .compact-control { flex-basis: 100%; }
+      .result-count { margin-left: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <header class="study-header">
+    <p class="eyebrow">Admin UX layout study</p>
+    <h1>Three desktop compositions from one component kit</h1>
+    <p class="lede">Settings pages currently underuse wide screens, while Logs needs a denser operational layout. These proposals compare page composition without inventing three separate design systems.</p>
+    <p class="principle"><strong>Standardization boundary:</strong> standardize reusable components and their states; let each page compose them according to its content. Settings forms do not need to look like Logs, but both should use the same header, toolbar, controls, data surface, pagination, focus, and status contracts.</p>
+    <nav class="index" aria-label="Proposal index">
+      <a href="#components">Shared components</a>
+      <a href="#proposal-a">A · Navigation rail</a>
+      <a class="recommended" href="#proposal-b">B · Card workbench · Recommended</a>
+      <a href="#proposal-c">C · Focused document</a>
+      <a href="#decision">Comparison</a>
+    </nav>
+  </header>
+
+  <main class="study-main">
+    <section class="component-kit" id="components">
+      <div class="section-heading">
+        <div><h2>Shared component kit</h2><p>All three proposals use these same semantic and visual contracts. Only their placement changes.</p></div>
+        <span class="badge">One implementation</span>
+      </div>
+      <div class="kit-grid">
+        <div class="kit-item"><strong>AdminPageHeader</strong><span>Page title, concise description, status, and one optional primary action.</span></div>
+        <div class="kit-item"><strong>SettingsSection + FieldRow</strong><span>Named group, persistent labels, helper text, validation, and responsive field alignment.</span></div>
+        <div class="kit-item"><strong>PageToolbar</strong><span>Search, filters, result count, and secondary actions in a wrapping control region.</span></div>
+        <div class="kit-item"><strong>DataSurface + Pagination</strong><span>Native table semantics, sorting, loading/empty/error rows, saved page size, and labelled paging.</span></div>
+        <div class="kit-item"><strong>ActionBar</strong><span>Save state and primary action; static or sticky based on page length.</span></div>
+        <div class="kit-item"><strong>RouteNav / PageOutline</strong><span>Same link and selected-state styling, used only where the page composition benefits.</span></div>
+        <div class="kit-item"><strong>ResourceState</strong><span>Stable loading, ready, empty, error, saving, and success presentation.</span></div>
+        <div class="kit-item"><strong>Control family</strong><span>Inputs, selects, checkboxes, buttons, focus indicators, disabled state, and help text.</span></div>
+      </div>
+    </section>
+
+    <section class="proposal" id="proposal-a">
+      <div class="section-heading">
+        <div><h2>Proposal A — Navigation rail</h2><p>A compact local rail improves cross-page movement. Settings stays a readable form; Logs uses the same navigation component but retains a full data table.</p></div>
+        <span class="badge">Lowest migration risk</span>
+      </div>
+      <div class="prototype-pair">
+        <div>
+          <div class="frame-label"><strong>Settings composition</strong><span>Rail + section stack</span></div>
+          <div class="mock-shell">
+            <aside class="app-nav"><div class="brand">ErsatzRS</div><a href="#">Channels</a><a href="#">Media</a><h3>Settings</h3><a class="active" href="#">FFmpeg</a><a href="#">Logging</a><a href="#">HDHomeRun</a><h3>Support</h3><a href="#">Logs</a></aside>
+            <div class="app"><div class="topbar"><strong>Settings</strong><span>Administration</span><span>EN</span></div><div class="page">
+              <header class="page-header"><div><h3>FFmpeg</h3><p>Playback defaults and streaming capacity.</p></div><button class="button-primary" type="button">Save settings</button></header>
+              <div class="rail-composition">
+                <nav class="section-nav" aria-label="Settings pages"><a href="#">Add-ons</a><a class="current" href="#" aria-current="page">FFmpeg</a><a href="#">Logging</a><a href="#">HDHomeRun</a><a href="#">Scanner</a><a href="#">Playout</a><a href="#">UI</a><a href="#">XMLTV</a></nav>
+                <form class="section-stack">
+                  <section class="settings-section"><h4>Runtime</h4><p>Executable discovery and default profile.</p><div class="field-row"><label for="a-path">FFmpeg path</label><div><input id="a-path" placeholder="Auto-detected"><small>Leave empty to use the managed runtime.</small></div></div><div class="field-row"><label for="a-profile">Default profile</label><select id="a-profile"><option>HD 1080p</option></select></div></section>
+                  <section class="settings-section"><h4>Language and subtitles</h4><p>Default track choices.</p><div class="field-row"><label for="a-audio">Preferred audio</label><select id="a-audio"><option>English</option></select></div><div class="field-row"><span class="field-label">Subtitle handling</span><label class="check"><input type="checkbox" checked>Use embedded subtitles</label></div></section>
+                </form>
+              </div>
+            </div></div>
+          </div>
+        </div>
+        <div>
+          <div class="frame-label"><strong>Logs composition</strong><span>Rail + toolbar + data surface</span></div>
+          <div class="mock-shell">
+            <aside class="app-nav"><div class="brand">ErsatzRS</div><a href="#">Channels</a><a href="#">Media</a><h3>Settings</h3><a href="#">FFmpeg</a><a href="#">Logging</a><h3>Support</h3><a class="active" href="#">Logs</a><a href="#">Health</a></aside>
+            <div class="app"><div class="topbar"><strong>Support</strong><span>Administration</span><span>EN</span></div><div class="page">
+              <header class="page-header"><div><h3>Logs</h3><p>Recent server events.</p></div></header>
+              <div class="rail-composition"><nav class="section-nav" aria-label="Support pages"><a href="#">Health checks</a><a class="current" href="#" aria-current="page">Logs</a><a href="#">Troubleshooting</a></nav><div>
+                <div class="page-toolbar"><div class="search"><label for="a-search">Search logs</label><input id="a-search" type="search" placeholder="Search messages"></div><div class="result-count">1–25 of 4,208</div></div>
+                <div class="data-surface"><div class="table-scroll"><table><caption class="sr-only">Recent logs</caption><thead><tr><th>Timestamp ↓</th><th>Level</th><th>Message</th></tr></thead><tbody><tr><td class="timestamp">28 Aug 14:24:18</td><td class="level info">INFO</td><td class="message">Library scan completed with no changes.</td></tr><tr><td class="timestamp">28 Aug 14:23:50</td><td class="level warn">WARN</td><td class="message">Channel 6 is waiting for its next playout build.</td></tr><tr><td class="timestamp">28 Aug 14:21:04</td><td class="level error">ERROR</td><td class="message">Add-on response could not be parsed.</td></tr></tbody></table></div><div class="pagination"><span>25 rows</span><span>1–25 of 4,208</span><button type="button" aria-label="Previous page">‹</button><button type="button" aria-label="Next page">›</button></div></div>
+              </div></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+      <div class="proposal-notes"><div><strong>Strength</strong><span>Excellent cross-page findability with minimal change to current components.</span></div><div><strong>Cost</strong><span>Duplicates global navigation and takes width away from Logs.</span></div><div><strong>Standardization</strong><span>Introduces RouteNav; every other component remains shared with B and C.</span></div></div>
+    </section>
+
+    <section class="proposal" id="proposal-b">
+      <div class="section-heading">
+        <div><h2>Proposal B — Card workbench</h2><p>The base sidebar exposes one Settings destination; route tabs own navigation between settings pages and can absorb future pages without expanding the base menu. Settings uses a two-column section grid, while Logs gets the complete width for its toolbar and data surface.</p></div>
+        <span class="badge recommended">Recommended</span>
+      </div>
+      <div class="prototype-pair">
+        <div>
+          <div class="frame-label"><strong>Settings composition</strong><span>Single menu item + route tabs + section grid</span></div>
+          <div class="mock-shell">
+            <aside class="app-nav"><div class="brand">ErsatzRS</div><a href="#">Channels</a><a href="#">Media</a><a class="active" href="#">Settings</a><h3>Support</h3><a href="#">Logs</a></aside>
+            <div class="app"><div class="topbar"><strong>Settings</strong><span>Administration</span><span>EN</span></div><div class="page">
+              <div class="sticky-action"><div><strong>FFmpeg settings</strong><span>Changes apply after a successful save.</span></div><button class="button-primary" type="button">Save settings</button></div>
+              <nav class="route-tabs" aria-label="Settings pages"><a href="#">Add-ons</a><a class="current" href="#" aria-current="page">FFmpeg</a><a href="#">Logging</a><a href="#">HDHomeRun</a><a href="#">Scanner</a><a href="#">Playout</a><a href="#">UI</a><a href="#">XMLTV</a></nav>
+              <header class="page-header"><div><h3>FFmpeg</h3><p>Grouped by operator decision, not field type.</p></div></header>
+              <form class="card-composition">
+                <section class="settings-section"><h4>Runtime and profile</h4><p>Executable discovery.</p><div class="field-row"><label for="b-path">FFmpeg path</label><div><input id="b-path" placeholder="Auto-detected"><small>Leave empty for managed.</small></div></div><div class="field-row"><label for="b-profile">Default profile</label><select id="b-profile"><option>HD 1080p</option></select></div></section>
+                <section class="settings-section"><h4>Language and subtitles</h4><p>Track selection defaults.</p><div class="field-row"><label for="b-audio">Preferred audio</label><select id="b-audio"><option>English</option></select></div><div class="field-row"><span class="field-label">Subtitle handling</span><label class="check"><input type="checkbox" checked>Use embedded subtitles</label></div></section>
+                <section class="settings-section"><h4>Streaming capacity</h4><p>Segmenter and transcodes.</p><div class="field-row"><label for="b-timeout">Idle timeout</label><select id="b-timeout"><option>60 seconds</option></select></div></section>
+                <section class="settings-section"><h4>Output defaults</h4><p>HLS and MPEG-TS.</p><div class="field-row"><label for="b-format">Direct format</label><select id="b-format"><option>MPEG-TS</option></select></div></section>
+              </form>
+            </div></div>
+          </div>
+        </div>
+        <div>
+          <div class="frame-label"><strong>Logs composition</strong><span>Header + toolbar + full-width data surface</span></div>
+          <div class="mock-shell">
+            <aside class="app-nav"><div class="brand">ErsatzRS</div><a href="#">Channels</a><a href="#">Media</a><a href="#">Settings</a><h3>Support</h3><a class="active" href="#">Logs</a><a href="#">Health</a></aside>
+            <div class="app"><div class="topbar"><strong>Support</strong><span>Administration</span><span>EN</span></div><div class="page">
+              <header class="page-header"><div><h3>Logs</h3><p>Recent server events in a message-first workspace.</p></div></header>
+              <div class="page-toolbar"><div class="search"><label for="b-search">Search logs</label><input id="b-search" type="search" placeholder="Search messages"></div><div class="compact-control"><label for="b-size">Rows</label><select id="b-size"><option>25</option><option>50</option><option>100</option></select></div><button class="button-secondary" type="button">Clear</button><div class="result-count">4,208 entries</div></div>
+              <div class="data-surface"><div class="table-scroll"><table style="table-layout:fixed"><caption class="sr-only">Recent logs</caption><colgroup><col style="width:8.2rem"><col style="width:3.8rem"><col></colgroup><thead><tr><th>Timestamp ↓</th><th>Level</th><th>Message</th></tr></thead><tbody><tr><td class="timestamp">28 Aug 14:24:18</td><td class="level info">INFO</td><td class="message">Library scan completed: 124 items checked, no changes.</td></tr><tr><td class="timestamp">28 Aug 14:23:50</td><td class="level warn">WARN</td><td class="message">Channel 6 is waiting for its next playout build. Playback continues from persisted state.</td></tr><tr><td class="timestamp">28 Aug 14:22:12</td><td class="level info">INFO</td><td class="message">HLS segmenter stopped after the configured idle timeout.</td></tr><tr><td class="timestamp">28 Aug 14:21:04</td><td class="level error">ERROR</td><td class="message">Add-on response could not be parsed; previous metadata remains available.</td></tr></tbody></table></div><div class="pagination" style="justify-content:space-between"><span>1–25 of 4,208 · newest first</span><span><button type="button" aria-label="First page">«</button> <button type="button" aria-label="Previous page">‹</button> <button type="button" aria-label="Next page">›</button> <button type="button" aria-label="Last page">»</button></span></div></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+      <div class="proposal-notes"><div><strong>Strength</strong><span>One stable Settings menu item prevents the base sidebar from growing as settings pages are added.</span></div><div><strong>Cost</strong><span>Opening a specific settings page takes one extra click; route tabs need translation-safe overflow and clear selected state.</span></div><div><strong>Standardization</strong><span>Route tabs become the single settings-navigation component while page compositions remain content-specific.</span></div></div>
+    </section>
+
+    <section class="proposal" id="proposal-c">
+      <div class="section-heading">
+        <div><h2>Proposal C — Focused document</h2><p>Long settings pages become semantic documents with an in-page outline. Logs reuses the toolbar and pagination but switches the data presentation to a readable chronological stream.</p></div>
+        <span class="badge">Best reading comfort</span>
+      </div>
+      <div class="prototype-pair">
+        <div>
+          <div class="frame-label"><strong>Settings composition</strong><span>Document + page outline</span></div>
+          <div class="mock-shell">
+            <aside class="app-nav"><div class="brand">ErsatzRS</div><a href="#">Channels</a><a href="#">Media</a><h3>Settings</h3><a class="active" href="#">FFmpeg</a><a href="#">Logging</a><a href="#">HDHomeRun</a><h3>Support</h3><a href="#">Logs</a></aside>
+            <div class="app"><div class="topbar"><strong>Settings / FFmpeg</strong><span>Administration</span><span>EN</span></div><div class="page">
+              <header class="page-header"><div><h3>FFmpeg settings</h3><p>One calm editing column with landmarks.</p></div><button class="button-primary" type="button">Save settings</button></header>
+              <div class="document-composition"><form class="document-form"><section class="settings-section" id="c-runtime"><h4>Runtime and profile</h4><p>Executable discovery.</p><div class="field-row"><label for="c-path">FFmpeg path</label><div><input id="c-path" placeholder="Auto-detected"><small>Leave empty for managed.</small></div></div><div class="field-row"><label for="c-profile">Default profile</label><select id="c-profile"><option>HD 1080p</option></select></div></section><section class="settings-section" id="c-language"><h4>Language and subtitles</h4><p>Default track selection.</p><div class="field-row"><label for="c-audio">Preferred audio</label><select id="c-audio"><option>English</option></select></div><div class="field-row"><span class="field-label">Subtitle handling</span><label class="check"><input type="checkbox" checked>Use embedded subtitles</label></div></section><section class="settings-section" id="c-streaming"><h4>Streaming capacity</h4><p>Segmenter and transcodes.</p><div class="field-row"><label for="c-timeout">Idle timeout</label><select id="c-timeout"><option>60 seconds</option></select></div></section></form><nav class="page-outline" aria-label="On this page"><strong>On this page</strong><a class="current" href="#c-runtime">Runtime</a><a href="#c-language">Language</a><a href="#c-streaming">Streaming</a><a href="#">Output</a></nav></div>
+            </div></div>
+          </div>
+        </div>
+        <div>
+          <div class="frame-label"><strong>Logs composition</strong><span>Toolbar + chronological stream</span></div>
+          <div class="mock-shell">
+            <aside class="app-nav"><div class="brand">ErsatzRS</div><a href="#">Channels</a><a href="#">Media</a><h3>Settings</h3><a href="#">FFmpeg</a><a href="#">Logging</a><h3>Support</h3><a class="active" href="#">Logs</a><a href="#">Health</a></aside>
+            <div class="app"><div class="topbar"><strong>Support / Logs</strong><span>Administration</span><span>EN</span></div><div class="page">
+              <header class="page-header"><div><h3>Logs</h3><p>Chronological reading view.</p></div></header>
+              <div class="page-toolbar"><div class="search"><label for="c-search">Search logs</label><input id="c-search" type="search" placeholder="Search messages"></div><div class="compact-control"><label for="c-size">Rows</label><select id="c-size"><option>25</option><option>50</option></select></div><div class="result-count">1–25 of 4,208</div></div>
+              <div class="log-stream" role="table" aria-label="Recent logs"><div class="log-row" role="row"><span class="timestamp" role="cell">28 Aug 14:24:18</span><span class="level info" role="cell">INFO</span><span class="message" role="cell">Library scan completed: 124 items checked, no changes.</span></div><div class="log-row" role="row"><span class="timestamp" role="cell">28 Aug 14:23:50</span><span class="level warn" role="cell">WARN</span><span class="message" role="cell">Channel 6 is waiting for its next playout build. Playback continues from persisted state.</span></div><div class="log-row" role="row"><span class="timestamp" role="cell">28 Aug 14:22:12</span><span class="level info" role="cell">INFO</span><span class="message" role="cell">HLS segmenter stopped after the configured idle timeout.</span></div><div class="log-row" role="row"><span class="timestamp" role="cell">28 Aug 14:21:04</span><span class="level error" role="cell">ERROR</span><span class="message" role="cell">Add-on response could not be parsed; previous metadata remains available.</span></div></div><div class="pagination"><span>1–25 of 4,208</span><button type="button" aria-label="Previous page">‹</button><button type="button" aria-label="Next page">›</button></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+      <div class="proposal-notes"><div><strong>Strength</strong><span>Excellent landmarks, zoom behavior, and long-form reading comfort.</span></div><div><strong>Cost</strong><span>Lower density; the log stream makes column comparison slower than a native table.</span></div><div><strong>Standardization</strong><span>Reuses controls and states but adds a second data-row presentation contract.</span></div></div>
+    </section>
+
+    <section class="decision" id="decision">
+      <h2>Comparison and recommendation</h2>
+      <div class="comparison-wrap"><table class="comparison"><caption class="sr-only">Proposal comparison</caption><thead><tr><th>Criterion</th><th>A · Navigation rail</th><th>B · Card workbench</th><th>C · Focused document</th></tr></thead><tbody><tr><th>Component reuse</th><td>High</td><td><strong>Highest</strong></td><td>High, plus stream variant</td></tr><tr><th>Settings desktop efficiency</th><td>Good</td><td><strong>Best</strong></td><td>Restrained</td></tr><tr><th>Logs efficiency</th><td>Good, rail consumes width</td><td><strong>Best, full-width table</strong></td><td>Best for reading one entry</td></tr><tr><th>Future settings growth</th><td>Local rail grows</td><td><strong>Base menu stays stable</strong></td><td>Base menu grows</td></tr><tr><th>Cross-page findability</th><td><strong>Best</strong></td><td>Good after entering Settings</td><td>Uses global navigation</td></tr><tr><th>Migration cost</th><td><strong>Lowest</strong></td><td>Moderate</td><td>Moderate to high</td></tr><tr><th>Direction</th><td>Conservative fallback</td><td><strong>Recommended base</strong></td><td>Borrow outline for long pages</td></tr></tbody></table></div>
+      <div class="acceptance">
+        <section><h3>Responsive and states</h3><ul><li>Cards and fields stack when content pressure requires it; route links scroll on one axis.</li><li>Only a bounded table may scroll horizontally; the page reflows at 320 CSS pixels.</li><li>Loading, ready, empty, error, validation, saving, saved, and disabled states preserve a stable page shell.</li><li>Long translations wrap without clipping actions or control labels.</li></ul></section>
+        <section><h3>Accessibility</h3><ul><li>Use native headings, forms, labels, tables, links, and buttons; sortable headings expose <code>aria-sort</code>.</li><li>Keyboard order matches visual order, with visible focus and named pagination controls.</li><li>Verify at 200% zoom, 320-pixel reflow, reduced motion, and both themes.</li><li>Loading and success use status semantics; load and save failures use alert semantics.</li></ul></section>
+        <section><h3>Rust/Leptos map</h3><ul><li>SSR renders complete forms and raw POST fallbacks.</li><li>Keep Logs search, sort, page size, and paging in its existing narrow island.</li><li>Shared Rust components own markup and states; CSS modules own component styling.</li><li>Page modules own composition only: grouping, ordering, and width allocation.</li></ul></section>
+        <section><h3>Verification</h3><ul><li>Focused SSR tests for field grouping and raw form actions.</li><li>Keyboard and accessible-name tests for sorting and pagination.</li><li>Hydration lint plus Chromium and Firefox at wide and narrow viewports.</li><li>Validate route-tab discovery, selected state, long translations, and overflow with additional future settings pages.</li></ul></section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

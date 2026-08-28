@@ -1,9 +1,15 @@
-# Add-on metadata editor artifacts
+# Admin UX artifacts
 
 These review artifacts preserve the UX decisions that guide the shared
 add-on-list implementation. They are design references, not a second UI
 implementation; the production surface remains the localized Leptos
 **Add-on Lists** page.
+
+The [settings desktop layout proposals](settings-desktop-layout-proposals.html)
+compare three compositions for Settings and Logs built from one standardized
+component kit. The artifact keeps page composition content-specific while
+standardizing headers, sections, fields, toolbars, data surfaces, pagination,
+actions, and resource states.
 
 ## Interactive artifacts
 

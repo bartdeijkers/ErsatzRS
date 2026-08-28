@@ -56,16 +56,12 @@ pub(super) fn NavDrawer() -> impl IntoView {
                     <NavLink href="/playouts" label=tr(TextKey::Playouts) icon=IconName::Play/>
                 </SchedulingNavGroup>
 
-                <NavGroup storage_key="settings" label=tr(TextKey::Settings)>
-                    <NavLink href="/settings/addons" label=tr(TextKey::Addons) icon=IconName::Settings/>
-                    <NavLink href="/settings/ffmpeg" label=tr(TextKey::Ffmpeg) icon=IconName::Settings/>
-                    <NavLink href="/settings/logging" label=tr(TextKey::Logging) icon=IconName::Settings/>
-                    <NavLink href="/settings/hdhr" label=tr(TextKey::HdHomeRun) icon=IconName::Settings/>
-                    <NavLink href="/settings/scanner" label=tr(TextKey::Scanner) icon=IconName::Settings/>
-                    <NavLink href="/settings/playout" label=tr(TextKey::Playout) icon=IconName::Settings/>
-                    <NavLink href="/settings/ui" label=tr(TextKey::Ui) icon=IconName::Settings/>
-                    <NavLink href="/settings/xmltv" label=tr(TextKey::Xmltv) icon=IconName::Settings/>
-                </NavGroup>
+                <NavLink
+                    href="/settings/ffmpeg"
+                    label=tr(TextKey::Settings)
+                    icon=IconName::Settings
+                    match_prefix="/settings/"
+                />
 
                 <SupportNavGroup>
                     <NavLink href="/system/health" label=tr(TextKey::HealthChecks) icon=IconName::Check/>
@@ -135,9 +131,17 @@ fn NavGroup(storage_key: &'static str, label: &'static str, children: ChildrenFn
 }
 
 #[component]
-fn NavLink(href: &'static str, label: &'static str, icon: IconName) -> impl IntoView {
+fn NavLink(
+    href: &'static str,
+    label: &'static str,
+    icon: IconName,
+    #[prop(optional)] match_prefix: Option<&'static str>,
+) -> impl IntoView {
     let location = use_location();
-    let is_active = move || location.pathname.get() == href;
+    let is_active = move || {
+        let pathname = location.pathname.get();
+        pathname == href || match_prefix.is_some_and(|prefix| pathname.starts_with(prefix))
+    };
 
     let cls = move || {
         if is_active() {
@@ -152,5 +156,15 @@ fn NavLink(href: &'static str, label: &'static str, icon: IconName) -> impl Into
             <span style=icon_style(icon, "1rem") aria-hidden="true"></span>
             <span class=style::nav_link_text>{label}</span>
         </a>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn settings_prefix_does_not_match_system_routes() {
+        let prefix = "/settings/";
+        assert!("/settings/logging".starts_with(prefix));
+        assert!(!"/system/logs".starts_with(prefix));
     }
 }
