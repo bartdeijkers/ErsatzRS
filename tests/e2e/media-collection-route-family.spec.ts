@@ -130,27 +130,33 @@ async function expectContentGeometry(page: Page, heading: string): Promise<void>
   expect(box?.width).toBeLessThanOrEqual(1600);
 }
 
-async function expectCollectionPagerTypography(page: Page): Promise<void> {
+async function expectStandardPaginationControls(page: Page): Promise<void> {
   const styles = await page.locator('main').evaluate((main) => {
-    const button = main.querySelector('button[class*="pager-btn"]');
-    const select = main.querySelector('select[class*="page-size"]');
-    if (!(button instanceof HTMLElement) || !(select instanceof HTMLElement)) {
+    const pagination = main.querySelector('[data-pagination]');
+    const button = pagination?.querySelector('button[aria-label]');
+    const select = pagination?.querySelector('select[data-pagination-page-size]');
+    if (
+      !(pagination instanceof HTMLElement)
+      || !(button instanceof HTMLElement)
+      || !(select instanceof HTMLElement)
+    ) {
       return null;
     }
-    const buttonStyle = window.getComputedStyle(button);
-    const selectStyle = window.getComputedStyle(select);
+    const buttonBox = button.getBoundingClientRect();
+    const selectBox = select.getBoundingClientRect();
     return {
-      buttonFontSize: buttonStyle.fontSize,
-      buttonLineHeight: buttonStyle.lineHeight,
-      selectFontSize: selectStyle.fontSize,
-      selectLineHeight: selectStyle.lineHeight,
+      buttonWidth: buttonBox.width,
+      buttonHeight: buttonBox.height,
+      selectHeight: selectBox.height,
+      contained: pagination.scrollWidth <= pagination.clientWidth,
     };
   });
 
   expect(styles).not.toBeNull();
-  expect(styles?.buttonFontSize).toBe('14px');
-  expect(styles?.selectFontSize).toBe('14px');
-  expect(styles?.buttonLineHeight).toBe(styles?.selectLineHeight);
+  expect(styles?.buttonWidth).toBeGreaterThanOrEqual(44);
+  expect(styles?.buttonHeight).toBeGreaterThanOrEqual(44);
+  expect(styles?.selectHeight).toBeGreaterThanOrEqual(44);
+  expect(styles?.contained).toBe(true);
 }
 
 async function expectMultiCollectionEditorGeometry(page: Page): Promise<void> {
@@ -267,7 +273,7 @@ SELECT COUNT(*) FROM "MultiCollection" WHERE "Name" = '${sqlEscape(fallbackName)
 
     await page.goto('/media/multi-collections');
     await expectContentGeometry(page, 'Multi Collections');
-    await expectCollectionPagerTypography(page);
+    await expectStandardPaginationControls(page);
     await expect(page.getByText('E2E Multi Collection').first()).toBeVisible();
     await expect(page.getByText(fallbackName).first()).toBeVisible();
     await page.screenshot({
@@ -286,6 +292,7 @@ SELECT COUNT(*) FROM "MultiCollection" WHERE "Name" = '${sqlEscape(fallbackName)
 
     await page.goto('/media/rerun-collections');
     await expectContentGeometry(page, 'Rerun Collections');
+    await expectStandardPaginationControls(page);
     await expect(page.getByText('E2E Rerun Collection').first()).toBeVisible();
     await page.goto(`/media/rerun-collections/${seed.rerunCollectionId}/edit`);
     await expect(page.getByRole('heading', { name: 'Rerun Collection', exact: true })).toBeVisible();
@@ -309,6 +316,7 @@ SELECT COUNT(*) FROM "MultiCollection" WHERE "Name" = '${sqlEscape(fallbackName)
 
     await page.goto('/media/filler/presets');
     await expectContentGeometry(page, 'Filler Presets');
+    await expectStandardPaginationControls(page);
     await expect(page.getByText('E2E Filler Preset').first()).toBeVisible();
     await page.goto(`/media/filler/presets/${seed.fillerPresetId}/edit`);
     await expect(page.getByRole('heading', { name: 'Filler Preset', exact: true })).toBeVisible();

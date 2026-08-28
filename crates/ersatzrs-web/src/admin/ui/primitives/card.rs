@@ -1,10 +1,9 @@
 use leptos::ev::MouseEvent;
 use leptos::prelude::*;
 
-use crate::admin::i18n::{
-    item_count, range_of, selected_count as selected_count_label, tr, TextKey,
-};
+use crate::admin::i18n::{selected_count as selected_count_label, tr, TextKey};
 use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::pagination::PaginationControls;
 
 pub use ersatzrs_domain::MediaItemState;
 
@@ -260,91 +259,76 @@ pub fn MediaCard(
 pub fn MediaCardPager(
     total: Signal<Option<u64>>,
     page: RwSignal<u32>,
-    page_size: u32,
+    page_size: RwSignal<u32>,
     #[prop(default = None)] selected_count: Option<Signal<usize>>,
     #[prop(default = None)] on_add_to_collection: Option<Callback<()>>,
     #[prop(default = None)] on_clear_selection: Option<Callback<()>>,
 ) -> impl IntoView {
-    let go_prev = move |_| {
+    let go_prev = Callback::new(move |()| {
         page.update(|p| {
             if *p > 0 {
                 *p -= 1;
             }
         });
-    };
-    let go_next = move |_| {
+    });
+    let go_next = Callback::new(move |()| {
         page.update(|p| {
-            let max_page = total.get().unwrap_or(0).saturating_sub(1) / u64::from(page_size);
+            let max_page =
+                total.get().unwrap_or(0).saturating_sub(1) / u64::from(page_size.get().max(1));
             if u64::from(*p) < max_page {
                 *p += 1;
             }
         });
-    };
+    });
+
+    let selection_view = selected_count.map(|count| {
+        view! {
+            <span
+                class=style::selected_label
+                style:display=move || if count.get() == 0 { "none" } else { "" }
+            >
+                {move || selected_count_label(count.get())}
+            </span>
+            {on_add_to_collection.map(|callback| view! {
+                <button
+                    type="button"
+                    class=style::add_btn
+                    style:display=move || if count.get() == 0 { "none" } else { "" }
+                    on:click=move |_| callback.run(())
+                >
+                    {tr(TextKey::AddToCollection)}
+                </button>
+            })}
+            {on_clear_selection.map(|callback| view! {
+                <button
+                    type="button"
+                    class=style::clear_btn
+                    style:display=move || if count.get() == 0 { "none" } else { "" }
+                    on:click=move |_| callback.run(())
+                >
+                    {tr(TextKey::Clear)}
+                </button>
+            })}
+        }
+    });
 
     view! {
-        <div class=style::pager>
-            <div class=style::pager_left>
-                {selected_count.map(|cnt| view! {
-                    <Show when=move || cnt.get() != 0>
-                        <span class=style::selected_label>
-                            {move || selected_count_label(cnt.get())}
-                        </span>
-                        {on_add_to_collection.map(|cb| view! {
-                            <button class=style::add_btn on:click=move |_| cb.run(())>
-                                {tr(TextKey::AddToCollection)}
-                            </button>
-                        })}
-                        {on_clear_selection.map(|cb| view! {
-                            <button class=style::clear_btn on:click=move |_| cb.run(())>
-                                {tr(TextKey::Clear)}
-                            </button>
-                        })}
-                    </Show>
-                })}
+        <div class=style::pager_shell>
+            <div class=style::pager_actions>
+                {selection_view}
             </div>
-            <div class=style::pager_right>
-                <Suspense fallback=move || view! {
-                    <span>{tr(TextKey::Loading)}</span>
-                    <button class=style::pager_btn disabled=true>"‹"</button>
-                    <button class=style::pager_btn disabled=true>"›"</button>
-                }>
-                    {move || {
-                        total.get().map(|total_items| {
-                            view! {
-                                <span>
-                                    {move || {
-                                        let p = page.get();
-                                        let start = p * page_size + 1;
-                                        let end = ((p + 1) * page_size)
-                                            .min(u32::try_from(total_items).unwrap_or(u32::MAX));
-                                        if total_items == 0 {
-                                            item_count(0)
-                                        } else {
-                                            range_of(start, end, total_items)
-                                        }
-                                    }}
-                                </span>
-                                <button
-                                    class=style::pager_btn
-                                    disabled=move || page.get() == 0
-                                    on:click=go_prev
-                                >
-                                    "‹"
-                                </button>
-                                <button
-                                    class=style::pager_btn
-                                    disabled=move || {
-                                        total_items == 0
-                                            || u64::from((page.get() + 1) * page_size) >= total_items
-                                    }
-                                    on:click=go_next
-                                >
-                                    "›"
-                                </button>
-                            }
-                        })
-                    }}
-                </Suspense>
+            <div class=style::pager_navigation>
+                <PaginationControls
+                    page=Signal::derive(move || page.get())
+                    total=total
+                    page_size=Signal::derive(move || page_size.get())
+                    on_previous=go_prev
+                    on_next=go_next
+                    on_page_size_change=Callback::new(move |value: u32| {
+                        page_size.set(value.max(1));
+                        page.set(0);
+                    })
+                />
             </div>
         </div>
     }

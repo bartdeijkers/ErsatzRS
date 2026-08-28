@@ -6,6 +6,7 @@ pub mod facet_bar;
 pub mod form;
 pub mod icon;
 pub mod letter_bar;
+pub mod pagination;
 pub mod resource_state;
 pub mod table;
 pub mod toast;

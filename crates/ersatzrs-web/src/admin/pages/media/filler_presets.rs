@@ -1,7 +1,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{delete_failed, filler_error_message, range_of, save_failed, tr, TextKey};
+use crate::admin::i18n::{delete_failed, filler_error_message, save_failed, tr, TextKey};
 use crate::admin::server_fns::filler::{
     delete_filler_preset, get_filler_preset_editor_options, get_filler_preset_form,
     get_filler_presets_page_size, list_filler_presets, save_filler_preset,
@@ -11,6 +11,7 @@ use crate::admin::server_fns::filler::{
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     icon::{icon_style, IconName},
+    pagination::PaginationControls,
     resource_state::{admin_loading_resource_view, admin_result_view},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -143,18 +144,6 @@ fn FillerPresetsList(
 
                 {move || {
                     let (rows, total) = current_data.get();
-                    let size = page_size.get().max(1);
-                    let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
-                        .unwrap_or(u32::MAX)
-                        .max(1);
-                    let current_page = page.get().min(total_pages.saturating_sub(1));
-                    let range_start = if total == 0 {
-                        0
-                    } else {
-                        u64::from(current_page) * u64::from(size) + 1
-                    };
-                    let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
-
                     view! {
                         <div class=style::table_wrap>
                             <table>
@@ -216,58 +205,26 @@ fn FillerPresetsList(
                                 </tbody>
                             </table>
                         </div>
-                        <div class=style::pager>
-                            <span>{tr(TextKey::RowsPerPage)} ":"</span>
-                            <select
-                                class=style::page_size
-                                aria-label=tr(TextKey::RowsPerPage)
-                                prop:value=move || page_size.get().to_string()
-                                on:change=move |event| {
-                                    if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                        page_size.set(value.max(1));
-                                        page.set(0);
-                                    }
-                                }
-                            >
-                                <option value="10">"10"</option>
-                                <option value="25">"25"</option>
-                                <option value="50">"50"</option>
-                                <option value="100">"100"</option>
-                            </select>
-                            <span class=style::pager_status>
-                                {range_of(
-                                    u32::try_from(range_start).unwrap_or(u32::MAX),
-                                    u32::try_from(range_end).unwrap_or(u32::MAX),
-                                    total,
-                                )}
-                            </span>
-                            <div class=style::pager_buttons>
-                                <button
-                                    type="button"
-                                    class=style::icon_button
-                                    disabled=move || page.get() == 0
-                                    title=tr(TextKey::PreviousPage)
-                                    aria-label=tr(TextKey::PreviousPage)
-                                    on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
-                                >
-                                    <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
-                                </button>
-                                <button
-                                    type="button"
-                                    class=style::icon_button
-                                    disabled=move || { page.get() + 1 >= total_pages }
-                                    title=tr(TextKey::NextPage)
-                                    aria-label=tr(TextKey::NextPage)
-                                    on:click=move |_| {
-                                        page.update(|page| {
-                                            *page = (*page + 1).min(total_pages.saturating_sub(1));
-                                        });
-                                    }
-                                >
-                                    <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
-                                </button>
-                            </div>
-                        </div>
+                        <PaginationControls
+                            page=Signal::derive(move || page.get())
+                            total=Signal::derive(move || Some(total))
+                            page_size=Signal::derive(move || page_size.get())
+                            page_size_options=Some(vec![10, 25, 50, 100])
+                            on_page_size_change=Callback::new(move |value: u32| {
+                                page_size.set(value.max(1));
+                                page.set(0);
+                            })
+                            on_previous=Callback::new(move |()| {
+                                page.update(|value| *value = value.saturating_sub(1));
+                            })
+                            on_next=Callback::new(move |()| {
+                                let size = page_size.get().max(1);
+                                let max_page = u32::try_from(total.div_ceil(u64::from(size)))
+                                    .unwrap_or(u32::MAX)
+                                    .saturating_sub(1);
+                                page.update(|value| *value = value.saturating_add(1).min(max_page));
+                            })
+                        />
                     }
                     .into_any()
                 }}

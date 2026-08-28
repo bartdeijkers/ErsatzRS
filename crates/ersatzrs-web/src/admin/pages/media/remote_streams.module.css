@@ -40,36 +40,26 @@
     font-weight: 600;
 }
 
-.pager {
+.pagination-slot {
+    min-width: min(100%, 22rem);
+}
+
+.pagination-slot > * {
+    justify-content: center;
+}
+
+.mobile-menu-button {
+    width: 2.75rem;
+    height: 2.75rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    padding: 0.125rem 0.25rem;
-    border-radius: var(--radius);
-    background: var(--color-surface);
+    border-radius: 999px;
     color: var(--color-gray-200);
-    font-size: 0.875rem;
 }
 
-.pager-btn {
-    width: 2.25rem;
-    height: 2.25rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius);
-    color: var(--color-gray-200);
-    text-decoration: none;
-}
-
-.pager-btn:hover:not(.pager-btn-disabled) {
+.mobile-menu-button:hover {
     background: var(--color-appbar);
-}
-
-.pager-btn-disabled {
-    opacity: 0.4;
-    pointer-events: none;
 }
 
 .actions {
@@ -226,7 +216,7 @@
         grid-template-columns: minmax(0, 1fr) auto;
     }
 
-    .pager {
+    .pagination-slot {
         grid-column: 1 / -1;
         grid-row: 2;
         justify-self: center;

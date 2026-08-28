@@ -19,6 +19,8 @@ pub struct LetterJump {
     pub base_uri: String,
     /// Optional `query` parameter to preserve through the jump.
     pub query: String,
+    /// Page size to preserve through cross-page jumps.
+    pub page_size: u32,
     /// 27-element vector of 1-based page numbers; index 0 is '#', 1..=26 is
     /// 'a'..='z'.
     pub page_map: LetterPageMap,
@@ -153,6 +155,7 @@ fn build_jump_href(jump: &LetterJump, letter: char) -> String {
     if !trimmed.is_empty() {
         params.push(format!("query={}", urlencoding::encode(trimmed)));
     }
+    params.push(format!("page_size={}", jump.page_size));
     if page > 1 {
         params.push(format!("page={page}"));
     }

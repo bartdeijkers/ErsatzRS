@@ -481,8 +481,7 @@ tbody tr:hover {
     color: var(--color-gray-300);
 }
 
-.select,
-.page-size {
+.select {
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
     border-radius: var(--radius);
@@ -491,8 +490,7 @@ tbody tr:hover {
     border: 1px solid var(--color-border);
 }
 
-.select:focus,
-.page-size:focus {
+.select:focus {
     outline: none;
     border-color: var(--color-primary);
 }
@@ -509,73 +507,6 @@ tbody tr:hover {
     margin: 0;
     color: var(--color-error, #f87171);
     font-size: 0.875rem;
-}
-
-.pager {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-    min-height: 3.25rem;
-    padding: 0 0.25rem 0 1rem;
-    border-bottom: 1px solid var(--color-table-line);
-    color: var(--color-text-primary);
-    font-size: 0.875rem;
-}
-
-.pager-status {
-    min-width: 7rem;
-    color: var(--color-text-primary);
-    text-align: right;
-}
-
-.pager-buttons {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.pager-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2rem;
-    height: 2rem;
-    padding: 0 0.5rem;
-    border: 0;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--color-action-default);
-    font: inherit;
-    font-size: 0.875rem;
-    cursor: pointer;
-}
-
-.pager-btn:hover:not(:disabled) {
-    background-color: var(--color-primary-20);
-}
-
-.pager-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.page-size {
-    min-width: 4.5rem;
-    height: 2rem;
-    padding: 0 1.5rem 0 0.5rem;
-    border: 0;
-    border-bottom: 1px solid var(--color-border);
-    border-radius: 0;
-    background-color: transparent;
-    color: var(--color-gray-100);
-    font: inherit;
-}
-
-.page-size option {
-    color: var(--color-gray-100);
-    background-color: var(--color-surface);
 }
 
 .autocomplete {

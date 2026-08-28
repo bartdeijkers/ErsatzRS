@@ -22,6 +22,10 @@ release section when tagging a release.
   installations remain runnable as legacy unmanaged packages and can be
   explicitly adopted by a local source without losing settings or data.
 
+- Standardize `/media/*` pagination with a built-in localized `Rows per page`
+  option list, range and page status, accessible previous/next actions,
+  44-pixel targets, responsive wrapping, and SSR-safe link navigation.
+
 - Require a completed, successful CI run for the exact release-candidate
   commit before creating any alpha, beta, or normal release tag.
 

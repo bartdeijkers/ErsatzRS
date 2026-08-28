@@ -62,6 +62,7 @@ where
 {
     let search = RwSignal::new(String::new());
     let page = RwSignal::new(0u32);
+    let page_size = RwSignal::new(PAGE_SIZE);
     let media_revision = RwSignal::new(String::new());
     Effect::new(move |_| {
         let _ = search.get();
@@ -72,11 +73,18 @@ where
     // construction (hydration-lint rule-3), so the failure is carried in the
     // resource value and rendered by `admin_result_view` instead.
     let data: Resource<Result<(Vec<MediaCardRow>, u64), String>> = Resource::new(
-        move || (search.get(), page.get(), media_revision.get()),
-        move |(q, p, _)| {
+        move || {
+            (
+                search.get(),
+                page.get(),
+                page_size.get(),
+                media_revision.get(),
+            )
+        },
+        move |(q, p, page_size, _)| {
             let loader = loader.clone();
             async move {
-                loader(q, p, PAGE_SIZE, true)
+                loader(q, p, page_size, true)
                     .await
                     .map_err(load_failed_message)
             }
@@ -135,7 +143,7 @@ where
 
             <LetterBar present=present/>
 
-            <MediaCardPager total=total page=page page_size=PAGE_SIZE/>
+            <MediaCardPager total=total page=page page_size=page_size/>
 
             <Suspense fallback=admin_loading_resource_view>
                 {move || {
@@ -187,7 +195,7 @@ where
                 }}
             </Suspense>
 
-            <MediaCardPager total=total page=page page_size=PAGE_SIZE/>
+            <MediaCardPager total=total page=page page_size=page_size/>
         </div>
     }
 }

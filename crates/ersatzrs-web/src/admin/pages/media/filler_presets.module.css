@@ -152,51 +152,6 @@ tbody tr:hover {
     cursor: default;
 }
 
-.pager {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 1.5rem;
-    min-height: 3.25rem;
-    padding: 0 0.25rem 0 1rem;
-    border-bottom: 1px solid var(--color-table-line);
-    color: var(--color-text-primary);
-    font-size: 0.875rem;
-}
-
-.pager-status {
-    min-width: 7rem;
-    text-align: right;
-}
-
-.pager-buttons {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.page-size {
-    min-width: 4.5rem;
-    height: 2rem;
-    padding: 0 1.5rem 0 0.5rem;
-    border: 0;
-    border-bottom: 1px solid var(--color-border);
-    border-radius: 0;
-    background-color: transparent;
-    color: var(--color-gray-100);
-    font: inherit;
-}
-
-.page-size:focus {
-    outline: none;
-    border-bottom-color: var(--color-gray-300);
-}
-
-.page-size option {
-    color: var(--color-gray-100);
-    background-color: var(--color-surface);
-}
-
 .editor {
     display: grid;
     grid-template-columns: 300px minmax(0, 500px);
@@ -341,13 +296,6 @@ tbody tr:hover {
     .content,
     .editor {
         max-width: none;
-    }
-
-    .pager {
-        justify-content: flex-start;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        padding: 0.75rem 0;
     }
 
     .editor {

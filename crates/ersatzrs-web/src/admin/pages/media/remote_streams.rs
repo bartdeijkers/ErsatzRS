@@ -8,12 +8,13 @@
 #![allow(clippy::too_many_lines)]
 
 use std::collections::HashSet;
+use std::fmt::Write as _;
 
 use leptos::ev::MouseEvent;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{item_count, range_of, selected_items_count, tr, TextKey};
+use crate::admin::i18n::{item_count, selected_items_count, tr, TextKey};
 use crate::admin::pages::media::multi_select_browser::{AddToCollectionModal, AddToPlaylistModal};
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
@@ -27,6 +28,7 @@ use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::letter_bar::{
     letter_bucket, FragmentLetterAnchor, LetterBar, LetterJump,
 };
+use crate::admin::ui::primitives::pagination::{PaginationFormField, PaginationLinks};
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
@@ -41,7 +43,8 @@ mod card_style {
     pub use s::*;
 }
 
-const PAGE_SIZE: u32 = 100;
+const DEFAULT_PAGE_SIZE: u32 = 100;
+const PAGE_SIZE_OPTIONS: [u32; 4] = [10, 25, 50, 100];
 const BASE_PATH: &str = "/media/remote/streams";
 
 #[component]
@@ -50,6 +53,8 @@ pub fn RemoteStreamsPage() -> impl IntoView {
     let params = use_params_map();
 
     let query = query_map.with_untracked(|p| p.get("query").unwrap_or_default());
+    let page_size =
+        query_map.with_untracked(|p| requested_page_size(p.get("page_size"), DEFAULT_PAGE_SIZE));
     let page = params.with_untracked(|p| {
         p.get("page")
             .and_then(|s| s.parse::<u32>().ok())
@@ -58,18 +63,18 @@ pub fn RemoteStreamsPage() -> impl IntoView {
     });
     let initial_query = query.clone();
     let initial = Resource::new_blocking(
-        move || (initial_query.clone(), page),
-        move |(query, page)| async move {
+        move || (initial_query.clone(), page, page_size),
+        move |(query, page, page_size)| async move {
             tokio::try_join!(
-                list_remote_streams(query.clone(), page, PAGE_SIZE),
-                remote_stream_page_map(query, PAGE_SIZE),
+                list_remote_streams(query.clone(), page, page_size),
+                remote_stream_page_map(query, page_size),
             )
         },
     );
 
     view! {
         <RemoteStreamTagFacets query=query.clone()/>
-        <RemoteStreamsNoScriptFallback query=query.clone() page=page/>
+        <RemoteStreamsNoScriptFallback query=query.clone() page=page page_size=page_size/>
         <Suspense fallback=admin_loading_resource_view>
             {move || {
                 let query = query.clone();
@@ -79,6 +84,7 @@ pub fn RemoteStreamsPage() -> impl IntoView {
                         <RemoteStreamsIsland
                             query=query.clone()
                             page=page
+                            page_size=page_size
                             initial_rows=initial_rows
                             initial_total=initial_total
                             initial_page_map=initial_page_map
@@ -139,8 +145,8 @@ fn active_tag(query: &str) -> Option<String> {
 }
 
 #[component]
-fn RemoteStreamsNoScriptFallback(query: String, page: u32) -> impl IntoView {
-    let rows = remote_stream_rows_for_noscript(query.clone(), page);
+fn RemoteStreamsNoScriptFallback(query: String, page: u32, page_size: u32) -> impl IntoView {
+    let rows = remote_stream_rows_for_noscript(query.clone(), page, page_size);
 
     view! {
         <noscript>
@@ -152,7 +158,7 @@ fn RemoteStreamsNoScriptFallback(query: String, page: u32) -> impl IntoView {
                             <span class=style::query_label>
                                 {format_remote_stream_count(&query, total)}
                             </span>
-                            <Pager query=query.clone() page=page total=total/>
+                            <Pager query=query.clone() page=page page_size=page_size total=total/>
                             <div class=style::actions></div>
                         </div>
                     </div>
@@ -198,10 +204,11 @@ fn RemoteStreamsNoScriptFallback(query: String, page: u32) -> impl IntoView {
 fn remote_stream_rows_for_noscript(
     query: String,
     page: u32,
+    page_size: u32,
 ) -> Result<(Vec<MediaCardRow>, u64), String> {
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current()
-            .block_on(list_remote_streams(query, page, PAGE_SIZE))
+            .block_on(list_remote_streams(query, page, page_size))
             .map_err(|error| error.to_string())
     })
 }
@@ -210,6 +217,7 @@ fn remote_stream_rows_for_noscript(
 fn remote_stream_rows_for_noscript(
     _query: String,
     _page: u32,
+    _page_size: u32,
 ) -> Result<(Vec<MediaCardRow>, u64), String> {
     Ok((Vec::new(), 0))
 }
@@ -218,6 +226,7 @@ fn remote_stream_rows_for_noscript(
 fn RemoteStreamsIsland(
     query: String,
     page: u32,
+    page_size: u32,
     initial_rows: Vec<MediaCardRow>,
     initial_total: u64,
     initial_page_map: crate::admin::server_fns::media_browser::LetterPageMap,
@@ -231,7 +240,7 @@ fn RemoteStreamsIsland(
         let q = q_for_rows.clone();
         let p = page;
         let _ = media_revision.get();
-        async move { load_or_notify(list_remote_streams(q, p, PAGE_SIZE).await, load_toast) }
+        async move { load_or_notify(list_remote_streams(q, p, page_size).await, load_toast) }
     });
     Effect::new(move |_| {
         if let Some(next_rows) = rows.get() {
@@ -250,7 +259,7 @@ fn RemoteStreamsIsland(
     let page_map = LocalResource::new(move || {
         let q = q_for_map.clone();
         let _ = media_revision.get();
-        async move { load_or_notify(remote_stream_page_map(q, PAGE_SIZE).await, load_toast) }
+        async move { load_or_notify(remote_stream_page_map(q, page_size).await, load_toast) }
     });
     #[cfg(target_arch = "wasm32")]
     let revision_load_failed = RwSignal::new(false);
@@ -305,12 +314,19 @@ fn RemoteStreamsIsland(
             let jump = LetterJump {
                 base_uri: BASE_PATH.to_owned(),
                 query: query_for_view.clone(),
+                page_size,
                 page_map: current_page_map.get(),
             };
 
             view! {
                 <LetterBar present=present jump=jump/>
-                <RemoteStreamsContent query=query_for_view page=page rows=items total=total/>
+                <RemoteStreamsContent
+                    query=query_for_view
+                    page=page
+                    page_size=page_size
+                    rows=items
+                    total=total
+                />
             }
         }}
     }
@@ -320,6 +336,7 @@ fn RemoteStreamsIsland(
 fn RemoteStreamsContent(
     query: String,
     page: u32,
+    page_size: u32,
     rows: Vec<MediaCardRow>,
     total: u64,
 ) -> impl IntoView {
@@ -356,7 +373,7 @@ fn RemoteStreamsContent(
             <div class=style::action_bar>
                 <div class=style::action_row>
                     <ActionLabel query=query.clone() total=total selected_count=selected_count/>
-                    <Pager query=query.clone() page=page total=total/>
+                <Pager query=query.clone() page=page page_size=page_size total=total/>
                     <div class=style::actions>
                         <button
                             type="button"
@@ -497,76 +514,57 @@ fn format_remote_stream_count(query: &str, total: u64) -> String {
 }
 
 #[component]
-fn Pager(query: String, page: u32, total: u64) -> impl IntoView {
-    let max_page = if total == 0 {
-        0
+fn Pager(query: String, page: u32, page_size: u32, total: u64) -> impl IntoView {
+    let prev_href = page_href(&query, page.saturating_sub(1), page_size);
+    let next_href = page_href(&query, page + 1, page_size);
+    let page_size_fields = if query.trim().is_empty() {
+        Vec::new()
     } else {
-        (total - 1) / u64::from(PAGE_SIZE)
+        vec![PaginationFormField {
+            name: "query".to_owned(),
+            value: query,
+        }]
     };
-    let current_page = u64::from(page);
-    let prev_disabled = page == 0;
-    let next_disabled = current_page >= max_page;
-    let start = page * PAGE_SIZE + 1;
-    let end = ((page + 1) * PAGE_SIZE).min(u32::try_from(total).unwrap_or(u32::MAX));
-    let summary = if total == 0 {
-        range_of(0, 0, 0)
-    } else {
-        range_of(start, end, total)
-    };
-
-    let prev_href = page_href(&query, page.saturating_sub(1));
-    let next_href = page_href(&query, page + 1);
-    let disabled_class = format!("{} {}", style::pager_btn, style::pager_btn_disabled);
 
     view! {
-        <div class=style::pager>
-            <span
-                class=disabled_class.clone()
-                style:display=move || if prev_disabled { "" } else { "none" }
-            >
-                {chevron(IconName::ChevronLeft)}
-            </span>
-            <a
-                class=style::pager_btn
-                href=prev_href
-                style:display=move || if prev_disabled { "none" } else { "" }
-            >
-                {chevron(IconName::ChevronLeft)}
-            </a>
-            <span>{summary}</span>
-            <span
-                class=disabled_class
-                style:display=move || if next_disabled { "" } else { "none" }
-            >
-                {chevron(IconName::ChevronRight)}
-            </span>
-            <a
-                class=style::pager_btn
-                href=next_href
-                style:display=move || if next_disabled { "none" } else { "" }
-            >
-                {chevron(IconName::ChevronRight)}
-            </a>
+        <div class=style::pagination_slot>
+            <PaginationLinks
+                page=page
+                total=total
+                page_size=page_size
+                previous_href=prev_href
+                next_href=next_href
+                page_size_action=BASE_PATH.to_owned()
+                page_size_fields=page_size_fields
+                page_size_options=Some(PAGE_SIZE_OPTIONS.to_vec())
+            />
         </div>
     }
 }
 
-fn chevron(icon: IconName) -> AnyView {
-    view! { <span style=icon_style(icon, "1.25rem") aria-hidden="true"></span> }.into_any()
-}
-
-fn page_href(query: &str, page: u32) -> String {
+fn page_href(query: &str, page: u32, page_size: u32) -> String {
     let mut url = if page == 0 {
         BASE_PATH.to_owned()
     } else {
         format!("{BASE_PATH}/page/{}", page + 1)
     };
     let trimmed = query.trim();
-    if !trimmed.is_empty() {
+    if trimmed.is_empty() {
+        url.push('?');
+    } else {
         url.push_str("?query=");
         url.push_str(&urlencoding::encode(trimmed));
+        url.push('&');
     }
+    let _ = write!(url, "page_size={page_size}");
     url
+}
+
+fn requested_page_size(value: Option<String>, default: u32) -> u32 {
+    value
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| PAGE_SIZE_OPTIONS.contains(value))
+        .unwrap_or(default)
 }
 
 #[component]
@@ -584,7 +582,7 @@ fn MobileActionMenu(
         <div class=style::mobile_menu>
             <button
                 type="button"
-                class=style::pager_btn
+                class=style::mobile_menu_button
                 aria-label=tr(TextKey::ItemActions)
                 aria-expanded=move || open.get().to_string()
                 on:click=move |_| open.update(|value| *value = !*value)
@@ -820,7 +818,7 @@ fn remote_stream_card_subtitle(row: &MediaCardRow) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{active_tag, page_href, tag_query_href};
+    use super::{active_tag, page_href, requested_page_size, tag_query_href};
 
     #[test]
     fn active_tag_round_trips_the_facet_link_query() {
@@ -841,11 +839,20 @@ mod tests {
 
     #[test]
     fn remote_stream_page_links_match_ersatztv_route_shape() {
-        assert_eq!(page_href("", 0), "/media/remote/streams");
-        assert_eq!(page_href("", 1), "/media/remote/streams/page/2");
+        assert_eq!(page_href("", 0, 50), "/media/remote/streams?page_size=50");
         assert_eq!(
-            page_href("library_id:7", 1),
-            "/media/remote/streams/page/2?query=library_id%3A7"
+            page_href("", 1, 50),
+            "/media/remote/streams/page/2?page_size=50"
         );
+        assert_eq!(
+            page_href("library_id:7", 1, 50),
+            "/media/remote/streams/page/2?query=library_id%3A7&page_size=50"
+        );
+    }
+
+    #[test]
+    fn remote_stream_page_size_accepts_only_control_options() {
+        assert_eq!(requested_page_size(Some("25".to_owned()), 100), 25);
+        assert_eq!(requested_page_size(Some("999".to_owned()), 100), 100);
     }
 }

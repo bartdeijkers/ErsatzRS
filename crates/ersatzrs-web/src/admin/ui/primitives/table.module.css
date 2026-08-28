@@ -77,33 +77,7 @@
     color: var(--color-muted);
 }
 
-.pagination {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 2rem;
-    min-height: 3.25rem;
-    font-size: 0.875rem;
-    color: var(--color-text-primary);
+.pagination-footer {
     padding: 0 1rem;
     border-top: 1px solid var(--color-table-line);
 }
-
-.page-btns {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.page-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2rem;
-    height: 2rem;
-    border-radius: 999px;
-    color: var(--color-action-default);
-    transition: background-color 150ms, color 150ms;
-}
-.page-btn:hover:not(:disabled) { background-color: var(--color-table-hover); }
-.page-btn:disabled { opacity: 0.4; }

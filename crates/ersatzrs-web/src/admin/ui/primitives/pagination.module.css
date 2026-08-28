@@ -1,0 +1,146 @@
+.pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem 1rem;
+    min-height: 3.25rem;
+    padding: 0.5rem 0;
+    color: var(--color-text-primary);
+    font-size: 0.875rem;
+}
+
+.page-size {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.page-size-form {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.page-size select {
+    min-width: 4.5rem;
+    min-height: 2.75rem;
+    padding: 0 1.75rem 0 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-text-primary);
+    background: var(--color-surface);
+    font: inherit;
+}
+
+.page-size select:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.page-size select option {
+    color: var(--color-gray-100);
+    background: var(--color-surface);
+}
+
+.apply {
+    min-height: 2.75rem;
+    padding: 0 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    color: var(--color-action-default);
+    background: var(--color-surface);
+    font: inherit;
+    cursor: pointer;
+}
+
+.apply:hover {
+    color: var(--color-text-primary);
+    background: var(--color-table-hover);
+}
+
+.apply:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.status {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem 0.75rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.range {
+    min-width: 7rem;
+    text-align: right;
+}
+
+.page {
+    color: var(--color-muted);
+    white-space: nowrap;
+}
+
+.buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    color: var(--color-action-default);
+    text-decoration: none;
+    transition: background-color 150ms, color 150ms;
+}
+
+.button:hover:not(:disabled):not(.disabled) {
+    color: var(--color-text-primary);
+    background: var(--color-table-hover);
+}
+
+.button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.button:disabled,
+.button.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+@media (max-width: 40rem) {
+    .pagination {
+        justify-content: flex-start;
+    }
+
+    .status {
+        flex: 1 1 auto;
+        justify-content: flex-start;
+    }
+
+    .page-size-form {
+        flex-wrap: wrap;
+    }
+
+    .range {
+        min-width: 0;
+        text-align: left;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .button {
+        transition: none;
+    }
+}

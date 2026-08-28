@@ -1,7 +1,8 @@
 #![allow(clippy::too_many_lines)]
 use leptos::prelude::*;
 
-use crate::admin::i18n::{item_count, range_of, rows_per_page, tr, TextKey};
+use crate::admin::i18n::{tr, TextKey};
+use crate::admin::ui::primitives::pagination::PaginationControls;
 
 stylance::import_crate_style!(style, "src/admin/ui/primitives/table.module.css");
 
@@ -89,14 +90,14 @@ pub fn PagedTable<T>(
 where
     T: Clone + Send + Sync + 'static,
 {
-    let go_prev = move |_| {
+    let go_prev = Callback::new(move |()| {
         params.update(|p| {
             if p.page > 0 {
                 p.page -= 1;
             }
         });
-    };
-    let go_next = move |_| {
+    });
+    let go_next = Callback::new(move |()| {
         params.update(|p| {
             let total_items = total.get().unwrap_or(0);
             let max = total_items.saturating_sub(1) / u64::from(p.page_size);
@@ -104,7 +105,7 @@ where
                 p.page += 1;
             }
         });
-    };
+    });
 
     view! {
         <div class=style::wrapper>
@@ -179,60 +180,21 @@ where
                     </tbody>
                 </table>
             </div>
-            {move || {
-                match total.get() {
-                    None => view! {
-                        <div class=style::pagination>
-                            <span>{tr(TextKey::Loading)}</span>
-                            <div class=style::page_btns>
-                                <button class=style::page_btn disabled=true>"‹"</button>
-                                <button class=style::page_btn disabled=true>"›"</button>
-                            </div>
-                        </div>
-                    }.into_any(),
-                    Some(total_items) => view! {
-                        <div class=style::pagination>
-                            <span>
-                                {move || {
-                                    let p = params.get();
-                                    rows_per_page(p.page_size)
-                                }}
-                            </span>
-                            <span>
-                                {move || {
-                                    let p = params.get();
-                                    let start = p.page * p.page_size + 1;
-                                    let end = ((p.page + 1) * p.page_size)
-                                        .min(u32::try_from(total_items).unwrap_or(u32::MAX));
-                                    if total_items == 0 {
-                                        item_count(0)
-                                    } else {
-                                        range_of(start, end, total_items)
-                                    }
-                                }}
-                            </span>
-                            <div class=style::page_btns>
-                                <button
-                                    class=style::page_btn
-                                    disabled=move || params.get().page == 0
-                                    on:click=go_prev
-                                    title=tr(TextKey::PreviousPage)
-                                >"‹"</button>
-                                <button
-                                    class=style::page_btn
-                                    disabled=move || {
-                                        let p = params.get();
-                                        total_items == 0
-                                            || u64::from((p.page + 1) * p.page_size) >= total_items
-                                    }
-                                    on:click=go_next
-                                    title=tr(TextKey::NextPage)
-                                >"›"</button>
-                            </div>
-                        </div>
-                    }.into_any(),
-                }
-            }}
+            <div class=style::pagination_footer>
+                <PaginationControls
+                    page=Signal::derive(move || params.get().page)
+                    total=total
+                    page_size=Signal::derive(move || params.get().page_size)
+                    on_previous=go_prev
+                    on_next=go_next
+                    on_page_size_change=Callback::new(move |value: u32| {
+                        params.update(|current| {
+                            current.page_size = value.max(1);
+                            current.page = 0;
+                        });
+                    })
+                />
+            </div>
         </div>
     }
 }

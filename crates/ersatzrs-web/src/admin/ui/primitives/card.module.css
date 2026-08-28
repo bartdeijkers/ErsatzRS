@@ -169,11 +169,8 @@
     z-index: 3;
 }
 
-/* MediaCardPager */
-/* Pager bar — three-column layout so the page summary + chevrons can
-   sit centered horizontally (matches ErsatzTV's `MediaCardPager.razor`
-   `MudPaper` block centered with `justify-content: center`). */
-.pager {
+/* MediaCardPager keeps bulk actions separate from pagination semantics. */
+.pager-shell {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -181,22 +178,21 @@
     font-size: 0.9375rem;
 }
 
-.pager-left {
+.pager-actions {
     flex: 1;
     display: flex;
     align-items: center;
     gap: 0.5rem;
 }
 
-.pager-right {
+.pager-navigation {
     flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    font-size: 0.9375rem;
-    color: var(--color-gray-200);
 }
+
+.pager-navigation > * { justify-content: center; }
 
 .add-btn {
     font-size: 0.75rem;
@@ -216,19 +212,6 @@
     transition: background-color 150ms;
 }
 .clear-btn:hover { background-color: var(--color-surface); }
-
-.pager-btn {
-    padding: 0.125rem 0.625rem;
-    font-size: 1.125rem;
-    line-height: 1;
-    border-radius: var(--radius);
-    color: var(--color-gray-200);
-    text-decoration: none;
-    transition: background-color 150ms;
-}
-.pager-btn:hover:not(:disabled) { background-color: var(--color-surface); }
-.pager-btn:disabled { opacity: 0.4; }
-.pager-btn-disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
 .selected-label {
     font-size: 0.75rem;

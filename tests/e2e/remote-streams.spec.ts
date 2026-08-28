@@ -370,6 +370,14 @@ LIMIT 1;
     const response = await noJsPage.goto(`/media/remote/streams?query=library_id:${seed.libraryId}`);
     expect(await response?.text()).toContain('Nurburgring broadcast');
     await expect(noJsPage.getByRole('heading', { name: 'Remote Streams' }).first()).toBeVisible();
+    await noJsPage.getByRole('combobox', { name: 'Rows per page' }).selectOption('50');
+    const changedPageResponse = noJsPage.waitForResponse(
+      (candidate) => candidate.request().resourceType() === 'document' && candidate.url().includes('page_size=50'),
+    );
+    await noJsPage.getByRole('button', { name: 'Apply' }).click();
+    const changedPageHtml = await (await changedPageResponse).text();
+    await expect(noJsPage).toHaveURL(/page_size=50/);
+    expect(changedPageHtml).toContain('Nurburgring broadcast');
     await expect(noJsPage.getByRole('link', { name: /next/i })).toHaveCount(0);
 
     await context.close();

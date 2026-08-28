@@ -21,6 +21,6 @@ part of the contract until source and focused evidence close them.
 | [Button and action link](button.md) | Implemented | Limited | Actions, navigation styled as an action, and icon-only actions |
 | [Dialog](dialog.md) | Implemented | Broad | Modal decisions and delete confirmation |
 | [Data table](data-table.md) | Implemented | Limited | Sortable, server-paged tabular data |
-| [Pagination](pagination.md) | Candidate | Fragmented | Range reporting and previous/next navigation |
+| [Pagination](pagination.md) | Implemented | Broad across `/media/*` | Range reporting, page size, and previous/next navigation |
 | [Resource state](resource-state.md) | Implemented | Broad | Stable loading, ready, empty, and failed resource markup |
 | [Navigation drawer](navigation-drawer.md) | Implemented | Global shell | Responsive primary admin navigation with keyboard-safe disclosure |

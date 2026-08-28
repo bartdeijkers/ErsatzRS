@@ -24,8 +24,8 @@ use leptos::prelude::*;
 
 use crate::admin::i18n::{
     add_to_collection_failed, add_to_playlist_failed, added_items_to_collection,
-    added_items_to_playlist, content_variant_badge_label, episode_display_subtitle, item_count,
-    range_of, season_display_name, select_collection_to_add_selected_items,
+    added_items_to_playlist, content_variant_badge_label, episode_display_subtitle,
+    season_display_name, select_collection_to_add_selected_items,
     select_playlist_to_add_selected_items, selected_items_count, tr, TextKey,
 };
 #[cfg(target_arch = "wasm32")]
@@ -47,6 +47,7 @@ use crate::admin::ui::primitives::icon::{icon_style, IconName};
 use crate::admin::ui::primitives::letter_bar::{
     letter_bucket, FragmentLetterAnchor, LetterBar, LetterJump,
 };
+use crate::admin::ui::primitives::pagination::{PaginationFormField, PaginationLinks};
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
@@ -59,7 +60,8 @@ mod card_style {
     pub use s::*;
 }
 
-pub const PAGE_SIZE: u32 = 50;
+const DEFAULT_PAGE_SIZE: u32 = 50;
+const PAGE_SIZE_OPTIONS: [u32; 4] = [10, 25, 50, 100];
 
 /// Encodes per-kind configuration that the page wrapper supplies. The fields
 /// are all scalars so they can be passed across the SSR → island boundary
@@ -229,14 +231,15 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
     use leptos_router::hooks::use_query_map;
 
     let query_map = use_query_map();
-    let (initial_query, initial_page) = query_map.with_untracked(|p| {
+    let (initial_query, initial_page, initial_page_size) = query_map.with_untracked(|p| {
         let q = p.get("query").unwrap_or_default();
         let pg = p
             .get("page")
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(1)
             .saturating_sub(1);
-        (q, pg)
+        let page_size = requested_page_size(p.get("page_size"), DEFAULT_PAGE_SIZE);
+        (q, pg, page_size)
     });
 
     let toolbar_query = initial_query.clone();
@@ -244,11 +247,17 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
     let base_path = config.base_path;
     let initial_query_for_resource = initial_query.clone();
     let initial = Resource::new_blocking(
-        move || (initial_query_for_resource.clone(), initial_page),
-        move |(q, p)| async move {
+        move || {
+            (
+                initial_query_for_resource.clone(),
+                initial_page,
+                initial_page_size,
+            )
+        },
+        move |(q, p, page_size)| async move {
             tokio::try_join!(
-                load_browser_rows(config.kind, q.clone(), p),
-                load_browser_page_map(config.kind, q),
+                load_browser_rows(config.kind, q.clone(), p, page_size),
+                load_browser_page_map(config.kind, q, page_size),
             )
         },
     );
@@ -264,6 +273,7 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
                     placeholder=tr(TextKey::Search)
                     value=toolbar_query
                 />
+                <input type="hidden" name="page_size" value=initial_page_size.to_string()/>
             </form>
 
             <Suspense fallback=admin_loading_resource_view>
@@ -274,6 +284,7 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
                             <MultiSelectIsland
                                 query=query.clone()
                                 page=initial_page
+                                page_size=initial_page_size
                                 kind_code=config.kind_code()
                                 initial_rows=initial_rows
                                 initial_total=initial_total
@@ -292,6 +303,7 @@ pub fn MultiSelectBrowserPage(config: BrowserKindConfig) -> impl IntoView {
 fn MultiSelectIsland(
     query: String,
     page: u32,
+    page_size: u32,
     kind_code: i32,
     initial_rows: Vec<MediaCardRow>,
     initial_total: u64,
@@ -308,7 +320,12 @@ fn MultiSelectIsland(
     let data: LocalResource<(Vec<MediaCardRow>, u64)> = LocalResource::new(move || {
         let q = q_for_resource.clone();
         let _ = media_revision.get();
-        async move { load_or_notify(load_browser_rows(kind, q, page).await, load_toast) }
+        async move {
+            load_or_notify(
+                load_browser_rows(kind, q, page, page_size).await,
+                load_toast,
+            )
+        }
     });
     Effect::new(move |_| {
         if let Some(rows) = data.get() {
@@ -327,7 +344,7 @@ fn MultiSelectIsland(
     let page_map: LocalResource<LetterPageMap> = LocalResource::new(move || {
         let q = q_for_map.clone();
         let _ = media_revision.get();
-        async move { load_or_notify(load_browser_page_map(kind, q).await, load_toast) }
+        async move { load_or_notify(load_browser_page_map(kind, q, page_size).await, load_toast) }
     });
     #[cfg(target_arch = "wasm32")]
     let revision_load_failed = RwSignal::new(false);
@@ -382,6 +399,7 @@ fn MultiSelectIsland(
             let jump = LetterJump {
                 base_uri: config.base_path.to_string(),
                 query: query.clone(),
+                page_size,
                 page_map: current_page_map.get(),
             };
 
@@ -391,6 +409,7 @@ fn MultiSelectIsland(
                     rows=rows
                     total=total
                     page=page
+                    page_size=page_size
                     query=query_for_links
                     config=config
                 />
@@ -403,26 +422,28 @@ async fn load_browser_rows(
     kind: MediaBrowserKind,
     query: String,
     page: u32,
+    page_size: u32,
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     match kind {
-        MediaBrowserKind::Movie => list_movies(query, page, PAGE_SIZE, true).await,
-        MediaBrowserKind::Show => list_shows(query, page, PAGE_SIZE, true).await,
-        MediaBrowserKind::Artist => list_artists(query, page, PAGE_SIZE, true).await,
-        MediaBrowserKind::OtherVideo => list_other_videos(query, page, PAGE_SIZE, true).await,
-        MediaBrowserKind::Season => list_seasons(query, page, PAGE_SIZE, true).await,
-        MediaBrowserKind::Episode => list_episodes(query, page, PAGE_SIZE, true).await,
-        MediaBrowserKind::MusicVideo => list_music_videos(query, page, PAGE_SIZE, true).await,
-        MediaBrowserKind::RemoteStream => list_remote_streams(query, page, PAGE_SIZE).await,
-        MediaBrowserKind::Song => list_songs(query, page, PAGE_SIZE, true).await,
-        MediaBrowserKind::Image => list_images(query, page, PAGE_SIZE, true).await,
+        MediaBrowserKind::Movie => list_movies(query, page, page_size, true).await,
+        MediaBrowserKind::Show => list_shows(query, page, page_size, true).await,
+        MediaBrowserKind::Artist => list_artists(query, page, page_size, true).await,
+        MediaBrowserKind::OtherVideo => list_other_videos(query, page, page_size, true).await,
+        MediaBrowserKind::Season => list_seasons(query, page, page_size, true).await,
+        MediaBrowserKind::Episode => list_episodes(query, page, page_size, true).await,
+        MediaBrowserKind::MusicVideo => list_music_videos(query, page, page_size, true).await,
+        MediaBrowserKind::RemoteStream => list_remote_streams(query, page, page_size).await,
+        MediaBrowserKind::Song => list_songs(query, page, page_size, true).await,
+        MediaBrowserKind::Image => list_images(query, page, page_size, true).await,
     }
 }
 
 async fn load_browser_page_map(
     kind: MediaBrowserKind,
     query: String,
+    page_size: u32,
 ) -> Result<LetterPageMap, ServerFnError> {
-    media_page_map(kind, query, PAGE_SIZE, true).await
+    media_page_map(kind, query, page_size, true).await
 }
 
 #[component]
@@ -430,6 +451,7 @@ fn GridWithSelection(
     rows: Vec<MediaCardRow>,
     total: u64,
     page: u32,
+    page_size: u32,
     query: String,
     config: BrowserKindConfig,
 ) -> impl IntoView {
@@ -518,14 +540,17 @@ fn GridWithSelection(
     };
 
     view! {
-        <div class=card_style::pager>
-            <div class=card_style::pager_left/>
-            <PagerCenter
-                base_path=config.base_path
-                query=query.clone()
-                page=page
-                total=total
-            />
+        <div class=card_style::pager_shell>
+            <div class=card_style::pager_actions/>
+            <div class=card_style::pager_navigation>
+                <PagerCenter
+                    base_path=config.base_path
+                    query=query.clone()
+                    page=page
+                    page_size=page_size
+                    total=total
+                />
+            </div>
             <div style="flex: 1; display: flex; justify-content: flex-end;">
                 <button
                     class=style::select_all_btn
@@ -1196,23 +1221,13 @@ pub(crate) fn AddToPlaylistModal(
 }
 
 #[component]
-fn PagerCenter(base_path: &'static str, query: String, page: u32, total: u64) -> impl IntoView {
-    let max_page = if total == 0 {
-        0
-    } else {
-        (total - 1) / u64::from(PAGE_SIZE)
-    };
-    let start = page * PAGE_SIZE + 1;
-    let end = ((page + 1) * PAGE_SIZE).min(u32::try_from(total).unwrap_or(u32::MAX));
-    let summary = if total == 0 {
-        item_count(0)
-    } else {
-        range_of(start, end, total)
-    };
-
-    let prev_disabled = page == 0;
-    let next_disabled = u64::from(page) >= max_page;
-
+fn PagerCenter(
+    base_path: &'static str,
+    query: String,
+    page: u32,
+    page_size: u32,
+    total: u64,
+) -> impl IntoView {
     let build_link = |q: &str, p: u32| {
         let mut url = String::from(base_path);
         let mut params: Vec<String> = Vec::new();
@@ -1220,6 +1235,7 @@ fn PagerCenter(base_path: &'static str, query: String, page: u32, total: u64) ->
         if !trimmed.is_empty() {
             params.push(format!("query={}", urlencoding::encode(trimmed)));
         }
+        params.push(format!("page_size={page_size}"));
         if p > 0 {
             params.push(format!("page={}", p + 1));
         }
@@ -1232,38 +1248,34 @@ fn PagerCenter(base_path: &'static str, query: String, page: u32, total: u64) ->
 
     let prev_href = build_link(&query, page.saturating_sub(1));
     let next_href = build_link(&query, page + 1);
+    let page_size_fields = if query.trim().is_empty() {
+        Vec::new()
+    } else {
+        vec![PaginationFormField {
+            name: "query".to_owned(),
+            value: query,
+        }]
+    };
 
     view! {
-        <div class=card_style::pager_right>
-            <span
-                class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)
-                style:display=move || if prev_disabled { "" } else { "none" }
-            >
-                "‹"
-            </span>
-            <a
-                class=card_style::pager_btn
-                href=prev_href
-                style:display=move || if prev_disabled { "none" } else { "" }
-            >
-                "‹"
-            </a>
-            <span>{summary}</span>
-            <span
-                class=format!("{} {}", card_style::pager_btn, card_style::pager_btn_disabled)
-                style:display=move || if next_disabled { "" } else { "none" }
-            >
-                "›"
-            </span>
-            <a
-                class=card_style::pager_btn
-                href=next_href
-                style:display=move || if next_disabled { "none" } else { "" }
-            >
-                "›"
-            </a>
-        </div>
+        <PaginationLinks
+            page=page
+            total=total
+            page_size=page_size
+            previous_href=prev_href
+            next_href=next_href
+            page_size_action=base_path.to_owned()
+            page_size_fields=page_size_fields
+            page_size_options=Some(PAGE_SIZE_OPTIONS.to_vec())
+        />
     }
+}
+
+fn requested_page_size(value: Option<String>, default: u32) -> u32 {
+    value
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|value| PAGE_SIZE_OPTIONS.contains(value))
+        .unwrap_or(default)
 }
 
 #[cfg(test)]
@@ -1296,5 +1308,11 @@ mod tests {
     #[test]
     fn ignores_episode_subtitle_without_expected_shape() {
         assert_eq!(localize_episode_subtitle("Show"), None);
+    }
+
+    #[test]
+    fn page_size_accepts_only_control_options() {
+        assert_eq!(requested_page_size(Some("25".to_owned()), 50), 25);
+        assert_eq!(requested_page_size(Some("999".to_owned()), 50), 50);
     }
 }

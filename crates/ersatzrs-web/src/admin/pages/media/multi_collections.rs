@@ -4,9 +4,7 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{
-    delete_failed, media_browser_error_message, page_of, save_failed, tr, TextKey,
-};
+use crate::admin::i18n::{delete_failed, media_browser_error_message, save_failed, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     delete_multi_collection, get_multi_collection, get_multi_collection_editor_options,
     get_multi_collections_page_size, list_multi_collections, save_multi_collection,
@@ -17,6 +15,7 @@ use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     form::TextField,
     icon::{icon_style, IconName},
+    pagination::PaginationControls,
     resource_state::{admin_loading_resource_view, admin_result_view},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -137,11 +136,6 @@ fn MultiCollectionsIsland(
 
             {move || {
                 let (rows, total) = current_data.get();
-                let size = u64::from(page_size.get().max(1));
-                let total_pages = u32::try_from(total.div_ceil(size))
-                    .unwrap_or(u32::MAX)
-                    .max(1);
-
                 let rows_view = if rows.is_empty() {
                     view! { <p class=style::empty>{tr(TextKey::NoMultiCollections)}</p> }
                         .into_any()
@@ -199,47 +193,26 @@ fn MultiCollectionsIsland(
 
                 view! {
                     {rows_view}
-                    <div class=style::pager>
-                        <button
-                            type="button"
-                            class=style::pager_btn
-                            disabled=move || page.get() == 0
-                            on:click=move |_| {
-                                page.update(|page| *page = page.saturating_sub(1));
-                            }
-                        >
-                            {tr(TextKey::PreviousPage)}
-                        </button>
-                        <span class=style::pager_status>
-                            {move || page_of(page.get() + 1, total_pages)}
-                        </span>
-                        <button
-                            type="button"
-                            class=style::pager_btn
-                            disabled=move || { page.get() + 1 >= total_pages }
-                            on:click=move |_| {
-                                let max_page = total_pages.saturating_sub(1);
-                                page.update(|page| *page = (*page + 1).min(max_page));
-                            }
-                        >
-                            {tr(TextKey::NextPage)}
-                        </button>
-                        <select
-                            class=style::page_size
-                            prop:value=move || page_size.get().to_string()
-                            on:change=move |event| {
-                                if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                    page_size.set(value.max(1));
-                                    page.set(0);
-                                }
-                            }
-                        >
-                            <option value="10">"10"</option>
-                            <option value="25">"25"</option>
-                            <option value="50">"50"</option>
-                            <option value="100">"100"</option>
-                        </select>
-                    </div>
+                    <PaginationControls
+                        page=Signal::derive(move || page.get())
+                        total=Signal::derive(move || Some(total))
+                        page_size=Signal::derive(move || page_size.get())
+                        page_size_options=Some(vec![10, 25, 50, 100])
+                        on_page_size_change=Callback::new(move |value: u32| {
+                            page_size.set(value.max(1));
+                            page.set(0);
+                        })
+                        on_previous=Callback::new(move |()| {
+                            page.update(|value| *value = value.saturating_sub(1));
+                        })
+                        on_next=Callback::new(move |()| {
+                            let size = page_size.get().max(1);
+                            let max_page = u32::try_from(total.div_ceil(u64::from(size)))
+                                .unwrap_or(u32::MAX)
+                                .saturating_sub(1);
+                            page.update(|value| *value = value.saturating_add(1).min(max_page));
+                        })
+                    />
                 }
                 .into_any()
             }}

@@ -15,7 +15,7 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::i18n::{
-    addon_media_list_error_message, delete_failed, match_status, range_of, save_failed, tr, TextKey,
+    addon_media_list_error_message, delete_failed, match_status, save_failed, tr, TextKey,
 };
 use crate::admin::server_fns::addon_media_lists::get_addon_media_list_show_nfo;
 use crate::admin::server_fns::addon_media_lists::{
@@ -40,6 +40,7 @@ use crate::admin::server_fns::addon_media_lists::{
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
     icon::{icon_style, IconName},
+    pagination::PaginationControls,
     resource_state::{admin_loading_resource_view, admin_result_view},
     toast::{load_or_notify, use_toast, ToastSeverity},
 };
@@ -1490,17 +1491,6 @@ fn AddonMediaListsIsland(
                 {move || {
                     let (rows, total) = current_data.get();
                     let has_rows = !rows.is_empty();
-                    let size = page_size.get().max(1);
-                    let total_pages = u32::try_from(total.div_ceil(u64::from(size)))
-                        .unwrap_or(u32::MAX)
-                        .max(1);
-                    let current_page = page.get().min(total_pages.saturating_sub(1));
-                    let range_start = if total == 0 {
-                        0
-                    } else {
-                        u64::from(current_page) * u64::from(size) + 1
-                    };
-                    let range_end = ((u64::from(current_page) + 1) * u64::from(size)).min(total);
 
                     view! {
                                 <div class=style::table_wrap style:display=if has_rows { "block" } else { "none" }>
@@ -1613,58 +1603,26 @@ fn AddonMediaListsIsland(
                                         </tbody>
                                     </table>
                                 </div>
-                                <div class=style::pager style:display=if total == 0 { "none" } else { "flex" }>
-                                    <span>{format!("{}:", tr(TextKey::RowsPerPage))}</span>
-                                    <select
-                                        class=style::page_size
-                                        aria-label=tr(TextKey::RowsPerPage)
-                                        prop:value=move || page_size.get().to_string()
-                                        on:change=move |event| {
-                                            if let Ok(value) = event_target_value(&event).parse::<u32>() {
-                                                page_size.set(value.max(1));
-                                                page.set(0);
-                                            }
-                                        }
-                                    >
-                                        <option value="10">"10"</option>
-                                        <option value="25">"25"</option>
-                                        <option value="50">"50"</option>
-                                        <option value="100">"100"</option>
-                                    </select>
-                                    <span class=style::pager_status>
-                                        {range_of(
-                                            u32::try_from(range_start).unwrap_or(u32::MAX),
-                                            u32::try_from(range_end).unwrap_or(u32::MAX),
-                                            total,
-                                        )}
-                                    </span>
-                                    <div class=style::pager_buttons>
-                                        <button
-                                            type="button"
-                                            class=style::icon_button
-                                            disabled=move || page.get() == 0
-                                            title=tr(TextKey::PreviousPage)
-                                            aria-label=tr(TextKey::PreviousPage)
-                                            on:click=move |_| page.update(|page| *page = page.saturating_sub(1))
-                                        >
-                                            <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class=style::icon_button
-                                            disabled=move || { page.get() + 1 >= total_pages }
-                                            title=tr(TextKey::NextPage)
-                                            aria-label=tr(TextKey::NextPage)
-                                            on:click=move |_| {
-                                                page.update(|page| {
-                                                    *page = (*page + 1).min(total_pages.saturating_sub(1));
-                                                });
-                                            }
-                                        >
-                                            <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
-                                        </button>
-                                    </div>
-                                </div>
+                                <PaginationControls
+                                    page=Signal::derive(move || page.get())
+                                    total=Signal::derive(move || Some(total))
+                                    page_size=Signal::derive(move || page_size.get())
+                                    page_size_options=Some(vec![10, 25, 50, 100])
+                                    on_page_size_change=Callback::new(move |value: u32| {
+                                        page_size.set(value.max(1));
+                                        page.set(0);
+                                    })
+                                    on_previous=Callback::new(move |()| {
+                                        page.update(|value| *value = value.saturating_sub(1));
+                                    })
+                                    on_next=Callback::new(move |()| {
+                                        let size = page_size.get().max(1);
+                                        let max_page = u32::try_from(total.div_ceil(u64::from(size)))
+                                            .unwrap_or(u32::MAX)
+                                            .saturating_sub(1);
+                                        page.update(|value| *value = value.saturating_add(1).min(max_page));
+                                    })
+                                />
                             }.into_any()
                 }}
             </section>
@@ -4921,57 +4879,28 @@ fn AddonMediaListEditorIsland(
                                 />
                         </ol>
                     </div>
-                    <nav class=style::pager aria-label=tr(TextKey::RowsPerPage)>
-                        <span>{format!("{}:", tr(TextKey::RowsPerPage))}</span>
-                        <select
-                            class=style::page_size
-                            aria-label=tr(TextKey::RowsPerPage)
-                            prop:value=move || item_page_size.get().to_string()
-                            on:change=move |event| {
-                                item_page.set(0);
-                                item_page_size.set(event_target_value(&event).parse().unwrap_or(DEFAULT_ITEM_PAGE_SIZE));
-                            }
-                        >
-                            {ITEM_PAGE_SIZES.into_iter().map(|size| view! {
-                                <option value=size.to_string()>
-                                    {if size == 0 { tr(TextKey::All).to_string() } else { size.to_string() }}
-                                </option>
-                            }).collect_view()}
-                        </select>
-                        <span class=style::pager_status role="status" aria-live="polite">
-                            {move || {
-                                let (start, end, total, _, _) = item_page_range.get();
-                                range_of(
-                                    if total == 0 { 0 } else { u32::try_from(start + 1).unwrap_or(u32::MAX) },
-                                    u32::try_from(end).unwrap_or(u32::MAX),
-                                    u64::try_from(total).unwrap_or(u64::MAX),
-                                )
-                            }}
-                        </span>
-                        <div class=style::pager_buttons>
-                            <button
-                                type="button"
-                                class=style::icon_button
-                                aria-label=tr(TextKey::PreviousPage)
-                                disabled=move || item_page_range.get().3 == 0
-                                on:click=move |_| item_page.update(|page| *page = page.saturating_sub(1))
-                            >
-                                <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
-                            </button>
-                            <button
-                                type="button"
-                                class=style::icon_button
-                                aria-label=tr(TextKey::NextPage)
-                                disabled=move || {
-                                    let (_, _, _, page, total_pages) = item_page_range.get();
-                                    page + 1 >= total_pages
-                                }
-                                on:click=move |_| item_page.update(|page| *page = page.saturating_add(1))
-                            >
-                                <span style=icon_style(IconName::ChevronRight, "1.25rem") aria-hidden="true"></span>
-                            </button>
-                        </div>
-                    </nav>
+                    <PaginationControls
+                        page=Signal::derive(move || item_page_range.get().3)
+                        total=Signal::derive(move || {
+                            Some(u64::try_from(filtered_item_count.get()).unwrap_or(u64::MAX))
+                        })
+                        page_size=Signal::derive(move || item_page_size.get())
+                        page_size_options=Some(ITEM_PAGE_SIZES.to_vec())
+                        on_page_size_change=Callback::new(move |value: u32| {
+                            item_page.set(0);
+                            item_page_size.set(value);
+                        })
+                        on_previous=Callback::new(move |()| {
+                            let current_page = item_page_range.get().3;
+                            item_page.set(current_page.saturating_sub(1));
+                        })
+                        on_next=Callback::new(move |()| {
+                            let (_, _, _, current_page, total_pages) = item_page_range.get();
+                            item_page.set(
+                                current_page.saturating_add(1).min(total_pages.saturating_sub(1)),
+                            );
+                        })
+                    />
                 </section>
                 <Modal
                     open=apply_content_kind_open
