@@ -1,7 +1,7 @@
 feature    = 'ErsatzRS healthcheck binary and health engine'
 etv_source = 'Spec-backed Phase 7 runtime hardening chore; no ErsatzTV equivalent'
 rs_target  = '`crates/ersatzrs-healthcheck`, `crates/ersatzrs-infra/src/health`, `crates/ersatzrs-web/src/admin/pages/system/health.rs`, `Dockerfile`, `.github/workflows/release.yml`, `docs/reference/release-bundle.md`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0064']
 summary    = '''
 Ported: ErsatzRS includes a dedicated `ersatzrs-healthcheck` binary that
@@ -40,6 +40,10 @@ The Artwork Cardinality check reports aggregate exact/same-source duplicates
 and projected show, season, and episode count mismatches without disclosing
 paths or provider identities. It links operators to the repaired television
 projection invariant while leaving distinct variants visible and intact.
+
+Remote Stream and add-on-list health applies liveness, inclusion, and
+publication filters so valid live entries and retained excluded draft state do
+not inflate the actionable warning count.
 '''
 
 [[debt]]
@@ -49,6 +53,37 @@ discovered  = '2026-08-23'
 evidence    = 'Resolved 2026-08-24: ArtworkCardinalityHealthCheck aggregates exact and same-source duplicate counts plus projected show/season/episode mismatches, emits localized guidance in every supported culture, and has focused clean/legacy regressions.'
 resolved    = true
 resolution  = 'The registered aggregate check makes the AMM-H invariant actionable while keeping paths and provider IDs out of health output.'
+
+[[debt]]
+id          = 'non-actionable-addon-state-health-warnings'
+description = 'Health reported explicitly live durationless playlist entries, failed detail jobs for excluded add-on items, and retained unpublished television projections as actionable warnings.'
+discovered  = '2026-08-29'
+evidence    = 'Resolved 2026-08-29: `health_reports_missing_duration_and_unknown_addon` proves a generated live definition with no duration passes; `ignores_failed_detail_work_for_excluded_items` filters excluded detail jobs; and `ignores_unpublished_projection_rows` keeps retained draft projection rows outside published cardinality. The focused `ersatzrs-infra` health suite passed 29/29.'
+resolved    = true
+resolution  = 'Health applies liveness, inclusion, and publication filters before counting actionable add-on and Remote Stream findings; the intentional local-trust advisory remains unchanged.'
+
+[[debt]]
+id          = 'invalid-remote-stream-definition-can-pass-health'
+description = 'P2: Validate generated Remote Stream definitions with the production parser before Live liveness suppresses a missing-duration warning, so an invalid managed definition cannot yield a passing health result.'
+discovered  = '2026-08-30'
+adr         = '0065'
+evidence    = 'Review on 2026-08-30: `managed_definition_is_live` deserializes `RemoteStreamDefinition` directly with `serde_yaml` and treats `liveness: live` as sufficient. Because playback fields are optional during raw deserialization, a definition with `liveness: live` and no `url` suppresses the duration warning and passes the later file-existence check, while `parse_remote_stream_definition` rejects the same file. Closure requires valid-live and invalid-live health regressions through the production validator.'
+resolved    = false
+
+[[debt]]
+id          = 'remote-stream-health-does-per-entry-blocking-io'
+description = 'P2: Keep Remote Stream playlist health bounded and async-safe instead of synchronously reading and YAML-parsing every durationless managed definition during each health run.'
+discovered  = '2026-08-30'
+adr         = '0065'
+evidence    = 'Review on 2026-08-30: the duration filter calls `std::fs::read_to_string` and `serde_yaml::from_str` once per active durationless sidecar entry inside async `check()`. Remote Stream lists accept up to `MAX_LIST_ITEMS = 10_000`, health checks run serially in the one-minute maintenance pass, and this O(N) blocking work can delay scheduler maintenance and later checks. Closure requires sidecar-carried validated liveness or bounded work off the async executor, without one blocking definition parse per entry.'
+resolved    = false
+
+[[debt]]
+id          = 'hls-delivery-underrun-not-health-visible'
+description = 'An active live HLS process can stop advancing completed segment duration without exiting or producing an actionable health result.'
+discovered  = '2026-08-29'
+evidence    = 'Resolved 2026-08-30: the live HLS worker compares completed EXTINF duration and sequence advancement with monotonic time, logs only sanitized transition metrics, and persists one bounded ConfigElement observation per numeric channel id. Active under-runs refresh a once-per-window health heartbeat without repeating warning logs. HLS Live Delivery health warns for under-runs from the last 30 minutes, retains recent visibility after recovery, ignores stale observations, and localizes the title and operator guidance in every supported culture. Focused tests cover no observation, recovery, stale evidence, startup stall, midstream stall, sustained under-run, heartbeat, sampling jitter, and every-language rendering.'
+resolved    = true
 
 [[debt]]
 id          = 'zero-duration-healthcheck-static-images'

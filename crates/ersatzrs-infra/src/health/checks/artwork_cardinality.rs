@@ -69,6 +69,7 @@ const PROJECTED_TELEVISION_COUNTS_SQL: &str = r#"
               ON "item"."Id" = "projection"."AddonMediaListItemId"
             JOIN "AddonMediaListTelevisionShow" AS "television"
               ON "television"."AddonMediaListId" = "item"."AddonMediaListId"
+            WHERE "item"."Published" = 1
         ) AS "ProjectionRows",
         (
             SELECT COUNT(DISTINCT "projection"."EpisodeId")
@@ -77,6 +78,7 @@ const PROJECTED_TELEVISION_COUNTS_SQL: &str = r#"
               ON "item"."Id" = "projection"."AddonMediaListItemId"
             JOIN "AddonMediaListTelevisionShow" AS "television"
               ON "television"."AddonMediaListId" = "item"."AddonMediaListId"
+            WHERE "item"."Published" = 1
         ) AS "DistinctEpisodes",
         (
             SELECT COUNT(*)
@@ -88,7 +90,8 @@ const PROJECTED_TELEVISION_COUNTS_SQL: &str = r#"
             JOIN "Episode" AS "episode" ON "episode"."Id" = "projection"."EpisodeId"
             JOIN "Season" AS "season" ON "season"."Id" = "episode"."SeasonId"
             JOIN "Show" AS "show" ON "show"."Id" = "season"."ShowId"
-            WHERE "show"."Id" = "television"."ShowId"
+            WHERE "item"."Published" = 1
+              AND "show"."Id" = "television"."ShowId"
               AND EXISTS (
                   SELECT 1 FROM "ShowMetadata" AS "metadata"
                   WHERE "metadata"."ShowId" = "show"."Id"
@@ -103,11 +106,17 @@ const PROJECTED_TELEVISION_COUNTS_SQL: &str = r#"
               )
         ) AS "CompleteHierarchyRows",
         (
-            SELECT COUNT(DISTINCT "episode"."Id")
-            FROM "AddonMediaListTelevisionShow" AS "television"
-            JOIN "Show" AS "show" ON "show"."Id" = "television"."ShowId"
-            JOIN "Season" AS "season" ON "season"."ShowId" = "show"."Id"
-            JOIN "Episode" AS "episode" ON "episode"."SeasonId" = "season"."Id"
+            SELECT COUNT(DISTINCT "projection"."EpisodeId")
+            FROM "AddonMediaListItemEpisode" AS "projection"
+            JOIN "AddonMediaListItem" AS "item"
+              ON "item"."Id" = "projection"."AddonMediaListItemId"
+            JOIN "AddonMediaListTelevisionShow" AS "television"
+              ON "television"."AddonMediaListId" = "item"."AddonMediaListId"
+            JOIN "Episode" AS "episode" ON "episode"."Id" = "projection"."EpisodeId"
+            JOIN "Season" AS "season" ON "season"."Id" = "episode"."SeasonId"
+            JOIN "Show" AS "show" ON "show"."Id" = "season"."ShowId"
+            WHERE "item"."Published" = 1
+              AND "show"."Id" = "television"."ShowId"
         ) AS "HierarchyEpisodes"
 "#;
 
@@ -332,6 +341,32 @@ mod tests {
         .execute(&pool)
         .await
         .expect("seed distinct artwork variants");
+
+        let result = ArtworkCardinalityHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("run artwork cardinality health check");
+
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
+    async fn ignores_unpublished_projection_rows() {
+        let pool = fixture_pool().await;
+        pool.execute(
+            r#"INSERT INTO "AddonMediaListItem" (
+                   "Id", "AddonMediaListId", "ParentProviderId", "Published"
+               ) VALUES (11, 1, NULL, 0)"#,
+        )
+        .await
+        .expect("seed unpublished item");
+        pool.execute(
+            r#"INSERT INTO "AddonMediaListItemEpisode" (
+                   "AddonMediaListItemId", "EpisodeId"
+               ) VALUES (11, 300)"#,
+        )
+        .await
+        .expect("seed unpublished projection");
 
         let result = ArtworkCardinalityHealthCheck::new(pool)
             .check()

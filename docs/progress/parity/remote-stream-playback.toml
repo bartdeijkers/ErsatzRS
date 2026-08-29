@@ -1,7 +1,7 @@
 feature    = 'Remote Stream playback'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/InternalController.cs`; `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutModeSchedulerFlood.cs`'
 rs_target  = '`crates/ersatzrs-infra/src/remote_stream.rs`; `crates/ersatzrs-web/src/transport/iptv/stream.rs`; `crates/ersatzrs-infra/src/hls_worker.rs`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0057', '0063', '0066']
 
 summary    = '''
@@ -64,3 +64,25 @@ Evidence:
 - Flood duration regression: `./run.sh test -p ersatzrs-core classic_flood_expands_zero_duration_remote_stream_to_hard_stop`.
 - Playlist type and UI proof are tracked by `remote-streams-browser.toml`.
 '''
+
+[[debt]]
+id          = 'unschedulable-remote-stream-fails-whole-build'
+description = 'A Remote Stream with unknown playback behavior, or a finite one without a positive duration, aborted the entire playout build instead of being dropped from its collection, so one unusable item left its channel with no playout items and nothing to stream.'
+discovered  = '2026-08-28'
+evidence    = 'Found in a live database: one Beeld & Geluid episode out of 83 resolved with `Liveness = 0` and no duration, and its channel failed every build with "Remote Stream 4395 has unknown playback behavior". ErsatzTV `PlayoutBuilder.CheckForEmptyCollections` instead logs and removes each zero-duration item (the `isZero` arm covers `RemoteStream` when both the media version duration and `rs.Duration` are absent or zero) and keeps scheduling; only a collection left with no items at all stops the build. Resolved by `drop_unschedulable_remote_streams` in `crates/ersatzrs-core/src/playout_builder.rs`, which removes those items from every reference-data collection and reports each removal as a playout build warning. Regression `one_unschedulable_remote_stream_does_not_block_its_collection` proves a mixed collection still schedules its healthy items.'
+resolved    = true
+
+[[debt]]
+id          = 'filtered-required-source-can-clear-playout'
+description = 'P1: Reject a playout build when filtering unknown or durationless finite Remote Streams leaves any required scheduling source empty; otherwise Reset or accepted Refresh can clear the existing timeline without replacement.'
+discovered  = '2026-08-30'
+evidence    = 'Review on 2026-08-30: `PlayoutBuilder::build` runs `drop_unschedulable_remote_streams` before engine dispatch but has no post-filter required-source guard. `live_sources_require_classic_flood_and_unknown_never_schedules` accepts an all-filtered empty result, while `one_unschedulable_remote_stream_does_not_block_its_collection` covers only a mixed source. Classic Reset or accepted Refresh returns `clear_items = true`, so persistence can delete existing rows without replacement; ErsatzTV `CheckForEmptyCollections` rejects a required collection after filtering leaves it empty. Closure requires Reset and Refresh regressions proving refusal occurs before any destructive clear.'
+resolved    = false
+
+[[debt]]
+id          = 'live-addon-sustained-delivery-unproven'
+adr         = '0057'
+description = 'The live yt-dlp add-on producer path is proven to emit valid streams but is not proven to sustain realtime delivery through the Windows HLS consumer; the current pipeline has no provider-versus-host under-run isolation.'
+discovered  = '2026-08-29'
+evidence    = 'The bounded Windows session kept the producer and consumer alive with zero transport/timestamp faults. Process sampling showed low CPU use, but channel 10 uses NVENC, so CPU alone cannot assign the slow layer. The first half-realtime estimate was invalid for VBR HLS; a metadata-only yt-dlp 2026.08.19 probe selected 1080p30 AVC at about 4.56 Mbps. Milestone hls-live-01 requires the new segment-advancement telemetry on an exact Windows candidate before assigning provider-specific recovery.'
+resolved    = false

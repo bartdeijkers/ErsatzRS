@@ -19,12 +19,25 @@ release section when tagging a release.
   version-specific external contracts, keeps retrieval to the smallest useful
   query set, and avoids calls when local repository evidence is authoritative.
 
+### Changed
+
+- Skip a Remote Stream whose playback behavior or duration is unknown instead
+  of refusing the whole playout build, matching ErsatzTV's `PlayoutBuilder`,
+  which drops zero-duration items from a collection and keeps scheduling. A
+  single add-on episode that resolved without a duration previously left its
+  channel with no playout items and nothing to stream. Dropped items are now
+  reported as playout build warnings.
+
 ### Fixed
 
 - Detect live HLS segment under-runs even when every received MPEG-TS packet is
   structurally valid, expose recent events through health, and make the manual
   TSDuck gate compare PCR media time with wall time without misclassifying
   variable-rate HLS from packet count and nominal bitrate.
+
+- Stop health checks from reporting durationless live Remote Stream playlist
+  entries, excluded add-on detail failures, and unpublished television
+  projections as actionable warnings.
 
 - Play sidecar subtitles whose filename contains an apostrophe, comma or
   semicolon. Those characters reached the ffmpeg `subtitles` filter unescaped,

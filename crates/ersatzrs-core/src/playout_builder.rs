@@ -86,7 +86,11 @@ impl PlayoutBuilder {
     ///
     /// Returns [`SchedulingError::UnsupportedScheduleKind`] for `None`, which
     /// is not a buildable schedule kind.
-    pub fn build(&self, request: SchedulingRequest) -> Result<SchedulingResult, SchedulingError> {
+    pub fn build(
+        &self,
+        mut request: SchedulingRequest,
+    ) -> Result<SchedulingResult, SchedulingError> {
+        let dropped = drop_unschedulable_remote_streams(&mut request.reference_data);
         validate_remote_stream_placements(&request)?;
         let options = ConfiguredPlayoutOptions::from_request(&request);
         let mut result = match request.playout.schedule_kind {
@@ -101,12 +105,80 @@ impl PlayoutBuilder {
         }?;
 
         apply_configured_playout_options(&mut result, &options);
+        result.warnings.extend(dropped);
         Ok(result)
     }
 }
 
+/// Drop Remote Streams that cannot be placed on a timeline, mirroring the
+/// `zeroItems` pass in C# `PlayoutBuilder.CheckForEmptyCollections`.
+///
+/// `ErsatzTV` logs and removes each media item whose duration is unknown or
+/// zero and keeps building; only a collection left with no items at all stops
+/// the build. A Remote Stream qualifies when its playback behavior is unknown,
+/// or when it is finite without a positive duration — the C# `isZero` arm for
+/// `RemoteStream`. Returning the removals as warnings keeps them visible on the
+/// playout instead of failing the whole channel over one unusable item.
+fn drop_unschedulable_remote_streams(reference: &mut SchedulingReferenceData) -> Vec<String> {
+    let unschedulable = scheduling_media_items(reference)
+        .filter(|item| match item.liveness {
+            Some(RemoteStreamLiveness::Unknown) => true,
+            Some(RemoteStreamLiveness::Finite) => item.duration <= Duration::zero(),
+            Some(RemoteStreamLiveness::Live) | None => false,
+        })
+        .map(|item| item.id)
+        .collect::<BTreeSet<_>>();
+    if unschedulable.is_empty() {
+        return Vec::new();
+    }
+
+    let retain = |items: &mut Vec<SchedulingMediaItem>| {
+        items.retain(|item| !unschedulable.contains(&item.id));
+    };
+    reference
+        .media_items_by_id
+        .retain(|id, _| !unschedulable.contains(id));
+    for items in reference
+        .media_by_key
+        .values_mut()
+        .chain(reference.collections_by_name.values_mut())
+        .chain(reference.multi_collections_by_name.values_mut())
+        .chain(reference.smart_collections_by_name.values_mut())
+        .chain(reference.playlists_by_group_and_name.values_mut())
+        .chain(reference.searches_by_query.values_mut())
+        .chain(reference.shows_by_name.values_mut())
+        .chain(reference.media_by_show_guid.values_mut())
+    {
+        retain(items);
+    }
+    for playlist in reference
+        .playlist_items_by_group_and_name
+        .values_mut()
+        .chain(reference.playlist_items_by_key.values_mut())
+        .flatten()
+    {
+        retain(&mut playlist.media_items);
+    }
+    for preset in reference.classic_filler_presets.values_mut() {
+        retain(&mut preset.media_items);
+    }
+    if let Some(fallback) = reference.global_fallback.as_mut() {
+        retain(&mut fallback.media_items);
+    }
+
+    unschedulable
+        .into_iter()
+        .map(|id| format!("Skipped Remote Stream {id} with unknown or zero duration"))
+        .collect()
+}
+
 fn validate_remote_stream_placements(request: &SchedulingRequest) -> Result<(), SchedulingError> {
     let items = unique_scheduling_media_items(&request.reference_data);
+    // Unknown and zero-duration Remote Streams are already gone: they are
+    // dropped by `drop_unschedulable_remote_streams` the way C#
+    // `CheckForEmptyCollections` drops `zeroItems`. Anything still carrying
+    // them here reached the engine without that pass, so refusing stays the
+    // safe answer rather than scheduling an item with no known length.
     let live_ids = items
         .values()
         .filter_map(|item| match item.liveness {
@@ -160,50 +232,55 @@ fn validate_remote_stream_placements(request: &SchedulingRequest) -> Result<(), 
         })
 }
 
+/// Visit every media item reachable from the reference data, including
+/// duplicates across collections.
+fn scheduling_media_items(
+    reference: &SchedulingReferenceData,
+) -> impl Iterator<Item = &SchedulingMediaItem> {
+    reference
+        .media_items_by_id
+        .values()
+        .chain(
+            reference
+                .media_by_key
+                .values()
+                .chain(reference.collections_by_name.values())
+                .chain(reference.multi_collections_by_name.values())
+                .chain(reference.smart_collections_by_name.values())
+                .chain(reference.playlists_by_group_and_name.values())
+                .chain(reference.searches_by_query.values())
+                .chain(reference.shows_by_name.values())
+                .chain(reference.media_by_show_guid.values())
+                .flatten(),
+        )
+        .chain(
+            reference
+                .playlist_items_by_group_and_name
+                .values()
+                .chain(reference.playlist_items_by_key.values())
+                .flatten()
+                .flat_map(|playlist| &playlist.media_items),
+        )
+        .chain(
+            reference
+                .classic_filler_presets
+                .values()
+                .flat_map(|preset| &preset.media_items),
+        )
+        .chain(
+            reference
+                .global_fallback
+                .iter()
+                .flat_map(|fallback| &fallback.media_items),
+        )
+}
+
 fn unique_scheduling_media_items(
     reference: &SchedulingReferenceData,
 ) -> BTreeMap<EntityId, SchedulingMediaItem> {
     let mut result = BTreeMap::new();
-    let mut insert = |item: &SchedulingMediaItem| {
+    for item in scheduling_media_items(reference) {
         result.entry(item.id).or_insert_with(|| item.clone());
-    };
-    for item in reference.media_items_by_id.values() {
-        insert(item);
-    }
-    for items in reference
-        .media_by_key
-        .values()
-        .chain(reference.collections_by_name.values())
-        .chain(reference.multi_collections_by_name.values())
-        .chain(reference.smart_collections_by_name.values())
-        .chain(reference.playlists_by_group_and_name.values())
-        .chain(reference.searches_by_query.values())
-        .chain(reference.shows_by_name.values())
-        .chain(reference.media_by_show_guid.values())
-    {
-        for item in items {
-            insert(item);
-        }
-    }
-    for playlist in reference
-        .playlist_items_by_group_and_name
-        .values()
-        .chain(reference.playlist_items_by_key.values())
-        .flatten()
-    {
-        for item in &playlist.media_items {
-            insert(item);
-        }
-    }
-    for preset in reference.classic_filler_presets.values() {
-        for item in &preset.media_items {
-            insert(item);
-        }
-    }
-    if let Some(fallback) = &reference.global_fallback {
-        for item in &fallback.media_items {
-            insert(item);
-        }
     }
     result
 }
@@ -563,10 +640,14 @@ mod tests {
                 ..SchedulingReferenceData::default()
             },
         };
-        assert!(matches!(
-            PlayoutBuilder::default().build(unknown_request),
-            Err(SchedulingError::UnknownRemoteStreamLiveness(99))
-        ));
+        let unknown_result = PlayoutBuilder::default()
+            .build(unknown_request)
+            .expect("an unschedulable Remote Stream is dropped, not fatal");
+        assert!(unknown_result.added_items.is_empty());
+        assert_eq!(
+            unknown_result.warnings,
+            vec!["Skipped Remote Stream 99 with unknown or zero duration"]
+        );
 
         let mut durationless_finite = SchedulingMediaItem::new(100, Duration::zero());
         durationless_finite.liveness = Some(RemoteStreamLiveness::Finite);
@@ -583,10 +664,75 @@ mod tests {
                 ..SchedulingReferenceData::default()
             },
         };
-        assert!(matches!(
-            PlayoutBuilder::default().build(finite_request),
-            Err(SchedulingError::FiniteRemoteStreamMissingDuration(100))
-        ));
+        let finite_result = PlayoutBuilder::default()
+            .build(finite_request)
+            .expect("a durationless finite Remote Stream is dropped, not fatal");
+        assert!(finite_result.added_items.is_empty());
+        assert_eq!(
+            finite_result.warnings,
+            vec!["Skipped Remote Stream 100 with unknown or zero duration"]
+        );
+    }
+
+    /// Regression: one unschedulable Remote Stream must not take down the
+    /// whole channel.
+    ///
+    /// C# `PlayoutBuilder.CheckForEmptyCollections` drops each zero-duration
+    /// item from its collection and keeps building. ErsatzRS used to refuse the
+    /// entire build with `UnknownRemoteStreamLiveness`, so a single add-on
+    /// episode that resolved without a duration left its channel with no
+    /// playout items at all and nothing to stream.
+    #[test]
+    fn one_unschedulable_remote_stream_does_not_block_its_collection() {
+        let start = Utc::now();
+        let mut unschedulable = SchedulingMediaItem::new(99, Duration::zero());
+        unschedulable.liveness = Some(RemoteStreamLiveness::Unknown);
+        let schedule_item = ProgramScheduleItem {
+            id: 7,
+            playout_mode: PlayoutMode::One,
+            ..ProgramScheduleItem::default()
+        };
+        let key = classic_schedule_item_key(&schedule_item);
+        let result = PlayoutBuilder::default()
+            .build(SchedulingRequest {
+                playout: Playout {
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::hours(3),
+                mode: PlayoutBuildMode::Continue,
+                reference_data: SchedulingReferenceData {
+                    classic_schedule_items: vec![schedule_item],
+                    media_by_key: [(
+                        key,
+                        vec![
+                            SchedulingMediaItem::new(1, Duration::minutes(30)),
+                            unschedulable,
+                            SchedulingMediaItem::new(2, Duration::minutes(30)),
+                        ],
+                    )]
+                    .into(),
+                    ..SchedulingReferenceData::default()
+                },
+            })
+            .expect("the healthy items in the collection must still schedule");
+
+        assert!(
+            !result.added_items.is_empty(),
+            "the channel must still receive a playout window"
+        );
+        assert!(
+            result
+                .added_items
+                .iter()
+                .all(|item| item.media_item_id != 99),
+            "the unschedulable Remote Stream must never be placed"
+        );
+        assert_eq!(
+            result.warnings,
+            vec!["Skipped Remote Stream 99 with unknown or zero duration"]
+        );
     }
 
     fn builder_with_static_result(result: SchedulingResult) -> PlayoutBuilder {

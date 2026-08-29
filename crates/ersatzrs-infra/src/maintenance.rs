@@ -530,6 +530,14 @@ async fn build_due_playouts(
     Ok(report)
 }
 
+/// Surface scheduler warnings the way C# `PlayoutBuilder` logs them, so items
+/// dropped from a collection stay visible instead of silently disappearing.
+fn log_build_warnings(playout_id: EntityId, result: &SchedulingResult) {
+    for warning in &result.warnings {
+        warn!(playout_id, warning, "playout build warning");
+    }
+}
+
 async fn build_playout(
     pool: &Pool<Db>,
     playout_id: EntityId,
@@ -607,6 +615,7 @@ async fn build_playout(
         mode,
         reference_data,
     })?;
+    log_build_warnings(playout_id, &result);
     let channel_info = load_playout_channel_info(pool, playout.channel_id).await?;
     let should_notify_segmenter = mode != PlayoutBuildMode::Continue
         && (scheduling_result_has_persisted_changes(&result)

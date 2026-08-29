@@ -232,10 +232,13 @@ async fn import_activity(pool: &Pool<Db>) -> Result<ImportActivity> {
 async fn detail_activity(pool: &Pool<Db>) -> Result<DetailActivity> {
     let row = sqlx::query(
         r#"SELECT
-               COUNT(CASE WHEN "State" IN (1, 3) THEN 1 END) AS "Active",
-               COUNT(CASE WHEN "State" IN (2, 4) THEN 1 END) AS "Waiting",
-               COUNT(CASE WHEN "State" = 7 THEN 1 END) AS "Failed"
-           FROM "AddonMediaListDetailJob""#,
+               COUNT(CASE WHEN "job"."State" IN (1, 3) THEN 1 END) AS "Active",
+               COUNT(CASE WHEN "job"."State" IN (2, 4) THEN 1 END) AS "Waiting",
+               COUNT(CASE WHEN "job"."State" = 7 THEN 1 END) AS "Failed"
+           FROM "AddonMediaListDetailJob" AS "job"
+           JOIN "AddonMediaListItem" AS "item"
+             ON "item"."Id" = "job"."AddonMediaListItemId"
+           WHERE "item"."Included" = 1"#,
     )
     .fetch_one(pool)
     .await
@@ -326,7 +329,8 @@ async fn detail_worker_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
            JOIN "AddonMediaList" AS "list" ON "list"."Id" = "detail"."AddonMediaListId"
            JOIN "AddonMediaListItem" AS "item"
              ON "item"."Id" = "detail"."AddonMediaListItemId"
-           WHERE "detail"."State" = 3 AND "detail"."UpdatedAt" <= ?
+           WHERE "detail"."State" = 3 AND "item"."Included" = 1
+             AND "detail"."UpdatedAt" <= ?
              AND ("detail"."LeaseExpiresAt" IS NULL OR "detail"."LeaseExpiresAt" <= ?)
            ORDER BY "detail"."UpdatedAt" LIMIT 5"#,
     )
@@ -688,6 +692,7 @@ mod tests {
                 "Id" INTEGER PRIMARY KEY,
                 "AddonMediaListId" INTEGER NOT NULL,
                 "DisplayTitle" TEXT NOT NULL DEFAULT '',
+                "Included" INTEGER NOT NULL DEFAULT 1,
                 "Published" INTEGER NOT NULL DEFAULT 0,
                 "Availability" INTEGER NOT NULL DEFAULT 0,
                 "ProviderMetadataJson" TEXT NOT NULL DEFAULT '{}',
@@ -974,6 +979,41 @@ mod tests {
             .contains("1 item detail job(s) need a manual retry"));
         assert!(result.message.contains("1 are active"));
         assert!(result.message.contains("2 are waiting"));
+    }
+
+    #[tokio::test]
+    async fn ignores_failed_detail_work_for_excluded_items() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "Name", "ReviewState", "ProviderMetadataJson"
+               ) VALUES (1, 'org.example.list', 'Fixture', 2, '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItem" (
+                   "Id", "AddonMediaListId", "DisplayTitle", "Included"
+               ) VALUES (1, 1, 'Excluded item', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("excluded item");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListDetailJob" (
+                   "AddonMediaListItemId", "AddonMediaListId", "State", "UpdatedAt"
+               ) VALUES (1, 1, 7, '2026-08-23 12:00:00')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("failed detail job");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
     }
 
     #[tokio::test]

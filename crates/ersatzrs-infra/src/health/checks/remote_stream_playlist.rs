@@ -161,17 +161,19 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
             {
                 warnings.push(format!("{name} is stale"));
             }
+            let generated_folder = path.parent().unwrap_or_else(|| Path::new(".")).join(folder);
             let missing = state
                 .entries
                 .iter()
                 .filter(|entry| {
-                    entry.active && entry.duration_seconds.is_none_or(|value| value == 0)
+                    entry.active
+                        && entry.duration_seconds.is_none_or(|value| value == 0)
+                        && !managed_definition_is_live(&generated_folder, entry)
                 })
                 .count();
             if missing > 0 {
                 warnings.push(format!("{name} has {missing} entries without duration"));
             }
-            let generated_folder = path.parent().unwrap_or_else(|| Path::new(".")).join(folder);
             let missing_sidecars = state
                 .entries
                 .iter()
@@ -226,6 +228,19 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
         }
         Ok(HealthCheckResult::pass(self.title()))
     }
+}
+
+fn managed_definition_is_live(folder: &Path, entry: &HealthEntry) -> bool {
+    std::fs::read_to_string(folder.join(&entry.file))
+        .ok()
+        .and_then(|yaml| {
+            serde_yaml::from_str::<crate::remote_stream::RemoteStreamDefinition>(&yaml).ok()
+        })
+        .is_some_and(|definition| match definition.liveness {
+            Some(ersatzrs_domain::RemoteStreamLiveness::Live) => true,
+            Some(_) => false,
+            None => definition.is_live,
+        })
 }
 
 async fn remote_stream_library_roots(pool: &Pool<Db>) -> Result<Vec<PathBuf>> {
@@ -364,6 +379,14 @@ mod tests {
         .expect("sidecar");
     }
 
+    fn write_live_entry(folder: &Path, state: &mut serde_json::Value) {
+        std::fs::write(folder.join("entry.yml"), "liveness: live\nis_live: true\n")
+            .expect("live definition");
+        std::fs::write(folder.join("entry.nfo"), "").expect("NFO sidecar");
+        state["entries"][0]["nfo_file"] = serde_json::json!("entry.nfo");
+        write_sidecar(folder, state);
+    }
+
     #[tokio::test]
     async fn health_reports_missing_duration_and_unknown_addon() {
         let temp = tempfile::TempDir::new().expect("temp dir");
@@ -447,6 +470,10 @@ mod tests {
         let result = check.check().await.expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Warning);
         assert!(result.message.contains("1 entries without duration"));
+
+        write_live_entry(&folder, &mut state);
+        let result = check.check().await.expect("live health result");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
 
         state["last_result"]["entries"] = serde_json::json!(0);
         write_sidecar(&folder, &state);

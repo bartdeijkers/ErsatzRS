@@ -1,6 +1,8 @@
 {"agent":"Codex","date":"2026-08-29","summary":"Implemented PCR-clocked TSDuck delivery acceptance plus sanitized live HLS segment under-run telemetry and health; Windows VLC exact-candidate acceptance remains open."}
+{"agent":"Codex","date":"2026-08-29","summary":"Filtered non-actionable live, excluded, and unpublished states from health warnings with focused regressions."}
 {"agent":"Codex","date":"2026-08-28","summary":"Implemented Proposal B settings navigation, responsive section cards, sticky actions, and the standardized Logs workbench with browser coverage."}
 {"agent":"Codex","date":"2026-08-28","summary":"Implemented private local add-on repository discovery, offline bundles, per-add-on installation and legacy adoption"}
+{"agent":"Claude Opus 5","date":"2026-08-28","summary":"Fixed Classic Refresh being refused after the first build (checkpoint timestamps now floored to persisted tick precision) and stopped one unschedulable Remote Stream from failing an entire playout build."}
 {"agent":"Codex","date":"2026-08-27","summary":"Published v1.0.28-beta as a Windows-only prerelease after focused Proposal B package verification; documented the mandatory exact-SHA CI-before-tag gate."}
 {"agent":"Codex","date":"2026-08-27","summary":"Prepared the v1.0.28-beta Windows-only release candidate with Proposal B add-on-list review, a beta SSR-WASM bundle gate, focused browser proof, workspace clippy, and a green 2,080-test closeout."}
 {"agent":"Codex","date":"2026-08-27","summary":"Implemented Proposal B for add-on list review with a collection-first, non-sticky responsive publication-readiness rail and verified it with matched hydration plus focused Playwright."}
