@@ -316,8 +316,17 @@ fn looks_like_windows_absolute_path(path: &str) -> bool {
 }
 
 fn escape_subtitles_filter_common(path: &str) -> String {
-    path.replace('[', r"\[")
+    // Filter-graph metacharacters must survive the same two ffmpeg parsers as
+    // the Windows drive colon above. A quote is the dangerous one: an unescaped
+    // `'` opens a quoted region that swallows every later `,`, `;` and `[`,
+    // collapsing the rest of the graph into one option blob (ErsatzTV has the
+    // same gap; see ADR 0082). `,` and `;` only cross the filtergraph parser,
+    // so they need a single backslash.
+    path.replace('\'', r"\\\'")
+        .replace('[', r"\[")
         .replace(']', r"\]")
+        .replace(',', r"\,")
+        .replace(';', r"\;")
         .replace("http://localhost:", r"http\\://localhost\\:")
 }
 

@@ -13,6 +13,15 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Play sidecar subtitles whose filename contains an apostrophe, comma or
+  semicolon. Those characters reached the ffmpeg `subtitles` filter unescaped,
+  where an apostrophe opened an unterminated quote that swallowed the rest of
+  the filter graph — including the `fontsdir` drive-colon escape behind it — and
+  killed the channel with "No option name near ..." at the moment the affected
+  episode started. See ADR 0082.
+
 ## [1.0.29-beta] - 2026-08-28
 
 ### Changed

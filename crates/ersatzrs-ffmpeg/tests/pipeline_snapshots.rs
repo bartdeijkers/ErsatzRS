@@ -1062,6 +1062,54 @@ fn software_pipeline_escapes_windows_subtitle_paths_for_libass_filter() {
 }
 
 #[test]
+fn software_pipeline_escapes_filtergraph_metacharacters_in_subtitle_paths() {
+    // Regression: a sidecar subtitle whose filename contains an apostrophe used
+    // to open an unterminated ffmpeg quote, swallowing every later `,`/`;`/`[`
+    // and collapsing the rest of the filtergraph into one option blob. That
+    // also destroyed the `\\:` drive-colon escape on the following `fontsdir`,
+    // so ffmpeg reported `No option name near '/Users/...'` and the channel
+    // died at the episode boundary. See ADR 0082.
+    let mut request = h264_request(DesiredVideoState::h264_1080p())
+        .with_subtitle_fonts_dir(r"C:\Users\Bart\AppData\Local\ErsatzRS\cache\streams\fonts");
+    request.inputs.push(InputFile::text_subtitle(
+        r"D:\Downloads\TV\South Park (1997)\Season 13\South Park (1997) - S13E09 - Butters' Bottom Bitch (1080p BluRay x265 RCVR).dut.srt",
+        ersatzrs_ffmpeg::SubtitleMethod::Burn,
+    ));
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments.join(" ");
+
+    // `'` must survive both ffmpeg parse levels: filtergraph then filter option.
+    assert!(
+        args.contains(r"Butters\\\' Bottom Bitch"),
+        "expected the apostrophe to be triple-escaped for both ffmpeg parse levels, got: {args}"
+    );
+    // The fontsdir drive colon must still be intact after the subtitle path.
+    assert!(
+        args.contains(r":fontsdir=C\\:/Users/Bart/AppData/Local/ErsatzRS/cache/streams/fonts"),
+        "expected the fontsdir drive colon to stay escaped, got: {args}"
+    );
+}
+
+#[test]
+fn software_pipeline_escapes_comma_and_semicolon_in_subtitle_paths() {
+    let mut request = h264_request(DesiredVideoState::h264_1080p());
+    request.inputs.push(InputFile::text_subtitle(
+        "/media/Lock, Stock; Two Barrels/subtitle.srt",
+        ersatzrs_ffmpeg::SubtitleMethod::Burn,
+    ));
+
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let args = pipeline.command(&request.inputs).arguments.join(" ");
+
+    // `,` and `;` only cross the filtergraph parser, so one backslash each.
+    assert!(
+        args.contains(r"subtitles=/media/Lock\, Stock\; Two Barrels/subtitle.srt"),
+        "expected filter and chain separators in the path to be escaped, got: {args}"
+    );
+}
+
+#[test]
 fn software_pipeline_overlays_image_subtitle_from_source_stream() {
     let mut request = h264_request(DesiredVideoState::h264_1080p());
     request.inputs.push(

@@ -2,7 +2,7 @@ feature    = 'FFmpeg filter graph'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/Filter/ComplexFilter.cs`'
 rs_target  = '`crates/ersatzrs-ffmpeg`'
 status     = 'Ported'
-adr        = ['0003']
+adr        = ['0003', '0082']
 
 summary    = '''
 Ported: complex-filter label routing, subtitle/song-progress filters, ffconcat
@@ -34,6 +34,15 @@ spawned FFmpeg argv with `-loop 1`, `-ss 00:00:05.0000000`, `(5+T)`,
 `(30+T)`, `mod((86399.5+T),86400)`, and `lt((5+T),12)`, then decode output
 pixels at three frames to observe black -> red -> black opacity behavior across
 the midnight wrap.
+
+The 2026-08-29 subtitle-path fix escapes filtergraph metacharacters when a
+filesystem path is interpolated into the `subtitles` filter. An apostrophe in a
+sidecar subtitle filename previously opened an unterminated ffmpeg quote that
+swallowed the rest of the graph (and the `fontsdir` drive-colon escape behind
+it), killing the channel with `No option name near ...` at the start of the
+affected playout item. `'`, `,` and `;` now join `[` and `]`, each at the escape
+depth its parser level requires. This is a deliberate divergence from
+`SubtitlesFilter.cs`, which carries the same defect upstream; see ADR 0082.
 
 The hardware-only `ffmpeg-command-generation` `nvenc-filter-gate-live-proof`
 debt remains open in that feature because this machine still has
