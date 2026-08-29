@@ -93,6 +93,7 @@ mirror against its canonical contract.
 
 - `skills/add-migration.md`
 - `skills/changelog-entry.md`
+- `skills/context7-docs.md`
 - `skills/durable-background-work.md`
 - `skills/explain-ersatztv.md`
 - `skills/ffmpeg-snapshot-test.md`

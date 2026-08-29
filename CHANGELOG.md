@@ -13,6 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Add a repository-local Context7 documentation skill that targets current,
+  version-specific external contracts, keeps retrieval to the smallest useful
+  query set, and avoids calls when local repository evidence is authoritative.
+
 ### Fixed
 
 - Play sidecar subtitles whose filename contains an apostrophe, comma or
