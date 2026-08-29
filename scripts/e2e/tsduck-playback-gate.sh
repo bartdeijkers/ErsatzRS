@@ -43,8 +43,11 @@ CALIB_DIR="$REPO_ROOT/calibration-clips"
 CAPTURE_SECONDS="${CAPTURE_SECONDS:-20}"   # per-pipeline live capture window
 ITEM_SECONDS="${ITEM_SECONDS:-8}"          # seconds of each clip the gate playout uses
 MAX_AUDIO_PIP_GAP_DEVIATION_MS="${MAX_AUDIO_PIP_GAP_DEVIATION_MS:-150}"
+DELIVERY_MONITOR_INTERVAL_SECONDS="${DELIVERY_MONITOR_INTERVAL_SECONDS:-12}"
 KEEP=0
 FRAMES=0
+CAPTURE_TOTAL_SECONDS=0
+CAPTURE_MONITOR_LOG=""
 
 die() { printf 'tsduck-gate: %s\n' "$*" >&2; exit 2; }
 need() { command -v "$1" >/dev/null 2>&1 || die "missing required tool: $1"; }
@@ -100,14 +103,34 @@ wait_for() { # URL CONTAINS TIMEOUT_S  → 0 when body matches CONTAINS
 }
 
 # capture_stream KIND URL SECONDS OUTFILE   (KIND: http|hls)
+redact_stream_url() {
+  local url="$1"
+  printf '%s\n' "${url%%\?*}"
+}
+
 capture_stream() {
   local kind="$1" url="$2" secs="$3" out="$4"
-  info "capturing ${secs}s from $url"
+  local started finished safe_url
+  safe_url="$(redact_stream_url "$url")"
+  CAPTURE_MONITOR_LOG="${WORKDIR:-/tmp}/delivery-monitor.log"
+  started=$(date +%s)
+  info "capturing ${secs}s from $safe_url"
   case "$kind" in
-    http) tsp -I http "$url" -P until --seconds "$secs" -O file "$out" >/dev/null 2>&1 ;;
-    hls)  tsp -I hls  "$url" -P until --seconds "$secs" -O file "$out" >/dev/null 2>&1 ;;
+    http) tsp -I http "$url" \
+      -P bitrate_monitor --time-interval "$DELIVERY_MONITOR_INTERVAL_SECONDS" \
+        --periodic-bitrate "$DELIVERY_MONITOR_INTERVAL_SECONDS" --summary \
+        --json-line=ERSATZRS_DELIVERY \
+      -P until --seconds "$secs" -O file "$out" > /dev/null 2>"$CAPTURE_MONITOR_LOG" ;;
+    hls)  tsp -I hls  "$url" \
+      -P bitrate_monitor --time-interval "$DELIVERY_MONITOR_INTERVAL_SECONDS" \
+        --periodic-bitrate "$DELIVERY_MONITOR_INTERVAL_SECONDS" --summary \
+        --json-line=ERSATZRS_DELIVERY \
+      -P until --seconds "$secs" -O file "$out" > /dev/null 2>"$CAPTURE_MONITOR_LOG" ;;
     *) die "unknown capture kind $kind" ;;
   esac
+  finished=$(date +%s)
+  CAPTURE_TOTAL_SECONDS=$((finished - started))
+  [ "$CAPTURE_TOTAL_SECONDS" -gt 0 ] || CAPTURE_TOTAL_SECONDS=1
   [ -s "$out" ]
 }
 
@@ -266,15 +289,22 @@ mode_url() {
   local url="${1:?usage: url <stream-url> [seconds]}" secs="${2:-$CAPTURE_SECONDS}"
   WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/tsduck-gate-url.XXXXXX")"
   trap 'rm -rf "$WORKDIR"' EXIT
-  local cap="$WORKDIR/capture.ts"
+  local cap="$WORKDIR/capture.ts" safe_url label
+  safe_url="$(redact_stream_url "$url")"
   if [[ "$url" == *.m3u8* ]]; then
     check_hls_playlist "$url" "live HLS"
-    capture_stream hls "$url" "$secs" "$cap" || die "HLS capture produced no data from $url"
+    capture_stream hls "$url" "$secs" "$cap" || die "HLS capture produced no data from $safe_url"
   else
-    capture_stream http "$url" "$secs" "$cap" || die "TS capture produced no data from $url"
+    capture_stream http "$url" "$secs" "$cap" || die "TS capture produced no data from $safe_url"
   fi
-  printf '\n=== live: %s ===\n' "$url"
-  validate_ts "$cap" "live $url"
+  label="live $safe_url"
+  printf '\n=== live: %s ===\n' "$safe_url"
+  validate_ts "$cap" "$label"
+  check_delivery_timing \
+    "$LAST_TS_MEDIA_MS" "$secs" "$CAPTURE_TOTAL_SECONDS" "$label"
+  local capture_average_bitrate
+  capture_average_bitrate=$((LAST_TS_PACKETS * 188 * 8 / secs))
+  check_delivery_monitor "$CAPTURE_MONITOR_LOG" "$capture_average_bitrate" "$label"
   grab_frames "$cap" "$WORKDIR/frame"
   [ "$KEEP" = 1 ] && { info "kept capture: $WORKDIR"; trap - EXIT; }
   checks_summary

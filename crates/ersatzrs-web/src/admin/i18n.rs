@@ -1519,6 +1519,7 @@ pub enum TextKey {
     ClassicPlayoutState,
     ScanRefreshState,
     ArtworkCardinality,
+    HlsLiveDelivery,
     BlockPlayout,
     ScriptedPlayout,
     AlternateSchedules,
@@ -3005,6 +3006,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ClassicPlayoutState,
     TextKey::ScanRefreshState,
     TextKey::ArtworkCardinality,
+    TextKey::HlsLiveDelivery,
     TextKey::BlockPlayout,
     TextKey::ScriptedPlayout,
     TextKey::AlternateSchedules,
@@ -3472,6 +3474,7 @@ pub fn health_summary(errors: u32, warnings: u32) -> String {
 const CLASSIC_PLAYOUT_STATE_TITLE: &str = "Classic Playout State";
 const SCAN_REFRESH_STATE_TITLE: &str = "Scan Refresh State";
 const ARTWORK_CARDINALITY_TITLE: &str = "Artwork Cardinality";
+const HLS_LIVE_DELIVERY_TITLE: &str = "HLS Live Delivery";
 const ADDONS_HEALTH_TITLE: &str = "Add-ons";
 const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str =
     "Classic playout state is not safe to Refresh for: ";
@@ -3494,6 +3497,10 @@ const ARTWORK_CARDINALITY_DISTINCT_SEPARATOR: &str = " distinct projected episod
 const ARTWORK_CARDINALITY_COMPLETE_SEPARATOR: &str = " complete hierarchy projection(s), and ";
 const ARTWORK_CARDINALITY_HIERARCHY_SUFFIX: &str =
     " hierarchy episode(s). Refresh or republish the affected add-on television lists.";
+const HLS_LIVE_DELIVERY_RECENT_SEPARATOR: &str =
+    " channel(s) delivered live HLS media slower than wall time in the last ";
+const HLS_LIVE_DELIVERY_ACTIVE_SEPARATOR: &str = " minutes; ";
+const HLS_LIVE_DELIVERY_SUFFIX: &str = " had not recovered when last observed. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.";
 
 pub fn health_check_title(title: &str) -> String {
     health_check_title_text(use_i18n(), title)
@@ -3504,6 +3511,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         CLASSIC_PLAYOUT_STATE_TITLE => text(language, TextKey::ClassicPlayoutState).to_owned(),
         SCAN_REFRESH_STATE_TITLE => text(language, TextKey::ScanRefreshState).to_owned(),
         ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
+        HLS_LIVE_DELIVERY_TITLE => text(language, TextKey::HlsLiveDelivery).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
         _ => title.to_owned(),
     }
@@ -3562,7 +3570,29 @@ pub fn health_check_message_text(
             );
         }
     }
+    if title == HLS_LIVE_DELIVERY_TITLE {
+        if let Some((recent_under_runs, minutes, active_under_runs)) =
+            hls_live_delivery_counts(displayed_message)
+        {
+            return languages_for(language).hls_live_delivery_message(
+                recent_under_runs,
+                minutes,
+                active_under_runs,
+            );
+        }
+    }
     displayed_message.to_owned()
+}
+
+fn hls_live_delivery_counts(message: &str) -> Option<(u64, u64, u64)> {
+    let (recent_under_runs, message) = message.split_once(HLS_LIVE_DELIVERY_RECENT_SEPARATOR)?;
+    let (minutes, message) = message.split_once(HLS_LIVE_DELIVERY_ACTIVE_SEPARATOR)?;
+    let active_under_runs = message.strip_suffix(HLS_LIVE_DELIVERY_SUFFIX)?;
+    Some((
+        recent_under_runs.parse().ok()?,
+        minutes.parse().ok()?,
+        active_under_runs.parse().ok()?,
+    ))
 }
 
 fn scan_refresh_state_counts(message: &str) -> Option<(u64, u64, u64, u64)> {
@@ -3768,6 +3798,12 @@ pub trait LanguageStrings: Sync {
         &self,
         duplicate_rows: [i64; 3],
         projection_counts: [i64; 5],
+    ) -> String;
+    fn hls_live_delivery_message(
+        &self,
+        recent_under_runs: u64,
+        minutes: u64,
+        active_under_runs: u64,
     ) -> String;
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String;
     fn playout_reset_prompt(&self, channel: &str, schedule: &str) -> String;
@@ -3976,6 +4012,33 @@ mod tests {
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(title, ARTWORK_CARDINALITY_TITLE);
                 assert!(!localized.starts_with(ARTWORK_CARDINALITY_MESSAGE_PREFIX));
+            }
+        }
+    }
+
+    #[test]
+    fn hls_live_delivery_health_text_is_localized_for_every_language() {
+        let message = "2 channel(s) delivered live HLS media slower than wall time in the last 30 minutes; 1 had not recovered when last observed. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = health_check_title_text(language, HLS_LIVE_DELIVERY_TITLE);
+            let localized = health_check_message_text(
+                language,
+                HLS_LIVE_DELIVERY_TITLE,
+                message,
+                "2 recent live HLS delivery under-run(s)",
+            );
+            assert!(!title.trim().is_empty());
+            for count in ["2", "30", "1"] {
+                assert!(
+                    localized.contains(count),
+                    "{}: {localized}",
+                    definition.code
+                );
+            }
+            if definition.code != UiLanguage::English.code() {
+                assert_ne!(title, HLS_LIVE_DELIVERY_TITLE);
+                assert!(!localized.contains(HLS_LIVE_DELIVERY_SUFFIX));
             }
         }
     }

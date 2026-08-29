@@ -6,7 +6,13 @@ Accepted
 
 ## Implementation
 
-Implemented 2026-06-28. ErsatzRS now exposes `/system/troubleshooting/mpeg`
+Partial — packet-integrity troubleshooting is implemented and the manual URL
+gate now compares PCR-derived media elapsed time with monotonic wall time. A
+2026-08-29 Windows VLC starvation report exposed that the prior gate had no
+delivery-cadence assertion; the first packet-count/nominal-bitrate correction
+was rejected because it misclassified variable-rate HLS. Milestone
+`hls-live-01` retains exact-candidate Windows acceptance before this
+implementation can again be considered complete. ErsatzRS exposes `/system/troubleshooting/mpeg`
 as an optional in-app Support tool, detects `tsp --version`, captures bounded
 channel MPEG-TS samples, runs read-only `tsp`/`tsbitrate` analysis, writes
 redacted `report.json` / `summary.json` archive metadata, deletes raw `.ts`

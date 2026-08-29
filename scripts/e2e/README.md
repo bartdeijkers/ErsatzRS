@@ -181,6 +181,23 @@ scripts/e2e/tsduck-playback-gate.sh url 'http://127.0.0.1:8409/iptv/session/1/hl
 scripts/e2e/tsduck-playback-gate.sh gate
 ```
 
+The `url` mode also compares first-to-last PCR media duration with the requested
+wall-clock capture window. `MIN_DELIVERY_RATIO_PERCENT` defaults to `95`, and
+`MAX_STREAM_STARTUP_SECONDS` defaults to `30`. This makes a structurally clean
+stream fail when it cannot deliver media fast enough for a realtime player.
+The calculation deliberately does not divide packet count by PCR-derived
+bitrate because that assumes constant bitrate and misclassifies VBR HLS.
+TSDuck's rolling `bitrate_monitor` uses 50 percent of the capture's wall-clock
+average as a severe-stall floor by default; input query strings are omitted
+from gate output because they can contain access tokens.
+
+Run the deterministic delivery-classification regression without a server or
+provider request:
+
+```bash
+scripts/e2e/test-tsduck-delivery.sh
+```
+
 Common flags: `--seconds N` (per‑pipeline capture window), `--item-seconds N`
 (seconds of each clip the gate playout uses; total playout = 3×N, so a capture
 longer than one item crosses the concat seams), `--frames` (extract PNGs for
@@ -207,6 +224,8 @@ e.g. one started by another agent). In that case stop it, or use `url` mode.
 | scrambled / invalid‑scrambling = 0 | content is clear |
 | `continuity` processor cross‑check | independent confirmation of the CC check |
 | HLS: `#EXTM3U`, segment count, target duration, discontinuity markers | playlist is well‑formed |
+| PCR media duration / wall time ≥ configured ratio | content keeps pace without assuming CBR |
+| rolling bitrate above the capture-relative severe-stall floor | no empty/starved delivery window |
 | `pcrverify` jitter | informational (see below) |
 
 `continuity-counter errors` and `pts/dts/pcr leaps` are the playback‑correctness
@@ -231,6 +250,10 @@ clock breaks are already gated by the `pcr-leap` check.
 | `MIN_PACKETS` | `2000` | minimum captured packets |
 | `EXPECT_VIDEO_PIDS` / `EXPECT_AUDIO_PIDS` | `1` | required ES counts |
 | `MIN_HLS_SEGMENTS` | `1` | minimum `#EXTINF` entries |
+| `MIN_DELIVERY_RATIO_PERCENT` | `95` | minimum PCR media-time / wall-time percentage |
+| `MAX_STREAM_STARTUP_SECONDS` | `30` | maximum input startup latency |
+| `MIN_ROLLING_DELIVERY_RATIO_PERCENT` | `50` | interval floor relative to capture average |
+| `MAX_LOW_DELIVERY_INTERVALS` | `0` | intervals allowed below the rolling floor |
 | `STRICT_PCR_JITTER` | `0` | `1` = gate on `pcrverify` jitter (CBR only) |
 | `MAX_PCR_JITTER_US` | `8000` | jitter ceiling (µs) when strict |
 | `CAPTURE_SECONDS` | `20` | per‑pipeline capture window |

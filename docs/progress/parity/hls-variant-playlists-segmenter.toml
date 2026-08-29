@@ -1,7 +1,7 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0015', '0016', '0061']
 summary    = '''
 Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs,
@@ -71,6 +71,14 @@ description = 'For channels configured with `IdleBehavior = StopOnDisconnect`, V
 discovered  = '2026-06-13'
 evidence    = 'User-observed VLC shutdown did not immediately stop the channel transcoding session, but the observation was shorter than the local configured timeout. Local DB evidence during triage: channels 1 and 2 have `IdleBehavior = 0` (`StopOnDisconnect`) and `ffmpeg.segmenter.timeout_seconds = 60`; upstream default from `GetFFmpegSettingsHandler` is also 60 seconds, while persisted ErsatzTV settings may be shorter. Upstream lifecycle evidence is `ChannelEditor.razor` Stop On Disconnect help text, `StartFFmpegSessionHandler` idle-timeout loading/KeepRunning bypass, `HlsSessionWorker` idle cancellation, static `/iptv/session` touch handling, and `IptvController` `RegisterForDispose` for direct `.ts` responses.'
 resolved    = true
+
+[[debt]]
+id          = 'live-segmenter-delivery-starvation'
+adr         = '0057'
+description = 'VLC can visibly starve on a live add-on HLS Segmenter session while FFmpeg remains alive and the emitted MPEG-TS stays structurally valid; the deployed worker has no segment-advancement evidence to classify the intermittent event.'
+discovered  = '2026-08-29'
+evidence    = 'VLC starved before one minute. A bounded 130-second Windows TSDuck session retained zero continuity, TEI, sync, PTS, DTS, and PCR-leap faults and the server log recorded no process failure. The first packet-count divided by nominal-bitrate estimate was rejected because the output is VBR; yt-dlp 2026.08.19 already selected 1080p30 AVC at about 4.56 Mbps. The new worker measures completed EXTINF duration against monotonic time, but exact-candidate Windows reproduction and recovery remain open under milestone hls-live-01.'
+resolved    = false
 
 [[debt]]
 id          = 'segmenter-start-replays-current-item'

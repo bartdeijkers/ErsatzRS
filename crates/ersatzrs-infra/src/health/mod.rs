@@ -23,14 +23,15 @@ use checks::{
     DowngradeHealthCheck, DynamicTextGraphicsHealthCheck, EmptyScheduleHealthCheck,
     EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
     FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
-    HardwareAccelerationHealthCheck, HardwareGraphHealthCheck, LocalTelevisionIdentityHealthCheck,
-    MigrationChecksumHealthCheck, MirrorChannelHealthCheck, MovieMetadataHealthCheck,
-    OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
-    ProviderConnectivityHealthCheck, RemoteStreamAddonReadinessHealthCheck,
-    RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
-    ScanRefreshStateHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
-    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
-    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    HardwareAccelerationHealthCheck, HardwareGraphHealthCheck, HlsDeliveryHealthCheck,
+    LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck, MirrorChannelHealthCheck,
+    MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck,
+    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck,
+    RemoteStreamAddonReadinessHealthCheck, RemoteStreamHealthCheck,
+    RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck, ScanRefreshStateHealthCheck,
+    SearchProjectionHealthCheck, SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
+    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
+    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -54,7 +55,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 38] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 39] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -67,6 +68,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 38] = [
     "Dynamic Text Graphics",
     "Hardware Acceleration",
     "Hardware Graph Capability",
+    "HLS Live Delivery",
     "Playback Data Access",
     "Pinned Stream Selection",
     "Movie Metadata",
@@ -235,6 +237,7 @@ fn registered_health_checks(
             ffmpeg_runtime.clone(),
         )),
         Box::new(HardwareGraphHealthCheck::new(ffmpeg_runtime.clone())),
+        Box::new(HlsDeliveryHealthCheck::new(pool.clone())),
         Box::new(PlaybackDataAccessHealthCheck::new(pool.clone())),
         Box::new(PinnedStreamSelectionHealthCheck::new(pool.clone())),
         Box::new(MovieMetadataHealthCheck::new(pool.clone())),

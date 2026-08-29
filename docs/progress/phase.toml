@@ -21,8 +21,10 @@ teletext is now unblocked.
 '''
 
 next_steps = '''
-ADR 0080, AMM-G, and DTX-A are complete. Resume Phase 9A at p9a-01 by accepting
-the teletext product and standards contract before implementation.
+Close release-critical milestone `hls-live-01`, which reopens live Remote
+Stream/HLS delivery and TSDuck acceptance after Windows starvation evidence.
+Then resume Phase 9A at p9a-01 by accepting the teletext product and standards
+contract before implementation.
 '''
 
 [[blocking_decision]]

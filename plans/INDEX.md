@@ -120,6 +120,11 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Active / actionable
 
+- `hls-live-delivery-starvation.md` — corrective Windows-dogfood plan for a
+  structurally clean HLS stream with VLC starvation that the old integrity-only
+  gate could not classify, including a PCR-clocked delivery gate,
+  provider-neutral HLS under-run health, one bounded yt-dlp isolation session,
+  and VLC/TSDuck acceptance under milestone `hls-live-01`.
 - `addon-nfo-sidecars-and-local-replacements-closeout.md` — blocking handoff
   for generic v2 add-on metadata/NFO sidecars, observable content-kind
   semantics, transactional YAML/NFO publication, exact Local replacements,

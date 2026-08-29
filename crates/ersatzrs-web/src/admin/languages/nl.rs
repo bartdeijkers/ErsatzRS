@@ -352,6 +352,10 @@ impl LanguageStrings for DutchStrings {
         )
     }
 
+    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64) -> String {
+        format!("Bij {recent} kana(a)l(en) werd live HLS-media in de afgelopen {minutes} minuten langzamer dan de werkelijke tijd geleverd; {active} was/waren bij de laatste meting nog niet hersteld. Controleer de streaminglogboeken en voer de leveringsbewuste TSDuck-afspeeltest uit voordat u providerinstellingen wijzigt.")
+    }
+
     fn artwork_cardinality_message(
         &self,
         duplicate_rows: [i64; 3],
@@ -1696,6 +1700,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayoutState => "Status klassieke uitzending",
         TextKey::ScanRefreshState => "Status van scanvernieuwing",
         TextKey::ArtworkCardinality => "Cardinaliteit van afbeeldingen",
+        TextKey::HlsLiveDelivery => "HLS-livelevering",
         TextKey::BlockPlayout => "Blokuitzending",
         TextKey::ScriptedPlayout => "Scripted uitzending",
         TextKey::AlternateSchedules => "Alternatieve schema's",

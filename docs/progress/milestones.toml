@@ -2155,3 +2155,31 @@ pixel reflow, 200% zoom, keyboard navigation, both themes, reduced motion,
 no-JS forms, delayed mutations, and HTTP 500 recovery in Chromium and Firefox.
 The full workspace test closeout passes all 2,078 tests and doctests.
 '''
+
+[[milestone]]
+id         = 'hls-live-01'
+phase      = 'Streaming reliability correction'
+title      = 'Detect and prevent live HLS delivery starvation'
+status     = 'In progress'
+feature    = 'hls-variant-playlists-segmenter'
+plan       = 'plans/hls-live-delivery-starvation.md'
+depends_on = []
+acceptance = '''
+The manual TSDuck URL gate fails structurally clean under-delivery by comparing
+PCR media duration, wall-clock average delivery, and rolling no-progress
+windows with monotonic elapsed time. The HLS worker exposes sanitized bounded
+under-run telemetry and health. Deterministic healthy/stalled/resumed fixtures
+classify without provider access. One shared five-minute Windows yt-dlp session
+delivers at least 98 percent media time per wall time after startup, shows no
+VLC starvation, has no over-budget segment gap, and retains zero transport,
+continuity, sync, PTS, DTS, and PCR-leap faults.
+'''
+evidence = '''
+Opened 2026-08-29 after VLC reported starvation before one minute while a
+130-second Windows capture remained structurally valid and the bounded server
+log recorded no process failure. The initial 60-second media estimate was
+rejected on 2026-08-30 because packet count divided by nominal PCR bitrate is
+invalid for VBR HLS. The corrected gate uses PCR elapsed time, and the worker
+now records provider-neutral segment advancement; exact-candidate Windows VLC
+acceptance remains open.
+'''

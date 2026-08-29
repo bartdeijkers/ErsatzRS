@@ -27,6 +27,7 @@ pub mod graphics_template;
 pub mod hardware_graph;
 pub mod health;
 pub mod hls;
+mod hls_delivery;
 pub mod hls_worker;
 pub mod jellyfin;
 pub mod logging;

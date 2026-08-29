@@ -1,8 +1,8 @@
 feature    = 'Support pages (Health / Logs / Troubleshooting)'
 etv_source = '`ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`, `ErsatzTV/Pages/Troubleshooting/`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/support-pages.spec.ts`'
-status     = 'Ported'
-adr        = []
+status     = 'In progress'
+adr        = ['0013']
 summary    = '''
 Ported: `/system/health` renders an ErsatzTV-style two-column health table from
 the live health service, filters `NotApplicable` rows, refreshes after scanner
@@ -31,6 +31,14 @@ id          = 'remote-stream-zero-duration-health-warning'
 description = 'Remote stream media versions with placeholder `00:00:00` duration triggered Zero Duration warnings on `/system/health`, even though live/URL streams can legitimately have no fixed duration.'
 discovered  = '2026-06-22'
 evidence    = 'Fixed 2026-06-22: `ZeroDurationHealthCheck` now excludes `MediaVersion` rows backed by `RemoteStreamId`; `zero_duration_check_ignores_remote_stream_placeholders` covers a live remote stream with a zero-duration placeholder and media-file URL.'
+resolved    = true
+
+[[debt]]
+id          = 'tsduck-gate-misses-delivery-starvation'
+adr         = '0013'
+description = 'The manual TSDuck URL gate validated packet integrity but did not compare PCR media elapsed time with wall time; its first packet-count divided by nominal-bitrate correction also misclassified variable-rate HLS.'
+discovered  = '2026-08-29'
+evidence    = 'Resolved 2026-08-30: the URL gate extracts first-to-last PCR media duration with TSDuck pcrextract, compares it with monotonic capture time, measures startup separately, evaluates rolling byte-rate against the capture average instead of nominal PCR bitrate, and redacts query strings. Deterministic healthy, bursty, starved, startup-timeout, and empty rolling-window cases pass without provider access; a 180-second calibration clip reports 179983 ms of PCR media time.'
 resolved    = true
 
 [[debt]]

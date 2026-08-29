@@ -36,6 +36,9 @@ use ersatzrs_ffmpeg::{
 use crate::dynamic_text::shutdown_dynamic_text_controllers;
 use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
 use crate::ffmpeg_config::playback_language_preferences;
+use crate::hls_delivery::{
+    persist_hls_delivery_observation, HlsDeliveryObservation, HlsDeliveryState,
+};
 use crate::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
@@ -80,6 +83,10 @@ const HLS_STALE_WATCHED_PREEMPTION_THRESHOLD: Duration = Duration::from_secs(25)
 const HLS_ADMISSION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
 const HLS_AT_CAPACITY_SLATE_DURATION: Duration = Duration::from_secs(4);
+const HLS_DELIVERY_WINDOW: Duration = Duration::from_mins(1);
+const HLS_DELIVERY_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+const HLS_DELIVERY_NO_PROGRESS_TIMEOUT: Duration = Duration::from_secs(12);
+const HLS_DELIVERY_MIN_RATIO: f64 = 0.95;
 pub(crate) const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
 const TS_PACKET_SIZE: usize = 188;
 const TS_SYNC_BYTE: u8 = 0x47;
@@ -182,9 +189,118 @@ enum HlsProcessOutcome {
     Reclaimed,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct HlsDeliverySegment {
+    sequence: u64,
+    duration: Duration,
+}
+
+#[derive(Debug)]
+struct HlsDeliveryTracker {
+    last_sequence: Option<u64>,
+    window_started_at: Duration,
+    media_in_window: Duration,
+    max_segment_duration: Duration,
+    last_progress_at: Option<Duration>,
+    under_run_active: bool,
+    last_under_run_at: Option<DateTime<Utc>>,
+}
+
+impl HlsDeliveryTracker {
+    fn new(last_sequence: Option<u64>) -> Self {
+        Self {
+            last_sequence,
+            window_started_at: Duration::ZERO,
+            media_in_window: Duration::ZERO,
+            max_segment_duration: Duration::ZERO,
+            last_progress_at: None,
+            under_run_active: false,
+            last_under_run_at: None,
+        }
+    }
+
+    fn observe(
+        &mut self,
+        elapsed: Duration,
+        segments: &[HlsDeliverySegment],
+        observed_at: DateTime<Utc>,
+    ) -> Option<HlsDeliveryObservation> {
+        let mut progressed = false;
+        for segment in segments {
+            if self
+                .last_sequence
+                .is_none_or(|sequence| segment.sequence > sequence)
+            {
+                self.media_in_window = self.media_in_window.saturating_add(segment.duration);
+                self.max_segment_duration = self.max_segment_duration.max(segment.duration);
+                self.last_sequence = Some(segment.sequence);
+                progressed = true;
+            }
+        }
+        if progressed {
+            self.last_progress_at = Some(elapsed);
+        }
+
+        let wall = elapsed.saturating_sub(self.window_started_at);
+        let no_progress = self
+            .last_progress_at
+            .map_or(elapsed, |progress_at| elapsed.saturating_sub(progress_at));
+        let startup_stalled =
+            self.last_progress_at.is_none() && elapsed >= HLS_DELIVERY_STARTUP_TIMEOUT;
+        let delivery_stalled =
+            self.last_progress_at.is_some() && no_progress >= HLS_DELIVERY_NO_PROGRESS_TIMEOUT;
+        let window_complete = wall >= HLS_DELIVERY_WINDOW;
+        let ratio = if wall.is_zero() {
+            1.0
+        } else {
+            self.media_in_window.as_secs_f64() / wall.as_secs_f64()
+        };
+        let media_seconds = self.media_in_window.as_secs_f64();
+        // One segment of allowance prevents a healthy segmented stream from
+        // failing solely because the observation tick landed just before the
+        // next playlist update.
+        let window_under_run = window_complete
+            && (self.media_in_window + self.max_segment_duration).as_secs_f64()
+                < wall.as_secs_f64() * HLS_DELIVERY_MIN_RATIO;
+        let under_run = startup_stalled || delivery_stalled || window_under_run;
+
+        let update = if under_run && !self.under_run_active {
+            self.under_run_active = true;
+            self.last_under_run_at = Some(observed_at);
+            Some((HlsDeliveryState::UnderRun, true))
+        } else if window_complete && under_run {
+            self.last_under_run_at = Some(observed_at);
+            Some((HlsDeliveryState::UnderRun, false))
+        } else if window_complete && !under_run && self.under_run_active {
+            self.under_run_active = false;
+            Some((HlsDeliveryState::Recovered, true))
+        } else {
+            None
+        };
+
+        if window_complete {
+            self.window_started_at = elapsed;
+            self.media_in_window = Duration::ZERO;
+            self.max_segment_duration = Duration::ZERO;
+        }
+
+        update.map(|(state, transitioned)| HlsDeliveryObservation {
+            transitioned,
+            observed_at,
+            state,
+            last_under_run_at: self.last_under_run_at.unwrap_or(observed_at),
+            wall_seconds: wall.as_secs_f64(),
+            media_seconds,
+            delivery_ratio_percent: ratio * 100.0,
+            no_progress_seconds: no_progress.as_secs_f64(),
+        })
+    }
+}
+
 struct HlsProcessCapacity<'a> {
     active_transcode_slot_id: Option<u64>,
     work_ahead_reservation: Option<&'a mut Option<WorkAheadReservation>>,
+    delivery_pool: Option<&'a DbPool>,
 }
 
 /// Concrete HLS segmenter worker backed by `FFmpeg` CLI output in a temp folder.
@@ -1169,6 +1285,7 @@ impl HlsSessionWorker {
                                 work_ahead_reservation: (is_continuous_remote
                                     && decision.working_ahead)
                                     .then_some(&mut work_ahead_reservation),
+                                delivery_pool: is_live_remote.then_some(&pool),
                             },
                         )
                         .await;
@@ -1487,6 +1604,7 @@ impl HlsSessionWorker {
             HlsProcessCapacity {
                 active_transcode_slot_id,
                 work_ahead_reservation: None,
+                delivery_pool: None,
             },
         )
         .await
@@ -1501,6 +1619,7 @@ impl HlsSessionWorker {
         remote_stream: Option<ResolvedRemoteStream>,
         mut capacity: HlsProcessCapacity<'_>,
     ) -> HlsProcessOutcome {
+        let delivery_pool = capacity.delivery_pool;
         let burst_baseline = if capacity.work_ahead_reservation.is_some() {
             playlist_segment_uris(&self.working_dir)
                 .await
@@ -1508,6 +1627,10 @@ impl HlsSessionWorker {
         } else {
             HashSet::new()
         };
+        let delivery_started_at = tokio::time::Instant::now();
+        let mut delivery_tracker = self
+            .initial_hls_delivery_tracker(delivery_pool.is_some())
+            .await;
         let producer = remote_stream.as_ref().and_then(remote_stream_producer);
         let Ok(mut child) = self.spawn_hls_child_with_remote(&command, producer) else {
             tracing::warn!(channel_number = %self.channel_number, "failed to spawn ffmpeg hls segmenter");
@@ -1567,6 +1690,9 @@ impl HlsSessionWorker {
                     }
                 }
                 _ = cleanup_interval.tick() => {
+                    if let (Some(pool), Some(tracker)) = (delivery_pool, delivery_tracker.as_mut()) {
+                        self.sample_hls_delivery(pool, tracker, delivery_started_at).await;
+                    }
                     if capacity.work_ahead_reservation
                         .as_ref()
                         .is_some_and(|reservation| reservation.is_some())
@@ -1590,6 +1716,83 @@ impl HlsSessionWorker {
                     let _ = self.trim_playlist_inner().await;
                 }
             }
+        }
+    }
+
+    async fn initial_hls_delivery_tracker(&self, enabled: bool) -> Option<HlsDeliveryTracker> {
+        if !enabled {
+            return None;
+        }
+        let baseline = hls_delivery_segments(&self.working_dir)
+            .await
+            .ok()
+            .and_then(|segments| segments.last().map(|segment| segment.sequence));
+        Some(HlsDeliveryTracker::new(baseline))
+    }
+
+    async fn sample_hls_delivery(
+        &self,
+        pool: &DbPool,
+        tracker: &mut HlsDeliveryTracker,
+        started_at: tokio::time::Instant,
+    ) {
+        match hls_delivery_segments(&self.working_dir).await {
+            Ok(segments) => {
+                if let Some(observation) =
+                    tracker.observe(started_at.elapsed(), &segments, Utc::now())
+                {
+                    self.record_hls_delivery_transition(pool, &observation)
+                        .await;
+                }
+            }
+            Err(error) => tracing::debug!(
+                %error,
+                channel_number = %self.channel_number,
+                "could not sample HLS delivery progress"
+            ),
+        }
+    }
+
+    async fn record_hls_delivery_transition(
+        &self,
+        pool: &DbPool,
+        observation: &HlsDeliveryObservation,
+    ) {
+        match (observation.state, observation.transitioned) {
+            (HlsDeliveryState::UnderRun, true) => tracing::warn!(
+                channel_number = %self.channel_number,
+                wall_seconds = observation.wall_seconds,
+                media_seconds = observation.media_seconds,
+                delivery_ratio_percent = observation.delivery_ratio_percent,
+                no_progress_seconds = observation.no_progress_seconds,
+                "live HLS delivery is not keeping pace with wall time"
+            ),
+            (HlsDeliveryState::Recovered, true) => tracing::info!(
+                channel_number = %self.channel_number,
+                wall_seconds = observation.wall_seconds,
+                media_seconds = observation.media_seconds,
+                delivery_ratio_percent = observation.delivery_ratio_percent,
+                "live HLS delivery recovered"
+            ),
+            (HlsDeliveryState::UnderRun | HlsDeliveryState::Recovered, false) => {}
+        }
+
+        let persisted = tokio::time::timeout(
+            Duration::from_secs(2),
+            persist_hls_delivery_observation(pool, self.channel_id, observation),
+        )
+        .await;
+        match persisted {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => tracing::warn!(
+                %error,
+                channel_number = %self.channel_number,
+                "failed to persist HLS delivery observation"
+            ),
+            Err(_) => tracing::warn!(
+                channel_number = %self.channel_number,
+                "timed out persisting HLS delivery observation"
+            ),
         }
     }
 
@@ -3596,6 +3799,26 @@ async fn playlist_duration_excluding_uris(
         .fold(Duration::ZERO, Duration::saturating_add))
 }
 
+async fn hls_delivery_segments(working_dir: &Path) -> io::Result<Vec<HlsDeliverySegment>> {
+    let playlist = match tokio::fs::read_to_string(working_dir.join("live.m3u8")).await {
+        Ok(playlist) => playlist,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error),
+    };
+    let mut segments = parsed_playlist_segments(&playlist)
+        .into_iter()
+        .filter_map(|segment| {
+            let duration = parse_extinf_duration(&segment.extinf_line)?.to_std().ok()?;
+            Some(HlsDeliverySegment {
+                sequence: segment.sequence,
+                duration,
+            })
+        })
+        .collect::<Vec<_>>();
+    segments.sort_unstable_by_key(|segment| segment.sequence);
+    Ok(segments)
+}
+
 fn parsed_playlist_segments(playlist: &str) -> Vec<PlaylistSegment> {
     parse_playlist(playlist, Utc::now(), false)
         .map(|parsed| {
@@ -4911,6 +5134,90 @@ mod tests {
 
     fn reset_active_transcode_state() {
         crate::transcode_capacity::reset_active_transcode_state_for_tests();
+    }
+
+    fn delivery_segments(first: u64, last: u64) -> Vec<HlsDeliverySegment> {
+        (first..=last)
+            .map(|sequence| HlsDeliverySegment {
+                sequence,
+                duration: Duration::from_secs(4),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn hls_delivery_tracker_allows_one_segment_of_sampling_jitter() {
+        let mut tracker = HlsDeliveryTracker::new(None);
+
+        let observation = tracker.observe(
+            Duration::from_mins(1),
+            &delivery_segments(1, 14),
+            Utc::now(),
+        );
+
+        assert!(observation.is_none());
+    }
+
+    #[test]
+    fn hls_delivery_tracker_detects_sustained_under_run_and_recovery() {
+        let now = Utc::now();
+        let mut tracker = HlsDeliveryTracker::new(None);
+
+        let under_run = tracker
+            .observe(Duration::from_mins(1), &delivery_segments(1, 7), now)
+            .expect("slow media delivery should transition to under-run");
+        assert_eq!(under_run.state, HlsDeliveryState::UnderRun);
+        assert!((under_run.media_seconds - 28.0).abs() < f64::EPSILON);
+        assert!(under_run.delivery_ratio_percent < 50.0);
+
+        let recovered = tracker
+            .observe(
+                Duration::from_mins(2),
+                &delivery_segments(8, 22),
+                now + chrono::Duration::seconds(60),
+            )
+            .expect("a healthy window should transition to recovered");
+        assert_eq!(recovered.state, HlsDeliveryState::Recovered);
+        assert_eq!(recovered.last_under_run_at, now);
+        assert!((recovered.media_seconds - 60.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn hls_delivery_tracker_detects_startup_and_midstream_stalls() {
+        let now = Utc::now();
+        let mut startup = HlsDeliveryTracker::new(None);
+        let startup_under_run = startup
+            .observe(Duration::from_secs(30), &[], now)
+            .expect("missing startup progress should be an under-run");
+        assert_eq!(startup_under_run.state, HlsDeliveryState::UnderRun);
+
+        let mut midstream = HlsDeliveryTracker::new(None);
+        assert!(midstream
+            .observe(Duration::from_secs(5), &delivery_segments(1, 1), now,)
+            .is_none());
+        let stalled = midstream
+            .observe(Duration::from_secs(17), &[], now)
+            .expect("twelve seconds without a segment should be an under-run");
+        assert_eq!(stalled.state, HlsDeliveryState::UnderRun);
+        assert!((stalled.no_progress_seconds - 12.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn hls_delivery_tracker_refreshes_active_under_run_without_log_transition() {
+        let now = Utc::now();
+        let mut tracker = HlsDeliveryTracker::new(None);
+        let initial = tracker
+            .observe(Duration::from_mins(1), &delivery_segments(1, 7), now)
+            .expect("initial under-run");
+        assert!(initial.transitioned);
+
+        let heartbeat_at = now + chrono::Duration::minutes(1);
+        let heartbeat = tracker
+            .observe(Duration::from_mins(2), &[], heartbeat_at)
+            .expect("active under-run heartbeat");
+        assert_eq!(heartbeat.state, HlsDeliveryState::UnderRun);
+        assert!(!heartbeat.transitioned);
+        assert_eq!(heartbeat.last_under_run_at, heartbeat_at);
     }
 
     fn test_ffmpeg_runtime(

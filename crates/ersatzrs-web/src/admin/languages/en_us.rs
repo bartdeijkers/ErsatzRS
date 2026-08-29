@@ -362,6 +362,10 @@ impl LanguageStrings for EnglishStrings {
         )
     }
 
+    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64) -> String {
+        format!("{recent} channel(s) delivered live HLS media slower than wall time in the last {minutes} minutes; {active} had not recovered when last observed. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.")
+    }
+
     fn artwork_cardinality_message(
         &self,
         duplicate_rows: [i64; 3],
@@ -984,6 +988,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayoutState => "Classic Playout State",
         TextKey::ScanRefreshState => "Scan Refresh State",
         TextKey::ArtworkCardinality => "Artwork Cardinality",
+        TextKey::HlsLiveDelivery => "HLS Live Delivery",
         TextKey::BlockPlayout => "Block Playout",
         TextKey::ScriptedPlayout => "Scripted Schedule",
         TextKey::AlternateSchedules => "Alternate Schedules",

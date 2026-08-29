@@ -21,6 +21,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Detect live HLS segment under-runs even when every received MPEG-TS packet is
+  structurally valid, expose recent events through health, and make the manual
+  TSDuck gate compare PCR media time with wall time without misclassifying
+  variable-rate HLS from packet count and nominal bitrate.
+
 - Play sidecar subtitles whose filename contains an apostrophe, comma or
   semicolon. Those characters reached the ffmpeg `subtitles` filter unescaped,
   where an apostrophe opened an unterminated quote that swallowed the rest of

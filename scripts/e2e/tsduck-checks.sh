@@ -24,9 +24,16 @@
 : "${EXPECT_VIDEO_PIDS:=1}"
 : "${EXPECT_AUDIO_PIDS:=1}"
 : "${MIN_HLS_SEGMENTS:=1}"
+: "${MIN_DELIVERY_RATIO_PERCENT:=95}" # captured media time / requested wall time
+: "${MAX_STREAM_STARTUP_SECONDS:=30}" # request start until tsp receives its first packet
+: "${MIN_ROLLING_DELIVERY_RATIO_PERCENT:=50}" # rolling bitrate floor vs capture average
+: "${MAX_LOW_DELIVERY_INTERVALS:=0}"   # rolling intervals below the floor
 
 CHECKS_RUN=0
 CHECKS_FAILED=0
+LAST_TS_PACKETS=0
+LAST_TS_BITRATE=0
+LAST_TS_MEDIA_MS=0
 
 if [ -t 1 ]; then
   C_PASS=$'\033[32m'; C_FAIL=$'\033[31m'; C_WARN=$'\033[33m'; C_DIM=$'\033[2m'; C_OFF=$'\033[0m'
@@ -81,6 +88,18 @@ analyze_ts() {
   pmt=$(_jn '[.pids[]|select(.pmt==true)]|length' "$json")
   sdt=$(_jn '[.pids[]|select(.id==17)]|length' "$json")
   svc=$(_jn '.services|length' "$json")
+  LAST_TS_PACKETS="$packets"
+  LAST_TS_BITRATE="$bitrate"
+  local pcr_csv="${json}.pcr.csv"
+  if tsp -I file "$ts" -P pcrextract --pcr --csv --noheader -o "$pcr_csv" -O drop \
+      >/dev/null 2>&1; then
+    LAST_TS_MEDIA_MS=$(awk -F, '
+      $4 == "PCR" && $7 ~ /^[0-9]+$/ && $7 > maximum { maximum=$7 }
+      END { printf "%.0f", maximum * 1000 / 27000000 }
+    ' "$pcr_csv")
+  else
+    LAST_TS_MEDIA_MS=0
+  fi
 
   info "$label — packets=$packets bitrate=${bitrate}bps services=$svc video_pids=$vid audio_pids=$aud TEI=$terr sync_errs=$isync"
 
@@ -151,11 +170,83 @@ check_continuity_plugin() {
   assert_le "$errs" "$MAX_CC_ERRORS" "$label · continuity processor errors"
 }
 
+# check_delivery_timing MEDIA_MS REQUESTED_SECONDS TOTAL_SECONDS LABEL
+#
+# TSDuck's `until --seconds` uses wall-clock time after the first packet, while
+# pcrextract reports the media clock elapsed between the first and last PCR.
+# Comparing those independent clocks exposes a stream that remains structurally
+# valid but delivers too little media for a realtime player. Packet count divided
+# by a PCR-derived bitrate is intentionally not used: that calculation assumes
+# constant bitrate and misclassifies valid variable-rate HLS. TOTAL_SECONDS
+# starts before the input plugin opens, so startup remains a separate signal.
+check_delivery_timing() {
+  local media_ms="$1" requested="$2" total="$3" label="$4"
+  local before="$CHECKS_FAILED"
+  if [ "$media_ms" -le 0 ] 2>/dev/null || [ "$requested" -le 0 ] 2>/dev/null \
+      || [ "$total" -le 0 ] 2>/dev/null; then
+    fail "$label · realtime delivery" "missing PCR media-time or elapsed-time evidence"
+    return 1
+  fi
+
+  local requested_ms media_ratio startup_seconds
+  requested_ms=$((requested * 1000))
+  media_ratio=$((media_ms * 100 / requested_ms))
+  startup_seconds=$((total > requested ? total - requested : 0))
+
+  info "$label — pcr_media_ms=$media_ms requested_ms=$requested_ms delivery_ratio=${media_ratio}% startup_seconds=$startup_seconds"
+  assert_ge "$media_ratio" "$MIN_DELIVERY_RATIO_PERCENT" \
+    "$label · media-time / wall-time delivery ratio (%)"
+  assert_le "$startup_seconds" "$MAX_STREAM_STARTUP_SECONDS" \
+    "$label · startup latency (seconds)"
+
+  [ "$CHECKS_FAILED" -eq "$before" ]
+}
+
+# check_delivery_monitor LOG CAPTURE_AVERAGE_BITRATE LABEL
+#
+# bitrate_monitor writes prefixed JSON lines. The reference is the capture's
+# wall-clock average, not tsanalyze's PCR-derived bitrate, so VBR HLS is not
+# mistaken for under-delivery. The deliberately low rolling floor catches an
+# empty or severely starved interval while tolerating ordinary segment bursts.
+check_delivery_monitor() {
+  local log="$1" average_bitrate="$2" label="$3"
+  local before="$CHECKS_FAILED"
+  if [ ! -s "$log" ] || [ "$average_bitrate" -le 0 ] 2>/dev/null; then
+    warn "$label · rolling delivery monitor unavailable"
+    return 0
+  fi
+
+  local threshold samples low minimum stats
+  threshold=$((average_bitrate * MIN_ROLLING_DELIVERY_RATIO_PERCENT / 100))
+  stats=$(sed -nE 's/^[^{]*(\{.*\})[^}]*$/\1/p' "$log" \
+    | jq -r 'select(.status != "summary") | .bitrate' 2>/dev/null \
+    | awk -v threshold="$threshold" '
+        BEGIN { samples=0; low=0; minimum=-1 }
+        /^[0-9]+$/ {
+          samples += 1
+          if ($1 < threshold) low += 1
+          if (minimum < 0 || $1 < minimum) minimum=$1
+        }
+        END { printf "%d %d %d", samples, low, minimum }
+      ')
+  read -r samples low minimum <<<"${stats:-0 0 -1}"
+  if [ "$samples" -eq 0 ]; then
+    warn "$label · rolling delivery monitor produced no periodic sample"
+    return 0
+  fi
+
+  info "$label — rolling_samples=$samples low_delivery_intervals=$low minimum_interval_bitrate=${minimum}bps threshold=${threshold}bps"
+  assert_le "$low" "$MAX_LOW_DELIVERY_INTERVALS" \
+    "$label · rolling low-delivery intervals"
+  [ "$CHECKS_FAILED" -eq "$before" ]
+}
+
 # check_hls_playlist URL_OR_FILE LABEL  (structure of an .m3u8)
 check_hls_playlist() {
-  local src="$1" label="$2" body segs variants
+  local src="$1" label="$2" body segs variants display_src
+  display_src="${src%%\?*}"
   if [[ "$src" == http* ]]; then body=$(curl -fsS --max-time 15 "$src" 2>/dev/null); else body=$(cat "$src" 2>/dev/null); fi
-  if [ -z "$body" ]; then fail "$label · HLS playlist fetch" "empty/unreachable: $src"; return 1; fi
+  if [ -z "$body" ]; then fail "$label · HLS playlist fetch" "empty/unreachable: $display_src"; return 1; fi
   if printf '%s' "$body" | grep -q '#EXTM3U'; then pass "$label · #EXTM3U header"; else fail "$label · #EXTM3U header" "not an HLS playlist"; fi
   segs=$(printf '%s' "$body" | grep -c '#EXTINF')
   variants=$(printf '%s' "$body" | grep -c '#EXT-X-STREAM-INF')

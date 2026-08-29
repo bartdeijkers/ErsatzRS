@@ -360,6 +360,10 @@ impl LanguageStrings for ItalianStrings {
         )
     }
 
+    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64) -> String {
+        format!("{recent} canale/i hanno distribuito contenuti HLS in diretta più lentamente del tempo reale negli ultimi {minutes} minuti; {active} non avevano ancora recuperato all'ultima osservazione. Controlla i log di streaming ed esegui il test di riproduzione TSDuck sensibile alla velocità di consegna prima di modificare le impostazioni del provider.")
+    }
+
     fn artwork_cardinality_message(
         &self,
         duplicate_rows: [i64; 3],
@@ -988,6 +992,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClassicPlayoutState => "Stato del playout classico",
         TextKey::ScanRefreshState => "Stato dell'aggiornamento dopo la scansione",
         TextKey::ArtworkCardinality => "Cardinalità delle immagini",
+        TextKey::HlsLiveDelivery => "Distribuzione HLS in diretta",
         TextKey::BlockPlayout => "Playout a blocchi",
         TextKey::ScriptedPlayout => "Programma scriptato",
         TextKey::AlternateSchedules => "Programmi alternativi",

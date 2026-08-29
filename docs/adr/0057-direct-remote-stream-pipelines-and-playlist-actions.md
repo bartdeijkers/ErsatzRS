@@ -11,7 +11,14 @@ actions remain active for add-on-backed producers.
 
 ## Implementation
 
-Implemented (revised 2026-08-17). Remote Stream YAML definitions are scanned
+Partial — the direct producer and cancellation contracts are implemented, but
+a 2026-08-29 Windows VLC starvation report remains unresolved. A bounded
+TSDuck observation stayed structurally clean; its initial half-realtime
+classification was invalid for variable-rate HLS, and a metadata-only probe
+confirmed that yt-dlp already selected 1080p30 AVC rather than an oversized
+rendition. Milestone `hls-live-01` owns provider-neutral segment-advancement
+supervision and exact-candidate Windows proof before any provider-specific
+recovery is enabled. Remote Stream YAML definitions are scanned
 into the persisted model, direct URLs and installed add-on producers are
 probed, and IPTV/HLS playback uses the resolved source instead of opening the
 YAML file. Add-on stdout is piped directly into managed FFmpeg, consumer
