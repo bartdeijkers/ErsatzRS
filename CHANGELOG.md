@@ -33,6 +33,14 @@ release section when tagging a release.
   killed the channel with "No option name near ..." at the moment the affected
   episode started. See ADR 0082.
 
+- Keep Classic playouts refreshable after the first build. Checkpoints are now
+  captured at the 100-nanosecond tick precision used by persisted timestamp
+  columns, so a checkpoint still matches its own scheduler continuation time
+  after a database round trip. Previously any checkpoint captured at sub-tick
+  precision read back as two different instants, every Refresh after a Reset
+  was refused with "checkpoint date and scheduler continuation time do not
+  match", and channels stopped streaming once the built window ran out.
+
 ## [1.0.29-beta] - 2026-08-28
 
 ### Changed

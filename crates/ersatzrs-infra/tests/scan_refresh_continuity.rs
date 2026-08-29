@@ -3,7 +3,7 @@ mod common;
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_core::repositories::ProgramScheduleRepository;
 use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
@@ -554,4 +554,73 @@ fn quoted_row_projection(alias: &str, columns: &[String]) -> String {
 
 fn quote_identifier(identifier: &str) -> String {
     format!("\"{}\"", identifier.replace('"', "\"\""))
+}
+
+/// Regression: a Classic Refresh must stay accepted after the checkpoint has
+/// survived a database round trip.
+///
+/// `PlayoutClassicCheckpoint."CheckpointDate"` is stored at .NET tick precision
+/// while the same instant inside `"Context"` is serialized by serde at full
+/// nanosecond precision, so a checkpoint captured at a sub-tick timestamp used
+/// to read back as two different instants and
+/// `audit_classic_refresh_checkpoint` refused every later Refresh with
+/// "checkpoint date and scheduler continuation time do not match". The build
+/// after a Reset therefore succeeded exactly once and the playout window was
+/// never extended again. Every other Classic checkpoint test drives the
+/// scheduler in memory or from whole-second fixtures, where the truncation is
+/// lossless, so only a persisted sub-tick build reproduces it.
+#[tokio::test]
+async fn classic_refresh_survives_checkpoint_round_trip_at_sub_tick_precision() {
+    let directory = tempfile::tempdir().expect("temporary database directory");
+    let database_path = directory.path().join("sub-tick.sqlite");
+    // 940 ns is not a whole tick, so the persisted column floors it to 900 ns.
+    let build_at = common::fixed_time()
+        .with_nanosecond(881_033_940)
+        .expect("sub-tick build timestamp");
+    assert_ne!(
+        build_at.timestamp_subsec_nanos() % 100,
+        0,
+        "the regression only reproduces below tick precision"
+    );
+
+    let pool = open_database(&database_path, true).await;
+    seed_acceptance_fixture(&pool).await;
+
+    run_classic_build(&pool, RELATED_PLAYOUT_ID, PlayoutBuildMode::Reset, build_at).await;
+    assert!(
+        !persisted_classic_rows(&pool, RELATED_PLAYOUT_ID)
+            .await
+            .classic_checkpoints
+            .is_empty(),
+        "the Reset build must persist a checkpoint to refresh from"
+    );
+    assert_build_succeeded(&pool, RELATED_PLAYOUT_ID, "reset").await;
+
+    run_classic_build(
+        &pool,
+        RELATED_PLAYOUT_ID,
+        PlayoutBuildMode::Refresh,
+        build_at + Duration::minutes(1),
+    )
+    .await;
+    assert_build_succeeded(&pool, RELATED_PLAYOUT_ID, "refresh").await;
+
+    pool.close().await;
+}
+
+async fn assert_build_succeeded(pool: &SqlitePool, playout_id: EntityId, stage: &str) {
+    let row = sqlx::query(
+        r#"SELECT "Success", COALESCE("Message", '') AS "Message"
+           FROM "PlayoutBuildStatus" WHERE "PlayoutId" = ?"#,
+    )
+    .bind(playout_id)
+    .fetch_one(pool)
+    .await
+    .expect("load persisted build status");
+    assert_eq!(
+        row.try_get::<i64, _>("Success").expect("success flag"),
+        1,
+        "{stage} build failed: {}",
+        row.try_get::<String, _>("Message").expect("message")
+    );
 }

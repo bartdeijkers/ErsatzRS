@@ -25,8 +25,9 @@ pub use block::{
 };
 pub use classic::{
     audit_classic_refresh_checkpoint, audit_classic_runtime_state, classic_schedule_item_key,
-    classic_schedule_item_policy_key, ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit,
-    ClassicSchedulingContext, ClassicSchedulingEngine,
+    classic_schedule_item_policy_key, truncate_to_persisted_precision,
+    ClassicRefreshCheckpointAudit, ClassicRuntimeStateAudit, ClassicSchedulingContext,
+    ClassicSchedulingEngine,
 };
 pub use scripted::ScriptedSchedulingEngine;
 pub use smart_shuffle::{

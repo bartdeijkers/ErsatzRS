@@ -115,3 +115,19 @@ description = 'RandomRotation persisted seed and index without the predecessor g
 discovered  = '2026-07-27'
 evidence    = 'Resolved by Classic anchor context version 2 storing each cycle predecessor media ID and by canonicalizing cycle source order with the full ADR 0048 scheduling-item identity. Regressions classic_random_rotation_continue_reconstructs_cycle_boundary and classic_random_rotation_continue_preserves_duplicate_override_identity match uninterrupted output, including duplicate media rows with different track overrides.'
 resolved    = true
+
+[[debt]]
+id          = 'checkpoint-date-loses-sub-tick-precision'
+description = 'Classic checkpoints were captured at full nanosecond precision, but `PlayoutClassicCheckpoint."CheckpointDate"` is stored at .NET tick precision while the same instant inside `"Context"` is serialized by serde at nanosecond precision, so the two disagreed after a database round trip and every Refresh following a Reset was refused.'
+discovered  = '2026-08-28'
+adr         = '0020'
+evidence    = 'Found in a live database: the persisted column read `2026-08-28 07:39:57.8810339` while the checkpoint context carried `2026-08-28T07:39:57.881033940Z`, so `audit_classic_refresh_checkpoint` failed its `context.anchor.next_start == checkpoint.checkpoint_date` equality check and refused with "checkpoint date and scheduler continuation time do not match". Every channel stopped streaming once its built window elapsed, because the playout could only ever be built once per Reset. Resolved by flooring the captured checkpoint instant to tick precision in `capture_checkpoint`, so the column and the context describe the same instant. Regression `classic_refresh_survives_checkpoint_round_trip_at_sub_tick_precision` (ersatzrs-infra/tests/scan_refresh_continuity.rs) drives two consecutive persisted builds from a sub-tick timestamp; the existing Classic checkpoint tests all use whole-second fixtures, where the truncation is lossless, and could not catch this.'
+resolved    = true
+
+[[debt]]
+id          = 'checkpoint-timestamp-normalization-is-partial'
+description = 'P2: Normalize every timestamp-bearing Classic checkpoint field at persisted .NET tick precision; flooring only `checkpoint_date` and `anchor.next_start` leaves Smart Shuffle `release_at` values at nanosecond precision and can change media selection after Refresh.'
+discovered  = '2026-08-30'
+adr         = '0020'
+evidence    = 'Review on 2026-08-30: `capture_checkpoint` floors the outer seam but clones `smart_shuffle_state` unchanged, so `SchedulingSmartShuffleEntry.release_at` retains full serde precision. At a cooldown seam a restored Refresh can resume 1-99 ns early, keep a tag blocked, and choose different media from an uninterrupted build. Closure requires a production checkpoint and repository round-trip regression that crosses a duration cooldown and asserts matching future media identities, timestamps, and scheduling contexts.'
+resolved    = false

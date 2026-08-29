@@ -85,6 +85,28 @@ impl ClassicRefreshCheckpointAudit {
     }
 }
 
+/// Number of nanoseconds in one .NET tick, the precision every persisted
+/// ErsatzTV timestamp is stored at.
+const NANOS_PER_TICK: u32 = 100;
+
+/// Floor a timestamp to the 100-nanosecond tick precision used by persisted
+/// ErsatzTV timestamp columns.
+///
+/// `PlayoutClassicCheckpoint."CheckpointDate"` is written through the shared
+/// datetime encoder, which floors to .NET ticks for ErsatzTV parity, while the
+/// same instant inside `"Context"` is serialized by serde at full nanosecond
+/// precision. A checkpoint must therefore be generated at tick precision or the
+/// two representations disagree after a database round trip, and
+/// [`audit_classic_refresh_checkpoint`] rejects every later Refresh with
+/// "checkpoint date and scheduler continuation time do not match".
+#[must_use]
+pub fn truncate_to_persisted_precision(value: DateTime<Utc>) -> DateTime<Utc> {
+    // Subtract rather than call `with_nanosecond`, which fails on the leap
+    // second that `timestamp_subsec_nanos` reports as `1_000_000_000 + n`.
+    let remainder = value.timestamp_subsec_nanos() % NANOS_PER_TICK;
+    value - Duration::nanoseconds(i64::from(remainder))
+}
+
 /// Prove that the earliest checkpoint on the Refresh day contains one state
 /// for every unique schedule source plus compatible scheduler-wide context.
 #[must_use]
@@ -1731,14 +1753,15 @@ impl ClassicContext {
     }
 
     fn capture_checkpoint(&mut self) {
-        let checkpoint_date = self
-            .result
-            .added_items
-            .iter()
-            .map(|item| item.finish)
-            .max()
-            .unwrap_or(self.state.current_time)
-            .max(self.state.current_time);
+        let checkpoint_date = truncate_to_persisted_precision(
+            self.result
+                .added_items
+                .iter()
+                .map(|item| item.finish)
+                .max()
+                .unwrap_or(self.state.current_time)
+                .max(self.state.current_time),
+        );
         if self
             .generated_checkpoints
             .iter()
