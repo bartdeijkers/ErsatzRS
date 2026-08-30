@@ -121,7 +121,7 @@ pub async fn load_channel_guide_templates(
 pub async fn load_channel_guide_templates_in(
     folder: &std::path::Path,
 ) -> Result<ChannelGuideTemplates, ChannelGuideTemplateError> {
-    let mut env = minijinja::Environment::new();
+    let mut env = crate::minijinja_compat::environment();
     // The registered names intentionally omit a `.xml` suffix, so MiniJinja's
     // default callback would not escape them. Every template renders XML and
     // must escape metadata and provider URLs before fragment validation.

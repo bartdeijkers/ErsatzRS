@@ -35,6 +35,7 @@ pub mod maintenance;
 pub mod media_server;
 pub mod metadata;
 pub(crate) mod metadata_query;
+pub(crate) mod minijinja_compat;
 pub mod music_video_credits;
 pub mod playback;
 pub mod plex;

@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh the dependency rollup, including `base64` 0.23 and
+  `ed25519-dalek` 3.0 for signed add-on repositories, while preserving the
+  lowercase boolean and `none` output of existing XMLTV and graphics templates
+  across the MiniJinja 2.23 update.
+
 ## [1.0.31-beta] - 2026-08-30
 
 ### Added
