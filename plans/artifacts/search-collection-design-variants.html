@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>ErsatzRS Variant 4 collection-search directions</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --canvas: #090b0e;
+      --app: #101318;
+      --surface: #181c22;
+      --surface-strong: #222831;
+      --surface-soft: #13171c;
+      --line: #323a45;
+      --line-strong: #4b5765;
+      --text: #f2f5f7;
+      --text-soft: #c9d0d8;
+      --muted: #929daa;
+      --primary: #6bc876;
+      --primary-strong: #188b31;
+      --primary-soft: #182b1d;
+      --blue: #83bee7;
+      --blue-soft: #172837;
+      --warning: #f3bd54;
+      --warning-soft: #292315;
+      --danger: #ef8585;
+      --focus: #b8ef70;
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--canvas); color: var(--text); font-size: 15px; line-height: 1.5; }
+    button, input, select, textarea { font: inherit; }
+    button, summary { cursor: pointer; }
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible,
+    textarea:focus-visible, summary:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 3px;
+    }
+    a { color: var(--blue); }
+    code { color: #d5e9f8; font-size: .92em; }
+    .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+
+    .hero { border-bottom: 1px solid var(--line); background: linear-gradient(145deg, #10151a, #0d1115 58%, #111912); padding: 2.4rem clamp(1rem, 4vw, 4rem) 2rem; }
+    .hero > * { width: min(100%, 92rem); margin-inline: auto; }
+    .eyebrow { margin: 0 0 .45rem; color: var(--primary); font-size: .75rem; font-weight: 850; letter-spacing: .09em; text-transform: uppercase; }
+    h1 { max-width: 24ch; margin-block: 0; font-size: clamp(2rem, 4vw, 3.6rem); line-height: 1.04; letter-spacing: -.04em; }
+    .lede { max-width: 75ch; margin: .85rem 0 0; color: var(--text-soft); font-size: 1rem; }
+    .hero-facts { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: 1.1rem; }
+    .fact { border: 1px solid var(--line); border-radius: 999px; background: rgb(16 19 24 / 78%); padding: .35rem .65rem; color: var(--muted); font-size: .66rem; }
+    .fact strong { color: var(--text-soft); }
+
+    .jump-nav { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--line); background: rgb(13 16 20 / 96%); backdrop-filter: blur(10px); }
+    .jump-nav > div { display: flex; width: min(100%, 92rem); margin-inline: auto; gap: .4rem; overflow-x: auto; padding: .6rem clamp(.7rem, 2vw, 1.2rem); scrollbar-width: thin; }
+    .jump-nav a { display: inline-flex; min-height: 2.65rem; flex: 0 0 auto; align-items: center; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface-soft); padding: .42rem .72rem; color: var(--text-soft); font-size: .7rem; font-weight: 800; text-decoration: none; }
+    .jump-nav a:hover, .jump-nav a:focus-visible { border-color: var(--primary); background: var(--primary-soft); color: var(--text); }
+
+    main { display: grid; gap: 3.4rem; padding: 2.4rem clamp(.7rem, 3vw, 3rem) 5rem; }
+    .study, .direction, .decision { width: min(100%, 92rem); min-width: 0; margin-inline: auto; scroll-margin-top: 5.2rem; }
+    .heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+    .heading h2 { margin: 0; font-size: clamp(1.45rem, 2.5vw, 2.1rem); line-height: 1.15; letter-spacing: -.025em; }
+    .heading p { max-width: 76ch; margin: .35rem 0 0; color: var(--muted); }
+    .badge { flex: 0 0 auto; border: 1px solid var(--line-strong); border-radius: 999px; padding: .35rem .62rem; color: var(--text-soft); font-size: .64rem; font-weight: 850; text-transform: uppercase; }
+    .badge.recommended { border-color: #4d8455; background: var(--primary-soft); color: #caefcf; }
+
+    .audit-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; }
+    .audit-card { border: 1px solid var(--line); border-top: 3px solid var(--warning); border-radius: var(--radius); background: var(--surface-soft); padding: .8rem; }
+    .audit-card strong { display: block; margin-bottom: .25rem; font-size: .76rem; }
+    .audit-card p { margin: 0; color: var(--muted); font-size: .67rem; }
+
+    .direction-body { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(16rem, .7fr); gap: 1rem; align-items: start; }
+    .prototype { min-width: 0; overflow: clip; border: 1px solid var(--line); border-radius: 10px; background: var(--app); box-shadow: 0 1.1rem 2.6rem rgb(0 0 0 / 22%); }
+    .prototype-bar { display: flex; min-height: 2.5rem; align-items: center; gap: .55rem; border-bottom: 1px solid var(--line); background: #15191f; padding: 0 .75rem; color: var(--muted); font-size: .64rem; }
+    .prototype-bar strong { color: var(--text-soft); }
+    .prototype-bar span:last-child { margin-left: auto; }
+    .prototype-content { padding: .9rem; }
+    .notes { display: grid; gap: .6rem; }
+    .note { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); padding: .72rem; }
+    .note h3 { margin: 0 0 .25rem; font-size: .73rem; }
+    .note p, .note li { color: var(--muted); font-size: .66rem; }
+    .note p { margin: 0; }
+    .note ul, .note ol { margin: .2rem 0 0; padding-left: 1rem; }
+    .note li + li { margin-top: .16rem; }
+    .note.better { border-left: 3px solid var(--primary); }
+    .note.tradeoff { border-left: 3px solid var(--warning); }
+
+    .search-row { display: flex; align-items: end; gap: .5rem; }
+    .field { min-width: 0; flex: 1; }
+    .field label, .field-label { display: block; margin-bottom: .2rem; color: var(--text-soft); font-size: .66rem; font-weight: 750; }
+    input, select, textarea { width: 100%; min-height: 2.65rem; border: 1px solid var(--line-strong); border-radius: var(--radius); background: #0f1317; color: var(--text); padding: .5rem .62rem; font-size: .72rem; }
+    textarea { min-height: 4.5rem; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .button-primary, .button-secondary, .button-text {
+      display: inline-flex; min-height: 2.65rem; align-items: center; justify-content: center; gap: .3rem; border-radius: var(--radius); padding: .5rem .72rem; font-size: .69rem; font-weight: 800; text-decoration: none;
+    }
+    .button-primary { border: 1px solid var(--primary-strong); background: var(--primary-strong); color: white; }
+    .button-secondary { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text-soft); }
+    .button-text { border: 1px solid transparent; background: transparent; color: var(--blue); }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+    .toolbar.end { justify-content: flex-end; }
+    .chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; }
+    .chip { display: inline-flex; min-height: 2rem; align-items: center; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface-soft); padding: .28rem .56rem; color: var(--text-soft); font-size: .62rem; }
+    .result-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .45rem; margin-top: .7rem; border-top: 1px solid var(--line); padding-top: .6rem; color: var(--muted); font-size: .66rem; }
+    .media-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; margin-top: .55rem; }
+    .media { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+    .poster { display: grid; min-height: 4.8rem; place-items: center; background: linear-gradient(145deg, #253746, #1e272f 55%, #27372a); color: #c7d4dd; font-weight: 850; }
+    .media:nth-child(2) .poster { background: linear-gradient(145deg, #3c2d2b, #292222 55%, #3b3524); }
+    .media:nth-child(3) .poster { background: linear-gradient(145deg, #2b2941, #22232b 55%, #273847); }
+    .media strong, .media small { display: block; padding-inline: .5rem; }
+    .media strong { overflow: hidden; padding-top: .4rem; text-overflow: ellipsis; white-space: nowrap; font-size: .67rem; }
+    .media small { padding-bottom: .45rem; color: var(--muted); font-size: .59rem; }
+
+    details.disclosure, details.group-card, details.intent-block { border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-soft); }
+    details.disclosure > summary, details.group-card > summary, details.intent-block > summary { display: flex; min-height: 2.8rem; align-items: center; justify-content: space-between; gap: .55rem; padding: .52rem .65rem; color: var(--text-soft); font-size: .68rem; font-weight: 850; list-style: none; }
+    details.disclosure > summary::-webkit-details-marker, details.group-card > summary::-webkit-details-marker, details.intent-block > summary::-webkit-details-marker { display: none; }
+    details.disclosure > summary::after, details.group-card > summary::after, details.intent-block > summary::after { content: "Show"; color: var(--blue); font-size: .59rem; }
+    details[open].disclosure > summary::after, details[open].group-card > summary::after, details[open].intent-block > summary::after { content: "Hide"; }
+    .disclosure-body, .group-body, .intent-body { border-top: 1px solid var(--line); padding: .65rem; }
+    .compact-warning { margin-bottom: .55rem; border-left: 3px solid var(--warning); background: var(--warning-soft); padding: .52rem .6rem; color: #decf9f; font-size: .64rem; }
+
+    .baseline-layout, .focus-layout { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: .55rem; }
+    .outline { border: 1px solid var(--line); border-radius: var(--radius); background: #11151a; padding: .5rem; }
+    .outline h4 { margin: 0 0 .35rem; color: var(--muted); font-size: .59rem; text-transform: uppercase; }
+    .tree-line { display: block; min-height: 1.9rem; border-left: 2px solid var(--line-strong); padding: .32rem .4rem; color: var(--text-soft); font-size: .61rem; }
+    .tree-line.child { margin-left: .65rem; }
+    .tree-line.active { border-left-color: var(--primary); background: var(--primary-soft); font-weight: 850; }
+    .inspector { border: 1px solid var(--line); border-radius: var(--radius); background: #11151a; padding: .6rem; }
+    .inspector h4 { margin: 0 0 .12rem; font-size: .76rem; }
+    .inspector > p { margin: 0 0 .45rem; color: var(--muted); font-size: .62rem; }
+    .rule { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .35rem; align-items: center; min-height: 2.45rem; border: 1px solid var(--line); border-radius: 5px; padding: .4rem; font-size: .62rem; }
+    .rule + .rule { margin-top: .35rem; }
+    .rule b { color: var(--warning); font-size: .57rem; }
+    .rule a { font-weight: 800; }
+
+    .mode-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .55rem; }
+    .mode-header strong { font-size: .76rem; }
+    .mode-header span { color: var(--muted); font-size: .62rem; }
+    .focus-group-list { display: grid; gap: .35rem; }
+    .focus-group { display: flex; min-height: 2.65rem; align-items: center; justify-content: space-between; gap: .5rem; border: 1px solid var(--line); border-radius: var(--radius); padding: .45rem .55rem; color: var(--text-soft); font-size: .64rem; text-decoration: none; }
+    .focus-group.active { border-color: var(--primary); background: var(--primary-soft); }
+
+    .group-stack, .intent-stack { display: grid; gap: .45rem; }
+    .group-card.all { border-left: 3px solid var(--primary); }
+    .group-card.any { border-left: 3px solid var(--warning); }
+    .group-card.none { border-left: 3px solid var(--danger); }
+    .group-summary { color: var(--muted); font-size: .61rem; font-weight: 600; }
+    .group-body .rule { background: #101419; }
+
+    .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .3rem; margin-bottom: .65rem; }
+    .step { border-top: 3px solid var(--line); padding-top: .32rem; color: var(--muted); font-size: .61rem; }
+    .step.active { border-color: var(--primary); color: var(--text); font-weight: 850; }
+    .intent-block.all { border-left: 3px solid var(--primary); }
+    .intent-block.any { border-left: 3px solid var(--warning); }
+    .intent-block.none { border-left: 3px solid var(--danger); }
+    .sentence { margin: 0; color: var(--text-soft); font-size: .68rem; }
+
+    .composer-shell { display: grid; grid-template-columns: 12rem minmax(0, 1fr) 12rem; gap: .6rem; }
+    .composer-nav, .composer-editor, .composer-preview { border: 1px solid var(--line); border-radius: var(--radius); background: #11151a; padding: .6rem; }
+    .composer-shell h4 { margin: 0 0 .4rem; font-size: .7rem; }
+    .composer-nav a { display: block; min-height: 2.25rem; border-left: 2px solid var(--line-strong); padding: .35rem .4rem; color: var(--text-soft); font-size: .62rem; text-decoration: none; }
+    .composer-nav a.active { border-left-color: var(--primary); background: var(--primary-soft); font-weight: 850; }
+    .composer-preview strong { display: block; font-size: 1.35rem; }
+    .composer-preview span { color: var(--muted); font-size: .61rem; }
+    .composer-preview ul { margin: .5rem 0 0; padding-left: 1rem; color: var(--muted); font-size: .6rem; }
+
+    .comparison-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+    .comparison { width: 100%; min-width: 62rem; border-collapse: collapse; font-size: .67rem; }
+    .comparison th, .comparison td { border-top: 1px solid var(--line); padding: .6rem; text-align: left; vertical-align: top; }
+    .comparison thead th { border-top: 0; background: var(--surface-strong); }
+    .comparison tbody th { color: var(--text-soft); }
+    .recommendation { margin-top: .8rem; border: 1px solid #456e4b; border-left: 4px solid var(--primary); border-radius: var(--radius); background: var(--primary-soft); padding: .9rem; }
+    .recommendation h3 { margin: 0 0 .25rem; font-size: .85rem; }
+    .recommendation p { margin: 0; color: #c1d7c4; font-size: .72rem; }
+    .acceptance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .6rem; margin-top: .7rem; }
+    .acceptance article { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); padding: .7rem; }
+    .acceptance h3 { margin: 0 0 .25rem; font-size: .72rem; }
+    .acceptance p, .acceptance li { color: var(--muted); font-size: .64rem; }
+    .acceptance p { margin: 0; }
+    .acceptance ul { margin: .2rem 0 0; padding-left: 1rem; }
+    .sources { margin-top: .75rem; columns: 2; column-gap: 2rem; padding-left: 1rem; }
+    .sources li { break-inside: avoid; margin-bottom: .35rem; color: var(--muted); font-size: .65rem; }
+
+    @media (max-width: 66rem) {
+      .audit-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .direction-body { grid-template-columns: 1fr; }
+      .notes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .composer-shell { grid-template-columns: 10rem minmax(0, 1fr); }
+      .composer-preview { grid-column: 1 / -1; }
+    }
+    @media (max-width: 48rem) {
+      .jump-nav { position: static; }
+      .heading { display: grid; }
+      .badge { justify-self: start; }
+      .audit-grid, .notes, .acceptance { grid-template-columns: 1fr; }
+      .search-row { align-items: stretch; flex-direction: column; }
+      .baseline-layout, .focus-layout, .composer-shell { grid-template-columns: 1fr; }
+      .composer-preview { grid-column: auto; }
+      .media-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .sources { columns: 1; }
+    }
+    @media (max-width: 24rem) {
+      .hero { padding-top: 1.5rem; }
+      main { padding-inline: .65rem; }
+      .prototype-content { padding: .55rem; }
+      .media-strip { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .rule { grid-template-columns: auto minmax(0, 1fr); }
+      .rule a { grid-column: 2; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <p class="eyebrow">Focused plan artifact · Variant 4</p>
+    <h1>Six directions for collection search</h1>
+    <p class="lede">The previous ten-way study is retired. This artifact keeps the selected Variant 4 as a baseline, then challenges its nested-drawer assumptions through five increasingly different alternatives.</p>
+    <div class="hero-facts">
+      <span class="fact"><strong>Job:</strong> turn search results into a trustworthy smart collection</span>
+      <span class="fact"><strong>Constraint:</strong> one canonical query</span>
+      <span class="fact"><strong>Risk:</strong> hidden boolean meaning</span>
+      <span class="fact"><strong>Artifact:</strong> native HTML, CSS, no JavaScript</span>
+    </div>
+  </header>
+
+  <nav class="jump-nav" aria-label="Variant 4 directions"><div>
+    <a href="#audit">Critical review</a>
+    <a href="#baseline">4 · Baseline</a>
+    <a href="#variant-4a">4A · Quick drawer</a>
+    <a href="#variant-4b">4B · Focus takeover</a>
+    <a href="#variant-4c">4C · Group cards</a>
+    <a href="#variant-4d">4D · Guided intent</a>
+    <a href="#variant-4e">4E · Composer</a>
+    <a href="#decision">Decision</a>
+  </div></nav>
+
+  <main>
+    <section class="study" id="audit">
+      <div class="heading"><div><h2>Critical review of the current choice</h2><p>These are design risks to validate, not claims about operator behavior. They explain why the baseline should not become the implementation spec unchanged.</p></div><span class="badge">Re-opened assumptions</span></div>
+      <div class="audit-grid">
+        <article class="audit-card"><strong>Drawer inside drawer</strong><p>Search, filters, logic outline, inspector, rule editor, and help disclosures create too many simultaneous layers.</p></article>
+        <article class="audit-card"><strong>Mode surprise</strong><p>Opening Logic makes Quick controls read-only. That state change is safe for data, but difficult to predict.</p></article>
+        <article class="audit-card"><strong>Tree by default</strong><p>A tree communicates depth, but adds navigation and keyboard cost when most queries may only need ALL, ANY, and NONE groups.</p></article>
+        <article class="audit-card"><strong>Two jobs on one route</strong><p>Finding media and authoring a durable collection overlap, but do not necessarily need the same information density or save model.</p></article>
+      </div>
+    </section>
+
+    <section class="direction" id="baseline">
+      <div class="heading"><div><h2>4 · Baseline: nested progressive drawer</h2><p>The selected design is preserved in compact form so every alternative can be compared against the same query.</p></div><span class="badge">Current baseline</span></div>
+      <div class="direction-body">
+        <div class="prototype">
+          <div class="prototype-bar"><strong>/search</strong><span>Quick + focused logic</span><span>One drawer</span></div>
+          <div class="prototype-content">
+            <div class="search-row"><div class="field"><label for="b-query">Search media</label><input id="b-query" type="search" value="space"></div><button class="button-primary" type="button">Search</button></div>
+            <div class="chips"><span class="chip">Movies</span><span class="chip">1980–1999</span><span class="chip">ANY · 2 genres</span><span class="chip">NONE · 2</span></div>
+            <details class="disclosure" open style="margin-top:.6rem"><summary>Filters and logic <span class="group-summary">4 parts · 42 matches</span></summary><div class="disclosure-body">
+              <div class="compact-warning">Quick filters are read-only while nested groups exist.</div>
+              <details class="disclosure" open><summary>Logic builder <span class="group-summary">ANY 2 · NONE 2</span></summary><div class="disclosure-body baseline-layout">
+                <div class="outline"><h4>Query</h4><span class="tree-line">ALL · 4</span><span class="tree-line child">Media + years</span><span class="tree-line child active">ANY · Genres</span><span class="tree-line child">NONE · Exclusions</span></div>
+                <div class="inspector"><h4>ANY · Genre</h4><p>At least one rule must match.</p><div class="rule"><b>OR</b><span>Genre is Science Fiction</span><a href="#baseline">Edit</a></div><div class="rule"><b>OR</b><span>Genre is Space Opera</span><a href="#baseline">Edit</a></div></div>
+              </div></details>
+            </div></details>
+            <div class="result-bar"><span>42 matches · valid</span><button class="button-secondary" type="button">Save collection</button></div>
+          </div>
+        </div>
+        <aside class="notes"><div class="note"><h3>Use</h3><p>Quick for simple filters; open nested Logic for ANY or NONE.</p></div><div class="note better"><h3>Strength</h3><p>One route and one query preserve context.</p></div><div class="note tradeoff"><h3>Concern</h3><p>Too many nested layers compete for working memory.</p></div></aside>
+      </div>
+    </section>
+
+    <section class="direction" id="variant-4a">
+      <div class="heading"><div><h2>4A · Quick-only result drawer</h2><p>Keep the drawer deliberately small. Complex collection logic gets an explicit handoff instead of growing inside search.</p></div><span class="badge">Smallest change</span></div>
+      <div class="direction-body">
+        <div class="prototype">
+          <div class="prototype-bar"><strong>/search</strong><span>Results first</span><span>No nested editor</span></div>
+          <div class="prototype-content">
+            <div class="search-row"><div class="field"><label for="a-query">Search media</label><input id="a-query" type="search" value="space"></div><button class="button-primary" type="button">Search</button></div>
+            <div class="chips"><span class="chip">Movies</span><span class="chip">1980–1999</span><span class="chip">Science Fiction</span></div>
+            <details class="disclosure" open style="margin-top:.6rem"><summary>Filters <span class="group-summary">3 active</span></summary><div class="disclosure-body">
+              <div class="search-row"><div class="field"><label for="a-type">Media type</label><select id="a-type"><option>Movies</option><option>Episodes</option></select></div><div class="field"><label for="a-genre">Genre</label><input id="a-genre" value="Science Fiction"></div><button class="button-secondary" type="button">Apply</button></div>
+              <div class="result-bar"><button class="button-text" type="button">Clear filters</button><a class="button-secondary" href="#variant-4e">Build complex collection…</a></div>
+            </div></details>
+            <div class="media-strip"><article class="media"><div class="poster">01</div><strong>Orbital Station</strong><small>Movie · 1987</small></article><article class="media"><div class="poster">02</div><strong>Signal From Home</strong><small>Movie · 1994</small></article><article class="media"><div class="poster">03</div><strong>Beyond Europa</strong><small>Movie · 1982</small></article></div>
+          </div>
+        </div>
+        <aside class="notes"><div class="note"><h3>Use</h3><p>Filter results quickly; hand complex work to a composer.</p></div><div class="note better"><h3>Better</h3><p>The closed drawer shows count, chips stay removable, and search never becomes an IDE.</p></div><div class="note tradeoff"><h3>Tradeoff</h3><p>The handoff must preserve the exact query and unsaved selection.</p></div></aside>
+      </div>
+    </section>
+
+    <section class="direction" id="variant-4b">
+      <div class="heading"><div><h2>4B · Focus-mode takeover</h2><p>Stay on <code>/search</code>, but replace the drawer content when Logic opens. Quick and Logic are never visible together.</p></div><span class="badge">Less competition</span></div>
+      <div class="direction-body">
+        <div class="prototype">
+          <div class="prototype-bar"><strong>/search</strong><span>Logic focus mode</span><span>One level at a time</span></div>
+          <div class="prototype-content">
+            <div class="mode-header"><div><strong>Logic editor</strong><span> · Quick filters paused</span></div><a href="#variant-4b">← Back to results</a></div>
+            <div class="focus-layout">
+              <nav class="focus-group-list" aria-label="Query groups"><a class="focus-group" href="#variant-4b"><span>ALL · Media + years</span><span>2</span></a><a class="focus-group active" href="#b-focus"><span>ANY · Genres</span><span>2</span></a><a class="focus-group" href="#variant-4b"><span>NONE · Exclusions</span><span>2</span></a></nav>
+              <section class="inspector" id="b-focus"><h4>ANY · Genre</h4><p>At least one rule must match.</p><div class="rule"><b>OR</b><span>Science Fiction</span><a href="#b-focus">Edit</a></div><div class="rule"><b>OR</b><span>Space Opera</span><a href="#b-focus">Edit</a></div><div class="toolbar" style="margin-top:.45rem"><button class="button-secondary" type="button">+ Add rule</button></div></section>
+            </div>
+            <div class="result-bar"><span>42 matches · 3 groups</span><div class="toolbar"><button class="button-secondary" type="button">Cancel</button><button class="button-primary" type="button">Apply logic</button></div></div>
+          </div>
+        </div>
+        <aside class="notes"><div class="note"><h3>Use</h3><p>Enter Logic, edit one group, then return to results.</p></div><div class="note better"><h3>Better</h3><p>No nested drawer or duplicate Quick controls; the task has one visible context.</p></div><div class="note tradeoff"><h3>Tradeoff</h3><p>Results temporarily leave view, so count and Cancel must remain trustworthy.</p></div></aside>
+      </div>
+    </section>
+
+    <section class="direction" id="variant-4c">
+      <div class="heading"><div><h2>4C · Boolean group cards</h2><p>Replace the tree with three familiar groups. Expand one card to edit its local rules.</p></div><span class="badge">Best shallow model</span></div>
+      <div class="direction-body">
+        <div class="prototype">
+          <div class="prototype-bar"><strong>Collection logic</strong><span>Group cards</span><span>No tree widget</span></div>
+          <div class="prototype-content group-stack">
+            <details class="group-card all"><summary><span>Match all <small class="group-summary">Movie · 1980–1999</small></span></summary><div class="group-body"><div class="rule"><b>AND</b><span>Media type is Movie</span><a href="#variant-4c">Edit</a></div><div class="rule"><b>AND</b><span>Year is 1980–1999</span><a href="#variant-4c">Edit</a></div></div></details>
+            <details class="group-card any" open><summary><span>Match any <small class="group-summary">2 genres</small></span></summary><div class="group-body"><div class="rule"><b>OR</b><span>Science Fiction</span><a href="#variant-4c">Edit</a></div><div class="rule"><b>OR</b><span>Space Opera</span><a href="#variant-4c">Edit</a></div><div class="toolbar" style="margin-top:.45rem"><button class="button-secondary" type="button">+ Add</button></div></div></details>
+            <details class="group-card none"><summary><span>Exclude any <small class="group-summary">NC-17 · commentary</small></span></summary><div class="group-body"><div class="rule"><b>NOT</b><span>Content rating is NC-17</span><a href="#variant-4c">Edit</a></div><div class="rule"><b>NOT</b><span>Has commentary</span><a href="#variant-4c">Edit</a></div></div></details>
+            <div class="result-bar"><span>42 matches</span><button class="button-primary" type="button">Apply groups</button></div>
+          </div>
+        </div>
+        <aside class="notes"><div class="note"><h3>Use</h3><p>Read ALL, ANY, and Exclude as separate chunks.</p></div><div class="note better"><h3>Better</h3><p>Matches the example query without tree-navigation overhead and works well on narrow screens.</p></div><div class="note tradeoff"><h3>Tradeoff</h3><p>Arbitrary nesting needs a focused child-group view rather than deeper indented cards.</p></div></aside>
+      </div>
+    </section>
+
+    <section class="direction" id="variant-4d">
+      <div class="heading"><div><h2>4D · Guided intent builder</h2><p>Use plain-language collection intent and a short review sequence before exposing boolean terminology.</p></div><span class="badge">Best onboarding</span></div>
+      <div class="direction-body">
+        <div class="prototype">
+          <div class="prototype-bar"><strong>Create smart collection</strong><span>Guided intent</span><span>3 steps</span></div>
+          <div class="prototype-content">
+            <div class="steps"><span class="step active">1 · Intent</span><span class="step">2 · Preview</span><span class="step">3 · Save</span></div>
+            <div class="intent-stack">
+              <details class="intent-block all" open><summary>Include all <span class="group-summary">2 choices</span></summary><div class="intent-body"><p class="sentence">Movies released from 1980 through 1999.</p><div class="chips"><span class="chip">Movies</span><span class="chip">1980–1999</span></div></div></details>
+              <details class="intent-block any"><summary>Include at least one <span class="group-summary">2 genres</span></summary><div class="intent-body"><p class="sentence">Science Fiction or Space Opera.</p></div></details>
+              <details class="intent-block none"><summary>Leave out <span class="group-summary">2 choices</span></summary><div class="intent-body"><p class="sentence">NC-17 items and items with commentary.</p></div></details>
+            </div>
+            <div class="result-bar"><span>“Classic space films without commentary” · 42 matches</span><button class="button-primary" type="button">Preview</button></div>
+          </div>
+        </div>
+        <aside class="notes"><div class="note"><h3>Use</h3><p>Describe inclusion and exclusion, preview, then name the collection.</p></div><div class="note better"><h3>Better</h3><p>Short sentences and familiar verbs reduce boolean-language burden.</p></div><div class="note tradeoff"><h3>Tradeoff</h3><p>Lossless localized sentence generation becomes a correctness requirement.</p></div></aside>
+      </div>
+    </section>
+
+    <section class="direction" id="variant-4e">
+      <div class="heading"><div><h2>4E · Dedicated collection composer</h2><p>Separate durable smart-collection authoring from global search while preserving the originating query and preview.</p></div><span class="badge recommended">Recommended direction</span></div>
+      <div class="direction-body">
+        <div class="prototype">
+          <div class="prototype-bar"><strong>/collections/new?mode=smart</strong><span>Draft composer</span><span>Full task context</span></div>
+          <div class="prototype-content">
+            <div class="composer-shell">
+              <nav class="composer-nav" aria-label="Collection composer sections"><h4>Classic space films</h4><a href="#variant-4e">Intent</a><a class="active" href="#e-rules">Rules · 6</a><a href="#variant-4e">Preview · 42</a><a href="#variant-4e">Save</a></nav>
+              <section class="composer-editor" id="e-rules"><h4>Rules</h4><div class="group-stack"><details class="group-card all"><summary>Match all <span class="group-summary">2</span></summary><div class="group-body"><div class="rule"><b>AND</b><span>Movie · 1980–1999</span><a href="#e-rules">Edit</a></div></div></details><details class="group-card any" open><summary>Match any <span class="group-summary">2</span></summary><div class="group-body"><div class="rule"><b>OR</b><span>Science Fiction</span><a href="#e-rules">Edit</a></div><div class="rule"><b>OR</b><span>Space Opera</span><a href="#e-rules">Edit</a></div></div></details><details class="group-card none"><summary>Exclude any <span class="group-summary">2</span></summary><div class="group-body"><div class="rule"><b>NOT</b><span>NC-17 · commentary</span><a href="#e-rules">Edit</a></div></div></details></div></section>
+              <aside class="composer-preview"><h4>Live preview</h4><strong>42</strong><span>matching items</span><ul><li>31 h before repeats</li><li>0 extras</li><li>Query valid</li></ul></aside>
+            </div>
+            <div class="result-bar"><a href="#variant-4a">← Back to search</a><div class="toolbar"><button class="button-secondary" type="button">Save draft</button><button class="button-primary" type="button">Create collection</button></div></div>
+          </div>
+        </div>
+        <aside class="notes"><div class="note"><h3>Use</h3><p>Start from search, compose deliberately, review impact, then save.</p></div><div class="note better"><h3>Better</h3><p>Discovery and durable authoring get appropriate space, history, and validation without nested drawers.</p></div><div class="note tradeoff"><h3>Tradeoff</h3><p>A route handoff, draft lifecycle, and exact back-navigation contract add implementation scope.</p></div></aside>
+      </div>
+    </section>
+
+    <section class="decision" id="decision">
+      <div class="heading"><div><h2>Comparison and revised direction</h2><p>The earlier “everything in one drawer” decision is not retained as the recommendation.</p></div><span class="badge recommended">4E + 4C</span></div>
+      <div class="comparison-wrap"><table class="comparison"><caption class="sr-only">Comparison of Variant 4 directions</caption><thead><tr><th>Direction</th><th>Simple search</th><th>Nested logic</th><th>Cognitive load</th><th>Mobile</th><th>Implementation</th><th>Best role</th></tr></thead><tbody>
+        <tr><th>4 · Baseline</th><td>Good</td><td>Full</td><td>High when expanded</td><td>Long stacked flow</td><td>High</td><td>Reference only</td></tr>
+        <tr><th>4A · Quick drawer</th><td>Excellent</td><td>Handoff</td><td>Low</td><td>Excellent</td><td>Moderate</td><td>Global search</td></tr>
+        <tr><th>4B · Focus takeover</th><td>Good</td><td>Full</td><td>Moderate</td><td>Good</td><td>High</td><td>Same-route advanced edit</td></tr>
+        <tr><th>4C · Group cards</th><td>Good</td><td>Shallow-first</td><td>Low–moderate</td><td>Excellent</td><td>High</td><td>Default rule editor</td></tr>
+        <tr><th>4D · Guided intent</th><td>Excellent</td><td>Curated subset</td><td>Lowest</td><td>Excellent</td><td>High</td><td>First collection/onboarding</td></tr>
+        <tr><th>4E · Composer</th><td>Separate</td><td>Full</td><td>Moderate</td><td>Good when sections stack</td><td>Highest</td><td><strong>Durable smart collections</strong></td></tr>
+      </tbody></table></div>
+      <div class="recommendation"><h3>Recommended product shape</h3><p>Keep global <code>/search</code> results-first with Variant 4A’s small filter drawer. “Create smart collection” carries the canonical query into Variant 4E’s dedicated composer. Use Variant 4C’s ALL/ANY/NONE group cards as the default editor; open a 4B-style focus view only for genuinely nested child groups. Do not make the baseline’s nested drawer the production default.</p></div>
+      <div class="acceptance">
+        <article><h3>Interaction contract</h3><ul><li>Search terms, active-filter count, and Clear remain visible when filters close.</li><li>The route handoff preserves the exact query and returns to the same results state.</li><li>Only one group is open for editing at a time in production.</li></ul></article>
+        <article><h3>Cognition and accessibility</h3><ul><li>Use short labels, familiar controls, and one primary action per region.</li><li>Disclosures expose one clearly related content region and work with Enter/Space.</li><li>At 320 CSS pixels, sticky navigation becomes static and all editors stack.</li></ul></article>
+        <article><h3>Implementation boundary</h3><ul><li>One typed AST drives search, chips, group cards, preview, URL, and saved collection.</li><li>SSR renders query summary and results; a narrow island owns AST editing and focus.</li><li>Arbitrary nesting uses focus mode rather than recursively indented cards.</li></ul></article>
+      </div>
+      <h3 style="margin-top:1.1rem">References used for this iteration</h3>
+      <ul class="sources">
+        <li><a href="https://www.w3.org/WAI/WCAG2/supplemental/objectives/o3-clear-content/">W3C cognitive accessibility: clear content</a> — short sentences, small text chunks, whitespace, and unambiguous formatting.</li>
+        <li><a href="https://www.w3.org/WAI/WCAG2/supplemental/patterns/o1p05-clear-controls/">W3C cognitive accessibility: clear controls</a> — standard, recognizable controls with clear purpose.</li>
+        <li><a href="https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/">WAI-ARIA APG disclosure pattern</a> — concise show/hide control, visible state, and Enter/Space behavior.</li>
+        <li><a href="https://designsystem.digital.gov/components/search/">U.S. Web Design System search</a> — persistent search terms, explicit submit, and advanced search kept out of the default path.</li>
+        <li><a href="https://v10.carbondesignsystem.com/patterns/filtering/">Carbon filtering pattern</a> — active-filter count and clearing without reopening hidden filters.</li>
+        <li><a href="https://www.w3.org/WAI/WCAG22/Understanding/reflow.html">WCAG 2.2 Reflow</a> — no two-dimensional scrolling at 320 CSS pixels and caution with sticky content.</li>
+        <li><a href="https://github.com/algolia/instantsearch">Algolia InstantSearch via the retained Context7 review</a> — one UI-state contract for refinements, reset, pagination, rendering, and URL routing; conceptual reference only.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

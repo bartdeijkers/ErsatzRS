@@ -20,6 +20,7 @@ mod media_source;
 mod metadata;
 mod playout;
 mod program_schedule;
+mod saved_search;
 mod television;
 mod template;
 mod troubleshooting;
@@ -115,6 +116,7 @@ pub use program_schedule::{
     ScheduleItemAdmin, ScheduleItemOption, ScheduleItemOptions, ScheduleLanguageOption,
     SchedulePlaylistOption,
 };
+pub use saved_search::{SavedSearchAdminRow, SavedSearchRepository};
 pub use television::{EpisodeCard, EpisodeMediaItemInfo, SeasonDetail, TelevisionRepository};
 pub use template::{
     TemplateAdminRow, TemplateBlockAdmin, TemplateBlockGroupAdmin, TemplateGroupAdminRow,

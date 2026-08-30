@@ -9,8 +9,8 @@ use ersatzrs_core::repositories::{
     BlockRepository, ChannelRepository, CollectionRepository, DecoRepository,
     FfmpegProfileRepository, FillerRepository, GraphicsRepository, LibraryRepository,
     MediaItemRepository, MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository,
-    SettingsMutation, TelevisionRepository, TemplateRepository, TroubleshootingRepository,
-    WatermarkRepository,
+    SavedSearchRepository, SettingsMutation, TelevisionRepository, TemplateRepository,
+    TroubleshootingRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -704,6 +704,7 @@ pub struct ApplicationPorts {
     admin_settings: Arc<dyn AdminSettingsRepository>,
     settings_runtime: Arc<dyn SettingsRuntime>,
     collections: Arc<dyn CollectionRepository>,
+    saved_searches: Arc<dyn SavedSearchRepository>,
     ffmpeg_profiles: Arc<dyn FfmpegProfileRepository>,
     fillers: Arc<dyn FillerRepository>,
     graphics: Arc<dyn GraphicsRepository>,
@@ -743,6 +744,7 @@ impl ApplicationPorts {
         admin_settings: Arc<dyn AdminSettingsRepository>,
         settings_runtime: Arc<dyn SettingsRuntime>,
         collections: Arc<dyn CollectionRepository>,
+        saved_searches: Arc<dyn SavedSearchRepository>,
         ffmpeg_profiles: Arc<dyn FfmpegProfileRepository>,
         fillers: Arc<dyn FillerRepository>,
         graphics: Arc<dyn GraphicsRepository>,
@@ -777,6 +779,7 @@ impl ApplicationPorts {
             admin_settings,
             settings_runtime,
             collections,
+            saved_searches,
             ffmpeg_profiles,
             fillers,
             graphics,
@@ -840,6 +843,12 @@ impl ApplicationPorts {
     #[must_use]
     pub fn collections(&self) -> &(dyn CollectionRepository + 'static) {
         self.collections.as_ref()
+    }
+
+    /// Reusable advanced-search persistence.
+    #[must_use]
+    pub fn saved_searches(&self) -> &(dyn SavedSearchRepository + 'static) {
+        self.saved_searches.as_ref()
     }
 
     /// `FFmpeg` profile persistence used by admin command and query slices.
@@ -1006,6 +1015,7 @@ impl std::fmt::Debug for ApplicationPorts {
             .field("admin_settings", &"dyn AdminSettingsRepository")
             .field("settings_runtime", &"dyn SettingsRuntime")
             .field("collections", &"dyn CollectionRepository")
+            .field("saved_searches", &"dyn SavedSearchRepository")
             .field("ffmpeg_profiles", &"dyn FfmpegProfileRepository")
             .field("fillers", &"dyn FillerRepository")
             .field("watermarks", &"dyn WatermarkRepository")

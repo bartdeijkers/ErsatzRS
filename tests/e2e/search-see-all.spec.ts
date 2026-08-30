@@ -32,6 +32,10 @@ function projectBase(testInfo: TestInfo): number {
   return 1_200_000 + projectOffset;
 }
 
+function screenshotPath(testInfo: TestInfo, name: string): string {
+  return `test-results/${name}-${testInfo.project.name}.png`;
+}
+
 function seedSearchResults(testInfo: TestInfo): Seed {
   const base = projectBase(testInfo);
   const query = `p7c03${testInfo.project.name.replace(/[^a-z0-9]/gi, '')}`;
@@ -218,6 +222,11 @@ test.describe('P7C-03 search and See All parity', () => {
     );
     await expect(poster.first()).toHaveAttribute('src', /tag=poster&fillHeight=440/);
     await expect(thumbnail.first()).toHaveAttribute('src', /tag=thumbnail&maxHeight=220/);
+    await expect(page.getByRole('button', { name: 'Add All to Collection' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add All to Playlist' })).toBeVisible();
+    await page.screenshot({
+      path: screenshotPath(testInfo, 'search-results-desktop'),
+    });
 
     const allSeeAllHrefs = await page.getByRole('link', { name: /see all/i }).evaluateAll((links) =>
       links.map((link) => link.getAttribute('href') ?? ''),
@@ -259,11 +268,24 @@ test.describe('P7C-03 search and See All parity', () => {
     await musicVideoCard.getByLabel('Select').click();
     await expect(page.getByText(/1 item selected/i)).toBeVisible();
 
+    await gotoHydrated(page, `/search?query=${encodedQuery}`);
     await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole('button', { name: 'Toggle navigation' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect
+      .poll(() =>
+        page.locator('[data-nav-drawer]').evaluate((drawer) => drawer.getBoundingClientRect().right),
+      )
+      .toBeLessThanOrEqual(0);
     const hasOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
     );
     expect(hasOverflow).toBe(false);
+    await page.screenshot({
+      path: screenshotPath(testInfo, 'search-results-mobile'),
+    });
     expect(runtimeErrors).toEqual([]);
     expect(failedRequests).toEqual([]);
   });

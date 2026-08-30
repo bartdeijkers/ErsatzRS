@@ -150,6 +150,7 @@ impl AppState {
                     Arc::clone(&tuner_count),
                 )),
                 Arc::new(repositories.collection.clone()),
+                Arc::new(repositories.saved_search.clone()),
                 Arc::new(repositories.ffmpeg_profile.clone()),
                 Arc::new(repositories.filler.clone()),
                 Arc::new(repositories.graphics.clone()),

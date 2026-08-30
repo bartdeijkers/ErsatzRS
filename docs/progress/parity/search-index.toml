@@ -2,7 +2,7 @@ feature    = 'Search index'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Search/`'
 rs_target  = '`crates/ersatzrs-core`, `crates/ersatzrs-infra`, `crates/ersatzrs-web/src/admin/pages/search.rs`'
 status     = 'Ported'
-adr        = ['0009', '0062']
+adr        = ['0009', '0062', '0083']
 
 summary    = '''
 Ported for the non-web parity target: scheduling has a core-owned Lucene-like parser/evaluator and SQL-backed search documents for title/sort/original title, year/release date, added date, genre/tag/studio/actor/director/writer, media kind, show fields, season/episode numbers, metadata kind, provider GUID source fields, languages, codecs, dimensions, video bit depth/dynamic range, chapter counts, duration seconds/minutes, `addon_list`, library name/folder id, collection, content rating, network/show network, show content rating, style/mood, album, artist, and album artist. The evaluator now lowercases and accent-folds text, consumes Lucene boost syntax, handles fuzzy terms, phrase slop, numeric exact/range queries, wildcards, relative date helpers (`released_onthisday`, `released_inthelast`, `released_notinthelast`, `added_inthelast`, `added_notinthelast`), nested `smart_collection:"name"` expansion with cycle guards, and jump-letter page maps for pageable results. Show, season, and artist hits expand to playable children. `/search?query=...` resolves the same scheduling search source used by add-on list and smart-collection Search actions. Elasticsearch is deliberately dropped; future Tantivy-style indexing is an optional internal optimization, not a parity requirement.
@@ -12,4 +12,14 @@ Closed 2026-06-13: the documented ErsatzTV smart-collection search contract at `
 ADR 0062 makes content rating, studio, music label, explicit/stream language,
 genre, and tag uniform across every media document. `music_label:` is public;
 `language_tag:` uses canonical codes while `language:` exposes names.
+
+ADR 0083 keeps `/search` results-first: common media-kind, genre, and year
+filters project through the same typed search AST, while the exact canonical
+query can be handed to the dedicated smart-collection composer. The core AST
+owns canonical formatting and boolean precedence; the web UI does not persist
+a second filter representation. Canonical formatting now preserves Text,
+Phrase, Wildcard, and Fuzzy value kinds across structured edits, while initial
+projection and durable saves reject incomplete branches. Named reusable queries
+store that same canonical string as authoring drafts separate from smart
+collections.
 '''

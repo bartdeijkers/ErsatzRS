@@ -288,7 +288,9 @@ pub fn NavStateHeadScript() -> impl IntoView {
 
   try {
     const stored = window.sessionStorage.getItem(drawerKey);
-    if (stored === "true" || stored === "false") {
+    if (window.matchMedia("(max-width: 767px)").matches) {
+      document.documentElement.dataset.navDrawerOpen = "false";
+    } else if (stored === "true" || stored === "false") {
       document.documentElement.dataset.navDrawerOpen = stored;
     }
   } catch {}
@@ -432,15 +434,17 @@ fn NavStateScript() -> impl IntoView {
     if (!toggle || !drawer) return;
 
     const stored = store?.getItem(drawerKey);
-    let open = stored === "true" || stored === "false"
-      ? stored === "true"
-      : !mobile.matches;
+    let open = mobile.matches
+      ? false
+      : stored === "true" || stored === "false"
+        ? stored === "true"
+        : true;
     syncDrawer(open, toggle, drawer);
 
     function setOpen(next, { restoreFocus = false, persist = true } = {}) {
       open = next;
       syncDrawer(open, toggle, drawer);
-      if (persist) {
+      if (persist && !mobile.matches) {
         try { store?.setItem(drawerKey, open ? "true" : "false"); } catch {}
       }
       if (open && mobile.matches) {
@@ -466,7 +470,9 @@ fn NavStateScript() -> impl IntoView {
     });
 
     mobile.addEventListener("change", (event) => {
-      setOpen(!event.matches, { persist: false });
+      const stored = store?.getItem(drawerKey);
+      const desktopOpen = stored === "false" ? false : true;
+      setOpen(event.matches ? false : desktopOpen, { persist: false });
     });
   }
 

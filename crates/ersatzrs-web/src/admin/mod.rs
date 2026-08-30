@@ -5,5 +5,6 @@ pub mod languages;
 pub mod layout;
 pub mod pages;
 pub mod routes;
+pub mod search_query;
 pub mod server_fns;
 pub mod ui;

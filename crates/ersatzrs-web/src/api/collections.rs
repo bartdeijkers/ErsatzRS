@@ -25,6 +25,8 @@ pub struct SmartCollectionSaveForm {
     id: i64,
     name: String,
     query: String,
+    #[serde(default)]
+    return_to: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -84,18 +86,45 @@ pub async fn save_smart_collection_form(
     Form(input): Form<SmartCollectionSaveForm>,
 ) -> Redirect {
     let id = input.id;
+    let name = input.name;
+    let query = input.query;
+    let return_to = safe_search_return_path(&input.return_to);
     let form = CollectionForm {
         id,
-        name: input.name,
-        query: input.query,
+        name: name.clone(),
+        query: query.clone(),
     };
 
     match save_smart_collection_with_state(&state, form).await {
         Ok(_) => Redirect::to("/media/smart-collections"),
         Err(error) => {
             tracing::error!(%error, smart_collection_id = id, "failed to save smart collection from HTML form");
-            Redirect::to(&format!("/media/smart-collections/{id}/edit?error=save"))
+            let target = smart_collection_save_error_target(id, &name, &query, &return_to);
+            Redirect::to(&target)
         }
+    }
+}
+
+fn smart_collection_save_error_target(id: i64, name: &str, query: &str, return_to: &str) -> String {
+    let route = if id == 0 {
+        "/media/smart-collections/add".to_owned()
+    } else {
+        format!("/media/smart-collections/{id}/edit")
+    };
+    let return_to = safe_search_return_path(return_to);
+    format!(
+        "{route}?error=save&collection_name={}&query={}&return_to={}",
+        urlencoding::encode(name),
+        urlencoding::encode(query),
+        urlencoding::encode(&return_to)
+    )
+}
+
+fn safe_search_return_path(candidate: &str) -> String {
+    if candidate == "/search" || candidate.starts_with("/search?") {
+        candidate.to_owned()
+    } else {
+        "/search".to_owned()
     }
 }
 
@@ -228,6 +257,23 @@ fn decode_form_value(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_smart_collection_save_error_preserves_the_query_on_the_add_route() {
+        assert_eq!(
+            smart_collection_save_error_target(
+                0,
+                "Sci-fi picks",
+                "genre:\"Science Fiction\"",
+                "/search?query=genre%3Adrama"
+            ),
+            "/media/smart-collections/add?error=save&collection_name=Sci-fi%20picks&query=genre%3A%22Science%20Fiction%22&return_to=%2Fsearch%3Fquery%3Dgenre%253Adrama"
+        );
+        assert_eq!(
+            smart_collection_save_error_target(7, "Edited", "changed", "//example.test"),
+            "/media/smart-collections/7/edit?error=save&collection_name=Edited&query=changed&return_to=%2Fsearch"
+        );
+    }
 
     #[test]
     fn multi_collection_save_parser_aligns_checkbox_indexes_with_items() {

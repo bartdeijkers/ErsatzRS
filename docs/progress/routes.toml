@@ -102,7 +102,7 @@ routed  = true
 
 [[route]]
 nav     = '/media/smart-collections'
-backing = 'list + add/`:id`/`:id/edit` editor'
+backing = 'list + add/`:id`/`:id/edit` dedicated composer with ALL/ANY/NONE cards, nested-group focus mode, live search count, and HTML POST fallback'
 routed  = true
 
 [[route]]
@@ -132,7 +132,7 @@ routed  = true
 
 [[route]]
 nav     = '/search'
-backing = 'scheduling search result page, including `addon_list:{id}` queries'
+backing = 'results-first scheduling search page with shallow quick-filter disclosure, canonical query chips, and exact-query handoff to the smart-collection composer; includes `addon_list:{id}` queries'
 routed  = true
 
 [[route]]

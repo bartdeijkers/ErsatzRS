@@ -19,6 +19,8 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::admin::search_query::{QueryComposerModel, QuickFilterProjection};
+
 use crate::admin::server_fns::media_browser::ContentVariantInfo;
 
 /// Bulk-id payload returned by the `search_all_ids` query (ported from
@@ -168,6 +170,172 @@ pub struct SearchResults {
     pub songs: SearchSection,
     pub images: SearchSection,
     pub remote_streams: SearchSection,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SavedSearchForm {
+    pub id: i64,
+    pub name: String,
+    pub query: String,
+}
+
+#[server(name = ListSavedSearchesFn)]
+pub async fn list_saved_searches() -> Result<Vec<SavedSearchForm>, ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        use crate::host::state::AppState;
+
+        let state = expect_context::<AppState>();
+        state
+            .application
+            .list_saved_searches()
+            .await
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|row| SavedSearchForm {
+                        id: row.id,
+                        name: row.name,
+                        query: row.query,
+                    })
+                    .collect()
+            })
+            .map_err(ServerFnError::new)
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        unreachable!("server function stub is replaced by the generated client")
+    }
+}
+
+#[server(name = GetSavedSearchFn)]
+pub async fn get_saved_search(id: i64) -> Result<Option<SavedSearchForm>, ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        use crate::host::state::AppState;
+
+        let state = expect_context::<AppState>();
+        state
+            .application
+            .get_saved_search(id)
+            .await
+            .map(|row| {
+                row.map(|row| SavedSearchForm {
+                    id: row.id,
+                    name: row.name,
+                    query: row.query,
+                })
+            })
+            .map_err(ServerFnError::new)
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        unreachable!("server function stub is replaced by the generated client")
+    }
+}
+
+#[server(name = SaveSavedSearchFn)]
+pub async fn save_saved_search(form: SavedSearchForm) -> Result<i64, ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        use crate::host::state::AppState;
+
+        let state = expect_context::<AppState>();
+        save_saved_search_with_state(&state, form).await
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = form;
+        unreachable!("server function stub is replaced by the generated client")
+    }
+}
+
+#[cfg(feature = "ssr")]
+pub async fn save_saved_search_with_state(
+    state: &crate::host::state::AppState,
+    form: SavedSearchForm,
+) -> Result<i64, ServerFnError> {
+    if !form.query.trim().is_empty() {
+        QueryComposerModel::from_validated_query(&form.query).map_err(ServerFnError::new)?;
+    }
+    state
+        .application
+        .save_saved_search(ersatzrs_app::commands::SaveSavedSearch {
+            id: form.id,
+            name: form.name,
+            query: form.query,
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server(name = DeleteSavedSearchFn)]
+pub async fn delete_saved_search(id: i64) -> Result<(), ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        use crate::host::state::AppState;
+
+        let state = expect_context::<AppState>();
+        state
+            .application
+            .delete_saved_search(ersatzrs_app::commands::DeleteSavedSearch { id })
+            .await
+            .map_err(ServerFnError::new)
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = id;
+        unreachable!("server function stub is replaced by the generated client")
+    }
+}
+
+#[server(name = ProjectSearchQueryFn)]
+#[allow(clippy::unused_async)] // `#[server]` requires an async transport signature.
+pub async fn project_search_query(query: String) -> Result<QueryComposerModel, ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        if query.trim().is_empty() {
+            Ok(QueryComposerModel::default())
+        } else {
+            QueryComposerModel::from_validated_query(&query).map_err(ServerFnError::new)
+        }
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = query;
+        unreachable!("server function stub is replaced by the generated client")
+    }
+}
+
+#[server(name = ComposeSearchQueryFn)]
+#[allow(clippy::unused_async)] // `#[server]` requires an async transport signature.
+pub async fn compose_search_query(model: QueryComposerModel) -> Result<String, ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        if let Some(code) = model.validation_code() {
+            return Err(ServerFnError::new(code));
+        }
+        Ok(model.to_query_string())
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = model;
+        unreachable!("server function stub is replaced by the generated client")
+    }
+}
+
+#[server(name = ProjectQuickFiltersFn)]
+#[allow(clippy::unused_async)] // `#[server]` requires an async transport signature.
+pub async fn project_quick_filters(query: String) -> Result<QuickFilterProjection, ServerFnError> {
+    #[cfg(feature = "ssr")]
+    {
+        Ok(QueryComposerModel::quick_filter_projection(&query))
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = query;
+        unreachable!("server function stub is replaced by the generated client")
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,15 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt};
 
 use chrono::{DateTime, Datelike, Duration, Months, NaiveDate, Utc};
 use ersatzrs_domain::{normalize_sub_kind_token, AddonMediaListContentKind, ContentKind};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum SearchQueryValidationError {
+    #[error("search query is required")]
+    Empty,
+    #[error("every search rule needs a field and value")]
+    MissingRuleValue,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SearchExpression {
@@ -178,11 +186,48 @@ pub struct SearchPageMap {
 }
 
 impl SearchExpression {
+    /// Parse the operator-authored query without adding implicit search policy.
+    ///
+    /// UI projections use this form so the stored canonical query remains the
+    /// only authored source of truth. Search execution should continue to call
+    /// [`Self::parse`], which also applies the default primary-content filter.
+    #[must_use]
+    pub fn parse_user_query(query: &str) -> Self {
+        SearchParser::new(query).parse()
+    }
+
+    /// Parse and validate an operator-authored query before durable storage.
+    ///
+    /// Search execution remains deliberately tolerant for compatibility, but
+    /// authoring surfaces must not persist incomplete terms such as `title:`
+    /// or boolean operators without a following expression.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SearchQueryValidationError::Empty`] for a blank query and
+    /// [`SearchQueryValidationError::MissingRuleValue`] when parsing produces
+    /// an incomplete term or boolean branch.
+    pub fn parse_validated_user_query(query: &str) -> Result<Self, SearchQueryValidationError> {
+        if query.trim().is_empty() {
+            return Err(SearchQueryValidationError::Empty);
+        }
+        let expression = Self::parse_user_query(query);
+        if expression.has_incomplete_branch() {
+            Err(SearchQueryValidationError::MissingRuleValue)
+        } else {
+            Ok(expression)
+        }
+    }
+
     #[must_use]
     pub fn parse(query: &str) -> Self {
-        SearchParser::new(query)
-            .parse()
-            .with_default_content_kind_filter()
+        Self::parse_user_query(query).with_default_content_kind_filter()
+    }
+
+    /// Render this expression as the canonical persisted query string.
+    #[must_use]
+    pub fn to_query_string(&self) -> String {
+        format_expression(self, 0)
     }
 
     #[must_use]
@@ -229,6 +274,27 @@ impl SearchExpression {
             Self::Not(expression) => expression.references_variant_selector(),
         }
     }
+
+    fn has_incomplete_branch(&self) -> bool {
+        match self {
+            Self::MatchAll => true,
+            Self::Term(term) => search_value_is_empty(&term.value),
+            Self::And(expressions) | Self::Or(expressions) => {
+                expressions.is_empty() || expressions.iter().any(Self::has_incomplete_branch)
+            }
+            Self::Not(expression) => expression.has_incomplete_branch(),
+        }
+    }
+}
+
+fn search_value_is_empty(value: &SearchValue) -> bool {
+    match value {
+        SearchValue::Text(value)
+        | SearchValue::Wildcard(value)
+        | SearchValue::Fuzzy { value, .. }
+        | SearchValue::Phrase { value, .. } => value.trim().is_empty(),
+        SearchValue::Range { start, end, .. } => start.is_none() && end.is_none(),
+    }
 }
 
 impl SearchTerm {
@@ -265,6 +331,82 @@ impl SearchTerm {
 }
 
 impl SearchField {
+    /// Parse a public query field token, including provider GUID source names.
+    #[must_use]
+    pub fn from_query_token(field: &str) -> Self {
+        Self::parse(field)
+    }
+
+    /// Return the stable field token used in persisted search queries.
+    #[must_use]
+    pub fn query_token(&self) -> &str {
+        match self {
+            Self::Default => "",
+            Self::Title => "title",
+            Self::SortTitle => "sort_title",
+            Self::OriginalTitle => "original_title",
+            Self::Year => "year",
+            Self::ReleaseDate => "release_date",
+            Self::AddedDate => "added_date",
+            Self::Genre => "genre",
+            Self::Tag => "tag",
+            Self::Collection => "collection",
+            Self::Studio => "studio",
+            Self::MusicLabel => "music_label",
+            Self::Network => "network",
+            Self::Actor => "actor",
+            Self::Director => "director",
+            Self::Writer => "writer",
+            Self::Language => "language",
+            Self::LanguageTag => "language_tag",
+            Self::SubtitleLanguage => "subtitle_language",
+            Self::SubtitleLanguageTag => "subtitle_language_tag",
+            Self::VideoCodec => "video_codec",
+            Self::VideoBitDepth => "video_bit_depth",
+            Self::VideoDynamicRange => "video_dynamic_range",
+            Self::AudioCodec => "audio_codec",
+            Self::AudioTitle => "audio_title",
+            Self::SubtitleCodec => "subtitle_codec",
+            Self::SubtitleTitle => "subtitle_title",
+            Self::HasCommentary => "has_commentary",
+            Self::Width => "width",
+            Self::Height => "height",
+            Self::Chapters => "chapters",
+            Self::Minutes => "minutes",
+            Self::Seconds => "seconds",
+            Self::MediaKind => "type",
+            Self::LibraryName => "library_name",
+            Self::LibraryFolderId => "library_folder_id",
+            Self::ContentKind => "content_kind",
+            Self::SubKind => "sub_kind",
+            Self::ParentTitle => "parent_title",
+            Self::ContentRating => "content_rating",
+            Self::ShowTitle => "show_title",
+            Self::ShowGenre => "show_genre",
+            Self::ShowTag => "show_tag",
+            Self::ShowStudio => "show_studio",
+            Self::ShowNetwork => "show_network",
+            Self::ShowContentRating => "show_content_rating",
+            Self::SeasonNumber => "season_number",
+            Self::EpisodeNumber => "episode_number",
+            Self::MetadataKind => "metadata_kind",
+            Self::AddonList => "addon_list",
+            Self::Style => "style",
+            Self::Mood => "mood",
+            Self::Album => "album",
+            Self::Artist => "artist",
+            Self::AlbumArtist => "album_artist",
+            Self::LibraryId => "library_id",
+            Self::ReleasedOnThisDay => "released_onthisday",
+            Self::ReleasedInTheLast => "released_inthelast",
+            Self::ReleasedNotInTheLast => "released_notinthelast",
+            Self::AddedInTheLast => "added_inthelast",
+            Self::AddedNotInTheLast => "added_notinthelast",
+            Self::ProviderGuid(None) => "guid",
+            Self::ProviderGuid(Some(source)) => source,
+        }
+    }
+
     #[allow(clippy::too_many_lines)]
     fn values(&self, document: &SearchDocument) -> Vec<String> {
         match self {
@@ -924,6 +1066,12 @@ impl SearchParser {
     }
 
     fn parse_primary(&mut self) -> SearchExpression {
+        // A closing delimiter belongs to the caller. Returning an empty
+        // branch here lets authoring validation reject `()` without turning
+        // the delimiter itself into a searchable text term.
+        if self.check(&Token::RightParen) {
+            return SearchExpression::MatchAll;
+        }
         if self.consume(&Token::LeftParen) {
             let expression = self.parse_or();
             let _ = self.consume(&Token::RightParen);
@@ -967,9 +1115,8 @@ impl SearchParser {
         SearchExpression::Term(SearchTerm { field, value })
     }
 
-    fn parse_text_value(&mut self, mut value: String, quoted: bool) -> SearchValue {
+    fn parse_text_value(&mut self, value: String, quoted: bool) -> SearchValue {
         let mut slop = 0usize;
-        let mut fuzzy = None;
 
         if quoted {
             if let Some(Token::Word(modifier)) = self.tokens.get(self.position).cloned() {
@@ -979,23 +1126,21 @@ impl SearchParser {
                     slop = slop_text.parse::<usize>().unwrap_or(0);
                 }
             }
-        } else if let Some((head, rest)) = value.rsplit_once('~') {
-            let head = head.to_owned();
-            let rest = rest.to_owned();
-            value = head;
-            let (fuzzy_text, _) = split_boost(&rest);
-            fuzzy = Some(parse_fuzzy_edits(fuzzy_text));
+            return SearchValue::Phrase { value, slop };
         }
 
-        let (value, _) = split_boost(&value);
-        let value = value.to_owned();
+        let (value, _) = split_unescaped_once(&value, '^');
+        let (value, fuzzy) = split_unescaped_last(value, '~').map_or_else(
+            || (value, None),
+            |(head, rest)| (head, Some(parse_fuzzy_edits(rest))),
+        );
+        let wildcard = contains_unescaped(value, '*') || contains_unescaped(value, '?');
+        let value = unescape_query_word(value);
 
-        if value.contains(['*', '?']) {
+        if wildcard {
             SearchValue::Wildcard(value)
         } else if let Some(max_edits) = fuzzy {
             SearchValue::Fuzzy { value, max_edits }
-        } else if quoted {
-            SearchValue::Phrase { value, slop }
         } else {
             SearchValue::Text(value)
         }
@@ -1091,17 +1236,43 @@ fn tokenize(query: &str) -> Vec<Token> {
             '"' | '\'' => {
                 let quote = ch;
                 let mut value = String::new();
+                let mut escaped = false;
                 for next in chars.by_ref() {
+                    if escaped {
+                        value.push(next);
+                        escaped = false;
+                        continue;
+                    }
+                    if next == '\\' {
+                        escaped = true;
+                        continue;
+                    }
                     if next == quote {
                         break;
                     }
                     value.push(next);
                 }
+                if escaped {
+                    value.push('\\');
+                }
                 tokens.push(Token::Phrase(value));
             }
             _ => {
                 let mut value = String::from(ch);
+                if ch == '\\' {
+                    if let Some(next) = chars.next() {
+                        value.push(next);
+                    }
+                }
                 while let Some(next) = chars.peek().copied() {
+                    if next == '\\' {
+                        value.push(next);
+                        let _ = chars.next();
+                        if let Some(escaped) = chars.next() {
+                            value.push(escaped);
+                        }
+                        continue;
+                    }
                     if next.is_whitespace()
                         || matches!(next, ':' | '(' | ')' | '[' | ']' | '{' | '}')
                     {
@@ -1119,6 +1290,9 @@ fn tokenize(query: &str) -> Vec<Token> {
 }
 
 fn word_token(value: String) -> Token {
+    if value.contains('\\') {
+        return Token::Word(value);
+    }
     match value.to_ascii_uppercase().as_str() {
         "AND" => Token::And,
         "OR" => Token::Or,
@@ -1126,6 +1300,58 @@ fn word_token(value: String) -> Token {
         "TO" => Token::To,
         _ => Token::Word(value),
     }
+}
+
+fn split_unescaped_once(value: &str, needle: char) -> (&str, Option<&str>) {
+    unescaped_indices(value, needle)
+        .next()
+        .map_or((value, None), |index| {
+            let tail = index + needle.len_utf8();
+            (&value[..index], Some(&value[tail..]))
+        })
+}
+
+fn split_unescaped_last(value: &str, needle: char) -> Option<(&str, &str)> {
+    unescaped_indices(value, needle).last().map(|index| {
+        let tail = index + needle.len_utf8();
+        (&value[..index], &value[tail..])
+    })
+}
+
+fn contains_unescaped(value: &str, needle: char) -> bool {
+    unescaped_indices(value, needle).next().is_some()
+}
+
+fn unescaped_indices(value: &str, needle: char) -> impl Iterator<Item = usize> + '_ {
+    let mut escaped = false;
+    value.char_indices().filter_map(move |(index, ch)| {
+        if escaped {
+            escaped = false;
+            return None;
+        }
+        if ch == '\\' {
+            escaped = true;
+            return None;
+        }
+        (ch == needle).then_some(index)
+    })
+}
+
+fn unescape_query_word(value: &str) -> String {
+    let mut unescaped = String::with_capacity(value.len());
+    let mut chars = value.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(next) = chars.next() {
+                unescaped.push(next);
+            } else {
+                unescaped.push(ch);
+            }
+        } else {
+            unescaped.push(ch);
+        }
+    }
+    unescaped
 }
 
 fn split_boost(value: &str) -> (&str, Option<&str>) {
@@ -1168,6 +1394,140 @@ fn token_text(token: &Token) -> String {
         Token::Plus => "+".to_owned(),
         Token::Minus => "-".to_owned(),
     }
+}
+
+impl fmt::Display for SearchExpression {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.to_query_string())
+    }
+}
+
+fn format_expression(expression: &SearchExpression, parent_precedence: u8) -> String {
+    let (precedence, rendered) = match expression {
+        SearchExpression::MatchAll => (4, String::new()),
+        SearchExpression::Term(term) => (4, format_term(term)),
+        SearchExpression::Not(child) => {
+            let child = format_expression(child, 3);
+            let rendered = if child.is_empty() {
+                String::new()
+            } else {
+                format!("NOT {child}")
+            };
+            (3, rendered)
+        }
+        SearchExpression::And(children) => {
+            let rendered = children
+                .iter()
+                .map(|child| format_expression(child, 2))
+                .filter(|child| !child.is_empty())
+                .collect::<Vec<_>>()
+                .join(" AND ");
+            (2, rendered)
+        }
+        SearchExpression::Or(children) => {
+            let rendered = children
+                .iter()
+                .map(|child| format_expression(child, 1))
+                .filter(|child| !child.is_empty())
+                .collect::<Vec<_>>()
+                .join(" OR ");
+            (1, rendered)
+        }
+    };
+
+    if !rendered.is_empty() && precedence < parent_precedence {
+        format!("({rendered})")
+    } else {
+        rendered
+    }
+}
+
+fn format_term(term: &SearchTerm) -> String {
+    let value = match &term.value {
+        SearchValue::Text(value) => format_query_word(value, false),
+        SearchValue::Wildcard(value) => format_query_word(value, true),
+        SearchValue::Fuzzy { value, max_edits } => {
+            format!("{}~{max_edits}", format_query_word(value, false))
+        }
+        SearchValue::Phrase { value, slop } => {
+            let phrase = quote_query_value(value);
+            if *slop == 0 {
+                phrase
+            } else {
+                format!("{phrase}~{slop}")
+            }
+        }
+        SearchValue::Range {
+            start,
+            end,
+            inclusive,
+        } => {
+            let (open, close) = if *inclusive { ('[', ']') } else { ('{', '}') };
+            let start = start
+                .as_deref()
+                .map_or_else(|| "*".to_owned(), format_query_atom);
+            let end = end
+                .as_deref()
+                .map_or_else(|| "*".to_owned(), format_query_atom);
+            format!("{open}{start} TO {end}{close}")
+        }
+    };
+
+    let field = term.field.query_token();
+    if field.is_empty() {
+        value
+    } else {
+        format!("{field}:{value}")
+    }
+}
+
+fn format_query_word(value: &str, preserve_wildcards: bool) -> String {
+    if value.is_empty() {
+        return quote_query_value(value);
+    }
+
+    let reserved = matches!(
+        value.to_ascii_uppercase().as_str(),
+        "AND" | "OR" | "NOT" | "TO"
+    );
+    let mut rendered = String::with_capacity(value.len());
+    for (index, ch) in value.chars().enumerate() {
+        let syntax = ch.is_whitespace()
+            || matches!(
+                ch,
+                '\\' | ':' | '(' | ')' | '[' | ']' | '{' | '}' | '^' | '~' | '"' | '\''
+            )
+            || (!preserve_wildcards && matches!(ch, '*' | '?'))
+            || (index == 0 && matches!(ch, '+' | '-'))
+            || (index == 0 && reserved);
+        if syntax {
+            rendered.push('\\');
+        }
+        rendered.push(ch);
+    }
+    rendered
+}
+
+fn format_query_atom(value: &str) -> String {
+    let reserved = matches!(
+        value.to_ascii_uppercase().as_str(),
+        "AND" | "OR" | "NOT" | "TO"
+    );
+    if value.is_empty()
+        || reserved
+        || value
+            .chars()
+            .any(|ch| ch.is_whitespace() || matches!(ch, ':' | '(' | ')' | '[' | ']' | '{' | '}'))
+    {
+        quote_query_value(value)
+    } else {
+        value.to_owned()
+    }
+}
+
+fn quote_query_value(value: &str) -> String {
+    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
 }
 
 #[must_use]
@@ -1287,6 +1647,97 @@ mod tests {
         assert!(SearchExpression::parse("year:[1960 TO 1970] AND tmdb:5925").matches(&doc));
         assert!(SearchExpression::parse("release_date:[19630701 TO 19630731]").matches(&doc));
         assert!(!SearchExpression::parse("type:episode OR guid:missing").matches(&doc));
+    }
+
+    #[test]
+    fn canonical_query_formatter_preserves_boolean_precedence_and_value_kinds() {
+        let expression = SearchExpression::parse_user_query(
+            "type:movie year:[1980 TO 1999] (genre:\"Science Fiction\" OR genre:space*) NOT (content_rating:NC-17 OR has_commentary:true)",
+        );
+
+        assert_eq!(
+            expression.to_query_string(),
+            "type:movie AND year:[1980 TO 1999] AND (genre:\"Science Fiction\" OR genre:space*) AND NOT (content_rating:NC-17 OR has_commentary:true)"
+        );
+        assert_eq!(
+            SearchExpression::parse_user_query(&expression.to_query_string()),
+            expression
+        );
+    }
+
+    #[test]
+    fn canonical_query_formatter_escapes_phrase_quotes() {
+        let expression = SearchExpression::Term(SearchTerm {
+            field: SearchField::Title,
+            value: SearchValue::Phrase {
+                value: "Director's \"cut\"".to_owned(),
+                slop: 2,
+            },
+        });
+        let query = expression.to_query_string();
+
+        assert_eq!(query, "title:\"Director's \\\"cut\\\"\"~2");
+        assert_eq!(SearchExpression::parse_user_query(&query), expression);
+    }
+
+    #[test]
+    fn canonical_query_formatter_preserves_multiword_value_kinds() {
+        let expression = SearchExpression::And(vec![
+            SearchExpression::Term(SearchTerm {
+                field: SearchField::Title,
+                value: SearchValue::Text("Star Wars".to_owned()),
+            }),
+            SearchExpression::Term(SearchTerm {
+                field: SearchField::Genre,
+                value: SearchValue::Wildcard("Science Fic*".to_owned()),
+            }),
+            SearchExpression::Term(SearchTerm {
+                field: SearchField::Actor,
+                value: SearchValue::Fuzzy {
+                    value: "Carrie Fisher".to_owned(),
+                    max_edits: 1,
+                },
+            }),
+        ]);
+        let query = expression.to_query_string();
+
+        assert_eq!(
+            query,
+            "title:Star\\ Wars AND genre:Science\\ Fic* AND actor:Carrie\\ Fisher~1"
+        );
+        assert_eq!(SearchExpression::parse_user_query(&query), expression);
+    }
+
+    #[test]
+    fn quoted_wildcards_remain_phrase_literals() {
+        let expression = SearchExpression::Term(SearchTerm {
+            field: SearchField::Title,
+            value: SearchValue::Phrase {
+                value: "Star* Wars?".to_owned(),
+                slop: 0,
+            },
+        });
+        let query = expression.to_query_string();
+
+        assert_eq!(query, "title:\"Star* Wars?\"");
+        assert_eq!(SearchExpression::parse_user_query(&query), expression);
+    }
+
+    #[test]
+    fn validated_query_rejects_empty_and_incomplete_rules() {
+        assert_eq!(
+            SearchExpression::parse_validated_user_query(" "),
+            Err(SearchQueryValidationError::Empty)
+        );
+        assert_eq!(
+            SearchExpression::parse_validated_user_query("title:"),
+            Err(SearchQueryValidationError::MissingRuleValue)
+        );
+        assert_eq!(
+            SearchExpression::parse_validated_user_query("title:star AND"),
+            Err(SearchQueryValidationError::MissingRuleValue)
+        );
+        assert!(SearchExpression::parse_validated_user_query("title:star").is_ok());
     }
 
     #[test]

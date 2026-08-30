@@ -1,15 +1,28 @@
 # Admin UX artifacts
 
-These review artifacts preserve the UX decisions that guide the shared
-add-on-list implementation. They are design references, not a second UI
-implementation; the production surface remains the localized Leptos
-**Add-on Lists** page.
+These review artifacts preserve UX decisions and compare implementation
+directions before production work begins. They are design references, not a
+second UI implementation; production surfaces remain localized Rust/Leptos
+pages with SSR and focused hydration.
 
 The [settings desktop layout proposals](settings-desktop-layout-proposals.html)
 compare three compositions for Settings and Logs built from one standardized
 component kit. The artifact keeps page composition content-specific while
 standardizing headers, sections, fields, toolbars, data surfaces, pagination,
 actions, and resource states.
+
+The [search-to-collection design variants](search-collection-design-variants.html)
+retain the selected Variant 4 as a baseline and compare five focused ways to
+improve it: a quick-only drawer, focus-mode takeover, boolean group cards,
+guided intent, and a dedicated collection composer. The revised recommendation
+keeps global `/search` results-first, then carries one canonical query into a
+dedicated smart-collection composer using group cards and focused editing only
+when nesting requires it.
+
+The [production search UX/UI visual review](search-ux-ui-visual-review.md)
+records the final Chromium/Firefox desktop and mobile assessment, the resolved
+hierarchy, contrast, control-label, and drawer-state findings, and the remaining
+visual-proof limits.
 
 ## Interactive artifacts
 

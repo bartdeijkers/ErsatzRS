@@ -241,6 +241,529 @@ tbody tr:hover {
     line-height: 1;
 }
 
+:global([data-theme="dark"]) .composer-save {
+    background-color: #008500;
+}
+
+:global([data-theme="dark"]) .composer-save:hover {
+    background-color: #007a00;
+}
+
+/* Smart collection composer */
+.composer-page .editor-action-bar {
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.composer-workspace {
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.composer-workspace:disabled {
+    opacity: 0.72;
+}
+
+.composer-back,
+.preview-heading a {
+    color: var(--color-action-default);
+    font-size: 0.875rem;
+    font-weight: 650;
+    text-decoration: none;
+}
+
+.composer-back:hover,
+.preview-heading a:hover {
+    text-decoration: underline;
+}
+
+.composer {
+    width: 100%;
+    max-width: 1536px;
+    margin: 0 auto;
+}
+
+.composer-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.composer-header .page-title {
+    margin: 0;
+}
+
+.composer-eyebrow {
+    margin: 0 0 0.25rem;
+    color: var(--color-gray-400);
+    font-size: 0.72rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.query-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.75rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 999px;
+    background: var(--color-success-20);
+    color: var(--color-success);
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.query-status[data-valid="false"] {
+    background: var(--color-danger-20);
+    color: var(--color-danger);
+}
+
+.composer-layout {
+    display: grid;
+    grid-template-columns: minmax(13rem, 18rem) minmax(22rem, 1fr) minmax(12rem, 16rem);
+    align-items: start;
+    gap: 1rem;
+}
+
+.composer-details,
+.composer-preview,
+.group-card,
+.focus-view {
+    border: 1px solid var(--color-border);
+    border-radius: calc(var(--radius) + 2px);
+    background: var(--color-surface);
+}
+
+.composer-details,
+.composer-preview {
+    padding: 1rem;
+}
+
+.composer-details h2,
+.composer-preview h2,
+.composer-rules h2,
+.focus-view h2 {
+    margin: 0;
+    color: var(--color-gray-100);
+    font-size: 1rem;
+}
+
+.composer-details > div {
+    margin-top: 1rem;
+}
+
+.canonical-details,
+.saved-searches {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.canonical-details summary,
+.saved-searches summary {
+    color: var(--color-gray-100);
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.canonical-details p,
+.saved-searches > p,
+.section-heading p {
+    margin: 0.45rem 0 0.75rem;
+    color: var(--color-gray-400);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.saved-search-controls {
+    display: grid;
+    gap: 0.625rem;
+}
+
+.saved-search-controls label {
+    display: grid;
+    gap: 0.3rem;
+    color: var(--color-gray-200);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.saved-search-controls select,
+.saved-search-controls input {
+    width: 100%;
+    min-height: 2.25rem;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-bg);
+    color: var(--color-gray-100);
+    font: inherit;
+}
+
+.saved-search-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.saved-search-status,
+.saved-search-error,
+.saved-search-notice {
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.saved-search-status {
+    color: var(--color-gray-400);
+}
+
+.saved-search-error {
+    color: var(--color-danger);
+}
+
+.saved-search-notice {
+    color: var(--color-success);
+}
+
+.canonical-details textarea {
+    width: 100%;
+    min-height: 6rem;
+    resize: vertical;
+    padding: 0.625rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-bg);
+    color: var(--color-gray-100);
+    font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.composer-rules {
+    min-width: 0;
+}
+
+.section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.section-heading p {
+    margin-bottom: 0;
+}
+
+.group-card {
+    overflow: hidden;
+    margin-bottom: 0.625rem;
+    border-left-width: 3px;
+}
+
+.group-all { border-left-color: var(--color-primary); }
+.group-any { border-left-color: var(--color-warning); }
+.group-none { border-left-color: var(--color-danger); }
+
+.group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 3.5rem;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border: 0;
+    background: transparent;
+    color: var(--color-gray-100);
+    text-align: left;
+    cursor: pointer;
+}
+
+.group-header:hover {
+    background: var(--color-table-hover);
+}
+
+.group-header > span:first-child {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.group-header small,
+.rule-summary small {
+    color: var(--color-gray-400);
+    font-size: 0.75rem;
+    font-weight: 400;
+}
+
+.group-count {
+    display: inline-grid;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    place-items: center;
+    border-radius: 999px;
+    background: var(--color-table-hover);
+    color: var(--color-gray-200);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.group-body {
+    padding: 0 1rem 0.875rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.rule-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.rule-row {
+    display: flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-bottom: 1px solid var(--color-table-line);
+}
+
+.nested-row {
+    margin: 0.4rem 0;
+    padding: 0.45rem 0.625rem;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius);
+}
+
+.rule-summary {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    overflow-wrap: anywhere;
+    color: var(--color-gray-100);
+    font-size: 0.82rem;
+}
+
+.rule-actions {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.rule-actions button,
+.text-button {
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    border: 0;
+    background: transparent;
+    color: var(--color-action-default);
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.rule-actions button:hover,
+.text-button:hover {
+    background: var(--color-table-hover);
+}
+
+.no-rules {
+    margin: 0;
+    padding: 0.875rem 0;
+    color: var(--color-gray-400);
+    font-size: 0.8rem;
+}
+
+.group-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    padding-top: 0.75rem;
+}
+
+.secondary-button {
+    min-height: 2rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--color-gray-100);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.secondary-button:hover {
+    border-color: var(--color-action-default);
+}
+
+.composer-preview {
+    position: sticky;
+    top: 1rem;
+}
+
+.preview-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.preview-heading a {
+    font-size: 0.75rem;
+}
+
+.preview-count {
+    display: block;
+    color: var(--color-gray-100);
+    font-size: 2rem;
+    line-height: 1;
+}
+
+.composer-preview > span {
+    color: var(--color-gray-400);
+    font-size: 0.78rem;
+}
+
+.query-error {
+    margin: 0.75rem 0 0;
+    color: var(--color-danger);
+    font-size: 0.78rem;
+}
+
+.focus-view {
+    min-width: 0;
+    padding: 1rem;
+}
+
+.focus-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.operator-select {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--color-gray-400);
+    font-size: 0.7rem;
+}
+
+.operator-select select,
+.rule-editor select,
+.rule-editor input {
+    min-height: 2.25rem;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-bg);
+    color: var(--color-gray-100);
+    font: inherit;
+}
+
+.rule-editor {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.875rem;
+}
+
+.rule-editor label {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.rule-editor label > span {
+    color: var(--color-gray-200);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.rule-editor select,
+.rule-editor input {
+    width: 100%;
+}
+
+.group-header:focus-visible,
+.rule-actions button:focus-visible,
+.secondary-button:focus-visible,
+.text-button:focus-visible,
+.composer-back:focus-visible,
+.preview-heading a:focus-visible,
+.canonical-details textarea:focus-visible,
+.saved-search-controls select:focus-visible,
+.saved-search-controls input:focus-visible,
+.operator-select select:focus-visible,
+.rule-editor select:focus-visible,
+.rule-editor input:focus-visible {
+    outline: 2px solid var(--color-focus, var(--color-action-default));
+    outline-offset: 2px;
+}
+
+@media (max-width: 70rem) {
+    .composer-layout {
+        grid-template-columns: minmax(12rem, 16rem) minmax(20rem, 1fr);
+    }
+
+    .composer-preview {
+        position: static;
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 48rem) {
+    .composer-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .composer-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .composer-preview {
+        grid-column: auto;
+    }
+
+    .composer-page .editor-action-bar {
+        align-items: stretch;
+        flex-direction: column;
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
+    }
+
+    .composer-page .editor-action-bar .btn-add {
+        width: 100%;
+    }
+
+    .focus-header {
+        grid-template-columns: 1fr;
+    }
+
+    .rule-editor {
+        grid-template-columns: 1fr;
+    }
+}
+
 .editor {
     display: grid;
     grid-template-columns: minmax(8rem, 18rem) minmax(18rem, 1fr);

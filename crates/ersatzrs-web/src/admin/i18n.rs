@@ -867,6 +867,80 @@ pub enum TextKey {
     Type,
     TypeToSearch,
     Search,
+    Filters,
+    ActiveFilters,
+    ClearFilters,
+    CreateSmartCollection,
+    FromYear,
+    ToYear,
+    CollectionComposer,
+    CollectionDetails,
+    Rules,
+    Overview,
+    MatchAll,
+    MatchAllHelp,
+    MatchAny,
+    MatchAnyHelp,
+    ExcludeAny,
+    ExcludeAnyHelp,
+    AddRule,
+    EditRule,
+    RemoveRule,
+    RuleField,
+    Genre,
+    Studio,
+    Network,
+    Actor,
+    Writer,
+    SubtitleLanguage,
+    ShowTitle,
+    ContentKindLabel,
+    SubKindLabel,
+    HasCommentary,
+    AllFields,
+    MatchType,
+    MatchValue,
+    TextContains,
+    ExactPhrase,
+    Wildcard,
+    Fuzzy,
+    Range,
+    RangeStart,
+    RangeEnd,
+    NestedGroup,
+    NestedGroupHelp,
+    AddNestedGroup,
+    EditNestedGroup,
+    BackToRules,
+    BackToSearch,
+    CanonicalQuery,
+    CanonicalQueryHelp,
+    LivePreview,
+    MatchingItems,
+    QueryValid,
+    QueryInvalid,
+    SearchRuleValueRequired,
+    SearchGroupRequired,
+    SearchWildcardRequired,
+    SavedSearches,
+    SavedSearchName,
+    SavedSearchHelp,
+    ChooseSavedSearch,
+    LoadSavedSearch,
+    SaveSavedSearch,
+    UpdateSavedSearch,
+    NewSavedSearch,
+    DeleteSavedSearch,
+    SavedSearchSaved,
+    SavedSearchDeleted,
+    SavedSearchLoaded,
+    SavedSearchNameRequired,
+    SavedSearchNameTooLong,
+    SavedSearchNameUnique,
+    NoSavedSearches,
+    RefreshPreview,
+    NoRules,
+    SearchFiltersHelp,
     SearchMedia,
     SearchMoviesOrShows,
     SearchAddonMediaList,
@@ -1049,6 +1123,8 @@ pub enum TextKey {
     ViewCollection,
     ViewPlaylist,
     AddAll,
+    AddAllToCollection,
+    AddAllToPlaylist,
     AddedItemToPlaylist,
     AddedArtistToSchedule,
     AddedMovieToSchedule,
@@ -2375,6 +2451,80 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::Type,
     TextKey::TypeToSearch,
     TextKey::Search,
+    TextKey::Filters,
+    TextKey::ActiveFilters,
+    TextKey::ClearFilters,
+    TextKey::CreateSmartCollection,
+    TextKey::FromYear,
+    TextKey::ToYear,
+    TextKey::CollectionComposer,
+    TextKey::CollectionDetails,
+    TextKey::Rules,
+    TextKey::Overview,
+    TextKey::MatchAll,
+    TextKey::MatchAllHelp,
+    TextKey::MatchAny,
+    TextKey::MatchAnyHelp,
+    TextKey::ExcludeAny,
+    TextKey::ExcludeAnyHelp,
+    TextKey::AddRule,
+    TextKey::EditRule,
+    TextKey::RemoveRule,
+    TextKey::RuleField,
+    TextKey::Genre,
+    TextKey::Studio,
+    TextKey::Network,
+    TextKey::Actor,
+    TextKey::Writer,
+    TextKey::SubtitleLanguage,
+    TextKey::ShowTitle,
+    TextKey::ContentKindLabel,
+    TextKey::SubKindLabel,
+    TextKey::HasCommentary,
+    TextKey::AllFields,
+    TextKey::MatchType,
+    TextKey::MatchValue,
+    TextKey::TextContains,
+    TextKey::ExactPhrase,
+    TextKey::Wildcard,
+    TextKey::Fuzzy,
+    TextKey::Range,
+    TextKey::RangeStart,
+    TextKey::RangeEnd,
+    TextKey::NestedGroup,
+    TextKey::NestedGroupHelp,
+    TextKey::AddNestedGroup,
+    TextKey::EditNestedGroup,
+    TextKey::BackToRules,
+    TextKey::BackToSearch,
+    TextKey::CanonicalQuery,
+    TextKey::CanonicalQueryHelp,
+    TextKey::LivePreview,
+    TextKey::MatchingItems,
+    TextKey::QueryValid,
+    TextKey::QueryInvalid,
+    TextKey::SearchRuleValueRequired,
+    TextKey::SearchGroupRequired,
+    TextKey::SearchWildcardRequired,
+    TextKey::SavedSearches,
+    TextKey::SavedSearchName,
+    TextKey::SavedSearchHelp,
+    TextKey::ChooseSavedSearch,
+    TextKey::LoadSavedSearch,
+    TextKey::SaveSavedSearch,
+    TextKey::UpdateSavedSearch,
+    TextKey::NewSavedSearch,
+    TextKey::DeleteSavedSearch,
+    TextKey::SavedSearchSaved,
+    TextKey::SavedSearchDeleted,
+    TextKey::SavedSearchLoaded,
+    TextKey::SavedSearchNameRequired,
+    TextKey::SavedSearchNameTooLong,
+    TextKey::SavedSearchNameUnique,
+    TextKey::NoSavedSearches,
+    TextKey::RefreshPreview,
+    TextKey::NoRules,
+    TextKey::SearchFiltersHelp,
     TextKey::SearchMedia,
     TextKey::SearchMoviesOrShows,
     TextKey::SearchAddonMediaList,
@@ -2557,6 +2707,8 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ViewCollection,
     TextKey::ViewPlaylist,
     TextKey::AddAll,
+    TextKey::AddAllToCollection,
+    TextKey::AddAllToPlaylist,
     TextKey::AddedItemToPlaylist,
     TextKey::AddedArtistToSchedule,
     TextKey::AddedMovieToSchedule,
@@ -3376,6 +3528,36 @@ pub fn media_browser_error_text(language: UiLanguage, error: &str) -> String {
     languages_for(language).media_browser_error_message(error)
 }
 
+pub fn search_query_error_message(error: impl std::fmt::Display) -> String {
+    search_query_error_text(use_i18n(), &error.to_string())
+}
+
+pub fn search_query_error_text(language: UiLanguage, error: &str) -> String {
+    let message = unwrap_server_function_error(error);
+    let key = if message.ends_with("search_query.required")
+        || message.ends_with("search query is required")
+    {
+        TextKey::SearchQueryRequired
+    } else if message.ends_with("search_query.rule_required")
+        || message.ends_with("every search rule needs a field and value")
+    {
+        TextKey::SearchRuleValueRequired
+    } else if message.ends_with("search_query.group_required") {
+        TextKey::SearchGroupRequired
+    } else if message.ends_with("search_query.wildcard_required") {
+        TextKey::SearchWildcardRequired
+    } else if message.ends_with("Saved search name is required") {
+        TextKey::SavedSearchNameRequired
+    } else if message.ends_with("Saved search name must be 80 characters or less") {
+        TextKey::SavedSearchNameTooLong
+    } else if message.ends_with("Saved search name must be unique") {
+        TextKey::SavedSearchNameUnique
+    } else {
+        return languages_for(language).media_browser_error_message(&message);
+    };
+    languages_for(language).text(key).to_owned()
+}
+
 pub fn media_source_error_message(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
     languages_for(use_i18n()).media_source_error_message(&message)
@@ -3906,6 +4088,37 @@ mod tests {
                 assert!(
                     !definition.strings.text(*key).trim().is_empty(),
                     "{} has an empty translation for {key:?}",
+                    definition.code
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn composer_validation_errors_are_localized_for_every_language() {
+        let errors = [
+            ("search_query.required", TextKey::SearchQueryRequired),
+            (
+                "invalid query: every search rule needs a field and value",
+                TextKey::SearchRuleValueRequired,
+            ),
+            (
+                "error running server function: search_query.group_required",
+                TextKey::SearchGroupRequired,
+            ),
+            (
+                "invalid name: Saved search name must be unique",
+                TextKey::SavedSearchNameUnique,
+            ),
+        ];
+
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for (error, key) in errors {
+                assert_eq!(
+                    search_query_error_text(language, error),
+                    definition.strings.text(key),
+                    "{} did not localize {error}",
                     definition.code
                 );
             }

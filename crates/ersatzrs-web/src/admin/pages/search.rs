@@ -29,6 +29,7 @@ use crate::admin::i18n::{
     added_items_to_playlist, content_variant_badge_label, episode_display_subtitle, search_count,
     season_display_name, selected_items_count, tr, TextKey,
 };
+use crate::admin::search_query::QuickFilterProjection;
 use crate::admin::server_fns::media_browser::{
     add_media_items_to_collection, add_media_items_to_playlist_mixed, CollectionOption,
     PlaylistGroupOption, PlaylistOption,
@@ -40,9 +41,9 @@ use crate::admin::server_fns::media_browser::{
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::search::search_all_ids;
 use crate::admin::server_fns::search::{
-    search_results, SearchAllIds, SearchCard, SearchCardKind, SearchResults, SearchSection,
+    project_quick_filters, search_results, SearchAllIds, SearchCard, SearchCardKind, SearchResults,
+    SearchSection,
 };
-use crate::admin::ui::dialogs::save_as_smart_collection::SaveAsSmartCollectionDialog;
 use crate::admin::ui::primitives::card::MediaCard;
 use crate::admin::ui::primitives::dialog::Modal;
 use crate::admin::ui::primitives::resource_state::{
@@ -166,9 +167,27 @@ fn see_all_href(list_path: &str, query: &str) -> String {
     }
 }
 
+fn search_query_href(query: &str) -> String {
+    let query = query.trim();
+    if query.is_empty() {
+        "/search".to_owned()
+    } else {
+        format!("/search?query={}", urlencoding::encode(query))
+    }
+}
+
+fn create_smart_collection_href(query: &str) -> String {
+    let return_to = search_query_href(query);
+    format!(
+        "/media/smart-collections/add?query={}&return_to={}",
+        urlencoding::encode(query),
+        urlencoding::encode(&return_to)
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::see_all_href;
+    use super::{create_smart_collection_href, see_all_href};
 
     #[test]
     fn see_all_links_preserve_encoded_query_and_first_page() {
@@ -181,6 +200,14 @@ mod tests {
             "/media/music/videos?page=1"
         );
     }
+
+    #[test]
+    fn smart_collection_handoff_preserves_query_and_exact_search_return() {
+        assert_eq!(
+            create_smart_collection_href("genre:\"Science Fiction\" AND year:[1980 TO 1999]"),
+            "/media/smart-collections/add?query=genre%3A%22Science%20Fiction%22%20AND%20year%3A%5B1980%20TO%201999%5D&return_to=%2Fsearch%3Fquery%3Dgenre%253A%2522Science%2520Fiction%2522%2520AND%2520year%253A%255B1980%2520TO%25201999%255D"
+        );
+    }
 }
 
 #[component]
@@ -189,6 +216,7 @@ pub fn SearchPage() -> impl IntoView {
     let initial_query = query_map.with(|params| params.get("query").unwrap_or_default());
     let input_value = initial_query.clone();
     let query_for_resource = initial_query.clone();
+    let query_for_filters = initial_query.clone();
     let data = Resource::new_blocking(
         move || query_for_resource.clone(),
         move |query| async move {
@@ -199,21 +227,40 @@ pub fn SearchPage() -> impl IntoView {
             }
         },
     );
+    let quick_filters =
+        Resource::new_blocking(move || query_for_filters.clone(), project_quick_filters);
 
     view! {
         <div class=shell::page>
             <form method="get" action="/search" class=shell::toolbar>
                 <h1 class=shell::page_title>{tr(TextKey::Search)}</h1>
-                <input
-                    class=shell::search
-                    type="search"
-                    name="query"
-                    placeholder=tr(TextKey::Search)
-                    value=input_value
-                />
-                <button type="submit" class=shell::btn_add>{tr(TextKey::Search)}</button>
+                <label class=style::visually_hidden for="global-search-query">
+                    {tr(TextKey::SearchMedia)}
+                </label>
+                <div class=shell::search_field>
+                    <input
+                        id="global-search-query"
+                        class=shell::search
+                        type="search"
+                        name="query"
+                        placeholder=tr(TextKey::Search)
+                        value=input_value
+                    />
+                </div>
+                <button
+                    type="submit"
+                    class=format!("{} {}", shell::btn_add, style::search_primary_action)
+                >
+                    {tr(TextKey::Search)}
+                </button>
             </form>
-            <p class=style::query_help>{tr(TextKey::ContentVariantSearchHelp)}</p>
+            <Suspense fallback=admin_loading_resource_view>
+                {move || {
+                    quick_filters.get().map(|result| admin_result_view(result, |projection| {
+                        view! { <QuickFilterDrawer projection/> }.into_any()
+                    }))
+                }}
+            </Suspense>
 
             <Suspense fallback=admin_loading_resource_view>
                 {move || {
@@ -227,6 +274,93 @@ pub fn SearchPage() -> impl IntoView {
             </Suspense>
             <SearchCardActionFallback/>
         </div>
+    }
+}
+
+#[component]
+fn QuickFilterDrawer(projection: QuickFilterProjection) -> impl IntoView {
+    let active_count = projection.active_count;
+    let media_kind = projection.media_kind.clone();
+    let genre = projection.genre.clone();
+    let year_from = projection.year_from.clone();
+    let year_to = projection.year_to.clone();
+
+    view! {
+        <section class=style::filter_surface aria-label=tr(TextKey::Filters)>
+            <details class=style::filter_disclosure>
+                <summary class=style::filter_summary>
+                    <span>{tr(TextKey::Filters)}</span>
+                    <span class=style::filter_count>
+                        {format!("{active_count} {}", tr(TextKey::ActiveFilters))}
+                    </span>
+                </summary>
+                <form method="get" action="/api/search/quick-filters" class=style::filter_form>
+                    <input type="hidden" name="base_query" value=projection.base_query.clone()/>
+                    <label class=style::filter_field>
+                        <span>{tr(TextKey::Type)}</span>
+                        <select name="media_kind">
+                            <option value="" selected=media_kind.is_empty()>{tr(TextKey::All)}</option>
+                            {SECTIONS.into_iter().map(|meta| {
+                                let value = meta.kind.media_kind();
+                                view! {
+                                    <option value=value selected=media_kind == value>{tr(meta.label)}</option>
+                                }
+                            }).collect_view()}
+                        </select>
+                    </label>
+                    <label class=style::filter_field>
+                        <span>{tr(TextKey::Genres)}</span>
+                        <input type="text" name="genre" value=genre.clone()/>
+                    </label>
+                    <fieldset class=style::year_fields>
+                        <legend>{tr(TextKey::Year)}</legend>
+                        <label class=style::filter_field>
+                            <span>{tr(TextKey::FromYear)}</span>
+                            <input type="number" name="year_from" min="1" max="9999" value=year_from.clone()/>
+                        </label>
+                        <label class=style::filter_field>
+                            <span>{tr(TextKey::ToYear)}</span>
+                            <input type="number" name="year_to" min="1" max="9999" value=year_to.clone()/>
+                        </label>
+                    </fieldset>
+                    <div class=style::filter_actions>
+                        <p>{tr(TextKey::SearchFiltersHelp)}</p>
+                        <button type="submit" class=style::action_btn>{tr(TextKey::Apply)}</button>
+                    </div>
+                </form>
+            </details>
+
+            <div
+                class=style::active_filters
+                style:display=if active_count == 0 { "none" } else { "" }
+                aria-label=tr(TextKey::ActiveFilters)
+            >
+                <a
+                    class=style::filter_chip
+                    href=search_query_href(&projection.clear_media_kind_query)
+                    style:display=if media_kind.is_empty() { "none" } else { "" }
+                >
+                    {format!("{}: {} ×", tr(TextKey::Type), media_kind)}
+                </a>
+                <a
+                    class=style::filter_chip
+                    href=search_query_href(&projection.clear_genre_query)
+                    style:display=if genre.is_empty() { "none" } else { "" }
+                >
+                    {format!("{}: {} ×", tr(TextKey::Genres), genre)}
+                </a>
+                <a
+                    class=style::filter_chip
+                    href=search_query_href(&projection.clear_year_query)
+                    style:display=if year_from.is_empty() && year_to.is_empty() { "none" } else { "" }
+                >
+                    {format!("{}: {}–{} ×", tr(TextKey::Year), year_from, year_to)}
+                </a>
+                <a class=style::clear_filters href=search_query_href(&projection.base_query)>
+                    {tr(TextKey::ClearFilters)}
+                </a>
+            </div>
+        </section>
     }
 }
 
@@ -245,8 +379,14 @@ fn SearchIsland(query: String, results: SearchResults) -> impl IntoView {
             if any {
                 view! { <SearchResultsView query=query results=results/> }.into_any()
             } else {
+                let create_collection_href = create_smart_collection_href(&query);
                 view! {
-                    <p class=style::empty>{tr(TextKey::NoMediaMatched)}</p>
+                    <div class=style::empty_state>
+                        <p class=style::empty>{tr(TextKey::NoMediaMatched)}</p>
+                        <a class=style::action_link_secondary href=create_collection_href>
+                            {tr(TextKey::CreateSmartCollection)}
+                        </a>
+                    </div>
                 }
                 .into_any()
             }
@@ -264,17 +404,11 @@ fn SearchResultsView(query: String, results: SearchResults) -> impl IntoView {
 
     let collection_open = RwSignal::new(false);
     let playlist_open = RwSignal::new(false);
-    let save_as_open = RwSignal::new(false);
     // When true, the bulk dialogs operate on the full result set ("Add All");
     // otherwise on the current selection.
     let bulk_all = RwSignal::new(false);
 
     let query_for_dialogs = query.clone();
-    let query_signal = Signal::derive({
-        let q = query.clone();
-        move || q.clone()
-    });
-
     let sorted = StoredValue::new(sorted_cards(&results));
 
     // Toggle / shift-range select. Mirrors `MultiSelectBase.SelectClicked`:
@@ -338,7 +472,6 @@ fn SearchResultsView(query: String, results: SearchResults) -> impl IntoView {
                 bulk_all.set(true);
                 playlist_open.set(true);
             })
-            on_save_as=Callback::new(move |()| save_as_open.set(true))
             on_sel_collection=Callback::new(move |()| {
                 bulk_all.set(false);
                 collection_open.set(true);
@@ -425,11 +558,6 @@ fn SearchResultsView(query: String, results: SearchResults) -> impl IntoView {
             selected=selected
             bulk_all=bulk_all
         />
-        <SaveAsSmartCollectionDialog
-            open=save_as_open
-            query=query_signal
-            on_saved=Some(Callback::new(move |_id: i64| clear_selection.run(())))
-        />
     }
 }
 
@@ -441,7 +569,6 @@ fn SearchToolbar(
     select_count: Signal<usize>,
     on_add_all_collection: Callback<()>,
     on_add_all_playlist: Callback<()>,
-    on_save_as: Callback<()>,
     on_sel_collection: Callback<()>,
     on_sel_playlist: Callback<()>,
     on_clear: Callback<()>,
@@ -454,11 +581,15 @@ fn SearchToolbar(
         })
         .collect();
 
+    let create_collection_href = create_smart_collection_href(&query);
+
     view! {
-        <div class=shell::toolbar>
-            <div style:display=move || if select_mode.get() { "none" } else { "" }>
+        <div class=format!("{} {}", shell::toolbar, style::results_toolbar)>
+            <div
+                class=style::toolbar_mode
+                style:display=move || if select_mode.get() { "none" } else { "" }
+            >
                 <div class=style::count_links>
-                    <span class=style::query_echo>{query}</span>
                     {counts
                         .into_iter()
                         .map(|(meta, total)| view! {
@@ -474,28 +605,28 @@ fn SearchToolbar(
                 <div class=style::actions>
                     <button
                         class=style::action_btn
-                        title=tr(TextKey::AddToCollection)
                         on:click=move |_| on_add_all_collection.run(())
                     >
-                        {tr(TextKey::AddAll)}
+                        {tr(TextKey::AddAllToCollection)}
                     </button>
                     <button
                         class=style::action_btn
-                        title=tr(TextKey::AddToPlaylist)
                         on:click=move |_| on_add_all_playlist.run(())
                     >
-                        {tr(TextKey::AddAll)}
+                        {tr(TextKey::AddAllToPlaylist)}
                     </button>
-                    <button
-                        class=style::action_btn_secondary
-                        title=tr(TextKey::SaveAsSmartCollection)
-                        on:click=move |_| on_save_as.run(())
+                    <a
+                        class=style::action_link_secondary
+                        href=create_collection_href
                     >
-                        {tr(TextKey::SaveAs)}
-                    </button>
+                        {tr(TextKey::CreateSmartCollection)}
+                    </a>
                 </div>
             </div>
-            <div style:display=move || if select_mode.get() { "" } else { "none" }>
+            <div
+                class=style::toolbar_mode
+                style:display=move || if select_mode.get() { "" } else { "none" }
+            >
                 <div class=style::count_links>
                     <span class=style::query_echo>
                         {move || {

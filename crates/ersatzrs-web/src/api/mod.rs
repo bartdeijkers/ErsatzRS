@@ -13,6 +13,7 @@ pub mod playlists;
 pub mod playouts;
 pub mod rerun_collections;
 pub mod schedules;
+pub mod search;
 pub mod settings;
 pub mod templates;
 pub mod troubleshooting;

@@ -1166,6 +1166,21 @@ impl ApplicationServices {
         queries::get_smart_collection(id, self.ports.collections()).await
     }
 
+    /// List reusable advanced-search queries.
+    pub async fn list_saved_searches(
+        &self,
+    ) -> Result<Vec<ersatzrs_core::repositories::SavedSearchAdminRow>> {
+        queries::list_saved_searches(self.ports.saved_searches()).await
+    }
+
+    /// Load one reusable advanced-search query.
+    pub async fn get_saved_search(
+        &self,
+        id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::SavedSearchAdminRow>> {
+        queries::get_saved_search(id, self.ports.saved_searches()).await
+    }
+
     /// Load the persisted multi-collection page size.
     pub async fn get_multi_collections_page_size(&self) -> Result<u32> {
         queries::get_multi_collections_page_size(self.ports.admin_settings()).await
@@ -1374,6 +1389,19 @@ impl ApplicationServices {
         command: commands::DeleteSmartCollection,
     ) -> Result<()> {
         commands::delete_smart_collection(command, self.ports.collections()).await
+    }
+
+    /// Validate and persist a reusable advanced-search query.
+    pub async fn save_saved_search(
+        &self,
+        command: commands::SaveSavedSearch,
+    ) -> Result<ersatzrs_domain::EntityId> {
+        commands::save_saved_search(command, self.ports.saved_searches()).await
+    }
+
+    /// Delete a reusable advanced-search query.
+    pub async fn delete_saved_search(&self, command: commands::DeleteSavedSearch) -> Result<()> {
+        commands::delete_saved_search(command, self.ports.saved_searches()).await
     }
 
     /// Validate, transactionally save, and refresh one multi-collection.

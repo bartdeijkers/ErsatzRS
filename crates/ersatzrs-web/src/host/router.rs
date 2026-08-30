@@ -115,6 +115,18 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::collections::save_collection_form),
         )
         .route(
+            "/api/search/quick-filters",
+            get(api::search::apply_quick_filters),
+        )
+        .route(
+            "/api/saved-searches/load",
+            post(api::search::load_saved_search_form),
+        )
+        .route(
+            "/api/saved-searches/save",
+            post(api::search::save_saved_search_form),
+        )
+        .route(
             "/api/smart-collections/save",
             post(api::collections::save_smart_collection_form),
         )

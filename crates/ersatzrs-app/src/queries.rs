@@ -16,11 +16,12 @@ use ersatzrs_core::repositories::{
     MultiCollectionEditorOptions, PlaylistEditorAdmin, PlaylistEditorOptions,
     PlaylistGroupAdminRow, PlayoutAlternateSchedulesAdmin, PlayoutKindEditorAdmin,
     PlayoutListAdminRow, PlayoutRepository, PlayoutTemplatesAdmin, ProgramScheduleRepository,
-    RerunCollectionAdmin, RerunCollectionAdminRow, RerunCollectionEditorOptions, ScheduleAdminForm,
-    ScheduleAdminRow, ScheduleItemAdmin, ScheduleItemOptions, SequentialPlayoutAdmin,
-    SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow, TemplateAdminRow,
-    TemplateBlockAdmin, TemplateBlockGroupAdmin, TemplateGroupAdminRow, TemplateItemAdmin,
-    TemplateRepository, WatermarkRepository,
+    RerunCollectionAdmin, RerunCollectionAdminRow, RerunCollectionEditorOptions,
+    SavedSearchAdminRow, SavedSearchRepository, ScheduleAdminForm, ScheduleAdminRow,
+    ScheduleItemAdmin, ScheduleItemOptions, SequentialPlayoutAdmin, SettingsOptionKind,
+    SettingsSelectOption, SmartCollectionAdminRow, TemplateAdminRow, TemplateBlockAdmin,
+    TemplateBlockGroupAdmin, TemplateGroupAdminRow, TemplateItemAdmin, TemplateRepository,
+    WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
@@ -1170,6 +1171,25 @@ pub async fn get_smart_collection(
         });
     }
     repository.get_smart_admin(id).await.map_err(Into::into)
+}
+
+pub async fn list_saved_searches(
+    repository: &dyn SavedSearchRepository,
+) -> Result<Vec<SavedSearchAdminRow>> {
+    repository.list_admin().await.map_err(Into::into)
+}
+
+pub async fn get_saved_search(
+    id: EntityId,
+    repository: &dyn SavedSearchRepository,
+) -> Result<Option<SavedSearchAdminRow>> {
+    if id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "saved_search_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    repository.get_admin(id).await.map_err(Into::into)
 }
 
 const MULTI_COLLECTIONS_PAGE_SIZE_KEY: &str = "pages.multi_collections.page_size";

@@ -18,6 +18,7 @@ mod media_source;
 mod metadata;
 mod playout;
 mod program_schedule;
+mod saved_search;
 mod scheduling;
 mod television;
 mod template;
@@ -42,6 +43,7 @@ pub use media_source::SqliteMediaSourceRepository;
 pub use metadata::SqliteMetadataRepository;
 pub use playout::SqlitePlayoutRepository;
 pub use program_schedule::SqliteProgramScheduleRepository;
+pub use saved_search::SqliteSavedSearchRepository;
 pub use scheduling::SqliteSchedulingContentRepository;
 use sqlx::Pool;
 pub use television::SqliteTelevisionRepository;
@@ -74,6 +76,7 @@ pub struct Repositories {
     pub channel: SqliteChannelRepository,
     pub playout: SqlitePlayoutRepository,
     pub program_schedule: SqliteProgramScheduleRepository,
+    pub saved_search: SqliteSavedSearchRepository,
     pub block: SqliteBlockRepository,
     pub deco: SqliteDecoRepository,
     pub template: SqliteTemplateRepository,
@@ -102,6 +105,7 @@ pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
         channel: SqliteChannelRepository(pool.clone()),
         playout: SqlitePlayoutRepository(pool.clone()),
         program_schedule: SqliteProgramScheduleRepository(pool.clone()),
+        saved_search: SqliteSavedSearchRepository(pool.clone()),
         block: SqliteBlockRepository(pool.clone()),
         deco: SqliteDecoRepository(pool.clone()),
         template: SqliteTemplateRepository(pool.clone()),

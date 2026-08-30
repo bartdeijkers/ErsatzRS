@@ -15,11 +15,24 @@ release section when tagging a release.
 
 ### Added
 
+- Add named advanced-search drafts to the smart-collection composer. Queries
+  can be saved, recalled later, modified, and updated without creating a smart
+  collection or triggering collection and playout refresh side effects.
+
 - Add a repository-local Context7 documentation skill that targets current,
   version-specific external contracts, keeps retrieval to the smallest useful
   query set, and avoids calls when local repository evidence is authoritative.
 
 ### Changed
+
+- Separate media discovery from durable smart-collection authoring. Global
+  search now stays results-first with a compact common-filter disclosure and
+  exact query handoff; the smart-collection route uses localized
+  Match all/Match any/Exclude any cards, focused nested-group editing, a live
+  result count, and the same canonical query for hydrated and no-JavaScript
+  saves. Search result counts and bulk actions now reflow as distinct,
+  higher-contrast controls, and the mobile navigation cannot obscure the
+  search or composer after a desktop-to-mobile transition. See ADR 0083.
 
 - Move Remote Stream playlist filesystem health inspection onto Tokio's
   blocking pool and persist validated effective liveness in version 4 playlist
@@ -34,6 +47,13 @@ release section when tagging a release.
   reported as playout build warnings.
 
 ### Fixed
+
+- Preserve canonical search semantics across structured edits, including
+  multiword text, wildcard, phrase, and fuzzy values; reject incomplete queries
+  during initial projection and durable saves; wait for the current composer
+  model before saving; keep the editor locked until projection completes; and
+  preserve the exact `/search` return URL across no-JavaScript save failures.
+  Composer validation is localized in every supported admin culture.
 
 - Validate managed Remote Stream definitions through the production parser
   before treating them as duration-exempt live entries in health, preventing an

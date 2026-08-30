@@ -9,8 +9,8 @@ use ersatzrs_core::repositories::{
     FillerRepository, LibraryRepository, MediaItemRepository, MultiCollectionItem,
     PlaybackOverrides, PlaylistEditorAdmin, PlaylistItemInsert, PlayoutAlternateScheduleItemAdmin,
     PlayoutCreateAdmin, PlayoutRepository, PlayoutTemplateItemAdmin, ProgramScheduleRepository,
-    RepositoryError, RerunCollectionAdmin, RerunCollectionReferenceKind, ScheduleAdminForm,
-    ScheduleItemAdmin, SettingsMutation, TemplateItemAdmin, TemplateRepository,
+    RepositoryError, RerunCollectionAdmin, RerunCollectionReferenceKind, SavedSearchRepository,
+    ScheduleAdminForm, ScheduleItemAdmin, SettingsMutation, TemplateItemAdmin, TemplateRepository,
     WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
@@ -410,6 +410,18 @@ pub struct SaveSmartCollection {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DeleteSmartCollection {
+    pub id: EntityId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SaveSavedSearch {
+    pub id: EntityId,
+    pub name: String,
+    pub query: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DeleteSavedSearch {
     pub id: EntityId,
 }
 
@@ -2731,6 +2743,12 @@ pub async fn save_smart_collection(
     if query.is_empty() {
         return validation_error("query", "Smart collection query is required");
     }
+    ersatzrs_core::search::SearchExpression::parse_validated_user_query(query).map_err(
+        |error| ApplicationError::Validation {
+            field: "query",
+            message: error.to_string(),
+        },
+    )?;
     let id = repository.save_smart_admin(command.id, name, query).await?;
     if command.id > 0 {
         for playout_id in repository.playout_ids_using_smart(command.id).await? {
@@ -2751,6 +2769,47 @@ pub async fn delete_smart_collection(
     validate_positive_id(command.id, "smart_collection_id")?;
     repository
         .delete_smart_admin(command.id)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn save_saved_search(
+    command: SaveSavedSearch,
+    repository: &dyn SavedSearchRepository,
+) -> crate::Result<EntityId> {
+    if command.id < 0 {
+        return validation_error("saved_search_id", "must be zero or greater");
+    }
+    let name = command.name.trim();
+    if name.is_empty() {
+        return validation_error("name", "Saved search name is required");
+    }
+    if name.chars().count() > 80 {
+        return validation_error("name", "Saved search name must be 80 characters or less");
+    }
+    if repository.name_exists(command.id, name).await? {
+        return validation_error("name", "Saved search name must be unique");
+    }
+    let query = command.query.trim();
+    ersatzrs_core::search::SearchExpression::parse_validated_user_query(query).map_err(
+        |error| ApplicationError::Validation {
+            field: "query",
+            message: error.to_string(),
+        },
+    )?;
+    repository
+        .save_admin(command.id, name, query)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn delete_saved_search(
+    command: DeleteSavedSearch,
+    repository: &dyn SavedSearchRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.id, "saved_search_id")?;
+    repository
+        .delete_admin(command.id)
         .await
         .map_err(Into::into)
 }

@@ -120,6 +120,23 @@ ErsatzTV's experimental Elasticsearch backend.
 
 ADR: [0009](../adr/0009-sql-backed-search-and-no-elasticsearch.md)
 
+## Dedicated smart collection composition
+
+ErsatzTV saves a search as a smart collection through a modal on `/search` and
+later exposes only the collection name in its editor. ErsatzRS keeps global
+search focused on results and common shallow filters, then carries the same
+canonical query into a dedicated smart-collection composer. The composer uses
+ALL/ANY/NONE group cards for ordinary queries and a focused child-group view
+only when the query is genuinely nested. Search, scheduling, and persisted
+smart collections continue to share one canonical query contract.
+
+ErsatzRS also lets operators keep named advanced-query drafts for later recall
+and modification. These saved searches are separate from smart collections and
+therefore do not refresh membership or playouts until the operator explicitly
+saves a smart collection.
+
+ADR: [0083](../adr/0083-separate-search-discovery-from-smart-collection-composition.md)
+
 ## Collection and playlist item playback overrides
 
 ErsatzTV stores preferred audio and subtitle settings on channels, program
