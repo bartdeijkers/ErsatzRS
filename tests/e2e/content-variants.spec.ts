@@ -454,7 +454,12 @@ ORDER BY "Id" DESC LIMIT 1;
     await expect(page.getByText('E2E Variant Song Unplugged').first()).toBeVisible();
 
     await gotoHydrated(page, `/search?query=${encodeURIComponent('content_kind:extra AND sub_kind:featurette')}`);
-    await expect(page.getByText('Variant tokens: content_kind:extra')).toBeVisible();
+    const searchFilters = page.locator('section[aria-label="Filters"] details');
+    await expect(searchFilters).toBeVisible();
+    await searchFilters.locator('summary').click();
+    await expect(
+      searchFilters.getByText('Common filters only. Use the smart collection composer for nested logic.'),
+    ).toBeVisible();
     await expect(page.getByText('E2E Variant Featurette').first()).toBeVisible();
     await expect(page.getByText('Extra: Featurette').first()).toBeVisible();
 
