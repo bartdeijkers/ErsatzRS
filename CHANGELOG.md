@@ -30,6 +30,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve an existing Classic playout when Remote Stream filtering leaves a
+  required schedule source empty. Reset and Refresh now refuse the destructive
+  rebuild instead of clearing the materialized timeline without replacement.
+
 - Detect live HLS segment under-runs even when every received MPEG-TS packet is
   structurally valid, expose recent events through health, and make the manual
   TSDuck gate compare PCR media time with wall time without misclassifying

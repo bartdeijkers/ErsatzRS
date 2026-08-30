@@ -76,8 +76,8 @@ resolved    = true
 id          = 'filtered-required-source-can-clear-playout'
 description = 'P1: Reject a playout build when filtering unknown or durationless finite Remote Streams leaves any required scheduling source empty; otherwise Reset or accepted Refresh can clear the existing timeline without replacement.'
 discovered  = '2026-08-30'
-evidence    = 'Review on 2026-08-30: `PlayoutBuilder::build` runs `drop_unschedulable_remote_streams` before engine dispatch but has no post-filter required-source guard. `live_sources_require_classic_flood_and_unknown_never_schedules` accepts an all-filtered empty result, while `one_unschedulable_remote_stream_does_not_block_its_collection` covers only a mixed source. Classic Reset or accepted Refresh returns `clear_items = true`, so persistence can delete existing rows without replacement; ErsatzTV `CheckForEmptyCollections` rejects a required collection after filtering leaves it empty. Closure requires Reset and Refresh regressions proving refusal occurs before any destructive clear.'
-resolved    = false
+evidence    = 'Resolved on 2026-08-30: `PlayoutBuilder::build` snapshots populated primary Classic schedule sources before `drop_unschedulable_remote_streams` and refuses the build if filtering empties one, matching ErsatzTV `CheckForEmptyCollections` while leaving pre-existing empty sources and optional filler/fallback behavior unchanged. Core regressions cover Reset, Refresh, and non-fatal optional filler; infra regression `reset_and_refresh_preserve_timeline_when_filter_empties_required_source` exercises the production maintenance path and proves both destructive modes preserve the exact existing `PlayoutItem` rows while recording a failed build status.'
+resolved    = true
 
 [[debt]]
 id          = 'live-addon-sustained-delivery-unproven'

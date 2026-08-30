@@ -90,7 +90,9 @@ impl PlayoutBuilder {
         &self,
         mut request: SchedulingRequest,
     ) -> Result<SchedulingResult, SchedulingError> {
+        let populated_classic_sources = populated_classic_source_ids(&request.reference_data);
         let dropped = drop_unschedulable_remote_streams(&mut request.reference_data);
+        validate_populated_classic_sources(&request.reference_data, &populated_classic_sources)?;
         validate_remote_stream_placements(&request)?;
         let options = ConfiguredPlayoutOptions::from_request(&request);
         let mut result = match request.playout.schedule_kind {
@@ -108,6 +110,51 @@ impl PlayoutBuilder {
         result.warnings.extend(dropped);
         Ok(result)
     }
+}
+
+/// Capture only populated primary Classic sources before Remote Stream filtering.
+///
+/// ErsatzTV rejects a referenced collection when its zero-duration cleanup
+/// leaves that collection empty. Snapshotting first keeps this guard scoped to
+/// the filter transition: pre-existing empty sources retain their established
+/// behavior, and optional filler/fallback collections are not promoted to
+/// fatal primary sources.
+fn populated_classic_source_ids(reference: &SchedulingReferenceData) -> BTreeSet<EntityId> {
+    reference
+        .classic_schedule_items
+        .iter()
+        .filter(|item| classic_source_has_media(reference, item))
+        .map(|item| item.id)
+        .collect()
+}
+
+fn validate_populated_classic_sources(
+    reference: &SchedulingReferenceData,
+    populated_source_ids: &BTreeSet<EntityId>,
+) -> Result<(), SchedulingError> {
+    if let Some(item) = reference.classic_schedule_items.iter().find(|item| {
+        populated_source_ids.contains(&item.id) && !classic_source_has_media(reference, item)
+    }) {
+        return Err(SchedulingError::EmptyClassicSourceAfterRemoteStreamFilter(
+            item.id,
+        ));
+    }
+    Ok(())
+}
+
+fn classic_source_has_media(
+    reference: &SchedulingReferenceData,
+    item: &ersatzrs_domain::ProgramScheduleItem,
+) -> bool {
+    let key = classic_schedule_item_key(item);
+    reference
+        .media_by_key
+        .get(&key)
+        .is_some_and(|items| !items.is_empty())
+        || reference
+            .playlist_items_by_key
+            .get(&key)
+            .is_some_and(|items| items.iter().any(|item| !item.media_items.is_empty()))
 }
 
 /// Drop Remote Streams that cannot be placed on a timeline, mirroring the
@@ -408,13 +455,14 @@ fn min_positive_duration(left: Duration, right: Duration) -> Duration {
 mod tests {
     use chrono::{Duration, Utc};
     use ersatzrs_domain::{
-        FillerKind, Playout, PlayoutGap, PlayoutMode, PlayoutScheduleKind, ProgramScheduleItem,
-        RemoteStreamLiveness,
+        FillerKind, FillerMode, Playout, PlayoutGap, PlayoutMode, PlayoutScheduleKind,
+        ProgramScheduleItem, RemoteStreamLiveness,
     };
 
     use super::*;
     use crate::scheduling::{
-        PlayoutBuildMode, SchedulingFallbackPreset, SchedulingMediaItem, SchedulingReferenceData,
+        PlayoutBuildMode, SchedulingFallbackPreset, SchedulingFillerPreset, SchedulingMediaItem,
+        SchedulingReferenceData,
     };
 
     #[test]
@@ -733,6 +781,93 @@ mod tests {
             result.warnings,
             vec!["Skipped Remote Stream 99 with unknown or zero duration"]
         );
+    }
+
+    #[test]
+    fn required_classic_source_emptied_by_filter_is_refused_before_destructive_build() {
+        let start = Utc::now();
+        let mut unschedulable = SchedulingMediaItem::new(99, Duration::zero());
+        unschedulable.liveness = Some(RemoteStreamLiveness::Unknown);
+        let schedule_item = ProgramScheduleItem {
+            id: 7,
+            playout_mode: PlayoutMode::One,
+            ..ProgramScheduleItem::default()
+        };
+        let key = classic_schedule_item_key(&schedule_item);
+
+        for mode in [PlayoutBuildMode::Reset, PlayoutBuildMode::Refresh] {
+            let error = PlayoutBuilder::default()
+                .build(SchedulingRequest {
+                    playout: Playout {
+                        schedule_kind: PlayoutScheduleKind::Classic,
+                        ..Playout::default()
+                    },
+                    start,
+                    finish: start + Duration::hours(3),
+                    mode,
+                    reference_data: SchedulingReferenceData {
+                        classic_schedule_items: vec![schedule_item.clone()],
+                        media_by_key: [(key.clone(), vec![unschedulable.clone()])].into(),
+                        ..SchedulingReferenceData::default()
+                    },
+                })
+                .expect_err("an emptied required source must refuse the build");
+
+            assert!(matches!(
+                error,
+                SchedulingError::EmptyClassicSourceAfterRemoteStreamFilter(7)
+            ));
+        }
+    }
+
+    #[test]
+    fn unschedulable_optional_filler_does_not_block_healthy_classic_source() {
+        let start = Utc::now();
+        let mut unschedulable = SchedulingMediaItem::new(99, Duration::zero());
+        unschedulable.liveness = Some(RemoteStreamLiveness::Unknown);
+        let schedule_item = ProgramScheduleItem {
+            id: 7,
+            playout_mode: PlayoutMode::One,
+            ..ProgramScheduleItem::default()
+        };
+        let key = classic_schedule_item_key(&schedule_item);
+
+        let result = PlayoutBuilder::default()
+            .build(SchedulingRequest {
+                playout: Playout {
+                    schedule_kind: PlayoutScheduleKind::Classic,
+                    ..Playout::default()
+                },
+                start,
+                finish: start + Duration::hours(1),
+                mode: PlayoutBuildMode::Reset,
+                reference_data: SchedulingReferenceData {
+                    classic_schedule_items: vec![schedule_item],
+                    media_by_key: [(
+                        key,
+                        vec![SchedulingMediaItem::new(1, Duration::minutes(30))],
+                    )]
+                    .into(),
+                    classic_filler_presets: [(
+                        8,
+                        SchedulingFillerPreset {
+                            id: 8,
+                            filler_kind: FillerKind::PostRoll,
+                            filler_mode: FillerMode::Count,
+                            duration: None,
+                            count: Some(1),
+                            pad_to_nearest_minute: None,
+                            allow_watermarks: false,
+                            media_items: vec![unschedulable],
+                        },
+                    )]
+                    .into(),
+                    ..SchedulingReferenceData::default()
+                },
+            })
+            .expect("optional filler filtering must not refuse healthy primary content");
+
+        assert!(!result.added_items.is_empty());
     }
 
     fn builder_with_static_result(result: SchedulingResult) -> PlayoutBuilder {

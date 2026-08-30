@@ -645,6 +645,10 @@ pub enum SchedulingError {
     FiniteRemoteStreamMissingDuration(EntityId),
     #[error("live Remote Stream {0} requires Classic Flood mode with a deterministic boundary")]
     UnsupportedLiveSourcePlacement(EntityId),
+    #[error(
+        "Classic schedule item {0} has no schedulable media after invalid Remote Streams were filtered"
+    )]
+    EmptyClassicSourceAfterRemoteStreamFilter(EntityId),
     #[error("invalid duration: {0}")]
     InvalidDuration(String),
     #[error("invalid time: {0}")]

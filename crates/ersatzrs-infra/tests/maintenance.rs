@@ -505,6 +505,83 @@ async fn requested_refresh_rewrites_upcoming_playout_item_playback_data() {
 }
 
 #[tokio::test]
+async fn reset_and_refresh_preserve_timeline_when_filter_empties_required_source() {
+    for mode in [PlayoutBuildMode::Reset, PlayoutBuildMode::Refresh] {
+        let pool = common::test_db().await;
+        let repos = make_repositories(pool.clone());
+        common::seed_profile_and_channel(&repos, 1).await;
+        seed_refresh_rebuild_fixture(&pool, &repos).await;
+
+        let start = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
+        let locker = EntityLocker::new();
+        run_requested_playout_build(
+            &pool,
+            &locker,
+            PlayoutBuildRequest {
+                playout_id: 88,
+                mode: PlayoutBuildMode::Reset,
+            },
+            start,
+            None,
+        )
+        .await
+        .expect("initial healthy build");
+        let before = persisted_playout_item_rows(&pool, 88).await;
+        assert!(
+            !before.is_empty(),
+            "fixture must have a timeline to preserve"
+        );
+
+        seed_unschedulable_remote_stream(&pool, 200).await;
+        sqlx::query(r#"DELETE FROM "CollectionItem" WHERE "CollectionId" = 1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "CollectionItem" ("CollectionId", "MediaItemId") VALUES (1, 200)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let error = run_requested_playout_build(
+            &pool,
+            &locker,
+            PlayoutBuildRequest {
+                playout_id: 88,
+                mode,
+            },
+            start + Duration::minutes(1),
+            None,
+        )
+        .await
+        .expect_err("an emptied required source must refuse a destructive build");
+        assert!(
+            error
+                .to_string()
+                .contains("has no schedulable media after invalid Remote Streams were filtered"),
+            "unexpected build failure: {error}"
+        );
+
+        assert_eq!(
+            persisted_playout_item_rows(&pool, 88).await,
+            before,
+            "{mode:?} must leave the existing materialized timeline untouched"
+        );
+        let status = sqlx::query(
+            r#"SELECT "Success", "Message" FROM "PlayoutBuildStatus" WHERE "PlayoutId" = 88"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(status.get::<i64, _>("Success"), 0);
+        assert!(status
+            .get::<Option<String>, _>("Message")
+            .is_some_and(|message| message.contains("has no schedulable media")));
+    }
+}
+
+#[tokio::test]
 async fn requested_classic_refresh_rewrites_near_term_playout_items() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
@@ -831,6 +908,64 @@ async fn seed_refresh_rebuild_fixture(pool: &SqlitePool, repos: &Repositories) {
     )
     .await
     .unwrap();
+}
+
+async fn seed_unschedulable_remote_stream(pool: &SqlitePool, media_item_id: i64) {
+    common::seed_media_item(pool, media_item_id, 1).await;
+    sqlx::query(
+        r#"INSERT INTO "RemoteStream" ("Id", "Url", "Liveness", "IsLive")
+           VALUES (?, 'https://example.invalid/stream', 0, 0)"#,
+    )
+    .bind(media_item_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "RemoteStreamMetadata" (
+               "RemoteStreamId", "MetadataKind", "Title", "DateAdded", "DateUpdated"
+           ) VALUES (?, 0, 'Unschedulable fixture', '2026-04-15 00:00:00', '2026-04-15 00:00:00')"#,
+    )
+    .bind(media_item_id)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "MediaVersion" (
+               "RemoteStreamId", "Name", "Duration", "VideoScanKind",
+               "DateAdded", "DateUpdated", "Width", "Height"
+           ) VALUES (?, 'main', '00:00:00', 0,
+                     '2026-04-15 00:00:00', '2026-04-15 00:00:00', 1920, 1080)"#,
+    )
+    .bind(media_item_id)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+async fn persisted_playout_item_rows(
+    pool: &SqlitePool,
+    playout_id: i64,
+) -> Vec<(i64, i64, String, String)> {
+    sqlx::query(
+        r#"SELECT "Id", "MediaItemId", "Start", "Finish"
+           FROM "PlayoutItem"
+           WHERE "PlayoutId" = ?
+           ORDER BY "Id""#,
+    )
+    .bind(playout_id)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| {
+        (
+            row.get("Id"),
+            row.get("MediaItemId"),
+            row.get("Start"),
+            row.get("Finish"),
+        )
+    })
+    .collect()
 }
 
 async fn first_playout_item_subtitle_mode(pool: &SqlitePool, playout_id: i64) -> Option<i64> {
