@@ -13,7 +13,7 @@ release section when tagging a release.
 
 ## [Unreleased]
 
-## [1.0.30-beta] - 2026-08-30
+## [1.0.30-beta.1] - 2026-08-30
 
 ### Added
 
@@ -49,6 +49,11 @@ release section when tagging a release.
   reported as playout build warnings.
 
 ### Fixed
+
+- Keep the Windows beta web-bundle gate independent of runner-owned FFmpeg
+  drift. Auto-discovered overrides are now accepted only when they report
+  FFmpeg major version 9; otherwise the gate uses the normal managed
+  ErsatzRS-ffmpeg acquisition path instead of failing on an older PATH tool.
 
 - Preserve canonical search semantics across structured edits, including
   multiword text, wildcard, phrase, and fuzzy values; reject incomplete queries

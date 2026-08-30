@@ -80,11 +80,21 @@ for preview_asset in \
   }
 done
 
-# --- FFmpeg override so startup does not download a managed runtime in CI.
+# --- Prefer a local FFmpeg 9 override so startup need not download a managed
+# runtime in CI. PATH is runner-owned and can drift to an unsupported major;
+# only pass an auto-discovered binary after checking the version contract. If
+# no compatible local binary exists, leave the override unset so this gate
+# exercises the same managed ErsatzRS-ffmpeg acquisition used in production.
 FF_BIN="${ErsatzRS_FFMPEG__PATH:-}"
 if [[ -z "$FF_BIN" ]]; then
   for c in "$HOME/.local/ffmpeg-9.0/bin/ffmpeg" "$(command -v ffmpeg 2>/dev/null || true)"; do
-    [[ -n "$c" && -x "$c" ]] && { FF_BIN="$c"; break; }
+    [[ -n "$c" && -x "$c" ]] || continue
+    version_line="$("$c" -version 2>/dev/null | head -1 || true)"
+    if [[ "$version_line" =~ ^ffmpeg[[:space:]]version[[:space:]](n)?9([.[:space:]-]|$) ]]; then
+      FF_BIN="$c"
+      break
+    fi
+    log "ignoring incompatible FFmpeg candidate: $c (${version_line:-version unavailable})"
   done
 fi
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ersatzrs-verify-bundle.XXXXXX")"
@@ -128,6 +138,8 @@ if [[ -n "$FF_BIN" ]]; then
     SRV_ENV+=("LD_LIBRARY_PATH=$FF_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}")
   fi
   log "ffmpeg override: $FF_BIN"
+else
+  log "no local FFmpeg 9 override; using managed ErsatzRS-ffmpeg acquisition"
 fi
 
 log "booting server on $BASE_URL…"
