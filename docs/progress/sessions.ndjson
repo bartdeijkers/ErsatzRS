@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-30","summary":"Refreshed PR 95 dependency rollup and preserved pre-2.22 MiniJinja template scalar output."}
 {"agent":"Codex","date":"2026-08-30","summary":"Fixed search composer P1/P2 review findings, added reusable advanced-query drafts, and completed Chromium/Firefox visual UX finetuning."}
 {"agent":"Codex","date":"2026-08-30","summary":"Implemented ADR 0083 results-first search and dedicated smart collection composer"}
 {"agent":"Codex","date":"2026-08-30","summary":"Repaired the P1 playout-preservation debt and three P2 health and Classic checkpoint parity debts in four scoped commits."}
