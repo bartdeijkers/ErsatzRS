@@ -13,7 +13,7 @@ release section when tagging a release.
 
 ## [Unreleased]
 
-## [1.0.30-beta.1] - 2026-08-30
+## [1.0.31-beta] - 2026-08-30
 
 ### Added
 
