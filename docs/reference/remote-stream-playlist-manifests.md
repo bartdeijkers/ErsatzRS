@@ -159,6 +159,10 @@ is stable without embedding provider-specific rules in the host.
 The expansion folder contains `.ersatzrs-playlist.json` plus generated `.yml`
 definitions and `.nfo` sidecars. Only files named in that versioned state are
 synchronization-owned.
+Version 4 state also records each definition's validated effective liveness and
+content hash. Health performs filesystem inspection outside the async executor
+and trusts the stored liveness only while the generated file still matches that
+hash; older state is refreshed before reuse.
 Hand-authored sibling definitions are never rewritten or removed. A failed
 enumeration records a redacted failed outcome and preserves the last complete
 definitions and playlist. Changing the manifest, add-on identity, installed

@@ -44,6 +44,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 const ENUMERATION_TIMEOUT: Duration = Duration::from_mins(2);
+const PLAYLIST_SIDECAR_VERSION: u32 = 4;
 #[cfg(test)]
 const MAX_ARTWORK_BYTES: usize = ersatzrs_infra::addon_artwork::MAX_ARTWORK_BYTES;
 
@@ -174,6 +175,10 @@ pub struct PlaylistSidecarEntry {
     pub title: String,
     pub duration_seconds: Option<u64>,
     pub active: bool,
+    /// Validated effective liveness of the generated definition. Health uses
+    /// this with `definition_sha256` instead of reparsing every YAML file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub liveness: Option<RemoteStreamLiveness>,
     #[serde(default)]
     pub nfo_file: Option<String>,
     #[serde(default)]
@@ -917,7 +922,7 @@ pub async fn stage_playlist_files(
                 && (selection.provider_ids.is_empty() || state.last_result.entries > 0)
         });
         let cache_is_fresh = cache_matches_publication
-            && matches!(state.version, 1..=3)
+            && state.version == PLAYLIST_SIDECAR_VERSION
             && state.last_result.kind == "ok"
             && state.manifest_etag == manifest_etag
             && managed_files_intact(&folder, state)
@@ -1044,6 +1049,7 @@ pub async fn stage_playlist_files(
         let nfo_file = managed_nfo_file_name(&file);
         let nfo_path = folder.join(&nfo_file);
         let definition_bytes = generated_definition_bytes(manifest, entry)?;
+        let liveness = effective_entry_liveness(&manifest.manifest.defaults, entry)?;
         let previous_entry = existing.as_ref().and_then(|state| {
             state
                 .entries
@@ -1134,6 +1140,7 @@ pub async fn stage_playlist_files(
             title: entry.title.clone(),
             duration_seconds: entry.duration_seconds,
             active: true,
+            liveness: Some(liveness),
             nfo_file: Some(nfo_file),
             availability: domain_availability(entry.availability),
             definition_sha256: Some(definition_sha256),
@@ -1199,7 +1206,7 @@ pub async fn stage_playlist_files(
         .as_ref()
         .is_none_or(|state| state.manifest_etag != manifest_etag);
     let state = PlaylistSidecarState {
-        version: 3,
+        version: PLAYLIST_SIDECAR_VERSION,
         manifest_etag,
         playlist_etag,
         last_sync: now,
@@ -1238,7 +1245,7 @@ fn persist_failed_sync(
         PlaylistError::Enumeration(format!("unable to create the managed folder: {error}"))
     })?;
     let mut state = existing.cloned().unwrap_or_else(|| PlaylistSidecarState {
-        version: 3,
+        version: PLAYLIST_SIDECAR_VERSION,
         manifest_etag: manifest_etag.clone(),
         playlist_etag: String::new(),
         last_sync: now,
@@ -1447,7 +1454,7 @@ fn load_sidecar(path: &Path) -> Result<Option<PlaylistSidecarState>> {
     let state: PlaylistSidecarState = serde_json::from_str(&value).map_err(|error| {
         PlaylistError::Enumeration(format!("managed playlist state is invalid: {error}"))
     })?;
-    if !matches!(state.version, 1..=3) {
+    if !matches!(state.version, 1..=PLAYLIST_SIDECAR_VERSION) {
         return Err(PlaylistError::Enumeration(format!(
             "managed playlist state version {} is unsupported",
             state.version
@@ -3126,6 +3133,7 @@ create_playlist: true
             title: format!("Title for {generated_id}"),
             duration_seconds: Some(60),
             active: true,
+            liveness: Some(RemoteStreamLiveness::Finite),
             nfo_file: Some(format!("{generated_id}.nfo")),
             availability: AddonMediaListItemAvailability::Available,
             definition_sha256: Some(format!("definition-{entry_etag}")),
@@ -3152,6 +3160,12 @@ create_playlist: true
             title: entry.title.clone(),
             duration_seconds: entry.duration_seconds,
             active: true,
+            liveness: Some(
+                entry
+                    .effective_liveness()
+                    .map(domain_liveness)
+                    .expect("fixture liveness"),
+            ),
             availability: domain_availability(entry.availability),
             entry_etag: Some(playlist_entry_etag(&definition_sha256, &nfo_sha256)),
             definition_sha256: Some(definition_sha256),
@@ -3163,7 +3177,7 @@ create_playlist: true
 
     fn membership_sidecar(entries: Vec<PlaylistSidecarEntry>) -> PlaylistSidecarState {
         PlaylistSidecarState {
-            version: 3,
+            version: PLAYLIST_SIDECAR_VERSION,
             manifest_etag: "manifest".to_owned(),
             playlist_etag: "playlist".to_owned(),
             last_sync: Utc::now(),
@@ -4539,6 +4553,7 @@ create_playlist: true
                 title: "Entry".to_owned(),
                 duration_seconds: None,
                 active: true,
+                liveness: None,
                 nfo_file: Some("entry.nfo".to_owned()),
                 availability: AddonMediaListItemAvailability::Available,
                 definition_sha256: Some(hex_hash(definition)),
@@ -4635,7 +4650,11 @@ create_playlist: true
         assert_eq!(nfo.producers, ["Example Producer"]);
         assert_eq!(nfo.original_broadcasters, ["Original Network"]);
         assert_eq!(nfo.broadcasters, ["Current Network"]);
-        assert_eq!(first.state.version, 3);
+        assert_eq!(first.state.version, PLAYLIST_SIDECAR_VERSION);
+        assert_eq!(
+            first.state.entries[0].liveness,
+            Some(RemoteStreamLiveness::Finite)
+        );
         let resolved = ersatzrs_infra::remote_stream::resolve_remote_stream_with_addons(
             &pool, &parsed, &runtime,
         )
@@ -4899,7 +4918,7 @@ create_playlist: true
         .await
         .expect("upgrade v1 state");
         assert!(upgraded.enumerated);
-        assert_eq!(upgraded.state.version, 3);
+        assert_eq!(upgraded.state.version, PLAYLIST_SIDECAR_VERSION);
         assert!(upgraded
             .state
             .entries

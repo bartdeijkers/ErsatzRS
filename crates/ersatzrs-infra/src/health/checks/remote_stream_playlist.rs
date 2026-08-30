@@ -1,6 +1,6 @@
 use super::super::{
-    async_trait, sqlx_error, Db, HealthCheck, HealthCheckResult, HealthCheckStatus, Pool, Result,
-    Row,
+    async_trait, sqlx_error, Db, HealthCheck, HealthCheckError, HealthCheckResult,
+    HealthCheckStatus, Pool, Result, Row,
 };
 use chrono::{DateTime, Utc};
 use ersatzrs_addon_contract::{
@@ -10,7 +10,9 @@ use ersatzrs_addon_contract::{
 };
 use semver::Version;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -72,6 +74,18 @@ struct HealthEntry {
     nfo_file: Option<String>,
     duration_seconds: Option<u64>,
     active: bool,
+    #[serde(default)]
+    liveness: Option<ersatzrs_domain::RemoteStreamLiveness>,
+    #[serde(default)]
+    definition_sha256: Option<String>,
+}
+
+#[derive(Default)]
+struct PlaylistHealthInspection {
+    manifests_found: bool,
+    failures: Vec<String>,
+    warnings: Vec<String>,
+    truncated: Vec<String>,
 }
 
 #[async_trait]
@@ -80,121 +94,21 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
         "Remote Stream playlists"
     }
 
-    #[allow(clippy::too_many_lines)]
     async fn check(&self) -> Result<HealthCheckResult> {
         let roots = remote_stream_library_roots(&self.pool).await?;
-        let manifests = roots
-            .iter()
-            .flat_map(|root| collect_manifests(root))
-            .collect::<Vec<_>>();
-        if manifests.is_empty() {
+        let addons = load_addons(&self.pool).await?;
+        let inspection = tokio::task::spawn_blocking(move || inspect_playlists(&roots, &addons))
+            .await
+            .map_err(|error| HealthCheckError::Process(error.to_string()))?;
+        if !inspection.manifests_found {
             return Ok(HealthCheckResult::not_applicable(self.title()));
         }
-        let addons = load_addons(&self.pool).await?;
-        let mut failures = Vec::new();
-        let mut warnings = Vec::new();
-        let mut truncated = Vec::new();
-        for path in manifests {
-            let fallback_name = manifest_name(&path);
-            let Ok(yaml) = std::fs::read_to_string(&path) else {
-                failures.push(format!("{fallback_name} cannot be read"));
-                continue;
-            };
-            let Ok(manifest) = serde_yaml::from_str::<HealthManifest>(&yaml) else {
-                failures.push(format!("{fallback_name} is invalid"));
-                continue;
-            };
-            let name = manifest
-                .name
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .unwrap_or(&fallback_name)
-                .to_owned();
-            let Some(addon_available) = addons.get(&manifest.addon) else {
-                failures.push(format!("{name} has an unknown add-on"));
-                continue;
-            };
-            if !addon_available {
-                failures.push(format!("{name} has an unavailable add-on"));
-                continue;
-            }
-            let interval =
-                parse_interval(&manifest.sync.interval).unwrap_or(Duration::from_secs(0));
-            if interval.is_zero() {
-                failures.push(format!("{name} has an invalid sync interval"));
-                continue;
-            }
-            let folder = manifest
-                .folder
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .unwrap_or(&fallback_name);
-            let sidecar_path = path
-                .parent()
-                .unwrap_or_else(|| Path::new("."))
-                .join(folder)
-                .join(".ersatzrs-playlist.json");
-            let state: HealthSidecar = match std::fs::read_to_string(sidecar_path)
-                .ok()
-                .and_then(|value| serde_json::from_str::<HealthSidecar>(&value).ok())
-            {
-                Some(state) if matches!(state.version, 1..=3) => state,
-                _ => {
-                    warnings.push(format!("{name} has never synchronized successfully"));
-                    continue;
-                }
-            };
-            if state.last_result.kind != "ok" {
-                failures.push(format!("{name} last synchronization failed"));
-                continue;
-            }
-            if state.last_result.entries == 0 {
-                warnings.push(format!("{name} synchronized without active entries"));
-            }
-            let stale_after = interval.checked_mul(2).unwrap_or(Duration::MAX);
-            if Utc::now()
-                .signed_duration_since(state.last_sync)
-                .to_std()
-                .is_ok_and(|age| age > stale_after)
-            {
-                warnings.push(format!("{name} is stale"));
-            }
-            let generated_folder = path.parent().unwrap_or_else(|| Path::new(".")).join(folder);
-            let missing = state
-                .entries
-                .iter()
-                .filter(|entry| {
-                    entry.active
-                        && entry.duration_seconds.is_none_or(|value| value == 0)
-                        && !managed_definition_is_live(&generated_folder, entry)
-                })
-                .count();
-            if missing > 0 {
-                warnings.push(format!("{name} has {missing} entries without duration"));
-            }
-            let missing_sidecars = state
-                .entries
-                .iter()
-                .filter(|entry| {
-                    entry.active
-                        && (!generated_folder.join(&entry.file).is_file()
-                            || entry
-                                .nfo_file
-                                .as_deref()
-                                .is_none_or(|file| !generated_folder.join(file).is_file()))
-                })
-                .count();
-            if missing_sidecars > 0 {
-                warnings.push(format!(
-                    "{name} has {missing_sidecars} missing managed definition or NFO sidecar(s)"
-                ));
-            }
-            if state.last_result.truncated {
-                truncated.push(name);
-            }
-        }
+        let PlaylistHealthInspection {
+            manifests_found: _,
+            failures,
+            warnings,
+            truncated,
+        } = inspection;
 
         if !failures.is_empty() {
             return Ok(HealthCheckResult::new(
@@ -230,16 +144,154 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
     }
 }
 
-fn managed_definition_is_live(folder: &Path, entry: &HealthEntry) -> bool {
-    std::fs::read_to_string(folder.join(&entry.file))
+#[allow(clippy::too_many_lines)]
+fn inspect_playlists(
+    roots: &[PathBuf],
+    addons: &BTreeMap<String, bool>,
+) -> PlaylistHealthInspection {
+    let manifests = roots
+        .iter()
+        .flat_map(|root| collect_manifests(root))
+        .collect::<Vec<_>>();
+    let mut inspection = PlaylistHealthInspection {
+        manifests_found: !manifests.is_empty(),
+        ..PlaylistHealthInspection::default()
+    };
+    for path in manifests {
+        let fallback_name = manifest_name(&path);
+        let Ok(yaml) = std::fs::read_to_string(&path) else {
+            inspection
+                .failures
+                .push(format!("{fallback_name} cannot be read"));
+            continue;
+        };
+        let Ok(manifest) = serde_yaml::from_str::<HealthManifest>(&yaml) else {
+            inspection
+                .failures
+                .push(format!("{fallback_name} is invalid"));
+            continue;
+        };
+        let name = manifest
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(&fallback_name)
+            .to_owned();
+        let Some(addon_available) = addons.get(&manifest.addon) else {
+            inspection
+                .failures
+                .push(format!("{name} has an unknown add-on"));
+            continue;
+        };
+        if !addon_available {
+            inspection
+                .failures
+                .push(format!("{name} has an unavailable add-on"));
+            continue;
+        }
+        let interval = parse_interval(&manifest.sync.interval).unwrap_or(Duration::from_secs(0));
+        if interval.is_zero() {
+            inspection
+                .failures
+                .push(format!("{name} has an invalid sync interval"));
+            continue;
+        }
+        let folder = manifest
+            .folder
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(&fallback_name);
+        let generated_folder = path.parent().unwrap_or_else(|| Path::new(".")).join(folder);
+        let sidecar_path = generated_folder.join(".ersatzrs-playlist.json");
+        let state: HealthSidecar = match std::fs::read_to_string(sidecar_path)
+            .ok()
+            .and_then(|value| serde_json::from_str::<HealthSidecar>(&value).ok())
+        {
+            Some(state) if matches!(state.version, 1..=4) => state,
+            _ => {
+                inspection
+                    .warnings
+                    .push(format!("{name} has never synchronized successfully"));
+                continue;
+            }
+        };
+        if state.last_result.kind != "ok" {
+            inspection
+                .failures
+                .push(format!("{name} last synchronization failed"));
+            continue;
+        }
+        if state.last_result.entries == 0 {
+            inspection
+                .warnings
+                .push(format!("{name} synchronized without active entries"));
+        }
+        let stale_after = interval.checked_mul(2).unwrap_or(Duration::MAX);
+        if Utc::now()
+            .signed_duration_since(state.last_sync)
+            .to_std()
+            .is_ok_and(|age| age > stale_after)
+        {
+            inspection.warnings.push(format!("{name} is stale"));
+        }
+        let missing = state
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry.active
+                    && entry.duration_seconds.is_none_or(|value| value == 0)
+                    && !managed_definition_is_validated_live(&generated_folder, entry)
+            })
+            .count();
+        if missing > 0 {
+            inspection
+                .warnings
+                .push(format!("{name} has {missing} entries without duration"));
+        }
+        let missing_sidecars = state
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry.active
+                    && (!generated_folder.join(&entry.file).is_file()
+                        || entry
+                            .nfo_file
+                            .as_deref()
+                            .is_none_or(|file| !generated_folder.join(file).is_file()))
+            })
+            .count();
+        if missing_sidecars > 0 {
+            inspection.warnings.push(format!(
+                "{name} has {missing_sidecars} missing managed definition or NFO sidecar(s)"
+            ));
+        }
+        if state.last_result.truncated {
+            inspection.truncated.push(name);
+        }
+    }
+    inspection
+}
+
+fn managed_definition_is_validated_live(folder: &Path, entry: &HealthEntry) -> bool {
+    if entry.liveness != Some(ersatzrs_domain::RemoteStreamLiveness::Live) {
+        return false;
+    }
+    let Some(expected_hash) = entry.definition_sha256.as_deref() else {
+        return false;
+    };
+    std::fs::read(folder.join(&entry.file))
         .ok()
-        .and_then(|yaml| crate::remote_stream::parse_remote_stream_definition(&yaml).ok())
-        .is_some_and(|definition| {
-            matches!(
-                definition.effective_liveness(),
-                Ok(ersatzrs_domain::RemoteStreamLiveness::Live)
-            )
-        })
+        .is_some_and(|bytes| hex_hash(&bytes) == expected_hash)
+}
+
+fn hex_hash(bytes: &[u8]) -> String {
+    let mut value = String::with_capacity(64);
+    for byte in Sha256::digest(bytes) {
+        write!(&mut value, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    value
 }
 
 async fn remote_stream_library_roots(pool: &Pool<Db>) -> Result<Vec<PathBuf>> {
@@ -379,17 +431,18 @@ mod tests {
     }
 
     fn write_live_entry(folder: &Path, state: &mut serde_json::Value) {
-        std::fs::write(
-            folder.join("entry.yml"),
-            "url: https://example.test/live\nliveness: live\nis_live: true\n",
-        )
-        .expect("live definition");
+        let definition = b"url: https://example.test/live\nliveness: live\nis_live: true\n";
+        std::fs::write(folder.join("entry.yml"), definition).expect("live definition");
         std::fs::write(folder.join("entry.nfo"), "").expect("NFO sidecar");
+        state["version"] = serde_json::json!(4);
         state["entries"][0]["nfo_file"] = serde_json::json!("entry.nfo");
+        state["entries"][0]["liveness"] = serde_json::json!("live");
+        state["entries"][0]["definition_sha256"] = serde_json::json!(hex_hash(definition));
         write_sidecar(folder, state);
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn health_reports_missing_duration_and_unknown_addon() {
         let temp = tempfile::TempDir::new().expect("temp dir");
         let root = temp.path().join("remote-streams");
@@ -486,6 +539,13 @@ mod tests {
         let result = check.check().await.expect("live health result");
         assert_eq!(result.status, HealthCheckStatus::Pass);
 
+        std::fs::write(folder.join("entry.yml"), "liveness: live\nis_live: true\n")
+            .expect("drifted invalid definition");
+        let result = check.check().await.expect("drifted live health result");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result.message.contains("1 entries without duration"));
+
+        write_live_entry(&folder, &mut state);
         state["last_result"]["entries"] = serde_json::json!(0);
         write_sidecar(&folder, &state);
         let result = check.check().await.expect("empty health result");

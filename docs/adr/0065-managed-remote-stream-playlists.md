@@ -31,6 +31,14 @@ including live two-connection InnoDB races, prove restart continuity and
 unrelated-row isolation; aggregate localized health reports stale or failed
 work without exposing source paths.
 
+Revised on 2026-08-30: version 4 playlist sidecars persist the validated
+effective liveness beside each generated definition hash. Playlist health runs
+recursive discovery and managed-file inspection on Tokio's blocking pool,
+trusts liveness only while the current definition matches that hash, and no
+longer parses one YAML definition per durationless entry on the async
+maintenance executor. Older sidecars remain readable but are refreshed before
+their cached result can be reused.
+
 ## Context
 
 At the time of this decision, ErsatzTV and ErsatzRS modeled one Remote Stream as
@@ -99,8 +107,9 @@ item count, and selected ordering before writing files. The enumeration entry
 name; ordinal position never determines identity. A versioned
 `.ersatzrs-playlist.json`
 sidecar records manifest and ordered-playlist hashes, timestamps, last outcome,
-entry order, managed file names, exclusions, and ownership. State and generated
-definitions are written with a sibling temporary file and atomic rename.
+entry order, managed file names, validated effective liveness, exclusions, and
+ownership. State and generated definitions are written with a sibling temporary
+file and atomic rename.
 The manifest hash includes the selected add-on identity, installed version, and
 verified package content hash, so activating updated package content forces one
 metadata refresh even when the normal synchronization interval has not elapsed.

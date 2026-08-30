@@ -21,6 +21,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Move Remote Stream playlist filesystem health inspection onto Tokio's
+  blocking pool and persist validated effective liveness in version 4 playlist
+  sidecars. Health verifies that metadata against the generated-definition hash
+  instead of synchronously YAML-parsing every durationless entry.
+
 - Skip a Remote Stream whose playback behavior or duration is unknown instead
   of refusing the whole playout build, matching ErsatzTV's `PlayoutBuilder`,
   which drops zero-duration items from a collection and keeps scheduling. A

@@ -75,8 +75,8 @@ id          = 'remote-stream-health-does-per-entry-blocking-io'
 description = 'P2: Keep Remote Stream playlist health bounded and async-safe instead of synchronously reading and YAML-parsing every durationless managed definition during each health run.'
 discovered  = '2026-08-30'
 adr         = '0065'
-evidence    = 'Review on 2026-08-30: the duration filter calls `std::fs::read_to_string` and `serde_yaml::from_str` once per active durationless sidecar entry inside async `check()`. Remote Stream lists accept up to `MAX_LIST_ITEMS = 10_000`, health checks run serially in the one-minute maintenance pass, and this O(N) blocking work can delay scheduler maintenance and later checks. Closure requires sidecar-carried validated liveness or bounded work off the async executor, without one blocking definition parse per entry.'
-resolved    = false
+evidence    = 'Resolved on 2026-08-30: Remote Stream playlist sidecar version 4 carries the production-validated effective liveness for each entry beside its generated-definition SHA-256. Health performs recursive discovery, manifest/sidecar reads, hash verification, and file checks in one `spawn_blocking` inspection; it exempts a durationless Live entry only when its current definition matches the recorded hash, and performs no per-entry YAML parse. Scanner and health regressions prove v4 liveness publication, valid-live exemption, legacy/invalid warning behavior, and hash-drift detection.'
+resolved    = true
 
 [[debt]]
 id          = 'hls-delivery-underrun-not-health-visible'
