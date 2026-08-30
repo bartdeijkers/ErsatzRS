@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.30-beta] - 2026-08-30
+
 ### Added
 
 - Add named advanced-search drafts to the smart-collection composer. Queries
