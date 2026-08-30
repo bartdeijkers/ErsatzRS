@@ -67,8 +67,8 @@ id          = 'invalid-remote-stream-definition-can-pass-health'
 description = 'P2: Validate generated Remote Stream definitions with the production parser before Live liveness suppresses a missing-duration warning, so an invalid managed definition cannot yield a passing health result.'
 discovered  = '2026-08-30'
 adr         = '0065'
-evidence    = 'Review on 2026-08-30: `managed_definition_is_live` deserializes `RemoteStreamDefinition` directly with `serde_yaml` and treats `liveness: live` as sufficient. Because playback fields are optional during raw deserialization, a definition with `liveness: live` and no `url` suppresses the duration warning and passes the later file-existence check, while `parse_remote_stream_definition` rejects the same file. Closure requires valid-live and invalid-live health regressions through the production validator.'
-resolved    = false
+evidence    = 'Resolved on 2026-08-30: `managed_definition_is_live` now calls the production `parse_remote_stream_definition` validator before inspecting effective liveness. `health_reports_missing_duration_and_unknown_addon` proves a valid live definition with a playback URL remains duration-exempt while the same Live declaration without a URL remains an actionable missing-duration warning.'
+resolved    = true
 
 [[debt]]
 id          = 'remote-stream-health-does-per-entry-blocking-io'

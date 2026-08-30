@@ -30,6 +30,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Validate managed Remote Stream definitions through the production parser
+  before treating them as duration-exempt live entries in health, preventing an
+  invalid definition with no playback URL from producing a passing result.
+
 - Preserve an existing Classic playout when Remote Stream filtering leaves a
   required schedule source empty. Reset and Refresh now refuse the destructive
   rebuild instead of clearing the materialized timeline without replacement.

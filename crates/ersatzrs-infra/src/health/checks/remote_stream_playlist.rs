@@ -233,13 +233,12 @@ impl HealthCheck for RemoteStreamPlaylistHealthCheck {
 fn managed_definition_is_live(folder: &Path, entry: &HealthEntry) -> bool {
     std::fs::read_to_string(folder.join(&entry.file))
         .ok()
-        .and_then(|yaml| {
-            serde_yaml::from_str::<crate::remote_stream::RemoteStreamDefinition>(&yaml).ok()
-        })
-        .is_some_and(|definition| match definition.liveness {
-            Some(ersatzrs_domain::RemoteStreamLiveness::Live) => true,
-            Some(_) => false,
-            None => definition.is_live,
+        .and_then(|yaml| crate::remote_stream::parse_remote_stream_definition(&yaml).ok())
+        .is_some_and(|definition| {
+            matches!(
+                definition.effective_liveness(),
+                Ok(ersatzrs_domain::RemoteStreamLiveness::Live)
+            )
         })
 }
 
@@ -380,8 +379,11 @@ mod tests {
     }
 
     fn write_live_entry(folder: &Path, state: &mut serde_json::Value) {
-        std::fs::write(folder.join("entry.yml"), "liveness: live\nis_live: true\n")
-            .expect("live definition");
+        std::fs::write(
+            folder.join("entry.yml"),
+            "url: https://example.test/live\nliveness: live\nis_live: true\n",
+        )
+        .expect("live definition");
         std::fs::write(folder.join("entry.nfo"), "").expect("NFO sidecar");
         state["entries"][0]["nfo_file"] = serde_json::json!("entry.nfo");
         write_sidecar(folder, state);
@@ -468,6 +470,15 @@ mod tests {
 
         let check = RemoteStreamPlaylistHealthCheck::new(pool.clone());
         let result = check.check().await.expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result.message.contains("1 entries without duration"));
+
+        std::fs::write(folder.join("entry.yml"), "liveness: live\nis_live: true\n")
+            .expect("invalid live definition");
+        std::fs::write(folder.join("entry.nfo"), "").expect("NFO sidecar");
+        state["entries"][0]["nfo_file"] = serde_json::json!("entry.nfo");
+        write_sidecar(&folder, &state);
+        let result = check.check().await.expect("invalid live health result");
         assert_eq!(result.status, HealthCheckStatus::Warning);
         assert!(result.message.contains("1 entries without duration"));
 
