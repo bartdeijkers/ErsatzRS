@@ -1725,6 +1725,7 @@ impl ClassicContext {
     }
 
     fn playout_anchor(&self, next_start: DateTime<Utc>) -> PlayoutAnchor {
+        let next_start = truncate_to_persisted_precision(next_start);
         PlayoutAnchor {
             schedule_items_enumerator_state: self.state.schedule_state,
             next_start,
@@ -1732,6 +1733,7 @@ impl ClassicContext {
             duration_finish: self
                 .state
                 .duration_finish
+                .map(truncate_to_persisted_precision)
                 .filter(|finish| *finish > next_start),
             in_flood: self.state.in_flood,
             in_duration_filler: self.state.in_duration_filler,
@@ -1741,7 +1743,7 @@ impl ClassicContext {
             .then(|| {
                 serde_json::to_string(&ClassicAnchorContext {
                     version: classic_anchor_context_version(),
-                    smart_shuffle: self.smart_shuffle_state.clone(),
+                    smart_shuffle: self.persisted_smart_shuffle_state(),
                     random_rotation_cycle_predecessors: self
                         .random_rotation_cycle_predecessors
                         .clone(),
@@ -1779,7 +1781,7 @@ impl ClassicContext {
                 .map(|index| self.schedule_items[*index].id)
                 .collect(),
             fill_group_states: self.fill_group_states.clone(),
-            smart_shuffle: self.smart_shuffle_state.clone(),
+            smart_shuffle: self.persisted_smart_shuffle_state(),
             random_rotation_cycle_predecessors: self.random_rotation_cycle_predecessors.clone(),
             sources: self.checkpoint_sources(),
         };
@@ -1790,6 +1792,12 @@ impl ClassicContext {
         });
         self.generated_dated_anchors
             .extend(self.program_schedule_anchors_at(Some(checkpoint_date)));
+    }
+
+    fn persisted_smart_shuffle_state(&self) -> SchedulingSmartShuffleState {
+        let mut state = self.smart_shuffle_state.clone();
+        state.normalize_timestamps(truncate_to_persisted_precision);
+        state
     }
 
     fn checkpoint_sources(&self) -> BTreeMap<String, ClassicCheckpointSource> {

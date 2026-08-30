@@ -31,6 +31,12 @@ the existing window remains untouched. The remaining reopened work is crf-02:
 the scanner still selects every playout with any program-schedule anchor as
 affected by Remote Stream membership instead of resolving real dependencies.
 
+All timestamp-bearing Classic anchor and checkpoint state is normalized before
+serialization to the 100-nanosecond precision used by persisted
+ErsatzTV-compatible timestamp columns. This includes the outer continuation
+seam, duration-mode boundary, and nested Smart Shuffle `release_at` values, so
+Refresh restores the same cooldown decisions as uninterrupted scheduling.
+
 ## Context
 
 A playout is a materialized timeline: rows in `PlayoutItem` that each carry a
@@ -212,3 +218,6 @@ items reflect the change, not just extended past it.**
   stable membership reconciliation, destructive preflight, legacy refusal,
   transactional SQLite/MySQL persistence, and health coverage. Dependency-
   scoped scan invalidation remains under crf-02.
+- 2026-08-30: Normalized every timestamp-bearing Classic checkpoint field to
+  persisted .NET tick precision and added a production repository round-trip
+  regression across an active Smart Shuffle duration cooldown.

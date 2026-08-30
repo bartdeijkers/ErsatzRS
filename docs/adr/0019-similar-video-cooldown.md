@@ -206,6 +206,10 @@ side effects:
   rooted in `PlayoutAnchor.Context`, while leaving ErsatzTV-compatible
   `PlayoutProgramScheduleAnchor` and `CollectionEnumeratorState` semantics
   unchanged.
+- Classic normalizes every persisted cooldown `release_at` value to the
+  100-nanosecond precision of the surrounding ErsatzTV-compatible timestamp
+  columns before serializing an anchor or checkpoint. This keeps Refresh and
+  Continue selection deterministic across a repository round trip.
 - `PlayoutHistory` remains useful for audit and resume hints, but is not the
   canonical cooldown store because history cleanup and old detail shapes do not
   retain arbitrary group tags.
@@ -297,3 +301,6 @@ to deterministic best-effort diversity with a warning, not an offline channel.
   be useful; item policy editing and playout-building behavior are unchanged.
 - 2026-08-05: Added the additive `content_rating`, `language`, and `music_label`
   grouping facets defined by ADR 0062; language tags group by canonical code.
+- 2026-08-30: Normalized Classic persisted Smart Shuffle release timestamps to
+  .NET tick precision so Refresh cannot change cooldown selection at a sub-tick
+  seam.

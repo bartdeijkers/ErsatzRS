@@ -60,12 +60,12 @@ release section when tagging a release.
   episode started. See ADR 0082.
 
 - Keep Classic playouts refreshable after the first build. Checkpoints are now
-  captured at the 100-nanosecond tick precision used by persisted timestamp
-  columns, so a checkpoint still matches its own scheduler continuation time
-  after a database round trip. Previously any checkpoint captured at sub-tick
-  precision read back as two different instants, every Refresh after a Reset
-  was refused with "checkpoint date and scheduler continuation time do not
-  match", and channels stopped streaming once the built window ran out.
+  captured wholly at the 100-nanosecond tick precision used by persisted
+  timestamp columns, including nested Smart Shuffle release times and duration
+  boundaries. A checkpoint therefore preserves both its scheduler continuation
+  time and cooldown selection after a database round trip. Previously a
+  sub-tick seam could either refuse every Refresh after a Reset or resume a
+  duration cooldown early and change the future media order.
 
 ## [1.0.29-beta] - 2026-08-28
 

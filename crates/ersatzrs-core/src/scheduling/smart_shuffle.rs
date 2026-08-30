@@ -341,6 +341,17 @@ impl SchedulingSmartShuffleState {
         self.buckets.is_empty()
     }
 
+    pub(crate) fn normalize_timestamps(
+        &mut self,
+        normalize: impl Fn(DateTime<Utc>) -> DateTime<Utc> + Copy,
+    ) {
+        for bucket in self.buckets.values_mut() {
+            for entry in bucket.active.values_mut() {
+                entry.release_at = entry.release_at.map(normalize);
+            }
+        }
+    }
+
     /// Select from the supplied base order without random rejection.
     #[must_use]
     pub fn select_candidate(

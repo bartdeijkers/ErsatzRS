@@ -5,8 +5,13 @@ use std::path::Path;
 
 use chrono::{DateTime, Duration, Timelike, Utc};
 use ersatzrs_core::locking::EntityLocker;
-use ersatzrs_core::repositories::ProgramScheduleRepository;
-use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
+use ersatzrs_core::playout_builder::PlayoutBuilder;
+use ersatzrs_core::repositories::{PlayoutRepository, ProgramScheduleRepository};
+use ersatzrs_core::scheduling::{
+    program_schedule_item_smart_shuffle_config_key, PlayoutBuildMode, PlayoutBuildRequest,
+    SchedulingRequest, SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset,
+    SchedulingSmartShuffleRule, SchedulingSmartShuffleRuleKind,
+};
 use ersatzrs_domain::{
     CollectionType, EntityId, PlaybackOrder, PlayoutMode, ProgramScheduleItem,
     ScanPlayoutRefreshReason,
@@ -606,6 +611,220 @@ async fn classic_refresh_survives_checkpoint_round_trip_at_sub_tick_precision() 
     assert_build_succeeded(&pool, RELATED_PLAYOUT_ID, "refresh").await;
 
     pool.close().await;
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn classic_smart_shuffle_refresh_matches_uninterrupted_cooldown_across_round_trip() {
+    let directory = tempfile::tempdir().expect("temporary database directory");
+    let database_path = directory.path().join("smart-shuffle-ticks.sqlite");
+    let build_at = common::fixed_time()
+        .with_nanosecond(881_033_940)
+        .expect("sub-tick build timestamp");
+    let pool = open_database(&database_path, true).await;
+    seed_acceptance_fixture(&pool).await;
+    seed_smart_shuffle_cooldown(&pool).await;
+
+    let oracle_reference =
+        ersatzrs_infra::repositories::SqliteSchedulingContentRepository::new(pool.clone())
+            .classic_reference_data(RELATED_PLAYOUT_ID, build_at, Duration::zero())
+            .await
+            .expect("load pre-build Classic reference data");
+    run_classic_build(&pool, RELATED_PLAYOUT_ID, PlayoutBuildMode::Reset, build_at).await;
+
+    let repositories = make_repositories(pool.clone());
+    let persisted_playout = repositories
+        .playout
+        .get_with_anchor(RELATED_PLAYOUT_ID)
+        .await
+        .expect("load seeded playout");
+    let first_leg_reference =
+        ersatzrs_infra::repositories::SqliteSchedulingContentRepository::new(pool.clone())
+            .classic_reference_data(RELATED_PLAYOUT_ID, build_at, Duration::zero())
+            .await
+            .expect("load first-leg checkpoints");
+    let seam_checkpoint = first_leg_reference
+        .existing_classic_checkpoints
+        .iter()
+        .filter(|checkpoint| checkpoint.checkpoint_date > build_at)
+        .min_by_key(|checkpoint| checkpoint.checkpoint_date)
+        .expect("the first leg must cross a populated daily checkpoint");
+    assert!(
+        seam_checkpoint.context.contains("release_at"),
+        "the regression checkpoint must carry an active duration cooldown"
+    );
+    assert_json_timestamps_at_tick_precision(
+        &serde_json::from_str(&seam_checkpoint.context).expect("checkpoint context JSON"),
+    );
+    let seam = seam_checkpoint.checkpoint_date;
+    let finish = seam + Duration::days(2);
+
+    let mut oracle_playout = persisted_playout.clone();
+    oracle_playout.anchor = None;
+    let oracle = PlayoutBuilder::default()
+        .build(SchedulingRequest {
+            playout: oracle_playout,
+            start: build_at,
+            finish,
+            mode: PlayoutBuildMode::Reset,
+            reference_data: oracle_reference,
+        })
+        .expect("build uninterrupted Smart Shuffle oracle");
+
+    sqlx::query(
+        r#"UPDATE "ConfigElement" SET "Value" = '2' WHERE "Key" = 'playout.days_to_build'"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("extend Refresh window");
+    pool.close().await;
+
+    let reopened = open_database(&database_path, false).await;
+    run_classic_build(
+        &reopened,
+        RELATED_PLAYOUT_ID,
+        PlayoutBuildMode::Refresh,
+        seam,
+    )
+    .await;
+    assert_build_succeeded(&reopened, RELATED_PLAYOUT_ID, "Smart Shuffle refresh").await;
+
+    let comparison_finish = seam + Duration::hours(2);
+    let oracle_comparison_start =
+        seam - Duration::nanoseconds(i64::from(seam.timestamp_subsec_nanos()));
+    let oracle_comparison_finish = oracle_comparison_start + Duration::hours(2);
+    let actual_items = make_repositories(reopened.clone())
+        .playout
+        .items_in_range(RELATED_PLAYOUT_ID, seam, comparison_finish)
+        .await
+        .expect("load refreshed future items")
+        .into_iter()
+        .filter(|item| item.start >= seam && item.start < comparison_finish)
+        .map(|item| (item.media_item_id, item.start, item.finish))
+        .collect::<Vec<_>>();
+    let expected_items = oracle
+        .added_items
+        .iter()
+        .filter(|item| {
+            item.start >= oracle_comparison_start && item.start < oracle_comparison_finish
+        })
+        .map(|item| {
+            (
+                item.media_item_id,
+                ersatzrs_core::scheduling::truncate_to_persisted_precision(item.start),
+                ersatzrs_core::scheduling::truncate_to_persisted_precision(item.finish),
+            )
+        })
+        .collect::<Vec<_>>();
+    let actual_origin = actual_items.first().expect("refreshed future items").1;
+    let expected_origin = expected_items.first().expect("oracle future items").1;
+    let actual_signatures = actual_items
+        .iter()
+        .map(|(media_id, start, finish)| (*media_id, *start - actual_origin, *finish - *start))
+        .collect::<Vec<_>>();
+    let expected_signatures = expected_items
+        .iter()
+        .map(|(media_id, start, finish)| (*media_id, *start - expected_origin, *finish - *start))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actual_signatures, expected_signatures,
+        "restored duration cooldowns must preserve future media identities and relative timestamps"
+    );
+
+    let actual_reference =
+        ersatzrs_infra::repositories::SqliteSchedulingContentRepository::new(reopened.clone())
+            .classic_reference_data(RELATED_PLAYOUT_ID, seam, Duration::zero())
+            .await
+            .expect("reload refreshed checkpoints");
+    let actual_contexts = actual_reference
+        .existing_classic_checkpoints
+        .iter()
+        .filter(|checkpoint| checkpoint.checkpoint_date >= seam)
+        .take(1)
+        .map(|checkpoint| (checkpoint.checkpoint_date, checkpoint.context.clone()))
+        .collect::<Vec<_>>();
+    let expected_contexts = oracle
+        .classic_checkpoints
+        .iter()
+        .filter(|checkpoint| checkpoint.checkpoint_date >= seam)
+        .take(1)
+        .map(|checkpoint| (checkpoint.checkpoint_date, checkpoint.context.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actual_contexts, expected_contexts,
+        "repository round-trip must preserve future checkpoint contexts"
+    );
+
+    let actual_anchor = make_repositories(reopened.clone())
+        .playout
+        .get_with_anchor(RELATED_PLAYOUT_ID)
+        .await
+        .expect("reload refreshed playout")
+        .anchor
+        .expect("refreshed anchor");
+    let expected_anchor = oracle.anchor.expect("oracle anchor");
+    assert_eq!(actual_anchor.next_start, expected_anchor.next_start);
+    assert_eq!(actual_anchor.context, expected_anchor.context);
+    reopened.close().await;
+}
+
+async fn seed_smart_shuffle_cooldown(pool: &SqlitePool) {
+    pool.execute(
+        r#"INSERT INTO "PlaylistItem" (
+               "Id", "Index", "PlaylistId", "CollectionType", "MediaItemId",
+               "IncludeInProgramGuide", "PlaybackOrder", "PlayAll"
+           ) VALUES
+               (102, 1, 11, 'Movie', 102, 1, 'Shuffle', 1),
+               (103, 2, 11, 'Movie', 201, 1, 'Shuffle', 1);
+           UPDATE "PlaylistItem" SET "PlaybackOrder" = 'Shuffle' WHERE "PlaylistId" = 11;
+           UPDATE "ProgramScheduleItem" SET "PlaybackOrder" = 'Shuffle' WHERE "Id" = 401"#,
+    )
+    .await
+    .expect("seed randomized playlist");
+    let policy = SchedulingSmartShufflePolicy {
+        enabled: true,
+        preset: SchedulingSmartShufflePreset::Custom,
+        after_duration: Some("00:20:00".to_owned()),
+        rules: vec![SchedulingSmartShuffleRule {
+            id: "related".to_owned(),
+            kind: SchedulingSmartShuffleRuleKind::Filter,
+            search: Some("title contains Related".to_owned()),
+        }],
+        ..SchedulingSmartShufflePolicy::default()
+    };
+    sqlx::query(r#"INSERT OR REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+        .bind(program_schedule_item_smart_shuffle_config_key(401))
+        .bind(serde_json::to_string(&policy).expect("serialize Smart Shuffle policy"))
+        .execute(pool)
+        .await
+        .expect("persist Smart Shuffle policy");
+}
+
+fn assert_json_timestamps_at_tick_precision(value: &serde_json::Value) {
+    match value {
+        serde_json::Value::Array(values) => {
+            for value in values {
+                assert_json_timestamps_at_tick_precision(value);
+            }
+        }
+        serde_json::Value::Object(values) => {
+            for value in values.values() {
+                assert_json_timestamps_at_tick_precision(value);
+            }
+        }
+        serde_json::Value::String(value) => {
+            if let Ok(timestamp) = DateTime::parse_from_rfc3339(value) {
+                assert_eq!(
+                    timestamp.timestamp_subsec_nanos() % 100,
+                    0,
+                    "checkpoint timestamp is below persisted tick precision: {value}"
+                );
+            } else if let Ok(nested) = serde_json::from_str(value) {
+                assert_json_timestamps_at_tick_precision(&nested);
+            }
+        }
+        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
+    }
 }
 
 async fn assert_build_succeeded(pool: &SqlitePool, playout_id: EntityId, stage: &str) {

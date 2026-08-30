@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-08-30","summary":"Repaired the P1 playout-preservation debt and three P2 health and Classic checkpoint parity debts in four scoped commits."}
 {"agent":"Codex","date":"2026-08-29","summary":"Implemented PCR-clocked TSDuck delivery acceptance plus sanitized live HLS segment under-run telemetry and health; Windows VLC exact-candidate acceptance remains open."}
 {"agent":"Codex","date":"2026-08-29","summary":"Filtered non-actionable live, excluded, and unpublished states from health warnings with focused regressions."}
 {"agent":"Codex","date":"2026-08-28","summary":"Implemented Proposal B settings navigation, responsive section cards, sticky actions, and the standardized Logs workbench with browser coverage."}
