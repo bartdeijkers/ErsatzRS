@@ -194,6 +194,17 @@ pub async fn scan_addon_repositories() -> Result<(), ServerFnError> {
 }
 
 #[server]
+pub async fn remove_addon_repository(repository_id: String) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    expect_context::<AppState>()
+        .application
+        .remove_addon_repository(repository_id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
 pub async fn install_addon_package(
     repository_id: String,
     addon_id: String,

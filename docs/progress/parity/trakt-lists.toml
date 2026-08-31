@@ -18,6 +18,14 @@ public shared-list, and saved-search hyperlinks.
 '''
 
 [[debt]]
+id          = 'core-playlist-pages-retain-trakt-specific-assumptions'
+description = 'Remove residual Trakt-specific code and vocabulary from the core playlist and provider-neutral add-on-list admin pages so provider behavior can enter the host only through the add-on contracts.'
+discovered  = '2026-08-31'
+evidence    = 'Maintainer request on 2026-08-31. The provider-neutral add-on-list module still named the retired upstream Trakt pages in active page documentation, the add-on contract fixture used a Trakt-specific secret reference, and core locking documentation retained Trakt examples even though the native provider was dropped by ADR 0069.'
+resolved    = true
+resolution  = 'The active core, contract, and admin page references are provider-neutral. `cargo xtask architecture-lint` now rejects case-insensitive Trakt vocabulary in the core playlist and add-on-list page sources, while legacy schema-removal migrations and compatibility tests remain intentionally available to clean upgrades from older installations.'
+
+[[debt]]
 id          = 'local-trakt-operations-require-noop-api-client'
 description = 'Local Trakt matching/generated-playlist operations require a synchronizer generic that includes remote API methods, so callers inject NoopTraktApiClient and rely on those methods never being reached.'
 discovered  = '2026-07-21'

@@ -7,14 +7,20 @@ use crate::{
 };
 use axum::{
     body::Body,
-    extract::{Multipart, Path, State},
+    extract::{Form, Multipart, Path, State},
     http::{header, StatusCode},
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
     Json,
 };
+use serde::Deserialize;
 use serde_json::json;
 
 pub const MAX_ADDON_UPLOAD_BYTES: usize = 256 * 1024 * 1024;
+
+#[derive(Debug, Deserialize)]
+pub struct RemoveAddonRepositoryForm {
+    repository_id: String,
+}
 
 pub async fn upload_addon_package(State(state): State<AppState>, multipart: Multipart) -> Response {
     let language = error_language(&state).await;
@@ -50,6 +56,27 @@ pub async fn upload_repository_bundle(
             StatusCode::UNPROCESSABLE_ENTITY,
             upload_error_text(language, &error.to_string()),
         ),
+    }
+}
+
+pub async fn remove_repository_bundle(
+    State(state): State<AppState>,
+    Form(input): Form<RemoveAddonRepositoryForm>,
+) -> Redirect {
+    match state
+        .application
+        .remove_addon_repository(input.repository_id.clone())
+        .await
+    {
+        Ok(()) => Redirect::to("/settings/addons?view=sources"),
+        Err(error) => {
+            tracing::error!(
+                %error,
+                repository_id = %input.repository_id,
+                "failed to remove add-on repository bundle from HTML form"
+            );
+            Redirect::to("/settings/addons?view=sources&error=delete-repository")
+        }
     }
 }
 

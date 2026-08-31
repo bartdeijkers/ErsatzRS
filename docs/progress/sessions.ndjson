@@ -1,3 +1,5 @@
+{"agent":"Codex","date":"2026-08-31","summary":"Implemented removable offline add-on bundles, persisted no-JS and drag-sortable playlist ordering, and removed Trakt-specific core playlist assumptions."}
+{"agent":"Codex","date":"2026-08-31","summary":"Implemented bounded live HLS 1080p-to-720p add-on fallback with play v2, verified cooldown, health visibility, and yt-dlp support; exact Windows acceptance remains open."}
 {"agent":"Codex","date":"2026-08-30","summary":"Refreshed PR 95 dependency rollup and preserved pre-2.22 MiniJinja template scalar output."}
 {"agent":"Codex","date":"2026-08-30","summary":"Fixed search composer P1/P2 review findings, added reusable advanced-query drafts, and completed Chromium/Firefox visual UX finetuning."}
 {"agent":"Codex","date":"2026-08-30","summary":"Implemented ADR 0083 results-first search and dedicated smart collection composer"}

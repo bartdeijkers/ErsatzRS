@@ -9,10 +9,11 @@ use leptos_router::hooks::use_params_map;
 use crate::admin::i18n::{delete_failed, media_browser_error_message, tr, TextKey};
 use crate::admin::server_fns::media_browser::{
     create_playlist, create_playlist_group, delete_playlist, delete_playlist_group,
-    get_playlist_editor, get_playlist_editor_options, get_playlist_page, preview_playlist_playout,
-    PlaylistEditorForm, PlaylistEditorOptions, PlaylistItemForm, PlaylistItemOption,
-    PlaylistPageData, PlaylistPreviewRow, PlaylistRow,
+    get_playlist_page, preview_playlist_playout, PlaylistEditorForm, PlaylistEditorOptions,
+    PlaylistItemForm, PlaylistItemOption, PlaylistPageData, PlaylistPreviewRow, PlaylistRow,
 };
+#[cfg(feature = "ssr")]
+use crate::admin::server_fns::media_browser::{get_playlist_editor, get_playlist_editor_options};
 use crate::admin::ui::primitives::{
     dialog::DeleteDialog,
     icon::{icon_style, IconName},
@@ -352,25 +353,37 @@ fn playlist_row(
 pub fn PlaylistEditorPage() -> impl IntoView {
     let params = use_params_map();
     let id = params.with(|p| p.get("id").and_then(|s| s.parse::<i64>().ok()).unwrap_or(0));
-    let initial = Resource::new_blocking(
-        move || id,
-        |id| async move { tokio::try_join!(get_playlist_editor(id), get_playlist_editor_options()) },
-    );
+    admin_result_view(
+        load_playlist_editor_initial(id),
+        move |(initial_form, initial_options)| {
+            view! {
+                <PlaylistEditorIsland
+                    id
+                    initial_form=initial_form
+                    initial_options=initial_options
+                />
+            }
+            .into_any()
+        },
+    )
+}
 
-    view! {
-        <Suspense fallback=admin_loading_resource_view>
-            {move || initial.get().map(|result| admin_result_view(result, |(initial_form, initial_options)| {
-                    view! {
-                        <PlaylistEditorIsland
-                            id
-                            initial_form=initial_form
-                            initial_options=initial_options
-                        />
-                    }
-                    .into_any()
-            }))}
-        </Suspense>
-    }
+type PlaylistEditorInitial = (Option<PlaylistEditorForm>, PlaylistEditorOptions);
+
+#[cfg(feature = "ssr")]
+fn load_playlist_editor_initial(id: i64) -> Result<PlaylistEditorInitial, String> {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current()
+            .block_on(async move {
+                tokio::try_join!(get_playlist_editor(id), get_playlist_editor_options())
+            })
+            .map_err(|error| error.to_string())
+    })
+}
+
+#[cfg(not(feature = "ssr"))]
+fn load_playlist_editor_initial(_id: i64) -> Result<PlaylistEditorInitial, String> {
+    Err("the playlist editor is loaded by server-side rendering".to_owned())
 }
 
 #[island]
@@ -397,6 +410,7 @@ fn PlaylistEditorIsland(
     );
     let options = RwSignal::new(initial_options);
     let selected = RwSignal::new(None::<usize>);
+    let dragged_item = RwSignal::new(None::<usize>);
     let preview_rows: RwSignal<Vec<PlaylistPreviewRow>> = RwSignal::new(Vec::new());
     let preview_message = RwSignal::new(String::new());
     let not_found = initial_form.is_none();
@@ -472,6 +486,7 @@ fn PlaylistEditorIsland(
                                     <span>{tr(TextKey::Name)}</span>
                                     <input
                                         name="name"
+                                        value=name.get_untracked()
                                         prop:value=move || name.get()
                                         disabled=move || is_system.get()
                                         on:input=move |event| name.set(event_target_value(&event))
@@ -486,6 +501,7 @@ fn PlaylistEditorIsland(
                                         <table>
                                             <thead>
                                                 <tr>
+                                                    <th class=style::drag_column/>
                                                     <th>{tr(TextKey::ItemType)}</th>
                                                     <th>{tr(TextKey::Item)}</th>
                                                     <th>{tr(TextKey::PlaybackOrder)}</th>
@@ -510,12 +526,38 @@ fn PlaylistEditorIsland(
                                                     view! {
                                                         <tr
                                                             class=if selected_row { style::selected_row } else { "" }
+                                                            data-playlist-item-row="true"
+                                                            data-playlist-item-index=idx.to_string()
+                                                            on:dragover=move |event| {
+                                                                if !readonly && dragged_item.get_untracked().is_some() {
+                                                                    event.prevent_default();
+                                                                }
+                                                            }
+                                                            on:drop=move |event| {
+                                                                event.prevent_default();
+                                                                if let Some(from) = dragged_item.get_untracked() {
+                                                                    reorder_item(items, selected, from, idx);
+                                                                }
+                                                                dragged_item.set(None);
+                                                            }
                                                             on:click=move |_| {
                                                                 selected.update(|current| {
                                                                     *current = if *current == Some(idx) { None } else { Some(idx) };
                                                                 });
                                                             }
                                                         >
+                                                            <td class=style::drag_cell>
+                                                                {(!readonly).then(|| view! {
+                                                                    <span
+                                                                        class=style::drag_handle
+                                                                        draggable="true"
+                                                                        title=tr(TextKey::ReorderPlaylistItem)
+                                                                        aria-label=tr(TextKey::ReorderPlaylistItem)
+                                                                        on:dragstart=move |_| dragged_item.set(Some(idx))
+                                                                        on:dragend=move |_| dragged_item.set(None)
+                                                                    >"⋮⋮"</span>
+                                                                })}
+                                                            </td>
                                                             <td>{item_type_label_i18n(collection_type)}</td>
                                                             <td>{item_name}</td>
                                                             <td>{playback_order_label_i18n(playback_order)}</td>
@@ -567,8 +609,28 @@ fn PlaylistEditorIsland(
                                                                     view! {
                                                                         <div class=style::row_actions>
                                                                             <button type="button" class=style::btn_edit on:click=move |_| copy_item(items, selected, idx)>{tr(TextKey::Copy)}</button>
-                                                                            <button type="button" class=style::btn_edit disabled=idx == 0 on:click=move |_| move_item(items, selected, idx, -1)>{tr(TextKey::MoveUp)}</button>
-                                                                            <button type="button" class=style::btn_edit disabled=move || { idx + 1 >= items.get().len() } on:click=move |_| move_item(items, selected, idx, 1)>{tr(TextKey::MoveDown)}</button>
+                                                                            <button
+                                                                                type="submit"
+                                                                                name="item_move"
+                                                                                value=format!("up:{idx}")
+                                                                                class=style::btn_edit
+                                                                                disabled=idx == 0
+                                                                                on:click=move |event| {
+                                                                                    event.prevent_default();
+                                                                                    move_item(items, selected, idx, -1);
+                                                                                }
+                                                                            >{tr(TextKey::MoveUp)}</button>
+                                                                            <button
+                                                                                type="submit"
+                                                                                name="item_move"
+                                                                                value=format!("down:{idx}")
+                                                                                class=style::btn_edit
+                                                                                disabled=move || { idx + 1 >= items.get().len() }
+                                                                                on:click=move |event| {
+                                                                                    event.prevent_default();
+                                                                                    move_item(items, selected, idx, 1);
+                                                                                }
+                                                                            >{tr(TextKey::MoveDown)}</button>
                                                                             <button type="button" class=style::btn_delete on:click=move |_| remove_item(items, selected, idx)>{tr(TextKey::Delete)}</button>
                                                                         </div>
                                                                     }.into_any()
@@ -950,6 +1012,22 @@ fn move_item(
             rows.swap(idx, target);
             selected.set(Some(target));
         }
+    });
+}
+
+fn reorder_item(
+    items: RwSignal<Vec<PlaylistItemForm>>,
+    selected: RwSignal<Option<usize>>,
+    from: usize,
+    to: usize,
+) {
+    items.update(|rows| {
+        if from >= rows.len() || to >= rows.len() || from == to {
+            return;
+        }
+        let row = rows.remove(from);
+        rows.insert(to, row);
+        selected.set(Some(to));
     });
 }
 

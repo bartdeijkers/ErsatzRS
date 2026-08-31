@@ -60,6 +60,14 @@ frozen compatibility path.
 '''
 
 [[debt]]
+id          = 'offline-repository-bundle-cannot-be-removed-in-admin'
+description = 'Let an administrator undo importing an offline repository ZIP from the Sources view. After explicit confirmation, remove the local bundle source, its discovered offers, scan state, and managed staged bundle without uninstalling independently installed add-on snapshots or deleting their settings and data. The action must be localized, support the no-JS fallback, reject checkout/deployment-owned sources, and leave no stale source or health rows.'
+discovered  = '2026-08-31'
+evidence    = 'Maintainer request on 2026-08-31. The Sources table renders local repository rows with an empty action cell, while the admin API only exposes repository-bundle upload and repository scan. `remove_trusted_repository` removes a legacy database allowlist row and is not wired to the local-bundle source lifecycle or admin UI. Close with focused persistence/cleanup tests plus hydrated and no-JS browser proof that an imported bundle can be removed while an installed add-on from that bundle remains runnable with its settings intact.'
+resolved    = true
+resolution  = 'The Sources table now offers Delete only for uploaded bundle sources. Infra validates that the stored path remains under the managed bundle root, transactionally removes source state and offers, clears installation provenance through the existing foreign key, and removes the staged bundle while preserving installed package snapshots, settings, and data. `removing_bundle_source_preserves_installed_snapshot_and_cleans_offers` and `removing_checkout_source_is_rejected_without_mutation` cover persistence and ownership; `tests/e2e/addons.spec.ts` proves both the hydrated confirmation flow and the server-rendered no-JavaScript form against a real host.'
+
+[[debt]]
 id          = 'addon-media-list-invocation-is-not-resumable'
 description = 'Replace the single whole-list process deadline with host-owned bounded discover/enrich invocations, durable checkpoints, retry/backoff, cancellation, and restart recovery.'
 discovered  = '2026-08-22'

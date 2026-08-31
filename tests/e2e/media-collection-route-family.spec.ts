@@ -19,6 +19,7 @@ type Seed = {
   playlistGroupId: number;
   playlistId: number;
   playlistItemId: number;
+  playlistSecondItemId: number;
   fillerPresetId: number;
 };
 
@@ -68,7 +69,8 @@ function seedRouteFamily(testInfo: TestInfo): Seed {
     playlistGroupId: base + 5,
     playlistId: base + 6,
     playlistItemId: base + 7,
-    fillerPresetId: base + 8,
+    playlistSecondItemId: base + 8,
+    fillerPresetId: base + 9,
   };
 
   sqlite(`
@@ -103,6 +105,10 @@ INSERT INTO "PlaylistItem" (
   "Id", "Index", "PlaylistId", "CollectionType", "CollectionId",
   "PlaybackOrder", "Count", "PlayAll", "IncludeInProgramGuide"
 ) VALUES (${seed.playlistItemId}, 0, ${seed.playlistId}, 0, ${seed.collectionId}, 1, 1, 0, 1);
+INSERT INTO "PlaylistItem" (
+  "Id", "Index", "PlaylistId", "CollectionType", "SmartCollectionId",
+  "PlaybackOrder", "Count", "PlayAll", "IncludeInProgramGuide"
+) VALUES (${seed.playlistSecondItemId}, 1, ${seed.playlistId}, 5, ${seed.smartCollectionId}, 1, 1, 0, 1);
 INSERT INTO "FillerPreset" (
   "Id", "Name", "FillerKind", "FillerMode", "Duration", "Count",
   "PadToNearestMinute", "AllowWatermarks", "CollectionType", "CollectionId",
@@ -266,6 +272,16 @@ test.describe('media collection route-family parity', () => {
     await fallbackForm.locator('input[name="name"]').fill(fallbackName);
     await fallbackForm.getByRole('button', { name: /add multi collection/i }).click();
     await expect(noJsPage).toHaveURL(/\/media\/multi-collections$/);
+
+    await noJsPage.goto(`/media/playlists/${seed.playlistId}`);
+    const noJsRows = noJsPage.locator('tr[data-playlist-item-row]');
+    await expect(noJsRows).toHaveCount(2);
+    await noJsRows.nth(0).getByRole('button', { name: /^move down$/i }).click();
+    await expect(noJsPage).toHaveURL(/\/media\/playlists$/);
+    expect(sqlite(`
+SELECT "CollectionType" FROM "PlaylistItem"
+WHERE "PlaylistId" = ${seed.playlistId} ORDER BY "Index";
+`)).toBe('5\n0');
     await noJsContext.close();
     expect(sqlite(`
 SELECT COUNT(*) FROM "MultiCollection" WHERE "Name" = '${sqlEscape(fallbackName)}';
@@ -309,10 +325,27 @@ SELECT COUNT(*) FROM "MultiCollection" WHERE "Name" = '${sqlEscape(fallbackName)
     await expect(page.locator('li').filter({ hasText: 'E2E Playlist' })).toBeVisible();
     await page.goto(`/media/playlists/${seed.playlistId}`);
     await expect(page.getByRole('heading', { name: 'Playlist', exact: true })).toBeVisible();
-    await expect(page.getByText('E2E Manual Collection').first()).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => window.__ersatzrs_hydrated === true))
+      .toBe(true);
+    const playlistRows = page.locator('tr[data-playlist-item-row]');
+    await expect(playlistRows).toHaveCount(2);
+    await expect(playlistRows.nth(0)).toContainText('E2E Smart Collection');
+    await expect(playlistRows.nth(1)).toContainText('E2E Manual Collection');
     await expect(page.getByRole('button', { name: /^copy$/i }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /^move down$/i }).first()).toBeDisabled();
+    await expect(page.getByRole('button', { name: /^move down$/i }).first()).toBeEnabled();
     await expect(page.getByRole('button', { name: /^delete$/i }).first()).toBeVisible();
+    await playlistRows
+      .nth(0)
+      .locator('[draggable="true"]')
+      .dragTo(playlistRows.nth(1));
+    await expect(playlistRows.nth(0)).toContainText('E2E Manual Collection');
+    await page.getByRole('button', { name: 'Save Playlist', exact: true }).click();
+    await expect(page).toHaveURL(/\/media\/playlists$/);
+    expect(sqlite(`
+SELECT "CollectionType" FROM "PlaylistItem"
+WHERE "PlaylistId" = ${seed.playlistId} ORDER BY "Index";
+`)).toBe('0\n5');
 
     await page.goto('/media/filler/presets');
     await expectContentGeometry(page, 'Filler Presets');

@@ -16,12 +16,13 @@ use crate::admin::i18n::{provide_i18n_context, tr, use_i18n, TextKey};
 use crate::admin::server_fns::addons::load_addon_detail;
 use crate::admin::server_fns::addons::{
     check_addon_package, disable_addon_package, enable_addon_package, install_addon_package,
-    load_addon_overview, save_addon_configuration, save_addon_detail_wait_settings,
-    scan_addon_repositories, set_default_remote_stream_addon, set_unverified_addon_sources,
-    uninstall_addon_package, AddonDetail, AddonDetailWaitSettingsForm, AddonOverview,
-    AddonRepositoryRow, AddonSettingEditor, AddonSettingRow, AvailableAddonRow, InstalledAddonRow,
+    load_addon_overview, remove_addon_repository, save_addon_configuration,
+    save_addon_detail_wait_settings, scan_addon_repositories, set_default_remote_stream_addon,
+    set_unverified_addon_sources, uninstall_addon_package, AddonDetail,
+    AddonDetailWaitSettingsForm, AddonOverview, AddonRepositoryRow, AddonSettingEditor,
+    AddonSettingRow, AvailableAddonRow, InstalledAddonRow,
 };
-use crate::admin::ui::primitives::dialog::Modal;
+use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::resource_state::AdminErrorState;
 use crate::admin::ui::primitives::settings_navigation::{
     SettingsPageLayout, SettingsPageLayoutForPath,
@@ -55,10 +56,38 @@ pub fn AddonsSettingsPage() -> impl IntoView {
             params.get("state").unwrap_or_else(|| "all".to_owned()),
         )
     });
-    view! {
-        <SettingsPageLayout>
-            <AddonsSettingsIsland initial_view initial_search initial_filter/>
-        </SettingsPageLayout>
+    match load_addon_overview_initial() {
+        Ok(initial_overview) => view! {
+            <SettingsPageLayout>
+                <AddonsSettingsIsland
+                    initial_view
+                    initial_search
+                    initial_filter
+                    initial_overview
+                />
+            </SettingsPageLayout>
+        }
+        .into_any(),
+        Err(error) => view! {
+            <SettingsPageLayout><AdminErrorState error/></SettingsPageLayout>
+        }
+        .into_any(),
+    }
+}
+
+fn load_addon_overview_initial() -> Result<Option<AddonOverview>, String> {
+    #[cfg(feature = "ssr")]
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(load_addon_overview())
+                .map(Some)
+                .map_err(|error| error.to_string())
+        })
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        Ok(None)
     }
 }
 
@@ -107,6 +136,7 @@ fn AddonsSettingsIsland(
     initial_view: String,
     initial_search: String,
     initial_filter: String,
+    initial_overview: Option<AddonOverview>,
 ) -> impl IntoView {
     provide_i18n_context();
     let toast = use_toast();
@@ -114,7 +144,7 @@ fn AddonsSettingsIsland(
         LocalResource::new(
             move || async move { load_or_notify(load_addon_overview().await, toast) },
         );
-    let current = RwSignal::new(None::<AddonOverview>);
+    let current = RwSignal::new(initial_overview);
     let detail_wait = DetailWaitEditor {
         minimum: RwSignal::new("2".to_owned()),
         maximum: RwSignal::new("16".to_owned()),
@@ -141,14 +171,21 @@ fn AddonsSettingsIsland(
         repository_name: RwSignal::new(String::new()),
     };
     let unknown_sources_confirm_open = RwSignal::new(false);
+    let repository_delete_open = RwSignal::new(false);
+    let repository_delete_target = RwSignal::new(None::<(String, String)>);
 
     let scan_action = Action::new(move |(): &()| scan_addon_repositories());
+    let remove_repository_action =
+        Action::new(move |repository_id: &String| remove_addon_repository(repository_id.clone()));
     let unknown_sources_action =
         Action::new(move |enabled: &bool| set_unverified_addon_sources(*enabled));
     let default_remote_stream_action =
         Action::new(move |addon_id: &String| set_default_remote_stream_addon(addon_id.clone()));
     Effect::new(move |_| action_result(scan_action.value().get(), overview, toast));
     Effect::new(move |_| action_result(unknown_sources_action.value().get(), overview, toast));
+    Effect::new(move |_| {
+        action_result(remove_repository_action.value().get(), overview, toast);
+    });
     Effect::new(move |_| {
         action_result(default_remote_stream_action.value().get(), overview, toast);
     });
@@ -221,6 +258,8 @@ fn AddonsSettingsIsland(
                 unknown_sources_confirm_open,
                 unknown_sources_action,
                 default_remote_stream_action,
+                repository_delete_open,
+                repository_delete_target,
                 upload_addon,
                 upload_repository,
             ))}
@@ -236,6 +275,23 @@ fn AddonsSettingsIsland(
             >
                 <p>{tr(TextKey::UnknownSourcesHelp)}</p>
             </Modal>
+
+            <DeleteDialog
+                open=repository_delete_open
+                entity_name=Signal::derive(move || {
+                    repository_delete_target
+                        .get()
+                        .map_or_else(String::new, |(_, name)| name)
+                })
+                on_confirm=Callback::new(move |confirmed| {
+                    if confirmed {
+                        if let Some((repository_id, _)) = repository_delete_target.get_untracked() {
+                            remove_repository_action.dispatch(repository_id);
+                        }
+                    }
+                    repository_delete_target.set(None);
+                })
+            />
         </main>
     }
 }
@@ -270,6 +326,8 @@ fn manager_body(
     unknown_sources_confirm_open: RwSignal<bool>,
     unknown_sources_action: Action<bool, Result<(), ServerFnError>>,
     default_remote_stream_action: Action<String, Result<(), ServerFnError>>,
+    repository_delete_open: RwSignal<bool>,
+    repository_delete_target: RwSignal<Option<(String, String)>>,
     upload_addon: impl Fn(leptos::ev::MouseEvent) + Copy + Send + 'static,
     upload_repository: impl Fn(leptos::ev::MouseEvent) + Copy + Send + 'static,
 ) -> AnyView {
@@ -543,7 +601,12 @@ fn manager_body(
                         </thead>
                         <tbody>
                             {data.repositories.into_iter().map(|repository| {
-                                repository_row(repository, &offers_per_repository)
+                                repository_row(
+                                    repository,
+                                    &offers_per_repository,
+                                    repository_delete_open,
+                                    repository_delete_target,
+                                )
                             }).collect_view()}
                         </tbody>
                     </table>
@@ -610,9 +673,17 @@ fn manager_body(
 
 /// One local source row: its identity, on-disk location, last scan, and error.
 #[allow(clippy::needless_pass_by_value)]
-fn repository_row(repository: AddonRepositoryRow, offers: &BTreeMap<String, usize>) -> AnyView {
+fn repository_row(
+    repository: AddonRepositoryRow,
+    offers: &BTreeMap<String, usize>,
+    delete_open: RwSignal<bool>,
+    delete_target: RwSignal<Option<(String, String)>>,
+) -> AnyView {
     let offered = offers.get(&repository.id).copied().unwrap_or_default();
     let last_error = repository.last_error.clone();
+    let removable = repository.kind == "bundle";
+    let repository_id = repository.id.clone();
+    let repository_name = repository.name.clone();
     view! {
         <tr data-testid="addon-repository-row">
             <td>
@@ -633,7 +704,23 @@ fn repository_row(repository: AddonRepositoryRow, offers: &BTreeMap<String, usiz
                     {last_error.map(|error| view! { <span class=style::error>{error}</span> })}
                 </div>
             </td>
-            <td/>
+            <td>
+                {removable.then(|| view! {
+                    <form method="post" action="/api/addons/repository-bundle/remove">
+                        <input type="hidden" name="repository_id" value=repository_id.clone()/>
+                        <button
+                            type="submit"
+                            class=source_style::row_btn_del
+                            data-testid="remove-addon-repository"
+                            on:click=move |event| {
+                                event.prevent_default();
+                                delete_target.set(Some((repository_id.clone(), repository_name.clone())));
+                                delete_open.set(true);
+                            }
+                        >{tr(TextKey::Delete)}</button>
+                    </form>
+                })}
+            </td>
         </tr>
     }
     .into_any()

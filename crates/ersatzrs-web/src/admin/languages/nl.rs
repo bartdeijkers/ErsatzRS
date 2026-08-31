@@ -1924,6 +1924,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MidRoll => "Mid-roll",
         TextKey::MoveDown => "Omlaag verplaatsen",
         TextKey::MoveUp => "Omhoog verplaatsen",
+        TextKey::ReorderPlaylistItem => "Sleep om het afspeellijstitem te verplaatsen",
         TextKey::MultiEpisodeGroupSize => "Groepsgrootte voor meerdere afleveringen",
         TextKey::MultiEpisodeShuffle => "Shuffle op meerdere afleveringen",
         TextKey::Multiple => "Meerdere",

@@ -99,6 +99,10 @@ pub fn build_app(app_state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(512 * 1024 * 1024 + 1024 * 1024)),
         )
         .route(
+            "/api/addons/repository-bundle/remove",
+            post(api::addons::remove_repository_bundle),
+        )
+        .route(
             "/api/addons/installed-icon/{addon_id}",
             get(api::addons::installed_icon),
         )

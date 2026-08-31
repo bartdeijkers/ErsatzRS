@@ -13,12 +13,31 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Allow administrators to remove an uploaded offline add-on repository bundle
+  from Sources without uninstalling package snapshots or deleting their
+  settings and data. Checkout sources remain operator-owned and cannot be
+  removed through ErsatzRS; both hydrated confirmation and no-JavaScript form
+  submission are supported.
+
+- Allow editable playlist items to be reordered with localized Move Up and
+  Move Down submit buttons or JavaScript-enabled drag-and-drop. Both paths save
+  the same persisted item indexes, while generated playlists remain read-only.
+
 ### Changed
 
 - Refresh the dependency rollup, including `base64` 0.23 and
   `ed25519-dalek` 3.0 for signed add-on repositories, while preserving the
   lowercase boolean and `none` output of existing XMLTV and graphics templates
   across the MiniJinja 2.23 update.
+
+### Removed
+
+- Remove the remaining hard-coded Trakt assumptions from the core playlist and
+  add-on-list admin pages. Provider-specific list discovery and parsing remain
+  add-on-owned, with an architecture guard preventing them from leaking back
+  into these host pages.
 
 ## [1.0.31-beta] - 2026-08-30
 

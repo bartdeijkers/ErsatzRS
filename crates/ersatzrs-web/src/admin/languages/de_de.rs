@@ -1206,6 +1206,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MidRoll => "Mid-Roll",
         TextKey::MoveDown => "Nach unten verschieben",
         TextKey::MoveUp => "Nach oben verschieben",
+        TextKey::ReorderPlaylistItem => "Playlisteneintrag zum Sortieren ziehen",
         TextKey::MultiEpisodeGroupSize => "Größe der Mehr-Episoden-Gruppe",
         TextKey::MultiEpisodeShuffle => "Mehr-Episoden-Mischen",
         TextKey::Multiple => "Mehrfach",

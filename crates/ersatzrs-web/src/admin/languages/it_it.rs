@@ -1222,6 +1222,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MidRoll => "Mid-Roll",
         TextKey::MoveDown => "Sposta in basso",
         TextKey::MoveUp => "Sposta in alto",
+        TextKey::ReorderPlaylistItem => "Trascina per riordinare l'elemento della playlist",
         TextKey::MultiEpisodeGroupSize => "Dimensione gruppo multi-episodio",
         TextKey::MultiEpisodeShuffle => "Scambio multi-episodio",
         TextKey::Multiple => "Multipli",

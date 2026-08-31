@@ -1,6 +1,5 @@
-//! Provider-neutral add-on media-list manager derived from ErsatzTV's
-//! `Pages/TraktLists.razor`, `Pages/TraktListEditor.razor`, and
-//! `Shared/AddTraktListDialog.razor`; ADR 0067 owns the deliberate boundary change.
+//! Provider-neutral add-on media-list manager. ADR 0067 owns the deliberate
+//! boundary that keeps provider-specific discovery and parsing in add-ons.
 
 use std::collections::{BTreeMap, BTreeSet};
 

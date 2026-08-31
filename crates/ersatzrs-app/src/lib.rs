@@ -104,6 +104,13 @@ impl ApplicationServices {
         self.ports.addons().scan_repositories().await
     }
 
+    pub async fn remove_addon_repository(
+        &self,
+        repository_id: String,
+    ) -> std::result::Result<(), AddonRuntimeError> {
+        self.ports.addons().remove_repository(repository_id).await
+    }
+
     pub async fn install_addon(
         &self,
         repository_id: String,

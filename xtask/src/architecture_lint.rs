@@ -28,6 +28,10 @@ const ADMIN_ROOTS: &[&str] = &[
     "crates/ersatzrs-web/src/admin",
     "crates/ersatzrs-web/src/api",
 ];
+const PROVIDER_NEUTRAL_MEDIA_PAGES: &[&str] = &[
+    "crates/ersatzrs-web/src/admin/pages/media/addon_lists.rs",
+    "crates/ersatzrs-web/src/admin/pages/media/playlists.rs",
+];
 const FORBIDDEN_APP_DEPENDENCIES: &[&str] = &[
     "ersatzrs-ffmpeg",
     "ersatzrs-healthcheck",
@@ -89,6 +93,7 @@ fn run_inner(opts: &Opts) -> Result<()> {
     check_scan_orchestration_boundary(workspace)?;
     check_write_transaction_begins(workspace)?;
     check_provider_availability_vocabulary_boundary(workspace)?;
+    check_provider_neutral_media_pages(workspace)?;
     let counts = scan_admin_trees(workspace)?;
 
     if opts.print_baseline {
@@ -124,6 +129,27 @@ fn run_inner(opts: &Opts) -> Result<()> {
         counts.server_error_to_default.values().sum::<usize>(),
         counts.row_decode_default.values().sum::<usize>()
     );
+    Ok(())
+}
+
+fn check_provider_neutral_media_pages(workspace: &Path) -> Result<()> {
+    let mut problems = Vec::new();
+    for relative_path in PROVIDER_NEUTRAL_MEDIA_PAGES {
+        let path = workspace.join(relative_path);
+        let source =
+            fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        if source.to_ascii_lowercase().contains("trakt") {
+            problems.push(format!(
+                "{relative_path} contains provider-specific playlist functionality"
+            ));
+        }
+    }
+    if !problems.is_empty() {
+        anyhow::bail!(
+            "core playlist and add-on-list pages must remain provider-neutral: {}",
+            problems.join("; ")
+        );
+    }
     Ok(())
 }
 

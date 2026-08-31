@@ -3259,7 +3259,7 @@ mod tests {
             options: Vec::new(),
             suggested_reference: Some(AddonSuggestedSecretReference {
                 kind: AddonSuggestedSecretReferenceKind::Environment,
-                reference: "TRAKT__CLIENTID".to_owned(),
+                reference: "PROVIDER__CLIENT_ID".to_owned(),
             }),
         });
         manifest.validate().expect("safe suggested reference");

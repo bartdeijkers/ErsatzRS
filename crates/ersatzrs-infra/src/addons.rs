@@ -1252,6 +1252,147 @@ pub async fn install_local_repository_bundle(
     result
 }
 
+/// Remove one uploaded offline repository bundle without uninstalling package snapshots.
+///
+/// Checkout sources are operator-owned and cannot be removed by ErsatzRS. Deleting a bundle
+/// source cascades its offers and clears `AddonInstallation.SourceId`; installed packages,
+/// settings, data namespaces, and immutable package directories remain untouched.
+///
+/// # Errors
+///
+/// Returns an error when the source does not exist, is not a bundle, escaped the managed bundle
+/// root, or its database/filesystem state cannot be removed safely.
+pub async fn remove_local_repository_bundle(
+    pool: &DbPool,
+    repository_id: &str,
+) -> Result<(), AddonError> {
+    remove_local_repository_bundle_from(pool, repository_id, &addon_repository_bundles_folder())
+        .await
+}
+
+async fn remove_local_repository_bundle_from(
+    pool: &DbPool,
+    repository_id: &str,
+    bundle_root: &Path,
+) -> Result<(), AddonError> {
+    let repository_id = repository_id.trim();
+    if repository_id.is_empty() {
+        return Err(AddonError::Validation(
+            "repository id must not be empty".to_owned(),
+        ));
+    }
+    let mut transaction = crate::db::begin_write(pool).await.map_err(database_error)?;
+    let row = sqlx::query(r#"SELECT "Kind", "RootPath" FROM "AddonSource" WHERE "Id" = ?"#)
+        .bind(repository_id)
+        .fetch_optional(&mut *transaction)
+        .await
+        .map_err(database_error)?
+        .ok_or_else(|| AddonError::NotFound("local add-on repository was not found".to_owned()))?;
+    let kind: String = row.try_get("Kind").repository().map_err(repository_error)?;
+    if kind != "bundle" {
+        return Err(AddonError::Validation(
+            "only uploaded repository bundles can be removed by ErsatzRS".to_owned(),
+        ));
+    }
+    let stored_root = PathBuf::from(
+        row.try_get::<String, _>("RootPath")
+            .repository()
+            .map_err(repository_error)?,
+    );
+    let removable_root = validated_bundle_path_for_removal(&stored_root, bundle_root).await?;
+
+    tokio::fs::create_dir_all(bundle_root)
+        .await
+        .map_err(package_io_error)?;
+    let tombstone = bundle_root.join(format!(".removing-{}", Uuid::new_v4()));
+    let root_exists = tokio::fs::try_exists(&removable_root)
+        .await
+        .map_err(package_io_error)?;
+    let deleted = sqlx::query(r#"DELETE FROM "AddonSource" WHERE "Id" = ? AND "Kind" = 'bundle'"#)
+        .bind(repository_id)
+        .execute(&mut *transaction)
+        .await
+        .map_err(database_error)?;
+    if deleted.rows_affected() != 1 {
+        return Err(AddonError::NotFound(
+            "local add-on repository was not found".to_owned(),
+        ));
+    }
+    if root_exists {
+        tokio::fs::rename(&removable_root, &tombstone)
+            .await
+            .map_err(package_io_error)?;
+    }
+    if let Err(error) = transaction.commit().await.map_err(database_error) {
+        if root_exists {
+            let _ = tokio::fs::rename(&tombstone, &removable_root).await;
+        }
+        return Err(error);
+    }
+    if root_exists {
+        tokio::fs::remove_dir_all(&tombstone)
+            .await
+            .map_err(package_io_error)?;
+        remove_empty_bundle_parent(&removable_root, bundle_root).await;
+    }
+    Ok(())
+}
+
+async fn validated_bundle_path_for_removal(
+    stored_path: &Path,
+    bundle_root: &Path,
+) -> Result<PathBuf, AddonError> {
+    let relative = stored_path.strip_prefix(bundle_root).map_err(|_| {
+        AddonError::Package("stored repository path is outside the bundle root".to_owned())
+    })?;
+    if relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(AddonError::Package(
+            "stored repository path is outside the bundle root".to_owned(),
+        ));
+    }
+    tokio::fs::create_dir_all(bundle_root)
+        .await
+        .map_err(package_io_error)?;
+    let canonical_root = containment_path_async(bundle_root)
+        .await
+        .map_err(package_io_error)?;
+    match containment_path_async(stored_path).await {
+        Ok(canonical_path)
+            if canonical_path != canonical_root && canonical_path.starts_with(&canonical_root) =>
+        {
+            Ok(canonical_path)
+        }
+        Ok(_) => Err(AddonError::Package(
+            "stored repository path is outside the bundle root".to_owned(),
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(stored_path.to_path_buf()),
+        Err(error) => Err(package_io_error(error)),
+    }
+}
+
+async fn remove_empty_bundle_parent(removed_root: &Path, bundle_root: &Path) {
+    let Some(parent) = removed_root.parent() else {
+        return;
+    };
+    if parent == bundle_root {
+        return;
+    }
+    let Ok(mut entries) = tokio::fs::read_dir(parent).await else {
+        return;
+    };
+    if entries
+        .next_entry()
+        .await
+        .is_ok_and(|entry| entry.is_none())
+    {
+        let _ = tokio::fs::remove_dir(parent).await;
+    }
+}
+
 /// Install or update one exact offer from a local source snapshot.
 ///
 /// `adopt_legacy` is the only path that may replace a catalog-owned package or
@@ -5456,6 +5597,140 @@ mod tests {
         assert!(load_local_addon_icon(&pool, &repository.id, addon_id)
             .await
             .is_err());
+    }
+
+    #[tokio::test]
+    async fn removing_bundle_source_preserves_installed_snapshot_and_cleans_offers() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+        let bundle_root = temp.path().join("repository-bundles");
+        let repository_id = "org.ersatzrs.repository.bundle-fixture";
+        let source_root = bundle_root.join(repository_id).join("0123456789abcdef");
+        let addon_id = "org.ersatzrs.addon.bundle-fixture";
+        tokio::fs::create_dir_all(source_root.join("addons").join(addon_id))
+            .await
+            .expect("create bundle source");
+        tokio::fs::write(source_root.join("repository.toml"), b"fixture")
+            .await
+            .expect("write bundle marker");
+        sqlx::query(
+            r#"INSERT INTO "AddonSource" (
+                   "Id", "Name", "Kind", "RootPath", "ManifestJson", "ContentSha256",
+                   "LastScan", "LastError", "StateRevision"
+               ) VALUES (?, 'Bundle fixture', 'bundle', ?, '{}', 'digest', 'now', NULL, 1)"#,
+        )
+        .bind(repository_id)
+        .bind(source_root.to_string_lossy().into_owned())
+        .execute(&pool)
+        .await
+        .expect("insert bundle source");
+        sqlx::query(
+            r#"INSERT INTO "AddonSourceOffer" (
+                   "SourceId", "AddonId", "Version", "ManifestJson", "RelativePath",
+                   "ContentSha256"
+               ) VALUES (?, ?, '1.0.0', '{}', ?, 'digest')"#,
+        )
+        .bind(repository_id)
+        .bind(addon_id)
+        .bind(format!("addons/{addon_id}"))
+        .execute(&pool)
+        .await
+        .expect("insert bundle offer");
+        let manifest = fixture_manifest(addon_id);
+        insert_fixture_installation(&pool, &manifest, true).await;
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "SourceId" = ? WHERE "AddonId" = ?"#)
+            .bind(repository_id)
+            .bind(addon_id)
+            .execute(&pool)
+            .await
+            .expect("attach installation provenance");
+        sqlx::query(
+            r#"INSERT INTO "AddonSetting" ("AddonId", "Key", "Value")
+               VALUES (?, 'DISPLAY_LABEL', 'Preserved value')"#,
+        )
+        .bind(addon_id)
+        .execute(&pool)
+        .await
+        .expect("insert installed setting");
+
+        remove_local_repository_bundle_from(&pool, repository_id, &bundle_root)
+            .await
+            .expect("remove bundle source");
+
+        let sources =
+            sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "AddonSource" WHERE "Id" = ?"#)
+                .bind(repository_id)
+                .fetch_one(&pool)
+                .await
+                .expect("count sources");
+        let offers = sqlx::query_scalar::<_, i64>(
+            r#"SELECT COUNT(*) FROM "AddonSourceOffer" WHERE "SourceId" = ?"#,
+        )
+        .bind(repository_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count offers");
+        let installation_source = sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT "SourceId" FROM "AddonInstallation" WHERE "AddonId" = ?"#,
+        )
+        .bind(addon_id)
+        .fetch_one(&pool)
+        .await
+        .expect("load installation provenance");
+        let setting = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Value" FROM "AddonSetting" WHERE "AddonId" = ? AND "Key" = 'DISPLAY_LABEL'"#,
+        )
+        .bind(addon_id)
+        .fetch_one(&pool)
+        .await
+        .expect("load preserved setting");
+        assert_eq!(sources, 0);
+        assert_eq!(offers, 0);
+        assert_eq!(installation_source, None);
+        assert_eq!(setting, "Preserved value");
+        assert!(load_installed_addon(&pool, addon_id)
+            .await
+            .expect("load installation")
+            .is_some());
+        assert!(!source_root.exists());
+        assert!(!bundle_root.join(repository_id).exists());
+    }
+
+    #[tokio::test]
+    async fn removing_checkout_source_is_rejected_without_mutation() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
+        let pool = crate::db::init(&database_url)
+            .await
+            .expect("initialize database");
+        let bundle_root = temp.path().join("repository-bundles");
+        sqlx::query(
+            r#"INSERT INTO "AddonSource" (
+                   "Id", "Name", "Kind", "RootPath", "ManifestJson", "ContentSha256",
+                   "LastScan", "LastError", "StateRevision"
+               ) VALUES ('org.example.checkout', 'Checkout', 'checkout', 'operator-owned',
+                         '{}', 'digest', 'now', NULL, 1)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("insert checkout source");
+
+        let error =
+            remove_local_repository_bundle_from(&pool, "org.example.checkout", &bundle_root)
+                .await
+                .expect_err("checkout removal must be rejected");
+
+        assert!(error.to_string().contains("uploaded repository bundles"));
+        let sources = sqlx::query_scalar::<_, i64>(
+            r#"SELECT COUNT(*) FROM "AddonSource" WHERE "Id" = 'org.example.checkout'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("count checkout source");
+        assert_eq!(sources, 1);
     }
 
     #[tokio::test]

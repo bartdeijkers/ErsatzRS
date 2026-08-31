@@ -307,6 +307,29 @@
     box-shadow: -1px 0 0 var(--color-table-line);
 }
 
+.drag-column,
+.drag-cell {
+    width: 2rem;
+    padding-right: 0;
+}
+
+.drag-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.75rem;
+    min-height: 2rem;
+    color: var(--color-gray-400);
+    font-weight: 700;
+    letter-spacing: -0.2rem;
+    cursor: grab;
+    user-select: none;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;

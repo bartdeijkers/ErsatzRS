@@ -1,9 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const DATABASE_PATH = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
+const APP_STATE_DIR = process.env.E2E_APP_STATE_DIR;
 const FIXTURE_ADDON_ID = 'org.example.addon.fixture';
 const FIXTURE_REPOSITORY_ID = 'org.example.addons';
+const BUNDLE_REPOSITORY_ID = 'org.example.addons.bundle';
 
 test.skip(!DATABASE_PATH, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required.');
 test.describe.configure({ mode: 'serial' });
@@ -78,7 +82,9 @@ function resetFixtures(): void {
       .prepare('DELETE FROM "AddonInstallation" WHERE "AddonId" = ?')
       .run(FIXTURE_ADDON_ID);
     database.prepare('DELETE FROM "AddonSourceOffer" WHERE "SourceId" = ?').run(FIXTURE_REPOSITORY_ID);
+    database.prepare('DELETE FROM "AddonSourceOffer" WHERE "SourceId" = ?').run(BUNDLE_REPOSITORY_ID);
     database.prepare('DELETE FROM "AddonSource" WHERE "Id" = ?').run(FIXTURE_REPOSITORY_ID);
+    database.prepare('DELETE FROM "AddonSource" WHERE "Id" = ?').run(BUNDLE_REPOSITORY_ID);
     database
       .prepare('DELETE FROM "ConfigElement" WHERE "Key" = ?')
       .run('addons.allow_unverified_sources');
@@ -87,6 +93,12 @@ function resetFixtures(): void {
       .run('addons.detail_wait.minimum_seconds', 'addons.detail_wait.maximum_seconds');
   } finally {
     database.close();
+  }
+  if (APP_STATE_DIR) {
+    rmSync(join(APP_STATE_DIR, 'addons', 'repository-bundles', BUNDLE_REPOSITORY_ID), {
+      recursive: true,
+      force: true,
+    });
   }
 }
 
@@ -114,6 +126,56 @@ function seedLocalRepository(): void {
   } finally {
     database.close();
   }
+}
+
+function seedBundleRepository(): string {
+  if (!APP_STATE_DIR) {
+    throw new Error('E2E_APP_STATE_DIR is required for repository-bundle removal tests');
+  }
+  const sourceRoot = join(
+    APP_STATE_DIR,
+    'addons',
+    'repository-bundles',
+    BUNDLE_REPOSITORY_ID,
+    '0123456789abcdef',
+  );
+  mkdirSync(sourceRoot, { recursive: true });
+  writeFileSync(join(sourceRoot, 'repository.toml'), 'schema_version = 1\n');
+
+  const database = openDatabase();
+  try {
+    database
+      .prepare(`
+        INSERT INTO "AddonSource" (
+          "Id", "Name", "Kind", "RootPath", "ManifestJson", "ContentSha256",
+          "LastScan", "LastError", "StateRevision"
+        ) VALUES (?, 'Uploaded fixture repository', 'bundle', ?, ?, ?, ?, NULL, 1)
+      `)
+      .run(
+        BUNDLE_REPOSITORY_ID,
+        sourceRoot,
+        JSON.stringify({
+          schema_version: 1,
+          id: BUNDLE_REPOSITORY_ID,
+          name: 'Uploaded fixture repository',
+        }),
+        '3'.repeat(64),
+        '2026-08-31T10:00:00Z',
+      );
+    database
+      .prepare(`
+        INSERT INTO "AddonSourceOffer" (
+          "SourceId", "AddonId", "Version", "ManifestJson", "RelativePath", "ContentSha256"
+        ) VALUES (?, ?, '1.0.0', ?, 'addons/org.example.addon.fixture', ?)
+      `)
+      .run(BUNDLE_REPOSITORY_ID, FIXTURE_ADDON_ID, JSON.stringify(manifest), '4'.repeat(64));
+    database
+      .prepare('UPDATE "AddonInstallation" SET "SourceId" = ? WHERE "AddonId" = ?')
+      .run(BUNDLE_REPOSITORY_ID, FIXTURE_ADDON_ID);
+  } finally {
+    database.close();
+  }
+  return sourceRoot;
 }
 
 function seedInstalledAddon(): void {
@@ -223,6 +285,76 @@ test('shows local repository sources without remote catalog controls', async ({ 
   await expect(page.locator('input[type="file"]')).toHaveCount(2);
   await expect(page.locator('input[type="file"]').first()).toBeDisabled();
   await expect(page.locator('input[type="file"]').last()).toBeDisabled();
+});
+
+test('removes an uploaded repository bundle while preserving its installed add-on', async ({ page }) => {
+  test.skip(!APP_STATE_DIR, 'E2E_APP_STATE_DIR is required.');
+  const sourceRoot = seedBundleRepository();
+
+  await page.goto('/settings/addons?view=sources');
+  await waitForHydration(page);
+  const row = page
+    .getByTestId('addon-repository-row')
+    .filter({ hasText: 'Uploaded fixture repository' });
+  await row.getByTestId('remove-addon-repository').click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Uploaded fixture repository');
+  await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+
+  await expect(row).toHaveCount(0);
+  await expect.poll(() => {
+    const database = openDatabase();
+    try {
+      return {
+        installation: database
+          .prepare('SELECT "SourceId" FROM "AddonInstallation" WHERE "AddonId" = ?')
+          .get(FIXTURE_ADDON_ID),
+        offers: database
+          .prepare('SELECT COUNT(*) AS count FROM "AddonSourceOffer" WHERE "SourceId" = ?')
+          .get(BUNDLE_REPOSITORY_ID),
+        source: database
+          .prepare('SELECT COUNT(*) AS count FROM "AddonSource" WHERE "Id" = ?')
+          .get(BUNDLE_REPOSITORY_ID),
+      };
+    } finally {
+      database.close();
+    }
+  }).toEqual({
+    installation: { SourceId: null },
+    offers: { count: 0 },
+    source: { count: 0 },
+  });
+  expect(existsSync(sourceRoot)).toBe(false);
+});
+
+test('removes an uploaded repository bundle without JavaScript', async ({ browser, baseURL }) => {
+  test.skip(!APP_STATE_DIR, 'E2E_APP_STATE_DIR is required.');
+  seedBundleRepository();
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+  const page = await context.newPage();
+
+  await page.goto('/settings/addons?view=sources');
+  const row = page
+    .getByTestId('addon-repository-row')
+    .filter({ hasText: 'Uploaded fixture repository' });
+  await row.getByTestId('remove-addon-repository').click();
+  await expect(page).toHaveURL(/\/settings\/addons\?view=sources$/);
+  await expect(row).toHaveCount(0);
+  await context.close();
+
+  const database = openDatabase();
+  try {
+    expect(
+      database.prepare('SELECT COUNT(*) AS count FROM "AddonSource" WHERE "Id" = ?')
+        .get(BUNDLE_REPOSITORY_ID),
+    ).toEqual({ count: 0 });
+    expect(
+      database.prepare('SELECT "SourceId" FROM "AddonInstallation" WHERE "AddonId" = ?')
+        .get(FIXTURE_ADDON_ID),
+    ).toEqual({ SourceId: null });
+  } finally {
+    database.close();
+  }
 });
 
 test('renders declarative panels and persists normal and secret-reference settings', async ({

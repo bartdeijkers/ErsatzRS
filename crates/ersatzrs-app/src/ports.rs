@@ -575,6 +575,7 @@ pub trait AddonRuntime: Send + Sync {
         addon_id: String,
     ) -> Result<Option<AddonIconRead>, AddonRuntimeError>;
     async fn scan_repositories(&self) -> Result<(), AddonRuntimeError>;
+    async fn remove_repository(&self, repository_id: String) -> Result<(), AddonRuntimeError>;
     async fn install(
         &self,
         repository_id: String,

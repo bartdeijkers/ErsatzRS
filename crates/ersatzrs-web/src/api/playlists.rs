@@ -34,6 +34,8 @@ pub struct PlaylistSaveForm {
     #[serde(default)]
     name: String,
     #[serde(default)]
+    item_move: String,
+    #[serde(default)]
     item_index: Vec<String>,
     #[serde(default)]
     item_id: Vec<String>,
@@ -148,7 +150,12 @@ pub async fn delete_playlist_form(
 pub async fn save_playlist_form(State(state): State<AppState>, body: Bytes) -> Redirect {
     let input = PlaylistSaveForm::from_urlencoded_bytes(&body);
     let id = input.id;
-    let form = input.into_editor_form();
+    let item_move = input.item_move.clone();
+    let mut form = input.into_editor_form();
+    if let Err(error) = apply_playlist_item_move(&mut form.items, &item_move) {
+        tracing::warn!(%error, playlist_id = id, "rejected playlist item move from HTML form");
+        return Redirect::to(&format!("/media/playlists/{id}?error=save"));
+    }
     match state
         .application
         .save_playlist(ersatzrs_app::commands::SavePlaylist {
@@ -174,6 +181,7 @@ impl PlaylistSaveForm {
             match key {
                 "id" => form.id = value.trim().parse().unwrap_or_default(),
                 "name" => form.name = value,
+                "item_move" => form.item_move = value,
                 "item_index" => form.item_index.push(value),
                 "item_id" => form.item_id.push(value),
                 "item_collection_type" => form.item_collection_type.push(value),
@@ -260,6 +268,32 @@ impl PlaylistSaveForm {
             items,
         }
     }
+}
+
+fn apply_playlist_item_move(
+    items: &mut [PlaylistItemForm],
+    requested_move: &str,
+) -> Result<(), &'static str> {
+    if requested_move.is_empty() {
+        return Ok(());
+    }
+    let (direction, index) = requested_move
+        .split_once(':')
+        .ok_or("playlist item move is malformed")?;
+    let index = index
+        .parse::<usize>()
+        .map_err(|_| "playlist item move index is invalid")?;
+    let target = match direction {
+        "up" if index > 0 => index - 1,
+        "down" if index + 1 < items.len() => index + 1,
+        "up" | "down" => return Err("playlist item move is out of bounds"),
+        _ => return Err("playlist item move direction is invalid"),
+    };
+    items.swap(index, target);
+    for (index, item) in items.iter_mut().enumerate() {
+        item.index = i32::try_from(index).unwrap_or(i32::MAX);
+    }
+    Ok(())
 }
 
 fn parse_index_set(values: &[String]) -> std::collections::HashSet<i32> {
@@ -372,5 +406,31 @@ mod tests {
         assert_eq!(parsed.items[1].media_item_id, Some(2124));
         assert_eq!(parsed.items[0].index, 0);
         assert_eq!(parsed.items[1].index, 1);
+    }
+
+    #[test]
+    fn playlist_save_form_applies_no_js_move_before_persistence() {
+        let form = PlaylistSaveForm::from_urlencoded_bytes(
+            b"id=3&name=Saturday&item_move=down%3A0&item_index=0&item_id=11&item_collection_type=0&item_collection_id=5&item_playback_order=1&item_index=1&item_id=12&item_collection_type=5&item_smart_collection_id=7&item_playback_order=1",
+        );
+        let requested_move = form.item_move.clone();
+        let mut parsed = form.into_editor_form();
+
+        apply_playlist_item_move(&mut parsed.items, &requested_move).expect("valid down move");
+
+        assert_eq!(parsed.items[0].id, 12);
+        assert_eq!(parsed.items[0].index, 0);
+        assert_eq!(parsed.items[1].id, 11);
+        assert_eq!(parsed.items[1].index, 1);
+    }
+
+    #[test]
+    fn playlist_save_form_rejects_out_of_bounds_move() {
+        let mut items = vec![PlaylistItemForm::default()];
+
+        let error = apply_playlist_item_move(&mut items, "up:0")
+            .expect_err("first playlist item cannot move up");
+
+        assert_eq!(error, "playlist item move is out of bounds");
     }
 }

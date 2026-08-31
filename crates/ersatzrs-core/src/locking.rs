@@ -4,7 +4,7 @@
 //!
 //! `ErsatzTV` uses a single `IEntityLocker` singleton across the web host,
 //! scheduler, scanner channel, and worker channel — all hosted in one
-//! process. Long-running operations (library scans, playout builds, Trakt
+//! process. Long-running operations (library scans, playout builds, provider
 //! sync, …) acquire the relevant lock, do their work, and release it; other
 //! requests skip silently when the lock is already held. The locker is
 //! intentionally per-process because every consumer lives in the same
@@ -17,8 +17,8 @@
 //! divergence.
 //!
 //! Only the lock surfaces `ErsatzRS` actually exercises today are exposed.
-//! Additional `IEntityLocker` members (`LockTrakt`, `LockEmbyCollections`,
-//! …) can be ported alongside the work that needs them.
+//! Additional upstream `IEntityLocker` members can be ported alongside the
+//! work that needs them.
 //!
 //! [`EntityLocker::lock_playout`] / [`EntityLocker::unlock_playout`] /
 //! [`EntityLocker::is_playout_locked`] mirror the C# `LockPlayout`,

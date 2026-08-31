@@ -8,10 +8,11 @@ use ersatzrs_infra::addons::{
     check_addon, disable_addon, enable_addon, ensure_addon_checkouts_folder,
     install_addon_from_local_source, install_addon_from_package, install_local_repository_bundle,
     list_installed_addons, list_local_addon_sources, list_local_available_addons,
-    load_addon_settings, load_installed_addon, load_local_addon_icon, save_addon_setting,
-    scan_local_addon_repositories, set_default_remote_stream_addon, set_unverified_sources_enabled,
-    uninstall_addon, unverified_sources_enabled, AddonRuntimeContext, AddonSecretReferenceKind,
-    AddonSettingValue, LocalAddonSource,
+    load_addon_settings, load_installed_addon, load_local_addon_icon,
+    remove_local_repository_bundle, save_addon_setting, scan_local_addon_repositories,
+    set_default_remote_stream_addon, set_unverified_sources_enabled, uninstall_addon,
+    unverified_sources_enabled, AddonRuntimeContext, AddonSecretReferenceKind, AddonSettingValue,
+    LocalAddonSource,
 };
 use ersatzrs_infra::db::DbPool;
 
@@ -172,6 +173,12 @@ impl AddonRuntime for NativeAddonRuntime {
         scan_local_addon_repositories(&self.pool)
             .await
             .map(|_| ())
+            .map_err(runtime_error)
+    }
+
+    async fn remove_repository(&self, repository_id: String) -> Result<(), AddonRuntimeError> {
+        remove_local_repository_bundle(&self.pool, &repository_id)
+            .await
             .map_err(runtime_error)
     }
 
