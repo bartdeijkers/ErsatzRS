@@ -59,7 +59,7 @@ impl DynamicTextTemplate {
     /// characters, or is not valid minijinja syntax.
     pub fn compile(source: String) -> Result<Self, DynamicTextError> {
         validate_text("template", &source, MAX_DYNAMIC_TEXT_BYTES)?;
-        let mut environment = Environment::new();
+        let mut environment = crate::minijinja_compat::environment();
         environment.set_undefined_behavior(UndefinedBehavior::Strict);
         environment.add_template_owned(TEMPLATE_NAME, source)?;
         // Force syntax validation now rather than on the first controller tick.

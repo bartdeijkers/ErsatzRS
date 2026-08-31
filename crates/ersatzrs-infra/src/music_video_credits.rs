@@ -334,9 +334,9 @@ const MINIJINJA_MARKER: &str = "ersatzrs:minijinja";
 /// error the built-in default song-title card is used so playback still gets a
 /// subtitle.
 fn render_minijinja_template(template: &str, data: &MusicVideoCreditsData) -> String {
-    use minijinja::{context, Environment};
+    use minijinja::context;
 
-    let env = Environment::new();
+    let env = crate::minijinja_compat::environment();
     let ctx = context! {
         resolution => context! {
             width => data.resolution.width,
