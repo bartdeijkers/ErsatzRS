@@ -18,8 +18,8 @@ use ersatzrs_addon_contract::{
     AddonMediaListItemAvailability as WireAvailability, RemoteStreamLiveness as WireLiveness,
     CAPABILITY_REMOTE_STREAM_ITEM_V1, CAPABILITY_REMOTE_STREAM_ITEM_V2,
     CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
-    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
-    CAPABILITY_REMOTE_STREAM_PLAY_V1, MAX_LIST_ITEMS, MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
+    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4, MAX_LIST_ITEMS,
+    MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES,
 };
 use ersatzrs_addon_contract::{
     validate_operator_source_url, AddonOperationError, OPERATION_CODE_UNSUPPORTED_URL,
@@ -700,12 +700,9 @@ async fn resolve_playlist_addon(pool: &DbPool, addon_id: &str) -> Result<Install
             "{addon_id} does not implement a Remote Stream list capability"
         )));
     }
-    if !addon
-        .manifest
-        .has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
-    {
+    if !addon.manifest.has_remote_stream_play_capability() {
         return Err(PlaylistError::Addon(format!(
-            "{addon_id} does not implement {CAPABILITY_REMOTE_STREAM_PLAY_V1}"
+            "{addon_id} does not implement a Remote Stream play capability"
         )));
     }
     Ok(addon)

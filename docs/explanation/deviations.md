@@ -161,6 +161,14 @@ shared collection type already defines Remote Stream playlist entries.
 
 ADR: [0057](../adr/0057-direct-remote-stream-pipelines-and-playlist-actions.md)
 
+Live HLS delivery can additionally request one provider-neutral 1080p-to-720p
+quality fallback from a v2 add-on after measured under-delivery. A verified
+fallback expires after 24 hours so the host periodically retries full quality;
+provider-specific rendition selection remains in the add-on.
+
+Adaptive delivery ADR:
+[0084](../adr/0084-adapt-live-addon-quality-after-hls-under-delivery.md)
+
 ## Managed Remote Stream playlists
 
 ErsatzTV supports one YAML definition per Remote Stream but has no contract for

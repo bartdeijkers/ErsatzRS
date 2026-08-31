@@ -2,29 +2,29 @@ feature    = 'Remote Stream playback'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/InternalController.cs`; `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutModeSchedulerFlood.cs`'
 rs_target  = '`crates/ersatzrs-infra/src/remote_stream.rs`; `crates/ersatzrs-web/src/transport/iptv/stream.rs`; `crates/ersatzrs-infra/src/hls_worker.rs`'
 status     = 'In progress'
-adr        = ['0057', '0063', '0066']
+adr        = ['0057', '0063', '0066', '0084']
 
 summary    = '''
-Remote Stream playout resolves a persisted direct URL or an enabled installed
-add-on instead of opening its YAML `MediaFile`. URL input uses bounded network
-reads and HTTP reconnect options. Add-on commands come only from an
-integrity-checked signed package, receive declared settings and managed
-FFmpeg/ffprobe paths through a host-owned environment, and pipe media stdout
-directly into the managed consumer process. FFmpeg and ffprobe detect the
-producer container from its bytes. Windows batch entrypoints use an exact raw
-`cmd.exe` command line so quoted package paths survive the platform process
-boundary. The standalone Beeld & Geluid package implementations follow
-fresh Server Action and CloudFront-cookie discovery, then select one HLS
-video/audio rendition pair so MPEG-TS output has stable video-then-audio order.
-The yt-dlp add-on keeps yt-dlp an operator-supplied tool while requiring the
-ErsatzRS-managed FFmpeg runtime and preserving provider-specific request
-headers.
+Remote Stream playout resolves a persisted URL or enabled installed add-on
+instead of opening its YAML `MediaFile`. URLs use bounded reads and reconnects.
+Integrity-checked signed packages receive declared settings and host-managed
+FFmpeg/ffprobe paths, then pipe stdout into the consumer; FFmpeg detects the
+container from bytes. Windows batch entrypoints preserve quoted package paths.
+The standalone Beeld & Geluid packages perform fresh Server Action and
+CloudFront-cookie discovery and select one HLS video/audio pair. The yt-dlp
+package keeps yt-dlp operator-supplied while using managed FFmpeg and preserving
+provider request headers.
 IPTV and HLS share this resolver and cancellation ownership. Producer failures
 log safe surface/channel/seek context and a sanitized 2 KiB stderr tail; URLs,
 credentials, cookies, control characters, and local paths are removed. Consumer
 exit and ffprobe timeouts reap stalled producers; cancellation and consumer pipe
 closure remain debug events. Diagnostics and health never run or retry the
 producer.
+
+Play v2 retains v1 compatibility while letting live HLS request one 720p
+restart after measured 1080p under-delivery. A healthy fallback is remembered
+for 24 hours in a bounded provider-neutral cache; a 720p under-run never loops.
+The yt-dlp add-on owns the height-aware selector and zero-seek omission.
 
 Live and finite sources have distinct timing behavior. RTSP is forced live,
 live inputs start at zero without read-rate pacing, and current live Remote
@@ -81,8 +81,8 @@ resolved    = true
 
 [[debt]]
 id          = 'live-addon-sustained-delivery-unproven'
-adr         = '0057'
+adr         = '0084'
 description = 'The live yt-dlp add-on producer path is proven to emit valid streams but is not proven to sustain realtime delivery through the Windows HLS consumer; the current pipeline has no provider-versus-host under-run isolation.'
 discovered  = '2026-08-29'
-evidence    = 'The bounded Windows session kept the producer and consumer alive with zero transport/timestamp faults. Process sampling showed low CPU use, but channel 10 uses NVENC, so CPU alone cannot assign the slow layer. The first half-realtime estimate was invalid for VBR HLS; a metadata-only yt-dlp 2026.08.19 probe selected 1080p30 AVC at about 4.56 Mbps. Milestone hls-live-01 requires the new segment-advancement telemetry on an exact Windows candidate before assigning provider-specific recovery.'
+evidence    = 'The bounded Windows browser and server session measured 137.826 seconds of media over 329.835 seconds wall time, 34 waiting events, and slow segment publication despite HTTP 200 responses completing in at most 23 ms. Producer and consumer remained alive, while GPU activity arrived in bursts, assigning the sustained shortfall to the add-on producer boundary. ADR 0084 implements a play v2 height ceiling, one bounded 1080p-to-720p restart, and a verified 24-hour cache. Deterministic tracker, cache, capability, and add-on argument tests are present; milestone hls-live-01 still requires the exact-candidate five-minute Windows browser and TSDuck proof before this debt closes.'
 resolved    = false

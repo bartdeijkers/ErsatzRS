@@ -360,8 +360,8 @@ impl LanguageStrings for GermanStrings {
         )
     }
 
-    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64) -> String {
-        format!("{recent} Kanal/Kanäle lieferten in den letzten {minutes} Minuten Live-HLS-Medien langsamer als die Echtzeit; {active} war(en) bei der letzten Beobachtung noch nicht wiederhergestellt. Prüfen Sie die Streaming-Protokolle und führen Sie vor Änderungen an den Anbietereinstellungen den TSDuck-Wiedergabetest mit Lieferzeitprüfung aus.")
+    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64, fallbacks: u64, fallback_hours: u64) -> String {
+        format!("{recent} Kanal/Kanäle lieferten in den letzten {minutes} Minuten Live-HLS-Medien langsamer als die Echtzeit; {active} war(en) bei der letzten Beobachtung noch nicht wiederhergestellt; {fallbacks} Kanal/Kanäle verwenden bis zu {fallback_hours} Stunden lang einen verifizierten 720p-Rückfall. Prüfen Sie die Streaming-Protokolle und führen Sie vor Änderungen an den Anbietereinstellungen den TSDuck-Wiedergabetest mit Lieferzeitprüfung aus.")
     }
 
     fn artwork_cardinality_message(

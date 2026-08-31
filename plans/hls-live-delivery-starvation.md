@@ -84,6 +84,14 @@ result.
 - Any automatic source restart or fallback that changes ErsatzTV-visible
   behavior must be captured in the owning ADR before it is enabled.
 
+Implemented on 2026-08-31 through ADR 0084: play v2 supplies a generic maximum
+video height, the HLS worker performs at most one 1080p-to-720p restart, and a
+healthy fallback is retained for 24 hours in a 256-entry provider-neutral
+cache. A 720p under-run clears the learned decision without creating a restart
+loop. The official yt-dlp add-on maps the ceiling into its format selector and
+omits a zero-offset input seek. Exact-candidate Windows playback acceptance
+remains open.
+
 ## Acceptance
 
 - Deterministic healthy, bursty-within-budget, stalled, and resumed sources

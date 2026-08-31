@@ -104,9 +104,7 @@ fn default_addon_is_usable(row: &DbRow) -> bool {
     row.try_get::<String, _>("ManifestJson")
         .ok()
         .and_then(|json| serde_json::from_str::<AddonManifest>(&json).ok())
-        .is_some_and(|manifest| {
-            manifest.has_capability(ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V1)
-        })
+        .is_some_and(|manifest| manifest.has_remote_stream_play_capability())
 }
 
 /// Report a configured default remote-stream add-on that cannot be used.

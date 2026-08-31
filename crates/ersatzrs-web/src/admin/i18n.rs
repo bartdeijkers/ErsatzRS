@@ -3684,7 +3684,10 @@ const ARTWORK_CARDINALITY_HIERARCHY_SUFFIX: &str =
 const HLS_LIVE_DELIVERY_RECENT_SEPARATOR: &str =
     " channel(s) delivered live HLS media slower than wall time in the last ";
 const HLS_LIVE_DELIVERY_ACTIVE_SEPARATOR: &str = " minutes; ";
-const HLS_LIVE_DELIVERY_SUFFIX: &str = " had not recovered when last observed. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.";
+const HLS_LIVE_DELIVERY_FALLBACK_SEPARATOR: &str = " had not recovered when last observed; ";
+const HLS_LIVE_DELIVERY_FALLBACK_HOURS_SEPARATOR: &str =
+    " channel(s) are using a verified 720p fallback for up to ";
+const HLS_LIVE_DELIVERY_SUFFIX: &str = " hours. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.";
 
 pub fn health_check_title(title: &str) -> String {
     health_check_title_text(use_i18n(), title)
@@ -3755,27 +3758,33 @@ pub fn health_check_message_text(
         }
     }
     if title == HLS_LIVE_DELIVERY_TITLE {
-        if let Some((recent_under_runs, minutes, active_under_runs)) =
+        if let Some((recent_under_runs, minutes, active_under_runs, fallbacks, fallback_hours)) =
             hls_live_delivery_counts(displayed_message)
         {
             return languages_for(language).hls_live_delivery_message(
                 recent_under_runs,
                 minutes,
                 active_under_runs,
+                fallbacks,
+                fallback_hours,
             );
         }
     }
     displayed_message.to_owned()
 }
 
-fn hls_live_delivery_counts(message: &str) -> Option<(u64, u64, u64)> {
+fn hls_live_delivery_counts(message: &str) -> Option<(u64, u64, u64, u64, u64)> {
     let (recent_under_runs, message) = message.split_once(HLS_LIVE_DELIVERY_RECENT_SEPARATOR)?;
     let (minutes, message) = message.split_once(HLS_LIVE_DELIVERY_ACTIVE_SEPARATOR)?;
-    let active_under_runs = message.strip_suffix(HLS_LIVE_DELIVERY_SUFFIX)?;
+    let (active_under_runs, message) = message.split_once(HLS_LIVE_DELIVERY_FALLBACK_SEPARATOR)?;
+    let (fallbacks, message) = message.split_once(HLS_LIVE_DELIVERY_FALLBACK_HOURS_SEPARATOR)?;
+    let fallback_hours = message.strip_suffix(HLS_LIVE_DELIVERY_SUFFIX)?;
     Some((
         recent_under_runs.parse().ok()?,
         minutes.parse().ok()?,
         active_under_runs.parse().ok()?,
+        fallbacks.parse().ok()?,
+        fallback_hours.parse().ok()?,
     ))
 }
 
@@ -3988,6 +3997,8 @@ pub trait LanguageStrings: Sync {
         recent_under_runs: u64,
         minutes: u64,
         active_under_runs: u64,
+        fallbacks: u64,
+        fallback_hours: u64,
     ) -> String;
     fn unable_to_load_playback_troubleshooting(&self, error: &dyn std::fmt::Display) -> String;
     fn playout_reset_prompt(&self, channel: &str, schedule: &str) -> String;
@@ -4233,7 +4244,7 @@ mod tests {
 
     #[test]
     fn hls_live_delivery_health_text_is_localized_for_every_language() {
-        let message = "2 channel(s) delivered live HLS media slower than wall time in the last 30 minutes; 1 had not recovered when last observed. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.";
+        let message = "2 channel(s) delivered live HLS media slower than wall time in the last 30 minutes; 1 had not recovered when last observed; 3 channel(s) are using a verified 720p fallback for up to 24 hours. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.";
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);
             let title = health_check_title_text(language, HLS_LIVE_DELIVERY_TITLE);
@@ -4244,7 +4255,7 @@ mod tests {
                 "2 recent live HLS delivery under-run(s)",
             );
             assert!(!title.trim().is_empty());
-            for count in ["2", "30", "1"] {
+            for count in ["2", "30", "1", "3", "720", "24"] {
                 assert!(
                     localized.contains(count),
                     "{}: {localized}",

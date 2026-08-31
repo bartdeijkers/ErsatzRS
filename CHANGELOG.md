@@ -76,6 +76,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Recover live add-on HLS playback that cannot sustain 1080p by requesting one
+  provider-neutral 720p rendition fallback, verifying it against playlist
+  delivery, remembering it for 24 hours, and reporting the temporary quality
+  reduction through localized health guidance. See ADR 0084.
+
 - Keep the Windows beta web-bundle gate independent of runner-owned FFmpeg
   drift. Auto-discovered overrides are now accepted only when they report
   FFmpeg major version 9; otherwise the gate uses the normal managed

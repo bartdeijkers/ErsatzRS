@@ -354,8 +354,8 @@ impl LanguageStrings for FrenchStrings {
         )
     }
 
-    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64) -> String {
-        format!("{recent} chaîne(s) ont fourni le média HLS en direct plus lentement que le temps réel au cours des {minutes} dernières minutes ; {active} n'avaient pas récupéré lors de la dernière observation. Consultez les journaux de diffusion et exécutez le test de lecture TSDuck sensible au débit avant de modifier les paramètres du fournisseur.")
+    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64, fallbacks: u64, fallback_hours: u64) -> String {
+        format!("{recent} chaîne(s) ont fourni le média HLS en direct plus lentement que le temps réel au cours des {minutes} dernières minutes ; {active} n'avaient pas récupéré lors de la dernière observation ; {fallbacks} chaîne(s) utilisent un repli 720p vérifié pendant au plus {fallback_hours} heures. Consultez les journaux de diffusion et exécutez le test de lecture TSDuck sensible au débit avant de modifier les paramètres du fournisseur.")
     }
 
     fn artwork_cardinality_message(

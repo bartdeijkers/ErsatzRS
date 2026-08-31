@@ -37,6 +37,7 @@ use crate::dynamic_text::shutdown_dynamic_text_controllers;
 use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
 use crate::ffmpeg_config::playback_language_preferences;
 use crate::hls_delivery::{
+    clear_hls_delivery_fallback, load_hls_delivery_fallback, persist_hls_delivery_fallback,
     persist_hls_delivery_observation, HlsDeliveryObservation, HlsDeliveryState,
 };
 use crate::playback::{
@@ -52,8 +53,10 @@ use crate::playback::{
 use crate::remote_stream::{
     decode_persisted_liveness, redact_remote_stream_output, redacted_source_label,
     remote_stream_input_file, remote_stream_playback_start, remote_stream_producer,
-    resolve_remote_stream_with_addons, spawn_ffmpeg_with_remote_input, RemoteStreamCommand,
+    remote_stream_video_height_ceiling, resolve_remote_stream_with_addons,
+    spawn_ffmpeg_with_remote_input, with_remote_stream_video_height_ceiling, RemoteStreamCommand,
     RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext, ResolvedRemoteStream,
+    REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT, REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
@@ -84,9 +87,11 @@ const HLS_ADMISSION_RETRY_INTERVAL: Duration = Duration::from_millis(250);
 const HLS_RECLAIMED_REACQUIRE_DELAY: Duration = Duration::from_millis(500);
 const HLS_AT_CAPACITY_SLATE_DURATION: Duration = Duration::from_secs(4);
 const HLS_DELIVERY_WINDOW: Duration = Duration::from_mins(1);
-const HLS_DELIVERY_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+const HLS_DELIVERY_FAST_WINDOW: Duration = Duration::from_secs(20);
+const HLS_DELIVERY_STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
 const HLS_DELIVERY_NO_PROGRESS_TIMEOUT: Duration = Duration::from_secs(12);
-const HLS_DELIVERY_MIN_RATIO: f64 = 0.95;
+const HLS_DELIVERY_FAST_MIN_RATIO: f64 = 0.90;
+const HLS_DELIVERY_MIN_RATIO: f64 = 0.98;
 pub(crate) const DEFAULT_WORK_AHEAD_SEGMENTER_LIMIT: i32 = 1;
 const TS_PACKET_SIZE: usize = 188;
 const TS_SYNC_BYTE: u8 = 0x47;
@@ -187,6 +192,7 @@ enum HlsProcessOutcome {
     Failed(String),
     Cancelled,
     Reclaimed,
+    DeliveryFallback { detected_at: DateTime<Utc> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -207,15 +213,15 @@ struct HlsDeliveryTracker {
 }
 
 impl HlsDeliveryTracker {
-    fn new(last_sequence: Option<u64>) -> Self {
+    fn new(last_sequence: Option<u64>, active_under_run_at: Option<DateTime<Utc>>) -> Self {
         Self {
             last_sequence,
             window_started_at: Duration::ZERO,
             media_in_window: Duration::ZERO,
             max_segment_duration: Duration::ZERO,
             last_progress_at: None,
-            under_run_active: false,
-            last_under_run_at: None,
+            under_run_active: active_under_run_at.is_some(),
+            last_under_run_at: active_under_run_at,
         }
     }
 
@@ -259,10 +265,14 @@ impl HlsDeliveryTracker {
         // One segment of allowance prevents a healthy segmented stream from
         // failing solely because the observation tick landed just before the
         // next playlist update.
+        let fast_window_under_run = wall >= HLS_DELIVERY_FAST_WINDOW
+            && (self.media_in_window + self.max_segment_duration).as_secs_f64()
+                < wall.as_secs_f64() * HLS_DELIVERY_FAST_MIN_RATIO;
         let window_under_run = window_complete
             && (self.media_in_window + self.max_segment_duration).as_secs_f64()
                 < wall.as_secs_f64() * HLS_DELIVERY_MIN_RATIO;
-        let under_run = startup_stalled || delivery_stalled || window_under_run;
+        let under_run =
+            startup_stalled || delivery_stalled || fast_window_under_run || window_under_run;
 
         let update = if under_run && !self.under_run_active {
             self.under_run_active = true;
@@ -301,6 +311,50 @@ struct HlsProcessCapacity<'a> {
     active_transcode_slot_id: Option<u64>,
     work_ahead_reservation: Option<&'a mut Option<WorkAheadReservation>>,
     delivery_pool: Option<&'a DbPool>,
+    delivery_recovery: Option<HlsDeliveryRecovery>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct HlsDeliveryRecovery {
+    media_item_id: i64,
+    max_video_height: u16,
+    fallback_detected_at: Option<DateTime<Utc>>,
+    fallback_verified: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HlsDeliveryRecoveryAction {
+    None,
+    RestartAtFallback,
+    VerifyFallback,
+    ClearFallback,
+}
+
+fn hls_delivery_recovery_action(
+    recovery: HlsDeliveryRecovery,
+    observation: &HlsDeliveryObservation,
+    fallback_verified: bool,
+) -> HlsDeliveryRecoveryAction {
+    if observation.state == HlsDeliveryState::UnderRun
+        && observation.transitioned
+        && recovery.max_video_height > REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
+        && recovery.fallback_detected_at.is_none()
+    {
+        return HlsDeliveryRecoveryAction::RestartAtFallback;
+    }
+    if observation.state == HlsDeliveryState::UnderRun
+        && recovery.max_video_height == REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
+    {
+        return HlsDeliveryRecoveryAction::ClearFallback;
+    }
+    if observation.state == HlsDeliveryState::Recovered
+        && observation.transitioned
+        && !fallback_verified
+        && recovery.max_video_height == REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
+    {
+        return HlsDeliveryRecoveryAction::VerifyFallback;
+    }
+    HlsDeliveryRecoveryAction::None
 }
 
 /// Concrete HLS segmenter worker backed by `FFmpeg` CLI output in a temp folder.
@@ -479,6 +533,7 @@ impl HlsSessionWorker {
         // ADR 0014 allows exactly one graph retry per session, mirroring the
         // decode-denial bound above.
         let mut learned_graph_retry_used = false;
+        let mut delivery_fallbacks = HashMap::<i64, DateTime<Utc>>::new();
         let slug_duration = match load_channel_slug_seconds(&pool, self.channel_id).await {
             Ok(seconds) => seconds
                 .filter(|seconds| *seconds > 0.0)
@@ -684,7 +739,7 @@ impl HlsSessionWorker {
                         last_playout_item_id = None;
                     }
                     HlsProcessOutcome::Cancelled => break,
-                    HlsProcessOutcome::Reclaimed => {}
+                    HlsProcessOutcome::Reclaimed | HlsProcessOutcome::DeliveryFallback { .. } => {}
                     HlsProcessOutcome::Failed(error) => {
                         tracing::warn!(
                             channel_number = %self.channel_number,
@@ -807,7 +862,9 @@ impl HlsSessionWorker {
                         self.set_session_state(self.session_state().throttle());
                         continue;
                     }
-                    HlsProcessOutcome::Failed(_) | HlsProcessOutcome::Cancelled => {}
+                    HlsProcessOutcome::Failed(_)
+                    | HlsProcessOutcome::Cancelled
+                    | HlsProcessOutcome::DeliveryFallback { .. } => {}
                 }
                 break;
             }
@@ -1233,7 +1290,49 @@ impl HlsSessionWorker {
                     HLS_REMOTE_INITIAL_BURST_SECONDS.to_string(),
                 ]);
             }
-            let remote_stream = active.remote_stream.clone();
+            let mut remote_stream = active.remote_stream.clone();
+            let mut delivery_recovery = None;
+            if is_live_remote
+                && remote_stream
+                    .as_ref()
+                    .and_then(remote_stream_video_height_ceiling)
+                    .is_some()
+            {
+                let (fallback_detected_at, fallback_verified) = if let Some(detected_at) =
+                    delivery_fallbacks.get(&active.media_item_id).copied()
+                {
+                    (Some(detected_at), false)
+                } else {
+                    match load_hls_delivery_fallback(&pool, active.media_item_id, Utc::now()).await
+                    {
+                        Ok(Some(fallback)) => (Some(fallback.detected_at), true),
+                        Ok(None) => (None, false),
+                        Err(error) => {
+                            tracing::warn!(
+                                %error,
+                                channel_number = %self.channel_number,
+                                media_item_id = active.media_item_id,
+                                "ignoring invalid live HLS quality fallback state"
+                            );
+                            let _ = clear_hls_delivery_fallback(&pool, active.media_item_id).await;
+                            (None, false)
+                        }
+                    }
+                };
+                let max_video_height = fallback_detected_at
+                    .map_or(REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT, |_| {
+                        REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
+                    });
+                remote_stream = remote_stream.as_ref().map(|stream| {
+                    with_remote_stream_video_height_ceiling(stream, max_video_height)
+                });
+                delivery_recovery = Some(HlsDeliveryRecovery {
+                    media_item_id: active.media_item_id,
+                    max_video_height,
+                    fallback_detected_at,
+                    fallback_verified,
+                });
+            }
             let mut runtime_capabilities = self.runtime_capabilities().await;
             let command = build_hls_command_with_input_explicit_discontinuity(
                 media_input,
@@ -1286,6 +1385,7 @@ impl HlsSessionWorker {
                                     && decision.working_ahead)
                                     .then_some(&mut work_ahead_reservation),
                                 delivery_pool: is_live_remote.then_some(&pool),
+                                delivery_recovery,
                             },
                         )
                         .await;
@@ -1478,7 +1578,9 @@ impl HlsSessionWorker {
                             self.set_session_state(self.session_state().throttle());
                             continue;
                         }
-                        HlsProcessOutcome::Failed(_) | HlsProcessOutcome::Cancelled => {
+                        HlsProcessOutcome::Failed(_)
+                        | HlsProcessOutcome::Cancelled
+                        | HlsProcessOutcome::DeliveryFallback { .. } => {
                             break;
                         }
                     }
@@ -1486,6 +1588,18 @@ impl HlsSessionWorker {
                 HlsProcessOutcome::Reclaimed => {
                     self.set_admission_status(HlsAdmissionStatus::Waiting);
                     self.set_session_state(self.session_state().throttle());
+                    continue;
+                }
+                HlsProcessOutcome::DeliveryFallback { detected_at } => {
+                    delivery_fallbacks.insert(active.media_item_id, detected_at);
+                    self.set_admission_status(HlsAdmissionStatus::Waiting);
+                    tracing::warn!(
+                        channel_number = %self.channel_number,
+                        media_item_id = active.media_item_id,
+                        from_height = REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT,
+                        to_height = REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
+                        "restarting under-delivering live HLS source with a lower video ceiling"
+                    );
                     continue;
                 }
                 HlsProcessOutcome::Cancelled => break,
@@ -1605,11 +1719,13 @@ impl HlsSessionWorker {
                 active_transcode_slot_id,
                 work_ahead_reservation: None,
                 delivery_pool: None,
+                delivery_recovery: None,
             },
         )
         .await
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn run_hls_process_with_remote(
         &self,
         command: FfmpegCommand,
@@ -1620,6 +1736,7 @@ impl HlsSessionWorker {
         mut capacity: HlsProcessCapacity<'_>,
     ) -> HlsProcessOutcome {
         let delivery_pool = capacity.delivery_pool;
+        let delivery_recovery = capacity.delivery_recovery;
         let burst_baseline = if capacity.work_ahead_reservation.is_some() {
             playlist_segment_uris(&self.working_dir)
                 .await
@@ -1629,8 +1746,13 @@ impl HlsSessionWorker {
         };
         let delivery_started_at = tokio::time::Instant::now();
         let mut delivery_tracker = self
-            .initial_hls_delivery_tracker(delivery_pool.is_some())
+            .initial_hls_delivery_tracker(
+                delivery_pool.is_some(),
+                delivery_recovery.and_then(|recovery| recovery.fallback_detected_at),
+            )
             .await;
+        let mut fallback_verified =
+            delivery_recovery.is_some_and(|recovery| recovery.fallback_verified);
         let producer = remote_stream.as_ref().and_then(remote_stream_producer);
         let Ok(mut child) = self.spawn_hls_child_with_remote(&command, producer) else {
             tracing::warn!(channel_number = %self.channel_number, "failed to spawn ffmpeg hls segmenter");
@@ -1691,7 +1813,26 @@ impl HlsSessionWorker {
                 }
                 _ = cleanup_interval.tick() => {
                     if let (Some(pool), Some(tracker)) = (delivery_pool, delivery_tracker.as_mut()) {
-                        self.sample_hls_delivery(pool, tracker, delivery_started_at).await;
+                        if let Some(observation) = self
+                            .sample_hls_delivery(pool, tracker, delivery_started_at)
+                            .await
+                        {
+                            if let Some(recovery) = delivery_recovery {
+                                if let Some(outcome) = self
+                                    .apply_hls_delivery_recovery(
+                                        pool,
+                                        recovery,
+                                        &observation,
+                                        &mut fallback_verified,
+                                        &mut child,
+                                        &mut stderr_task,
+                                    )
+                                    .await
+                                {
+                                    return outcome;
+                                }
+                            }
+                        }
                     }
                     if capacity.work_ahead_reservation
                         .as_ref()
@@ -1719,7 +1860,59 @@ impl HlsSessionWorker {
         }
     }
 
-    async fn initial_hls_delivery_tracker(&self, enabled: bool) -> Option<HlsDeliveryTracker> {
+    async fn apply_hls_delivery_recovery(
+        &self,
+        pool: &DbPool,
+        recovery: HlsDeliveryRecovery,
+        observation: &HlsDeliveryObservation,
+        fallback_verified: &mut bool,
+        child: &mut RemoteStreamProcess,
+        stderr_task: &mut Option<tokio::task::JoinHandle<String>>,
+    ) -> Option<HlsProcessOutcome> {
+        match hls_delivery_recovery_action(recovery, observation, *fallback_verified) {
+            HlsDeliveryRecoveryAction::RestartAtFallback => {
+                self.terminate_hls_child(child, stderr_task.take(), "live HLS delivery fallback")
+                    .await;
+                Some(HlsProcessOutcome::DeliveryFallback {
+                    detected_at: observation.observed_at,
+                })
+            }
+            HlsDeliveryRecoveryAction::ClearFallback => {
+                let _ = clear_hls_delivery_fallback(pool, recovery.media_item_id).await;
+                None
+            }
+            HlsDeliveryRecoveryAction::VerifyFallback => {
+                let detected_at = recovery
+                    .fallback_detected_at
+                    .unwrap_or(observation.last_under_run_at);
+                match persist_hls_delivery_fallback(
+                    pool,
+                    recovery.media_item_id,
+                    detected_at,
+                    observation.observed_at,
+                    recovery.max_video_height,
+                )
+                .await
+                {
+                    Ok(()) => *fallback_verified = true,
+                    Err(error) => tracing::warn!(
+                        %error,
+                        channel_number = %self.channel_number,
+                        media_item_id = recovery.media_item_id,
+                        "failed to persist verified live HLS quality fallback"
+                    ),
+                }
+                None
+            }
+            HlsDeliveryRecoveryAction::None => None,
+        }
+    }
+
+    async fn initial_hls_delivery_tracker(
+        &self,
+        enabled: bool,
+        active_under_run_at: Option<DateTime<Utc>>,
+    ) -> Option<HlsDeliveryTracker> {
         if !enabled {
             return None;
         }
@@ -1727,7 +1920,7 @@ impl HlsSessionWorker {
             .await
             .ok()
             .and_then(|segments| segments.last().map(|segment| segment.sequence));
-        Some(HlsDeliveryTracker::new(baseline))
+        Some(HlsDeliveryTracker::new(baseline, active_under_run_at))
     }
 
     async fn sample_hls_delivery(
@@ -1735,7 +1928,7 @@ impl HlsSessionWorker {
         pool: &DbPool,
         tracker: &mut HlsDeliveryTracker,
         started_at: tokio::time::Instant,
-    ) {
+    ) -> Option<HlsDeliveryObservation> {
         match hls_delivery_segments(&self.working_dir).await {
             Ok(segments) => {
                 if let Some(observation) =
@@ -1743,6 +1936,7 @@ impl HlsSessionWorker {
                 {
                     self.record_hls_delivery_transition(pool, &observation)
                         .await;
+                    return Some(observation);
                 }
             }
             Err(error) => tracing::debug!(
@@ -1751,6 +1945,7 @@ impl HlsSessionWorker {
                 "could not sample HLS delivery progress"
             ),
         }
+        None
     }
 
     async fn record_hls_delivery_transition(
@@ -5147,7 +5342,7 @@ mod tests {
 
     #[test]
     fn hls_delivery_tracker_allows_one_segment_of_sampling_jitter() {
-        let mut tracker = HlsDeliveryTracker::new(None);
+        let mut tracker = HlsDeliveryTracker::new(None, None);
 
         let observation = tracker.observe(
             Duration::from_mins(1),
@@ -5161,7 +5356,7 @@ mod tests {
     #[test]
     fn hls_delivery_tracker_detects_sustained_under_run_and_recovery() {
         let now = Utc::now();
-        let mut tracker = HlsDeliveryTracker::new(None);
+        let mut tracker = HlsDeliveryTracker::new(None, None);
 
         let under_run = tracker
             .observe(Duration::from_mins(1), &delivery_segments(1, 7), now)
@@ -5183,15 +5378,114 @@ mod tests {
     }
 
     #[test]
+    fn hls_delivery_tracker_detects_fast_severe_under_run() {
+        let mut tracker = HlsDeliveryTracker::new(None, None);
+
+        let under_run = tracker
+            .observe(
+                HLS_DELIVERY_FAST_WINDOW,
+                &delivery_segments(1, 2),
+                Utc::now(),
+            )
+            .expect("severe under-delivery should trigger the fast window");
+
+        assert_eq!(under_run.state, HlsDeliveryState::UnderRun);
+        assert!(under_run.transitioned);
+    }
+
+    #[test]
+    fn hls_delivery_tracker_recovers_seeded_fallback_after_healthy_window() {
+        let detected_at = Utc::now();
+        let mut tracker = HlsDeliveryTracker::new(None, Some(detected_at));
+
+        let recovered = tracker
+            .observe(
+                HLS_DELIVERY_WINDOW,
+                &delivery_segments(1, 15),
+                detected_at + chrono::Duration::minutes(1),
+            )
+            .expect("a verified fallback should transition to recovered");
+
+        assert_eq!(recovered.state, HlsDeliveryState::Recovered);
+        assert!(recovered.transitioned);
+        assert_eq!(recovered.last_under_run_at, detected_at);
+    }
+
+    #[test]
+    fn hls_delivery_recovery_allows_one_downgrade_and_never_loops_at_720p() {
+        let observed_at = Utc::now();
+        let under_run = HlsDeliveryObservation {
+            transitioned: true,
+            observed_at,
+            state: HlsDeliveryState::UnderRun,
+            last_under_run_at: observed_at,
+            wall_seconds: 20.0,
+            media_seconds: 8.0,
+            delivery_ratio_percent: 40.0,
+            no_progress_seconds: 0.0,
+        };
+        let initial = HlsDeliveryRecovery {
+            media_item_id: 42,
+            max_video_height: REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT,
+            fallback_detected_at: None,
+            fallback_verified: false,
+        };
+        let fallback = HlsDeliveryRecovery {
+            max_video_height: REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
+            fallback_detected_at: Some(observed_at),
+            ..initial
+        };
+
+        assert_eq!(
+            hls_delivery_recovery_action(initial, &under_run, false),
+            HlsDeliveryRecoveryAction::RestartAtFallback
+        );
+        assert_eq!(
+            hls_delivery_recovery_action(fallback, &under_run, false),
+            HlsDeliveryRecoveryAction::ClearFallback
+        );
+    }
+
+    #[test]
+    fn hls_delivery_recovery_verifies_healthy_720p_once() {
+        let detected_at = Utc::now();
+        let recovered = HlsDeliveryObservation {
+            transitioned: true,
+            observed_at: detected_at + chrono::Duration::minutes(1),
+            state: HlsDeliveryState::Recovered,
+            last_under_run_at: detected_at,
+            wall_seconds: 60.0,
+            media_seconds: 60.0,
+            delivery_ratio_percent: 100.0,
+            no_progress_seconds: 0.0,
+        };
+        let fallback = HlsDeliveryRecovery {
+            media_item_id: 42,
+            max_video_height: REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
+            fallback_detected_at: Some(detected_at),
+            fallback_verified: false,
+        };
+
+        assert_eq!(
+            hls_delivery_recovery_action(fallback, &recovered, false),
+            HlsDeliveryRecoveryAction::VerifyFallback
+        );
+        assert_eq!(
+            hls_delivery_recovery_action(fallback, &recovered, true),
+            HlsDeliveryRecoveryAction::None
+        );
+    }
+
+    #[test]
     fn hls_delivery_tracker_detects_startup_and_midstream_stalls() {
         let now = Utc::now();
-        let mut startup = HlsDeliveryTracker::new(None);
+        let mut startup = HlsDeliveryTracker::new(None, None);
         let startup_under_run = startup
             .observe(Duration::from_secs(30), &[], now)
             .expect("missing startup progress should be an under-run");
         assert_eq!(startup_under_run.state, HlsDeliveryState::UnderRun);
 
-        let mut midstream = HlsDeliveryTracker::new(None);
+        let mut midstream = HlsDeliveryTracker::new(None, None);
         assert!(midstream
             .observe(Duration::from_secs(5), &delivery_segments(1, 1), now,)
             .is_none());
@@ -5205,7 +5499,7 @@ mod tests {
     #[test]
     fn hls_delivery_tracker_refreshes_active_under_run_without_log_transition() {
         let now = Utc::now();
-        let mut tracker = HlsDeliveryTracker::new(None);
+        let mut tracker = HlsDeliveryTracker::new(None, None);
         let initial = tracker
             .observe(Duration::from_mins(1), &delivery_segments(1, 7), now)
             .expect("initial under-run");

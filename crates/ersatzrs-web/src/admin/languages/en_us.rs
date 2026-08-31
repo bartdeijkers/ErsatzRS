@@ -362,8 +362,8 @@ impl LanguageStrings for EnglishStrings {
         )
     }
 
-    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64) -> String {
-        format!("{recent} channel(s) delivered live HLS media slower than wall time in the last {minutes} minutes; {active} had not recovered when last observed. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.")
+    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64, fallbacks: u64, fallback_hours: u64) -> String {
+        format!("{recent} channel(s) delivered live HLS media slower than wall time in the last {minutes} minutes; {active} had not recovered when last observed; {fallbacks} channel(s) are using a verified 720p fallback for up to {fallback_hours} hours. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.")
     }
 
     fn artwork_cardinality_message(

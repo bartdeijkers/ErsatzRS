@@ -21,8 +21,9 @@ setting values use these names:
 | `ERSATZRS_ADDON_SECRET_<KEY>` | Secret resolved from a named environment reference. |
 | `ERSATZRS_ADDON_SECRET_FILE_<KEY>` | Configured secret-file path. |
 | `FFMPEG_BIN`, `FFPROBE_BIN` | Managed tool paths when `managed_ffmpeg` is declared. |
-| `ERSATZRS_REMOTE_STREAM_URL` | URL for `remote-stream.play.v1`. |
+| `ERSATZRS_REMOTE_STREAM_URL` | URL for `remote-stream.play.v1` or v2. |
 | `ERSATZRS_REMOTE_STREAM_SEEK` | Current source offset for play. |
+| `ERSATZRS_REMOTE_STREAM_MAX_VIDEO_HEIGHT` | Host-selected maximum video height for `remote-stream.play.v2`; decimal pixels from 144 through 4320. |
 | `ERSATZRS_REMOTE_STREAM_PLAYLIST_URL` | URL for Remote Stream list v1 or v2. |
 | `ERSATZRS_MEDIA_LIST_URL` | Source hyperlink for media-list list v1 or v2. |
 
@@ -76,8 +77,9 @@ Every invocation runs in an owned Unix process group or Windows Job Object.
 Timeout, cancellation, output-drain failure, and invocation-owner teardown
 terminate every member that remains in that managed group or job. Control,
 list, and check output plus diagnostic stderr are byte- and time-bounded.
-`remote-stream.play.v1` stdout is instead a session-owned media stream; session
-cancellation owns its lifetime.
+`remote-stream.play.v1` and v2 stdout are instead session-owned media streams;
+session cancellation owns their lifetime. Version 2 must honor the supplied
+maximum video height without treating it as an exact required rendition.
 
 Processes still run as the ErsatzRS operating-system user. Signing proves
 provenance and integrity, not confinement. The small startup allowlist still

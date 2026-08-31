@@ -360,8 +360,8 @@ impl LanguageStrings for ItalianStrings {
         )
     }
 
-    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64) -> String {
-        format!("{recent} canale/i hanno distribuito contenuti HLS in diretta più lentamente del tempo reale negli ultimi {minutes} minuti; {active} non avevano ancora recuperato all'ultima osservazione. Controlla i log di streaming ed esegui il test di riproduzione TSDuck sensibile alla velocità di consegna prima di modificare le impostazioni del provider.")
+    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64, fallbacks: u64, fallback_hours: u64) -> String {
+        format!("{recent} canale/i hanno distribuito contenuti HLS in diretta più lentamente del tempo reale negli ultimi {minutes} minuti; {active} non avevano ancora recuperato all'ultima osservazione; {fallbacks} canale/i usano un ripiego 720p verificato per un massimo di {fallback_hours} ore. Controlla i log di streaming ed esegui il test di riproduzione TSDuck sensibile alla velocità di consegna prima di modificare le impostazioni del provider.")
     }
 
     fn artwork_cardinality_message(

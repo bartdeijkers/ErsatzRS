@@ -23,8 +23,8 @@ use ersatzrs_addon_contract::{
     CAPABILITY_REMOTE_STREAM_ITEM_V1, CAPABILITY_REMOTE_STREAM_ITEM_V2,
     CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
     CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
-    CAPABILITY_REMOTE_STREAM_PLAY_V1, OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET,
-    OPERATION_CODE_MISSING_SETTING,
+    CAPABILITY_REMOTE_STREAM_PLAY_V1, CAPABILITY_REMOTE_STREAM_PLAY_V2, OPERATION_CODE_FAILED,
+    OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
 };
 use futures_util::StreamExt as _;
 #[cfg(windows)]
@@ -501,12 +501,9 @@ pub async fn set_default_remote_stream_addon(
             "add-on '{addon_id}' is not enabled"
         )));
     }
-    if !installed
-        .manifest
-        .has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
-    {
+    if !installed.manifest.has_remote_stream_play_capability() {
         return Err(AddonError::Validation(format!(
-            "add-on '{addon_id}' does not implement {CAPABILITY_REMOTE_STREAM_PLAY_V1}"
+            "add-on '{addon_id}' does not implement a Remote Stream play capability"
         )));
     }
     let updated = sqlx::query(r#"UPDATE "ConfigElement" SET "Value" = ? WHERE "Key" = ?"#)
@@ -3219,7 +3216,10 @@ fn validate_supported_operation(capability: &str, operation: &str) -> Result<(),
                 "item"
             )
             | (CAPABILITY_MEDIA_LIST_IMPORT_V1, "discover" | "enrich")
-            | (CAPABILITY_REMOTE_STREAM_PLAY_V1, "play")
+            | (
+                CAPABILITY_REMOTE_STREAM_PLAY_V1 | CAPABILITY_REMOTE_STREAM_PLAY_V2,
+                "play"
+            )
     );
     if !supported {
         return Err(AddonError::Validation(format!(
@@ -5461,7 +5461,7 @@ mod tests {
         assert!(validate_supported_operation(CAPABILITY_MEDIA_LIST_LIST_V1, "list").is_ok());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_LIST_V1, "list").is_ok());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V1, "play").is_ok());
-        assert!(validate_supported_operation("remote-stream.play.v2", "play").is_err());
+        assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V2, "play").is_ok());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V1, "list").is_err());
     }
 

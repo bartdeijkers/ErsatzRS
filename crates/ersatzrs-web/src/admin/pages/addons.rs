@@ -411,12 +411,7 @@ fn manager_body(
     let remote_stream_addons = data
         .installed
         .iter()
-        .filter(|item| {
-            item.enabled
-                && item
-                    .manifest
-                    .has_capability(ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V1)
-        })
+        .filter(|item| item.enabled && item.manifest.has_remote_stream_play_capability())
         .map(|item| (item.addon_id.clone(), localized(&item.manifest.name)))
         .collect::<Vec<_>>();
     let default_remote_stream_addon = data.default_remote_stream_addon.clone().unwrap_or_default();

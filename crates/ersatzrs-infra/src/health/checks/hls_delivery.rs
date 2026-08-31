@@ -5,8 +5,9 @@ use super::super::{
     HealthCheckStatus, Pool, Result, Row,
 };
 use crate::hls_delivery::{
-    HlsDeliveryObservation, HlsDeliveryState, CONFIG_KEY_HLS_DELIVERY_PREFIX,
-    HLS_DELIVERY_RECENT_MINUTES,
+    HlsDeliveryFallback, HlsDeliveryObservation, HlsDeliveryState,
+    CONFIG_KEY_HLS_DELIVERY_FALLBACK_PREFIX, CONFIG_KEY_HLS_DELIVERY_PREFIX,
+    HLS_DELIVERY_FALLBACK_HOURS, HLS_DELIVERY_RECENT_MINUTES,
 };
 
 pub(crate) struct HlsDeliveryHealthCheck {
@@ -36,7 +37,16 @@ impl HealthCheck for HlsDeliveryHealthCheck {
         .await
         .map_err(sqlx_error)?;
 
-        if rows.is_empty() {
+        let fallback_rows = sqlx::query(
+            r#"SELECT "Value"
+               FROM "ConfigElement"
+               WHERE "Key" LIKE ?"#,
+        )
+        .bind(format!("{CONFIG_KEY_HLS_DELIVERY_FALLBACK_PREFIX}%"))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(sqlx_error)?;
+        if rows.is_empty() && fallback_rows.is_empty() {
             return Ok(HealthCheckResult::not_applicable(self.title()));
         }
 
@@ -44,6 +54,7 @@ impl HealthCheck for HlsDeliveryHealthCheck {
         let mut recent_under_runs = 0_u64;
         let mut active_under_runs = 0_u64;
         let mut malformed = 0_u64;
+        let mut active_fallbacks = 0_u64;
 
         for row in rows {
             let value = row.try_get::<String, _>("Value").map_err(sqlx_error)?;
@@ -60,12 +71,23 @@ impl HealthCheck for HlsDeliveryHealthCheck {
             }
         }
 
+        for row in fallback_rows {
+            let value = row.try_get::<String, _>("Value").map_err(sqlx_error)?;
+            let Ok(fallback) = serde_json::from_str::<HlsDeliveryFallback>(&value) else {
+                malformed += 1;
+                continue;
+            };
+            if fallback.expires_at > Utc::now() {
+                active_fallbacks += 1;
+            }
+        }
+
         if malformed > 0 {
             return Err(HealthCheckError::Serialization(format!(
                 "{malformed} persisted HLS delivery observation(s) are invalid"
             )));
         }
-        if recent_under_runs == 0 {
+        if recent_under_runs == 0 && active_fallbacks == 0 {
             return Ok(HealthCheckResult::pass(self.title()));
         }
 
@@ -73,9 +95,11 @@ impl HealthCheck for HlsDeliveryHealthCheck {
             self.title(),
             HealthCheckStatus::Warning,
             format!(
-                "{recent_under_runs} channel(s) delivered live HLS media slower than wall time in the last {HLS_DELIVERY_RECENT_MINUTES} minutes; {active_under_runs} had not recovered when last observed. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings."
+                "{recent_under_runs} channel(s) delivered live HLS media slower than wall time in the last {HLS_DELIVERY_RECENT_MINUTES} minutes; {active_under_runs} had not recovered when last observed; {active_fallbacks} channel(s) are using a verified 720p fallback for up to {HLS_DELIVERY_FALLBACK_HOURS} hours. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings."
             ),
-            format!("{recent_under_runs} recent live HLS delivery under-run(s)"),
+            format!(
+                "{recent_under_runs} recent live HLS delivery under-run(s); {active_fallbacks} temporary quality fallback(s)"
+            ),
         )
         .with_link("/system/troubleshooting/mpeg"))
     }
@@ -88,7 +112,8 @@ mod tests {
 
     use super::*;
     use crate::hls_delivery::{
-        persist_hls_delivery_observation, HlsDeliveryObservation, HlsDeliveryState,
+        persist_hls_delivery_fallback, persist_hls_delivery_observation, HlsDeliveryObservation,
+        HlsDeliveryState,
     };
 
     async fn test_pool() -> Pool<Db> {
@@ -177,5 +202,23 @@ mod tests {
             .expect("run health check");
 
         assert_eq!(result.status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
+    async fn verified_quality_fallback_remains_visible_while_delivery_is_stable() {
+        let pool = test_pool().await;
+        let detected_at = Utc::now() - Duration::minutes(2);
+        persist_hls_delivery_fallback(&pool, 10, detected_at, Utc::now(), 720)
+            .await
+            .expect("persist fallback");
+
+        let result = HlsDeliveryHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("run health check");
+
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result.message.contains("1 channel(s) are using"));
+        assert!(result.message.contains("720p"));
     }
 }

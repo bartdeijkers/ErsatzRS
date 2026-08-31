@@ -6,7 +6,7 @@ use crate::db::DbRow;
 use crate::remote_stream::{
     decode_persisted_liveness, resolve_remote_stream, RemoteStreamDefinition,
 };
-use ersatzrs_addon_contract::{validate_addon_id, AddonManifest, CAPABILITY_REMOTE_STREAM_PLAY_V1};
+use ersatzrs_addon_contract::{validate_addon_id, AddonManifest};
 use ersatzrs_domain::RemoteStreamLiveness;
 use semver::Version;
 use std::path::Path;
@@ -323,7 +323,7 @@ fn remote_stream_addon_is_ready(row: &DbRow, host_version: Option<&Version>) -> 
             .is_some_and(|manifest| {
                 manifest.validate().is_ok()
                     && manifest.id == addon_id
-                    && manifest.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
+                    && manifest.has_remote_stream_play_capability()
                     && host_version.is_some_and(|version| manifest.host_version.matches(version))
             })
 }

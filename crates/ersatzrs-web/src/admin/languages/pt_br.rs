@@ -348,8 +348,8 @@ impl LanguageStrings for PortugueseBrazilStrings {
         )
     }
 
-    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64) -> String {
-        format!("{recent} canal(is) entregaram mídia HLS ao vivo mais lentamente que o tempo real nos últimos {minutes} minutos; {active} ainda não haviam se recuperado na última observação. Revise os logs de streaming e execute o teste de reprodução TSDuck sensível à taxa de entrega antes de alterar as configurações do provedor.")
+    fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64, fallbacks: u64, fallback_hours: u64) -> String {
+        format!("{recent} canal(is) entregaram mídia HLS ao vivo mais lentamente que o tempo real nos últimos {minutes} minutos; {active} ainda não haviam se recuperado na última observação; {fallbacks} canal(is) estão usando uma alternativa 720p verificada por até {fallback_hours} horas. Revise os logs de streaming e execute o teste de reprodução TSDuck sensível à taxa de entrega antes de alterar as configurações do provedor.")
     }
 
     fn artwork_cardinality_message(

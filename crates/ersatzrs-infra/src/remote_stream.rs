@@ -28,6 +28,12 @@ use crate::db::DbPool;
 
 const REMOTE_INPUT_TIMEOUT_MICROSECONDS: &str = "30000000";
 const REMOTE_STREAM_SEEK_PLACEHOLDER: &str = "{seek}";
+/// Add-on play v2 environment variable carrying a maximum video height.
+pub const REMOTE_STREAM_MAX_VIDEO_HEIGHT_ENV: &str = "ERSATZRS_REMOTE_STREAM_MAX_VIDEO_HEIGHT";
+/// Initial live add-on video-height ceiling.
+pub const REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT: u16 = 1080;
+/// Bounded live add-on fallback video-height ceiling.
+pub const REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT: u16 = 720;
 const STDERR_TAIL_LIMIT: usize = 16 * 1024;
 const STDERR_EXCERPT_LIMIT: usize = 2 * 1024;
 const STDERR_READER_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
@@ -125,6 +131,22 @@ impl RemoteStreamCommand {
             if value == REMOTE_STREAM_SEEK_PLACEHOLDER {
                 seek_position.clone_into(value);
             }
+        }
+        command
+    }
+
+    fn supports_video_height_ceiling(&self) -> bool {
+        self.environment
+            .contains_key(REMOTE_STREAM_MAX_VIDEO_HEIGHT_ENV)
+    }
+
+    fn with_video_height_ceiling(&self, max_video_height: u16) -> Self {
+        let mut command = self.clone();
+        if command.supports_video_height_ceiling() {
+            command.environment.insert(
+                REMOTE_STREAM_MAX_VIDEO_HEIGHT_ENV.to_owned(),
+                max_video_height.to_string(),
+            );
         }
         command
     }
@@ -475,10 +497,24 @@ async fn resolve_remote_stream_with_addons_mode(
 ) -> Result<ResolvedRemoteStream, RemoteStreamError> {
     validate_definition(definition)?;
     let command = if let Some(addon_id) = trimmed(definition.addon.as_ref()) {
+        let installation = crate::addons::load_installed_addon(pool, addon_id)
+            .await
+            .map_err(|error| RemoteStreamError::Command(error.to_string()))?
+            .ok_or_else(|| {
+                RemoteStreamError::Command(format!("add-on '{addon_id}' is not installed"))
+            })?;
+        let play_capability = if installation
+            .manifest
+            .has_capability(ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V2)
+        {
+            ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V2
+        } else {
+            ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V1
+        };
         let resolved = crate::addons::resolve_enabled_addon_command(
             pool,
             addon_id,
-            ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V1,
+            play_capability,
             "play",
             runtime,
         )
@@ -487,6 +523,7 @@ async fn resolve_remote_stream_with_addons_mode(
         Some(remote_stream_command_from_addon(
             resolved,
             trimmed(definition.url.as_ref()).unwrap_or_default(),
+            play_capability == ersatzrs_addon_contract::CAPABILITY_REMOTE_STREAM_PLAY_V2,
         ))
     } else {
         None
@@ -526,6 +563,7 @@ fn resolve_remote_stream_source(
 fn remote_stream_command_from_addon(
     resolved: ResolvedAddonCommand,
     url: &str,
+    supports_video_height_ceiling: bool,
 ) -> RemoteStreamCommand {
     let mut environment = resolved.environment;
     environment.insert("ERSATZRS_REMOTE_STREAM_URL".to_owned(), url.to_owned());
@@ -533,6 +571,12 @@ fn remote_stream_command_from_addon(
         "ERSATZRS_REMOTE_STREAM_SEEK".to_owned(),
         REMOTE_STREAM_SEEK_PLACEHOLDER.to_owned(),
     );
+    if supports_video_height_ceiling {
+        environment.insert(
+            REMOTE_STREAM_MAX_VIDEO_HEIGHT_ENV.to_owned(),
+            REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT.to_string(),
+        );
+    }
     RemoteStreamCommand {
         program: resolved.program,
         args: resolved.args,
@@ -604,6 +648,29 @@ pub fn remote_stream_producer(stream: &ResolvedRemoteStream) -> Option<&RemoteSt
         RemoteStreamSource::Addon(command) => Some(command),
         RemoteStreamSource::Url(_) => None,
     }
+}
+
+#[must_use]
+pub fn remote_stream_video_height_ceiling(stream: &ResolvedRemoteStream) -> Option<u16> {
+    let RemoteStreamSource::Addon(command) = &stream.source else {
+        return None;
+    };
+    command
+        .environment
+        .get(REMOTE_STREAM_MAX_VIDEO_HEIGHT_ENV)
+        .and_then(|value| value.parse::<u16>().ok())
+}
+
+#[must_use]
+pub fn with_remote_stream_video_height_ceiling(
+    stream: &ResolvedRemoteStream,
+    max_video_height: u16,
+) -> ResolvedRemoteStream {
+    let mut stream = stream.clone();
+    if let RemoteStreamSource::Addon(command) = &mut stream.source {
+        *command = command.with_video_height_ceiling(max_video_height);
+    }
+    stream
 }
 
 /// Keep finite sources seekable while always opening a live source at its
@@ -1660,6 +1727,42 @@ content_rating: PG
         assert_eq!(
             marked.expect("marked producer").args,
             ["https://example.test/watch", "0"]
+        );
+    }
+
+    #[test]
+    fn video_height_ceiling_is_applied_only_to_v2_addon_commands() {
+        let v1 = ResolvedRemoteStream {
+            source: RemoteStreamSource::Addon(RemoteStreamCommand {
+                program: "producer".to_owned(),
+                args: Vec::new(),
+                working_directory: PathBuf::from("."),
+                environment: BTreeMap::new(),
+            }),
+            liveness: RemoteStreamLiveness::Live,
+            is_live: true,
+            configured_duration: None,
+            fallback_query: None,
+            uses_addon: true,
+        };
+        let mut v2 = v1.clone();
+        let RemoteStreamSource::Addon(command) = &mut v2.source else {
+            unreachable!("fixture uses an add-on command");
+        };
+        command.environment.insert(
+            REMOTE_STREAM_MAX_VIDEO_HEIGHT_ENV.to_owned(),
+            REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT.to_string(),
+        );
+
+        let unchanged_v1 =
+            with_remote_stream_video_height_ceiling(&v1, REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT);
+        let capped_v2 =
+            with_remote_stream_video_height_ceiling(&v2, REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT);
+
+        assert_eq!(remote_stream_video_height_ceiling(&unchanged_v1), None);
+        assert_eq!(
+            remote_stream_video_height_ceiling(&capped_v2),
+            Some(REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT)
         );
     }
 

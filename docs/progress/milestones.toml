@@ -2180,6 +2180,12 @@ Opened 2026-08-29 after VLC reported starvation before one minute while a
 log recorded no process failure. The initial 60-second media estimate was
 rejected on 2026-08-30 because packet count divided by nominal PCR bitrate is
 invalid for VBR HLS. The corrected gate uses PCR elapsed time, and the worker
-now records provider-neutral segment advancement; exact-candidate Windows VLC
+now records provider-neutral segment advancement. ADR 0084 adds play v2, one
+bounded 1080p-to-720p recovery, a verified 24-hour fallback cache, and
+localized health visibility. Deterministic infra recovery/cache tests, the
+all-language web health test, and focused yt-dlp selector/seek tests pass. The
+affected Rust graph passed 1,494 tests, `cargo xtask smoke` passed all three
+stream probes, and the synthetic TSDuck gate passed 64 checks with no transport
+or timestamp faults. Exact-candidate Windows VLC and live-source TSDuck
 acceptance remains open.
 '''

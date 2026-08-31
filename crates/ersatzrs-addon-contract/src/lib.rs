@@ -36,6 +36,8 @@ pub const CAPABILITY_REMOTE_STREAM_ITEM_V2: &str = "remote-stream.item.v2";
 /// Describe retained Remote Streams with the shared rich metadata document.
 /// Produce Remote Stream bytes for playback.
 pub const CAPABILITY_REMOTE_STREAM_PLAY_V1: &str = "remote-stream.play.v1";
+/// Produce Remote Stream bytes with a host-supplied maximum video height.
+pub const CAPABILITY_REMOTE_STREAM_PLAY_V2: &str = "remote-stream.play.v2";
 /// Enumerate a provider list whose entries are matched to local media.
 pub const CAPABILITY_MEDIA_LIST_LIST_V1: &str = "media-list.list.v1";
 /// Enumerate a provider list with explicit per-item availability.
@@ -1325,10 +1327,11 @@ impl AddonManifest {
                 return invalid("media_list_storage", "requires manifest schema version 3");
             }
             storage.validate(&self.settings)?;
-            for capability in [CAPABILITY_REMOTE_STREAM_PLAY_V1] {
-                if !self.has_capability(capability) {
-                    return invalid("media_list_storage", format!("requires {capability}"));
-                }
+            if !self.has_remote_stream_play_capability() {
+                return invalid(
+                    "media_list_storage",
+                    "requires a supported remote-stream.play capability",
+                );
             }
             if !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V1)
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V2)
@@ -1442,6 +1445,13 @@ impl AddonManifest {
     #[must_use]
     pub fn has_capability(&self, capability: &str) -> bool {
         self.capabilities.iter().any(|item| item.id == capability)
+    }
+
+    /// Whether the package can produce Remote Stream playback bytes.
+    #[must_use]
+    pub fn has_remote_stream_play_capability(&self) -> bool {
+        self.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
+            || self.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V2)
     }
 }
 
@@ -3312,6 +3322,16 @@ mod tests {
         manifest
             .validate()
             .expect("complete managed storage contract");
+
+        manifest
+            .capabilities
+            .retain(|capability| capability.id != CAPABILITY_REMOTE_STREAM_PLAY_V1);
+        manifest.capabilities.push(AddonCapability {
+            id: CAPABILITY_REMOTE_STREAM_PLAY_V2.to_owned(),
+        });
+        manifest
+            .validate()
+            .expect("v2 play capability also completes managed storage contract");
 
         manifest.manifest_version = 2;
         assert!(manifest.validate().is_err());
