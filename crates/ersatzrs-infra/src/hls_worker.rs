@@ -22,8 +22,8 @@ use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacemen
 use ersatzrs_core::repositories::{RepositoryError, Result as RepositoryResult};
 use ersatzrs_domain::{
     Channel, ChannelMusicVideoCreditsMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
-    FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileVideoFormat, StreamingMode,
-    VideoScanKind,
+    FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileVideoFormat,
+    HardwareAccelerationKind, StreamingMode, VideoScanKind,
 };
 use ersatzrs_ffmpeg::{
     build_pipeline_for_acceleration, ffmpeg_path, ffprobe_path, DesiredVideoState,
@@ -38,7 +38,8 @@ use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
 use crate::ffmpeg_config::playback_language_preferences;
 use crate::hls_delivery::{
     clear_hls_delivery_fallback, load_hls_delivery_fallback, persist_hls_delivery_fallback,
-    persist_hls_delivery_observation, HlsDeliveryObservation, HlsDeliveryState,
+    persist_hls_delivery_observation, HlsDeliveryObservation, HlsDeliverySoftwareScope,
+    HlsDeliveryState,
 };
 use crate::playback::{
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
@@ -192,7 +193,15 @@ enum HlsProcessOutcome {
     Failed(String),
     Cancelled,
     Reclaimed,
-    DeliveryFallback { detected_at: DateTime<Utc> },
+    DeliverySoftwareFallback {
+        detected_at: DateTime<Utc>,
+        max_video_height: u16,
+        software_video_scope: HlsDeliverySoftwareScope,
+    },
+    DeliveryFallback {
+        detected_at: DateTime<Utc>,
+        software_video_scope: Option<HlsDeliverySoftwareScope>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -318,13 +327,24 @@ struct HlsProcessCapacity<'a> {
 struct HlsDeliveryRecovery {
     media_item_id: i64,
     max_video_height: u16,
+    supports_quality_fallback: bool,
+    software_video_scope: Option<HlsDeliverySoftwareScope>,
+    available_software_video_scope: Option<HlsDeliverySoftwareScope>,
     fallback_detected_at: Option<DateTime<Utc>>,
     fallback_verified: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct HlsDeliveryAdaptation {
+    detected_at: DateTime<Utc>,
+    max_video_height: u16,
+    software_video_scope: Option<HlsDeliverySoftwareScope>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HlsDeliveryRecoveryAction {
     None,
+    RestartWithSoftware(HlsDeliverySoftwareScope),
     RestartAtFallback,
     VerifyFallback,
     ClearFallback,
@@ -337,24 +357,42 @@ fn hls_delivery_recovery_action(
 ) -> HlsDeliveryRecoveryAction {
     if observation.state == HlsDeliveryState::UnderRun
         && observation.transitioned
+        && recovery.software_video_scope.is_none()
+    {
+        if let Some(scope) = recovery.available_software_video_scope {
+            return HlsDeliveryRecoveryAction::RestartWithSoftware(scope);
+        }
+    }
+    if observation.state == HlsDeliveryState::UnderRun
+        && (observation.transitioned || recovery.software_video_scope.is_some())
+        && recovery.supports_quality_fallback
         && recovery.max_video_height > REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
-        && recovery.fallback_detected_at.is_none()
     {
         return HlsDeliveryRecoveryAction::RestartAtFallback;
     }
     if observation.state == HlsDeliveryState::UnderRun
-        && recovery.max_video_height == REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
+        && (recovery.max_video_height == REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
+            || recovery.software_video_scope.is_some())
     {
         return HlsDeliveryRecoveryAction::ClearFallback;
     }
     if observation.state == HlsDeliveryState::Recovered
         && observation.transitioned
         && !fallback_verified
-        && recovery.max_video_height == REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
+        && (recovery.max_video_height == REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
+            || recovery.software_video_scope.is_some())
     {
         return HlsDeliveryRecoveryAction::VerifyFallback;
     }
     HlsDeliveryRecoveryAction::None
+}
+
+fn pending_hls_delivery_fallback_detected_at(
+    recovery: Option<HlsDeliveryRecovery>,
+) -> Option<DateTime<Utc>> {
+    recovery
+        .filter(|recovery| !recovery.fallback_verified)
+        .and_then(|recovery| recovery.fallback_detected_at)
 }
 
 /// Concrete HLS segmenter worker backed by `FFmpeg` CLI output in a temp folder.
@@ -533,7 +571,7 @@ impl HlsSessionWorker {
         // ADR 0014 allows exactly one graph retry per session, mirroring the
         // decode-denial bound above.
         let mut learned_graph_retry_used = false;
-        let mut delivery_fallbacks = HashMap::<i64, DateTime<Utc>>::new();
+        let mut delivery_adaptations = HashMap::<i64, HlsDeliveryAdaptation>::new();
         let slug_duration = match load_channel_slug_seconds(&pool, self.channel_id).await {
             Ok(seconds) => seconds
                 .filter(|seconds| *seconds > 0.0)
@@ -739,7 +777,9 @@ impl HlsSessionWorker {
                         last_playout_item_id = None;
                     }
                     HlsProcessOutcome::Cancelled => break,
-                    HlsProcessOutcome::Reclaimed | HlsProcessOutcome::DeliveryFallback { .. } => {}
+                    HlsProcessOutcome::Reclaimed
+                    | HlsProcessOutcome::DeliverySoftwareFallback { .. }
+                    | HlsProcessOutcome::DeliveryFallback { .. } => {}
                     HlsProcessOutcome::Failed(error) => {
                         tracing::warn!(
                             channel_number = %self.channel_number,
@@ -864,6 +904,7 @@ impl HlsSessionWorker {
                     }
                     HlsProcessOutcome::Failed(_)
                     | HlsProcessOutcome::Cancelled
+                    | HlsProcessOutcome::DeliverySoftwareFallback { .. }
                     | HlsProcessOutcome::DeliveryFallback { .. } => {}
                 }
                 break;
@@ -973,7 +1014,13 @@ impl HlsSessionWorker {
                     continue;
                 }
             }
-            let playback_profile = match self.load_playback_profile(&pool).await {
+            let supports_quality_fallback = is_live_remote
+                && active
+                    .remote_stream
+                    .as_ref()
+                    .and_then(remote_stream_video_height_ceiling)
+                    .is_some();
+            let mut playback_profile = match self.load_playback_profile(&pool).await {
                 Ok(Some(profile)) => profile,
                 Ok(None) => {
                     tracing::warn!(
@@ -993,6 +1040,100 @@ impl HlsSessionWorker {
                     continue;
                 }
             };
+            let configured_software_video_scope = match hls_delivery_software_scope(
+                self.channel_id,
+                &playback_profile,
+            ) {
+                Ok(scope) => Some(scope),
+                Err(error) => {
+                    tracing::warn!(
+                        %error,
+                        channel_id = self.channel_id,
+                        ffmpeg_profile_id = playback_profile.profile.id,
+                        "unable to fingerprint the HLS playback profile; disabling persisted software fallback"
+                    );
+                    None
+                }
+            };
+            let available_software_video_scope = configured_software_video_scope
+                .filter(|_| hls_software_video_fallback_available(&playback_profile));
+            let (delivery_adaptation, delivery_fallback_verified) = if is_live_remote {
+                let previous_adaptation = delivery_adaptations.get(&active.media_item_id).copied();
+                let in_memory = previous_adaptation.and_then(|adaptation| {
+                    hls_delivery_adaptation_for_scope(
+                        adaptation,
+                        available_software_video_scope,
+                        supports_quality_fallback,
+                    )
+                });
+                if let Some(previous_software_scope) =
+                    previous_adaptation.and_then(|adaptation| adaptation.software_video_scope)
+                {
+                    let retained_software_scope =
+                        in_memory.and_then(|adaptation| adaptation.software_video_scope);
+                    if retained_software_scope != Some(previous_software_scope) {
+                        let _ = clear_hls_delivery_fallback(
+                            &pool,
+                            active.media_item_id,
+                            Some(previous_software_scope),
+                        )
+                        .await;
+                    }
+                }
+                if let Some(adaptation) = in_memory {
+                    delivery_adaptations.insert(active.media_item_id, adaptation);
+                    (Some(adaptation), false)
+                } else {
+                    delivery_adaptations.remove(&active.media_item_id);
+                    match load_hls_delivery_fallback(
+                        &pool,
+                        active.media_item_id,
+                        configured_software_video_scope,
+                        Utc::now(),
+                    )
+                    .await
+                    {
+                        Ok(Some(fallback)) => (
+                            hls_delivery_adaptation_for_scope(
+                                HlsDeliveryAdaptation {
+                                    detected_at: fallback.detected_at,
+                                    max_video_height: fallback.max_video_height,
+                                    software_video_scope: fallback.software_video_scope,
+                                },
+                                available_software_video_scope,
+                                supports_quality_fallback,
+                            ),
+                            true,
+                        ),
+                        Ok(None) => (None, false),
+                        Err(error) => {
+                            tracing::warn!(
+                                %error,
+                                channel_id = self.channel_id,
+                                channel_number = %self.channel_number,
+                                media_item_id = active.media_item_id,
+                                "ignoring invalid live HLS delivery fallback state"
+                            );
+                            let _ = clear_hls_delivery_fallback(
+                                &pool,
+                                active.media_item_id,
+                                configured_software_video_scope,
+                            )
+                            .await;
+                            let _ = clear_hls_delivery_fallback(&pool, active.media_item_id, None)
+                                .await;
+                            (None, false)
+                        }
+                    }
+                }
+            } else {
+                (None, false)
+            };
+            if delivery_adaptation
+                .is_some_and(|adaptation| adaptation.software_video_scope.is_some())
+            {
+                apply_hls_software_video_fallback(&mut playback_profile);
+            }
             let source_stream = enrich_source_video_stream_for_playback(
                 source_stream,
                 playback_profile.profile.hardware_acceleration,
@@ -1291,48 +1432,25 @@ impl HlsSessionWorker {
                 ]);
             }
             let mut remote_stream = active.remote_stream.clone();
-            let mut delivery_recovery = None;
-            if is_live_remote
-                && remote_stream
-                    .as_ref()
-                    .and_then(remote_stream_video_height_ceiling)
-                    .is_some()
-            {
-                let (fallback_detected_at, fallback_verified) = if let Some(detected_at) =
-                    delivery_fallbacks.get(&active.media_item_id).copied()
-                {
-                    (Some(detected_at), false)
-                } else {
-                    match load_hls_delivery_fallback(&pool, active.media_item_id, Utc::now()).await
-                    {
-                        Ok(Some(fallback)) => (Some(fallback.detected_at), true),
-                        Ok(None) => (None, false),
-                        Err(error) => {
-                            tracing::warn!(
-                                %error,
-                                channel_number = %self.channel_number,
-                                media_item_id = active.media_item_id,
-                                "ignoring invalid live HLS quality fallback state"
-                            );
-                            let _ = clear_hls_delivery_fallback(&pool, active.media_item_id).await;
-                            (None, false)
-                        }
-                    }
-                };
-                let max_video_height = fallback_detected_at
-                    .map_or(REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT, |_| {
-                        REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
-                    });
+            let max_video_height = delivery_adaptation
+                .map_or(REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT, |adaptation| {
+                    adaptation.max_video_height
+                });
+            if supports_quality_fallback {
                 remote_stream = remote_stream.as_ref().map(|stream| {
                     with_remote_stream_video_height_ceiling(stream, max_video_height)
                 });
-                delivery_recovery = Some(HlsDeliveryRecovery {
-                    media_item_id: active.media_item_id,
-                    max_video_height,
-                    fallback_detected_at,
-                    fallback_verified,
-                });
             }
+            let delivery_recovery = is_live_remote.then_some(HlsDeliveryRecovery {
+                media_item_id: active.media_item_id,
+                max_video_height,
+                supports_quality_fallback,
+                software_video_scope: delivery_adaptation
+                    .and_then(|adaptation| adaptation.software_video_scope),
+                available_software_video_scope,
+                fallback_detected_at: delivery_adaptation.map(|adaptation| adaptation.detected_at),
+                fallback_verified: delivery_fallback_verified,
+            });
             let mut runtime_capabilities = self.runtime_capabilities().await;
             let command = build_hls_command_with_input_explicit_discontinuity(
                 media_input,
@@ -1580,6 +1698,7 @@ impl HlsSessionWorker {
                         }
                         HlsProcessOutcome::Failed(_)
                         | HlsProcessOutcome::Cancelled
+                        | HlsProcessOutcome::DeliverySoftwareFallback { .. }
                         | HlsProcessOutcome::DeliveryFallback { .. } => {
                             break;
                         }
@@ -1590,8 +1709,40 @@ impl HlsSessionWorker {
                     self.set_session_state(self.session_state().throttle());
                     continue;
                 }
-                HlsProcessOutcome::DeliveryFallback { detected_at } => {
-                    delivery_fallbacks.insert(active.media_item_id, detected_at);
+                HlsProcessOutcome::DeliverySoftwareFallback {
+                    detected_at,
+                    max_video_height,
+                    software_video_scope,
+                } => {
+                    delivery_adaptations.insert(
+                        active.media_item_id,
+                        HlsDeliveryAdaptation {
+                            detected_at,
+                            max_video_height,
+                            software_video_scope: Some(software_video_scope),
+                        },
+                    );
+                    self.set_admission_status(HlsAdmissionStatus::Waiting);
+                    tracing::warn!(
+                        channel_number = %self.channel_number,
+                        media_item_id = active.media_item_id,
+                        ffmpeg_profile_id = software_video_scope.ffmpeg_profile_id,
+                        "restarting under-delivering live HLS output with software video encoding"
+                    );
+                    continue;
+                }
+                HlsProcessOutcome::DeliveryFallback {
+                    detected_at,
+                    software_video_scope,
+                } => {
+                    delivery_adaptations.insert(
+                        active.media_item_id,
+                        HlsDeliveryAdaptation {
+                            detected_at,
+                            max_video_height: REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
+                            software_video_scope,
+                        },
+                    );
                     self.set_admission_status(HlsAdmissionStatus::Waiting);
                     tracing::warn!(
                         channel_number = %self.channel_number,
@@ -1748,7 +1899,7 @@ impl HlsSessionWorker {
         let mut delivery_tracker = self
             .initial_hls_delivery_tracker(
                 delivery_pool.is_some(),
-                delivery_recovery.and_then(|recovery| recovery.fallback_detected_at),
+                pending_hls_delivery_fallback_detected_at(delivery_recovery),
             )
             .await;
         let mut fallback_verified =
@@ -1870,15 +2021,34 @@ impl HlsSessionWorker {
         stderr_task: &mut Option<tokio::task::JoinHandle<String>>,
     ) -> Option<HlsProcessOutcome> {
         match hls_delivery_recovery_action(recovery, observation, *fallback_verified) {
+            HlsDeliveryRecoveryAction::RestartWithSoftware(software_video_scope) => {
+                self.terminate_hls_child(
+                    child,
+                    stderr_task.take(),
+                    "live HLS software video fallback",
+                )
+                .await;
+                Some(HlsProcessOutcome::DeliverySoftwareFallback {
+                    detected_at: observation.observed_at,
+                    max_video_height: recovery.max_video_height,
+                    software_video_scope,
+                })
+            }
             HlsDeliveryRecoveryAction::RestartAtFallback => {
                 self.terminate_hls_child(child, stderr_task.take(), "live HLS delivery fallback")
                     .await;
                 Some(HlsProcessOutcome::DeliveryFallback {
                     detected_at: observation.observed_at,
+                    software_video_scope: recovery.software_video_scope,
                 })
             }
             HlsDeliveryRecoveryAction::ClearFallback => {
-                let _ = clear_hls_delivery_fallback(pool, recovery.media_item_id).await;
+                let _ = clear_hls_delivery_fallback(
+                    pool,
+                    recovery.media_item_id,
+                    recovery.software_video_scope,
+                )
+                .await;
                 None
             }
             HlsDeliveryRecoveryAction::VerifyFallback => {
@@ -1891,6 +2061,7 @@ impl HlsSessionWorker {
                     detected_at,
                     observation.observed_at,
                     recovery.max_video_height,
+                    recovery.software_video_scope,
                 )
                 .await
                 {
@@ -1899,7 +2070,7 @@ impl HlsSessionWorker {
                         %error,
                         channel_number = %self.channel_number,
                         media_item_id = recovery.media_item_id,
-                        "failed to persist verified live HLS quality fallback"
+                        "failed to persist verified live HLS delivery fallback"
                     ),
                 }
                 None
@@ -2393,6 +2564,54 @@ pub fn apply_playback_profile_override(
         }
     }
     playback_profile
+}
+
+fn hls_software_video_fallback_available(playback_profile: &PlaybackProfile) -> bool {
+    playback_profile.profile.transcode_video
+        && playback_profile.profile.hardware_acceleration != HardwareAccelerationKind::None
+        && playback_profile.profile.video_format == FFmpegProfileVideoFormat::H264
+}
+
+fn hls_delivery_software_scope(
+    channel_id: i64,
+    playback_profile: &PlaybackProfile,
+) -> Result<HlsDeliverySoftwareScope, serde_json::Error> {
+    let profile_json =
+        serde_json::to_vec(&(&playback_profile.profile, &playback_profile.resolution))?;
+    Ok(HlsDeliverySoftwareScope {
+        channel_id,
+        ffmpeg_profile_id: playback_profile.profile.id,
+        profile_sha256: Sha256::digest(profile_json).into(),
+    })
+}
+
+fn hls_delivery_adaptation_for_scope(
+    mut adaptation: HlsDeliveryAdaptation,
+    available_software_video_scope: Option<HlsDeliverySoftwareScope>,
+    supports_quality_fallback: bool,
+) -> Option<HlsDeliveryAdaptation> {
+    if adaptation.software_video_scope.is_some()
+        && adaptation.software_video_scope != available_software_video_scope
+    {
+        adaptation.software_video_scope = None;
+    }
+    if !supports_quality_fallback {
+        adaptation.max_video_height = REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT;
+    }
+
+    (adaptation.software_video_scope.is_some()
+        || adaptation.max_video_height < REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT)
+        .then_some(adaptation)
+}
+
+fn apply_hls_software_video_fallback(playback_profile: &mut PlaybackProfile) {
+    if playback_profile.profile.video_format != FFmpegProfileVideoFormat::H264 {
+        return;
+    }
+
+    playback_profile.profile.hardware_acceleration = HardwareAccelerationKind::None;
+    playback_profile.profile.video_preset = Some("veryfast".to_owned());
+    playback_profile.profile.video_tune = None;
 }
 
 #[async_trait]
@@ -5340,6 +5559,14 @@ mod tests {
             .collect()
     }
 
+    const fn software_video_scope() -> HlsDeliverySoftwareScope {
+        HlsDeliverySoftwareScope {
+            channel_id: 5,
+            ffmpeg_profile_id: 7,
+            profile_sha256: [1; 32],
+        }
+    }
+
     #[test]
     fn hls_delivery_tracker_allows_one_segment_of_sampling_jitter() {
         let mut tracker = HlsDeliveryTracker::new(None, None);
@@ -5394,6 +5621,19 @@ mod tests {
     }
 
     #[test]
+    fn hls_delivery_tracker_does_not_fast_fail_before_twenty_seconds() {
+        let mut tracker = HlsDeliveryTracker::new(None, None);
+
+        let observation = tracker.observe(
+            Duration::from_secs(19),
+            &delivery_segments(1, 2),
+            Utc::now(),
+        );
+
+        assert!(observation.is_none());
+    }
+
+    #[test]
     fn hls_delivery_tracker_recovers_seeded_fallback_after_healthy_window() {
         let detected_at = Utc::now();
         let mut tracker = HlsDeliveryTracker::new(None, Some(detected_at));
@@ -5427,6 +5667,9 @@ mod tests {
         let initial = HlsDeliveryRecovery {
             media_item_id: 42,
             max_video_height: REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT,
+            supports_quality_fallback: true,
+            software_video_scope: None,
+            available_software_video_scope: None,
             fallback_detected_at: None,
             fallback_verified: false,
         };
@@ -5447,6 +5690,103 @@ mod tests {
     }
 
     #[test]
+    fn hls_delivery_recovery_prefers_software_video_before_quality_downgrade() {
+        let observed_at = Utc::now();
+        let under_run = HlsDeliveryObservation {
+            transitioned: true,
+            observed_at,
+            state: HlsDeliveryState::UnderRun,
+            last_under_run_at: observed_at,
+            wall_seconds: 20.0,
+            media_seconds: 4.0,
+            delivery_ratio_percent: 26.7,
+            no_progress_seconds: 5.0,
+        };
+        let hardware = HlsDeliveryRecovery {
+            media_item_id: 42,
+            max_video_height: REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT,
+            supports_quality_fallback: true,
+            software_video_scope: None,
+            available_software_video_scope: Some(software_video_scope()),
+            fallback_detected_at: None,
+            fallback_verified: false,
+        };
+        let software = HlsDeliveryRecovery {
+            software_video_scope: Some(software_video_scope()),
+            fallback_detected_at: Some(observed_at),
+            ..hardware
+        };
+
+        assert_eq!(
+            hls_delivery_recovery_action(hardware, &under_run, false),
+            HlsDeliveryRecoveryAction::RestartWithSoftware(software_video_scope())
+        );
+        assert_eq!(
+            hls_delivery_recovery_action(software, &under_run, false),
+            HlsDeliveryRecoveryAction::RestartAtFallback
+        );
+    }
+
+    #[test]
+    fn verified_720p_fallback_can_escalate_to_software_encoding() {
+        let detected_at = Utc::now() - chrono::Duration::minutes(2);
+        let recovery = HlsDeliveryRecovery {
+            media_item_id: 42,
+            max_video_height: REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
+            supports_quality_fallback: true,
+            software_video_scope: None,
+            available_software_video_scope: Some(software_video_scope()),
+            fallback_detected_at: Some(detected_at),
+            fallback_verified: true,
+        };
+        let mut tracker = HlsDeliveryTracker::new(
+            None,
+            pending_hls_delivery_fallback_detected_at(Some(recovery)),
+        );
+        let observation = tracker
+            .observe(
+                HLS_DELIVERY_FAST_WINDOW,
+                &delivery_segments(1, 2),
+                Utc::now(),
+            )
+            .expect("a fresh under-run should transition after loading a verified fallback");
+
+        assert!(observation.transitioned);
+        assert_eq!(
+            hls_delivery_recovery_action(recovery, &observation, true),
+            HlsDeliveryRecoveryAction::RestartWithSoftware(software_video_scope())
+        );
+    }
+
+    #[test]
+    fn hls_delivery_in_memory_software_fallback_does_not_cross_channel_scope() {
+        let adaptation = HlsDeliveryAdaptation {
+            detected_at: Utc::now(),
+            max_video_height: REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT,
+            software_video_scope: Some(software_video_scope()),
+        };
+        let other_channel = HlsDeliverySoftwareScope {
+            channel_id: 6,
+            ..software_video_scope()
+        };
+
+        assert!(hls_delivery_adaptation_for_scope(adaptation, Some(other_channel), true).is_none());
+
+        let quality_and_software = HlsDeliveryAdaptation {
+            max_video_height: REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
+            ..adaptation
+        };
+        let normalized =
+            hls_delivery_adaptation_for_scope(quality_and_software, Some(other_channel), true)
+                .expect("media-scoped quality fallback should remain active");
+        assert!(normalized.software_video_scope.is_none());
+        assert_eq!(
+            normalized.max_video_height,
+            REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT
+        );
+    }
+
+    #[test]
     fn hls_delivery_recovery_verifies_healthy_720p_once() {
         let detected_at = Utc::now();
         let recovered = HlsDeliveryObservation {
@@ -5462,6 +5802,42 @@ mod tests {
         let fallback = HlsDeliveryRecovery {
             media_item_id: 42,
             max_video_height: REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
+            supports_quality_fallback: true,
+            software_video_scope: None,
+            available_software_video_scope: None,
+            fallback_detected_at: Some(detected_at),
+            fallback_verified: false,
+        };
+
+        assert_eq!(
+            hls_delivery_recovery_action(fallback, &recovered, false),
+            HlsDeliveryRecoveryAction::VerifyFallback
+        );
+        assert_eq!(
+            hls_delivery_recovery_action(fallback, &recovered, true),
+            HlsDeliveryRecoveryAction::None
+        );
+    }
+
+    #[test]
+    fn hls_delivery_recovery_verifies_healthy_software_fallback_once() {
+        let detected_at = Utc::now();
+        let recovered = HlsDeliveryObservation {
+            transitioned: true,
+            observed_at: detected_at + chrono::Duration::minutes(1),
+            state: HlsDeliveryState::Recovered,
+            last_under_run_at: detected_at,
+            wall_seconds: 60.0,
+            media_seconds: 60.0,
+            delivery_ratio_percent: 100.0,
+            no_progress_seconds: 0.0,
+        };
+        let fallback = HlsDeliveryRecovery {
+            media_item_id: 42,
+            max_video_height: REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT,
+            supports_quality_fallback: true,
+            software_video_scope: Some(software_video_scope()),
+            available_software_video_scope: Some(software_video_scope()),
             fallback_detected_at: Some(detected_at),
             fallback_verified: false,
         };
@@ -5549,6 +5925,67 @@ mod tests {
         assert_eq!(preview.profile.video_bitrate, 12_345);
         assert!(preview.profile.normalize_colors);
         assert_eq!(preview.resolution, resolution);
+    }
+
+    #[test]
+    fn hls_software_video_fallback_preserves_profile_except_encoder_controls() {
+        let mut profile = playback_profile();
+        profile.profile.transcode_video = true;
+        profile.profile.hardware_acceleration = HardwareAccelerationKind::Nvenc;
+        profile.profile.video_format = FFmpegProfileVideoFormat::H264;
+        profile.profile.video_preset = Some("p5".to_owned());
+        profile.profile.video_tune = Some("hq".to_owned());
+        let expected_resolution = profile.resolution.clone();
+        let expected_bitrate = profile.profile.video_bitrate;
+
+        assert!(hls_software_video_fallback_available(&profile));
+        apply_hls_software_video_fallback(&mut profile);
+
+        assert_eq!(
+            profile.profile.hardware_acceleration,
+            HardwareAccelerationKind::None
+        );
+        assert_eq!(profile.profile.video_preset.as_deref(), Some("veryfast"));
+        assert!(profile.profile.video_tune.is_none());
+        assert_eq!(profile.profile.video_bitrate, expected_bitrate);
+        assert_eq!(profile.resolution, expected_resolution);
+    }
+
+    #[test]
+    fn hls_software_video_fallback_command_uses_libx264() {
+        // ADR 0084: an observed live-delivery under-run may replace hardware
+        // H.264 encoding while preserving the remainder of the HLS contract.
+        let mut profile = playback_profile();
+        profile.profile.transcode_video = true;
+        profile.profile.hardware_acceleration = HardwareAccelerationKind::Nvenc;
+        profile.profile.video_preset = Some("p5".to_owned());
+        profile.profile.video_tune = Some("hq".to_owned());
+        apply_hls_software_video_fallback(&mut profile);
+
+        let command = build_hls_command(
+            "/media/test.mkv",
+            Path::new("/tmp/hls/software-fallback"),
+            OutputFormat::Hls,
+            true,
+            false,
+            true,
+            Duration::ZERO,
+            None,
+            None,
+            &profile,
+            None,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            None,
+            Vec::new(),
+            PlaybackAudioSelection::Automatic,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("software fallback should produce a playable HLS command");
+
+        insta::assert_snapshot!(command.arguments.join(" "));
     }
 
     fn test_active_slot(

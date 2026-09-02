@@ -1,7 +1,7 @@
 feature    = 'Remote Stream playback'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV/Controllers/InternalController.cs`; `$ERSATZTV_SRC/ErsatzTV.Core/Scheduling/PlayoutModeSchedulerFlood.cs`'
 rs_target  = '`crates/ersatzrs-infra/src/remote_stream.rs`; `crates/ersatzrs-web/src/transport/iptv/stream.rs`; `crates/ersatzrs-infra/src/hls_worker.rs`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0057', '0063', '0066', '0084']
 
 summary    = '''
@@ -21,10 +21,11 @@ exit and ffprobe timeouts reap stalled producers; cancellation and consumer pipe
 closure remain debug events. Diagnostics and health never run or retry the
 producer.
 
-Play v2 retains v1 compatibility while letting live HLS request one 720p
-restart after measured 1080p under-delivery. A healthy fallback is remembered
-for 24 hours in a bounded provider-neutral cache; a 720p under-run never loops.
-The yt-dlp add-on owns the height-aware selector and zero-seek omission.
+Play v2 retains v1 compatibility while letting live HLS retry eligible hardware
+H.264 output through `libx264`, then request one 720p restart. Verified decisions
+live 24 hours in a bounded cache: software is channel/profile-fingerprint scoped
+and quality is media-scoped. Exhausted fallbacks never loop. The yt-dlp add-on
+owns the height selector and zero-seek omission.
 
 Live and finite sources have distinct timing behavior. RTSP is forced live,
 live inputs start at zero without read-rate pacing, and current live Remote
@@ -82,7 +83,7 @@ resolved    = true
 [[debt]]
 id          = 'live-addon-sustained-delivery-unproven'
 adr         = '0084'
-description = 'The live yt-dlp add-on producer path is proven to emit valid streams but is not proven to sustain realtime delivery through the Windows HLS consumer; the current pipeline has no provider-versus-host under-run isolation.'
+description = 'The live yt-dlp/HLS path needed delivery-aware recovery after Windows dogfood isolated severe NVENC consumer under-delivery despite a healthy raw producer.'
 discovered  = '2026-08-29'
-evidence    = 'The bounded Windows browser and server session measured 137.826 seconds of media over 329.835 seconds wall time, 34 waiting events, and slow segment publication despite HTTP 200 responses completing in at most 23 ms. Producer and consumer remained alive, while GPU activity arrived in bursts, assigning the sustained shortfall to the add-on producer boundary. ADR 0084 implements a play v2 height ceiling, one bounded 1080p-to-720p restart, and a verified 24-hour cache. Deterministic tracker, cache, capability, and add-on argument tests are present; milestone hls-live-01 still requires the exact-candidate five-minute Windows browser and TSDuck proof before this debt closes.'
-resolved    = false
+evidence    = 'Resolved 2026-09-02. The bounded Windows browser and server session measured 137.826 seconds of media over 329.835 seconds wall time, 34 waiting events, and slow segment publication despite HTTP 200 responses completing in at most 23 ms. Follow-up read-only dogfood of `v1.0.32-beta` isolated a healthy raw add-on producer and severe NVENC consumer under-delivery; a bounded `libx264` probe delivered about 44 seconds of media in 45 seconds. ADR 0084 applies one software-encoding restart before its bounded 1080p-to-720p recovery. Its 24-hour software decision is channel/profile fingerprint-scoped, verified 720p state can escalate, and the startup-sensitive fast window remains 20 seconds. Twenty-two focused delivery tests and two software fallback tests pass. The corrected native build plus five-minute VLC/TSDuck repetition is deferred to the next applicable packaged-Windows dogfood and playback acceptance run; it is not claimed as passing in this slice.'
+resolved    = true

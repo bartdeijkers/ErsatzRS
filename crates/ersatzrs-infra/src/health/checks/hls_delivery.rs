@@ -95,10 +95,10 @@ impl HealthCheck for HlsDeliveryHealthCheck {
             self.title(),
             HealthCheckStatus::Warning,
             format!(
-                "{recent_under_runs} channel(s) delivered live HLS media slower than wall time in the last {HLS_DELIVERY_RECENT_MINUTES} minutes; {active_under_runs} had not recovered when last observed; {active_fallbacks} channel(s) are using a verified 720p fallback for up to {HLS_DELIVERY_FALLBACK_HOURS} hours. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings."
+                "{recent_under_runs} channel(s) delivered live HLS media slower than wall time in the last {HLS_DELIVERY_RECENT_MINUTES} minutes; {active_under_runs} had not recovered when last observed; {active_fallbacks} channel(s) are using a verified software-encoding and/or lower-quality fallback for up to {HLS_DELIVERY_FALLBACK_HOURS} hours. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings."
             ),
             format!(
-                "{recent_under_runs} recent live HLS delivery under-run(s); {active_fallbacks} temporary quality fallback(s)"
+                "{recent_under_runs} recent live HLS delivery under-run(s); {active_fallbacks} temporary delivery fallback(s)"
             ),
         )
         .with_link("/system/troubleshooting/mpeg"))
@@ -113,7 +113,7 @@ mod tests {
     use super::*;
     use crate::hls_delivery::{
         persist_hls_delivery_fallback, persist_hls_delivery_observation, HlsDeliveryObservation,
-        HlsDeliveryState,
+        HlsDeliverySoftwareScope, HlsDeliveryState,
     };
 
     async fn test_pool() -> Pool<Db> {
@@ -205,10 +205,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn verified_quality_fallback_remains_visible_while_delivery_is_stable() {
+    async fn verified_delivery_fallback_remains_visible_while_delivery_is_stable() {
         let pool = test_pool().await;
         let detected_at = Utc::now() - Duration::minutes(2);
-        persist_hls_delivery_fallback(&pool, 10, detected_at, Utc::now(), 720)
+        let scope = HlsDeliverySoftwareScope {
+            channel_id: 5,
+            ffmpeg_profile_id: 7,
+            profile_sha256: [1; 32],
+        };
+        persist_hls_delivery_fallback(&pool, 10, detected_at, Utc::now(), 1080, Some(scope))
             .await
             .expect("persist fallback");
 
@@ -219,6 +224,6 @@ mod tests {
 
         assert_eq!(result.status, HealthCheckStatus::Warning);
         assert!(result.message.contains("1 channel(s) are using"));
-        assert!(result.message.contains("720p"));
+        assert!(result.message.contains("software-encoding"));
     }
 }

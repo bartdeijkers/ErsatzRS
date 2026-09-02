@@ -363,7 +363,7 @@ impl LanguageStrings for LatinAmericanSpanishStrings {
     }
 
     fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64, fallbacks: u64, fallback_hours: u64) -> String {
-        format!("{recent} canal(es) entregaron contenido HLS en vivo más lentamente que el tiempo real durante los últimos {minutes} minutos; {active} aún no se habían recuperado en la última observación; {fallbacks} canal(es) usan una alternativa 720p verificada durante un máximo de {fallback_hours} horas. Revisa los registros de streaming y ejecuta la prueba de reproducción TSDuck sensible a la velocidad de entrega antes de cambiar la configuración del proveedor.")
+        format!("{recent} canal(es) entregaron contenido HLS en vivo más lentamente que el tiempo real durante los últimos {minutes} minutos; {active} aún no se habían recuperado en la última observación; {fallbacks} canal(es) usan una alternativa verificada de codificación por software y/o menor calidad durante un máximo de {fallback_hours} horas. Revisa los registros de streaming y ejecuta la prueba de reproducción TSDuck sensible a la velocidad de entrega antes de cambiar la configuración del proveedor.")
     }
 
     fn artwork_cardinality_message(

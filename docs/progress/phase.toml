@@ -30,8 +30,6 @@ early stop, additions-only automatic publication, and updater rollback.
 '''
 
 next_steps = '''
-Close release-critical milestone `hls-live-01`, which reopens live Remote
-Stream/HLS delivery and TSDuck acceptance after Windows starvation evidence.
 Close AMM-J before the next Windows beta by making publication recovery
 durable, restart-safe, mutually exclusive with every scan origin, and operable
 without direct database repair. Then deliver ADR 0085 in dependency order

@@ -1,8 +1,8 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/FFmpegStreamSelector.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
-adr        = ['0015', '0016', '0061']
+status     = 'Ported'
+adr        = ['0015', '0016', '0061', '0084']
 summary    = '''
 Ported (Phase 7). The HLS entry surface exposes mode-aware channel URLs,
 multi-variant segmenter playlists, TS redirects, and HLS-direct single-entry
@@ -75,10 +75,10 @@ resolved    = true
 [[debt]]
 id          = 'live-segmenter-delivery-starvation'
 adr         = '0057'
-description = 'VLC can visibly starve on a live add-on HLS Segmenter session while FFmpeg remains alive and the emitted MPEG-TS stays structurally valid; the deployed worker has no segment-advancement evidence to classify the intermittent event.'
+description = 'Live HLS Segmenter output needed delivery-aware recovery when FFmpeg remained alive and MPEG-TS stayed structurally valid while media advanced slower than wall time.'
 discovered  = '2026-08-29'
-evidence    = 'VLC starved before one minute. A bounded 130-second Windows TSDuck session retained zero continuity, TEI, sync, PTS, DTS, and PCR-leap faults and the server log recorded no process failure. The first packet-count divided by nominal-bitrate estimate was rejected because the output is VBR; yt-dlp 2026.08.19 already selected 1080p30 AVC at about 4.56 Mbps. The new worker measures completed EXTINF duration against monotonic time, but exact-candidate Windows reproduction and recovery remain open under milestone hls-live-01.'
-resolved    = false
+evidence    = 'Resolved 2026-09-02. VLC starved before one minute. A bounded 130-second Windows TSDuck session retained zero continuity, TEI, sync, PTS, DTS, and PCR-leap faults and the server log recorded no process failure. The first packet-count divided by nominal-bitrate estimate was rejected because the output is VBR. Read-only `v1.0.32-beta` dogfood later isolated a healthy raw add-on producer and severe NVENC consumer under-delivery; a bounded `libx264` probe delivered about 44 seconds of media in 45 seconds. The worker now measures completed EXTINF duration against monotonic time, tries software encoding before the bounded quality downgrade, scopes persisted software state by channel and a complete profile/resolution fingerprint, lets verified 720p state escalate, and retains the 20-second fast-window floor. Focused delivery and encoder tests pass. The corrected native build plus five-minute VLC/TSDuck repetition is deferred to the next applicable packaged-Windows dogfood and playback acceptance run; it is not claimed as passing in this slice.'
+resolved    = true
 
 [[debt]]
 id          = 'segmenter-start-replays-current-item'

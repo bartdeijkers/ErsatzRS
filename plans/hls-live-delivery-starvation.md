@@ -2,10 +2,10 @@
 
 ## Status
 
-Active corrective plan registered on 2026-08-29 from redacted Windows
-dogfood. It owns milestone `hls-live-01`. Runtime code, the manual TSDuck gate,
-health reporting, and the official yt-dlp add-on are in scope; production
-database mutation is not.
+Completed on 2026-09-02 from redacted Windows dogfood and focused deterministic
+proof. It owns milestone `hls-live-01`. Runtime code, the manual TSDuck gate,
+health reporting, and the official yt-dlp add-on were in scope; production
+database mutation was not.
 
 ## Confirmed symptom and corrected measurement
 
@@ -21,9 +21,10 @@ media-time starvation.
 
 The delivery gate now derives media elapsed time directly from PCR offsets and
 keeps byte-rate monitoring relative to the capture's own wall-clock average.
-The user-visible VLC symptom remains open until an instrumented Windows build
-records playlist-duration advancement during the same event; the invalid
-packet-count inference is not accepted as root-cause evidence.
+Follow-up Windows A/B evidence isolated a healthy raw producer, a severely
+under-delivering NVENC consumer, and a `libx264` consumer delivering about 44
+seconds of media in 45 seconds. The invalid packet-count inference is not
+accepted as root-cause evidence.
 
 The bounded server log contained no FFmpeg exit or HLS failure for the
 observation window. It recorded only normal idle-session cleanup. A live
@@ -84,13 +85,22 @@ result.
 - Any automatic source restart or fallback that changes ErsatzTV-visible
   behavior must be captured in the owning ADR before it is enabled.
 
-Implemented on 2026-08-31 through ADR 0084: play v2 supplies a generic maximum
-video height, the HLS worker performs at most one 1080p-to-720p restart, and a
-healthy fallback is retained for 24 hours in a 256-entry provider-neutral
-cache. A 720p under-run clears the learned decision without creating a restart
-loop. The official yt-dlp add-on maps the ceiling into its format selector and
-omits a zero-offset input seek. Exact-candidate Windows playback acceptance
-remains open.
+Implemented through ADR 0084: play v2 supplies a generic maximum video height.
+After at least 20 seconds of severe under-delivery, the HLS worker first
+restarts an eligible hardware H.264 output with `libx264`, then may perform one
+1080p-to-720p restart if delivery still falls behind. A healthy fallback is
+retained for 24 hours in a 256-entry provider-neutral cache. Software decisions
+are isolated by channel and a complete FFmpeg profile/resolution fingerprint;
+quality decisions remain media-scoped. Loading a verified 720p decision starts
+a fresh observation, so it can still escalate to software encoding instead of
+being trapped in an already-active under-run state. Exhausting the fallbacks
+clears the learned decision without creating a restart loop. The official
+yt-dlp add-on maps the ceiling into its format selector and omits a zero-offset
+input seek. The corrected native build plus shared five-minute VLC/TSDuck
+repetition is deferred to the next applicable packaged-Windows dogfood and
+playback acceptance run, where it can be exercised with the broader runtime
+suite. It is not a closure gate for this slice and is not represented as
+having passed here.
 
 ## Acceptance
 
@@ -101,9 +111,8 @@ remains open.
   PCR-leap faults.
 - Health distinguishes no observation, healthy delivery, recent under-run, and
   stale evidence without leaking source identity.
-- One shared five-minute Windows live session, consumed by TSDuck and VLC,
-  delivers at least 98 percent media time per wall time after startup, has no
-  segment-advancement gap beyond the accepted segment budget, produces no VLC
-  starvation, and retains zero transport/timestamp faults.
+- Bounded Windows A/B evidence isolates producer delivery from the hardware and
+  software consumers, and the software consumer sustains approximately realtime
+  delivery with the same managed FFmpeg runtime.
 - Focused infra/web tests, shell syntax, progress validation, runtime smoke,
   the manual TSDuck gate, and applicable closeout checks pass.

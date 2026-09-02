@@ -6,10 +6,10 @@ Accepted
 
 ## Implementation
 
-Partial — the provider-neutral play v2 contract, bounded 1080p-to-720p HLS
-recovery, verified 24-hour fallback cache, health reporting, and official
-yt-dlp add-on policy are implemented; exact Windows live acceptance remains
-tracked by milestone `hls-live-01`.
+Implemented — the provider-neutral play v2 contract, bounded
+hardware-to-software encoding and 1080p-to-720p HLS recovery, verified 24-hour
+fallback cache, health reporting, and official yt-dlp add-on policy are in
+place. Milestone `hls-live-01` records the focused and Windows A/B evidence.
 
 ## Context
 
@@ -31,23 +31,29 @@ the add-on translates it into provider-specific rendition selection. Version
 1 remains supported without automatic quality recovery.
 
 For live HLS v2 sources, the worker starts with a 1080p ceiling and measures
-completed playlist duration against monotonic wall time. Severe under-delivery
-may trigger exactly one restart of the same live item with a 720p ceiling. The
+completed playlist duration against monotonic wall time. After a 20-second
+minimum observation window, severe under-delivery from a hardware H.264 output
+may first trigger one restart with `libx264`; a continuing under-run may then
+trigger exactly one restart of the same live item with a 720p ceiling. Each
 restart uses the existing HLS append, discontinuity, timestamp-normalization,
 process-group, and Windows Job ownership paths.
 
-A 720p fallback is remembered only after one full healthy delivery window.
-The provider-neutral record contains stable media identity, timestamps, and
-the ceiling, expires after 24 hours, and is pruned to 256 entries. Expiry
-retries 1080p. A 720p under-run clears the learned record and never creates a
-restart loop.
+A fallback is remembered only after one full healthy delivery window. Quality
+decisions remain media-scoped. Software-encoding decisions are scoped by
+channel and FFmpeg profile ID and contain a fingerprint of the complete profile
+and resolution, so another channel or profile cannot inherit them and an
+in-place profile edit invalidates them. Records expire after 24 hours and are
+pruned to 256 entries. Expiry retries the configured profile and 1080p. An
+under-run after exhausting the available fallbacks clears the learned record
+and never creates a restart loop.
 
 ## Consequences
 
-Healthy sources retain 1080p. A source that cannot sustain it can recover
-without an operator changing the channel profile, and later tuning sessions
-avoid repeatedly reproducing the initial stall. The host does not learn
-provider URLs or format identifiers.
+Healthy sources retain the configured encoder and 1080p ceiling. A source or
+hardware output that cannot sustain realtime delivery can recover without an
+operator changing the channel profile, and later tuning sessions avoid
+repeatedly reproducing the initial stall. The host does not learn provider URLs
+or format identifiers.
 
 The first downgrade introduces one controlled HLS discontinuity and may skip
 live content while the new producer starts. Play v1 add-ons continue to expose

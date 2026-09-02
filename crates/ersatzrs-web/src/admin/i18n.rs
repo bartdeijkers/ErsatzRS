@@ -3686,7 +3686,7 @@ const HLS_LIVE_DELIVERY_RECENT_SEPARATOR: &str =
 const HLS_LIVE_DELIVERY_ACTIVE_SEPARATOR: &str = " minutes; ";
 const HLS_LIVE_DELIVERY_FALLBACK_SEPARATOR: &str = " had not recovered when last observed; ";
 const HLS_LIVE_DELIVERY_FALLBACK_HOURS_SEPARATOR: &str =
-    " channel(s) are using a verified 720p fallback for up to ";
+    " channel(s) are using a verified software-encoding and/or lower-quality fallback for up to ";
 const HLS_LIVE_DELIVERY_SUFFIX: &str = " hours. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.";
 
 pub fn health_check_title(title: &str) -> String {
@@ -4244,7 +4244,7 @@ mod tests {
 
     #[test]
     fn hls_live_delivery_health_text_is_localized_for_every_language() {
-        let message = "2 channel(s) delivered live HLS media slower than wall time in the last 30 minutes; 1 had not recovered when last observed; 3 channel(s) are using a verified 720p fallback for up to 24 hours. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.";
+        let message = "2 channel(s) delivered live HLS media slower than wall time in the last 30 minutes; 1 had not recovered when last observed; 3 channel(s) are using a verified software-encoding and/or lower-quality fallback for up to 24 hours. Review the streaming logs and run the delivery-aware TSDuck playback gate before changing provider settings.";
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);
             let title = health_check_title_text(language, HLS_LIVE_DELIVERY_TITLE);
@@ -4255,7 +4255,7 @@ mod tests {
                 "2 recent live HLS delivery under-run(s)",
             );
             assert!(!title.trim().is_empty());
-            for count in ["2", "30", "1", "3", "720", "24"] {
+            for count in ["2", "30", "1", "3", "24"] {
                 assert!(
                     localized.contains(count),
                     "{}: {localized}",

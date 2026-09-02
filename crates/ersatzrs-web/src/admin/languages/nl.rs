@@ -353,7 +353,7 @@ impl LanguageStrings for DutchStrings {
     }
 
     fn hls_live_delivery_message(&self, recent: u64, minutes: u64, active: u64, fallbacks: u64, fallback_hours: u64) -> String {
-        format!("Bij {recent} kana(a)l(en) werd live HLS-media in de afgelopen {minutes} minuten langzamer dan de werkelijke tijd geleverd; {active} was/waren bij de laatste meting nog niet hersteld; {fallbacks} kana(a)l(en) gebruiken maximaal {fallback_hours} uur een geverifieerde 720p-terugval. Controleer de streaminglogboeken en voer de leveringsbewuste TSDuck-afspeeltest uit voordat u providerinstellingen wijzigt.")
+        format!("Bij {recent} kana(a)l(en) werd live HLS-media in de afgelopen {minutes} minuten langzamer dan de werkelijke tijd geleverd; {active} was/waren bij de laatste meting nog niet hersteld; {fallbacks} kana(a)l(en) gebruiken maximaal {fallback_hours} uur een geverifieerde terugval naar software-encoding en/of lagere kwaliteit. Controleer de streaminglogboeken en voer de leveringsbewuste TSDuck-afspeeltest uit voordat u providerinstellingen wijzigt.")
     }
 
     fn artwork_cardinality_message(

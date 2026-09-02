@@ -92,6 +92,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Recover severely under-delivering live HLS hardware output by trying one
+  software H.264 restart before lowering source quality. Temporary software
+  decisions are isolated by channel and the complete FFmpeg profile, verified
+  720p decisions can still escalate, and startup jitter retains a 20-second
+  observation floor. See ADR 0084.
+
 - Recover live add-on HLS playback that cannot sustain 1080p by requesting one
   provider-neutral 720p rendition fallback, verifying it against playlist
   delivery, remembering it for 24 hours, and reporting the temporary quality
