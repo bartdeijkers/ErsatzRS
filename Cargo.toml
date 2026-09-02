@@ -37,7 +37,7 @@ repository = "https://github.com/bartdeijkers/ErsatzRS"
 # cargo compiles sqlx once with one feature set. Per-crate Cargo.toml files use
 # `sqlx = { workspace = true }`.
 [workspace.dependencies]
-quick-xml = { version = "0.41", features = ["serialize"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
 sqlx = { version = "0.9", features = ["runtime-tokio", "sqlite", "migrate", "chrono", "uuid", "macros"] }
 
 [profile.release]
