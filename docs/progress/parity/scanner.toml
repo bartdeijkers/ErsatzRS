@@ -1,7 +1,7 @@
 feature    = 'Scanner'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/`'
 rs_target  = '`crates/ersatzrs-scanner`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0057', '0060', '0062']
 
 summary    = '''
@@ -65,6 +65,9 @@ that file. ADR 0057 owns the direct producer contract.
 ADR 0062 adds uniform local facets, complete Other Video NFO persistence,
 song/image sidecars, FFprobe tag aliases, and Plex Other Video scanning with
 ETags, reconciliation, remote playback, people, GUIDs, artwork, and streams.
+
+Reopened 2026-09-02: scan persistence still crosses the documented
+infrastructure boundary.
 '''
 
 [[debt]]
@@ -108,3 +111,10 @@ description = 'The media-server Unavailable (State=2) flag path needed coverage 
 discovered  = '2026-06-17'
 evidence    = 'Fixed 2026-06-19: the pinned ErsatzTV baseline shows every concrete Plex/Jellyfin/Emby scanner, including PlexOtherVideoLibraryScanner, overrides ServerSupportsRemoteStreaming => true, so no concrete pinned-baseline provider path produces Unavailable today. crates/ersatzrs-infra/tests/media_server.rs now covers the false-support branch with unavailable_flags_present_item_with_missing_local_file_as_unavailable_without_remote_streaming.'
 resolved    = true
+
+[[debt]]
+id          = 'scanner-owns-persistence-implementation'
+description = 'P2: Move local and playlist scan persistence behind infrastructure-owned repository ports so `ersatzrs-scanner` owns scan discovery and execution rather than SQL, transactions, database rows, and schema knowledge.'
+discovered  = '2026-09-02'
+evidence    = '`crates/ersatzrs-scanner/src/lib.rs`, `library_folder.rs`, `local_television.rs`, `remote_stream_playlist.rs`, and the production CLI path import SQLx and infrastructure database types and execute production reads and writes. Closure requires storage-neutral scanner inputs/outcomes, infrastructure repository implementations for scan persistence and transaction boundaries, preserved retry/atomicity semantics, and focused local, provider, Remote Stream playlist, SQLite, and MySQL regressions; alternatively, an explicit ADR must redefine and enforce the scanner as an infrastructure adapter.'
+resolved    = false

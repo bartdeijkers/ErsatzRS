@@ -6,7 +6,7 @@ Accepted (2026-07-21; revised 2026-08-11)
 
 ## Implementation
 
-Implemented (2026-07-24) — the Phase 7B foundation in `ersatzrs-app` exposes documented
+Partial (2026-09-02) — the Phase 7B foundation in `ersatzrs-app` exposes documented
 command, query, application-error, port, and operation-coordination modules.
 Core repository errors are storage-neutral, infrastructure maps concrete SQLx
 failures at its boundary, and the native web composition root constructs
@@ -37,7 +37,14 @@ all SQL and typed row decoding; and the native composition root is the sole web
 owner of concrete adapter construction. Production admin/API handlers have no
 raw pool dependency. The completed architecture baseline reports zero direct
 admin SQL constructors, raw admin-pool consumers, error-to-default loaders,
-and row-decode defaults.
+and row-decode defaults. An architecture review reopened the implementation
+claim because the IPTV transport still owns one active-playout SQL query and
+persisted-row decoding path, while architecture-lint audits only the admin and
+API adapter trees. The same review found that `ARCHITECTURE.md` assigns the
+playout engines to `ersatzrs-scheduler`, contradicting both the implemented
+core-policy boundary and this ADR's durable-work-consumer definition. The
+accepted decision is unchanged; the linked application-layer debt records the
+required extraction, guard expansion, and contract correction.
 
 ## Context
 

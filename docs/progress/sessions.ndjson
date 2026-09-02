@@ -1,3 +1,6 @@
+{"agent":"Codex","date":"2026-09-02","summary":"Folded causal diagnostics, source and impact previews, bounded revision restore, safe yt-dlp early stop, non-destructive reconciliation, additions-only publication, inherited bulk options, artifact budgets, and validated updater rollback into AMM-J through AMM-N."}
+{"agent":"Codex","date":"2026-09-01","summary":"Accepted ADR 0085 and broadened Add-on Metadata Management through AMM-N for crash-safe publication/scan ownership, truthful lifecycle UX, incremental yt-dlp refresh, item playback options/subtitles, and controlled tool updates."}
+{"agent":"Codex","date":"2026-08-31","summary":"Recovered a stuck Windows add-on-list publication and registered AMM-J for durable restart-safe recovery."}
 {"agent":"Codex","date":"2026-08-31","summary":"Implemented removable offline add-on bundles, persisted no-JS and drag-sortable playlist ordering, and removed Trakt-specific core playlist assumptions."}
 {"agent":"Codex","date":"2026-08-31","summary":"Implemented bounded live HLS 1080p-to-720p add-on fallback with play v2, verified cooldown, health visibility, and yt-dlp support; exact Windows acceptance remains open."}
 {"agent":"Codex","date":"2026-08-30","summary":"Refreshed PR 95 dependency rollup and preserved pre-2.22 MiniJinja template scalar output."}

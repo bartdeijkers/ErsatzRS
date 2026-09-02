@@ -1,7 +1,7 @@
 feature    = 'Application use-case layer and orchestration boundary'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Application/`, including Channels, Libraries, MediaCollections, Playouts, Scheduling, Streaming, and Troubleshooting handlers'
 rs_target  = '`crates/ersatzrs-app`, `crates/ersatzrs-core`, `crates/ersatzrs-infra`, `crates/ersatzrs-scheduler`, `crates/ersatzrs-web`'
-status     = 'Ported'
+status     = 'In progress'
 adr        = ['0051']
 summary    = '''
 Ported: Phase 7B provides documented command, query, application-error, port,
@@ -22,6 +22,14 @@ along enumerable seams behind exhaustive route, instruction, Lua-global, and
 media-source gates. The original public imports, Leptos endpoints, serialized
 YAML, scheduler output, provider requests and persistence, SSR/WASM boundary,
 and visible admin behavior remain unchanged.
+
+Reopened 2026-09-02 after an architecture review found one active IPTV
+playout lookup still owning SQL and row decoding in the transport adapter,
+while architecture-lint does not scan the transport tree. The same review
+found that `ARCHITECTURE.md` assigns scheduling-engine ownership to
+`ersatzrs-scheduler` even though the storage-neutral engines and dispatch live
+in `ersatzrs-core`; the accepted ADR already defines the scheduler crate as a
+consumer of durable work and core policy.
 '''
 
 [[debt]]
@@ -70,3 +78,27 @@ resolution  = '''Locked decision: split a module only when an enumerable growth 
 All five conditions must hold: variation follows an enumerable dimension; that dimension grows as parity expands; each variant carries a similar responsibility; a thin dispatcher or registry is natural; and compiler exhaustiveness or a registry test can prove completeness.
 
 The reference pattern is admin localization: `admin/i18n.rs` owns `UiLanguage`, `TextKey`, registry metadata, and dispatch; `admin/languages/*.rs` owns per-language values; and `all_languages_translate_each_key` proves every language covers every key. A structural split must never move orchestration or SQL back into `ersatzrs-web`.'''
+
+[[debt]]
+id          = 'transport-active-playout-query-owns-sql'
+description = 'P2: Move the active IPTV playout-item SQL and persisted-row decoding out of `ersatzrs-web` transport code and expose the lookup through a storage-neutral core repository or application query implemented by infrastructure.'
+discovered  = '2026-09-02'
+adr         = '0051'
+evidence    = '`crates/ersatzrs-web/src/transport/iptv/stream.rs::load_active_media_path` executes a raw `PlayoutItem`/`MediaVersion`/`MediaFile` query and decodes the persistence projection inside the protocol adapter. Closure requires the transport to consume a typed application/core result, infrastructure to own the SQL and strict row decoding, and focused IPTV plus repository regressions to preserve mirror-time, media-version, stream-selection, Remote Stream, and valid-absence behavior.'
+resolved    = false
+
+[[debt]]
+id          = 'architecture-lint-omits-transport-adapters'
+description = 'P2: Extend architecture-lint coverage to transport adapters so raw SQL, persisted-row decoding, and raw pool access cannot re-enter IPTV or HDHomeRun code without failing the architecture gate.'
+discovered  = '2026-09-02'
+adr         = '0051'
+evidence    = '`xtask/src/architecture_lint.rs` limits the audited web roots to `crates/ersatzrs-web/src/admin` and `crates/ersatzrs-web/src/api`, so the production query in `transport/iptv/stream.rs` is a current false negative. Closure requires transport-tree coverage with adversarial tests for qualified, renamed, glob-imported, executor, raw-SQL, row-decode-default, and raw-pool forms, plus a zero or ratcheted baseline that cannot grow.'
+resolved    = false
+
+[[debt]]
+id          = 'scheduling-engine-ownership-contract-drift'
+description = 'P3: Make `ersatzrs-core` the documented owner of storage-neutral playout scheduling traits, policies, engines, and dispatch, and define `ersatzrs-scheduler` as the native background worker that consumes durable work and coordinates runtime execution.'
+discovered  = '2026-09-02'
+adr         = '0051'
+evidence    = '`crates/ersatzrs-core/src/scheduling` implements Block, Classic, Scripted, YAML, and External JSON engines and `playout_builder.rs` dispatches them, while `crates/ersatzrs-scheduler/src/runner.rs` owns ticking, queue consumption, maintenance, retries, locking, and shutdown. `ARCHITECTURE.md` currently assigns the engines to `ersatzrs-scheduler`, contradicting both the implementation and ADR 0051. Closure requires aligned workspace/rule text and explicit core/scheduler module documentation without moving policy into the infrastructure-dependent worker crate.'
+resolved    = false

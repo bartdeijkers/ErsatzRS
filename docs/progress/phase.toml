@@ -17,14 +17,28 @@ controller, localized editor, health coverage, and decoded Windows/WSL runtime
 proof. AMM-I closes the add-on-list import/review UX correction with automatic
 Ready materialization, authoritative publication readiness, faithful no-JS
 forms, compact responsive review cards, and keyboard-safe navigation. Phase 9
-teletext is now unblocked.
+teletext is now unblocked. Redacted Windows dogfood reopened the atomic
+add-on-list publication contract under AMM-J: an interrupted scan followed by
+a one-shot directory-rename failure can leave a valid journal permanently
+blocked without startup or admin recovery. ADR 0085 broadens the corrective
+program through AMM-K operator lifecycle/navigation, AMM-L cadenced incremental
+refresh/reconciliation, AMM-M inherited yt-dlp access/SponsorBlock/subtitles
+with bounded artifact storage, and AMM-N validated yt-dlp maintenance plus
+cross-platform closeout. The widened acceptance also requires causal operation
+history, source/change/impact preview, bounded revision restore, safe ordered
+early stop, additions-only automatic publication, and updater rollback.
 '''
 
 next_steps = '''
 Close release-critical milestone `hls-live-01`, which reopens live Remote
 Stream/HLS delivery and TSDuck acceptance after Windows starvation evidence.
-Then resume Phase 9A at p9a-01 by accepting the teletext product and standards
-contract before implementation.
+Close AMM-J before the next Windows beta by making publication recovery
+durable, restart-safe, mutually exclusive with every scan origin, and operable
+without direct database repair. Then deliver ADR 0085 in dependency order
+through AMM-K, AMM-L, AMM-M, and AMM-N before claiming the broadened add-on-list
+lifecycle complete at `amm-n-03`. Resume Phase 9A at p9a-01 after that
+corrective program by accepting the teletext product and standards contract
+before implementation.
 '''
 
 [[blocking_decision]]

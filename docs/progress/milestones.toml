@@ -2157,6 +2157,479 @@ The full workspace test closeout passes all 2,078 tests and doctests.
 '''
 
 [[milestone]]
+id         = 'amm-j-01'
+phase      = 'AMM-J — Crash-safe publication recovery'
+title      = 'Move add-on publication into a durable recovery coordinator'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-publication-recovery.md'
+depends_on = ['amm-i-01']
+acceptance = '''
+Publish persists one exact-revision job and returns without owning the scan or
+filesystem lifetime. Transactional claims, phases, attempts, lease expiry,
+heartbeat, next eligibility, original failure, and bounded recovery diagnostic
+survive restart. One exclusive per-managed-library lease admits publication,
+recovery, reset, refresh, and every scheduled/manual/startup/child scan; the
+publication child scan reuses its parent token and unrelated scans defer.
+Startup resumes an expired job idempotently, duplicate clicks cannot create or
+commit a second generation, request cancellation cannot cancel the job, and no
+scan or recovery holds an HTTP request or database write transaction open.
+'''
+evidence = '''
+Opened 2026-08-31 after redacted Windows dogfood proved that the journal makes
+an interrupted publication visible but cannot execute recovery after the
+request-owned rollback fails. The publication overlapped a scheduled scan; the
+scan completed, but diagnostics cannot distinguish later request cancellation
+from a Windows sharing violation. Both produce the same stranded journal and
+are separate required fault-injection cases.
+'''
+
+[[milestone]]
+id         = 'amm-j-02'
+phase      = 'AMM-J — Crash-safe publication recovery'
+title      = 'Make publication rollback atomic on Windows and POSIX'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-publication-recovery.md'
+depends_on = ['amm-j-01']
+acceptance = '''
+Journal markers and observable directory state make every partial swap
+idempotently resumable. Scanner and child-process handles drain before rename;
+Windows sharing violations receive bounded retry; immutable backups cannot be
+changed through hard-linked publication writes. Files, projection, published
+items and liveness, artwork, playlist membership, and refresh intents converge
+to exactly one complete previous or new revision before cleanup clears the
+journal. NTFS and POSIX fault injection plus SQLite restart tests pass.
+'''
+evidence = '''
+Not started. The live incident had intact managed and backup directories but
+no failed-publication intermediate directory, locating the failed rollback at
+its first one-shot rename. The same swap passed with the host stopped.
+'''
+
+[[milestone]]
+id         = 'amm-j-03'
+phase      = 'AMM-J — Crash-safe publication recovery'
+title      = 'Expose recovery and keep restricted items item-scoped'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-publication-recovery.md'
+depends_on = ['amm-j-02']
+acceptance = '''
+The localized hydrated and no-JavaScript editor distinguishes active, waiting,
+expired, failed, restoring, and complete publication jobs and offers guarded
+Retry recovery and Restore previous revision commands. Health reports the same
+redacted state. Publishing appears only for a live executing lease; every
+failed, expired, validation-blocked, or recovery-required state shows Publish
+blocked with an immediately following alert containing the exact cause and
+specific clearing action. Official add-ons return structured provider-neutral
+authentication/restriction outcomes; optional failures remain non-blocking,
+and an inaccessible item is retained for review but excluded from the attempted
+revision so usable items still publish. Credentials use SecretReference only.
+Chromium, Firefox, Windows dogfood, and packaged restart acceptance pass.
+'''
+evidence = '''
+Not started. The live editor showed an indefinitely disabled Publishing action
+and two blockers without a recovery command. Six age/auth detail failures were
+correctly optional; AMM-J preserves that behavior and covers the playback-
+required case without parsing provider text in the host.
+'''
+
+[[milestone]]
+id         = 'amm-j-04'
+phase      = 'AMM-J — Crash-safe publication recovery'
+title      = 'Persist a redacted causal publication and recovery history'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-publication-recovery.md'
+depends_on = ['amm-j-03']
+acceptance = '''
+Every publication/recovery job persists one ordered causal event stream with a
+correlation ID across enqueue, lease wait, child scan, filesystem transition,
+retry, recovery action, and terminal outcome. The original failure and later
+rollback failures remain distinct through restart. Events are transactionally
+ordered, capped at 256 with a truncation marker, and terminal history is
+bounded to 30 days and 50 jobs per list without deleting active/recovery work.
+The localized editor Activity timeline, Health/runtime audit, hydrated Copy
+redacted diagnostics, and no-JavaScript Download redacted diagnostics expose
+only typed phases, aggregate counts, sanitized OS error category/code, and
+outcome—never URLs, paths, titles, cookies, headers, provider stderr, or
+arbitrary exception text. Cancellation and held-handle sharing-violation fault
+injections retain distinct causes while both recover.
+'''
+evidence = '''
+Not started. The Windows incident retained a journal but insufficient causal
+diagnostics to distinguish request cancellation from a sharing violation;
+current progress and terminal diagnostic fields do not preserve an ordered
+cross-scan/filesystem recovery history.
+'''
+
+[[milestone]]
+id         = 'amm-k-01'
+phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
+title      = 'Persist provider-neutral options and complete list lifecycle state'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-j-04']
+acceptance = '''
+ADR 0085 option schemas, list/item draft and published values, refresh cadence,
+refresh-publication policy, reset/reconcile job, incremental strategy/checkpoint,
+tombstones, retained revision references, artifact budget/ownership, and tool-
+maintenance history are represented by provider-neutral domain/application/
+repository contracts and additive SQLite migration. Unknown schemas fail
+closed, legacy add-ons retain their frozen path, health/runtime audit expose
+bounded aggregate state, and no Rust host branch compares the official yt-dlp
+add-on identifier.
+'''
+evidence = '''
+Not started. Source audit found a Boolean AutoRefresh, no item-option or
+artifact/checkpoint persistence, and provider-specific behavior correctly
+confined to the package; ADR 0085 preserves that boundary while extending it.
+'''
+
+[[milestone]]
+id         = 'amm-k-02'
+phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
+title      = 'Add clean reset, always-visible metadata, and optional numbering'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-k-01']
+acceptance = '''
+Reset and reload source URL durably unpublishes and removes every derived list
+artifact, projection, item, override, replacement, job, cursor, subtitle,
+processed cache, and archive entry before queuing a full import from retained
+configuration; its confirmation states that channels remain empty on failure.
+List and item metadata are always visible and inline-editable, including the
+hero title, with no Edit metadata controls. Missing episode numbers are a
+recommendation and render Unnumbered rather than blocking or showing S00E00.
+The list table presents Name before Id. Localized hydrated/no-JS, keyboard,
+320-pixel, 200%-zoom, Chromium, and Firefox acceptance passes.
+'''
+evidence = '''
+Not started. Current UI hides list metadata behind duplicate text/icon toggles,
+orders Id before Name, and readiness hard-blocks missing season/episode data;
+there is no complete unload-and-reload command.
+'''
+
+[[milestone]]
+id         = 'amm-k-03'
+phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
+title      = 'Open Remote Stream details from add-on-list search results'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-k-02']
+acceptance = '''
+Remote Stream search cards have a canonical /media/remote/streams/:id href and
+open a localized details page with effective metadata, artwork, tracks,
+liveness, duration, availability, owning add-on list, published options,
+playback health, and applicable watch/channel actions. Add-on-list-filtered
+search navigation behaves like movie/episode cards with SSR, hydration,
+keyboard, narrow-screen, Chromium, and Firefox proof.
+'''
+evidence = '''
+Not started. search_href deliberately returns an empty string for RemoteStream
+and the router has only list/page Remote Stream routes.
+'''
+
+[[milestone]]
+id         = 'amm-k-04'
+phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
+title      = 'Preview list impact and retain bounded publication revisions'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-k-03']
+acceptance = '''
+The detail page offers durable non-mutating Test source, an exact saved-draft
+diff, and reset impact counts for published items, generated playlists,
+channels, schedules, and active/future playout. Current plus two preceding
+complete revisions remain reference-counted and comparable; Restore revision
+uses the normal durable lease and creates a new monotonic revision. Cleanup
+cannot remove files/artifacts pinned by retained revisions, active work, or
+current/future playout. The shared destructive dialog contains keyboard focus
+and uses aria-labelledby; Name/Id sorting is keyboard operable with aria-sort.
+Localized hydrated/no-JS, 320-pixel, 200%-zoom, Chromium, and Firefox proof
+covers source/diff/impact/history and safe restore.
+'''
+evidence = '''
+Not started. The current editor has no source preflight, general published-to-
+draft diff, downstream reset impact, routine revision comparison/restore, or
+complete shared-dialog and sortable-table accessibility behavior.
+'''
+
+[[milestone]]
+id         = 'amm-l-01'
+phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
+title      = 'Replace daily auto-refresh with five explicit cadences'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-k-01']
+acceptance = '''
+Daily, weekly, monthly, yearly, and never are localized select values backed by
+a persisted cadence, next due instant, retry eligibility, and success anchor.
+The migration maps true to daily and false to never. UTC/calendar tests cover
+month end, leap day, DST, manual success, failure, restart, disabled add-ons,
+and repeated hourly ticks without duplicate or catch-up generations.
+'''
+evidence = '''
+Not started. Both current refresh coordinators query AutoRefresh = 1 against a
+one-day LastUpdate cutoff and the admin renders a daily checkbox.
+'''
+
+[[milestone]]
+id         = 'amm-l-02'
+phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
+title      = 'Use a transactional yt-dlp archive for new-item discovery'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-l-01']
+acceptance = '''
+Import v2 supports full and incremental generations, a list record plus zero
+new items, and atomic host-owned checkpoint promotion. The official package
+passes a staged archive.txt through --download-archive and
+--force-write-archive on Windows and POSIX. It distinguishes skip-known from a
+package-declared stable-newest-first early-stop strategy and uses
+--break-on-existing only for the latter. Examined, archived-skipped, and
+emitted counts are persisted. Unchanged and later-addition fixtures emit only
+new identities; a reordered fixture with an unseen item after a known one
+falls back to bounded enumeration and cannot miss it. Lazy-playlist is never
+combined with early stop and any lazy skip-known path has frozen tool-version
+fixtures. Invalid/cancelled output does not advance the archive, reset/reload
+clears it, and delta absence is never inferred as provider deletion.
+'''
+evidence = '''
+Not started. Current yt-dlp discovery re-enumerates flat playlist pages and has
+no archive/checkpoint input or durable promotion boundary. yt-dlp documents
+archive suppression and break-on-existing as separate behaviors, so an archive
+alone does not prove that full enumeration was avoided.
+'''
+
+[[milestone]]
+id         = 'amm-l-03'
+phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
+title      = 'Refresh complete playlist metadata independently of item deltas'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-l-02']
+acceptance = '''
+The official yt-dlp package performs bounded playlist-header extraction and
+maps title, summary/description, tags, channel/people, artwork, and stable
+identifiers even when no new item is discovered. Provider fields refresh,
+operator overrides and conflicts remain intact, and flat-playlist omissions
+cannot erase richer saved metadata. Frozen Windows/POSIX fixtures and host
+merge tests cover an empty delta and changed header.
+'''
+evidence = '''
+Not started. The mapper accepts description and tags, but receives only the
+flat discovery object and therefore cannot guarantee that playlist-level rich
+metadata is present.
+'''
+
+[[milestone]]
+id         = 'amm-l-04'
+phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
+title      = 'Reconcile a complete source without erasing operator work'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-l-03']
+acceptance = '''
+Reconcile entire source runs a complete scratch generation and staged full
+archive while retaining current publication, draft overrides, inclusion,
+numbering, replacements, options, and artifacts. One complete absence records
+MissingSince; removal requires a second complete successful observation at
+least 24 hours later or explicit confirmation. Failure, cancellation,
+incomplete pagination, and invalid output cannot advance missing evidence;
+reappearance clears it. Additions, metadata/order changes, reappearances, and
+removal candidates are previewed before explicit Publish. Accepting the result
+promotes the matching staged archive atomically; Reset and Reload remains the
+separate clean-slate action.
+'''
+evidence = '''
+Not started. The current broadened design can suppress archived identities but
+otherwise leaves provider removals indefinitely or requires destructive reset,
+which discards operator review state.
+'''
+
+[[milestone]]
+id         = 'amm-l-05'
+phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
+title      = 'Make refresh publication policy explicit and safe'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-l-04']
+acceptance = '''
+Each list persists Review changes before publishing by default and may opt into
+Automatically publish validated additions. The latter uses the exact saved-
+revision publication lease only for pure additions. Existing-item changes,
+conflicts, tombstones/removal candidates, restrictions, unavailable items,
+option-schema changes, and failed preparation always remain a review draft and
+create a localized in-app activity/Health notice. Automatic refresh cannot
+silently remove or rewrite current playout content. Paused-time and restart
+tests cover duplicate ticks, concurrent manual work, failure, and notification
+deduplication.
+'''
+evidence = '''
+Not started. Cadence without an explicit refresh-to-publication policy leaves
+operators unable to tell whether new items reach channels automatically, while
+unrestricted auto-publication would bypass the existing review contract.
+'''
+
+[[milestone]]
+id         = 'amm-m-01'
+phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
+title      = 'Add per-item browser cookies and checked SponsorBlock removal'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-k-04', 'amm-l-05']
+acceptance = '''
+The schema-rendered editor offers list defaults and nullable item overrides for
+none, Firefox, Chrome, and Chromium plus Remove SponsorBlock segments checked
+by default. It shows effective/inherited state, Reset to list default, and
+previewed atomic bulk changes with one-step undo. Only the lowercase effective
+browser enum crosses IPC; cookie bytes never reach storage, logs, health, or
+diagnostics. Durable Test access returns a typed redacted result and expires on
+URL, package/tool, or option change. Enrich, subtitle, preparation, and playback
+use the published choice. Finite items use --sponsorblock-remove default with
+cancellation/restart/invalidation and real channel proof; live items show the
+exact unsupported reason and remain playable.
+'''
+evidence = '''
+Not started. Current official yt-dlp operations have no item option input and
+stream directly to stdout; official yt-dlp documents SponsorBlock removal as
+video-file post-processing, requiring an explicit preparation lifecycle.
+'''
+
+[[milestone]]
+id         = 'amm-m-02'
+phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
+title      = 'Publish human-authored yt-dlp subtitles into channel playback'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-m-01']
+acceptance = '''
+The official package requests only configured global default/fallback subtitle
+languages with --write-subs and explicit --no-write-auto-subs, writes bounded
+artifacts to host scratch, and reports actual language/format/digest. The host
+atomically publishes files and idempotent Subtitle rows. Tests prove primary,
+fallback, unset, unrelated-language refusal, no automatic captions,
+item/channel override precedence, publication recovery, and actual MPEG-TS/HLS
+channel viewing with the selected subtitle.
+'''
+evidence = '''
+Not started. ADR 0052 already supplies selection precedence and settings, but
+the yt-dlp add-on exposes no subtitle artifact and generated Remote Streams
+therefore have no provider subtitle rows.
+'''
+
+[[milestone]]
+id         = 'amm-m-03'
+phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
+title      = 'Bound and expose processed-artifact storage'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-m-02']
+acceptance = '''
+Generic global/per-list byte ceilings, minimum free space, retention, and
+preparation concurrency are persisted and enforced before SponsorBlock process
+launch. The list and Add-ons pages expose effective budget and used, pinned,
+reclaimable, pending, and failed state with exact required/free/available disk
+blockers. Clear unused cache is restart-safe and LRU-evicts only unpinned
+completed artifacts; active jobs, retained revisions, and current/future
+playout remain pinned. Tests cover reservation races, low disk, cancellation,
+restart, cleanup idempotency, and prove transient artifacts never become Local
+library media or an unbounded permanent collection.
+'''
+evidence = '''
+Not started. ADR 0085 currently requires a bounded transient SponsorBlock cache
+but no persisted operator-visible quota, reservation, concurrency, retention,
+or safe reclamation contract exists.
+'''
+
+[[milestone]]
+id         = 'amm-n-01'
+phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
+title      = 'Run controlled yt-dlp self-update on startup and daily'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-k-01']
+acceptance = '''
+After permission review, every enabled tool.update.v1 package receives one
+startup attempt and at least one attempt per 24 running hours. The official
+package runs configured yt-dlp -U, probes before/after version, and returns
+updated, already-current, manual-update-required, or failed. Durable claims
+deduplicate overlaps, a tool lease prevents replacement during new invocations,
+non-maintenance commands keep --no-update, and Add-ons/Health show exact manual
+remediation for package-manager/read-only installations on Windows and POSIX.
+'''
+evidence = '''
+Not started. The official package currently documents operator-owned updates
+and passes --no-update on discovery, enrichment, and playback.
+'''
+
+[[milestone]]
+id         = 'amm-n-02'
+phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
+title      = 'Validate and roll back yt-dlp replacement'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-n-01']
+acceptance = '''
+For an accepted eligible regular executable, the update job records size and
+digest and stores one bounded private last-known-good copy before yt-dlp -U.
+Startup, reported version, and extractor-registry loading validate before the
+tool lease releases. Failed validation atomically restores exact prior bytes
+and returns rolled_back; failed restore quarantines the tool with exact
+remediation. Package-manager, immutable, and read-only installations are never
+mutated. Check for update now and a bounded redacted update history share the
+same lease, Retry-After, backoff, and next eligibility. Windows/POSIX tests
+cover success, no-op, validation failure, rollback, quarantine, concurrent
+operations, process death, and restart.
+'''
+evidence = '''
+Not started. A serialized -U invocation prevents concurrent replacement but
+does not prove that the resulting executable is usable or provide a known-good
+rollback and operator-visible attempt history.
+'''
+
+[[milestone]]
+id         = 'amm-n-03'
+phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
+title      = 'Close the broadened lifecycle on all supported platforms'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-j-04', 'amm-k-04', 'amm-l-05', 'amm-m-03', 'amm-n-02']
+acceptance = '''
+Host and official-package contract suites, focused Rust/migration/health tests,
+localization, hydration lint, Chromium/Firefox, all six RID package checks,
+Windows NTFS/browser-profile dogfood, runtime smoke, and applicable TSDuck
+playback gates pass. The original overlap is repeated with a scheduled scan,
+Publish, browser disconnect, restart, UI recovery, and one exact final revision
+with distinct causal diagnostics, no stranded journal, and no manual database/
+filesystem repair. Reordered incremental discovery, two-observation reconcile,
+source/diff/impact/history UX, accessibility, quota/LRU pins, validated update
+rollback, and additions-only publication pass. A real channel proves
+SponsorBlock-processed video and default/fallback human subtitles.
+'''
+evidence = '''
+Not started. This milestone is the only completion boundary for the combined
+AMM-J through AMM-N contract; individual argv or UI tests are insufficient.
+'''
+
+[[milestone]]
 id         = 'hls-live-01'
 phase      = 'Streaming reliability correction'
 title      = 'Detect and prevent live HLS delivery starvation'

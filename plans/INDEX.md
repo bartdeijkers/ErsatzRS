@@ -145,6 +145,18 @@ changelog, and git history for evidence. The authoritative live state is always
   actions, automatic Ready-to-review materialization, explicit saved-revision
   and publication readiness, responsive item cards, contextual entry points,
   and bounded progress/copy defects under milestone `amm-i-01`.
+- `addon-list-publication-recovery.md` — corrective AMM-J plan for durable
+  publication jobs, restart-safe Windows/POSIX rollback, localized recovery
+  actions, and item-scoped continuation when provider authentication or age
+  restrictions make one entry unavailable.
+- `addon-list-lifecycle-broadening.md` — accepted ADR 0085 execution plan for
+  AMM-J through AMM-N: shared publication/scan ownership, truthful blocked
+  actions and causal history, complete reset/reload, non-destructive reconcile,
+  source/change/impact previews, bounded revision restore, inline metadata and
+  Remote Stream details, five refresh cadences, observable safe yt-dlp archive
+  early stop and rich headers, inherited/bulk cookies/SponsorBlock/subtitles,
+  artifact budgets, and validated startup/daily yt-dlp maintenance with
+  rollback.
 - `playout-refresh-and-addon-tv-deduplication.md` — corrective Windows-dogfood
   plan for real Classic Refresh checkpoints, dependency-scoped scan
   invalidation, safe existing-database behavior, and idempotent add-on

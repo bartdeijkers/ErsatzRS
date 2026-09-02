@@ -27,6 +27,22 @@ release section when tagging a release.
 
 ### Changed
 
+- Reopen the add-on-list atomic-publication contract after Windows dogfood
+  showed that a failed post-scan directory rollback can leave an otherwise
+  valid recovery journal permanently blocked. AMM-J now owns durable restart
+  recovery, Windows/POSIX filesystem retry, localized operator actions, and
+  item-scoped continuation for provider-restricted entries.
+
+- Accept ADR 0085 and broaden the open Add-on Metadata Management roadmap
+  through AMM-N: coordinate publication with every scan origin, make blocked
+  and reset/reload workflows explicit, retain redacted causal diagnostics,
+  preview source/change/downstream impact, compare/restore bounded revisions,
+  reconcile without erasing edits, expose inline metadata and Remote Stream
+  details, add five refresh cadences and observable safe yt-dlp archive early
+  stop, carry inherited/bulk browser-cookie/SponsorBlock/subtitle behavior into
+  playback under artifact budgets, and run permission-reviewed, validated,
+  rollback-safe yt-dlp maintenance at startup and daily.
+
 - Refresh the dependency rollup, including `base64` 0.23 and
   `ed25519-dalek` 3.0 for signed add-on repositories, while preserving the
   lowercase boolean and `none` output of existing XMLTV and graphics templates

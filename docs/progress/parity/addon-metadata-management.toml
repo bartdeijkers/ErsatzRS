@@ -2,7 +2,7 @@ feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'In progress'
-adr        = ['0068', '0073', '0075', '0078', '0079']
+adr        = ['0068', '0073', '0075', '0078', '0079', '0085']
 
 summary = '''
 ADR 0075 replaces immediate managed-library publication with a provider-neutral
@@ -14,15 +14,9 @@ updateable extraction engine; its add-on mapper only translates full yt-dlp
 JSON. Beeld & Geluid uses one cross-platform adapter to normalize scraped data
 and prefer episode-card stills over generic broadcaster artwork. Native Linux,
 WSL, Windows, Chromium, Firefox, migration, and full workspace closeout proof
-complete the contract. A staged publication explicitly bypasses the empty
-draft-era Remote Stream cache, existing affected publications self-repair on
-their next scan, and health reports empty successful sidecars. The shared
-artwork client identifies ErsatzRS so provider CDNs can serve reviewed images
-consistently to both publication and scanning paths. Reviewed item NFOs retain
-list-wide tags and defaults without duplicating values. Existing imports can
-be republished as any supported library type without running the provider a
-second time; the stored provider snapshot, source order, inclusion, and
-operator overrides remain the durable control plane while only the media
+complete the original contract. Existing imports can be republished as any
+supported library type without rerunning the provider; the stored snapshot,
+source order, inclusion, and overrides remain the control plane while only the
 projection changes.
 Television drafts provide direct row editing plus atomic, provider-order
 numbering from any included item. Bounded or date-gap-detected assignments and
@@ -56,10 +50,56 @@ select one deterministic non-empty artwork winner, and narrow restart-safe
 SQLite/MySQL repairs remove only safe exact duplicates. Aggregate health and
 runtime-audit diagnostics plus a 27-episode browser proof keep the invariant
 visible without exposing media paths.
-AMM-I closes overview, draft/publication, no-JS, and reflow gaps with
-authoritative readiness and responsive review proven in both browsers;
-see amm-i-01 and plans/addon-list-import-review-ux.md.
+AMM-I closes the import/review UX gaps under `amm-i-01`.
+AMM-J reopens publication recovery after Windows dogfood exposed a stranded
+journal and now requires a bounded causal operation history; see its open debt
+and corrective plan. ADR 0085 broadens the open program through AMM-K operator-
+safe reset/editor/navigation plus impact and revision history, AMM-L cadenced
+incremental refresh, safe early stop, non-destructive reconcile, rich headers,
+and explicit publication policy, AMM-M inherited/bulk yt-dlp access,
+SponsorBlock/subtitle artifacts and storage budgets, and AMM-N validated
+yt-dlp maintenance and integrated closeout.
 '''
+
+[[debt]]
+id          = 'addon-list-publication-recovery-can-stall-permanently-on-windows'
+description = 'Make add-on-list publication and rollback durable, restart-safe, and recoverable through the admin UI after scan failure, process interruption, or a transient Windows filesystem sharing violation; retain a bounded redacted causal history that distinguishes original and recovery failures; keep provider authentication and age restrictions item-scoped.'
+discovered  = '2026-08-31'
+adr         = '0085'
+evidence    = 'Redacted Windows dogfood left a 165-item list in Publishing with an intact journal and previous-revision backup, no failed-publication intermediate directory, and no persisted ReviewError. Health and the editor detected the condition but offered no recovery. The publication overlapped a scheduled scan; that scan completed, but this beta cannot prove whether request cancellation or a Windows sharing violation during rollback was the immediate trigger because no ordered cross-scan/filesystem event history exists. Both reach the same stranded journal. The same journal-owned directory swap succeeded immediately with the host stopped; restoring snapshots, scanning through the UI, and matching produced 165 matched items, 165 playlist members, and 166 artwork materializations. Explicit publication then completed as revision 3 with zero blockers and healthy SQLite integrity. Source inspection confirms request-owned scan/commit/rollback, one-shot rename, and no shared library lease, startup claimant, durable retry, admin recovery command, or bounded causal diagnostics. Tracked by AMM-J and plans/addon-list-publication-recovery.md.'
+resolved    = false
+
+[[debt]]
+id          = 'addon-list-lifecycle-actions-and-navigation-are-incomplete'
+description = 'Provide truthful Publish blocked remediation, a complete reset-and-reload operation, source/publication/downstream impact preview, bounded revision comparison/restore, always-visible inline list/item metadata, optional episode numbering, Name-before-Id list layout, accessible dialog/table behavior, and a real Remote Stream details route from add-on-list search results.'
+discovered  = '2026-09-01'
+adr         = '0085'
+evidence    = 'The current action model hides Publish when validation blockers exist and reports Publishing from the review-state flag even for an unclaimable recovery journal; blocker copy has no clearing command. No reset/reload, source preflight, general published-to-draft diff, downstream impact, or routine revision comparison/restore exists. General metadata is gated by both an Edit metadata link and icon, the hero title is display-only, SeasonEpisodeMissing is a hard blocker, the list table orders Id before Name, and search_href deliberately returns an empty Remote Stream href. The shared dialog lacks focus containment/aria-labelledby and shared sortable headings are pointer-only without aria-sort. Tracked by AMM-K and plans/addon-list-lifecycle-broadening.md.'
+resolved    = false
+
+[[debt]]
+id          = 'addon-list-refresh-has-no-cadence-or-incremental-checkpoint'
+description = 'Replace Boolean daily refresh with daily, weekly, monthly, yearly, and never; use a transactionally promoted yt-dlp archive with observable safe early stop to load only new identities; reconcile provider removals/reordering without erasing operator work; refresh complete playlist metadata on an empty item delta; and make review versus additions-only automatic publication explicit.'
+discovered  = '2026-09-01'
+adr         = '0085'
+evidence    = 'Both current coordinators select AutoRefresh = 1 with a one-day LastUpdate cutoff. The official yt-dlp discover adapter re-enumerates flat playlist pages, has no archive path, and cannot guarantee rich list summary/tags from flat output. Official yt-dlp documents --force-write-archive and separately documents --break-on-existing; archive suppression alone does not prove enumeration stopped, and unconditional early stop can miss reordered insertions. No non-destructive full reconcile, two-observation tombstone, or explicit refresh-publication policy exists. Tracked by AMM-L and plans/addon-list-lifecycle-broadening.md.'
+resolved    = false
+
+[[debt]]
+id          = 'yt-dlp-list-items-lack-access-sponsorblock-and-subtitle-options'
+description = 'Add inherited list defaults, nullable per-item overrides, bulk preview/undo, and redacted access testing for Firefox, Chrome, or Chromium without persisting cookie material; checked-by-default SponsorBlock removal for finite media under explicit storage budgets; and human-authored default/fallback subtitle artifacts that play on channels.'
+discovered  = '2026-09-01'
+adr         = '0085'
+evidence    = 'The official package currently has no list/item option inheritance, bulk mutation, access-test, or artifact input and its playback command streams directly to stdout. yt-dlp documents browser-cookie enums, --sponsorblock-remove as video-file post-processing, and --write-subs with --no-write-auto-subs. ADR 0052 already implements global subtitle-language precedence, but generated Remote Streams receive no provider subtitle rows. The proposed transient processed cache has no operator-visible global/per-list byte ceilings, minimum-free-space reservation, retention/concurrency, or safe LRU cleanup contract. Tracked by AMM-M and plans/addon-list-lifecycle-broadening.md.'
+resolved    = false
+
+[[debt]]
+id          = 'enabled-yt-dlp-tool-is-not-maintained-by-ersatzrs'
+description = 'Run one controlled yt-dlp self-update at every ErsatzRS start and at least daily while its add-on is enabled, with permission review, durable leases, before/after version and digest, post-update validation, last-known-good rollback/quarantine, bounded history, health, and exact manual remediation for installations that cannot self-update.'
+discovered  = '2026-09-01'
+adr         = '0085'
+evidence    = 'The official package tells the operator to update yt-dlp and passes --no-update on discovery, enrichment, and playback. There is no tool-maintenance capability, startup/daily job, per-tool replacement lease, typed update outcome, replacement validation, known-good rollback/quarantine, manual Check for update now, or bounded attempt history. Tracked by AMM-N and plans/addon-list-lifecycle-broadening.md.'
+resolved    = false
 
 [[debt]]
 id          = 'addon-list-import-review-ux-obscures-state-and-mobile-actions'
