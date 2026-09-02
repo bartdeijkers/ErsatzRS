@@ -1,0 +1,28 @@
+name: Windows publication filesystem gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ntfs-publication-recovery:
+    name: NTFS held-handle recovery
+    runs-on: [self-hosted, ersatzrs-windows-release]
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: publication-filesystem-win-x64
+          cache-bin: "true"
+      - name: Exercise NTFS sharing recovery
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo test -p ersatzrs-infra --target x86_64-pc-windows-msvc windows_publication_restore_retries_until_a_held_handle_drains

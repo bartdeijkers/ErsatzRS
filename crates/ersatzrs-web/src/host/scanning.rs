@@ -253,6 +253,10 @@ fn scan_error(error: impl std::fmt::Display) -> ScanRuntimeError {
     ScanRuntimeError::new(error.to_string())
 }
 
+fn heartbeat_keeps_operation_running<E>(result: &Result<bool, E>) -> bool {
+    matches!(result, Ok(true))
+}
+
 struct WorkerLifecycle {
     application: Arc<ApplicationServices>,
 }
@@ -309,15 +313,20 @@ pub async fn run_scan_worker(
                 () = shutdown.cancelled() => break None,
                 outcome = &mut execution => break Some(outcome),
                 _ = heartbeat.tick() => {
-                    match application.heartbeat_managed_library_operation(&claim).await {
+                    let heartbeat_result = application
+                        .heartbeat_managed_library_operation(&claim)
+                        .await;
+                    match &heartbeat_result {
                         Ok(true) => {}
                         Ok(false) => {
                             tracing::warn!(operation_id, library_id, "managed-library lease was lost");
-                            break Some(ExecuteManagedLibraryOperationOutcome::LeaseLost);
                         }
                         Err(error) => {
                             tracing::warn!(operation_id, library_id, error = %error, "managed-library heartbeat failed");
                         }
+                    }
+                    if !heartbeat_keeps_operation_running(&heartbeat_result) {
+                        break Some(ExecuteManagedLibraryOperationOutcome::LeaseLost);
                     }
                 }
             }
@@ -367,6 +376,15 @@ mod tests {
     use ersatzrs_domain::ScanPlayoutRefreshReason;
     use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::Executor as _;
+
+    #[test]
+    fn heartbeat_error_stops_the_claimed_operation() {
+        assert!(heartbeat_keeps_operation_running(&Ok::<_, &str>(true)));
+        assert!(!heartbeat_keeps_operation_running(&Ok::<_, &str>(false)));
+        assert!(!heartbeat_keeps_operation_running(&Err::<bool, _>(
+            "heartbeat unavailable"
+        )));
+    }
 
     async fn seed_local_library(pool: &DbPool, root: &std::path::Path, media_kind: i32) {
         pool.execute(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)

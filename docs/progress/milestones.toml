@@ -2205,7 +2205,7 @@ retry, and the cross-platform partial-swap matrix remain owned by amm-j-02.
 id         = 'amm-j-02'
 phase      = 'AMM-J — Crash-safe publication recovery'
 title      = 'Make publication rollback atomic on Windows and POSIX'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-publication-recovery.md'
 depends_on = ['amm-j-01']
@@ -2219,9 +2219,28 @@ to exactly one complete previous or new revision before cleanup clears the
 journal. NTFS and POSIX fault injection plus SQLite restart tests pass.
 '''
 evidence = '''
-Not started. The live incident had intact managed and backup directories but
-no failed-publication intermediate directory, locating the failed rollback at
-its first one-shot rename. The same swap passed with the host stopped.
+Implemented locally on 2026-09-02, pending the required real-NTFS gate. Managed,
+backup, and failed trees now carry operation/generation/revision markers and
+content fingerprints; same-parent ownership checks and marker-last cleanup make
+each safe rename state resumable while foreign or corrupt trees stop without
+deletion. Staging copies bytes instead of hard-linking mutable files. The
+durable coordinator drains its first child scan, commits or restores, runs a
+separate persisted Local verification scan, verifies filesystem and SQLite
+revision convergence, and only then enters an idempotent fenced cleanup phase
+that clears the journal. Local ffprobe processes are killed when their scan
+future is dropped. Windows access/sharing errors use six deterministic bounded
+backoff attempts, while other OS and integrity failures stop immediately.
+Focused `ersatzrs-infra` publication tests cover copy isolation, every partial
+swap, corrupt ownership, stale prepared seals, POSIX held handles, cleanup
+ordering, logical database cardinality, active-journal writer fencing, legacy
+adoption, and a file-backed SQLite close/reopen during verification. The 49
+projection/publication integration tests, 19 filesystem tests, 2,270-test
+canonical closeout with doctests, workspace clippy, and MPEG-TS/HLS runtime
+smoke pass. An independent recovery audit found no remaining blocker.
+The manual `Windows publication filesystem gate` workflow targets the
+self-hosted NTFS release runner and holds a non-delete-shared handle until the
+production retry loop succeeds. AMM-J-02 remains open until that workflow has a
+green run whose URL and exact commit SHA are recorded here.
 '''
 
 [[milestone]]

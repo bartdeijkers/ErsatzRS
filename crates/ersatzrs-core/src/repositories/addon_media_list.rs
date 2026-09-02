@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
     AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemRole,
-    AddonMediaListPresentationKind, AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
+    AddonMediaListPresentationKind, AddonMediaListPublicationOutcome, AddonMediaListReviewState,
+    EntityId, RemoteStreamLiveness,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -383,6 +384,18 @@ pub struct AddonMediaListPublication {
     pub library_id: EntityId,
 }
 
+/// Whether a durable publication step must enter the AMM-J-02 verification
+/// flow or already reached a journal-less terminal state under AMM-J-01.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddonMediaListPublicationContinuation {
+    /// The operation still owns a journal and must verify before cleanup.
+    VerificationRequired,
+    /// A pre-AMM-J-02 process already cleared the journal after committing or
+    /// reconciling the selected revision, so no owned filesystem state remains
+    /// to verify or clean up.
+    CompletedLegacy,
+}
+
 /// Complete administration detail for one provider or chapter-fragment item.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListItemDetail {
@@ -577,7 +590,7 @@ pub trait AddonMediaListRepository: Send + Sync {
         generation: i32,
         owner_token: &str,
         lease_owner: &str,
-    ) -> Result<()> {
+    ) -> Result<AddonMediaListPublicationContinuation> {
         let _ = (
             target_published_revision,
             operation_id,
@@ -585,7 +598,9 @@ pub trait AddonMediaListRepository: Send + Sync {
             owner_token,
             lease_owner,
         );
-        self.commit_staged_publication(id).await
+        self.commit_staged_publication(id)
+            .await
+            .map(|()| AddonMediaListPublicationContinuation::VerificationRequired)
     }
     /// Restore the last published item snapshot after staging or commit failed.
     async fn restore_staged_publication(&self, id: EntityId, message: &str) -> Result<()> {
@@ -624,9 +639,57 @@ pub trait AddonMediaListRepository: Send + Sync {
         generation: i32,
         owner_token: &str,
         lease_owner: &str,
-    ) -> Result<()> {
+    ) -> Result<AddonMediaListPublicationContinuation> {
         let _ = (operation_id, generation, owner_token, lease_owner);
-        self.reconcile_restored_publication(id).await
+        self.reconcile_restored_publication(id)
+            .await
+            .map(|()| AddonMediaListPublicationContinuation::VerificationRequired)
+    }
+    /// Verify the selected filesystem and database revision before cleanup.
+    async fn verify_staged_publication_revision(
+        &self,
+        id: EntityId,
+        outcome: AddonMediaListPublicationOutcome,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let _ = (
+            id,
+            outcome,
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        );
+        Err(RepositoryError::unavailable(
+            "verify add-on media-list publication",
+            "not implemented",
+        ))
+    }
+    /// Remove verified scratch trees and clear the exact fenced journal.
+    async fn finalize_staged_publication_revision(
+        &self,
+        id: EntityId,
+        outcome: AddonMediaListPublicationOutcome,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let _ = (
+            id,
+            outcome,
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        );
+        Err(RepositoryError::unavailable(
+            "finalize add-on media-list publication",
+            "not implemented",
+        ))
     }
     /// Publish directly when managed files already exist (mainly repository tests).
     ///

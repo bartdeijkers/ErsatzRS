@@ -123,6 +123,21 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         list_id: EntityId,
     ) -> Result<ManagedLibraryOperation>;
 
+    /// Create or resume the post-commit/restore verification scan.
+    async fn ensure_publication_verification_scan(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        list_id: EntityId,
+    ) -> Result<ManagedLibraryOperation>;
+
+    /// Persist the selected result before entering the shared verification phases.
+    async fn begin_publication_verification(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        expected: AddonMediaListPublicationPhase,
+        outcome: AddonMediaListPublicationOutcome,
+    ) -> Result<bool>;
+
     async fn record_publication_failure(
         &self,
         claim: &ManagedLibraryOperationClaim,

@@ -553,6 +553,73 @@ async fn refresh_merges_untouched_fields_records_override_conflicts_and_holds_ne
 }
 
 #[tokio::test]
+async fn provider_overview_refresh_defers_while_publication_is_verifying() {
+    let pool = common::test_db().await;
+    seed_addon(&pool).await;
+    let source_url = "https://example.invalid/refresh-series";
+    let list_id =
+        AddonMediaListRemoteSynchronizer::new(pool.clone(), InitialRefreshMetadataProvider)
+            .add_or_refresh(
+                "org.example.lists",
+                source_url,
+                None,
+                AddonMediaListContentKind::TelevisionEpisode,
+                "",
+            )
+            .await
+            .expect("persist initial provider snapshot");
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "ReviewState" = 3, "PublishedRevision" = 1,
+               "PublicationJournalJson" = '{"phase":"Verifying"}'
+           WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&pool)
+    .await
+    .expect("checkpoint verifying publication");
+    let before = sqlx::query_as::<_, (String, i32, i32)>(
+        r#"SELECT "Name", "ItemCount", "DraftRevision"
+           FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .expect("load overview before blocked refresh");
+
+    let error = AddonMediaListRemoteSynchronizer::new(pool.clone(), ChangedRefreshMetadataProvider)
+        .add_or_refresh(
+            "org.example.lists",
+            source_url,
+            None,
+            AddonMediaListContentKind::TelevisionEpisode,
+            "",
+        )
+        .await
+        .expect_err("publication verification freezes provider overview writes");
+    assert!(error.to_string().contains("being published"));
+    let after = sqlx::query_as::<_, (String, i32, i32)>(
+        r#"SELECT "Name", "ItemCount", "DraftRevision"
+           FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .expect("load unchanged overview after blocked refresh");
+    assert_eq!(after, before);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            r#"SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
+        )
+        .bind(list_id)
+        .fetch_one(&pool)
+        .await
+        .expect("count unchanged provider items"),
+        1
+    );
+}
+
+#[tokio::test]
 async fn remote_stream_items_match_by_url_and_use_remote_stream_collection_type() {
     let pool = common::test_db().await;
     seed_system_playlist_group(&pool).await;

@@ -3014,6 +3014,7 @@ async fn execute_managed_library_operation(
     claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
 ) -> commands::ExecuteManagedLibraryOperationOutcome {
     use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
+    use ersatzrs_core::repositories::AddonMediaListPublicationContinuation;
     use ersatzrs_domain::{
         AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
         ManagedLibraryOperationKind, ManagedLibraryOperationState,
@@ -3026,7 +3027,7 @@ async fn execute_managed_library_operation(
         return execute_durable_scan(application, claim).await;
     }
 
-    for _ in 0..16 {
+    for _ in 0..24 {
         let job = match application
             .ports
             .managed_library_operations()
@@ -3163,7 +3164,7 @@ async fn execute_managed_library_operation(
                 }
             }
             AddonMediaListPublicationPhase::Committing => {
-                if let Err(error) = application
+                let continuation = match application
                     .ports
                     .addon_media_lists()
                     .commit_staged_publication_revision(
@@ -3176,27 +3177,30 @@ async fn execute_managed_library_operation(
                     )
                     .await
                 {
-                    let recorded = application
-                        .ports
-                        .managed_library_operations()
-                        .record_publication_failure(
-                            claim,
-                            job.phase,
-                            "publication_commit_failed",
-                            "publication commit failed",
-                        )
-                        .await
-                        .unwrap_or(false);
-                    if !recorded {
-                        return Outcome::LeaseLost;
+                    Ok(continuation) => continuation,
+                    Err(error) => {
+                        let recorded = application
+                            .ports
+                            .managed_library_operations()
+                            .record_publication_failure(
+                                claim,
+                                job.phase,
+                                "publication_commit_failed",
+                                "publication commit failed",
+                            )
+                            .await
+                            .unwrap_or(false);
+                        if !recorded {
+                            return Outcome::LeaseLost;
+                        }
+                        tracing::warn!(
+                            operation_id = claim.operation.id,
+                            error = %error,
+                            "add-on publication commit failed; recovery will restore the prior revision"
+                        );
+                        continue;
                     }
-                    tracing::warn!(
-                        operation_id = claim.operation.id,
-                        error = %error,
-                        "add-on publication commit failed; recovery will restore the prior revision"
-                    );
-                    continue;
-                }
+                };
                 if let Ok(report) = application
                     .ports
                     .scan_runtime()
@@ -3215,18 +3219,32 @@ async fn execute_managed_library_operation(
                         );
                     }
                 }
-                return match application
+                if continuation == AddonMediaListPublicationContinuation::CompletedLegacy {
+                    return complete_publication_operation(
+                        application,
+                        claim,
+                        AddonMediaListPublicationOutcome::Published,
+                    )
+                    .await;
+                }
+                match application
                     .ports
                     .managed_library_operations()
-                    .complete_publication(claim, AddonMediaListPublicationOutcome::Published)
+                    .begin_publication_verification(
+                        claim,
+                        job.phase,
+                        AddonMediaListPublicationOutcome::Published,
+                    )
                     .await
                 {
-                    Ok(true) => Outcome::Completed,
-                    Ok(false) => Outcome::LeaseLost,
-                    Err(error) => Outcome::Failed {
-                        message: error.to_string(),
-                    },
-                };
+                    Ok(true) => {}
+                    Ok(false) => return Outcome::LeaseLost,
+                    Err(error) => {
+                        return Outcome::Failed {
+                            message: error.to_string(),
+                        };
+                    }
+                }
             }
             AddonMediaListPublicationPhase::RestoringFiles => {
                 let original = job
@@ -3261,11 +3279,137 @@ async fn execute_managed_library_operation(
                 }
             }
             AddonMediaListPublicationPhase::RestoringProjection => {
-                if let Err(error) = application
+                let continuation = match application
                     .ports
                     .addon_media_lists()
                     .reconcile_restored_publication_revision(
                         job.list_id,
+                        job.operation_id,
+                        job.generation,
+                        &claim.operation.owner_token,
+                        &claim.lease_owner,
+                    )
+                    .await
+                {
+                    Ok(continuation) => continuation,
+                    Err(error) => {
+                        return schedule_publication_retry(application, claim, &error.to_string())
+                            .await;
+                    }
+                };
+                if continuation == AddonMediaListPublicationContinuation::CompletedLegacy {
+                    return complete_publication_operation(
+                        application,
+                        claim,
+                        AddonMediaListPublicationOutcome::RestoredAfterFailure,
+                    )
+                    .await;
+                }
+                if !transition_publication(
+                    application,
+                    claim,
+                    job.phase,
+                    AddonMediaListPublicationPhase::Reconciling,
+                )
+                .await
+                {
+                    return Outcome::LeaseLost;
+                }
+            }
+            AddonMediaListPublicationPhase::Reconciling => {
+                // Re-enter the idempotent repository step at this durable
+                // boundary. AMM-J-01 could exit after reconciliation cleared
+                // the journal but before the operation was completed; the
+                // typed continuation distinguishes that terminal legacy state
+                // from an AMM-J-02 journal that still requires verification.
+                let continuation = match application
+                    .ports
+                    .addon_media_lists()
+                    .reconcile_restored_publication_revision(
+                        job.list_id,
+                        job.operation_id,
+                        job.generation,
+                        &claim.operation.owner_token,
+                        &claim.lease_owner,
+                    )
+                    .await
+                {
+                    Ok(continuation) => continuation,
+                    Err(error) => {
+                        return schedule_publication_retry(application, claim, &error.to_string())
+                            .await;
+                    }
+                };
+                if continuation == AddonMediaListPublicationContinuation::CompletedLegacy {
+                    return complete_publication_operation(
+                        application,
+                        claim,
+                        AddonMediaListPublicationOutcome::RestoredAfterFailure,
+                    )
+                    .await;
+                }
+                match application
+                    .ports
+                    .managed_library_operations()
+                    .begin_publication_verification(
+                        claim,
+                        job.phase,
+                        AddonMediaListPublicationOutcome::RestoredAfterFailure,
+                    )
+                    .await
+                {
+                    Ok(true) => {}
+                    Ok(false) => return Outcome::LeaseLost,
+                    Err(error) => {
+                        return Outcome::Failed {
+                            message: error.to_string(),
+                        };
+                    }
+                }
+            }
+            AddonMediaListPublicationPhase::Verifying => {
+                let child = match application
+                    .ports
+                    .managed_library_operations()
+                    .ensure_publication_verification_scan(claim, job.list_id)
+                    .await
+                {
+                    Ok(child) => child,
+                    Err(error) => {
+                        return schedule_publication_retry(application, claim, &error.to_string())
+                            .await;
+                    }
+                };
+                if child.state != ManagedLibraryOperationState::Completed {
+                    let child_claim = ersatzrs_core::repositories::ManagedLibraryOperationClaim {
+                        operation: child,
+                        lease_owner: claim.lease_owner.clone(),
+                    };
+                    match execute_durable_scan(application, &child_claim).await {
+                        Outcome::Completed => {}
+                        Outcome::Failed { message } => {
+                            tracing::warn!(
+                                operation_id = claim.operation.id,
+                                error = %message,
+                                "add-on publication verification scan failed; recovery will retry"
+                            );
+                            return schedule_publication_retry(application, claim, &message).await;
+                        }
+                        Outcome::Deferred | Outcome::LeaseLost => return Outcome::LeaseLost,
+                    }
+                }
+                let Some(outcome) = job.outcome else {
+                    return Outcome::Failed {
+                        message: "publication verification has no selected revision outcome"
+                            .to_owned(),
+                    };
+                };
+                if let Err(error) = application
+                    .ports
+                    .addon_media_lists()
+                    .verify_staged_publication_revision(
+                        job.list_id,
+                        outcome,
                         job.operation_id,
                         job.generation,
                         &claim.operation.owner_token,
@@ -3280,21 +3424,39 @@ async fn execute_managed_library_operation(
                     application,
                     claim,
                     job.phase,
-                    AddonMediaListPublicationPhase::Reconciling,
+                    AddonMediaListPublicationPhase::CleaningUp,
                 )
                 .await
                 {
                     return Outcome::LeaseLost;
                 }
             }
-            AddonMediaListPublicationPhase::Reconciling => {
+            AddonMediaListPublicationPhase::CleaningUp => {
+                let Some(outcome) = job.outcome else {
+                    return Outcome::Failed {
+                        message: "publication cleanup has no selected revision outcome".to_owned(),
+                    };
+                };
+                if let Err(error) = application
+                    .ports
+                    .addon_media_lists()
+                    .finalize_staged_publication_revision(
+                        job.list_id,
+                        outcome,
+                        job.operation_id,
+                        job.generation,
+                        &claim.operation.owner_token,
+                        &claim.lease_owner,
+                    )
+                    .await
+                {
+                    return schedule_publication_retry(application, claim, &error.to_string())
+                        .await;
+                }
                 return match application
                     .ports
                     .managed_library_operations()
-                    .complete_publication(
-                        claim,
-                        AddonMediaListPublicationOutcome::RestoredAfterFailure,
-                    )
+                    .complete_publication(claim, outcome)
                     .await
                 {
                     Ok(true) => Outcome::Completed,
@@ -3327,6 +3489,27 @@ async fn execute_managed_library_operation(
 
     Outcome::Failed {
         message: "publication exceeded its bounded phase-advance loop".to_owned(),
+    }
+}
+
+async fn complete_publication_operation(
+    application: &ApplicationServices,
+    claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+    outcome: ersatzrs_domain::AddonMediaListPublicationOutcome,
+) -> commands::ExecuteManagedLibraryOperationOutcome {
+    use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
+
+    match application
+        .ports
+        .managed_library_operations()
+        .complete_publication(claim, outcome)
+        .await
+    {
+        Ok(true) => Outcome::Completed,
+        Ok(false) => Outcome::LeaseLost,
+        Err(error) => Outcome::Failed {
+            message: error.to_string(),
+        },
     }
 }
 

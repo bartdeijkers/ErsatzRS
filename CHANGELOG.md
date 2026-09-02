@@ -58,6 +58,14 @@ release section when tagging a release.
   that lose their heartbeat, preserves concurrent provider changes as a later
   draft, and adopts stranded pre-upgrade publication journals for recovery.
 
+- Make add-on-list filesystem publication resumable across process exits and
+  Windows sharing violations with revision-owned integrity markers, immutable
+  byte-copy backups, bounded retry, pre-upgrade terminal-state adoption,
+  pre-sealed full-tree fingerprints, a post-swap Local verification scan,
+  exact logical projection/cardinality checks, active-publication writer
+  fencing, and journal-last terminal cleanup after filesystem and SQLite
+  convergence.
+
 ### Removed
 
 - Remove the remaining hard-coded Trakt assumptions from the core playlist and

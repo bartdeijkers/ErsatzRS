@@ -6,13 +6,14 @@ use ersatzrs_core::repositories::{
     AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict, AddonMediaListNfoForm,
     AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListPublication,
     AddonMediaListPublicationBlocker, AddonMediaListPublicationBlockerKind,
-    AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
-    AddonMediaListRepository, RepositoryError, Result,
+    AddonMediaListPublicationContinuation, AddonMediaListPublicationReadiness,
+    AddonMediaListReplacementCandidate, AddonMediaListRepository, RepositoryError, Result,
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
     AddonMediaListItemAvailability, AddonMediaListItemKind, AddonMediaListItemRole,
-    AddonMediaListPresentationKind, AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
+    AddonMediaListPresentationKind, AddonMediaListPublicationOutcome, AddonMediaListReviewState,
+    EntityId, RemoteStreamLiveness,
 };
 use sha2::{Digest as _, Sha256};
 use sqlx::{Pool, Row};
@@ -25,6 +26,9 @@ use crate::addon_media_list_sync::{AddonMediaListRemoteSynchronizer, AddonMediaL
 use crate::metadata::{
     artwork_identity, artwork_kind, replace_artwork, replace_guids, replace_metadata_languages,
     replace_people, replace_strings, ArtworkRef, PersonRef,
+};
+use crate::repositories::addon_publication_fs::{
+    self, PublicationFsIdentity, PublicationFsPaths, PublicationTreeRole, RestoreProgress,
 };
 use crate::repositories::common::{
     decode_bool_column, decode_optional_datetime, decode_optional_enum_column,
@@ -58,6 +62,8 @@ pub async fn project_one_pending_detail_batch(
            JOIN "AddonMediaListLibrary" AS "managed"
              ON "managed"."AddonMediaListId" = "list"."Id"
            WHERE "list"."ReviewState" = ?
+             AND ("list"."PublicationJournalJson" IS NULL
+                  OR TRIM("list"."PublicationJournalJson") = '')
              AND "list"."DetailProjectionPendingAt" IS NOT NULL
              AND "list"."DetailProjectionPendingAt" <= ?
            ORDER BY "list"."DetailProjectionPendingAt", "list"."Id" LIMIT 1"#,
@@ -123,7 +129,15 @@ struct PublicationJournal {
     #[serde(default)]
     backup_folder: Option<String>,
     #[serde(default)]
+    failed_folder: Option<String>,
+    #[serde(default)]
+    previous_published_revision: Option<i32>,
+    #[serde(default)]
+    target_published_revision: Option<i32>,
+    #[serde(default)]
     previous_materializations: Vec<ArtworkMaterializationSnapshot>,
+    #[serde(default)]
+    target_database: Option<PublicationDatabaseSnapshot>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -154,7 +168,7 @@ impl<'a> PublicationFence<'a> {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 struct ArtworkMaterializationSnapshot {
     id: EntityId,
     item_id: Option<EntityId>,
@@ -166,16 +180,45 @@ struct ArtworkMaterializationSnapshot {
     published_revision: i32,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+struct PublicationDatabaseSnapshot {
+    presentation_kind: AddonMediaListPresentationKind,
+    published_item_count: i64,
+    items: Vec<PublishedItemSnapshot>,
+    playlist: Option<PlaylistSnapshot>,
+    materializations: Vec<ArtworkMaterializationSnapshot>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 struct PublishedItemSnapshot {
     id: EntityId,
     published: bool,
     media_item_id: Option<EntityId>,
     #[serde(default)]
+    identity_captured: bool,
+    #[serde(default)]
+    kind: Option<AddonMediaListItemKind>,
+    #[serde(default)]
+    provider_id: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    year: Option<i32>,
+    #[serde(default)]
+    season: Option<i32>,
+    #[serde(default)]
+    episode: Option<i32>,
+    #[serde(default)]
+    source_url: Option<String>,
+    #[serde(default)]
+    rank: Option<i32>,
+    #[serde(default)]
+    guids: Option<Vec<String>>,
+    #[serde(default)]
     published_liveness: RemoteStreamLiveness,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 struct PlaylistSnapshot {
     id: EntityId,
     is_system: bool,
@@ -184,7 +227,7 @@ struct PlaylistSnapshot {
     items: Vec<PlaylistItemSnapshot>,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 struct PlaylistItemSnapshot {
     id: EntityId,
     index: i32,
@@ -205,6 +248,91 @@ struct PlaylistItemSnapshot {
     video_stream_index: Option<i32>,
     audio_stream_index: Option<i32>,
     subtitle_stream_index: Option<i32>,
+}
+
+impl PublishedItemSnapshot {
+    fn has_same_restored_content(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.published == other.published
+            && self.published_liveness == other.published_liveness
+            && (!other.identity_captured
+                || (self.kind == other.kind
+                    && self.provider_id == other.provider_id
+                    && self.title == other.title
+                    && self.year == other.year
+                    && self.season == other.season
+                    && self.episode == other.episode
+                    && self.source_url == other.source_url
+                    && self.rank == other.rank
+                    && self.guids == other.guids))
+    }
+}
+
+impl ArtworkMaterializationSnapshot {
+    fn has_same_content(&self, other: &Self) -> bool {
+        self.item_id == other.item_id
+            && self.scope_item_id == other.scope_item_id
+            && self.role == other.role
+            && self.source == other.source
+            && self.file_name == other.file_name
+            && self.sha256 == other.sha256
+            && self.published_revision == other.published_revision
+    }
+}
+
+impl PlaylistSnapshot {
+    fn has_same_restored_content(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.is_system == other.is_system
+            && self.name == other.name
+            && self.playlist_group_id == other.playlist_group_id
+            && self.items.len() == other.items.len()
+            && self
+                .items
+                .iter()
+                .zip(&other.items)
+                .all(|(left, right)| left.has_same_restored_content(right))
+    }
+
+    fn has_same_published_content(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.is_system == other.is_system
+            && self.name == other.name
+            && self.playlist_group_id == other.playlist_group_id
+            && self.items.len() == other.items.len()
+            && self
+                .items
+                .iter()
+                .zip(&other.items)
+                .all(|(left, right)| left.has_same_published_content(right))
+    }
+}
+
+impl PlaylistItemSnapshot {
+    fn has_same_restored_content(&self, other: &Self) -> bool {
+        self.index == other.index
+            && self.collection_type == other.collection_type
+            && self.collection_id == other.collection_id
+            && self.multi_collection_id == other.multi_collection_id
+            && self.smart_collection_id == other.smart_collection_id
+            && self.include_in_program_guide == other.include_in_program_guide
+            && self.playback_order == other.playback_order
+            && self.play_all == other.play_all
+            && self.count == other.count
+            && self.preferred_audio_language_code == other.preferred_audio_language_code
+            && self.preferred_audio_title == other.preferred_audio_title
+            && self.preferred_subtitle_language_code == other.preferred_subtitle_language_code
+            && self.subtitle_mode == other.subtitle_mode
+            && self.video_stream_index == other.video_stream_index
+            && self.audio_stream_index == other.audio_stream_index
+            && self.subtitle_stream_index == other.subtitle_stream_index
+    }
+
+    fn has_same_published_content(&self, other: &Self) -> bool {
+        self.media_item_id == other.media_item_id
+            && self.media_version_id == other.media_version_id
+            && self.has_same_restored_content(other)
+    }
 }
 
 #[derive(Clone)]
@@ -1231,9 +1359,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         generation: i32,
         owner_token: &str,
         lease_owner: &str,
-    ) -> Result<()> {
+    ) -> Result<AddonMediaListPublicationContinuation> {
         let row = sqlx::query(
-            r#"SELECT "PublishedRevision", "PublicationJournalJson"
+            r#"SELECT "ReviewState", "PublishedRevision", "PublicationJournalJson",
+                      "PublicationStartedAt"
                FROM "AddonMediaList" WHERE "Id" = ?"#,
         )
         .bind(id)
@@ -1244,25 +1373,42 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             kind: "add-on media list",
             id,
         })?;
+        let review_state: AddonMediaListReviewState =
+            crate::repositories::common::decode_enum_column(
+                "AddonMediaListReviewState",
+                &row,
+                "ReviewState",
+            )?;
         let published_revision: i32 = row.try_get("PublishedRevision").repository()?;
         let journal: Option<String> = row.try_get("PublicationJournalJson").repository()?;
-        if published_revision == target_published_revision
-            && journal.as_deref().is_none_or(str::is_empty)
+        if published_revision != target_published_revision
+            && published_revision.saturating_add(1) != target_published_revision
         {
-            return Ok(());
-        }
-        if published_revision.saturating_add(1) != target_published_revision {
             return Err(RepositoryError::Conflict(
                 "the published add-on media-list revision changed before commit".to_owned(),
             ));
         }
-        let journal = journal
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| {
-                RepositoryError::Conflict(
-                    "the add-on media list has no publication journal".to_owned(),
-                )
-            })?;
+        let fence = PublicationClaimFence {
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        };
+        ensure_current_publication_claim(&self.0, id, fence, false).await?;
+        let Some(journal) = journal.filter(|value| !value.trim().is_empty()) else {
+            let publication_started_at: Option<String> =
+                row.try_get("PublicationStartedAt").repository()?;
+            if published_revision == target_published_revision
+                && review_state == AddonMediaListReviewState::Published
+                && publication_started_at.is_none()
+            {
+                ensure_current_publication_claim(&self.0, id, fence, false).await?;
+                return Ok(AddonMediaListPublicationContinuation::CompletedLegacy);
+            }
+            return Err(RepositoryError::Conflict(
+                "the add-on media list has no publication journal".to_owned(),
+            ));
+        };
         let publication_journal: PublicationJournal =
             serde_json::from_str(&journal).map_err(|error| RepositoryError::Decode {
                 kind: "add-on publication journal",
@@ -1275,14 +1421,62 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "the staged add-on media-list publication belongs to another generation".to_owned(),
             ));
         }
-        let fence = PublicationClaimFence {
-            operation_id,
-            generation,
-            owner_token,
-            lease_owner,
-        };
-        ensure_current_publication_claim(&self.0, id, fence, true).await?;
-        commit_staged_publication_impl(self, id, Some(target_published_revision), Some(fence)).await
+        ensure_current_publication_claim(&self.0, id, fence, false).await?;
+        if published_revision == target_published_revision {
+            let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+            let retained = sqlx::query(
+                r#"UPDATE "AddonMediaList" SET "ReviewState" = ?
+                   WHERE "Id" = ? AND "PublicationJournalJson" = ?
+                     AND "PublishedRevision" = ? AND "ReviewState" IN (?, ?)
+                     AND EXISTS (
+                         SELECT 1
+                         FROM "AddonMediaListPublicationJob" AS "job"
+                         JOIN "ManagedLibraryOperation" AS "operation"
+                           ON "operation"."Id" = "job"."OperationId"
+                         JOIN "ManagedLibraryLease" AS "lease"
+                           ON "lease"."OperationId" = "operation"."Id"
+                         WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                           AND "job"."OperationId" = ? AND "job"."Generation" = ?
+                           AND "operation"."State" = 1
+                           AND "operation"."OwnerToken" = ?
+                           AND "operation"."LeaseOwner" = ?
+                           AND "lease"."OwnerToken" = ?
+                           AND "lease"."LeaseOwner" = ?
+                           AND "lease"."LeaseExpiresAt" > ?
+                     )"#,
+            )
+            .bind(crate::repositories::common::encode_enum(
+                AddonMediaListReviewState::Publishing,
+            ))
+            .bind(id)
+            .bind(&journal)
+            .bind(target_published_revision)
+            .bind(crate::repositories::common::encode_enum(
+                AddonMediaListReviewState::Published,
+            ))
+            .bind(crate::repositories::common::encode_enum(
+                AddonMediaListReviewState::Publishing,
+            ))
+            .bind(operation_id)
+            .bind(generation)
+            .bind(owner_token)
+            .bind(lease_owner)
+            .bind(owner_token)
+            .bind(lease_owner)
+            .bind(now)
+            .execute(&self.0)
+            .await
+            .repository()?;
+            if retained.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the committed add-on publication changed before verification".to_owned(),
+                ));
+            }
+            return Ok(AddonMediaListPublicationContinuation::VerificationRequired);
+        }
+        commit_staged_publication_impl(self, id, Some(target_published_revision), Some(fence))
+            .await?;
+        Ok(AddonMediaListPublicationContinuation::VerificationRequired)
     }
 
     async fn restore_staged_publication(&self, id: EntityId, message: &str) -> Result<()> {
@@ -1319,6 +1513,74 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         generation: i32,
         owner_token: &str,
         lease_owner: &str,
+    ) -> Result<AddonMediaListPublicationContinuation> {
+        let fence = PublicationClaimFence {
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        };
+        ensure_current_publication_claim(&self.0, id, fence, false).await?;
+        let row = sqlx::query(
+            r#"SELECT "list"."ReviewState", "list"."PublishedRevision",
+                      "list"."PublicationJournalJson", "list"."PublicationStartedAt",
+                      "job"."TargetPublishedRevision"
+               FROM "AddonMediaList" AS "list"
+               JOIN "AddonMediaListPublicationJob" AS "job"
+                 ON "job"."AddonMediaListId" = "list"."Id"
+               WHERE "list"."Id" = ? AND "job"."OperationId" = ?
+                 AND "job"."Generation" = ?"#,
+        )
+        .bind(id)
+        .bind(operation_id)
+        .bind(generation)
+        .fetch_optional(&self.0)
+        .await
+        .repository()?
+        .ok_or_else(|| {
+            RepositoryError::Conflict(
+                "the restored add-on publication job is no longer current".to_owned(),
+            )
+        })?;
+        let journal: Option<String> = row.try_get("PublicationJournalJson").repository()?;
+        if journal
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+        {
+            let review_state: AddonMediaListReviewState =
+                crate::repositories::common::decode_enum_column(
+                    "AddonMediaListReviewState",
+                    &row,
+                    "ReviewState",
+                )?;
+            let published_revision: i32 = row.try_get("PublishedRevision").repository()?;
+            let target_revision: i32 = row.try_get("TargetPublishedRevision").repository()?;
+            let publication_started_at: Option<String> =
+                row.try_get("PublicationStartedAt").repository()?;
+            if review_state != AddonMediaListReviewState::Publishing
+                && published_revision == target_revision.saturating_sub(1)
+                && publication_started_at.is_none()
+            {
+                ensure_current_publication_claim(&self.0, id, fence, false).await?;
+                return Ok(AddonMediaListPublicationContinuation::CompletedLegacy);
+            }
+            return Err(RepositoryError::Conflict(
+                "the publishing list lost its publication journal".to_owned(),
+            ));
+        }
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+        reconcile_restored_publication_impl(self, id, Some(fence)).await?;
+        Ok(AddonMediaListPublicationContinuation::VerificationRequired)
+    }
+
+    async fn verify_staged_publication_revision(
+        &self,
+        id: EntityId,
+        outcome: AddonMediaListPublicationOutcome,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
     ) -> Result<()> {
         let fence = PublicationClaimFence {
             operation_id,
@@ -1327,7 +1589,226 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             lease_owner,
         };
         ensure_current_publication_claim(&self.0, id, fence, true).await?;
-        reconcile_restored_publication_impl(self, id, Some(fence)).await
+        let (journal, _) = load_publication_journal_value(&self.0, id).await?;
+        let (paths, identity) =
+            publication_fs_context(&self.0, id, &journal, Some(operation_id), Some(generation))
+                .await?;
+        let legacy_marker_adoption = journal.failed_folder.is_none()
+            || journal.previous_published_revision.is_none()
+            || journal.target_published_revision.is_none();
+        if legacy_marker_adoption {
+            let legacy_paths = paths.clone();
+            tokio::task::spawn_blocking(move || {
+                addon_publication_fs::bootstrap_legacy_markers(&legacy_paths, identity)
+            })
+            .await
+            .map_err(|error| {
+                RepositoryError::unavailable(
+                    "verify add-on publication",
+                    format!("publication marker recovery task failed: {error}"),
+                )
+            })?
+            .map_err(publication_fs_repository_error)?;
+            if outcome == AddonMediaListPublicationOutcome::Published {
+                ensure_current_publication_claim(&self.0, id, fence, true).await?;
+                let prepare_paths = paths.clone();
+                let prepared = tokio::task::spawn_blocking(move || {
+                    addon_publication_fs::prepare_managed_candidate_seal(&prepare_paths, identity)
+                })
+                .await
+                .map_err(|error| {
+                    RepositoryError::unavailable(
+                        "verify add-on publication",
+                        format!("legacy publication fingerprint task failed: {error}"),
+                    )
+                })?
+                .map_err(publication_fs_repository_error)?;
+                ensure_current_publication_claim(&self.0, id, fence, true).await?;
+                let persist_paths = paths.clone();
+                tokio::task::spawn_blocking(move || {
+                    addon_publication_fs::persist_prepared_candidate_seal(
+                        &persist_paths,
+                        identity,
+                        &prepared,
+                    )
+                })
+                .await
+                .map_err(|error| {
+                    RepositoryError::unavailable(
+                        "verify add-on publication",
+                        format!("legacy publication sealing task failed: {error}"),
+                    )
+                })?
+                .map_err(publication_fs_repository_error)?;
+            }
+        }
+        let role = publication_outcome_role(outcome);
+        tokio::task::spawn_blocking(move || {
+            addon_publication_fs::verify_managed_complete(&paths, identity, role)
+        })
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "verify add-on publication",
+                format!("publication verification task failed: {error}"),
+            )
+        })?
+        .map_err(publication_fs_repository_error)?;
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+        verify_publication_database(
+            &self.0,
+            id,
+            &journal,
+            identity.previous_revision,
+            identity.target_revision,
+            outcome,
+        )
+        .await
+    }
+
+    async fn finalize_staged_publication_revision(
+        &self,
+        id: EntityId,
+        outcome: AddonMediaListPublicationOutcome,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let fence = PublicationClaimFence {
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        };
+        ensure_current_publication_claim(&self.0, id, fence, false).await?;
+        let (journal, journal_json) = match load_publication_journal_value(&self.0, id).await {
+            Ok(value) => value,
+            Err(RepositoryError::Conflict(_)) => {
+                let finalized: i64 = sqlx::query_scalar(
+                    r#"SELECT COUNT(*)
+                       FROM "AddonMediaList" AS "list"
+                       JOIN "AddonMediaListPublicationJob" AS "job"
+                         ON "job"."AddonMediaListId" = "list"."Id"
+                       WHERE "list"."Id" = ?
+                         AND "list"."PublicationJournalJson" IS NULL
+                         AND "list"."PublicationStartedAt" IS NULL
+                         AND "job"."OperationId" = ? AND "job"."Generation" = ?
+                         AND "job"."Phase" = ? AND "job"."Outcome" = ?"#,
+                )
+                .bind(id)
+                .bind(operation_id)
+                .bind(generation)
+                .bind(crate::repositories::common::encode_enum(
+                    ersatzrs_domain::AddonMediaListPublicationPhase::CleaningUp,
+                ))
+                .bind(crate::repositories::common::encode_enum(outcome))
+                .fetch_one(&self.0)
+                .await
+                .repository()?;
+                if finalized == 1 {
+                    return Ok(());
+                }
+                return Err(RepositoryError::Conflict(
+                    "the add-on publication journal disappeared before finalization".to_owned(),
+                ));
+            }
+            Err(error) => return Err(error),
+        };
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+        let (paths, identity) =
+            publication_fs_context(&self.0, id, &journal, Some(operation_id), Some(generation))
+                .await?;
+        let role = publication_outcome_role(outcome);
+        let verify_paths = paths.clone();
+        tokio::task::spawn_blocking(move || {
+            addon_publication_fs::verify_managed_complete(&verify_paths, identity, role)
+        })
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "finalize add-on publication",
+                format!("publication verification task failed: {error}"),
+            )
+        })?
+        .map_err(publication_fs_repository_error)?;
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+        verify_publication_database(
+            &self.0,
+            id,
+            &journal,
+            identity.previous_revision,
+            identity.target_revision,
+            outcome,
+        )
+        .await?;
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+        tokio::task::spawn_blocking(move || {
+            addon_publication_fs::cleanup_after_verification(&paths, identity, role)
+        })
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "finalize add-on publication",
+                format!("publication cleanup task failed: {error}"),
+            )
+        })?
+        .map_err(publication_fs_repository_error)?;
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+
+        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        let terminal_review_state = match outcome {
+            AddonMediaListPublicationOutcome::Published => AddonMediaListReviewState::Published,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure => journal.previous_review_state,
+        };
+        let cleared = sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "ReviewState" = ?, "PublicationJournalJson" = NULL,
+                   "PublicationStartedAt" = NULL
+               WHERE "Id" = ? AND "PublicationJournalJson" = ?
+                 AND EXISTS (
+                     SELECT 1
+                     FROM "AddonMediaListPublicationJob" AS "job"
+                     JOIN "ManagedLibraryOperation" AS "operation"
+                       ON "operation"."Id" = "job"."OperationId"
+                     JOIN "ManagedLibraryLease" AS "lease"
+                       ON "lease"."OperationId" = "operation"."Id"
+                     WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                       AND "job"."OperationId" = ? AND "job"."Generation" = ?
+                       AND "job"."Phase" = ? AND "job"."Outcome" = ?
+                       AND "operation"."State" = 1
+                       AND "operation"."OwnerToken" = ?
+                       AND "operation"."LeaseOwner" = ?
+                       AND "lease"."OwnerToken" = ?
+                       AND "lease"."LeaseOwner" = ?
+                       AND "lease"."LeaseExpiresAt" > ?
+                 )"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            terminal_review_state,
+        ))
+        .bind(id)
+        .bind(&journal_json)
+        .bind(operation_id)
+        .bind(generation)
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListPublicationPhase::CleaningUp,
+        ))
+        .bind(crate::repositories::common::encode_enum(outcome))
+        .bind(owner_token)
+        .bind(lease_owner)
+        .bind(owner_token)
+        .bind(lease_owner)
+        .bind(now)
+        .execute(&self.0)
+        .await
+        .repository()?;
+        if cleared.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the verified add-on publication changed before finalization".to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     async fn upload_artwork(
@@ -1799,6 +2280,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn delete(&self, id: EntityId) -> Result<()> {
+        crate::addon_media_list_sync::ensure_not_publishing(&self.0, id).await?;
         reconcile_projection(&self.0, id, AddonMediaListPresentationKind::RemoteStreams).await?;
         AddonMediaListSynchronizer::new(self.0.clone())
             .delete_list(id)
@@ -1993,7 +2475,7 @@ async fn commit_staged_publication_impl(
     target_published_revision: Option<i32>,
     fence: Option<PublicationClaimFence<'_>>,
 ) -> Result<()> {
-    let (journal, journal_json) = load_publication_journal_value(&repository.0, id).await?;
+    let (mut journal, journal_json) = load_publication_journal_value(&repository.0, id).await?;
     let form = repository
         .get_admin_form(id)
         .await?
@@ -2034,7 +2516,88 @@ async fn commit_staged_publication_impl(
     if let Some(fence) = fence {
         ensure_current_publication_claim(&repository.0, id, fence, true).await?;
     }
-    synchronizer.match_list_items(id).await?;
+    synchronizer.match_list_items_for_publication(id).await?;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+
+    let publication_revision =
+        target_published_revision.unwrap_or_else(|| form.published_revision.saturating_add(1));
+    let mut target_materializations = load_artwork_materializations(&repository.0, id).await?;
+    for materialization in &mut target_materializations {
+        materialization.published_revision = publication_revision;
+    }
+    let next_journal_json = if fence.is_some() {
+        let published_item_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "AddonMediaListItem"
+               WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+                 AND "Published" = 1"#,
+        )
+        .bind(id)
+        .fetch_one(&repository.0)
+        .await
+        .repository()?;
+        journal.target_database = Some(PublicationDatabaseSnapshot {
+            presentation_kind: effective_presentation,
+            published_item_count,
+            items: load_published_item_snapshots(&repository.0, id).await?,
+            playlist: if form.generate_playlist {
+                load_playlist_snapshot(&repository.0, id).await?
+            } else {
+                None
+            },
+            materializations: target_materializations.clone(),
+        });
+        Some(
+            serde_json::to_string(&journal).map_err(|error| RepositoryError::Decode {
+                kind: "add-on publication journal",
+                value: error.to_string(),
+            })?,
+        )
+    } else {
+        None
+    };
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    let (paths, identity) = publication_fs_context(
+        &repository.0,
+        id,
+        &journal,
+        fence.map(|fence| fence.operation_id),
+        fence.map(|fence| fence.generation),
+    )
+    .await?;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    let prepare_paths = paths.clone();
+    let prepared = tokio::task::spawn_blocking(move || {
+        addon_publication_fs::prepare_managed_candidate_seal(&prepare_paths, identity)
+    })
+    .await
+    .map_err(|error| {
+        RepositoryError::unavailable(
+            "seal add-on publication",
+            format!("publication fingerprint task failed: {error}"),
+        )
+    })?
+    .map_err(publication_fs_repository_error)?;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    let persist_paths = paths.clone();
+    tokio::task::spawn_blocking(move || {
+        addon_publication_fs::persist_prepared_candidate_seal(&persist_paths, identity, &prepared)
+    })
+    .await
+    .map_err(|error| {
+        RepositoryError::unavailable(
+            "seal add-on publication",
+            format!("publication sealing task failed: {error}"),
+        )
+    })?
+    .map_err(publication_fs_repository_error)?;
     if let Some(fence) = fence {
         ensure_current_publication_claim(&repository.0, id, fence, true).await?;
     }
@@ -2045,15 +2608,24 @@ async fn commit_staged_publication_impl(
             .commit_generated_playlist_removal_in_tx(&mut commit, id, removal)
             .await?;
     }
+    sqlx::query(
+        r#"UPDATE "AddonMediaListArtworkMaterialization"
+           SET "PublishedRevision" = ? WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(publication_revision)
+    .bind(id)
+    .execute(&mut *commit)
+    .await
+    .repository()?;
     let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
     let updated = if let (Some(fence), Some(target_published_revision)) =
         (fence, target_published_revision)
     {
         sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "ReviewState" = 2, "PublishedRevision" = "PublishedRevision" + 1,
+               SET "ReviewState" = 3, "PublishedRevision" = "PublishedRevision" + 1,
                    "ReviewError" = NULL, "PresentationError" = NULL,
-                   "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL,
+                   "PublicationJournalJson" = ?,
                    "DetailImportAuthorizedAt" = COALESCE("DetailImportAuthorizedAt", ?),
                    "DetailProjectionPendingAt" = NULL
                WHERE "Id" = ? AND "PublicationJournalJson" = ?
@@ -2075,6 +2647,11 @@ async fn commit_staged_publication_impl(
                        AND "lease"."LeaseExpiresAt" > ?
                  )"#,
         )
+        .bind(next_journal_json.as_deref().ok_or_else(|| {
+            RepositoryError::Conflict(
+                "the durable publication target snapshot was not recorded".to_owned(),
+            )
+        })?)
         .bind(&now)
         .bind(id)
         .bind(&journal_json)
@@ -2139,7 +2716,11 @@ async fn commit_staged_publication_impl(
     .await
     .repository()?;
     commit.commit().await.repository()?;
-    cleanup_publication_backup_async(journal).await
+    if fence.is_some() {
+        Ok(())
+    } else {
+        cleanup_publication_backup_async(id, journal).await
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -2153,15 +2734,7 @@ async fn restore_staged_publication_impl(
     if let Some(fence) = fence {
         ensure_current_publication_claim(&repository.0, id, fence, true).await?;
     }
-    let restore_journal = journal.clone();
-    tokio::task::spawn_blocking(move || restore_publication_backup(&restore_journal))
-        .await
-        .map_err(|error| {
-            RepositoryError::unavailable(
-                "restore add-on publication",
-                format!("publication restore task failed: {error}"),
-            )
-        })??;
+    restore_publication_files(&repository.0, id, &journal, fence).await?;
     if let Some(fence) = fence {
         ensure_current_publication_claim(&repository.0, id, fence, true).await?;
     }
@@ -2215,7 +2788,8 @@ async fn restore_staged_publication_impl(
         let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
         sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "ReviewState" = ?, "ReviewError" = ?
+               SET "ReviewState" = 3, "ReviewError" = ?,
+                   "PublishedRevision" = COALESCE(?, "PublishedRevision")
                WHERE "Id" = ? AND "PublicationJournalJson" = ?
                  AND EXISTS (
                      SELECT 1
@@ -2234,10 +2808,8 @@ async fn restore_staged_publication_impl(
                        AND "lease"."LeaseExpiresAt" > ?
                  )"#,
         )
-        .bind(crate::repositories::common::encode_enum(
-            journal.previous_review_state,
-        ))
         .bind(message)
+        .bind(journal.previous_published_revision)
         .bind(id)
         .bind(&journal_json)
         .bind(fence.operation_id)
@@ -2253,13 +2825,15 @@ async fn restore_staged_publication_impl(
     } else {
         sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "ReviewState" = ?, "ReviewError" = ?
+               SET "ReviewState" = ?, "ReviewError" = ?,
+                   "PublishedRevision" = COALESCE(?, "PublishedRevision")
                WHERE "Id" = ? AND "PublicationJournalJson" = ?"#,
         )
         .bind(crate::repositories::common::encode_enum(
             journal.previous_review_state,
         ))
         .bind(message)
+        .bind(journal.previous_published_revision)
         .bind(id)
         .bind(&journal_json)
         .execute(&mut *tx)
@@ -2313,60 +2887,33 @@ async fn reconcile_restored_publication_impl(
         ensure_current_publication_claim(&repository.0, id, fence, true).await?;
     }
     AddonMediaListSynchronizer::new(repository.0.clone())
-        .match_list_items(id)
+        .match_list_items_for_publication(id)
         .await?;
     if let Some(fence) = fence {
         ensure_current_publication_claim(&repository.0, id, fence, true).await?;
     }
     restore_playlist_snapshot(&repository.0, id, journal.previous_playlist.as_ref()).await?;
+    if let Some(playlist) = &journal.previous_playlist {
+        AddonMediaListSynchronizer::new(repository.0.clone())
+            .rebuild_restored_playlist_items(id, playlist.id)
+            .await?;
+    }
 
-    let cleared = if let Some(fence) = fence {
-        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
-        sqlx::query(
-            r#"UPDATE "AddonMediaList"
-               SET "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL
-               WHERE "Id" = ? AND "PublicationJournalJson" = ?
-                 AND EXISTS (
-                     SELECT 1
-                     FROM "AddonMediaListPublicationJob" AS "job"
-                     JOIN "ManagedLibraryOperation" AS "operation"
-                       ON "operation"."Id" = "job"."OperationId"
-                     JOIN "ManagedLibraryLease" AS "lease"
-                       ON "lease"."OperationId" = "operation"."Id"
-                     WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
-                       AND "job"."OperationId" = ? AND "job"."Generation" = ?
-                       AND "operation"."State" = 1
-                       AND "operation"."OwnerToken" = ?
-                       AND "operation"."LeaseOwner" = ?
-                       AND "lease"."OwnerToken" = ?
-                       AND "lease"."LeaseOwner" = ?
-                       AND "lease"."LeaseExpiresAt" > ?
-                 )"#,
-        )
-        .bind(id)
-        .bind(&journal_json)
-        .bind(fence.operation_id)
-        .bind(fence.generation)
-        .bind(fence.owner_token)
-        .bind(fence.lease_owner)
-        .bind(fence.owner_token)
-        .bind(fence.lease_owner)
-        .bind(now)
-        .execute(&repository.0)
-        .await
-        .repository()?
-    } else {
-        sqlx::query(
-            r#"UPDATE "AddonMediaList"
-               SET "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL
-               WHERE "Id" = ? AND "PublicationJournalJson" = ?"#,
-        )
-        .bind(id)
-        .bind(&journal_json)
-        .execute(&repository.0)
-        .await
-        .repository()?
-    };
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+        return Ok(());
+    }
+
+    let cleared = sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL
+           WHERE "Id" = ? AND "PublicationJournalJson" = ?"#,
+    )
+    .bind(id)
+    .bind(&journal_json)
+    .execute(&repository.0)
+    .await
+    .repository()?;
     if cleared.rows_affected() != 1 {
         return Err(RepositoryError::Conflict(
             "the restored add-on media-list publication changed before reconciliation".to_owned(),
@@ -2451,34 +2998,19 @@ async fn stage_publication_impl(
     let library_id = repository.managed_library_id(id).await?.ok_or_else(|| {
         RepositoryError::Conflict("managed list storage is unavailable".to_owned())
     })?;
-    let previous_items = sqlx::query(
-        r#"SELECT "Id", "Published", "MediaItemId", "PublishedLiveness"
-           FROM "AddonMediaListItem"
-           WHERE "AddonMediaListId" = ?
-           ORDER BY "Id""#,
-    )
-    .bind(id)
-    .fetch_all(&repository.0)
-    .await
-    .repository()?
-    .iter()
-    .map(|row| {
-        Ok(PublishedItemSnapshot {
-            id: row.try_get("Id").repository()?,
-            published: decode_bool_column(row, "Published")?,
-            media_item_id: row.try_get("MediaItemId").repository()?,
-            published_liveness: crate::repositories::common::decode_enum_column(
-                "RemoteStreamLiveness",
-                row,
-                "PublishedLiveness",
-            )?,
-        })
-    })
-    .collect::<Result<Vec<_>>>()?;
+    let previous_items = load_published_item_snapshots(&repository.0, id).await?;
     let previous_playlist = load_playlist_snapshot(&repository.0, id).await?;
     let previous_materializations = load_artwork_materializations(&repository.0, id).await?;
-    let (managed_folder, backup_folder) =
-        create_publication_backup(&repository.0, id, fence).await?;
+    let previous_published_revision = form.published_revision;
+    let target_published_revision = previous_published_revision.saturating_add(1);
+    let publication_paths = create_publication_backup(
+        &repository.0,
+        id,
+        fence,
+        previous_published_revision,
+        target_published_revision,
+    )
+    .await?;
     let journal = PublicationJournal {
         operation_id: fence.map(|value| value.operation_id),
         generation: fence.map(|value| value.generation),
@@ -2487,14 +3019,19 @@ async fn stage_publication_impl(
         previous_presentation_kind: form.presentation_kind,
         previous_items,
         previous_playlist,
-        managed_folder: Some(managed_folder.to_string_lossy().into_owned()),
-        backup_folder: Some(backup_folder.to_string_lossy().into_owned()),
+        managed_folder: Some(publication_paths.managed.to_string_lossy().into_owned()),
+        backup_folder: Some(publication_paths.backup.to_string_lossy().into_owned()),
+        failed_folder: Some(publication_paths.failed.to_string_lossy().into_owned()),
+        previous_published_revision: Some(previous_published_revision),
+        target_published_revision: Some(target_published_revision),
         previous_materializations,
+        target_database: None,
     };
     let journal_json = match serde_json::to_string(&journal) {
         Ok(value) => value,
         Err(error) => {
-            remove_publication_backup(&managed_folder, &backup_folder);
+            abort_publication_staging(publication_paths, publication_fs_identity(id, &journal))
+                .await;
             return Err(RepositoryError::Decode {
                 kind: "add-on publication journal",
                 value: error.to_string(),
@@ -2579,7 +3116,7 @@ async fn stage_publication_impl(
     }
     .await;
     if let Err(error) = staged {
-        remove_publication_backup(&managed_folder, &backup_folder);
+        abort_publication_staging(publication_paths, publication_fs_identity(id, &journal)).await;
         return Err(error);
     }
     Ok(AddonMediaListPublication {
@@ -2622,7 +3159,9 @@ async fn create_publication_backup(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
     fence: Option<PublicationFence<'_>>,
-) -> Result<(PathBuf, PathBuf)> {
+    previous_published_revision: i32,
+    target_published_revision: i32,
+) -> Result<PublicationFsPaths> {
     let manifest: String = sqlx::query_scalar(
         r#"SELECT "ManifestPath" FROM "AddonMediaListLibrary"
            WHERE "AddonMediaListId" = ?"#,
@@ -2634,86 +3173,57 @@ async fn create_publication_backup(
     if let Some(fence) = fence {
         ensure_current_publication_claim(pool, list_id, fence.claim(), false).await?;
     }
-    let result =
-        tokio::task::spawn_blocking(move || create_publication_backup_on_disk(&manifest, list_id))
-            .await
-            .map_err(|error| {
-                RepositoryError::unavailable(
-                    "snapshot add-on publication",
-                    format!("publication backup task failed: {error}"),
-                )
-            })??;
+    let operation_id = fence.map(|value| value.operation_id);
+    let generation = fence.map(|value| value.generation);
+    let identity = PublicationFsIdentity {
+        list_id,
+        operation_id,
+        generation,
+        previous_revision: previous_published_revision,
+        target_revision: target_published_revision,
+    };
+    let result = tokio::task::spawn_blocking(move || {
+        let manifest_path = Path::new(&manifest);
+        let managed_path = if manifest_path.is_dir() {
+            manifest_path
+        } else {
+            manifest_path
+                .parent()
+                .ok_or(addon_publication_fs::PublicationFsError::UnsafeState(
+                    "the managed manifest has no parent folder",
+                ))?
+        };
+        let managed = managed_path.canonicalize().map_err(|source| {
+            addon_publication_fs::PublicationFsError::Io {
+                action: "canonicalize managed publication folder",
+                source,
+            }
+        })?;
+        let paths =
+            addon_publication_fs::publication_paths(managed, list_id, operation_id, generation)?;
+        addon_publication_fs::create_backup(&paths, identity)?;
+        Ok::<_, addon_publication_fs::PublicationFsError>(paths)
+    })
+    .await
+    .map_err(|error| {
+        RepositoryError::unavailable(
+            "snapshot add-on publication",
+            format!("publication backup task failed: {error}"),
+        )
+    })?
+    .map_err(publication_fs_repository_error)?;
     if let Some(fence) = fence {
         if let Err(error) =
             ensure_current_publication_claim(pool, list_id, fence.claim(), false).await
         {
-            let (managed, backup) = result;
-            let _ = tokio::task::spawn_blocking(move || {
-                remove_publication_backup(&managed, &backup);
-            })
-            .await;
+            abort_publication_staging(result, identity).await;
             return Err(error);
         }
     }
     Ok(result)
 }
 
-fn create_publication_backup_on_disk(
-    manifest: &str,
-    list_id: EntityId,
-) -> Result<(PathBuf, PathBuf)> {
-    let manifest_path = Path::new(&manifest);
-    let managed_path = if manifest_path.is_dir() {
-        manifest_path
-    } else {
-        manifest_path.parent().ok_or_else(|| {
-            RepositoryError::unavailable(
-                "snapshot add-on publication",
-                "the managed manifest has no parent folder",
-            )
-        })?
-    };
-    let managed = managed_path.canonicalize().map_err(|error| {
-        RepositoryError::unavailable("snapshot add-on publication", error.to_string())
-    })?;
-    let parent = managed.parent().ok_or_else(|| {
-        RepositoryError::unavailable(
-            "snapshot add-on publication",
-            "the managed folder has no parent",
-        )
-    })?;
-    let backup = parent.join(format!(
-        ".ersatzrs-publication-{list_id}-{}",
-        uuid::Uuid::new_v4()
-    ));
-    copy_publication_tree(&managed, &backup).map_err(|error| {
-        RepositoryError::unavailable("snapshot add-on publication", error.to_string())
-    })?;
-    Ok((managed, backup))
-}
-
-fn copy_publication_tree(source: &Path, destination: &Path) -> std::io::Result<()> {
-    std::fs::create_dir(destination)?;
-    for entry in std::fs::read_dir(source)? {
-        let entry = entry?;
-        let metadata = std::fs::symlink_metadata(entry.path())?;
-        if metadata.file_type().is_symlink() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "managed publication folders may not contain symbolic links",
-            ));
-        }
-        let target = destination.join(entry.file_name());
-        if metadata.is_dir() {
-            copy_publication_tree(&entry.path(), &target)?;
-        } else if metadata.is_file() && std::fs::hard_link(entry.path(), &target).is_err() {
-            std::fs::copy(entry.path(), target)?;
-        }
-    }
-    Ok(())
-}
-
-fn publication_backup_paths(journal: &PublicationJournal) -> Result<(PathBuf, PathBuf)> {
+fn publication_paths_from_journal(journal: &PublicationJournal) -> Result<PublicationFsPaths> {
     let managed = journal
         .managed_folder
         .as_deref()
@@ -2734,100 +3244,1039 @@ fn publication_backup_paths(journal: &PublicationJournal) -> Result<(PathBuf, Pa
                 "the publication journal has no backup folder",
             )
         })?;
-    let safe = managed.parent().is_some()
-        && managed.parent() == backup.parent()
-        && backup
+    let failed = if let Some(value) = journal.failed_folder.as_deref() {
+        PathBuf::from(value)
+    } else {
+        let suffix = backup
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with(".ersatzrs-publication-"));
-    if !safe {
-        return Err(RepositoryError::unavailable(
-            "restore add-on publication",
-            "the publication backup path failed its ownership check",
-        ));
-    }
-    Ok((managed, backup))
+            .and_then(|name| name.strip_prefix(".ersatzrs-publication-"))
+            .ok_or_else(|| {
+                RepositoryError::unavailable(
+                    "restore add-on publication",
+                    "the legacy publication backup name failed its ownership check",
+                )
+            })?;
+        managed
+            .parent()
+            .ok_or_else(|| {
+                RepositoryError::unavailable(
+                    "restore add-on publication",
+                    "the managed publication folder has no parent",
+                )
+            })?
+            .join(format!(".ersatzrs-failed-publication-{suffix}"))
+    };
+    Ok(PublicationFsPaths {
+        managed,
+        backup,
+        failed,
+    })
 }
 
-fn restore_publication_backup(journal: &PublicationJournal) -> Result<()> {
-    let (managed, backup) = publication_backup_paths(journal)?;
-    if managed.is_dir() && !backup.exists() {
-        // Recovery may have completed the directory swap immediately before a
-        // process exit. The journal remains the authority for the following
-        // database restoration phases; AMM-J-02 strengthens this inference
-        // with revision markers for every partial swap shape.
-        return Ok(());
-    }
-    if !backup.is_dir() || !managed.is_dir() {
-        return Err(RepositoryError::unavailable(
-            "restore add-on publication",
-            "the managed folder or its publication backup is missing",
-        ));
-    }
-    let failed = managed
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(format!(
-            ".ersatzrs-failed-publication-{}",
-            uuid::Uuid::new_v4()
-        ));
-    std::fs::rename(&managed, &failed).map_err(|error| {
-        RepositoryError::unavailable("restore add-on publication", error.to_string())
-    })?;
-    if let Err(error) = std::fs::rename(&backup, &managed) {
-        let rollback = std::fs::rename(&failed, &managed);
-        return Err(RepositoryError::unavailable(
-            "restore add-on publication",
-            match rollback {
-                Ok(()) => error.to_string(),
-                Err(rollback_error) => {
-                    format!("{error}; failed to put the staged folder back: {rollback_error}")
-                }
-            },
-        ));
-    }
-    if let Err(error) = std::fs::remove_dir_all(&failed) {
-        tracing::warn!(
-            path = %failed.display(),
-            %error,
-            "unable to remove failed add-on publication folder after recovery"
-        );
-    }
-    Ok(())
+async fn cleanup_publication_backup_async(
+    list_id: EntityId,
+    journal: PublicationJournal,
+) -> Result<()> {
+    let paths = publication_paths_from_journal(&journal)?;
+    let identity = publication_fs_identity(list_id, &journal);
+    tokio::task::spawn_blocking(move || {
+        addon_publication_fs::verify_managed_complete(
+            &paths,
+            identity,
+            PublicationTreeRole::Candidate,
+        )?;
+        addon_publication_fs::cleanup_after_verification(
+            &paths,
+            identity,
+            PublicationTreeRole::Candidate,
+        )
+    })
+    .await
+    .map_err(|error| {
+        RepositoryError::unavailable(
+            "complete add-on publication",
+            format!("publication cleanup task failed: {error}"),
+        )
+    })?
+    .map_err(publication_fs_repository_error)
 }
 
-fn cleanup_publication_backup(journal: &PublicationJournal) -> Result<()> {
-    let (managed, backup) = publication_backup_paths(journal)?;
-    remove_publication_backup(&managed, &backup);
-    Ok(())
+fn publication_fs_identity(
+    list_id: EntityId,
+    journal: &PublicationJournal,
+) -> PublicationFsIdentity {
+    let previous_revision = journal.previous_published_revision.unwrap_or_default();
+    PublicationFsIdentity {
+        list_id,
+        operation_id: journal.operation_id,
+        generation: journal.generation,
+        previous_revision,
+        target_revision: match journal.target_published_revision {
+            Some(value) => value,
+            None => previous_revision.saturating_add(1),
+        },
+    }
 }
 
-async fn cleanup_publication_backup_async(journal: PublicationJournal) -> Result<()> {
-    tokio::task::spawn_blocking(move || cleanup_publication_backup(&journal))
+async fn publication_fs_context(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    journal: &PublicationJournal,
+    operation_id: Option<EntityId>,
+    generation: Option<i32>,
+) -> Result<(PublicationFsPaths, PublicationFsIdentity)> {
+    let operation_id = journal.operation_id.or(operation_id);
+    let generation = journal.generation.or(generation);
+    let target_revision = match journal.target_published_revision {
+        Some(value) => value,
+        None => match (operation_id, generation) {
+            (Some(operation_id), Some(generation)) => sqlx::query_scalar::<_, i32>(
+                r#"SELECT "TargetPublishedRevision"
+                   FROM "AddonMediaListPublicationJob"
+                   WHERE "OperationId" = ? AND "AddonMediaListId" = ? AND "Generation" = ?"#,
+            )
+            .bind(operation_id)
+            .bind(list_id)
+            .bind(generation)
+            .fetch_one(pool)
+            .await
+            .repository()?,
+            _ => sqlx::query_scalar::<_, i32>(
+                r#"SELECT "PublishedRevision" + 1 FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(pool)
+            .await
+            .repository()?,
+        },
+    };
+    let identity = PublicationFsIdentity {
+        list_id,
+        operation_id,
+        generation,
+        previous_revision: journal
+            .previous_published_revision
+            .unwrap_or_else(|| target_revision.saturating_sub(1)),
+        target_revision,
+    };
+    Ok((publication_paths_from_journal(journal)?, identity))
+}
+
+const fn publication_outcome_role(
+    outcome: AddonMediaListPublicationOutcome,
+) -> PublicationTreeRole {
+    match outcome {
+        AddonMediaListPublicationOutcome::Published => PublicationTreeRole::Candidate,
+        AddonMediaListPublicationOutcome::RestoredAfterFailure => PublicationTreeRole::Previous,
+    }
+}
+
+fn publication_fs_repository_error(
+    error: addon_publication_fs::PublicationFsError,
+) -> RepositoryError {
+    let message = error.to_string();
+    drop(error);
+    RepositoryError::unavailable("add-on publication filesystem", message)
+}
+
+async fn abort_publication_staging(paths: PublicationFsPaths, identity: PublicationFsIdentity) {
+    let result =
+        tokio::task::spawn_blocking(move || addon_publication_fs::abort_staging(&paths, identity))
+            .await;
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            tracing::warn!(%error, "unable to remove an uncommitted publication backup");
+        }
+        Err(error) => {
+            tracing::warn!(%error, "publication staging cleanup task failed");
+        }
+    }
+}
+
+async fn restore_publication_files(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    journal: &PublicationJournal,
+    fence: Option<PublicationClaimFence<'_>>,
+) -> Result<()> {
+    let operation_id = fence
+        .map(|value| value.operation_id)
+        .or(journal.operation_id);
+    let generation = fence.map(|value| value.generation).or(journal.generation);
+    let (paths, identity) =
+        publication_fs_context(pool, list_id, journal, operation_id, generation).await?;
+
+    if journal.failed_folder.is_none()
+        || journal.previous_published_revision.is_none()
+        || journal.target_published_revision.is_none()
+    {
+        let paths = paths.clone();
+        tokio::task::spawn_blocking(move || {
+            addon_publication_fs::bootstrap_legacy_markers(&paths, identity)
+        })
         .await
         .map_err(|error| {
             RepositoryError::unavailable(
-                "complete add-on publication",
-                format!("publication cleanup task failed: {error}"),
+                "restore add-on publication",
+                format!("publication marker recovery task failed: {error}"),
             )
         })?
+        .map_err(publication_fs_repository_error)?;
+    }
+
+    let operation_seed = operation_id.unwrap_or(list_id);
+    restore_publication_tree_with_retry(paths, identity, operation_seed, || async {
+        if let Some(fence) = fence {
+            ensure_current_publication_claim(pool, list_id, fence, true).await?;
+        }
+        Ok(())
+    })
+    .await
 }
 
-fn remove_publication_backup(managed: &Path, backup: &Path) {
-    let safe = managed.parent().is_some()
-        && managed.parent() == backup.parent()
-        && backup
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with(".ersatzrs-publication-"));
-    if safe && backup.exists() {
-        if let Err(error) = std::fs::remove_dir_all(backup) {
-            tracing::warn!(
-                path = %backup.display(),
-                %error,
-                "unable to remove completed add-on publication backup"
-            );
+async fn restore_publication_tree_with_retry<Check, CheckFuture>(
+    paths: PublicationFsPaths,
+    identity: PublicationFsIdentity,
+    operation_seed: EntityId,
+    mut check_claim: Check,
+) -> Result<()>
+where
+    Check: FnMut() -> CheckFuture,
+    CheckFuture: std::future::Future<Output = Result<()>>,
+{
+    let mut retry_attempt = 0_u32;
+    let mut transitions = 0_u8;
+    loop {
+        check_claim().await?;
+        let step_paths = paths.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            addon_publication_fs::restore_step(&step_paths, identity)
+        })
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "restore add-on publication",
+                format!("publication restore task failed: {error}"),
+            )
+        })?;
+        match result {
+            Ok(RestoreProgress::Complete) => return Ok(()),
+            Ok(RestoreProgress::Advanced) => {
+                transitions = transitions.saturating_add(1);
+                if transitions > 2 {
+                    return Err(RepositoryError::unavailable(
+                        "restore add-on publication",
+                        "publication restore exceeded its bounded transition count",
+                    ));
+                }
+                retry_attempt = 0;
+            }
+            Err(error)
+                if cfg!(windows)
+                    && addon_publication_fs::is_retryable_windows_code(error.raw_os_error())
+                    && retry_attempt < 6 =>
+            {
+                let delay = addon_publication_fs::retry_delay_millis(operation_seed, retry_attempt);
+                retry_attempt = retry_attempt.saturating_add(1);
+                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+            }
+            Err(error) => return Err(publication_fs_repository_error(error)),
         }
+    }
+}
+
+async fn load_published_item_snapshots(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+) -> Result<Vec<PublishedItemSnapshot>> {
+    let rows = sqlx::query(
+        r#"SELECT "Id", "Published", "MediaItemId", "Kind", "ProviderId", "Title",
+                  "Year", "Season", "Episode", "SourceUrl", "Rank", "PublishedLiveness"
+           FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ?
+           ORDER BY "Id""#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let mut snapshots = Vec::with_capacity(rows.len());
+    for row in rows {
+        let id: EntityId = row.try_get("Id").repository()?;
+        let guids = sqlx::query_scalar::<_, String>(
+            r#"SELECT "Guid" FROM "AddonMediaListItemGuid"
+               WHERE "AddonMediaListItemId" = ? ORDER BY "Id""#,
+        )
+        .bind(id)
+        .fetch_all(pool)
+        .await
+        .repository()?;
+        snapshots.push(PublishedItemSnapshot {
+            id,
+            published: decode_bool_column(&row, "Published")?,
+            media_item_id: row.try_get("MediaItemId").repository()?,
+            identity_captured: true,
+            kind: Some(crate::repositories::common::decode_enum_column(
+                "AddonMediaListItemKind",
+                &row,
+                "Kind",
+            )?),
+            provider_id: row.try_get("ProviderId").repository()?,
+            title: row.try_get("Title").repository()?,
+            year: row.try_get("Year").repository()?,
+            season: row.try_get("Season").repository()?,
+            episode: row.try_get("Episode").repository()?,
+            source_url: row.try_get("SourceUrl").repository()?,
+            rank: row.try_get("Rank").repository()?,
+            guids: Some(guids),
+            published_liveness: crate::repositories::common::decode_enum_column(
+                "RemoteStreamLiveness",
+                &row,
+                "PublishedLiveness",
+            )?,
+        });
+    }
+    Ok(snapshots)
+}
+
+#[allow(clippy::too_many_lines)]
+async fn verify_published_publication_database(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    target_revision: i32,
+    target: &PublicationDatabaseSnapshot,
+) -> Result<()> {
+    let row = sqlx::query(
+        r#"SELECT "ReviewState", "PublishedRevision", "PresentationKind",
+                  "RequestedPresentationKind", "GeneratePlaylist", "PlaylistId"
+           FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or(RepositoryError::NotFound {
+        kind: "add-on media list",
+        id: list_id,
+    })?;
+    let review_state: AddonMediaListReviewState = crate::repositories::common::decode_enum_column(
+        "AddonMediaListReviewState",
+        &row,
+        "ReviewState",
+    )?;
+    let published_revision: i32 = row.try_get("PublishedRevision").repository()?;
+    let presentation: AddonMediaListPresentationKind =
+        crate::repositories::common::decode_enum_column(
+            "AddonMediaListPresentationKind",
+            &row,
+            "PresentationKind",
+        )?;
+    let requested: AddonMediaListPresentationKind =
+        crate::repositories::common::decode_enum_column(
+            "AddonMediaListPresentationKind",
+            &row,
+            "RequestedPresentationKind",
+        )?;
+    let resolved_presentation = if requested == AddonMediaListPresentationKind::Auto {
+        resolve_auto_presentation(pool, list_id).await?
+    } else {
+        requested
+    };
+    let generate_playlist = decode_bool_column(&row, "GeneratePlaylist")?;
+    let playlist_id: Option<EntityId> = row.try_get("PlaylistId").repository()?;
+
+    let counts = sqlx::query(
+        r#"SELECT
+             COUNT(*) AS "ItemCount",
+             COALESCE(SUM(CASE WHEN "Published" = 1 THEN 1 ELSE 0 END), 0) AS "PublishedCount",
+             COALESCE(SUM(CASE WHEN "Included" = 1 THEN 1 ELSE 0 END), 0) AS "IncludedCount",
+             COALESCE(SUM(CASE WHEN "Published" <> "Included"
+                           OR "PublishedLiveness" <> "EffectiveLiveness"
+                      THEN 1 ELSE 0 END), 0) AS "SnapshotMismatchCount",
+             COALESCE(SUM(CASE WHEN "Published" = 1 AND (
+                           "MediaItemId" IS NULL OR NOT EXISTS (
+                               SELECT 1 FROM "MediaItem"
+                               WHERE "Id" = "AddonMediaListItem"."MediaItemId"
+                           )
+                      ) THEN 1 ELSE 0 END), 0) AS "UnmatchedCount"
+           FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL"#,
+    )
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    let item_count: i64 = counts.try_get("ItemCount").repository()?;
+    let published_count: i64 = counts.try_get("PublishedCount").repository()?;
+    let included_count: i64 = counts.try_get("IncludedCount").repository()?;
+    let snapshot_mismatch_count: i64 = counts.try_get("SnapshotMismatchCount").repository()?;
+    let unmatched_count: i64 = counts.try_get("UnmatchedCount").repository()?;
+    // Provider identity and replacement playback are deliberately separate:
+    // `AddonMediaListItem.MediaItemId` owns the provider match, while an
+    // unavailable item's configured replacement is selected only in the
+    // generated playlist below.
+    let stable_match_mismatch_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListItem" AS "item"
+           JOIN "AddonMediaList" AS "list" ON "list"."Id" = "item"."AddonMediaListId"
+           LEFT JOIN "RemoteStream" AS "stream" ON "stream"."Id" = "item"."MediaItemId"
+           WHERE "item"."AddonMediaListId" = ? AND "item"."ParentProviderId" IS NULL
+             AND "item"."Published" = 1 AND "item"."Kind" = ?
+             AND ("stream"."Id" IS NULL OR "stream"."AddonId" <> "list"."AddonId"
+                  OR "stream"."ProviderId" <> "item"."ProviderId")"#,
+    )
+    .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemKind::RemoteStream,
+    ))
+    .fetch_one(pool)
+    .await
+    .repository()?;
+
+    let items = load_published_item_snapshots(pool, list_id).await?;
+    let item_snapshot_complete = items == target.items;
+    let projection_complete =
+        verify_published_projection_database(pool, list_id, target.presentation_kind).await?;
+    let playlist_complete = verify_published_playlist_database(
+        pool,
+        list_id,
+        generate_playlist,
+        playlist_id,
+        target.playlist.as_ref(),
+    )
+    .await?;
+    let materialization_complete = verify_published_materialization_database(
+        pool,
+        list_id,
+        target.presentation_kind,
+        target_revision,
+        &target.materializations,
+    )
+    .await?;
+
+    if review_state != AddonMediaListReviewState::Publishing
+        || published_revision != target_revision
+        || presentation != resolved_presentation
+        || presentation != target.presentation_kind
+        || item_count == 0
+        || published_count != included_count
+        || published_count != target.published_item_count
+        || snapshot_mismatch_count != 0
+        || unmatched_count != 0
+        || stable_match_mismatch_count != 0
+        || !item_snapshot_complete
+        || !projection_complete
+        || !playlist_complete
+        || !materialization_complete
+    {
+        return Err(RepositoryError::Conflict(
+            "the published add-on media-list revision failed convergence verification".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+async fn verify_published_projection_database(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    presentation: AddonMediaListPresentationKind,
+) -> Result<bool> {
+    let expected_projection_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+             AND "Published" = 1 AND "Kind" = ?"#,
+    )
+    .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemKind::RemoteStream,
+    ))
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    let total_projection_count: i64 = sqlx::query_scalar(
+        r#"SELECT
+             (SELECT COUNT(*) FROM "AddonMediaListItemEpisode" AS "projection"
+                JOIN "AddonMediaListItem" AS "item"
+                  ON "item"."Id" = "projection"."AddonMediaListItemId"
+                WHERE "item"."AddonMediaListId" = ?)
+             + (SELECT COUNT(*) FROM "AddonMediaListItemMovie" AS "projection"
+                JOIN "AddonMediaListItem" AS "item"
+                  ON "item"."Id" = "projection"."AddonMediaListItemId"
+                WHERE "item"."AddonMediaListId" = ?)
+             + (SELECT COUNT(*) FROM "AddonMediaListItemOtherVideo" AS "projection"
+                JOIN "AddonMediaListItem" AS "item"
+                  ON "item"."Id" = "projection"."AddonMediaListItemId"
+                WHERE "item"."AddonMediaListId" = ?)
+             + (SELECT COUNT(*) FROM "AddonMediaListItemSong" AS "projection"
+                JOIN "AddonMediaListItem" AS "item"
+                  ON "item"."Id" = "projection"."AddonMediaListItemId"
+                WHERE "item"."AddonMediaListId" = ?)
+             + (SELECT COUNT(*) FROM "AddonMediaListItemImage" AS "projection"
+                JOIN "AddonMediaListItem" AS "item"
+                  ON "item"."Id" = "projection"."AddonMediaListItemId"
+                WHERE "item"."AddonMediaListId" = ?)
+             + (SELECT COUNT(*) FROM "AddonMediaListItemMusicVideo" AS "projection"
+                JOIN "AddonMediaListItem" AS "item"
+                  ON "item"."Id" = "projection"."AddonMediaListItemId"
+                WHERE "item"."AddonMediaListId" = ?)"#,
+    )
+    .bind(list_id)
+    .bind(list_id)
+    .bind(list_id)
+    .bind(list_id)
+    .bind(list_id)
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    let parent_projection_count: i64 = sqlx::query_scalar(
+        r#"SELECT
+             (SELECT COUNT(*) FROM "AddonMediaListTelevisionShow"
+                WHERE "AddonMediaListId" = ?)
+             + (SELECT COUNT(*) FROM "AddonMediaListArtist"
+                WHERE "AddonMediaListId" = ?)"#,
+    )
+    .bind(list_id)
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+
+    let (link_table, link_column, metadata_table, metadata_column, expected_parent_count) =
+        match presentation {
+            AddonMediaListPresentationKind::RemoteStreams
+            | AddonMediaListPresentationKind::Auto => {
+                return Ok(total_projection_count == 0 && parent_projection_count == 0);
+            }
+            AddonMediaListPresentationKind::TelevisionShow => (
+                "AddonMediaListItemEpisode",
+                "EpisodeId",
+                "EpisodeMetadata",
+                "EpisodeId",
+                1_i64,
+            ),
+            AddonMediaListPresentationKind::Movies => (
+                "AddonMediaListItemMovie",
+                "MovieId",
+                "MovieMetadata",
+                "MovieId",
+                0,
+            ),
+            AddonMediaListPresentationKind::OtherVideos => (
+                "AddonMediaListItemOtherVideo",
+                "OtherVideoId",
+                "OtherVideoMetadata",
+                "OtherVideoId",
+                0,
+            ),
+            AddonMediaListPresentationKind::Songs => (
+                "AddonMediaListItemSong",
+                "SongId",
+                "SongMetadata",
+                "SongId",
+                0,
+            ),
+            AddonMediaListPresentationKind::Images => (
+                "AddonMediaListItemImage",
+                "ImageId",
+                "ImageMetadata",
+                "ImageId",
+                0,
+            ),
+            AddonMediaListPresentationKind::MusicVideos => (
+                "AddonMediaListItemMusicVideo",
+                "MusicVideoId",
+                "MusicVideoMetadata",
+                "MusicVideoId",
+                1,
+            ),
+        };
+    let incomplete_count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListItem" AS "item"
+           LEFT JOIN "{link_table}" AS "projection"
+             ON "projection"."AddonMediaListItemId" = "item"."Id"
+           LEFT JOIN "MediaItem" AS "media"
+             ON "media"."Id" = "projection"."{link_column}"
+           WHERE "item"."AddonMediaListId" = ?
+             AND "item"."ParentProviderId" IS NULL AND "item"."Published" = 1
+             AND "item"."Kind" = ?
+             AND ("projection"."AddonMediaListItemId" IS NULL OR "media"."Id" IS NULL
+                  OR ("item"."Kind" = ? AND NOT EXISTS (
+                      SELECT 1 FROM "MediaVersion" AS "version"
+                      WHERE "version"."{link_column}" = "projection"."{link_column}"
+                        AND "version"."RemoteStreamId" = "item"."MediaItemId"
+                  ))
+                  OR ("item"."Kind" <> ?
+                      AND "projection"."{link_column}" <> "item"."MediaItemId"))"#
+    )))
+    .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemKind::RemoteStream,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemKind::RemoteStream,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemKind::RemoteStream,
+    ))
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    let metadata_mismatch_count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListItem" AS "item"
+           JOIN "{link_table}" AS "projection"
+             ON "projection"."AddonMediaListItemId" = "item"."Id"
+           WHERE "item"."AddonMediaListId" = ?
+             AND "item"."ParentProviderId" IS NULL AND "item"."Published" = 1
+             AND (SELECT COUNT(*) FROM "{metadata_table}" AS "metadata"
+                  WHERE "metadata"."{metadata_column}" = "projection"."{link_column}") <> 1"#
+    )))
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    let parent_ownership_mismatch_count: i64 = match presentation {
+        AddonMediaListPresentationKind::TelevisionShow => sqlx::query_scalar(
+            r#"SELECT COUNT(*)
+               FROM "AddonMediaListItem" AS "item"
+               JOIN "AddonMediaListItemEpisode" AS "projection"
+                 ON "projection"."AddonMediaListItemId" = "item"."Id"
+               JOIN "Episode" AS "episode" ON "episode"."Id" = "projection"."EpisodeId"
+               JOIN "Season" AS "season" ON "season"."Id" = "episode"."SeasonId"
+               LEFT JOIN "AddonMediaListTelevisionShow" AS "owned"
+                 ON "owned"."AddonMediaListId" = "item"."AddonMediaListId"
+               WHERE "item"."AddonMediaListId" = ?
+                 AND ("owned"."ShowId" IS NULL OR "season"."ShowId" <> "owned"."ShowId")"#,
+        )
+        .bind(list_id)
+        .fetch_one(pool)
+        .await
+        .repository()?,
+        AddonMediaListPresentationKind::MusicVideos => sqlx::query_scalar(
+            r#"SELECT COUNT(*)
+               FROM "AddonMediaListItem" AS "item"
+               JOIN "AddonMediaListItemMusicVideo" AS "projection"
+                 ON "projection"."AddonMediaListItemId" = "item"."Id"
+               JOIN "MusicVideo" AS "video" ON "video"."Id" = "projection"."MusicVideoId"
+               LEFT JOIN "AddonMediaListArtist" AS "owned"
+                 ON "owned"."AddonMediaListId" = "item"."AddonMediaListId"
+               WHERE "item"."AddonMediaListId" = ?
+                 AND ("owned"."ArtistId" IS NULL OR "video"."ArtistId" <> "owned"."ArtistId")"#,
+        )
+        .bind(list_id)
+        .fetch_one(pool)
+        .await
+        .repository()?,
+        _ => 0,
+    };
+    let parent_metadata_mismatch_count: i64 = match presentation {
+        AddonMediaListPresentationKind::TelevisionShow => sqlx::query_scalar(
+            r#"SELECT
+                 (SELECT COUNT(*) FROM "AddonMediaListTelevisionShow" AS "owned"
+                  WHERE "owned"."AddonMediaListId" = ?
+                    AND (SELECT COUNT(*) FROM "ShowMetadata" AS "metadata"
+                         WHERE "metadata"."ShowId" = "owned"."ShowId") <> 1)
+                 +
+                 (SELECT COUNT(*) FROM "AddonMediaListItemEpisode" AS "projection"
+                  JOIN "AddonMediaListItem" AS "item"
+                    ON "item"."Id" = "projection"."AddonMediaListItemId"
+                  JOIN "Episode" AS "episode" ON "episode"."Id" = "projection"."EpisodeId"
+                  WHERE "item"."AddonMediaListId" = ? AND "item"."Published" = 1
+                    AND (SELECT COUNT(*) FROM "SeasonMetadata" AS "metadata"
+                         WHERE "metadata"."SeasonId" = "episode"."SeasonId") <> 1)"#,
+        )
+        .bind(list_id)
+        .bind(list_id)
+        .fetch_one(pool)
+        .await
+        .repository()?,
+        AddonMediaListPresentationKind::MusicVideos => sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "AddonMediaListArtist" AS "owned"
+               WHERE "owned"."AddonMediaListId" = ?
+                 AND (SELECT COUNT(*) FROM "ArtistMetadata" AS "metadata"
+                      WHERE "metadata"."ArtistId" = "owned"."ArtistId") <> 1"#,
+        )
+        .bind(list_id)
+        .fetch_one(pool)
+        .await
+        .repository()?,
+        _ => 0,
+    };
+    Ok(total_projection_count == expected_projection_count
+        && parent_projection_count == expected_parent_count
+        && incomplete_count == 0
+        && metadata_mismatch_count == 0
+        && parent_ownership_mismatch_count == 0
+        && parent_metadata_mismatch_count == 0)
+}
+
+async fn verify_published_playlist_database(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    generate_playlist: bool,
+    playlist_id: Option<EntityId>,
+    target: Option<&PlaylistSnapshot>,
+) -> Result<bool> {
+    let (Some(playlist_id), Some(target)) = (playlist_id, target) else {
+        return Ok(!generate_playlist && playlist_id.is_none() && target.is_none());
+    };
+    if !generate_playlist || playlist_id != target.id {
+        return Ok(false);
+    }
+    let current = load_playlist_snapshot(pool, list_id).await?;
+    let Some(current) = current else {
+        return Ok(false);
+    };
+    let target_count = i64::try_from(target.items.len()).unwrap_or(i64::MAX);
+    Ok(current.has_same_published_content(target)
+        && verify_playlist_membership_database(pool, list_id, playlist_id, target_count).await?)
+}
+
+async fn verify_playlist_membership_database(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    playlist_id: EntityId,
+    expected_count: i64,
+) -> Result<bool> {
+    let row = sqlx::query(
+        r#"SELECT COUNT(*) AS "ItemCount",
+                  COALESCE(SUM(CASE WHEN "item"."MediaItemId" IS NULL OR "media"."Id" IS NULL
+                           THEN 1 ELSE 0 END), 0) AS "InvalidMediaCount"
+           FROM "PlaylistItem" AS "item"
+           LEFT JOIN "MediaItem" AS "media" ON "media"."Id" = "item"."MediaItemId"
+           WHERE "item"."PlaylistId" = ?
+             AND EXISTS (SELECT 1 FROM "Playlist" WHERE "Id" = ?)
+             AND EXISTS (SELECT 1 FROM "AddonMediaList"
+                         WHERE "Id" = ? AND "PlaylistId" = ?)"#,
+    )
+    .bind(playlist_id)
+    .bind(playlist_id)
+    .bind(list_id)
+    .bind(playlist_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    let item_count: i64 = row.try_get("ItemCount").repository()?;
+    let invalid_media_count: i64 = row.try_get("InvalidMediaCount").repository()?;
+    let wrong_membership_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "PlaylistItem" AS "playlist_item"
+           WHERE "playlist_item"."PlaylistId" = ?
+             AND NOT EXISTS (
+                 SELECT 1
+                 FROM "AddonMediaListItem" AS "item"
+                 LEFT JOIN "AddonMediaListItemReplacement" AS "replacement"
+                   ON "replacement"."AddonMediaListItemId" = "item"."Id"
+                 WHERE "item"."AddonMediaListId" = ?
+                   AND "item"."ParentProviderId" IS NULL AND "item"."Published" = 1
+                   AND "playlist_item"."Index" = "item"."Rank"
+                   AND (
+                     ("item"."Availability" <> ? AND (
+                        "playlist_item"."MediaItemId" = COALESCE(
+                            (SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
+                             WHERE "AddonMediaListItemId" = "item"."Id"),
+                            "item"."MediaItemId"
+                        )
+                     ))
+                     OR ("item"."Availability" = ?
+                         AND "playlist_item"."MediaItemId" = "replacement"."MediaItemId"
+                         AND "playlist_item"."MediaVersionId" = "replacement"."MediaVersionId")
+                   )
+             )"#,
+    )
+    .bind(playlist_id)
+    .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemAvailability::Unavailable,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemAvailability::Unavailable,
+    ))
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    Ok(item_count == expected_count && invalid_media_count == 0 && wrong_membership_count == 0)
+}
+
+async fn verify_published_materialization_database(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    presentation: AddonMediaListPresentationKind,
+    target_revision: i32,
+    target: &[ArtworkMaterializationSnapshot],
+) -> Result<bool> {
+    let current = load_artwork_materializations(pool, list_id).await?;
+    if current.len() != target.len()
+        || current
+            .iter()
+            .any(|materialization| materialization.published_revision != target_revision)
+    {
+        return Ok(false);
+    }
+    let mut matched = vec![false; target.len()];
+    for current in &current {
+        let Some((index, _)) = target
+            .iter()
+            .enumerate()
+            .find(|(index, expected)| !matched[*index] && current.has_same_content(expected))
+        else {
+            return Ok(false);
+        };
+        matched[index] = true;
+    }
+    let managed_root: String = sqlx::query_scalar(
+        r#"SELECT "ManifestPath" FROM "AddonMediaListLibrary"
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    let manifest_path = Path::new(&managed_root);
+    let managed_root = if manifest_path.is_dir() {
+        manifest_path
+    } else {
+        let Some(parent) = manifest_path.parent() else {
+            return Ok(false);
+        };
+        parent
+    };
+    if managed_root.as_os_str().is_empty() {
+        return Ok(false);
+    }
+    for materialization in &current {
+        let relative = Path::new(&materialization.file_name);
+        if relative.is_absolute()
+            || relative
+                .components()
+                .any(|component| !matches!(component, std::path::Component::Normal(_)))
+        {
+            return Ok(false);
+        }
+        let path = managed_root.join(relative);
+        if !path.starts_with(managed_root)
+            || !path.is_file()
+            || !file_has_sha256(&path, &materialization.sha256)
+        {
+            return Ok(false);
+        }
+    }
+    let expected_parent_roles = if parent_nfo_for(presentation).is_some() {
+        selected_parent_artwork(&load_list_metadata_form(pool, list_id).await?.metadata)
+            .into_iter()
+            .filter_map(|candidate| match candidate.role {
+                AddonMediaListArtworkRole::Poster
+                | AddonMediaListArtworkRole::Fanart
+                | AddonMediaListArtworkRole::Thumb => Some(artwork_role_value(candidate.role)),
+                AddonMediaListArtworkRole::Other => None,
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+    } else {
+        std::collections::BTreeSet::new()
+    };
+    let current_parent_roles = current
+        .iter()
+        .filter(|materialization| {
+            materialization.item_id.is_none() && materialization.scope_item_id == 0
+        })
+        .map(|materialization| materialization.role)
+        .collect::<std::collections::BTreeSet<_>>();
+    let current_parent_count = current
+        .iter()
+        .filter(|materialization| {
+            materialization.item_id.is_none() && materialization.scope_item_id == 0
+        })
+        .count();
+    Ok(current_parent_roles == expected_parent_roles
+        && current_parent_count == current_parent_roles.len())
+}
+
+async fn verify_publication_database(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    journal: &PublicationJournal,
+    previous_revision: i32,
+    target_revision: i32,
+    outcome: AddonMediaListPublicationOutcome,
+) -> Result<()> {
+    let row = sqlx::query(
+        r#"SELECT "ReviewState", "PublishedRevision"
+           FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or(RepositoryError::NotFound {
+        kind: "add-on media list",
+        id: list_id,
+    })?;
+    let review_state: AddonMediaListReviewState = crate::repositories::common::decode_enum_column(
+        "AddonMediaListReviewState",
+        &row,
+        "ReviewState",
+    )?;
+    let published_revision: i32 = row.try_get("PublishedRevision").repository()?;
+
+    match outcome {
+        AddonMediaListPublicationOutcome::Published => {
+            if let Some(target) = journal.target_database.as_ref() {
+                verify_published_publication_database(pool, list_id, target_revision, target)
+                    .await?;
+            } else if review_state != AddonMediaListReviewState::Publishing
+                || published_revision != target_revision
+            {
+                return Err(RepositoryError::Conflict(
+                    "the legacy published add-on media-list revision failed terminal verification"
+                        .to_owned(),
+                ));
+            }
+        }
+        AddonMediaListPublicationOutcome::RestoredAfterFailure => {
+            let items = load_published_item_snapshots(pool, list_id).await?;
+            let materializations = load_artwork_materializations(pool, list_id).await?;
+            let playlist = load_playlist_snapshot(pool, list_id).await?;
+            let items_match = items.len() == journal.previous_items.len()
+                && items
+                    .iter()
+                    .zip(&journal.previous_items)
+                    .all(|(current, previous)| current.has_same_restored_content(previous));
+            let playlist_matches =
+                restored_playlists_match(playlist.as_ref(), journal.previous_playlist.as_ref());
+            let restored_structure_matches =
+                verify_restored_publication_structure(pool, list_id, journal, playlist.as_ref())
+                    .await?;
+            let mut mismatches = Vec::new();
+            if review_state != AddonMediaListReviewState::Publishing {
+                mismatches.push("review state");
+            }
+            if published_revision != previous_revision {
+                mismatches.push("published revision");
+            }
+            if !items_match {
+                mismatches.push("published items");
+            }
+            if materializations != journal.previous_materializations {
+                mismatches.push("artwork materializations");
+            }
+            if !playlist_matches {
+                mismatches.push("generated playlist");
+            }
+            if !restored_structure_matches {
+                mismatches.push("matching or projection structure");
+            }
+            if !mismatches.is_empty() {
+                return Err(RepositoryError::Conflict(format!(
+                    "the restored add-on media-list revision failed convergence verification: {}",
+                    mismatches.join(", ")
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn verify_restored_publication_structure(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    journal: &PublicationJournal,
+    playlist: Option<&PlaylistSnapshot>,
+) -> Result<bool> {
+    let presentation: AddonMediaListPresentationKind =
+        crate::repositories::common::decode_enum_column(
+            "AddonMediaListPresentationKind",
+            &sqlx::query(r#"SELECT "PresentationKind" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(list_id)
+                .fetch_one(pool)
+                .await
+                .repository()?,
+            "PresentationKind",
+        )?;
+    let rows = sqlx::query(
+        r#"SELECT "item"."Id", "item"."Kind", "item"."MediaItemId",
+                  "stream"."AddonId" AS "StreamAddonId",
+                  "stream"."ProviderId" AS "StreamProviderId",
+                  "list"."AddonId", "item"."ProviderId"
+           FROM "AddonMediaListItem" AS "item"
+           JOIN "AddonMediaList" AS "list" ON "list"."Id" = "item"."AddonMediaListId"
+           LEFT JOIN "MediaItem" AS "media" ON "media"."Id" = "item"."MediaItemId"
+           LEFT JOIN "RemoteStream" AS "stream" ON "stream"."Id" = "item"."MediaItemId"
+           WHERE "item"."AddonMediaListId" = ? AND "item"."ParentProviderId" IS NULL
+             AND "item"."Published" = 1 AND "media"."Id" IS NOT NULL
+           ORDER BY "item"."Id""#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let expected_published: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
+             AND "Published" = 1"#,
+    )
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    if i64::try_from(rows.len()).unwrap_or(i64::MAX) != expected_published {
+        return Ok(false);
+    }
+    for row in &rows {
+        let id: EntityId = row.try_get("Id").repository()?;
+        let kind: AddonMediaListItemKind =
+            crate::repositories::common::decode_enum_column("AddonMediaListItemKind", row, "Kind")?;
+        let media_item_id: Option<EntityId> = row.try_get("MediaItemId").repository()?;
+        let Some(previous) = journal.previous_items.iter().find(|item| item.id == id) else {
+            return Ok(false);
+        };
+        let matches = if kind == AddonMediaListItemKind::RemoteStream {
+            row.try_get::<Option<String>, _>("StreamAddonId")
+                .repository()?
+                == Some(row.try_get("AddonId").repository()?)
+                && row
+                    .try_get::<Option<String>, _>("StreamProviderId")
+                    .repository()?
+                    == Some(row.try_get("ProviderId").repository()?)
+        } else {
+            media_item_id == previous.media_item_id
+        };
+        if !matches {
+            return Ok(false);
+        }
+    }
+    if presentation != journal.previous_presentation_kind
+        || !verify_published_projection_database(pool, list_id, presentation).await?
+    {
+        return Ok(false);
+    }
+    match (playlist, journal.previous_playlist.as_ref()) {
+        (None, None) => Ok(true),
+        (Some(current), Some(previous)) if current.id == previous.id => {
+            verify_playlist_membership_database(
+                pool,
+                list_id,
+                current.id,
+                i64::try_from(previous.items.len()).unwrap_or(i64::MAX),
+            )
+            .await
+        }
+        _ => Ok(false),
+    }
+}
+
+fn restored_playlists_match(
+    current: Option<&PlaylistSnapshot>,
+    previous: Option<&PlaylistSnapshot>,
+) -> bool {
+    match (current, previous) {
+        (None, None) => true,
+        (Some(current), Some(previous)) => current.has_same_restored_content(previous),
+        _ => false,
     }
 }
 
@@ -2978,13 +4427,11 @@ async fn restore_playlist_snapshot(
                 .execute(&mut *tx)
                 .await
                 .repository()?;
-            // The matcher immediately before this function has rebuilt the
-            // generated members against the restored projection identities.
-            // Re-inserting the old raw media ids here would be incorrect after
-            // a presentation switch recreated those identities. Keep the
-            // snapshot members in the journal for audit evidence, while the
-            // deterministic matcher owns their recovered rows.
-            let _previous_item_count = snapshot.items.len();
+            sqlx::query(r#"DELETE FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+                .bind(snapshot.id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
         }
     }
     tx.commit().await.repository()?;
@@ -4322,6 +5769,7 @@ async fn ensure_generated_parent_nfo(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn materialize_parent_artwork(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
@@ -4364,6 +5812,15 @@ async fn materialize_parent_artwork(
         if let Some(existing) = &existing {
             let path = folder.join(&existing.file_name);
             if existing.source == source && file_has_sha256(&path, &existing.sha256) {
+                retain_parent_materialization(
+                    pool,
+                    list_id,
+                    role,
+                    source,
+                    existing,
+                    revision.saturating_add(1),
+                )
+                .await?;
                 candidate.url.clone_from(&existing.file_name);
                 published.push(candidate);
                 continue;
@@ -4421,6 +5878,26 @@ async fn materialize_parent_artwork(
     metadata.artwork = published;
     metadata.artwork_urls.clear();
     Ok(())
+}
+
+async fn retain_parent_materialization(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    role: AddonMediaListArtworkRole,
+    source: &str,
+    existing: &ArtworkMaterializationSnapshot,
+    revision: i32,
+) -> Result<()> {
+    upsert_parent_materialization(
+        pool,
+        list_id,
+        role,
+        source,
+        &existing.file_name,
+        &existing.sha256,
+        revision,
+    )
+    .await
 }
 
 fn selected_parent_artwork(metadata: &AddonMediaListNfoMetadata) -> Vec<AddonMediaListArtwork> {
@@ -4778,10 +6255,13 @@ async fn apply_music_video_projection(pool: &Pool<crate::db::Db>, list_id: Entit
         r#"SELECT "Id", "Title", "Year", "Availability"
            FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
-             AND "Published" = 1
+             AND "Published" = 1 AND "Kind" = ?
            ORDER BY "Rank", "Id""#,
     )
     .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemKind::RemoteStream,
+    ))
     .fetch_all(pool)
     .await
     .repository()?;
@@ -5281,10 +6761,13 @@ async fn apply_flat_projection(
         r#"SELECT "Id", "Title", "Year", "Availability"
            FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
-             AND "Published" = 1
+             AND "Published" = 1 AND "Kind" = ?
            ORDER BY "Rank", "Id""#,
     )
     .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemKind::RemoteStream,
+    ))
     .fetch_all(pool)
     .await
     .repository()?;
@@ -5582,10 +7065,13 @@ async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> R
         r#"SELECT "Id", "Title", "Year", "Season", "Episode", "Availability"
            FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
-             AND "Published" = 1
+             AND "Published" = 1 AND "Kind" = ?
            ORDER BY "Rank", "Id""#,
     )
     .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListItemKind::RemoteStream,
+    ))
     .fetch_all(pool)
     .await
     .repository()?;
@@ -6047,5 +7533,58 @@ mod tests {
             "https://media.example.test/{}",
             "x".repeat(2_048)
         )));
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_publication_restore_retries_until_a_held_handle_drains() {
+        use std::fs::{self, OpenOptions};
+        use std::os::windows::fs::OpenOptionsExt as _;
+        use std::time::Duration;
+
+        use super::{PublicationFsIdentity, RepositoryError};
+
+        const FILE_SHARE_READ: u32 = 0x0000_0001;
+        let temp = tempfile::tempdir().expect("publication recovery fixture");
+        let managed = temp.path().join("managed");
+        fs::create_dir(&managed).expect("managed directory");
+        fs::write(managed.join("item.yml"), b"previous").expect("previous item");
+        let identity = PublicationFsIdentity {
+            list_id: 7,
+            operation_id: Some(11),
+            generation: Some(2),
+            previous_revision: 3,
+            target_revision: 4,
+        };
+        let paths = super::addon_publication_fs::publication_paths(
+            managed,
+            identity.list_id,
+            identity.operation_id,
+            identity.generation,
+        )
+        .expect("publication paths");
+        super::addon_publication_fs::create_backup(&paths, identity)
+            .expect("create publication backup");
+        fs::write(paths.managed.join("item.yml"), b"candidate").expect("candidate item");
+        let held = OpenOptions::new()
+            .read(true)
+            .share_mode(FILE_SHARE_READ)
+            .open(paths.managed.join("item.yml"))
+            .expect("held item without delete sharing");
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(180));
+            drop(held);
+        });
+
+        super::restore_publication_tree_with_retry(paths.clone(), identity, 11, || async {
+            Ok::<(), RepositoryError>(())
+        })
+        .await
+        .expect("bounded sharing retry restores the previous tree");
+        release.join().expect("release held handle");
+        assert_eq!(
+            fs::read(paths.managed.join("item.yml")).expect("restored item"),
+            b"previous"
+        );
     }
 }

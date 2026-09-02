@@ -7005,6 +7005,23 @@ mod tests {
             unreachable!("child scans are not used by command tests")
         }
 
+        async fn ensure_publication_verification_scan(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _list_id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<ManagedLibraryOperation> {
+            unreachable!("verification scans are not used by command tests")
+        }
+
+        async fn begin_publication_verification(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _expected: AddonMediaListPublicationPhase,
+            _outcome: AddonMediaListPublicationOutcome,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            unreachable!("publication verification is not used by command tests")
+        }
+
         async fn record_publication_failure(
             &self,
             _claim: &ManagedLibraryOperationClaim,

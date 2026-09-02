@@ -54,8 +54,9 @@ AMM-I closes the import/review UX gaps under `amm-i-01`.
 After Windows dogfood exposed a stranded journal, AMM-J-01 now provides
 exact-revision durable jobs, shared managed-library leases, expired-worker
 fencing, restart claim/retry, child-scan inheritance, and legacy-journal
-adoption. AMM-J-02 through AMM-J-04 retain atomic filesystem recovery,
-operator actions, and bounded causal history. ADR 0085 also opens AMM-K through
+adoption. AMM-J-02 implements byte-copy backups, resumable swaps,
+verification, and cleanup; its NTFS gate remains open. AMM-J-03 and AMM-J-04
+retain operator actions and causal history. ADR 0085 opens AMM-K through
 AMM-N for lifecycle/navigation, incremental refresh, inherited yt-dlp playback
 options, storage budgets, validated tool maintenance, and integrated closeout.
 '''
@@ -65,7 +66,7 @@ id          = 'addon-list-publication-recovery-can-stall-permanently-on-windows'
 description = 'Make add-on-list publication and rollback durable, restart-safe, and recoverable through the admin UI after scan failure, process interruption, or a transient Windows filesystem sharing violation; retain a bounded redacted causal history that distinguishes original and recovery failures; keep provider authentication and age restrictions item-scoped.'
 discovered  = '2026-08-31'
 adr         = '0085'
-evidence    = 'Redacted Windows dogfood left a 165-item list in Publishing with an intact journal and previous-revision backup, no failed-publication intermediate directory, and no persisted ReviewError. The publication overlapped a scheduled scan, and the beta could not distinguish request cancellation from a Windows sharing violation. AMM-J-01 now persists exact-revision publication/recovery jobs, coordinates all current managed-library scan origins through one lease, fences expired workers, resumes child scans, retries recovery indefinitely with capped backoff, and adopts legacy stranded journals on upgrade. AMM-J-02 still owns crash-state filesystem markers, drained handles, sharing-violation retry, and NTFS/POSIX fault injection; AMM-J-03 owns localized operator recovery and item-scoped restricted outcomes; AMM-J-04 owns the bounded redacted causal event stream. Tracked by AMM-J and plans/addon-list-publication-recovery.md.'
+evidence    = 'Redacted Windows dogfood left a 165-item list in Publishing with an intact journal and previous-revision backup, no failed-publication intermediate directory, and no persisted ReviewError. The publication overlapped a scheduled scan, and the beta could not distinguish request cancellation from a Windows sharing violation. AMM-J-01 now persists exact-revision publication/recovery jobs, coordinates all current managed-library scan origins through one lease, fences expired workers, resumes child scans, retries recovery indefinitely with capped backoff, and adopts legacy stranded journals on upgrade. AMM-J-02 implements operation-owned revision markers, byte-isolated backups, resumable partial swaps, dropped-process cleanup, bounded Windows sharing retry, pre-sealed full-tree fingerprints, a persisted post-swap verification scan, exact logical SQLite/filesystem convergence, active-journal writer fencing, and cleanup-before-terminal-state finalization; POSIX fault injection, legacy restart states, and a file-backed SQLite restart pass. Its manual self-hosted NTFS gate still needs a green exact-SHA run before the milestone can close. AMM-J-03 owns localized operator recovery and item-scoped restricted outcomes; AMM-J-04 owns the bounded redacted causal event stream. Tracked by AMM-J and plans/addon-list-publication-recovery.md.'
 resolved    = false
 
 [[debt]]

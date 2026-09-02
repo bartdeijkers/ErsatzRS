@@ -93,8 +93,9 @@ impl FfprobeExtractor {
     pub async fn extract(&self, path: impl AsRef<Path>) -> Result<FfprobeMediaVersion> {
         let path = path.as_ref();
         let command = self.command_for(path);
-        let output = Command::new(&command.program)
-            .args(&command.args)
+        let mut process = Command::new(&command.program);
+        process.args(&command.args).kill_on_drop(true);
+        let output = process
             .output()
             .await
             .map_err(|source| FfprobeError::Spawn {

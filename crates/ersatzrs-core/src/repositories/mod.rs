@@ -34,8 +34,9 @@ pub use addon_media_list::{
     AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict,
     AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoOwnership,
     AddonMediaListNfoPerson, AddonMediaListPublication, AddonMediaListPublicationBlocker,
-    AddonMediaListPublicationBlockerKind, AddonMediaListPublicationReadiness,
-    AddonMediaListReplacementCandidate, AddonMediaListRepository,
+    AddonMediaListPublicationBlockerKind, AddonMediaListPublicationContinuation,
+    AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
+    AddonMediaListRepository,
 };
 pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,

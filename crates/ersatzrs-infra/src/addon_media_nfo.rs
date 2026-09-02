@@ -653,8 +653,9 @@ fn save_state(folder: &Path, state: &NfoState) -> Result<()> {
 }
 
 fn write_atomically(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut temporary = tempfile::NamedTempFile::new_in(parent)
+    let temporary_directory =
+        crate::repositories::addon_publication_fs::atomic_write_temporary_directory(path);
+    let mut temporary = tempfile::NamedTempFile::new_in(temporary_directory)
         .map_err(|error| AddonMediaNfoError::Write(error.to_string()))?;
     temporary
         .write_all(bytes)
@@ -735,6 +736,28 @@ pub fn item_nfo_path(definition_path: Option<&str>) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn atomic_publication_write_stages_outside_the_marked_tree() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let managed = temp.path().join("managed");
+        let nested = managed.join("season");
+        fs::create_dir_all(&nested).expect("managed publication directory");
+        fs::write(
+            managed.join(crate::repositories::addon_publication_fs::PUBLICATION_MARKER_FILE),
+            b"owned",
+        )
+        .expect("publication marker");
+        let path = nested.join("episode.nfo");
+
+        write_atomically(&path, b"<episodedetails/>").expect("atomic NFO write");
+
+        assert_eq!(
+            crate::repositories::addon_publication_fs::atomic_write_temporary_directory(&path),
+            temp.path()
+        );
+        assert_eq!(fs::read(path).expect("published NFO"), b"<episodedetails/>");
+    }
 
     #[test]
     fn full_episode_metadata_round_trips() {

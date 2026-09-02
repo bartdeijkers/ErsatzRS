@@ -642,6 +642,170 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
         })
     }
 
+    async fn ensure_publication_verification_scan(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        list_id: EntityId,
+    ) -> Result<ManagedLibraryOperation> {
+        let now = encode_datetime(Utc::now());
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        if !claim_is_current(&mut tx, claim).await? {
+            return Err(RepositoryError::Conflict(
+                "the managed-library lease changed before publication verification".to_owned(),
+            ));
+        }
+        let existing = sqlx::query(
+            r#"SELECT "operation".*
+               FROM "AddonMediaListPublicationJob" AS "job"
+               JOIN "ManagedLibraryOperation" AS "operation"
+                 ON "operation"."Id" = "job"."ChildScanOperationId"
+               WHERE "job"."OperationId" = ? AND "job"."AddonMediaListId" = ?
+                 AND "job"."Phase" = ?"#,
+        )
+        .bind(claim.operation.id)
+        .bind(list_id)
+        .bind(encode_enum(AddonMediaListPublicationPhase::Verifying))
+        .fetch_optional(&mut *tx)
+        .await
+        .repository()?;
+        if let Some(row) = existing {
+            let deep_scan = decode_bool_column(&row, "DeepScan")?;
+            let mut operation = decode_operation_row(&row)?;
+            if !deep_scan {
+                if operation.state != ManagedLibraryOperationState::Completed {
+                    let updated = sqlx::query(
+                        r#"UPDATE "ManagedLibraryOperation"
+                           SET "State" = ?, "AttemptCount" = "AttemptCount" + 1,
+                               "LeaseOwner" = ?,
+                               "LeaseExpiresAt" = (
+                                   SELECT "LeaseExpiresAt" FROM "ManagedLibraryLease"
+                                   WHERE "OperationId" = ?
+                               ),
+                               "HeartbeatAt" = ?, "DiagnosticCode" = NULL,
+                               "Diagnostic" = NULL, "CompletedAt" = NULL, "UpdatedAt" = ?
+                           WHERE "Id" = ? AND "ParentOperationId" = ? AND "OwnerToken" = ?"#,
+                    )
+                    .bind(encode_enum(ManagedLibraryOperationState::Running))
+                    .bind(&claim.lease_owner)
+                    .bind(claim.operation.id)
+                    .bind(&now)
+                    .bind(&now)
+                    .bind(operation.id)
+                    .bind(claim.operation.id)
+                    .bind(&claim.operation.owner_token)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                    if updated.rows_affected() != 1 {
+                        return Err(RepositoryError::Conflict(
+                            "the publication verification scan changed before recovery".to_owned(),
+                        ));
+                    }
+                    operation.state = ManagedLibraryOperationState::Running;
+                    operation.attempt_count = operation.attempt_count.saturating_add(1);
+                }
+                tx.commit().await.repository()?;
+                return Ok(operation);
+            }
+            if operation.state != ManagedLibraryOperationState::Completed {
+                return Err(RepositoryError::Conflict(
+                    "the original publication scan has not drained before verification".to_owned(),
+                ));
+            }
+        }
+
+        let result = sqlx::query(
+            r#"INSERT INTO "ManagedLibraryOperation" (
+                   "LibraryId", "ParentOperationId", "OwnerToken", "Kind", "State",
+                   "Provider", "DeepScan", "AttemptCount", "LeaseOwner", "LeaseExpiresAt",
+                   "HeartbeatAt", "CreatedAt", "UpdatedAt"
+               ) VALUES (?, ?, ?, ?, ?, ?, 0, 1, ?,
+                         (SELECT "LeaseExpiresAt" FROM "ManagedLibraryLease" WHERE "OperationId" = ?),
+                         ?, ?, ?)"#,
+        )
+        .bind(claim.operation.library_id)
+        .bind(claim.operation.id)
+        .bind(&claim.operation.owner_token)
+        .bind(encode_enum(ManagedLibraryOperationKind::PublicationChildScan))
+        .bind(encode_enum(ManagedLibraryOperationState::Running))
+        .bind(encode_enum(MediaSourceKind::Local))
+        .bind(&claim.lease_owner)
+        .bind(claim.operation.id)
+        .bind(&now)
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        let child_id = inserted_id(&mut tx, result).await.repository()?;
+        let updated = sqlx::query(
+            r#"UPDATE "AddonMediaListPublicationJob"
+               SET "ChildScanOperationId" = ?, "UpdatedAt" = ?
+               WHERE "OperationId" = ? AND "AddonMediaListId" = ? AND "Phase" = ?"#,
+        )
+        .bind(child_id)
+        .bind(&now)
+        .bind(claim.operation.id)
+        .bind(list_id)
+        .bind(encode_enum(AddonMediaListPublicationPhase::Verifying))
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the publication phase changed before verification scan admission".to_owned(),
+            ));
+        }
+        tx.commit().await.repository()?;
+        Ok(ManagedLibraryOperation {
+            id: child_id,
+            library_id: claim.operation.library_id,
+            parent_operation_id: Some(claim.operation.id),
+            owner_token: claim.operation.owner_token.clone(),
+            kind: ManagedLibraryOperationKind::PublicationChildScan,
+            state: ManagedLibraryOperationState::Running,
+            scan: Some(ManagedLibraryScanSpec {
+                provider: MediaSourceKind::Local,
+                show_id: None,
+                deep_scan: false,
+            }),
+            attempt_count: 1,
+            next_eligible_at: None,
+        })
+    }
+
+    async fn begin_publication_verification(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        expected: AddonMediaListPublicationPhase,
+        outcome: AddonMediaListPublicationOutcome,
+    ) -> Result<bool> {
+        let now = encode_datetime(Utc::now());
+        let result = sqlx::query(
+            r#"UPDATE "AddonMediaListPublicationJob"
+               SET "Phase" = ?, "Outcome" = ?, "UpdatedAt" = ?
+               WHERE "OperationId" = ? AND "Phase" = ?
+                 AND EXISTS (
+                     SELECT 1 FROM "ManagedLibraryLease"
+                     WHERE "OperationId" = ? AND "OwnerToken" = ? AND "LeaseOwner" = ?
+                       AND "LeaseExpiresAt" > ?
+                 )"#,
+        )
+        .bind(encode_enum(AddonMediaListPublicationPhase::Verifying))
+        .bind(encode_enum(outcome))
+        .bind(&now)
+        .bind(claim.operation.id)
+        .bind(encode_enum(expected))
+        .bind(claim.operation.id)
+        .bind(&claim.operation.owner_token)
+        .bind(&claim.lease_owner)
+        .bind(&now)
+        .execute(&self.0)
+        .await
+        .repository()?;
+        Ok(result.rows_affected() == 1)
+    }
+
     async fn record_publication_failure(
         &self,
         claim: &ManagedLibraryOperationClaim,
@@ -1025,7 +1189,11 @@ mod tests {
     use super::*;
 
     async fn pool_with_library() -> DbPool {
-        let pool = crate::db::init("sqlite::memory:")
+        pool_with_library_at("sqlite::memory:").await
+    }
+
+    async fn pool_with_library_at(database_url: &str) -> DbPool {
+        let pool = crate::db::init(database_url)
             .await
             .expect("migrate operation test database");
         sqlx::query(r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#)
@@ -1401,5 +1569,120 @@ mod tests {
             .complete_operation(&child_claim)
             .await
             .expect("complete child through parent lease"));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn publication_verification_scan_is_distinct_and_resumes_after_reclaim() {
+        let database_directory = tempfile::tempdir().expect("verification database directory");
+        let database_path = database_directory.path().join("verification.db");
+        let database_url = format!("sqlite://{}?mode=rwc", database_path.display());
+        let pool = pool_with_library_at(&database_url).await;
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+                   "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+               ) VALUES ('org.example.verify', '1.0.0', 1, 'package', 'content', '{}',
+                         'addons/verify', '2026-09-02T00:00:00Z', '2026-09-02T00:00:00Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed installation");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+                   "DraftRevision", "PublishedRevision"
+               ) VALUES (1, 'org.example.verify', 'list', 'https://example.invalid/list',
+                         'List', 1, 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed list");
+        let repository = SqliteManagedLibraryOperationRepository(pool);
+        let queued = repository
+            .enqueue_publication(1, 1, 1, 1)
+            .await
+            .expect("enqueue publication");
+        let started = Utc::now();
+        let claim = repository
+            .claim_next(started)
+            .await
+            .expect("claim publication")
+            .expect("publication claim");
+        assert!(repository
+            .transition_publication(
+                &claim,
+                AddonMediaListPublicationPhase::AwaitingLease,
+                AddonMediaListPublicationPhase::Scanning,
+            )
+            .await
+            .expect("enter initial scan"));
+        let initial = repository
+            .ensure_publication_child_scan(&claim, 1)
+            .await
+            .expect("create initial child scan");
+        let initial_claim = ManagedLibraryOperationClaim {
+            operation: initial.clone(),
+            lease_owner: claim.lease_owner.clone(),
+        };
+        assert!(repository
+            .complete_operation(&initial_claim)
+            .await
+            .expect("complete initial scan"));
+        assert!(repository
+            .begin_publication_verification(
+                &claim,
+                AddonMediaListPublicationPhase::Scanning,
+                AddonMediaListPublicationOutcome::Published,
+            )
+            .await
+            .expect("enter verification"));
+        let verification = repository
+            .ensure_publication_verification_scan(&claim, 1)
+            .await
+            .expect("create verification scan");
+        assert_ne!(verification.id, initial.id);
+        assert_eq!(verification.parent_operation_id, Some(claim.operation.id));
+        assert_eq!(
+            verification.scan,
+            Some(ManagedLibraryScanSpec {
+                provider: MediaSourceKind::Local,
+                show_id: None,
+                deep_scan: false,
+            })
+        );
+
+        repository.0.close().await;
+        drop(repository);
+        let repository = SqliteManagedLibraryOperationRepository(
+            crate::db::init(&database_url)
+                .await
+                .expect("reopen verification database"),
+        );
+        let reclaimed = repository
+            .claim_operation(queued.operation.id, started + Duration::seconds(91))
+            .await
+            .expect("reclaim publication")
+            .expect("expired parent is reclaimable");
+        let resumed = repository
+            .ensure_publication_verification_scan(&reclaimed, 1)
+            .await
+            .expect("resume verification scan");
+        assert_eq!(resumed.id, verification.id);
+        assert_eq!(resumed.attempt_count, 2);
+        let resumed_claim = ManagedLibraryOperationClaim {
+            operation: resumed,
+            lease_owner: reclaimed.lease_owner.clone(),
+        };
+        assert!(repository
+            .complete_operation(&resumed_claim)
+            .await
+            .expect("complete verification scan"));
+        let completed = repository
+            .ensure_publication_verification_scan(&reclaimed, 1)
+            .await
+            .expect("reuse completed verification scan");
+        assert_eq!(completed.id, verification.id);
+        assert_eq!(completed.state, ManagedLibraryOperationState::Completed);
     }
 }

@@ -185,6 +185,16 @@ impl AddonMediaListImportCoordinator {
                WHERE "list"."AutoRefresh" = 1
                  AND "addon"."Enabled" = 1
                  AND ("list"."LastUpdate" IS NULL OR "list"."LastUpdate" <= ?)
+                 AND ("list"."PublicationJournalJson" IS NULL
+                      OR TRIM("list"."PublicationJournalJson") = '')
+                 AND NOT EXISTS (
+                     SELECT 1
+                     FROM "AddonMediaListPublicationJob" AS "publication"
+                     JOIN "ManagedLibraryOperation" AS "operation"
+                       ON "operation"."Id" = "publication"."OperationId"
+                     WHERE "publication"."AddonMediaListId" = "list"."Id"
+                       AND "operation"."State" IN (?, ?, ?)
+                 )
                  AND NOT EXISTS (
                      SELECT 1 FROM "AddonMediaListImportJob" AS "job"
                      WHERE "job"."AddonMediaListId" = "list"."Id"
@@ -193,6 +203,15 @@ impl AddonMediaListImportCoordinator {
                ORDER BY "list"."Id""#,
         )
         .bind(&cutoff)
+        .bind(encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::Queued,
+        ))
+        .bind(encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::Running,
+        ))
+        .bind(encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+        ))
         .bind(encode_enum(AddonMediaListImportState::Queued))
         .bind(encode_enum(AddonMediaListImportState::Discovering))
         .bind(encode_enum(AddonMediaListImportState::Verifying))
@@ -261,14 +280,17 @@ impl AddonMediaListImportCoordinator {
                     "add-on media list {conflict} already uses this provider and source"
                 )));
             }
-            sqlx::query(r#"SELECT "Id", "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#)
-                .bind(list_id)
-                .fetch_optional(&mut *tx)
-                .await
-                .repository()?
+            sqlx::query(
+                r#"SELECT "Id", "ReviewState", "PublicationJournalJson"
+                   FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .repository()?
         } else {
             sqlx::query(
-                r#"SELECT "Id", "ReviewState" FROM "AddonMediaList"
+                r#"SELECT "Id", "ReviewState", "PublicationJournalJson" FROM "AddonMediaList"
                    WHERE "AddonId" = ? AND "SourceUrl" = ?
                    ORDER BY "Id" LIMIT 1"#,
             )
@@ -281,25 +303,80 @@ impl AddonMediaListImportCoordinator {
         let list_id = if let Some(row) = existing {
             let id: EntityId = row.try_get("Id").repository()?;
             let review_state: i32 = row.try_get("ReviewState").repository()?;
-            if review_state == 3 {
+            let publication_journal: Option<String> =
+                row.try_get("PublicationJournalJson").repository()?;
+            let active_publication: bool = sqlx::query_scalar(
+                r#"SELECT EXISTS (
+                       SELECT 1
+                       FROM "AddonMediaListPublicationJob" AS "job"
+                       JOIN "ManagedLibraryOperation" AS "operation"
+                         ON "operation"."Id" = "job"."OperationId"
+                       WHERE "job"."AddonMediaListId" = ?
+                         AND "operation"."State" IN (?, ?, ?)
+                   )"#,
+            )
+            .bind(id)
+            .bind(encode_enum(
+                ersatzrs_domain::ManagedLibraryOperationState::Queued,
+            ))
+            .bind(encode_enum(
+                ersatzrs_domain::ManagedLibraryOperationState::Running,
+            ))
+            .bind(encode_enum(
+                ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+            ))
+            .fetch_one(&mut *tx)
+            .await
+            .repository()?;
+            if review_state == 3
+                || active_publication
+                || publication_journal
+                    .as_deref()
+                    .is_some_and(|journal| !journal.trim().is_empty())
+            {
                 return Err(RepositoryError::Conflict(
                     "the add-on media list is being published; wait for publication to finish"
                         .to_owned(),
                 ));
             }
-            sqlx::query(
+            let updated = sqlx::query(
                 r#"UPDATE "AddonMediaList"
                    SET "AddonId" = ?, "ContentKindOverride" = ?, "DetailImportPolicy" = ?,
                        "LastError" = NULL, "DraftRevision" = "DraftRevision" + 1
-                   WHERE "Id" = ?"#,
+                   WHERE "Id" = ? AND "ReviewState" <> 3
+                     AND ("PublicationJournalJson" IS NULL
+                          OR TRIM("PublicationJournalJson") = '')
+                     AND NOT EXISTS (
+                         SELECT 1
+                         FROM "AddonMediaListPublicationJob" AS "job"
+                         JOIN "ManagedLibraryOperation" AS "operation"
+                           ON "operation"."Id" = "job"."OperationId"
+                         WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                           AND "operation"."State" IN (?, ?, ?)
+                     )"#,
             )
             .bind(addon_id)
             .bind(encode_enum(content_kind_override))
             .bind(encode_enum(detail_policy))
             .bind(id)
+            .bind(encode_enum(
+                ersatzrs_domain::ManagedLibraryOperationState::Queued,
+            ))
+            .bind(encode_enum(
+                ersatzrs_domain::ManagedLibraryOperationState::Running,
+            ))
+            .bind(encode_enum(
+                ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+            ))
             .execute(&mut *tx)
             .await
             .repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the add-on media list is being published; wait for publication to finish"
+                        .to_owned(),
+                ));
+            }
             id
         } else {
             let host = Url::parse(&context.source_url)
@@ -889,12 +966,40 @@ impl AddonMediaListImportCoordinator {
                 "another imported list already owns this provider identity".to_owned(),
             ));
         }
-        sqlx::query(r#"UPDATE "AddonMediaList" SET "ProviderId" = ? WHERE "Id" = ?"#)
-            .bind(&enumerated.provider_id)
-            .bind(job.list_id)
-            .execute(&self.pool)
-            .await
-            .repository()?;
+        let promoted = sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "ProviderId" = ?
+               WHERE "Id" = ? AND "ReviewState" <> 3
+                 AND ("PublicationJournalJson" IS NULL
+                      OR TRIM("PublicationJournalJson") = '')
+                 AND NOT EXISTS (
+                     SELECT 1
+                     FROM "AddonMediaListPublicationJob" AS "publication"
+                     JOIN "ManagedLibraryOperation" AS "operation"
+                       ON "operation"."Id" = "publication"."OperationId"
+                     WHERE "publication"."AddonMediaListId" = "AddonMediaList"."Id"
+                       AND "operation"."State" IN (?, ?, ?)
+                 )"#,
+        )
+        .bind(&enumerated.provider_id)
+        .bind(job.list_id)
+        .bind(encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::Queued,
+        ))
+        .bind(encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::Running,
+        ))
+        .bind(encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+        ))
+        .execute(&self.pool)
+        .await
+        .repository()?;
+        if promoted.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the add-on media list is being published; wait for publication to finish"
+                    .to_owned(),
+            ));
+        }
 
         let chapter_input = row
             .try_get::<Option<String>, _>("ChapterInput")
@@ -2432,6 +2537,147 @@ mod tests {
                 )
                 .await
                 .expect("queue overview import")
+        }
+
+        #[tokio::test]
+        async fn queue_import_defers_while_publication_is_verifying() {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let source_url = "https://provider.example.test/verifying";
+            let list_id = queue(
+                &coordinator,
+                source_url,
+                AddonMediaListDetailPolicy::ManualOnly,
+            )
+            .await;
+            sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "ReviewState" = 3,
+                       "PublicationJournalJson" = '{"phase":"Verifying"}'
+                   WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .execute(&pool)
+            .await
+            .expect("checkpoint verifying publication");
+            let draft_before: i32 = sqlx::query_scalar(
+                r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("draft before blocked queue");
+            let jobs_before: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListImportJob"
+                   WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("jobs before blocked queue");
+
+            let error = coordinator
+                .queue_import(
+                    "org.example.fixture",
+                    &context(source_url),
+                    None,
+                    AddonMediaListContentKind::TelevisionEpisode,
+                    AddonMediaListDetailPolicy::Automatic,
+                    Some(list_id),
+                )
+                .await
+                .expect_err("publication verification freezes overview queue admission");
+            assert!(error.to_string().contains("being published"));
+            assert_eq!(
+                sqlx::query_scalar::<_, i32>(
+                    r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#,
+                )
+                .bind(list_id)
+                .fetch_one(&pool)
+                .await
+                .expect("unchanged draft after blocked queue"),
+                draft_before
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    r#"SELECT COUNT(*) FROM "AddonMediaListImportJob"
+                       WHERE "AddonMediaListId" = ?"#,
+                )
+                .bind(list_id)
+                .fetch_one(&pool)
+                .await
+                .expect("unchanged jobs after blocked queue"),
+                jobs_before
+            );
+        }
+
+        #[tokio::test]
+        async fn completed_overview_promotion_defers_at_a_verifying_checkpoint() {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let source_url = "https://provider.example.test/promotion-race";
+            let list_id = queue(
+                &coordinator,
+                source_url,
+                AddonMediaListDetailPolicy::ManualOnly,
+            )
+            .await;
+            let job = coordinator
+                .claim_import_job()
+                .await
+                .expect("claim overview")
+                .expect("queued overview");
+            sqlx::query(
+                r#"CREATE TRIGGER "CheckpointPublicationBeforeOverviewPromotion"
+                   AFTER UPDATE OF "OverviewComplete" ON "AddonMediaListImportJob"
+                   WHEN NEW."OverviewComplete" = 1
+                   BEGIN
+                     UPDATE "AddonMediaList"
+                     SET "ReviewState" = 3,
+                         "PublicationJournalJson" = '{"phase":"Verifying"}'
+                     WHERE "Id" = NEW."AddonMediaListId";
+                   END"#,
+            )
+            .execute(&pool)
+            .await
+            .expect("install promotion checkpoint trigger");
+
+            let error = coordinator
+                .commit_import_page(
+                    &job,
+                    MediaListDiscoveryPage {
+                        complete: true,
+                        next_cursor: None,
+                        total_hint: Some(1),
+                        revision_token: Some("revision-1".to_owned()),
+                        records: vec![
+                            list_record("provider/promoted"),
+                            item_record("episode:1", 0, "Overview plot"),
+                        ],
+                    },
+                )
+                .await
+                .expect_err("publication verification freezes overview promotion");
+            assert!(error.to_string().contains("being published"));
+            let persisted = sqlx::query_as::<_, (String, i32, i32)>(
+                r#"SELECT "ProviderId", "ItemCount", "DraftRevision"
+                   FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("load list after blocked promotion");
+            assert!(persisted.0.starts_with("pending:"));
+            assert_eq!((persisted.1, persisted.2), (0, 0));
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    r#"SELECT COUNT(*) FROM "AddonMediaListItem"
+                       WHERE "AddonMediaListId" = ?"#,
+                )
+                .bind(list_id)
+                .fetch_one(&pool)
+                .await
+                .expect("count unpromoted items"),
+                0
+            );
         }
 
         async fn complete_single_page(

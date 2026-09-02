@@ -555,6 +555,8 @@ db_enum!(AddonMediaListPublicationPhase {
     5 => AddonMediaListPublicationPhase::RestoringProjection,
     6 => AddonMediaListPublicationPhase::Reconciling,
     7 => AddonMediaListPublicationPhase::Complete,
+    8 => AddonMediaListPublicationPhase::Verifying,
+    9 => AddonMediaListPublicationPhase::CleaningUp,
 });
 db_enum!(AddonMediaListPublicationOutcome {
     0 => AddonMediaListPublicationOutcome::Published,

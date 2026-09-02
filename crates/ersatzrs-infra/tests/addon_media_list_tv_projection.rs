@@ -7,17 +7,20 @@
 
 mod common;
 
-use std::{collections::BTreeSet, fs, path::Path};
+use std::{collections::BTreeSet, fs, path::Path, path::PathBuf};
 
 use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListNfoMetadata,
-    AddonMediaListNfoPerson, AddonMediaListPublicationEnqueue, AddonMediaListRepository,
-    ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, TelevisionRepository,
+    AddonMediaListNfoPerson, AddonMediaListPublicationContinuation,
+    AddonMediaListPublicationEnqueue, AddonMediaListRepository, ManagedLibraryOperationClaim,
+    ManagedLibraryOperationRepository, TelevisionRepository,
 };
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListPresentationKind, AddonMediaListPublicationPhase,
+    AddonMediaListContentKind, AddonMediaListPresentationKind, AddonMediaListPublicationOutcome,
+    AddonMediaListPublicationPhase,
 };
+use ersatzrs_infra::addon_media_list_sync::AddonMediaListSynchronizer;
 use ersatzrs_infra::repositories::{
     make_repositories, project_one_pending_detail_batch, Repositories,
 };
@@ -1638,7 +1641,6 @@ async fn durable_publication_fences_stale_workers_at_stage_and_commit() {
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
     let (enqueued, stale, current) = claim_and_reclaim_publication(&repositories).await;
-
     assert_stale_publication_claim_is_fenced(&repositories, &enqueued, &stale, &current).await;
 
     repositories
@@ -1660,6 +1662,219 @@ async fn durable_publication_fences_stale_workers_at_stage_and_commit() {
         )
         .await,
         enqueued.job.target_published_revision
+    );
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        3,
+        "a durable commit remains publishing until cleanup finalizes"
+    );
+    let journal_json = scalar::<String>(
+        &pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode retained publication journal");
+    let backup = journal["backup_folder"]
+        .as_str()
+        .map(PathBuf::from)
+        .expect("journal backup folder");
+    assert!(backup.is_dir());
+
+    assert!(repositories
+        .managed_library_operations
+        .begin_publication_verification(
+            &current,
+            AddonMediaListPublicationPhase::Staging,
+            AddonMediaListPublicationOutcome::Published,
+        )
+        .await
+        .expect("enter publication verification"));
+    repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::Published,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("verify the committed revision");
+    assert!(repositories
+        .managed_library_operations
+        .transition_publication(
+            &current,
+            AddonMediaListPublicationPhase::Verifying,
+            AddonMediaListPublicationPhase::CleaningUp,
+        )
+        .await
+        .expect("enter publication cleanup"));
+    finalize_published_revision(&repositories, &enqueued, &current).await;
+    assert_active_publication_handoff_blocks_delete(&repositories).await;
+    finalize_published_revision(&repositories, &enqueued, &current).await;
+    assert!(!backup.exists());
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaList"
+               WHERE "Id" = 1 AND "PublicationJournalJson" IS NOT NULL"#,
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        2,
+        "successful cleanup publishes atomically with journal removal"
+    );
+}
+
+#[tokio::test]
+async fn journal_less_legacy_commit_is_terminal_only_for_the_current_exact_claim() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let (enqueued, stale, current) = claim_and_reclaim_publication(&repositories).await;
+    assert_stale_publication_claim_is_fenced(&repositories, &enqueued, &stale, &current).await;
+
+    let continuation = repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("commit the durable publication");
+    assert_eq!(
+        continuation,
+        AddonMediaListPublicationContinuation::VerificationRequired
+    );
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "ReviewState" = 2, "PublicationJournalJson" = NULL,
+               "PublicationStartedAt" = NULL
+           WHERE "Id" = 1"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("simulate AMM-J-01 terminal commit cleanup");
+
+    let stale_error = repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &stale.operation.owner_token,
+            &stale.lease_owner,
+        )
+        .await
+        .expect_err("a stale claimant cannot adopt the terminal legacy state");
+    assert!(stale_error
+        .to_string()
+        .contains("lease is no longer current"));
+    let continuation = repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("the current claimant adopts the terminal legacy state");
+    assert_eq!(
+        continuation,
+        AddonMediaListPublicationContinuation::CompletedLegacy
+    );
+}
+
+#[tokio::test]
+async fn journal_less_legacy_reconcile_is_terminal_only_at_the_prior_revision() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let (enqueued, _stale, current) = claim_and_reclaim_publication(&repositories).await;
+    repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            enqueued.job.saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("stage publication recovery fixture");
+    repositories
+        .addon_media_lists
+        .restore_staged_publication_revision(
+            LIST_ID,
+            "injected legacy recovery",
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("restore the prior files and snapshot");
+    let continuation = repositories
+        .addon_media_lists
+        .reconcile_restored_publication_revision(
+            LIST_ID,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("reconcile the restored projection");
+    assert_eq!(
+        continuation,
+        AddonMediaListPublicationContinuation::VerificationRequired
+    );
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "ReviewState" = 1, "PublicationJournalJson" = NULL,
+               "PublicationStartedAt" = NULL
+           WHERE "Id" = 1"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("simulate AMM-J-01 terminal reconcile cleanup");
+
+    let continuation = repositories
+        .addon_media_lists
+        .reconcile_restored_publication_revision(
+            LIST_ID,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("adopt the exact terminal legacy recovery state");
+    assert_eq!(
+        continuation,
+        AddonMediaListPublicationContinuation::CompletedLegacy
     );
 }
 
@@ -1955,7 +2170,7 @@ async fn durable_publication_reconcile_fences_a_lease_lost_after_projection() {
         )
         .await
         .expect_err("the final reconciliation must reject a lease lost after projection");
-    assert!(error.to_string().contains("changed before reconciliation"));
+    assert!(error.to_string().contains("lease is no longer current"));
     sqlx::query(r#"DROP TRIGGER "ExpirePublicationLeaseDuringReconcile""#)
         .execute(&pool)
         .await
@@ -1987,6 +2202,75 @@ async fn durable_publication_reconcile_fences_a_lease_lost_after_projection() {
         )
         .await
         .expect("the new claimant finishes reconciliation");
+    assert!(repositories
+        .managed_library_operations
+        .begin_publication_verification(
+            &reclaimed,
+            AddonMediaListPublicationPhase::Staging,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+        )
+        .await
+        .expect("enter restored revision verification"));
+    repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &reclaimed.operation.owner_token,
+            &reclaimed.lease_owner,
+        )
+        .await
+        .expect("verify the restored revision");
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        3,
+        "restored durable work remains publishing through verification"
+    );
+    assert!(repositories
+        .managed_library_operations
+        .transition_publication(
+            &reclaimed,
+            AddonMediaListPublicationPhase::Verifying,
+            AddonMediaListPublicationPhase::CleaningUp,
+        )
+        .await
+        .expect("enter restored revision cleanup"));
+    repositories
+        .addon_media_lists
+        .finalize_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &reclaimed.operation.owner_token,
+            &reclaimed.lease_owner,
+        )
+        .await
+        .expect("finalize the restored revision");
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaList"
+               WHERE "Id" = 1 AND "PublicationJournalJson" IS NOT NULL"#,
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        1,
+        "restored cleanup atomically returns the prior draft to review"
+    );
 }
 
 async fn claim_and_reclaim_publication(
@@ -2025,6 +2309,1264 @@ async fn claim_and_reclaim_publication(
         .expect("expired publication is reclaimable");
 
     (enqueued, stale, current)
+}
+
+async fn finalize_published_revision(
+    repositories: &Repositories,
+    enqueued: &AddonMediaListPublicationEnqueue,
+    claim: &ManagedLibraryOperationClaim,
+) {
+    repositories
+        .addon_media_lists
+        .finalize_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::Published,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("finalize verified publication");
+}
+
+async fn assert_active_publication_handoff_blocks_delete(repositories: &Repositories) {
+    let error = repositories
+        .addon_media_lists
+        .delete(LIST_ID)
+        .await
+        .expect_err("the active operation owns the terminal handoff window");
+    assert!(error.to_string().contains("being published"));
+}
+
+struct VerifiablePublication {
+    pool: SqlitePool,
+    directory: TempDir,
+    repositories: Repositories,
+    enqueued: AddonMediaListPublicationEnqueue,
+    claim: ManagedLibraryOperationClaim,
+}
+
+async fn configure_verifiable_tv_publication(pool: &SqlitePool, repositories: &Repositories) {
+    sqlx::query(r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES ('System', 1)"#)
+        .execute(pool)
+        .await
+        .expect("seed system playlist group");
+    repositories
+        .addon_media_lists
+        .request_presentation(
+            LIST_ID,
+            AddonMediaListPresentationKind::TelevisionShow,
+            None,
+        )
+        .await
+        .expect("request television presentation");
+    repositories
+        .addon_media_lists
+        .update_settings(
+            LIST_ID,
+            true,
+            true,
+            AddonMediaListContentKind::TelevisionEpisode,
+            "",
+        )
+        .await
+        .expect("enable generated playlist");
+    let form = repositories
+        .addon_media_lists
+        .get_show_nfo(LIST_ID)
+        .await
+        .expect("load list metadata");
+    repositories
+        .addon_media_lists
+        .upload_artwork(
+            LIST_ID,
+            None,
+            AddonMediaListArtworkRole::Poster,
+            "image/png",
+            b"\x89PNG\r\n\x1a\npublication verifier poster",
+            &form.etag,
+        )
+        .await
+        .expect("upload parent artwork");
+}
+
+async fn prepare_verifiable_tv_publication() -> VerifiablePublication {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    configure_verifiable_tv_publication(&pool, &repositories).await;
+    let saved_revision = scalar::<i32>(
+        &pool,
+        r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let published_revision = scalar::<i32>(
+        &pool,
+        r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let enqueued = repositories
+        .managed_library_operations
+        .enqueue_publication(
+            LIST_ID,
+            1,
+            saved_revision,
+            published_revision.saturating_add(1),
+        )
+        .await
+        .expect("enqueue exact publication revision");
+    let claim = repositories
+        .managed_library_operations
+        .claim_operation(enqueued.operation.id, Utc::now())
+        .await
+        .expect("claim publication")
+        .expect("publication is claimable");
+    assert!(repositories
+        .managed_library_operations
+        .transition_publication(
+            &claim,
+            AddonMediaListPublicationPhase::AwaitingLease,
+            AddonMediaListPublicationPhase::Staging,
+        )
+        .await
+        .expect("enter staging"));
+    repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("stage exact publication");
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListArtworkMaterialization" (
+               "AddonMediaListId", "AddonMediaListItemId", "ScopeItemId", "Role",
+               "Source", "FileName", "Sha256", "PublishedRevision"
+           ) VALUES (1, 10, 10, 3, 'https://example.invalid/item-thumb.jpg',
+                     'S01E01.jpg',
+                     'e32e48ce92baa22a98f435f806b65ca40c52a6ccd4acf689cb107bcb29925989', 1)"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("retain an item-scoped materialization into the candidate revision");
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .commit_staged_publication_revision(
+                LIST_ID,
+                enqueued.job.target_published_revision,
+                enqueued.operation.id,
+                enqueued.job.generation,
+                &claim.operation.owner_token,
+                &claim.lease_owner,
+            )
+            .await
+            .expect("commit publication candidate"),
+        AddonMediaListPublicationContinuation::VerificationRequired
+    );
+    assert!(repositories
+        .managed_library_operations
+        .begin_publication_verification(
+            &claim,
+            AddonMediaListPublicationPhase::Staging,
+            AddonMediaListPublicationOutcome::Published,
+        )
+        .await
+        .expect("enter candidate verification"));
+    VerifiablePublication {
+        pool,
+        directory,
+        repositories,
+        enqueued,
+        claim,
+    }
+}
+
+async fn verify_publication_candidate(
+    fixture: &VerifiablePublication,
+) -> ersatzrs_core::repositories::Result<()> {
+    fixture
+        .repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::Published,
+            fixture.enqueued.operation.id,
+            fixture.enqueued.job.generation,
+            &fixture.claim.operation.owner_token,
+            &fixture.claim.lease_owner,
+        )
+        .await
+}
+
+#[tokio::test]
+async fn journal_present_legacy_commit_bootstraps_and_seals_before_verification() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    let journal_json = scalar::<String>(
+        &fixture.pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let mut journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode current publication journal");
+    let backup = PathBuf::from(journal["backup_folder"].as_str().expect("backup path"));
+    for field in [
+        "failed_folder",
+        "previous_published_revision",
+        "target_published_revision",
+        "target_database",
+    ] {
+        journal[field] = serde_json::Value::Null;
+    }
+    fs::remove_file(fixture.directory.path().join(".ersatzrs-publication.json"))
+        .expect("remove candidate marker from the legacy fixture");
+    fs::remove_file(backup.join(".ersatzrs-publication.json"))
+        .expect("remove backup marker from the legacy fixture");
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "PublicationJournalJson" = ? WHERE "Id" = 1"#)
+        .bind(serde_json::to_string(&journal).expect("encode legacy publication journal"))
+        .execute(&fixture.pool)
+        .await
+        .expect("persist the pre-verification journal shape");
+
+    verify_publication_candidate(&fixture)
+        .await
+        .expect("legacy committed state must bootstrap, seal, and verify");
+    let marker: serde_json::Value = serde_json::from_slice(
+        &fs::read(fixture.directory.path().join(".ersatzrs-publication.json"))
+            .expect("read adopted candidate marker"),
+    )
+    .expect("decode adopted candidate marker");
+    assert_eq!(marker["state"], "complete");
+}
+
+#[tokio::test]
+async fn journal_present_legacy_restore_verifies_while_still_publishing() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let (enqueued, stale, claim) = claim_and_reclaim_publication(&repositories).await;
+    assert_stale_publication_claim_is_fenced(&repositories, &enqueued, &stale, &claim).await;
+    repositories
+        .addon_media_lists
+        .restore_staged_publication_revision(
+            LIST_ID,
+            "legacy restored fixture",
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("restore legacy publication snapshot");
+    repositories
+        .addon_media_lists
+        .reconcile_restored_publication_revision(
+            LIST_ID,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("reconcile legacy restored snapshot");
+    assert!(repositories
+        .managed_library_operations
+        .begin_publication_verification(
+            &claim,
+            AddonMediaListPublicationPhase::Staging,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+        )
+        .await
+        .expect("enter legacy restored verification"));
+    let journal_json = scalar::<String>(
+        &pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let mut journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode restored publication journal");
+    for field in [
+        "failed_folder",
+        "previous_published_revision",
+        "target_published_revision",
+    ] {
+        journal[field] = serde_json::Value::Null;
+    }
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "PublicationJournalJson" = ? WHERE "Id" = 1"#)
+        .bind(serde_json::to_string(&journal).expect("encode legacy restored journal"))
+        .execute(&pool)
+        .await
+        .expect("persist legacy restored journal shape");
+
+    repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("legacy restored state must bootstrap and verify");
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        3
+    );
+}
+
+#[tokio::test]
+async fn cleanup_revalidates_database_and_retains_backup_after_late_mutation() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    verify_publication_candidate(&fixture)
+        .await
+        .expect("verify intact candidate");
+    assert!(fixture
+        .repositories
+        .managed_library_operations
+        .transition_publication(
+            &fixture.claim,
+            AddonMediaListPublicationPhase::Verifying,
+            AddonMediaListPublicationPhase::CleaningUp,
+        )
+        .await
+        .expect("enter publication cleanup"));
+    let journal_json = scalar::<String>(
+        &fixture.pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode publication journal");
+    let backup = PathBuf::from(journal["backup_folder"].as_str().expect("backup path"));
+    sqlx::query(r#"DELETE FROM "AddonMediaListItemEpisode" WHERE "AddonMediaListItemId" = 10"#)
+        .execute(&fixture.pool)
+        .await
+        .expect("mutate projection after verification");
+    let error = fixture
+        .repositories
+        .addon_media_lists
+        .finalize_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::Published,
+            fixture.enqueued.operation.id,
+            fixture.enqueued.job.generation,
+            &fixture.claim.operation.owner_token,
+            &fixture.claim.lease_owner,
+        )
+        .await
+        .expect_err("late database mutation must block destructive cleanup");
+    assert!(error.to_string().contains("convergence verification"));
+    assert!(backup.is_dir(), "failed cleanup must retain the backup");
+    assert_eq!(
+        scalar::<Option<String>>(
+            &fixture.pool,
+            r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        Some(journal_json)
+    );
+}
+
+#[tokio::test]
+async fn ordinary_match_and_detail_writers_freeze_while_publication_is_active() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "MediaItemId" = NULL WHERE "Id" = 10"#)
+        .execute(&fixture.pool)
+        .await
+        .expect("clear the matched identity");
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "LastMatch" = NULL, "DetailProjectionPendingAt" = '2000-01-01T00:00:00Z'
+           WHERE "Id" = 1"#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("prepare frozen due and detail writers");
+    fixture
+        .repositories
+        .addon_media_lists
+        .match_items(LIST_ID)
+        .await
+        .expect_err("manual matching defers during publication");
+    let synchronizer = AddonMediaListSynchronizer::new(fixture.pool.clone());
+    assert_eq!(
+        synchronizer.match_all_lists().await.expect("global match"),
+        0
+    );
+    assert_eq!(synchronizer.match_due_lists().await.expect("due match"), 0);
+    assert_eq!(
+        project_one_pending_detail_batch(&fixture.pool)
+            .await
+            .expect("detail projection lookup"),
+        None
+    );
+    assert_eq!(
+        scalar::<Option<i64>>(
+            &fixture.pool,
+            r#"SELECT "MediaItemId" FROM "AddonMediaListItem" WHERE "Id" = 10"#,
+        )
+        .await,
+        None
+    );
+}
+
+#[tokio::test]
+async fn deletion_is_rejected_before_mutating_a_verifying_publication_projection() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    let projected_before = scalar::<i64>(
+        &fixture.pool,
+        r#"SELECT COUNT(*) FROM "AddonMediaListItemEpisode""#,
+    )
+    .await;
+
+    let error = fixture
+        .repositories
+        .addon_media_lists
+        .delete(LIST_ID)
+        .await
+        .expect_err("verification owns the list and its projection");
+    assert!(error.to_string().contains("being published"));
+    assert_eq!(
+        scalar::<i64>(
+            &fixture.pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        1
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &fixture.pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaListItemEpisode""#
+        )
+        .await,
+        projected_before,
+        "the deletion guard must run before projection reconciliation"
+    );
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_a_wrong_existing_provider_match() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "MediaItemId" = 111 WHERE "Id" = 10"#)
+        .execute(&fixture.pool)
+        .await
+        .expect("inject a wrong but existing provider match");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("wrong provider identity must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_a_wrong_existing_non_remote_match() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem" SET "Kind" = 0, "MediaItemId" = 111
+           WHERE "Id" = 10"#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("inject a wrong but existing non-remote match");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("wrong non-remote target identity must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_a_kind_only_identity_change() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Kind" = 0 WHERE "Id" = 10"#)
+        .execute(&fixture.pool)
+        .await
+        .expect("change only the durable provider-item kind");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("kind-only identity drift must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+async fn seed_native_movie_match(pool: &SqlitePool) {
+    sqlx::query(r#"INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State") VALUES (500, 1, 0)"#)
+        .execute(pool)
+        .await
+        .expect("seed native movie media item");
+    sqlx::query(r#"INSERT INTO "Movie" ("Id") VALUES (500)"#)
+        .execute(pool)
+        .await
+        .expect("seed native movie");
+    sqlx::query(
+        r#"INSERT INTO "MovieMetadata" (
+               "DateAdded", "DateUpdated", "MetadataKind", "MovieId", "Title"
+           ) VALUES ('2026-08-14T00:00:00Z', '2026-08-14T00:00:00Z', 1, 500, 'Pilot')"#,
+    )
+    .execute(pool)
+    .await
+    .expect("seed native movie metadata");
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Included" = CASE WHEN "Id" = 10 THEN 1 ELSE 0 END,
+               "Kind" = CASE WHEN "Id" = 10 THEN 0 ELSE "Kind" END,
+               "MediaItemId" = CASE WHEN "Id" = 10 THEN 500 ELSE "MediaItemId" END
+           WHERE "AddonMediaListId" = 1"#,
+    )
+    .execute(pool)
+    .await
+    .expect("seed one native matched provider item");
+}
+
+#[tokio::test]
+async fn candidate_verification_accepts_a_native_movie_without_owned_projection() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    seed_native_movie_match(&pool).await;
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+        .await
+        .expect("request movie presentation");
+    let saved_revision = scalar::<i32>(
+        &pool,
+        r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let enqueued = repositories
+        .managed_library_operations
+        .enqueue_publication(LIST_ID, 1, saved_revision, 2)
+        .await
+        .expect("enqueue native movie publication");
+    let claim = repositories
+        .managed_library_operations
+        .claim_operation(enqueued.operation.id, Utc::now())
+        .await
+        .expect("claim native movie publication")
+        .expect("native movie publication is claimable");
+    assert!(repositories
+        .managed_library_operations
+        .transition_publication(
+            &claim,
+            AddonMediaListPublicationPhase::AwaitingLease,
+            AddonMediaListPublicationPhase::Staging,
+        )
+        .await
+        .expect("enter native movie staging"));
+    repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("stage native movie publication");
+    repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("commit native movie publication");
+    assert!(repositories
+        .managed_library_operations
+        .begin_publication_verification(
+            &claim,
+            AddonMediaListPublicationPhase::Staging,
+            AddonMediaListPublicationOutcome::Published,
+        )
+        .await
+        .expect("enter native movie verification"));
+    repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::Published,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("native movie direct match must verify");
+    assert_eq!(
+        scalar::<i64>(&pool, r#"SELECT COUNT(*) FROM "AddonMediaListItemMovie""#).await,
+        0,
+        "native media must never be adopted as a list-owned projection"
+    );
+    drop(directory);
+}
+
+#[tokio::test]
+async fn candidate_verification_allows_duplicate_exact_item_and_playlist_matches() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    sqlx::query(r#"INSERT INTO "PlaylistGroup" ("Name", "IsSystem") VALUES ('System', 1)"#)
+        .execute(&pool)
+        .await
+        .expect("seed system playlist group");
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "GeneratePlaylist" = 1 WHERE "Id" = 1"#)
+        .execute(&pool)
+        .await
+        .expect("enable a generated playlist");
+    let (enqueued, _stale, claim) = claim_and_reclaim_publication(&repositories).await;
+    repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            enqueued.job.saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("stage duplicate matching fixture");
+    sqlx::query(
+        r#"CREATE TRIGGER "DuplicateExactCandidateMatches"
+           AFTER UPDATE OF "LastMatch" ON "AddonMediaList"
+           BEGIN
+             UPDATE "AddonMediaListItem"
+             SET "Kind" = 0, "MediaItemId" = 110 WHERE "Id" IN (10, 11);
+           END"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("install duplicate matching fixture trigger");
+    repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("commit duplicate exact matches");
+    sqlx::query(r#"DROP TRIGGER "DuplicateExactCandidateMatches""#)
+        .execute(&pool)
+        .await
+        .expect("remove duplicate matching fixture trigger");
+    let journal_json = scalar::<String>(
+        &pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let mut journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode duplicate target fixture");
+    journal["target_database"]["playlist"]["items"][1]["media_item_id"] =
+        serde_json::json!(110_i64);
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "PublicationJournalJson" = ? WHERE "Id" = 1"#)
+        .bind(serde_json::to_string(&journal).expect("encode duplicate target fixture"))
+        .execute(&pool)
+        .await
+        .expect("record duplicate exact playlist selection");
+    sqlx::query(
+        r#"UPDATE "PlaylistItem" SET "MediaItemId" = 110
+           WHERE "PlaylistId" = (SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 1)
+             AND "Index" = 11"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("apply duplicate canonical playlist selection");
+    assert!(repositories
+        .managed_library_operations
+        .begin_publication_verification(
+            &claim,
+            AddonMediaListPublicationPhase::Staging,
+            AddonMediaListPublicationOutcome::Published,
+        )
+        .await
+        .expect("enter duplicate candidate verification"));
+    repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::Published,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("duplicate exact item and playlist matches must preserve cardinality and verify");
+}
+
+#[tokio::test]
+async fn candidate_verification_accepts_complete_item_scoped_materializations() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    verify_publication_candidate(&fixture)
+        .await
+        .expect("complete parent and item artwork materializations must verify");
+}
+
+#[tokio::test]
+async fn candidate_verification_accepts_a_file_valued_manifest_path() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(
+        r#"UPDATE "AddonMediaListLibrary" SET "ManifestPath" = ? WHERE "AddonMediaListId" = 1"#,
+    )
+    .bind(
+        fixture
+            .directory
+            .path()
+            .join("list.playlist.yml")
+            .to_string_lossy()
+            .as_ref(),
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("store the production manifest-file path shape");
+    verify_publication_candidate(&fixture)
+        .await
+        .expect("materialized files resolve relative to the manifest parent");
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_materialization_hash_not_matching_sealed_bytes() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    let fake_sha = "0000000000000000000000000000000000000000000000000000000000000000";
+    sqlx::query(
+        r#"UPDATE "AddonMediaListArtworkMaterialization" SET "Sha256" = ?
+           WHERE "AddonMediaListId" = 1 AND "ScopeItemId" = 0"#,
+    )
+    .bind(fake_sha)
+    .execute(&fixture.pool)
+    .await
+    .expect("replace the database artwork digest only");
+    let journal_json = scalar::<String>(
+        &fixture.pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let mut journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode materialization target");
+    let target = journal["target_database"]["materializations"]
+        .as_array_mut()
+        .expect("target materializations")
+        .iter_mut()
+        .find(|row| row["scope_item_id"] == 0)
+        .expect("parent materialization target");
+    target["sha256"] = serde_json::json!(fake_sha);
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "PublicationJournalJson" = ? WHERE "Id" = 1"#)
+        .bind(serde_json::to_string(&journal).expect("encode materialization target"))
+        .execute(&fixture.pool)
+        .await
+        .expect("keep logical target and current rows identical");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("database artwork digest must match the managed bytes");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_a_missing_projection_row() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(r#"DELETE FROM "AddonMediaListItemEpisode" WHERE "AddonMediaListItemId" = 10"#)
+        .execute(&fixture.pool)
+        .await
+        .expect("remove one projected episode");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("incomplete projection must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_missing_projection_metadata() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(
+        r#"DELETE FROM "EpisodeMetadata"
+           WHERE "EpisodeId" = (SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
+                                  WHERE "AddonMediaListItemId" = 10)"#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("remove one projected episode metadata row");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("projected media without metadata must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_missing_parent_projection_metadata() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(
+        r#"DELETE FROM "ShowMetadata"
+           WHERE "ShowId" = (SELECT "ShowId" FROM "AddonMediaListTelevisionShow"
+                              WHERE "AddonMediaListId" = 1)"#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("remove the projected parent metadata row");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("projected parent without metadata must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_same_cardinality_wrong_projection_without_playlist() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    let journal_json = scalar::<String>(
+        &fixture.pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let mut journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode target database snapshot");
+    journal["target_database"]["playlist"] = serde_json::Value::Null;
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "GeneratePlaylist" = 0, "PlaylistId" = NULL, "PublicationJournalJson" = ?
+           WHERE "Id" = 1"#,
+    )
+    .bind(serde_json::to_string(&journal).expect("encode playlist-free target fixture"))
+    .execute(&fixture.pool)
+    .await
+    .expect("remove playlist from the independent projection fixture");
+    let first_episode = scalar::<i64>(
+        &fixture.pool,
+        r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
+           WHERE "AddonMediaListItemId" = 10"#,
+    )
+    .await;
+    let second_episode = scalar::<i64>(
+        &fixture.pool,
+        r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
+           WHERE "AddonMediaListItemId" = 11"#,
+    )
+    .await;
+    sqlx::query(
+        r#"DELETE FROM "AddonMediaListItemEpisode" WHERE "AddonMediaListItemId" IN (10, 11)"#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("detach two projection rows");
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListItemEpisode" ("AddonMediaListItemId", "EpisodeId")
+           VALUES (10, ?), (11, ?)"#,
+    )
+    .bind(second_episode)
+    .bind(first_episode)
+    .execute(&fixture.pool)
+    .await
+    .expect("swap two valid projected episode identities");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("wrong projection source linkage must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_missing_playlist_membership() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(
+        r#"DELETE FROM "PlaylistItem"
+           WHERE "Id" = (SELECT MIN("Id") FROM "PlaylistItem"
+                          WHERE "PlaylistId" = (SELECT "PlaylistId" FROM "AddonMediaList"
+                                                WHERE "Id" = 1))"#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("remove one generated playlist member");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("incomplete playlist must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_wrong_same_cardinality_playlist_membership() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    sqlx::query(
+        r#"UPDATE "PlaylistItem" SET "MediaItemId" = 110
+           WHERE "Id" = (SELECT MIN("Id") FROM "PlaylistItem"
+                          WHERE "PlaylistId" = (SELECT "PlaylistId" FROM "AddonMediaList"
+                                                WHERE "Id" = 1))"#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("replace one member with a wrong existing media row");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("wrong playlist membership must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_missing_expected_artwork_materialization() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    assert_eq!(
+        scalar::<i64>(
+            &fixture.pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaListArtworkMaterialization"
+               WHERE "AddonMediaListId" = 1"#,
+        )
+        .await,
+        2
+    );
+    sqlx::query(
+        r#"DELETE FROM "AddonMediaListArtworkMaterialization"
+           WHERE "AddonMediaListId" = 1"#,
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("remove expected parent artwork materialization");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("missing artwork materialization must fail verification");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_a_missing_materialized_artwork_file() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    let managed_root = scalar::<String>(
+        &fixture.pool,
+        r#"SELECT "ManifestPath" FROM "AddonMediaListLibrary" WHERE "AddonMediaListId" = 1"#,
+    )
+    .await;
+    let file_name = scalar::<String>(
+        &fixture.pool,
+        r#"SELECT "FileName" FROM "AddonMediaListArtworkMaterialization"
+           WHERE "AddonMediaListId" = 1 AND "ScopeItemId" = 0"#,
+    )
+    .await;
+    fs::remove_file(Path::new(&managed_root).join(file_name))
+        .expect("remove materialized parent artwork file");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("missing materialized artwork bytes must fail verification");
+    assert!(error.to_string().contains("publication tree"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_a_tampered_sealed_nfo_and_keeps_backup() {
+    let fixture = prepare_verifiable_tv_publication().await;
+    let journal_json = scalar::<String>(
+        &fixture.pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode sealed publication journal");
+    let backup = PathBuf::from(
+        journal["backup_folder"]
+            .as_str()
+            .expect("publication backup path"),
+    );
+    fs::write(fixture.directory.path().join("tvshow.nfo"), b"tampered NFO")
+        .expect("tamper with the sealed candidate tree");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("tampered sealed candidate must fail verification");
+    assert!(error.to_string().contains("publication tree"));
+    assert!(
+        backup.is_dir(),
+        "failed verification must retain the backup"
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn restored_verification_accepts_logical_content_with_regenerated_database_ids() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let _ = prepare_published_revision(&pool, &repositories, &directory).await;
+    let previous_episode_ids = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode" ORDER BY "AddonMediaListItemId""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("load previous episode identities");
+    let previous_playlist_item_ids = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "PlaylistItem"
+           WHERE "PlaylistId" = (SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 1)
+           ORDER BY "Index", "Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("load previous playlist item identities");
+
+    repositories
+        .addon_media_lists
+        .request_presentation(LIST_ID, AddonMediaListPresentationKind::Movies, None)
+        .await
+        .expect("request failed candidate presentation");
+    repositories
+        .addon_media_lists
+        .update_settings(LIST_ID, true, false, AddonMediaListContentKind::Movie, "")
+        .await
+        .expect("disable the candidate generated playlist");
+    let saved_revision = scalar::<i32>(
+        &pool,
+        r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let published_revision = scalar::<i32>(
+        &pool,
+        r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let enqueued = repositories
+        .managed_library_operations
+        .enqueue_publication(
+            LIST_ID,
+            1,
+            saved_revision,
+            published_revision.saturating_add(1),
+        )
+        .await
+        .expect("enqueue failed candidate revision");
+    let claim = repositories
+        .managed_library_operations
+        .claim_operation(enqueued.operation.id, Utc::now())
+        .await
+        .expect("claim failed candidate")
+        .expect("candidate is claimable");
+    assert!(repositories
+        .managed_library_operations
+        .transition_publication(
+            &claim,
+            AddonMediaListPublicationPhase::AwaitingLease,
+            AddonMediaListPublicationPhase::Staging,
+        )
+        .await
+        .expect("enter candidate staging"));
+    repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("stage failed candidate");
+    repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("commit candidate before injected downstream failure");
+    repositories
+        .addon_media_lists
+        .restore_staged_publication_revision(
+            LIST_ID,
+            "injected post-commit failure",
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("restore prior snapshot");
+    repositories
+        .addon_media_lists
+        .reconcile_restored_publication_revision(
+            LIST_ID,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("rebuild prior projection and playlist");
+
+    let restored_episode_ids = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode" ORDER BY "AddonMediaListItemId""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("load restored episode identities");
+    let restored_playlist_item_ids = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "Id" FROM "PlaylistItem"
+           WHERE "PlaylistId" = (SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 1)
+           ORDER BY "Index", "Id""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("load restored playlist item identities");
+    assert_ne!(restored_episode_ids, previous_episode_ids);
+    assert_ne!(restored_playlist_item_ids, previous_playlist_item_ids);
+
+    let journal_json = scalar::<String>(
+        &pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let mut journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode publication journal");
+    journal["previous_items"][0]["media_item_id"] = serde_json::json!(999_999_i64);
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "PublicationJournalJson" = ? WHERE "Id" = 1"#)
+        .bind(serde_json::to_string(&journal).expect("encode regenerated identity fixture"))
+        .execute(&pool)
+        .await
+        .expect("record the pre-regeneration provider identity");
+
+    assert!(repositories
+        .managed_library_operations
+        .begin_publication_verification(
+            &claim,
+            AddonMediaListPublicationPhase::Staging,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+        )
+        .await
+        .expect("enter restored verification"));
+    repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("logical restored state must ignore regenerated row identities");
+
+    let first_episode = scalar::<i64>(
+        &pool,
+        r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
+           WHERE "AddonMediaListItemId" = 10"#,
+    )
+    .await;
+    let second_episode = scalar::<i64>(
+        &pool,
+        r#"SELECT "EpisodeId" FROM "AddonMediaListItemEpisode"
+           WHERE "AddonMediaListItemId" = 11"#,
+    )
+    .await;
+    sqlx::query(
+        r#"DELETE FROM "AddonMediaListItemEpisode" WHERE "AddonMediaListItemId" IN (10, 11)"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("detach restored projection rows");
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListItemEpisode" ("AddonMediaListItemId", "EpisodeId")
+           VALUES (10, ?), (11, ?)"#,
+    )
+    .bind(second_episode)
+    .bind(first_episode)
+    .execute(&pool)
+    .await
+    .expect("swap restored projection identities");
+    let projection_error = repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect_err("wrong restored projection content must fail verification");
+    assert!(projection_error
+        .to_string()
+        .contains("matching or projection structure"));
+
+    sqlx::query(
+        r#"DELETE FROM "AddonMediaListItemEpisode" WHERE "AddonMediaListItemId" IN (10, 11)"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("detach swapped projection rows");
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListItemEpisode" ("AddonMediaListItemId", "EpisodeId")
+           VALUES (10, ?), (11, ?)"#,
+    )
+    .bind(first_episode)
+    .bind(second_episode)
+    .execute(&pool)
+    .await
+    .expect("restore correct projection identities");
+    sqlx::query(
+        r#"UPDATE "PlaylistItem" SET "MediaItemId" = 110
+           WHERE "Id" = (SELECT MIN("Id") FROM "PlaylistItem"
+                          WHERE "PlaylistId" = (SELECT "PlaylistId" FROM "AddonMediaList"
+                                                WHERE "Id" = 1))"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("inject wrong restored playlist media");
+    let playlist_error = repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect_err("wrong restored playlist content must fail verification");
+    assert!(playlist_error
+        .to_string()
+        .contains("convergence verification"));
+
+    sqlx::query(
+        r#"UPDATE "PlaylistItem"
+           SET "MediaItemId" = CASE "Index" WHEN 10 THEN ? WHEN 11 THEN ? ELSE "MediaItemId" END
+           WHERE "PlaylistId" = (SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 1)"#,
+    )
+    .bind(second_episode)
+    .bind(first_episode)
+    .execute(&pool)
+    .await
+    .expect("swap two valid restored playlist members");
+    let permutation_error = repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect_err("restored playlist permutation must fail verification");
+    assert!(permutation_error
+        .to_string()
+        .contains("matching or projection structure"));
 }
 
 async fn assert_stale_publication_claim_is_fenced(

@@ -147,6 +147,10 @@ pub enum AddonMediaListPublicationPhase {
     RestoringFiles,
     RestoringProjection,
     Reconciling,
+    /// Re-scan and validate the chosen previous or candidate revision.
+    Verifying,
+    /// Remove journal-owned scratch trees before clearing the journal.
+    CleaningUp,
     Complete,
 }
 
