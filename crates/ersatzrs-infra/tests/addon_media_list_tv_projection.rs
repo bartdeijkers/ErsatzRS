@@ -9,11 +9,15 @@ mod common;
 
 use std::{collections::BTreeSet, fs, path::Path};
 
+use chrono::{Duration, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListNfoMetadata,
-    AddonMediaListNfoPerson, AddonMediaListRepository, TelevisionRepository,
+    AddonMediaListNfoPerson, AddonMediaListPublicationEnqueue, AddonMediaListRepository,
+    ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, TelevisionRepository,
 };
-use ersatzrs_domain::{AddonMediaListContentKind, AddonMediaListPresentationKind};
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListPresentationKind, AddonMediaListPublicationPhase,
+};
 use ersatzrs_infra::repositories::{
     make_repositories, project_one_pending_detail_batch, Repositories,
 };
@@ -1626,6 +1630,467 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
 
     recover_failed_publication(&repositories, &metadata_error).await;
     assert_publication_was_restored(&pool, &directory, revision, &nfo, playlist_items).await;
+}
+
+#[tokio::test]
+async fn durable_publication_fences_stale_workers_at_stage_and_commit() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let (enqueued, stale, current) = claim_and_reclaim_publication(&repositories).await;
+
+    assert_stale_publication_claim_is_fenced(&repositories, &enqueued, &stale, &current).await;
+
+    repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("the current claimant commits publication");
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        enqueued.job.target_published_revision
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn durable_publication_commit_rechecks_the_lease_in_its_write_transaction() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    prepare_published_revision(&pool, &repositories, &directory).await;
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "GeneratePlaylist" = 0, "ReviewState" = 1,
+               "DraftRevision" = "DraftRevision" + 1
+           WHERE "Id" = 1"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("prepare a draft that removes the generated playlist");
+    let saved_revision = scalar::<i32>(
+        &pool,
+        r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let published_revision = scalar::<i32>(
+        &pool,
+        r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let enqueued = repositories
+        .managed_library_operations
+        .enqueue_publication(
+            LIST_ID,
+            1,
+            saved_revision,
+            published_revision.saturating_add(1),
+        )
+        .await
+        .expect("enqueue exact publication revision");
+    let claim = repositories
+        .managed_library_operations
+        .claim_operation(enqueued.operation.id, Utc::now())
+        .await
+        .expect("claim publication")
+        .expect("publication is claimable");
+    assert!(repositories
+        .managed_library_operations
+        .transition_publication(
+            &claim,
+            AddonMediaListPublicationPhase::AwaitingLease,
+            AddonMediaListPublicationPhase::Staging,
+        )
+        .await
+        .expect("enter staging"));
+    repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("stage publication");
+
+    let trigger = format!(
+        r#"CREATE TRIGGER "ExpirePublicationLeaseDuringCommit"
+           AFTER UPDATE OF "PlaylistId" ON "AddonMediaList"
+           WHEN OLD."PlaylistId" IS NOT NULL AND NEW."PlaylistId" IS NULL
+           BEGIN
+             UPDATE "ManagedLibraryLease"
+             SET "LeaseExpiresAt" = '2000-01-01T00:00:00Z'
+             WHERE "OperationId" = {};
+           END"#,
+        enqueued.operation.id
+    );
+    sqlx::query(sqlx::AssertSqlSafe(trigger))
+        .execute(&pool)
+        .await
+        .expect("install lease-expiry trigger");
+    let error = repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect_err("the final commit must reject a lease lost inside its transaction");
+    assert!(error.to_string().contains("changed before commit"));
+    sqlx::query(r#"DROP TRIGGER "ExpirePublicationLeaseDuringCommit""#)
+        .execute(&pool)
+        .await
+        .expect("remove lease-expiry trigger");
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        published_revision
+    );
+    assert!(scalar::<Option<i64>>(
+        &pool,
+        r#"SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await
+    .is_some());
+
+    repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("the current claimant can retry the rolled-back commit");
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn durable_publication_restore_rechecks_the_lease_in_its_write_transaction() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let (enqueued, _stale, current) = claim_and_reclaim_publication(&repositories).await;
+    repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            enqueued.job.saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("stage publication");
+
+    let trigger = format!(
+        r#"CREATE TRIGGER "ExpirePublicationLeaseDuringRestore"
+           AFTER UPDATE OF "Published" ON "AddonMediaListItem"
+           BEGIN
+             UPDATE "ManagedLibraryLease"
+             SET "LeaseExpiresAt" = '2000-01-01T00:00:00Z'
+             WHERE "OperationId" = {};
+           END"#,
+        enqueued.operation.id
+    );
+    sqlx::query(sqlx::AssertSqlSafe(trigger))
+        .execute(&pool)
+        .await
+        .expect("install lease-expiry trigger");
+    let error = repositories
+        .addon_media_lists
+        .restore_staged_publication_revision(
+            LIST_ID,
+            "injected recovery",
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect_err("the final restore must reject a lease lost inside its transaction");
+    assert!(error.to_string().contains("changed before restoration"));
+    sqlx::query(r#"DROP TRIGGER "ExpirePublicationLeaseDuringRestore""#)
+        .execute(&pool)
+        .await
+        .expect("remove lease-expiry trigger");
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        3
+    );
+
+    repositories
+        .addon_media_lists
+        .restore_staged_publication_revision(
+            LIST_ID,
+            "injected recovery",
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("the current claimant can retry the rolled-back restoration");
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn durable_publication_reconcile_fences_a_lease_lost_after_projection() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    prepare_published_revision(&pool, &repositories, &directory).await;
+    save_collection_title(&repositories, "Unpublished title").await;
+    let saved_revision = scalar::<i32>(
+        &pool,
+        r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let published_revision = scalar::<i32>(
+        &pool,
+        r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let enqueued = repositories
+        .managed_library_operations
+        .enqueue_publication(
+            LIST_ID,
+            1,
+            saved_revision,
+            published_revision.saturating_add(1),
+        )
+        .await
+        .expect("enqueue exact publication revision");
+    let claim = repositories
+        .managed_library_operations
+        .claim_operation(enqueued.operation.id, Utc::now())
+        .await
+        .expect("claim publication")
+        .expect("publication is claimable");
+    assert!(repositories
+        .managed_library_operations
+        .transition_publication(
+            &claim,
+            AddonMediaListPublicationPhase::AwaitingLease,
+            AddonMediaListPublicationPhase::Staging,
+        )
+        .await
+        .expect("enter staging"));
+    repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("stage publication");
+    repositories
+        .addon_media_lists
+        .restore_staged_publication_revision(
+            LIST_ID,
+            "injected recovery",
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect("restore staged publication");
+
+    let trigger = format!(
+        r#"CREATE TRIGGER "ExpirePublicationLeaseDuringReconcile"
+           AFTER UPDATE OF "PlaylistId" ON "AddonMediaList"
+           BEGIN
+             UPDATE "ManagedLibraryLease"
+             SET "LeaseExpiresAt" = '2000-01-01T00:00:00Z'
+             WHERE "OperationId" = {};
+           END"#,
+        enqueued.operation.id
+    );
+    sqlx::query(sqlx::AssertSqlSafe(trigger))
+        .execute(&pool)
+        .await
+        .expect("install lease-expiry trigger");
+    let error = repositories
+        .addon_media_lists
+        .reconcile_restored_publication_revision(
+            LIST_ID,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect_err("the final reconciliation must reject a lease lost after projection");
+    assert!(error.to_string().contains("changed before reconciliation"));
+    sqlx::query(r#"DROP TRIGGER "ExpirePublicationLeaseDuringReconcile""#)
+        .execute(&pool)
+        .await
+        .expect("remove lease-expiry trigger");
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaList"
+               WHERE "Id" = 1 AND "PublicationJournalJson" IS NOT NULL"#,
+        )
+        .await,
+        1
+    );
+
+    let reclaimed = repositories
+        .managed_library_operations
+        .claim_operation(enqueued.operation.id, Utc::now() + Duration::minutes(2))
+        .await
+        .expect("reclaim publication")
+        .expect("expired publication is reclaimable");
+    repositories
+        .addon_media_lists
+        .reconcile_restored_publication_revision(
+            LIST_ID,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &reclaimed.operation.owner_token,
+            &reclaimed.lease_owner,
+        )
+        .await
+        .expect("the new claimant finishes reconciliation");
+}
+
+async fn claim_and_reclaim_publication(
+    repositories: &Repositories,
+) -> (
+    AddonMediaListPublicationEnqueue,
+    ManagedLibraryOperationClaim,
+    ManagedLibraryOperationClaim,
+) {
+    let enqueued = repositories
+        .managed_library_operations
+        .enqueue_publication(LIST_ID, 1, 0, 2)
+        .await
+        .expect("enqueue exact publication revision");
+    let claimed_at = Utc::now();
+    let stale = repositories
+        .managed_library_operations
+        .claim_operation(enqueued.operation.id, claimed_at)
+        .await
+        .expect("claim publication")
+        .expect("publication is claimable");
+    assert!(repositories
+        .managed_library_operations
+        .transition_publication(
+            &stale,
+            AddonMediaListPublicationPhase::AwaitingLease,
+            AddonMediaListPublicationPhase::Staging,
+        )
+        .await
+        .expect("enter staging"));
+    let current = repositories
+        .managed_library_operations
+        .claim_operation(enqueued.operation.id, claimed_at + Duration::minutes(2))
+        .await
+        .expect("reclaim expired publication")
+        .expect("expired publication is reclaimable");
+
+    (enqueued, stale, current)
+}
+
+async fn assert_stale_publication_claim_is_fenced(
+    repositories: &Repositories,
+    enqueued: &AddonMediaListPublicationEnqueue,
+    stale: &ManagedLibraryOperationClaim,
+    current: &ManagedLibraryOperationClaim,
+) {
+    let stale_stage = repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            enqueued.job.saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &stale.operation.owner_token,
+            &stale.lease_owner,
+        )
+        .await
+        .expect_err("an expired claimant must not stage publication");
+    assert!(stale_stage
+        .to_string()
+        .contains("lease is no longer current"));
+
+    repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            enqueued.job.saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &current.operation.owner_token,
+            &current.lease_owner,
+        )
+        .await
+        .expect("the current claimant stages publication");
+    let stale_restore = repositories
+        .addon_media_lists
+        .restore_staged_publication_revision(
+            LIST_ID,
+            "stale recovery must not touch managed files",
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &stale.operation.owner_token,
+            &stale.lease_owner,
+        )
+        .await
+        .expect_err("an expired claimant must not restore publication files");
+    assert!(stale_restore
+        .to_string()
+        .contains("lease is no longer current"));
+    let stale_commit = repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            enqueued.job.target_published_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &stale.operation.owner_token,
+            &stale.lease_owner,
+        )
+        .await
+        .expect_err("an expired claimant must not commit publication");
+    assert!(stale_commit
+        .to_string()
+        .contains("lease is no longer current"));
 }
 
 #[tokio::test]

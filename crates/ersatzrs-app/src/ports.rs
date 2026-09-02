@@ -8,9 +8,9 @@ use ersatzrs_core::repositories::{
     AddonMediaListRepository, AdminMediaRepository, AdminSearchRepository, AdminSettingsRepository,
     BlockRepository, ChannelRepository, CollectionRepository, DecoRepository,
     FfmpegProfileRepository, FillerRepository, GraphicsRepository, LibraryRepository,
-    MediaItemRepository, MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository,
-    SavedSearchRepository, SettingsMutation, TelevisionRepository, TemplateRepository,
-    TroubleshootingRepository, WatermarkRepository,
+    ManagedLibraryOperationRepository, MediaItemRepository, MediaSourceRepository,
+    PlayoutRepository, ProgramScheduleRepository, SavedSearchRepository, SettingsMutation,
+    TelevisionRepository, TemplateRepository, TroubleshootingRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -226,6 +226,11 @@ pub struct ScanRuntimeReport {
 /// Native scanner execution supplied by the composition root.
 #[async_trait]
 pub trait ScanRuntime: Send + Sync {
+    /// Return Local libraries whose interrupted scan markers need replay.
+    async fn interrupted_scan_library_ids(&self) -> Result<Vec<EntityId>, ScanRuntimeError> {
+        Ok(Vec::new())
+    }
+
     /// Recover membership-triggered refreshes that survived process shutdown.
     async fn recover_playout_refreshes(&self) -> Result<ScanRuntimeReport, ScanRuntimeError> {
         Ok(ScanRuntimeReport::default())
@@ -716,6 +721,7 @@ pub struct ApplicationPorts {
     program_schedules: Arc<dyn ProgramScheduleRepository>,
     playouts: Arc<dyn PlayoutRepository>,
     libraries: Arc<dyn LibraryRepository>,
+    managed_library_operations: Arc<dyn ManagedLibraryOperationRepository>,
     media_sources: Arc<dyn MediaSourceRepository>,
     media_items: Arc<dyn MediaItemRepository>,
     admin_media: Arc<dyn AdminMediaRepository>,
@@ -756,6 +762,7 @@ impl ApplicationPorts {
         program_schedules: Arc<dyn ProgramScheduleRepository>,
         playouts: Arc<dyn PlayoutRepository>,
         libraries: Arc<dyn LibraryRepository>,
+        managed_library_operations: Arc<dyn ManagedLibraryOperationRepository>,
         media_sources: Arc<dyn MediaSourceRepository>,
         media_items: Arc<dyn MediaItemRepository>,
         admin_media: Arc<dyn AdminMediaRepository>,
@@ -791,6 +798,7 @@ impl ApplicationPorts {
             program_schedules,
             playouts,
             libraries,
+            managed_library_operations,
             media_sources,
             media_items,
             admin_media,
@@ -912,6 +920,12 @@ impl ApplicationPorts {
         self.libraries.as_ref()
     }
 
+    /// Durable admission, lease, and publication-recovery persistence.
+    #[must_use]
+    pub fn managed_library_operations(&self) -> &(dyn ManagedLibraryOperationRepository + 'static) {
+        self.managed_library_operations.as_ref()
+    }
+
     /// Media-source persistence used by admin source and artwork queries.
     #[must_use]
     pub fn media_sources(&self) -> &(dyn MediaSourceRepository + 'static) {
@@ -1026,6 +1040,10 @@ impl std::fmt::Debug for ApplicationPorts {
             .field("program_schedules", &"dyn ProgramScheduleRepository")
             .field("playouts", &"dyn PlayoutRepository")
             .field("libraries", &"dyn LibraryRepository")
+            .field(
+                "managed_library_operations",
+                &"dyn ManagedLibraryOperationRepository",
+            )
             .field("media_sources", &"dyn MediaSourceRepository")
             .field("media_items", &"dyn MediaItemRepository")
             .field("admin_media", &"dyn AdminMediaRepository")

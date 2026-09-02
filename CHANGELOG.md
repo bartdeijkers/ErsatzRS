@@ -48,6 +48,16 @@ release section when tagging a release.
   lowercase boolean and `none` output of existing XMLTV and graphics templates
   across the MiniJinja 2.23 update.
 
+### Fixed
+
+- Run exact-revision add-on-list publication and recovery as durable background
+  work behind one shared managed-library lease. Publication now survives
+  request cancellation and process restart, deduplicates repeated Publish
+  requests and provider refreshes, transactionally fences expired workers,
+  waits for startup replay before admitting dependent refreshes, cancels scans
+  that lose their heartbeat, preserves concurrent provider changes as a later
+  draft, and adopts stranded pre-upgrade publication journals for recovery.
+
 ### Removed
 
 - Remove the remaining hard-coded Trakt assumptions from the core playlist and

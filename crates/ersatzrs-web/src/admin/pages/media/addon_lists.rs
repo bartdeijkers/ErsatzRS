@@ -2889,6 +2889,7 @@ fn AddonMediaListEditorIsland(
     let initial_status_key = match initial_status.as_str() {
         "saved" => Some(TextKey::DraftSaved),
         "published" => Some(TextKey::Published),
+        "publishing" => Some(TextKey::Publishing),
         "preparing" => Some(TextKey::PreparingPublication),
         _ => None,
     };
@@ -3361,7 +3362,10 @@ fn AddonMediaListEditorIsland(
         let (list_id, action) = *value;
         async move { control_addon_media_list_import(list_id, action).await }
     });
-    let publish_action = Action::new(|id: &i64| publish_addon_media_list(*id));
+    let publish_action = Action::new(|value: &(i64, i32)| {
+        let (id, saved_revision) = *value;
+        async move { publish_addon_media_list(id, saved_revision).await }
+    });
     let row_mutation_pending = Memo::new(move |_| {
         review_edit_action.pending().get()
             || undo_review_edit_action.pending().get()
@@ -3681,8 +3685,8 @@ fn AddonMediaListEditorIsland(
     Effect::new(move |_| {
         if let Some(result) = publish_action.value().get() {
             match result {
-                Ok(AddonMediaListPublishResult::Published) => {
-                    toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
+                Ok(AddonMediaListPublishResult::Queued { .. }) => {
+                    toast.push(tr(TextKey::Publishing).to_string(), ToastSeverity::Info);
                     set_browser_location(&format!("/media/addon-lists/{id}"));
                 }
                 Ok(AddonMediaListPublishResult::PreparingPlaybackDetails { item_count }) => {
@@ -3987,6 +3991,7 @@ fn AddonMediaListEditorIsland(
                             review_state: form.review_state,
                             review_error: form.review_error.clone(),
                             published_revision: form.published_revision,
+                            draft_revision: form.draft_revision,
                             detail_import_policy: detail_import_policy.get_untracked(),
                             import_progress: form.import_progress.clone(),
                         }, presentation_kind.get_untracked(), next_show_metadata, show_etag.get_untracked()));
@@ -4008,7 +4013,10 @@ fn AddonMediaListEditorIsland(
                         if row_mutation_pending.get_untracked() || publish_action.pending().get_untracked() {
                             return;
                         }
-                        publish_action.dispatch(id);
+                        publish_action.dispatch((
+                            id,
+                            publication_readiness.with_untracked(|readiness| readiness.saved_revision),
+                        ));
                     }
                 >
                     <span style=icon_style(IconName::Upload, "1.125rem") aria-hidden="true"></span>
@@ -4249,6 +4257,7 @@ fn AddonMediaListEditorIsland(
                                 <span>{review_error}</span>
                             </p>
                             <input type="hidden" name="id" value=move || form_id.get().to_string()/>
+                            <input type="hidden" name="saved_revision" value=move || publication_readiness.with(|readiness| readiness.saved_revision.to_string())/>
                             <input type="hidden" name="metadata_etag" value=move || show_etag.get()/>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::AddonMediaListUrl)}</div>

@@ -161,6 +161,7 @@ impl AppState {
                 Arc::new(repositories.program_schedule.clone()),
                 Arc::new(repositories.playout.clone()),
                 Arc::new(repositories.library.clone()),
+                Arc::new(repositories.managed_library_operations.clone()),
                 Arc::new(repositories.media_source.clone()),
                 Arc::new(repositories.media_item.clone()),
                 Arc::new(repositories.admin_media.clone()),

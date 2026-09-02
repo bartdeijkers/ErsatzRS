@@ -40,6 +40,12 @@ pub struct AddonMediaListMatchReport {
     pub playout_refreshes: Vec<ScanPlayoutRefresh>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DetailMergeOutcome {
+    Applied,
+    DeferredForPublication,
+}
+
 impl AddonMediaListMatchReport {
     fn one(playout_refreshes: Vec<ScanPlayoutRefresh>) -> Self {
         Self {
@@ -249,14 +255,31 @@ impl AddonMediaListSynchronizer {
                SET "AutoRefresh" = ?, "GeneratePlaylist" = ?, "ContentKindOverride" = ?,
                    "ChapterInput" = ?,
                    "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
-                   "ReviewError" = NULL
-               WHERE "Id" = ? AND "ReviewState" <> 3"#,
+                   "ReviewError" = NULL, "DraftRevision" = "DraftRevision" + 1
+               WHERE "Id" = ? AND "ReviewState" <> 3
+                 AND NOT EXISTS (
+                     SELECT 1
+                     FROM "AddonMediaListPublicationJob" AS "job"
+                     JOIN "ManagedLibraryOperation" AS "operation"
+                       ON "operation"."Id" = "job"."OperationId"
+                     WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                       AND "operation"."State" IN (?, ?, ?)
+                 )"#,
         )
         .bind(auto_refresh)
         .bind(generate_playlist)
         .bind(encode_enum(content_kind_override))
         .bind((!chapter_input.is_empty()).then_some(chapter_input))
         .bind(list_id)
+        .bind(encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::Queued,
+        ))
+        .bind(encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::Running,
+        ))
+        .bind(encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+        ))
         .execute(&self.pool)
         .await
         .repository()?;
@@ -280,7 +303,7 @@ impl AddonMediaListSynchronizer {
         &self,
         list_id: EntityId,
         item: &EnumeratedAddonMediaListItem,
-    ) -> Result<()> {
+    ) -> Result<DetailMergeOutcome> {
         let row = sqlx::query(
             r#"SELECT "item".*, "list"."PublishedRevision"
                FROM "AddonMediaListItem" AS "item"
@@ -342,6 +365,20 @@ impl AddonMediaListSynchronizer {
         let image_urls = encode_image_urls(&item.additional_image_urls)?;
         let now = encode_datetime(Utc::now());
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let review_state: i32 =
+            sqlx::query_scalar(r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(list_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .repository()?
+                .ok_or(RepositoryError::NotFound {
+                    kind: "add-on media list",
+                    id: list_id,
+                })?;
+        if review_state == encode_enum(ersatzrs_domain::AddonMediaListReviewState::Publishing) {
+            tx.rollback().await.repository()?;
+            return Ok(DetailMergeOutcome::DeferredForPublication);
+        }
         if published {
             sqlx::query(
                 r#"UPDATE "AddonMediaListItem"
@@ -411,9 +448,10 @@ impl AddonMediaListSynchronizer {
             insert_item_guids(&mut tx, item_id, &item.guids).await?;
         }
         if review_required {
-            sqlx::query(
+            let updated = sqlx::query(
                 r#"UPDATE "AddonMediaList"
-                   SET "ReviewState" = ?, "ReviewError" = ?
+                   SET "ReviewState" = ?, "ReviewError" = ?,
+                       "DraftRevision" = "DraftRevision" + 1
                    WHERE "Id" = ? AND "ReviewState" <> ?"#,
             )
             .bind(encode_enum(
@@ -427,6 +465,11 @@ impl AddonMediaListSynchronizer {
             .execute(&mut *tx)
             .await
             .repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the add-on media list changed while provider details were merged".to_owned(),
+                ));
+            }
         } else if published {
             sqlx::query(
                 r#"UPDATE "AddonMediaList"
@@ -440,7 +483,7 @@ impl AddonMediaListSynchronizer {
             .repository()?;
         }
         tx.commit().await.repository()?;
-        Ok(())
+        Ok(DetailMergeOutcome::Applied)
     }
 
     /// Delete a Add-on media list and its generated playlist if present.
@@ -611,7 +654,7 @@ impl AddonMediaListSynchronizer {
                        "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
                        "LastError" = NULL,
                        "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
-                       "ReviewError" = NULL
+                       "ReviewError" = NULL, "DraftRevision" = "DraftRevision" + 1
                    WHERE "Id" = ? AND "ReviewState" <> 3"#,
             )
             .bind(&list.source_url)
@@ -1629,7 +1672,8 @@ where
             ));
         }
         let updated = sqlx::query(
-            r#"UPDATE "AddonMediaList" SET "AddonId" = ?, "ProviderId" = ?, "LastError" = NULL
+            r#"UPDATE "AddonMediaList" SET "AddonId" = ?, "ProviderId" = ?, "LastError" = NULL,
+                      "DraftRevision" = "DraftRevision" + 1
                WHERE "Id" = ? AND "ReviewState" <> 3"#,
         )
         .bind(addon_id)

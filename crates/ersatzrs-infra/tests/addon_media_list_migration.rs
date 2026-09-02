@@ -1,6 +1,87 @@
 use sqlx::{sqlite::SqlitePoolOptions, Executor, Row};
 
 #[tokio::test]
+async fn durable_publication_migration_adopts_a_stranded_legacy_journal() {
+    const DURABLE_PUBLICATION_VERSION: i64 = 202_609_021_200;
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("open publication migration database");
+    pool.execute("PRAGMA foreign_keys = ON")
+        .await
+        .expect("enable foreign keys");
+    let migrations = sqlx::migrate!("../../migrations");
+    let previous = sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version < DURABLE_PUBLICATION_VERSION)
+            .cloned()
+            .collect(),
+    );
+    previous
+        .run(&pool)
+        .await
+        .expect("migrate the legacy publication schema");
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO "MediaSource" ("Id") VALUES (1);
+        INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name")
+            VALUES (1, 2, 1, 'Managed add-on list');
+        INSERT INTO "AddonInstallation" (
+            "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+            "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+        ) VALUES (
+            'org.example.legacy', '1.0.0', 1, 'package', 'content', '{}',
+            'addons/legacy', '2026-09-02T00:00:00Z', '2026-09-02T00:00:00Z'
+        );
+        INSERT INTO "AddonMediaList" (
+            "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ReviewState",
+            "PublishedRevision", "PublicationJournalJson", "PublicationStartedAt"
+        ) VALUES (
+            1, 'org.example.legacy', 'legacy-list', 'https://example.invalid/list',
+            'Legacy list', 3, 7,
+            '{"previous_review_state":"published","previous_presentation_kind":"remote_streams","previous_items":[],"previous_playlist":null,"managed_folder":"managed/legacy-list","backup_folder":"managed/.ersatzrs-publication-1-legacy","previous_materializations":[]}',
+            '2026-09-01T00:00:00Z'
+        );
+        INSERT INTO "AddonMediaListLibrary" (
+            "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+        ) VALUES (1, 1, 'Legacy list', 'managed/legacy-list');
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed stranded legacy publication");
+
+    migrations
+        .run(&pool)
+        .await
+        .expect("apply durable publication migration");
+
+    let row = sqlx::query(
+        r#"SELECT "operation"."Kind", "operation"."State", "job"."Phase",
+                  "job"."SavedRevision", "job"."TargetPublishedRevision",
+                  "job"."OriginalFailureCode"
+           FROM "ManagedLibraryOperation" AS "operation"
+           JOIN "AddonMediaListPublicationJob" AS "job"
+             ON "job"."OperationId" = "operation"."Id"
+           WHERE "job"."AddonMediaListId" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("load adopted recovery job");
+    assert_eq!(row.get::<i32, _>("Kind"), 6);
+    assert_eq!(row.get::<i32, _>("State"), 0);
+    assert_eq!(row.get::<i32, _>("Phase"), 4);
+    assert_eq!(row.get::<i32, _>("SavedRevision"), 7);
+    assert_eq!(row.get::<i32, _>("TargetPublishedRevision"), 8);
+    assert_eq!(
+        row.get::<String, _>("OriginalFailureCode"),
+        "legacy_interrupted_publication"
+    );
+}
+
+#[tokio::test]
 async fn destructive_migration_removes_legacy_trakt_schema_and_data() {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)

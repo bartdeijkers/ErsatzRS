@@ -1,11 +1,16 @@
+use async_trait::async_trait;
+use ersatzrs_app::commands::ExecuteManagedLibraryOperationOutcome;
 use ersatzrs_core::hls::HlsSessionRegistry;
+use ersatzrs_core::repositories::{ManagedLibraryOperation, ManagedLibraryOperationClaim};
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
+use ersatzrs_domain::{EntityId, ManagedLibraryOperationState};
 use ersatzrs_infra::addon_media_list_import::AddonMediaListImportCoordinator;
 use ersatzrs_infra::addon_media_list_sync::{
     AddonMediaListMatchReport, AddonMediaListSynchronizer,
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_scheduler::runner::{run_scheduler, SchedulerOptions};
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::sync::{atomic::AtomicI32, Arc};
 use tokio::sync::mpsc;
@@ -22,7 +27,163 @@ use tokio_util::sync::CancellationToken;
 pub async fn run_background_task_preflight(
     application: Arc<ersatzrs_app::ApplicationServices>,
 ) -> ersatzrs_app::Result<usize> {
-    application.recover_scan_playout_refreshes().await
+    run_background_task_preflight_inner(application.as_ref()).await
+}
+
+async fn run_background_task_preflight_inner(
+    application: &(dyn StartupReplayApplication + '_),
+) -> ersatzrs_app::Result<usize> {
+    loop {
+        let replay_operation_ids = application.prepare_recovery().await?;
+        if replay_operation_ids.is_empty() {
+            break;
+        }
+        await_terminal_startup_replays(application, replay_operation_ids).await?;
+    }
+    application.recover_refreshes().await
+}
+
+#[async_trait]
+trait StartupReplayApplication: Sync {
+    async fn prepare_recovery(&self) -> ersatzrs_app::Result<Vec<EntityId>>;
+
+    async fn recover_refreshes(&self) -> ersatzrs_app::Result<usize>;
+
+    async fn operation(
+        &self,
+        operation_id: EntityId,
+    ) -> ersatzrs_app::Result<Option<ManagedLibraryOperation>>;
+
+    async fn claim_operation(
+        &self,
+        operation_id: EntityId,
+    ) -> ersatzrs_app::Result<Option<ManagedLibraryOperationClaim>>;
+
+    async fn heartbeat(&self, claim: &ManagedLibraryOperationClaim) -> ersatzrs_app::Result<bool>;
+
+    async fn execute(
+        &self,
+        claim: ManagedLibraryOperationClaim,
+    ) -> ExecuteManagedLibraryOperationOutcome;
+}
+
+#[async_trait]
+impl StartupReplayApplication for ersatzrs_app::ApplicationServices {
+    async fn prepare_recovery(&self) -> ersatzrs_app::Result<Vec<EntityId>> {
+        self.prepare_scan_playout_recovery().await
+    }
+
+    async fn recover_refreshes(&self) -> ersatzrs_app::Result<usize> {
+        self.recover_scan_playout_refreshes().await
+    }
+
+    async fn operation(
+        &self,
+        operation_id: EntityId,
+    ) -> ersatzrs_app::Result<Option<ManagedLibraryOperation>> {
+        self.managed_library_operation(operation_id).await
+    }
+
+    async fn claim_operation(
+        &self,
+        operation_id: EntityId,
+    ) -> ersatzrs_app::Result<Option<ManagedLibraryOperationClaim>> {
+        self.claim_managed_library_operation_by_id(operation_id)
+            .await
+    }
+
+    async fn heartbeat(&self, claim: &ManagedLibraryOperationClaim) -> ersatzrs_app::Result<bool> {
+        self.heartbeat_managed_library_operation(claim).await
+    }
+
+    async fn execute(
+        &self,
+        claim: ManagedLibraryOperationClaim,
+    ) -> ExecuteManagedLibraryOperationOutcome {
+        self.execute_managed_library_operation(claim).await
+    }
+}
+
+async fn await_terminal_startup_replays(
+    application: &(dyn StartupReplayApplication + '_),
+    operation_ids: Vec<EntityId>,
+) -> ersatzrs_app::Result<()> {
+    let mut pending = operation_ids.into_iter().collect::<BTreeSet<_>>();
+    while !pending.is_empty() {
+        let mut made_progress = false;
+        for operation_id in pending.iter().copied().collect::<Vec<_>>() {
+            let operation = application.operation(operation_id).await?.ok_or(
+                ersatzrs_app::ApplicationError::InvalidData {
+                    kind: "managed-library operation",
+                    value: format!("startup replay operation {operation_id} disappeared"),
+                },
+            )?;
+            if matches!(operation.state, ManagedLibraryOperationState::Completed) {
+                pending.remove(&operation_id);
+                made_progress = true;
+                continue;
+            }
+            if matches!(operation.state, ManagedLibraryOperationState::Failed) {
+                return Err(ersatzrs_app::ApplicationError::Unavailable {
+                    operation: "replay interrupted library scan",
+                    message: format!("startup replay operation {operation_id} failed"),
+                });
+            }
+            if let Some(claim) = application.claim_operation(operation_id).await? {
+                match execute_startup_replay_with_heartbeat(application, claim).await? {
+                    ExecuteManagedLibraryOperationOutcome::Completed
+                    | ExecuteManagedLibraryOperationOutcome::LeaseLost => {}
+                    ExecuteManagedLibraryOperationOutcome::Deferred => {
+                        return Err(ersatzrs_app::ApplicationError::Unavailable {
+                            operation: "replay interrupted library scan",
+                            message: format!(
+                                "startup replay operation {operation_id} was unexpectedly deferred"
+                            ),
+                        });
+                    }
+                    ExecuteManagedLibraryOperationOutcome::Failed { message } => {
+                        return Err(ersatzrs_app::ApplicationError::Unavailable {
+                            operation: "replay interrupted library scan",
+                            message,
+                        });
+                    }
+                }
+                made_progress = true;
+            }
+        }
+        if !pending.is_empty() && !made_progress {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+    }
+    Ok(())
+}
+
+async fn execute_startup_replay_with_heartbeat(
+    application: &(dyn StartupReplayApplication + '_),
+    claim: ManagedLibraryOperationClaim,
+) -> ersatzrs_app::Result<ExecuteManagedLibraryOperationOutcome> {
+    let execution = application.execute(claim.clone());
+    tokio::pin!(execution);
+    let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
+    heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    heartbeat.tick().await;
+    loop {
+        tokio::select! {
+            outcome = &mut execution => return Ok(outcome),
+            _ = heartbeat.tick() => {
+                match application.heartbeat(&claim).await {
+                    Ok(true) => {}
+                    Ok(false) => return Ok(ExecuteManagedLibraryOperationOutcome::LeaseLost),
+                    Err(error) => {
+                        return Err(ersatzrs_app::ApplicationError::Unavailable {
+                            operation: "heartbeat startup library scan replay",
+                            message: error.to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Spawn the long-running background tasks and return their join handles so the
@@ -226,12 +387,185 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
-    use ersatzrs_core::repositories::RepositoryError;
-    use ersatzrs_domain::{ScanPlayoutRefresh, ScanPlayoutRefreshReason};
+    use async_trait::async_trait;
+    use ersatzrs_app::commands::ExecuteManagedLibraryOperationOutcome;
+    use ersatzrs_core::repositories::{
+        ManagedLibraryOperation, ManagedLibraryOperationClaim, ManagedLibraryScanSpec,
+        RepositoryError,
+    };
+    use ersatzrs_domain::{
+        ManagedLibraryOperationKind, ManagedLibraryOperationState, MediaSourceKind,
+        ScanPlayoutRefresh, ScanPlayoutRefreshReason,
+    };
 
-    use super::{admit_periodic_addon_playlist_refreshes, AddonMediaListMatchReport};
+    use super::{
+        admit_periodic_addon_playlist_refreshes, await_terminal_startup_replays,
+        run_background_task_preflight_inner, AddonMediaListMatchReport, StartupReplayApplication,
+    };
+
+    struct ReplayApplication {
+        operation: Mutex<ManagedLibraryOperation>,
+        claims: AtomicUsize,
+        fail: bool,
+        lease_loss_once: bool,
+        lease_lost: AtomicBool,
+        preparation_rounds: usize,
+        preparation_calls: AtomicUsize,
+    }
+
+    impl ReplayApplication {
+        fn new() -> Self {
+            Self {
+                operation: Mutex::new(ManagedLibraryOperation {
+                    id: 17,
+                    library_id: 4,
+                    parent_operation_id: None,
+                    owner_token: "owner".to_owned(),
+                    kind: ManagedLibraryOperationKind::StartupReplayScan,
+                    state: ManagedLibraryOperationState::Running,
+                    scan: Some(ManagedLibraryScanSpec {
+                        provider: MediaSourceKind::Local,
+                        show_id: None,
+                        deep_scan: true,
+                    }),
+                    attempt_count: 1,
+                    next_eligible_at: None,
+                }),
+                claims: AtomicUsize::new(0),
+                fail: false,
+                lease_loss_once: true,
+                lease_lost: AtomicBool::new(false),
+                preparation_rounds: 0,
+                preparation_calls: AtomicUsize::new(0),
+            }
+        }
+
+        fn failing() -> Self {
+            Self {
+                fail: true,
+                ..Self::new()
+            }
+        }
+
+        fn repeating() -> Self {
+            Self {
+                lease_loss_once: false,
+                preparation_rounds: 2,
+                ..Self::new()
+            }
+        }
+    }
+
+    #[async_trait]
+    impl StartupReplayApplication for ReplayApplication {
+        async fn prepare_recovery(&self) -> ersatzrs_app::Result<Vec<ersatzrs_domain::EntityId>> {
+            let round = self.preparation_calls.fetch_add(1, Ordering::SeqCst) + 1;
+            if round > self.preparation_rounds {
+                return Ok(Vec::new());
+            }
+            let mut operation = self.operation.lock().expect("operation");
+            operation.id = 16 + i64::try_from(round).expect("round id");
+            operation.state = ManagedLibraryOperationState::Running;
+            Ok(vec![operation.id])
+        }
+
+        async fn recover_refreshes(&self) -> ersatzrs_app::Result<usize> {
+            Ok(3)
+        }
+
+        async fn operation(
+            &self,
+            operation_id: ersatzrs_domain::EntityId,
+        ) -> ersatzrs_app::Result<Option<ManagedLibraryOperation>> {
+            let operation = self.operation.lock().expect("operation").clone();
+            Ok((operation.id == operation_id).then_some(operation))
+        }
+
+        async fn claim_operation(
+            &self,
+            operation_id: ersatzrs_domain::EntityId,
+        ) -> ersatzrs_app::Result<Option<ManagedLibraryOperationClaim>> {
+            let operation = self.operation.lock().expect("operation").clone();
+            if operation.id != operation_id {
+                return Ok(None);
+            }
+            self.claims.fetch_add(1, Ordering::SeqCst);
+            Ok(Some(ManagedLibraryOperationClaim {
+                operation,
+                lease_owner: "lease".to_owned(),
+            }))
+        }
+
+        async fn heartbeat(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+        ) -> ersatzrs_app::Result<bool> {
+            Ok(true)
+        }
+
+        async fn execute(
+            &self,
+            _claim: ManagedLibraryOperationClaim,
+        ) -> ExecuteManagedLibraryOperationOutcome {
+            if self.fail {
+                self.operation.lock().expect("operation").state =
+                    ManagedLibraryOperationState::Failed;
+                return ExecuteManagedLibraryOperationOutcome::Failed {
+                    message: "replay scan failed".to_owned(),
+                };
+            }
+            if self.lease_loss_once && !self.lease_lost.swap(true, Ordering::SeqCst) {
+                ExecuteManagedLibraryOperationOutcome::LeaseLost
+            } else {
+                self.operation.lock().expect("operation").state =
+                    ManagedLibraryOperationState::Completed;
+                ExecuteManagedLibraryOperationOutcome::Completed
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn startup_replay_waits_for_persisted_terminal_state_after_lease_loss() {
+        let application = ReplayApplication::new();
+
+        await_terminal_startup_replays(&application, vec![17])
+            .await
+            .expect("wait for durable replay completion");
+
+        assert_eq!(
+            application.claims.load(Ordering::SeqCst),
+            2,
+            "an execution outcome must not finish preflight before persistence is terminal"
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_startup_replay_rejects_preflight() {
+        let application = ReplayApplication::failing();
+
+        let error = await_terminal_startup_replays(&application, vec![17])
+            .await
+            .expect_err("failed durable replay must stop preflight");
+
+        assert!(error.to_string().contains("replay scan failed"));
+        assert_eq!(application.claims.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn preflight_prepares_again_until_no_interrupted_marker_remains() {
+        let application = ReplayApplication::repeating();
+
+        let recovered = run_background_task_preflight_inner(&application)
+            .await
+            .expect("complete every startup replay generation");
+
+        assert_eq!(recovered, 3);
+        assert_eq!(application.preparation_calls.load(Ordering::SeqCst), 3);
+        assert_eq!(application.claims.load(Ordering::SeqCst), 2);
+    }
 
     #[tokio::test]
     async fn periodic_match_report_immediately_admits_durable_refreshes() {

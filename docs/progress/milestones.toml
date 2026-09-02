@@ -2160,7 +2160,7 @@ The full workspace test closeout passes all 2,078 tests and doctests.
 id         = 'amm-j-01'
 phase      = 'AMM-J — Crash-safe publication recovery'
 title      = 'Move add-on publication into a durable recovery coordinator'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-publication-recovery.md'
 depends_on = ['amm-i-01']
@@ -2176,12 +2176,29 @@ commit a second generation, request cancellation cannot cancel the job, and no
 scan or recovery holds an HTTP request or database write transaction open.
 '''
 evidence = '''
-Opened 2026-08-31 after redacted Windows dogfood proved that the journal makes
-an interrupted publication visible but cannot execute recovery after the
-request-owned rollback fails. The publication overlapped a scheduled scan; the
-scan completed, but diagnostics cannot distinguish later request cancellation
-from a Windows sharing violation. Both produce the same stranded journal and
-are separate required fault-injection cases.
+Completed 2026-09-02. The durable-operation migration persists operation kind,
+state, phase, attempt, lease/heartbeat expiry, next eligibility, exact saved and
+target revisions, and separate bounded original/recovery diagnostics; it also
+adopts stranded legacy publication journals as recovery jobs. Publish now
+enqueues and returns, while the host claims restart-safe work from SQLite and
+uses one per-managed-library lease for publication, recovery, scheduled/manual/
+startup scans, provider refresh, and publication child scans. Child scans reuse
+the parent token and lease. Repository compare-and-swap fences reject expired
+stage, restore, heartbeat, completion, and final commit/restore/reconcile
+mutations by exact operation, generation, owner, live lease, and journal state.
+Startup preflight drives interrupted Local replay to its exact persisted
+terminal result before refresh workers start; a reclaimed durable operation
+resets terminal process-local state, and standalone scans stop when their
+heartbeat fails. Provider detail results arriving during publication remain
+checkpointed until they can create one later draft revision, provider refresh
+operations coalesce, and backup/restore/cleanup traversal runs on the blocking
+pool. Duplicate Publish returns the existing exact-revision generation.
+Focused migration, durable operation, add-on projection, health, application,
+scanner-host, and web route tests pass. The workspace clippy gate, all 2,218
+unit/integration tests and doctests, the consistent Leptos build, `cargo xtask
+parity-check web`, progress validation, architecture and hydration lint, and
+MPEG-TS/HLS runtime smoke pass. Filesystem swap markers, sharing-violation
+retry, and the cross-platform partial-swap matrix remain owned by amm-j-02.
 '''
 
 [[milestone]]

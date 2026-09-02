@@ -79,6 +79,8 @@ pub struct AddonMediaListItemReviewForm {
 pub struct AddonMediaListSaveForm {
     id: i64,
     #[serde(default)]
+    saved_revision: i32,
+    #[serde(default)]
     auto_refresh: bool,
     #[serde(default)]
     generate_playlist: bool,
@@ -297,6 +299,7 @@ pub async fn save_addon_media_list_form(
         review_state: current.review_state,
         review_error: current.review_error,
         published_revision: current.published_revision,
+        draft_revision: current.draft_revision,
         detail_import_policy: if input.load_item_details {
             AddonMediaListDetailPolicy::Automatic
         } else {
@@ -404,9 +407,12 @@ pub async fn publish_addon_media_list_form(
     if !readiness.blockers.is_empty() {
         return Redirect::to(&format!("/media/addon-lists/{id}?error=blocked"));
     }
-    match publish_addon_media_list_with_state(&state, id).await {
-        Ok(AddonMediaListPublishResult::Published) => {
-            Redirect::to(&format!("/media/addon-lists/{id}?status=published"))
+    if input.saved_revision != readiness.saved_revision {
+        return Redirect::to(&format!("/media/addon-lists/{id}?error=unsaved"));
+    }
+    match publish_addon_media_list_with_state(&state, id, input.saved_revision).await {
+        Ok(AddonMediaListPublishResult::Queued { .. }) => {
+            Redirect::to(&format!("/media/addon-lists/{id}?status=publishing"))
         }
         Ok(AddonMediaListPublishResult::PreparingPlaybackDetails { .. }) => {
             Redirect::to(&format!("/media/addon-lists/{id}?status=preparing"))

@@ -13,6 +13,7 @@ mod ffmpeg_profile;
 mod filler;
 mod graphics;
 mod library;
+mod managed_library_operation;
 mod media_item;
 mod media_source;
 mod metadata;
@@ -38,6 +39,7 @@ pub(crate) use ffmpeg_profile::{decode_hdr_content_light, decode_hdr_mastering_d
 pub use filler::SqliteFillerRepository;
 pub use graphics::SqliteGraphicsRepository;
 pub use library::SqliteLibraryRepository;
+pub use managed_library_operation::SqliteManagedLibraryOperationRepository;
 pub use media_item::SqliteMediaItemRepository;
 pub use media_source::SqliteMediaSourceRepository;
 pub use metadata::SqliteMetadataRepository;
@@ -81,6 +83,7 @@ pub struct Repositories {
     pub deco: SqliteDecoRepository,
     pub template: SqliteTemplateRepository,
     pub media_item: SqliteMediaItemRepository,
+    pub managed_library_operations: SqliteManagedLibraryOperationRepository,
     pub library: SqliteLibraryRepository,
     pub media_source: SqliteMediaSourceRepository,
     pub collection: SqliteCollectionRepository,
@@ -110,6 +113,7 @@ pub fn make_repositories(pool: Pool<crate::db::Db>) -> Repositories {
         deco: SqliteDecoRepository(pool.clone()),
         template: SqliteTemplateRepository(pool.clone()),
         media_item: SqliteMediaItemRepository(pool.clone()),
+        managed_library_operations: SqliteManagedLibraryOperationRepository(pool.clone()),
         library: SqliteLibraryRepository(pool.clone()),
         media_source: SqliteMediaSourceRepository(pool.clone()),
         collection: SqliteCollectionRepository(pool.clone()),

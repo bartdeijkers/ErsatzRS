@@ -10,8 +10,14 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AddonMediaListPublishResult {
-    Published,
-    PreparingPlaybackDetails { item_count: u64 },
+    Queued {
+        operation_id: i64,
+        generation: i32,
+        existing: bool,
+    },
+    PreparingPlaybackDetails {
+        item_count: u64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -121,6 +127,7 @@ pub struct AddonMediaListRow {
     pub review_state: AddonMediaListReviewState,
     pub review_error: Option<String>,
     pub published_revision: i32,
+    pub draft_revision: i32,
     pub detail_import_policy: AddonMediaListDetailPolicy,
     pub import_progress: Option<AddonMediaListImportProgressRow>,
 }
@@ -140,6 +147,7 @@ pub struct AddonMediaListForm {
     pub review_state: AddonMediaListReviewState,
     pub review_error: Option<String>,
     pub published_revision: i32,
+    pub draft_revision: i32,
     pub legacy_chapter_input: String,
     pub detail_import_policy: AddonMediaListDetailPolicy,
     pub import_progress: Option<AddonMediaListImportProgressRow>,
@@ -738,6 +746,7 @@ pub async fn list_addon_media_lists_with_state(
                 review_state: row.review_state,
                 review_error: row.review_error,
                 published_revision: row.published_revision,
+                draft_revision: row.draft_revision,
                 detail_import_policy: row.detail_import_policy,
                 import_progress: row.import_progress.map(Into::into),
             })
@@ -785,6 +794,7 @@ pub async fn get_addon_media_list_form(
                 review_state: form.review_state,
                 review_error: form.review_error,
                 published_revision: form.published_revision,
+                draft_revision: form.draft_revision,
                 legacy_chapter_input: form.legacy_chapter_input,
                 detail_import_policy: form.detail_import_policy,
                 import_progress: form.import_progress.map(Into::into),
@@ -1293,11 +1303,12 @@ pub async fn match_addon_media_list(id: i64) -> Result<(), ServerFnError> {
 #[server]
 pub async fn publish_addon_media_list(
     id: i64,
+    saved_revision: i32,
 ) -> Result<AddonMediaListPublishResult, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    publish_addon_media_list_with_state(&state, id)
+    publish_addon_media_list_with_state(&state, id, saved_revision)
         .await
         .map_err(ServerFnError::new)
 }
@@ -1306,23 +1317,32 @@ pub async fn publish_addon_media_list(
 pub async fn publish_addon_media_list_with_state(
     state: &crate::host::state::AppState,
     id: i64,
+    saved_revision: i32,
 ) -> ersatzrs_app::Result<AddonMediaListPublishResult> {
-    let pending_details = state
+    let outcome = state
         .application
-        .publish_addon_media_list(ersatzrs_app::commands::PublishAddonMediaList { id })
+        .publish_addon_media_list(ersatzrs_app::commands::PublishAddonMediaList {
+            id,
+            saved_revision,
+        })
         .await?;
-    if let Some(item_count) = pending_details {
-        return Ok(AddonMediaListPublishResult::PreparingPlaybackDetails { item_count });
+    match outcome {
+        ersatzrs_app::commands::PublishAddonMediaListOutcome::Preparing { pending_details } => {
+            Ok(AddonMediaListPublishResult::PreparingPlaybackDetails {
+                item_count: pending_details,
+            })
+        }
+        ersatzrs_app::commands::PublishAddonMediaListOutcome::Queued {
+            operation_id,
+            generation,
+            existing,
+            ..
+        } => Ok(AddonMediaListPublishResult::Queued {
+            operation_id,
+            generation,
+            existing,
+        }),
     }
-    if let Some(library_id) = state.application.addon_media_list_library_id(id).await? {
-        let _ = state
-            .application
-            .request_library_scan(ersatzrs_app::commands::RequestLibraryScan::new(
-                library_id, false,
-            ))
-            .await;
-    }
-    Ok(AddonMediaListPublishResult::Published)
 }
 
 #[server]

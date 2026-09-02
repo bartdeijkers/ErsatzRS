@@ -1,6 +1,10 @@
 use anyhow::Context;
 use clap::{Parser, ValueEnum};
-use ersatzrs_core::repositories::{EmbyConnectionConfig, JellyfinConnectionConfig};
+use ersatzrs_core::repositories::{
+    EmbyConnectionConfig, JellyfinConnectionConfig, ManagedLibraryOperationRepository,
+    ManagedLibraryScanSpec,
+};
+use ersatzrs_domain::{ManagedLibraryOperationKind, ManagedLibraryOperationState, MediaSourceKind};
 use ersatzrs_infra::db;
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::emby::{sync_emby_movie_library, sync_emby_show_library, EmbyService};
@@ -11,8 +15,10 @@ use ersatzrs_infra::plex::{
     sync_plex_collection_library, sync_plex_movie_library, sync_plex_other_video_library,
     sync_plex_show_library, PlexConnectionConfig, PlexService,
 };
+use ersatzrs_infra::repositories::SqliteManagedLibraryOperationRepository;
 use ersatzrs_scanner::{scan_local_library, LocalScanConfig};
 use sqlx::Row;
+use std::future::Future;
 use tracing::info;
 
 const PLEX_SERVER_AUTH_TOKEN_PREFIX: &str = "plex.server_auth_token.";
@@ -58,13 +64,118 @@ async fn main() -> anyhow::Result<()> {
 
     let pool = startup.pool;
 
-    match args.provider {
-        Provider::Local => scan_local(&pool, &args).await?,
-        Provider::Jellyfin => scan_jellyfin(&pool, &args).await?,
-        Provider::Plex => scan_plex(&pool, &args).await?,
-        Provider::Emby => scan_emby(&pool, &args).await?,
+    if args.dry_run {
+        match args.provider {
+            Provider::Local => scan_local(&pool, &args).await?,
+            Provider::Jellyfin => scan_jellyfin(&pool, &args).await?,
+            Provider::Plex => scan_plex(&pool, &args).await?,
+            Provider::Emby => scan_emby(&pool, &args).await?,
+        }
+        return Ok(());
     }
+
+    let provider = match args.provider {
+        Provider::Local => MediaSourceKind::Local,
+        Provider::Jellyfin => MediaSourceKind::Jellyfin,
+        Provider::Plex => MediaSourceKind::Plex,
+        Provider::Emby => MediaSourceKind::Emby,
+    };
+    let operations = SqliteManagedLibraryOperationRepository(pool.clone());
+    let operation = operations
+        .enqueue_scan(
+            ManagedLibraryOperationKind::ManualScan,
+            args.library_id,
+            ManagedLibraryScanSpec {
+                provider,
+                show_id: None,
+                deep_scan: args.deep_scan,
+            },
+            false,
+        )
+        .await?
+        .context("persist scanner operation")?;
+    let claim = loop {
+        if let Some(claim) = operations
+            .claim_operation(operation.id, chrono::Utc::now())
+            .await?
+        {
+            break claim;
+        }
+        match operations.operation(operation.id).await? {
+            Some(current) if current.state == ManagedLibraryOperationState::Completed => {
+                info!(
+                    operation_id = operation.id,
+                    "scan completed by the active host worker"
+                );
+                return Ok(());
+            }
+            Some(current) if current.state == ManagedLibraryOperationState::Failed => {
+                anyhow::bail!("persisted scan operation failed in the active host worker");
+            }
+            None => anyhow::bail!("persisted scan operation disappeared while waiting"),
+            Some(_) => tokio::time::sleep(std::time::Duration::from_millis(250)).await,
+        }
+    };
+    let heartbeat_operations = operations.clone();
+    let heartbeat_claim = claim.clone();
+    let heartbeat = async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            let current = heartbeat_operations
+                .heartbeat(&heartbeat_claim, chrono::Utc::now())
+                .await
+                .context("refresh standalone scanner lease")?;
+            if !current {
+                anyhow::bail!("standalone scanner lease is no longer current");
+            }
+        }
+    };
+
+    let scan = async {
+        match args.provider {
+            Provider::Local => scan_local(&pool, &args).await,
+            Provider::Jellyfin => scan_jellyfin(&pool, &args).await,
+            Provider::Plex => scan_plex(&pool, &args).await,
+            Provider::Emby => scan_emby(&pool, &args).await,
+        }
+    };
+    let result = Box::pin(run_while_lease_current(scan, heartbeat)).await;
+    match result {
+        Ok(()) => {
+            if !operations.complete_operation(&claim).await? {
+                anyhow::bail!("scanner lease expired before completion could be persisted");
+            }
+        }
+        Err(error) => {
+            let _ = operations
+                .fail_operation(&claim, "scan_failed", "standalone scanner operation failed")
+                .await;
+            return Err(error);
+        }
+    }
+
     Ok(())
+}
+
+async fn run_while_lease_current<Scan, Heartbeat>(
+    scan: Scan,
+    heartbeat: Heartbeat,
+) -> anyhow::Result<()>
+where
+    Scan: Future<Output = anyhow::Result<()>>,
+    Heartbeat: Future<Output = anyhow::Result<()>>,
+{
+    tokio::pin!(scan);
+    tokio::pin!(heartbeat);
+    tokio::select! {
+        result = &mut scan => result,
+        result = &mut heartbeat => match result {
+            Err(error) => Err(error),
+            Ok(()) => anyhow::bail!("standalone scanner heartbeat stopped unexpectedly"),
+        },
+    }
 }
 
 #[allow(clippy::disallowed_methods)]
@@ -97,6 +208,9 @@ async fn scan_local(pool: &DbPool, args: &Args) -> anyhow::Result<()> {
         },
     )
     .await?;
+    if report.failed_files > 0 {
+        anyhow::bail!("Local scan reported {} failed file(s)", report.failed_files);
+    }
     info!(scanned_files = report.scanned_files, "local scan complete");
     Ok(())
 }
@@ -451,12 +565,17 @@ async fn resolve_ffprobe_path(pool: &DbPool, args: &Args) -> anyhow::Result<Stri
 #[cfg(test)]
 mod tests {
     use super::{
-        scan_emby, scan_jellyfin, scan_plex, Args, Provider, PLEX_SERVER_AUTH_TOKEN_PREFIX,
+        run_while_lease_current, scan_emby, scan_jellyfin, scan_plex, Args, Provider,
+        PLEX_SERVER_AUTH_TOKEN_PREFIX,
     };
     use httpmock::{prelude::*, Mock};
     use serde_json::json;
     use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::{Executor, Row, SqlitePool};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
 
     async fn test_db() -> SqlitePool {
         let pool = SqlitePoolOptions::new()
@@ -595,6 +714,43 @@ mod tests {
             dry_run: true,
             deep_scan: false,
         }
+    }
+
+    #[tokio::test]
+    async fn heartbeat_failure_cancels_the_foreground_scan() {
+        struct DropFlag(Arc<AtomicBool>);
+
+        impl Drop for DropFlag {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+
+        let started = Arc::new(AtomicBool::new(false));
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let scan_started = started.clone();
+        let scan_cancelled = cancelled.clone();
+        let scan = async move {
+            let _drop_flag = DropFlag(scan_cancelled);
+            scan_started.store(true, Ordering::SeqCst);
+            std::future::pending::<anyhow::Result<()>>().await
+        };
+        let heartbeat = async move {
+            while !started.load(Ordering::SeqCst) {
+                tokio::task::yield_now().await;
+            }
+            anyhow::bail!("lease heartbeat failed")
+        };
+
+        let error = run_while_lease_current(scan, heartbeat)
+            .await
+            .expect_err("heartbeat loss must fail the scanner");
+
+        assert!(error.to_string().contains("lease heartbeat failed"));
+        assert!(
+            cancelled.load(Ordering::SeqCst),
+            "the foreground scan future must be dropped before returning"
+        );
     }
 
     #[tokio::test]

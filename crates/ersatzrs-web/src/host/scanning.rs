@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use ersatzrs_app::{
-    commands::{ExecuteScanOutcome, ScanWorkRequest},
+    commands::{ExecuteManagedLibraryOperationOutcome, ScanWorkRequest},
     ApplicationServices, ScanPlayoutRefresh, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
     ScanWorkQueue, ScanWorkQueueError,
 };
@@ -10,7 +10,6 @@ use ersatzrs_domain::{EntityId, MediaSourceKind, ScanProgressSink};
 use ersatzrs_infra::db::DbPool;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use tracing::warn;
 
 /// Tokio adapter for the application-owned FIFO scan admission boundary.
 #[derive(Clone)]
@@ -72,57 +71,19 @@ impl NativeScanRuntime {
 
 #[async_trait]
 impl ScanRuntime for NativeScanRuntime {
-    async fn recover_playout_refreshes(&self) -> Result<ScanRuntimeReport, ScanRuntimeError> {
-        let interrupted = ersatzrs_infra::scan_refresh::interrupted_resolutions(&self.pool)
+    async fn interrupted_scan_library_ids(&self) -> Result<Vec<EntityId>, ScanRuntimeError> {
+        ersatzrs_infra::scan_refresh::interrupted_resolutions(&self.pool)
             .await
-            .map_err(scan_error)?;
-        for resolution in interrupted {
-            let replay = async {
-                let report = self
-                    .scan_local_library_report(resolution.library_id, &())
-                    .await?;
-                if report.failed_files > 0 {
-                    return Err(ScanRuntimeError::new(format!(
-                        "interrupted Local scan replay reported {} failed file(s)",
-                        report.failed_files
-                    )));
-                }
-                self.match_all_addon_media_lists().await?;
-                Ok(())
-            }
-            .await;
-            match replay {
-                Ok(()) => {
-                    ersatzrs_infra::scan_refresh::complete_interrupted_replay(
-                        &self.pool,
-                        resolution.library_id,
-                        resolution.generation,
-                    )
-                    .await
-                    .map_err(scan_error)?;
-                }
-                Err(error) => {
-                    if let Err(state_error) = ersatzrs_infra::scan_refresh::fail_interrupted_replay(
-                        &self.pool,
-                        resolution.library_id,
-                        resolution.generation,
-                    )
-                    .await
-                    {
-                        warn!(
-                            library_id = resolution.library_id,
-                            error = %state_error,
-                            "failed to retain interrupted scan replay failure"
-                        );
-                    }
-                    warn!(
-                        library_id = resolution.library_id,
-                        %error,
-                        "interrupted scan-impact resolution replay failed"
-                    );
-                }
-            }
-        }
+            .map(|resolutions| {
+                resolutions
+                    .into_iter()
+                    .map(|resolution| resolution.library_id)
+                    .collect()
+            })
+            .map_err(scan_error)
+    }
+
+    async fn recover_playout_refreshes(&self) -> Result<ScanRuntimeReport, ScanRuntimeError> {
         let refreshes = ersatzrs_infra::scan_refresh::recoverable_refreshes(&self.pool)
             .await
             .map_err(scan_error)?;
@@ -190,14 +151,45 @@ impl ScanRuntime for NativeScanRuntime {
             .map(|_| ScanRuntimeReport::default())
             .map_err(scan_error),
             MediaSourceKind::Local => {
-                let mut report = self.scan_local_library_report(library_id, progress).await?;
-                let match_report = self.match_all_addon_media_lists().await?;
-                report
-                    .playout_refreshes
-                    .extend(match_report.playout_refreshes);
-                Ok(ScanRuntimeReport {
-                    playout_refreshes: report.playout_refreshes,
-                })
+                let interrupted_generation =
+                    ersatzrs_infra::scan_refresh::interrupted_resolutions(&self.pool)
+                        .await
+                        .map_err(scan_error)?
+                        .into_iter()
+                        .find(|resolution| resolution.library_id == library_id)
+                        .map(|resolution| resolution.generation);
+                let result = async {
+                    let mut report = self.scan_local_library_report(library_id, progress).await?;
+                    if report.failed_files > 0 {
+                        return Err(ScanRuntimeError::new(format!(
+                            "Local scan reported {} failed file(s)",
+                            report.failed_files
+                        )));
+                    }
+                    let match_report = self.match_all_addon_media_lists().await?;
+                    report
+                        .playout_refreshes
+                        .extend(match_report.playout_refreshes);
+                    Ok(ScanRuntimeReport {
+                        playout_refreshes: report.playout_refreshes,
+                    })
+                }
+                .await;
+                if let Some(generation) = interrupted_generation {
+                    let persisted = if result.is_ok() {
+                        ersatzrs_infra::scan_refresh::complete_interrupted_replay(
+                            &self.pool, library_id, generation,
+                        )
+                        .await
+                    } else {
+                        ersatzrs_infra::scan_refresh::fail_interrupted_replay(
+                            &self.pool, library_id, generation,
+                        )
+                        .await
+                    };
+                    persisted.map_err(scan_error)?;
+                }
+                result
             }
         }
     }
@@ -272,7 +264,7 @@ impl Drop for WorkerLifecycle {
     }
 }
 
-/// Consume the one process-wide FIFO scan queue until coordinated shutdown.
+/// Claim durable managed-library work until coordinated shutdown.
 pub async fn run_scan_worker(
     mut receiver: mpsc::UnboundedReceiver<ScanWorkRequest>,
     application: Arc<ApplicationServices>,
@@ -284,39 +276,83 @@ pub async fn run_scan_worker(
     };
     tracing::info!("scanner worker started");
 
+    let mut poll = tokio::time::interval(std::time::Duration::from_millis(250));
+    poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut receiver_closed = false;
+
     loop {
-        let work = tokio::select! {
+        tokio::select! {
             () = shutdown.cancelled() => break,
-            work = receiver.recv() => {
-                let Some(work) = work else {
-                    break;
-                };
-                work
+            _ = poll.tick() => {}
+            work = receiver.recv(), if !receiver_closed => {
+                receiver_closed = work.is_none();
             }
         };
-        let operation_id = work.operation_id.0;
-        let library_id = work.request.library_id();
-        let outcome = tokio::select! {
-            () = shutdown.cancelled() => break,
-            outcome = application.execute_scan_work(work) => outcome,
+
+        let claim = match application.claim_managed_library_operation().await {
+            Ok(Some(claim)) => claim,
+            Ok(None) => continue,
+            Err(error) => {
+                tracing::warn!(error = %error, "managed-library operation claim failed");
+                continue;
+            }
+        };
+        let operation_id = claim.operation.id;
+        let library_id = claim.operation.library_id;
+        let execution = application.execute_managed_library_operation(claim.clone());
+        tokio::pin!(execution);
+        let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(30));
+        heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        heartbeat.tick().await;
+        let outcome = loop {
+            tokio::select! {
+                () = shutdown.cancelled() => break None,
+                outcome = &mut execution => break Some(outcome),
+                _ = heartbeat.tick() => {
+                    match application.heartbeat_managed_library_operation(&claim).await {
+                        Ok(true) => {}
+                        Ok(false) => {
+                            tracing::warn!(operation_id, library_id, "managed-library lease was lost");
+                            break Some(ExecuteManagedLibraryOperationOutcome::LeaseLost);
+                        }
+                        Err(error) => {
+                            tracing::warn!(operation_id, library_id, error = %error, "managed-library heartbeat failed");
+                        }
+                    }
+                }
+            }
+        };
+        let Some(outcome) = outcome else {
+            break;
         };
         match outcome {
-            ExecuteScanOutcome::Completed => {
-                tracing::info!(operation_id, library_id, "scan operation completed");
+            ExecuteManagedLibraryOperationOutcome::Completed => {
+                tracing::info!(
+                    operation_id,
+                    library_id,
+                    "managed-library operation completed"
+                );
             }
-            ExecuteScanOutcome::Failed { message } => {
+            ExecuteManagedLibraryOperationOutcome::Deferred => {
+                tracing::warn!(
+                    operation_id,
+                    library_id,
+                    "managed-library recovery deferred"
+                );
+            }
+            ExecuteManagedLibraryOperationOutcome::Failed { message } => {
                 tracing::warn!(
                     operation_id,
                     library_id,
                     error = %message,
-                    "scan operation failed"
+                    "managed-library operation failed"
                 );
             }
-            ExecuteScanOutcome::Missing => {
+            ExecuteManagedLibraryOperationOutcome::LeaseLost => {
                 tracing::warn!(
                     operation_id,
                     library_id,
-                    "scan queue token has no queued application operation"
+                    "managed-library operation stopped after losing its lease"
                 );
             }
         }
@@ -358,7 +394,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn startup_replays_and_completes_an_interrupted_local_scan_marker() {
+    async fn durable_startup_replay_completes_an_interrupted_local_scan_marker() {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -378,16 +414,22 @@ mod tests {
         .await
         .expect("persist interrupted scan marker");
 
-        let report = NativeScanRuntime::new(pool.clone())
+        let runtime = NativeScanRuntime::new(pool.clone());
+        let libraries = runtime
+            .interrupted_scan_library_ids()
+            .await
+            .expect("load interrupted Local scan");
+        let report = runtime
             .recover_playout_refreshes()
             .await
-            .expect("replay interrupted Local scan");
+            .expect("recover completed refresh intents");
 
+        assert_eq!(libraries, [1]);
         assert!(report.playout_refreshes.is_empty());
-        assert!(ersatzrs_infra::scan_refresh::interrupted_resolutions(&pool)
+        runtime
+            .scan_library(MediaSourceKind::Local, 1, true, &())
             .await
-            .expect("load remaining interrupted markers")
-            .is_empty());
+            .expect("run admitted startup replay");
         let state: i64 = sqlx::query_scalar(
             r#"SELECT "State" FROM "ScanRefreshResolution" WHERE "LibraryId" = 1"#,
         )
@@ -398,7 +440,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn startup_retains_a_failed_marker_when_interrupted_replay_has_file_failures() {
+    async fn durable_startup_replay_retains_a_failed_marker() {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -423,12 +465,22 @@ mod tests {
         .await
         .expect("persist interrupted scan marker");
 
-        let report = NativeScanRuntime::new(pool.clone())
+        let runtime = NativeScanRuntime::new(pool.clone());
+        let libraries = runtime
+            .interrupted_scan_library_ids()
+            .await
+            .expect("discover interrupted scan");
+        let report = runtime
             .recover_playout_refreshes()
             .await
-            .expect("recover other durable refreshes after replay failure");
+            .expect("recover other durable refreshes");
 
+        assert_eq!(libraries, [1]);
         assert!(report.playout_refreshes.is_empty());
+        runtime
+            .scan_library(MediaSourceKind::Local, 1, true, &())
+            .await
+            .expect_err("malformed managed input must fail replay");
         let state: i64 = sqlx::query_scalar(
             r#"SELECT "State" FROM "ScanRefreshResolution" WHERE "LibraryId" = 1"#,
         )

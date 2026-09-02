@@ -450,13 +450,11 @@ impl ApplicationServices {
     pub async fn publish_addon_media_list(
         &self,
         command: commands::PublishAddonMediaList,
-    ) -> Result<Option<u64>> {
+    ) -> Result<commands::PublishAddonMediaListOutcome> {
         commands::publish_addon_media_list(
             command,
             self.ports.addon_media_lists(),
-            self.ports.scan_runtime(),
-            self.ports.playout_builds(),
-            &self.operations,
+            self.ports.managed_library_operations(),
         )
         .await
     }
@@ -2772,6 +2770,7 @@ impl ApplicationServices {
         commands::request_library_scan(
             command,
             self.ports.libraries(),
+            self.ports.managed_library_operations(),
             self.ports.scan_work(),
             &self.operations,
         )
@@ -2786,6 +2785,7 @@ impl ApplicationServices {
         commands::request_show_scan(
             command,
             self.ports.libraries(),
+            self.ports.managed_library_operations(),
             self.ports.scan_work(),
             &self.operations,
         )
@@ -2806,8 +2806,120 @@ impl ApplicationServices {
         .await
     }
 
-    /// Re-admit durable scan-triggered Refresh intents after process startup.
+    /// Claim the oldest eligible managed-library operation across restarts.
+    pub async fn claim_managed_library_operation(
+        &self,
+    ) -> Result<Option<ersatzrs_core::repositories::ManagedLibraryOperationClaim>> {
+        self.ports
+            .managed_library_operations()
+            .claim_next(chrono::Utc::now())
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Extend the durable lease while external scan or filesystem work runs.
+    pub async fn heartbeat_managed_library_operation(
+        &self,
+        claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+    ) -> Result<bool> {
+        self.ports
+            .managed_library_operations()
+            .heartbeat(claim, chrono::Utc::now())
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Execute one fenced durable operation through the shared native runtime.
+    pub async fn execute_managed_library_operation(
+        &self,
+        claim: ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+    ) -> commands::ExecuteManagedLibraryOperationOutcome {
+        execute_managed_library_operation(self, &claim).await
+    }
+
+    /// Persist or identify the exact durable Local scans startup must finish
+    /// before recovering scan-triggered playout refreshes.
+    pub async fn prepare_scan_playout_recovery(&self) -> Result<Vec<ersatzrs_domain::EntityId>> {
+        let interrupted = self.interrupted_scan_library_ids().await?;
+        let mut replay_operation_ids = std::collections::BTreeSet::new();
+        for library_id in &interrupted {
+            let scan = ersatzrs_core::repositories::ManagedLibraryScanSpec {
+                provider: ersatzrs_domain::MediaSourceKind::Local,
+                show_id: None,
+                deep_scan: true,
+            };
+            let operation = if let Some(operation) = self
+                .ports
+                .managed_library_operations()
+                .enqueue_scan(
+                    ersatzrs_domain::ManagedLibraryOperationKind::StartupReplayScan,
+                    *library_id,
+                    scan,
+                    true,
+                )
+                .await?
+            {
+                operation
+            } else if let Some(operation) = self
+                .ports
+                .managed_library_operations()
+                .active_scan_operation(*library_id)
+                .await?
+            {
+                operation
+            } else if !self
+                .interrupted_scan_library_ids()
+                .await?
+                .contains(library_id)
+            {
+                continue;
+            } else {
+                return Err(ApplicationError::Unavailable {
+                    operation: "identify interrupted library scan replay",
+                    message: format!(
+                        "library {library_id} remained interrupted without an active durable scan"
+                    ),
+                });
+            };
+            replay_operation_ids.insert(operation.id);
+        }
+        Ok(replay_operation_ids.into_iter().collect())
+    }
+
+    /// Load one durable operation while startup waits for its terminal state.
+    pub async fn managed_library_operation(
+        &self,
+        operation_id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::ManagedLibraryOperation>> {
+        self.ports
+            .managed_library_operations()
+            .operation(operation_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Claim one exact durable operation during the startup recovery barrier.
+    pub async fn claim_managed_library_operation_by_id(
+        &self,
+        operation_id: ersatzrs_domain::EntityId,
+    ) -> Result<Option<ersatzrs_core::repositories::ManagedLibraryOperationClaim>> {
+        self.ports
+            .managed_library_operations()
+            .claim_operation(operation_id, chrono::Utc::now())
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Recover durable playout refreshes after startup replay scans are
+    /// terminal. Any remaining interrupted marker rejects preflight.
     pub async fn recover_scan_playout_refreshes(&self) -> Result<usize> {
+        let unresolved = self.interrupted_scan_library_ids().await?;
+        if !unresolved.is_empty() {
+            return Err(ApplicationError::Unavailable {
+                operation: "resolve interrupted library scan replay",
+                message: format!("durable replay ended without resolving libraries {unresolved:?}"),
+            });
+        }
         let report = self
             .ports
             .scan_runtime()
@@ -2824,6 +2936,17 @@ impl ApplicationServices {
             &self.operations,
         )?;
         Ok(count)
+    }
+
+    async fn interrupted_scan_library_ids(&self) -> Result<Vec<ersatzrs_domain::EntityId>> {
+        self.ports
+            .scan_runtime()
+            .interrupted_scan_library_ids()
+            .await
+            .map_err(|error| ApplicationError::Unavailable {
+                operation: "load interrupted library scans",
+                message: error.to_string(),
+            })
     }
 
     /// Re-admit pending durable scan-triggered Refresh intents during the
@@ -2885,6 +3008,460 @@ impl ApplicationServices {
     }
 }
 
+#[allow(clippy::too_many_lines)]
+async fn execute_managed_library_operation(
+    application: &ApplicationServices,
+    claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+) -> commands::ExecuteManagedLibraryOperationOutcome {
+    use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
+    use ersatzrs_domain::{
+        AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
+        ManagedLibraryOperationKind, ManagedLibraryOperationState,
+    };
+
+    if !matches!(
+        claim.operation.kind,
+        ManagedLibraryOperationKind::Publication | ManagedLibraryOperationKind::Recovery
+    ) {
+        return execute_durable_scan(application, claim).await;
+    }
+
+    for _ in 0..16 {
+        let job = match application
+            .ports
+            .managed_library_operations()
+            .publication_job(claim.operation.id)
+            .await
+        {
+            Ok(Some(job)) => job,
+            Ok(None) => {
+                let _ = application
+                    .ports
+                    .managed_library_operations()
+                    .fail_operation(
+                        claim,
+                        "publication_job_missing",
+                        "publication job is missing",
+                    )
+                    .await;
+                return Outcome::Failed {
+                    message: "publication job is missing".to_owned(),
+                };
+            }
+            Err(error) => {
+                return Outcome::Failed {
+                    message: error.to_string(),
+                };
+            }
+        };
+
+        match job.phase {
+            AddonMediaListPublicationPhase::AwaitingLease => {
+                if !transition_publication(
+                    application,
+                    claim,
+                    job.phase,
+                    AddonMediaListPublicationPhase::Staging,
+                )
+                .await
+                {
+                    return Outcome::LeaseLost;
+                }
+            }
+            AddonMediaListPublicationPhase::Staging => {
+                let staged = application
+                    .ports
+                    .addon_media_lists()
+                    .stage_publication_revision(
+                        job.list_id,
+                        job.saved_revision,
+                        job.operation_id,
+                        job.generation,
+                        &claim.operation.owner_token,
+                        &claim.lease_owner,
+                    )
+                    .await;
+                if let Err(error) = staged {
+                    let message = error.to_string();
+                    let _ = application
+                        .ports
+                        .managed_library_operations()
+                        .fail_operation(
+                            claim,
+                            "publication_staging_failed",
+                            "publication staging failed",
+                        )
+                        .await;
+                    return Outcome::Failed { message };
+                }
+                if !transition_publication(
+                    application,
+                    claim,
+                    job.phase,
+                    AddonMediaListPublicationPhase::Scanning,
+                )
+                .await
+                {
+                    return Outcome::LeaseLost;
+                }
+            }
+            AddonMediaListPublicationPhase::Scanning => {
+                let child = match application
+                    .ports
+                    .managed_library_operations()
+                    .ensure_publication_child_scan(claim, job.list_id)
+                    .await
+                {
+                    Ok(child) => child,
+                    Err(error) => {
+                        return Outcome::Failed {
+                            message: error.to_string(),
+                        };
+                    }
+                };
+                if child.state != ManagedLibraryOperationState::Completed {
+                    let child_claim = ersatzrs_core::repositories::ManagedLibraryOperationClaim {
+                        operation: child,
+                        lease_owner: claim.lease_owner.clone(),
+                    };
+                    match execute_durable_scan(application, &child_claim).await {
+                        Outcome::Completed => {}
+                        Outcome::Failed { message } => {
+                            let recorded = application
+                                .ports
+                                .managed_library_operations()
+                                .record_publication_failure(
+                                    claim,
+                                    job.phase,
+                                    "publication_scan_failed",
+                                    "publication child scan failed",
+                                )
+                                .await
+                                .unwrap_or(false);
+                            if !recorded {
+                                return Outcome::LeaseLost;
+                            }
+                            tracing::warn!(
+                                operation_id = claim.operation.id,
+                                error = %message,
+                                "add-on publication child scan failed; recovery will restore the prior revision"
+                            );
+                            continue;
+                        }
+                        Outcome::Deferred | Outcome::LeaseLost => return Outcome::LeaseLost,
+                    }
+                }
+                if !transition_publication(
+                    application,
+                    claim,
+                    job.phase,
+                    AddonMediaListPublicationPhase::Committing,
+                )
+                .await
+                {
+                    return Outcome::LeaseLost;
+                }
+            }
+            AddonMediaListPublicationPhase::Committing => {
+                if let Err(error) = application
+                    .ports
+                    .addon_media_lists()
+                    .commit_staged_publication_revision(
+                        job.list_id,
+                        job.target_published_revision,
+                        job.operation_id,
+                        job.generation,
+                        &claim.operation.owner_token,
+                        &claim.lease_owner,
+                    )
+                    .await
+                {
+                    let recorded = application
+                        .ports
+                        .managed_library_operations()
+                        .record_publication_failure(
+                            claim,
+                            job.phase,
+                            "publication_commit_failed",
+                            "publication commit failed",
+                        )
+                        .await
+                        .unwrap_or(false);
+                    if !recorded {
+                        return Outcome::LeaseLost;
+                    }
+                    tracing::warn!(
+                        operation_id = claim.operation.id,
+                        error = %error,
+                        "add-on publication commit failed; recovery will restore the prior revision"
+                    );
+                    continue;
+                }
+                if let Ok(report) = application
+                    .ports
+                    .scan_runtime()
+                    .pending_playout_refreshes()
+                    .await
+                {
+                    if let Err(error) = commands::require_scan_playout_refreshes(
+                        report,
+                        application.ports.playout_builds(),
+                        &application.operations,
+                    ) {
+                        tracing::warn!(
+                            operation_id = claim.operation.id,
+                            error = %error,
+                            "published add-on list has deferred playout refresh admission"
+                        );
+                    }
+                }
+                return match application
+                    .ports
+                    .managed_library_operations()
+                    .complete_publication(claim, AddonMediaListPublicationOutcome::Published)
+                    .await
+                {
+                    Ok(true) => Outcome::Completed,
+                    Ok(false) => Outcome::LeaseLost,
+                    Err(error) => Outcome::Failed {
+                        message: error.to_string(),
+                    },
+                };
+            }
+            AddonMediaListPublicationPhase::RestoringFiles => {
+                let original = job
+                    .original_failure_diagnostic
+                    .as_deref()
+                    .unwrap_or("publication failed");
+                if let Err(error) = application
+                    .ports
+                    .addon_media_lists()
+                    .restore_staged_publication_revision(
+                        job.list_id,
+                        original,
+                        job.operation_id,
+                        job.generation,
+                        &claim.operation.owner_token,
+                        &claim.lease_owner,
+                    )
+                    .await
+                {
+                    return schedule_publication_retry(application, claim, &error.to_string())
+                        .await;
+                }
+                if !transition_publication(
+                    application,
+                    claim,
+                    job.phase,
+                    AddonMediaListPublicationPhase::RestoringProjection,
+                )
+                .await
+                {
+                    return Outcome::LeaseLost;
+                }
+            }
+            AddonMediaListPublicationPhase::RestoringProjection => {
+                if let Err(error) = application
+                    .ports
+                    .addon_media_lists()
+                    .reconcile_restored_publication_revision(
+                        job.list_id,
+                        job.operation_id,
+                        job.generation,
+                        &claim.operation.owner_token,
+                        &claim.lease_owner,
+                    )
+                    .await
+                {
+                    return schedule_publication_retry(application, claim, &error.to_string())
+                        .await;
+                }
+                if !transition_publication(
+                    application,
+                    claim,
+                    job.phase,
+                    AddonMediaListPublicationPhase::Reconciling,
+                )
+                .await
+                {
+                    return Outcome::LeaseLost;
+                }
+            }
+            AddonMediaListPublicationPhase::Reconciling => {
+                return match application
+                    .ports
+                    .managed_library_operations()
+                    .complete_publication(
+                        claim,
+                        AddonMediaListPublicationOutcome::RestoredAfterFailure,
+                    )
+                    .await
+                {
+                    Ok(true) => Outcome::Completed,
+                    Ok(false) => Outcome::LeaseLost,
+                    Err(error) => Outcome::Failed {
+                        message: error.to_string(),
+                    },
+                };
+            }
+            AddonMediaListPublicationPhase::Complete => {
+                return match application
+                    .ports
+                    .managed_library_operations()
+                    .complete_publication(
+                        claim,
+                        job.outcome
+                            .unwrap_or(AddonMediaListPublicationOutcome::Published),
+                    )
+                    .await
+                {
+                    Ok(true) => Outcome::Completed,
+                    Ok(false) => Outcome::LeaseLost,
+                    Err(error) => Outcome::Failed {
+                        message: error.to_string(),
+                    },
+                };
+            }
+        }
+    }
+
+    Outcome::Failed {
+        message: "publication exceeded its bounded phase-advance loop".to_owned(),
+    }
+}
+
+async fn transition_publication(
+    application: &ApplicationServices,
+    claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+    expected: ersatzrs_domain::AddonMediaListPublicationPhase,
+    next: ersatzrs_domain::AddonMediaListPublicationPhase,
+) -> bool {
+    application
+        .ports
+        .managed_library_operations()
+        .transition_publication(claim, expected, next)
+        .await
+        .unwrap_or(false)
+}
+
+async fn schedule_publication_retry(
+    application: &ApplicationServices,
+    claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+    diagnostic: &str,
+) -> commands::ExecuteManagedLibraryOperationOutcome {
+    use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
+
+    let attempt = u32::try_from(claim.operation.attempt_count.max(1)).unwrap_or(1);
+    let base = 1_i64
+        .checked_shl(attempt.saturating_sub(1).min(6))
+        .unwrap_or(50)
+        .min(50);
+    let jitter_window = (base / 5).max(1);
+    let operation = claim.operation.id.unsigned_abs();
+    let jitter = i64::try_from(
+        (operation + u64::from(attempt)) % u64::try_from(jitter_window + 1).unwrap_or(2),
+    )
+    .unwrap_or(0);
+    let next = chrono::Utc::now() + chrono::Duration::seconds((base + jitter).min(60));
+    match application
+        .ports
+        .managed_library_operations()
+        .schedule_publication_recovery_retry(
+            claim,
+            "publication recovery will retry after a transient failure",
+            next,
+        )
+        .await
+    {
+        Ok(true) => {
+            tracing::warn!(
+                operation_id = claim.operation.id,
+                error = %diagnostic,
+                retry_at = %next,
+                "add-on publication recovery deferred"
+            );
+            Outcome::Deferred
+        }
+        Ok(false) => Outcome::LeaseLost,
+        Err(error) => Outcome::Failed {
+            message: error.to_string(),
+        },
+    }
+}
+
+async fn execute_durable_scan(
+    application: &ApplicationServices,
+    claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+) -> commands::ExecuteManagedLibraryOperationOutcome {
+    use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
+
+    let Some(scan) = claim.operation.scan else {
+        let message = "managed-library operation has no executable scan payload".to_owned();
+        let _ = application
+            .ports
+            .managed_library_operations()
+            .fail_operation(claim, "scan_payload_missing", &message)
+            .await;
+        return Outcome::Failed { message };
+    };
+    let request = scan.show_id.map_or(
+        commands::ScanRequest::Library {
+            provider: scan.provider,
+            library_id: claim.operation.library_id,
+            deep_scan: scan.deep_scan,
+        },
+        |show_id| commands::ScanRequest::Show {
+            provider: scan.provider,
+            library_id: claim.operation.library_id,
+            show_id,
+            deep_scan: scan.deep_scan,
+        },
+    );
+    let operation_id = match u64::try_from(claim.operation.id) {
+        Ok(value) => commands::ScanOperationId(value),
+        Err(error) => {
+            return Outcome::Failed {
+                message: error.to_string(),
+            };
+        }
+    };
+    application
+        .operations
+        .scan_activity()
+        .observe_persisted(operation_id, request);
+    let outcome = application
+        .execute_scan_work(commands::ScanWorkRequest {
+            operation_id,
+            request,
+        })
+        .await;
+    match outcome {
+        commands::ExecuteScanOutcome::Completed => match application
+            .ports
+            .managed_library_operations()
+            .complete_operation(claim)
+            .await
+        {
+            Ok(true) => Outcome::Completed,
+            Ok(false) => Outcome::LeaseLost,
+            Err(error) => Outcome::Failed {
+                message: error.to_string(),
+            },
+        },
+        commands::ExecuteScanOutcome::Failed { message } => {
+            let _ = application
+                .ports
+                .managed_library_operations()
+                .fail_operation(claim, "scan_failed", "managed-library scan failed")
+                .await;
+            Outcome::Failed { message }
+        }
+        commands::ExecuteScanOutcome::Missing => Outcome::Failed {
+            message: "persisted scan was not visible to the progress registry".to_owned(),
+        },
+    }
+}
+
 struct ScanProgressReporter {
     registry: operations::ScanOperationRegistry,
     operation_id: commands::ScanOperationId,
@@ -2907,6 +3484,7 @@ impl ersatzrs_core::maintenance::ScheduledLibraryScanRequester for ApplicationSe
         match commands::request_scheduled_library_scan(
             commands::RequestScheduledLibraryScan::new(library_id),
             self.ports.libraries(),
+            self.ports.managed_library_operations(),
             self.ports.scan_work(),
             &self.operations,
         )

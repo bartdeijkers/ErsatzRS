@@ -84,6 +84,7 @@ impl HealthCheck for AddonMediaListHealthCheck {
         let presentation_failures = presentation_failures(&rows);
         let publication_failures = publication_failures(&rows);
         let stuck_publications = stuck_publications(&rows)?;
+        let coordinator_failures = publication_coordinator_failures(&self.pool).await?;
         let invalid_metadata = invalid_metadata(&self.pool).await?;
         let missing_artwork = missing_artwork(&self.pool).await?;
         let import_failures = import_failures(&self.pool).await?;
@@ -99,6 +100,7 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .chain(presentation_failures)
             .chain(publication_failures)
             .chain(stuck_publications)
+            .chain(coordinator_failures)
             .chain(invalid_metadata)
             .chain(missing_artwork)
             .chain(import_failures.into_iter().map(|(_, message)| message))
@@ -621,6 +623,46 @@ fn publication_failures(rows: &[crate::db::DbRow]) -> Vec<String> {
         .collect()
 }
 
+async fn publication_coordinator_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
+    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let failed: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListPublicationJob" AS "job"
+           JOIN "ManagedLibraryOperation" AS "operation"
+             ON "operation"."Id" = "job"."OperationId"
+           WHERE "operation"."State" = 4 AND "job"."Phase" <> 7"#,
+    )
+    .fetch_one(pool)
+    .await
+    .map_err(sqlx_error)?;
+    let expired: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListPublicationJob" AS "job"
+           JOIN "ManagedLibraryOperation" AS "operation"
+             ON "operation"."Id" = "job"."OperationId"
+           WHERE "operation"."State" = 1
+             AND "operation"."LeaseExpiresAt" IS NOT NULL
+             AND "operation"."LeaseExpiresAt" <= ?
+             AND "job"."Phase" <> 7"#,
+    )
+    .bind(now)
+    .fetch_one(pool)
+    .await
+    .map_err(sqlx_error)?;
+    let mut failures = Vec::new();
+    if failed > 0 {
+        failures.push(format!(
+            "{failed} durable add-on publication job(s) stopped before a safe terminal phase"
+        ));
+    }
+    if expired > 0 {
+        failures.push(format!(
+            "{expired} durable add-on publication lease(s) expired and await worker recovery"
+        ));
+    }
+    Ok(failures)
+}
+
 async fn count_missing_replacements(pool: &Pool<Db>) -> Result<i64> {
     sqlx::query_scalar(
         r#"SELECT COUNT(*)
@@ -734,6 +776,16 @@ mod tests {
                 "State" INTEGER NOT NULL,
                 "UpdatedAt" TEXT NOT NULL,
                 "LeaseExpiresAt" TEXT NULL
+            );
+            CREATE TABLE "ManagedLibraryOperation" (
+                "Id" INTEGER PRIMARY KEY,
+                "State" INTEGER NOT NULL,
+                "LeaseExpiresAt" TEXT NULL
+            );
+            CREATE TABLE "AddonMediaListPublicationJob" (
+                "Id" INTEGER PRIMARY KEY,
+                "OperationId" INTEGER NOT NULL,
+                "Phase" INTEGER NOT NULL
             );
             CREATE TABLE "AddonProviderHostCooldown" (
                 "ProviderHost" TEXT PRIMARY KEY,
@@ -1039,5 +1091,41 @@ mod tests {
         assert!(result
             .message
             .contains("selected artwork is not materialized"));
+    }
+
+    #[tokio::test]
+    async fn reports_a_durable_publication_that_stopped_before_terminal_state() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "Name", "ReviewState", "ProviderMetadataJson"
+               ) VALUES (1, 'org.example.list', 'Fixture', 2, '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "ManagedLibraryOperation" ("Id", "State", "LeaseExpiresAt")
+               VALUES (10, 4, NULL)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("failed operation");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListPublicationJob" ("Id", "OperationId", "Phase")
+               VALUES (20, 10, 3)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("publication job");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result
+            .message
+            .contains("stopped before a safe terminal phase"));
     }
 }

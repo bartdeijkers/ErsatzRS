@@ -108,6 +108,12 @@ pub async fn project_one_pending_detail_batch(
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 struct PublicationJournal {
+    #[serde(default)]
+    operation_id: Option<EntityId>,
+    #[serde(default)]
+    generation: Option<i32>,
+    #[serde(default)]
+    saved_revision: Option<i32>,
     previous_review_state: AddonMediaListReviewState,
     previous_presentation_kind: AddonMediaListPresentationKind,
     previous_items: Vec<PublishedItemSnapshot>,
@@ -118,6 +124,34 @@ struct PublicationJournal {
     backup_folder: Option<String>,
     #[serde(default)]
     previous_materializations: Vec<ArtworkMaterializationSnapshot>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PublicationFence<'a> {
+    operation_id: EntityId,
+    generation: i32,
+    saved_revision: i32,
+    owner_token: &'a str,
+    lease_owner: &'a str,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PublicationClaimFence<'a> {
+    operation_id: EntityId,
+    generation: i32,
+    owner_token: &'a str,
+    lease_owner: &'a str,
+}
+
+impl<'a> PublicationFence<'a> {
+    const fn claim(self) -> PublicationClaimFence<'a> {
+        PublicationClaimFence {
+            operation_id: self.operation_id,
+            generation: self.generation,
+            owner_token: self.owner_token,
+            lease_owner: self.lease_owner,
+        }
+    }
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -195,7 +229,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                       "list"."LastUpdate", "list"."LastMatch", "list"."LastError",
                       "list"."PresentationKind", "list"."RequestedPresentationKind",
                       "list"."PresentationError", "list"."ReviewState", "list"."ReviewError",
-                      "list"."PublishedRevision", "list"."DetailImportPolicy",
+                      "list"."PublishedRevision", "list"."DraftRevision",
+                      "list"."DetailImportPolicy",
                       COUNT("matched"."Id") AS "MatchCount"
                FROM "AddonMediaList" AS "list"
                LEFT JOIN "AddonMediaListItem" AS "matched"
@@ -207,7 +242,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                         "list"."LastUpdate", "list"."LastMatch", "list"."LastError",
                         "list"."PresentationKind", "list"."RequestedPresentationKind",
                         "list"."PresentationError", "list"."ReviewState", "list"."ReviewError",
-                        "list"."PublishedRevision", "list"."DetailImportPolicy"
+                        "list"."PublishedRevision", "list"."DraftRevision",
+                        "list"."DetailImportPolicy"
                ORDER BY "list"."Name", "list"."Id"
                LIMIT ? OFFSET ?"#,
         )
@@ -265,6 +301,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                     )?,
                     review_error: row.try_get("ReviewError").repository()?,
                     published_revision: row.try_get("PublishedRevision").repository()?,
+                    draft_revision: row.try_get("DraftRevision").repository()?,
                     detail_import_policy: crate::repositories::common::decode_enum_column(
                         "AddonMediaListDetailPolicy",
                         row,
@@ -293,7 +330,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                       "list"."ContentKindOverride", "list"."PresentationKind",
                       "list"."RequestedPresentationKind", "list"."PresentationError",
                       "list"."ChapterInput", "list"."ReviewState", "list"."ReviewError",
-                      "list"."PublishedRevision", "list"."DetailImportPolicy",
+                      "list"."PublishedRevision", "list"."DraftRevision",
+                      "list"."DetailImportPolicy",
                       COALESCE("managed"."FolderName", '') AS "FolderName"
                FROM "AddonMediaList" AS "list"
                LEFT JOIN "AddonMediaListLibrary" AS "managed"
@@ -336,6 +374,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                     )?,
                     review_error: row.try_get("ReviewError").repository()?,
                     published_revision: row.try_get("PublishedRevision").repository()?,
+                    draft_revision: row.try_get("DraftRevision").repository()?,
                     detail_import_policy: crate::repositories::common::decode_enum_column(
                         "AddonMediaListDetailPolicy",
                         &row,
@@ -1154,285 +1193,141 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn stage_publication(&self, id: EntityId) -> Result<AddonMediaListPublication> {
-        let form = self
-            .get_admin_form(id)
-            .await?
-            .ok_or(RepositoryError::NotFound {
-                kind: "add-on media list",
-                id,
-            })?;
-        let readiness = self.publication_readiness(id).await?;
-        if let Some(blocker) = readiness.blockers.first() {
-            let message = publication_blocker_message(blocker);
-            record_publication_error(&self.0, id, &message).await?;
-            return Err(RepositoryError::Conflict(message));
-        }
-        if readiness.required_playback_detail_count > 0 {
-            let message = format!(
-                "{} included finite item(s) still require playback details",
-                readiness.required_playback_detail_count
-            );
-            record_publication_error(&self.0, id, &message).await?;
-            return Err(RepositoryError::Conflict(message));
-        }
-        let library_id = self.managed_library_id(id).await?.ok_or_else(|| {
-            RepositoryError::Conflict("managed list storage is unavailable".to_owned())
-        })?;
-        let previous_items = sqlx::query(
-            r#"SELECT "Id", "Published", "MediaItemId", "PublishedLiveness"
-               FROM "AddonMediaListItem"
-               WHERE "AddonMediaListId" = ?
-               ORDER BY "Id""#,
+        stage_publication_impl(self, id, None).await
+    }
+
+    async fn stage_publication_revision(
+        &self,
+        id: EntityId,
+        saved_revision: i32,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<AddonMediaListPublication> {
+        stage_publication_impl(
+            self,
+            id,
+            Some(PublicationFence {
+                operation_id,
+                generation,
+                saved_revision,
+                owner_token,
+                lease_owner,
+            }),
         )
-        .bind(id)
-        .fetch_all(&self.0)
         .await
-        .repository()?
-        .iter()
-        .map(|row| {
-            Ok(PublishedItemSnapshot {
-                id: row.try_get("Id").repository()?,
-                published: decode_bool_column(row, "Published")?,
-                media_item_id: row.try_get("MediaItemId").repository()?,
-                published_liveness: crate::repositories::common::decode_enum_column(
-                    "RemoteStreamLiveness",
-                    row,
-                    "PublishedLiveness",
-                )?,
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
-        let previous_playlist = load_playlist_snapshot(&self.0, id).await?;
-        let previous_materializations = load_artwork_materializations(&self.0, id).await?;
-        let (managed_folder, backup_folder) = create_publication_backup(&self.0, id).await?;
-        let journal = PublicationJournal {
-            previous_review_state: form.review_state,
-            previous_presentation_kind: form.presentation_kind,
-            previous_items,
-            previous_playlist,
-            managed_folder: Some(managed_folder.to_string_lossy().into_owned()),
-            backup_folder: Some(backup_folder.to_string_lossy().into_owned()),
-            previous_materializations,
-        };
-        let journal_json = match serde_json::to_string(&journal) {
-            Ok(value) => value,
-            Err(error) => {
-                remove_publication_backup(&managed_folder, &backup_folder);
-                return Err(RepositoryError::Decode {
-                    kind: "add-on publication journal",
-                    value: error.to_string(),
-                });
-            }
-        };
-        let staged = async {
-            let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-            let updated = sqlx::query(
-                r#"UPDATE "AddonMediaList"
-                   SET "ReviewState" = 3, "ReviewError" = NULL,
-                       "PublicationJournalJson" = ?, "PublicationStartedAt" = ?
-                   WHERE "Id" = ? AND "ReviewState" <> 3
-                     AND ("PublicationJournalJson" IS NULL OR TRIM("PublicationJournalJson") = '')"#,
-            )
-            .bind(journal_json)
-            .bind(crate::repositories::common::encode_datetime(
-                chrono::Utc::now(),
-            ))
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-            if updated.rows_affected() != 1 {
-                return Err(publication_in_progress());
-            }
-            sqlx::query(
-                r#"UPDATE "AddonMediaListItem"
-                   SET "Published" = "Included", "PublishedLiveness" = "EffectiveLiveness"
-                   WHERE "AddonMediaListId" = ?"#,
-            )
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-            tx.commit().await.repository()
-        }
-        .await;
-        if let Err(error) = staged {
-            remove_publication_backup(&managed_folder, &backup_folder);
-            return Err(error);
-        }
-        Ok(AddonMediaListPublication {
-            list_id: id,
-            library_id,
-        })
     }
 
     async fn commit_staged_publication(&self, id: EntityId) -> Result<()> {
-        let journal = load_publication_journal(&self.0, id).await?;
-        let form = self
-            .get_admin_form(id)
-            .await?
-            .ok_or(RepositoryError::NotFound {
-                kind: "add-on media list",
-                id,
-            })?;
-        if form.review_state != AddonMediaListReviewState::Publishing {
+        commit_staged_publication_impl(self, id, None, None).await
+    }
+
+    async fn commit_staged_publication_revision(
+        &self,
+        id: EntityId,
+        target_published_revision: i32,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let row = sqlx::query(
+            r#"SELECT "PublishedRevision", "PublicationJournalJson"
+               FROM "AddonMediaList" WHERE "Id" = ?"#,
+        )
+        .bind(id)
+        .fetch_optional(&self.0)
+        .await
+        .repository()?
+        .ok_or(RepositoryError::NotFound {
+            kind: "add-on media list",
+            id,
+        })?;
+        let published_revision: i32 = row.try_get("PublishedRevision").repository()?;
+        let journal: Option<String> = row.try_get("PublicationJournalJson").repository()?;
+        if published_revision == target_published_revision
+            && journal.as_deref().is_none_or(str::is_empty)
+        {
+            return Ok(());
+        }
+        if published_revision.saturating_add(1) != target_published_revision {
             return Err(RepositoryError::Conflict(
-                "the add-on media list has no staged publication".to_owned(),
+                "the published add-on media-list revision changed before commit".to_owned(),
             ));
         }
-        let effective_presentation =
-            if form.requested_presentation_kind == AddonMediaListPresentationKind::Auto {
-                resolve_auto_presentation(&self.0, id).await?
-            } else {
-                form.requested_presentation_kind
-            };
-        let synchronizer = AddonMediaListSynchronizer::new(self.0.clone());
-        let generated_playlist_removal = if form.generate_playlist {
-            None
-        } else {
-            synchronizer.prepare_generated_playlist_removal(id).await?
+        let journal = journal
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                RepositoryError::Conflict(
+                    "the add-on media list has no publication journal".to_owned(),
+                )
+            })?;
+        let publication_journal: PublicationJournal =
+            serde_json::from_str(&journal).map_err(|error| RepositoryError::Decode {
+                kind: "add-on publication journal",
+                value: error.to_string(),
+            })?;
+        if publication_journal.operation_id != Some(operation_id)
+            || publication_journal.generation != Some(generation)
+        {
+            return Err(RepositoryError::Conflict(
+                "the staged add-on media-list publication belongs to another generation".to_owned(),
+            ));
+        }
+        let fence = PublicationClaimFence {
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
         };
-        if parent_nfo_for(effective_presentation).is_some() {
-            ensure_generated_parent_nfo(&self.0, id, effective_presentation, None).await?;
-        }
-        reconcile_projection(&self.0, id, form.requested_presentation_kind).await?;
-        synchronizer.match_list_items(id).await?;
-
-        let mut commit = crate::db::begin_write(&self.0).await.repository()?;
-        if let Some(removal) = &generated_playlist_removal {
-            synchronizer
-                .commit_generated_playlist_removal_in_tx(&mut commit, id, removal)
-                .await?;
-        }
-        sqlx::query(
-            r#"UPDATE "AddonMediaList"
-               SET "ReviewState" = 2, "PublishedRevision" = "PublishedRevision" + 1,
-                   "ReviewError" = NULL, "PresentationError" = NULL,
-                   "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL,
-                   "DetailImportAuthorizedAt" = COALESCE("DetailImportAuthorizedAt", ?),
-                   "DetailProjectionPendingAt" = NULL
-               WHERE "Id" = ?"#,
-        )
-        .bind(crate::repositories::common::encode_datetime(
-            chrono::Utc::now(),
-        ))
-        .bind(id)
-        .execute(&mut *commit)
-        .await
-        .repository()?;
-        let detail_now = crate::repositories::common::encode_datetime(chrono::Utc::now());
-        sqlx::query(
-            r#"UPDATE "AddonMediaListDetailJob"
-               SET "State" = ?, "RequestedAt" = COALESCE("RequestedAt", ?),
-                   "UpdatedAt" = ?
-               WHERE "AddonMediaListId" = ? AND "State" = ?
-                 AND EXISTS (
-                     SELECT 1 FROM "AddonMediaList"
-                     WHERE "Id" = ? AND "DetailImportPolicy" = ?
-                 )"#,
-        )
-        .bind(crate::repositories::common::encode_enum(
-            AddonMediaListDetailState::Queued,
-        ))
-        .bind(&detail_now)
-        .bind(&detail_now)
-        .bind(id)
-        .bind(crate::repositories::common::encode_enum(
-            AddonMediaListDetailState::NotRequested,
-        ))
-        .bind(id)
-        .bind(crate::repositories::common::encode_enum(
-            AddonMediaListDetailPolicy::Automatic,
-        ))
-        .execute(&mut *commit)
-        .await
-        .repository()?;
-        commit.commit().await.repository()?;
-        cleanup_publication_backup(&journal)?;
-        Ok(())
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+        commit_staged_publication_impl(self, id, Some(target_published_revision), Some(fence)).await
     }
 
     async fn restore_staged_publication(&self, id: EntityId, message: &str) -> Result<()> {
-        let journal = load_publication_journal(&self.0, id).await?;
-        restore_publication_backup(&journal)?;
-        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        for item in &journal.previous_items {
-            sqlx::query(
-                r#"UPDATE "AddonMediaListItem"
-                   SET "Published" = ?, "MediaItemId" = ?, "PublishedLiveness" = ?
-                   WHERE "Id" = ?"#,
-            )
-            .bind(item.published)
-            .bind(item.media_item_id)
-            .bind(crate::repositories::common::encode_enum(
-                item.published_liveness,
-            ))
-            .bind(item.id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        }
-        sqlx::query(
-            r#"DELETE FROM "AddonMediaListArtworkMaterialization"
-               WHERE "AddonMediaListId" = ?"#,
-        )
-        .bind(id)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        for materialization in &journal.previous_materializations {
-            sqlx::query(
-                r#"INSERT INTO "AddonMediaListArtworkMaterialization" (
-                       "Id", "AddonMediaListId", "AddonMediaListItemId", "ScopeItemId", "Role",
-                       "Source", "FileName", "Sha256", "PublishedRevision"
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            )
-            .bind(materialization.id)
-            .bind(id)
-            .bind(materialization.item_id)
-            .bind(materialization.scope_item_id)
-            .bind(materialization.role)
-            .bind(&materialization.source)
-            .bind(&materialization.file_name)
-            .bind(&materialization.sha256)
-            .bind(materialization.published_revision)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        }
-        sqlx::query(
-            r#"UPDATE "AddonMediaList"
-               SET "ReviewState" = ?, "ReviewError" = ? WHERE "Id" = ?"#,
-        )
-        .bind(crate::repositories::common::encode_enum(
-            journal.previous_review_state,
-        ))
-        .bind(message)
-        .bind(id)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        tx.commit().await.repository()?;
-        Ok(())
+        restore_staged_publication_impl(self, id, message, None).await
+    }
+
+    async fn restore_staged_publication_revision(
+        &self,
+        id: EntityId,
+        message: &str,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let fence = PublicationClaimFence {
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        };
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+        restore_staged_publication_impl(self, id, message, Some(fence)).await
     }
 
     async fn reconcile_restored_publication(&self, id: EntityId) -> Result<()> {
-        let journal = load_publication_journal(&self.0, id).await?;
-        reconcile_projection(&self.0, id, journal.previous_presentation_kind).await?;
-        AddonMediaListSynchronizer::new(self.0.clone())
-            .match_list_items(id)
-            .await?;
-        restore_playlist_snapshot(&self.0, id, journal.previous_playlist.as_ref()).await?;
-        sqlx::query(
-            r#"UPDATE "AddonMediaList"
-               SET "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL
-               WHERE "Id" = ?"#,
-        )
-        .bind(id)
-        .execute(&self.0)
-        .await
-        .repository()?;
-        Ok(())
+        reconcile_restored_publication_impl(self, id, None).await
+    }
+
+    async fn reconcile_restored_publication_revision(
+        &self,
+        id: EntityId,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let fence = PublicationClaimFence {
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        };
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+        reconcile_restored_publication_impl(self, id, Some(fence)).await
     }
 
     async fn upload_artwork(
@@ -1710,9 +1605,6 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 kind: "add-on media list",
                 id,
             })?;
-        let mut review_tx = crate::db::begin_write(&self.0).await.repository()?;
-        mark_list_ready_tx(&mut review_tx, id).await?;
-        review_tx.commit().await.repository()?;
         // A library-type edit changes only the local publication projection.
         // The imported provider snapshot is already durable, so changing its
         // list-wide content-kind override must not execute the add-on again.
@@ -1761,21 +1653,22 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "presentation {presentation_kind:?} has no projection yet"
             )));
         }
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "RequestedPresentationKind" = ?, "PresentationError" = NULL,
-                   "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
-                   "ReviewError" = NULL
+               SET "RequestedPresentationKind" = ?, "PresentationError" = NULL
                WHERE "Id" = ? AND "ReviewState" <> 3"#,
         )
         .bind(crate::repositories::common::encode_enum(presentation_kind))
         .bind(id)
-        .execute(&self.0)
+        .execute(&mut *tx)
         .await
         .repository()?;
         if updated.rows_affected() != 1 {
             return Err(publication_in_progress());
         }
+        mark_list_ready_tx(&mut tx, id).await?;
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -1986,6 +1879,15 @@ async fn load_publication_journal(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
 ) -> Result<PublicationJournal> {
+    load_publication_journal_value(pool, list_id)
+        .await
+        .map(|(journal, _)| journal)
+}
+
+async fn load_publication_journal_value(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+) -> Result<(PublicationJournal, String)> {
     let value = sqlx::query_scalar::<_, Option<String>>(
         r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = ?"#,
     )
@@ -2001,9 +1903,688 @@ async fn load_publication_journal(
     .ok_or_else(|| {
         RepositoryError::Conflict("the add-on media list has no publication journal".to_owned())
     })?;
-    serde_json::from_str(&value).map_err(|error| RepositoryError::Decode {
+    let journal = serde_json::from_str(&value).map_err(|error| RepositoryError::Decode {
         kind: "add-on publication journal",
         value: error.to_string(),
+    })?;
+    Ok((journal, value))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn ensure_current_publication_fence(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    operation_id: EntityId,
+    generation: i32,
+    owner_token: &str,
+    lease_owner: &str,
+    require_journal: bool,
+) -> Result<()> {
+    ensure_current_publication_claim(
+        pool,
+        list_id,
+        PublicationClaimFence {
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        },
+        require_journal,
+    )
+    .await
+}
+
+async fn ensure_current_publication_claim(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    fence: PublicationClaimFence<'_>,
+    require_journal: bool,
+) -> Result<()> {
+    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let current = sqlx::query_scalar::<_, i64>(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListPublicationJob" AS "job"
+           JOIN "ManagedLibraryOperation" AS "operation"
+             ON "operation"."Id" = "job"."OperationId"
+           JOIN "ManagedLibraryLease" AS "lease"
+             ON "lease"."OperationId" = "operation"."Id"
+           WHERE "job"."AddonMediaListId" = ?
+             AND "job"."OperationId" = ? AND "job"."Generation" = ?
+             AND "operation"."State" = 1
+             AND "operation"."OwnerToken" = ? AND "operation"."LeaseOwner" = ?
+             AND "lease"."OwnerToken" = ? AND "lease"."LeaseOwner" = ?
+             AND "lease"."LeaseExpiresAt" > ?"#,
+    )
+    .bind(list_id)
+    .bind(fence.operation_id)
+    .bind(fence.generation)
+    .bind(fence.owner_token)
+    .bind(fence.lease_owner)
+    .bind(fence.owner_token)
+    .bind(fence.lease_owner)
+    .bind(now)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    if current != 1 {
+        return Err(RepositoryError::Conflict(
+            "the add-on publication lease is no longer current".to_owned(),
+        ));
+    }
+    if require_journal {
+        let journal = load_publication_journal(pool, list_id).await?;
+        let legacy_unfenced = journal.operation_id.is_none() && journal.generation.is_none();
+        if !legacy_unfenced
+            && (journal.operation_id != Some(fence.operation_id)
+                || journal.generation != Some(fence.generation))
+        {
+            return Err(RepositoryError::Conflict(
+                "the staged add-on media-list publication belongs to another generation".to_owned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+async fn commit_staged_publication_impl(
+    repository: &SqliteAddonMediaListRepository,
+    id: EntityId,
+    target_published_revision: Option<i32>,
+    fence: Option<PublicationClaimFence<'_>>,
+) -> Result<()> {
+    let (journal, journal_json) = load_publication_journal_value(&repository.0, id).await?;
+    let form = repository
+        .get_admin_form(id)
+        .await?
+        .ok_or(RepositoryError::NotFound {
+            kind: "add-on media list",
+            id,
+        })?;
+    if form.review_state != AddonMediaListReviewState::Publishing {
+        return Err(RepositoryError::Conflict(
+            "the add-on media list has no staged publication".to_owned(),
+        ));
+    }
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    let effective_presentation =
+        if form.requested_presentation_kind == AddonMediaListPresentationKind::Auto {
+            resolve_auto_presentation(&repository.0, id).await?
+        } else {
+            form.requested_presentation_kind
+        };
+    let synchronizer = AddonMediaListSynchronizer::new(repository.0.clone());
+    let generated_playlist_removal = if form.generate_playlist {
+        None
+    } else {
+        synchronizer.prepare_generated_playlist_removal(id).await?
+    };
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    if parent_nfo_for(effective_presentation).is_some() {
+        ensure_generated_parent_nfo(&repository.0, id, effective_presentation, None).await?;
+        if let Some(fence) = fence {
+            ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+        }
+    }
+    reconcile_projection(&repository.0, id, form.requested_presentation_kind).await?;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    synchronizer.match_list_items(id).await?;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+
+    let mut commit = crate::db::begin_write(&repository.0).await.repository()?;
+    if let Some(removal) = &generated_playlist_removal {
+        synchronizer
+            .commit_generated_playlist_removal_in_tx(&mut commit, id, removal)
+            .await?;
+    }
+    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let updated = if let (Some(fence), Some(target_published_revision)) =
+        (fence, target_published_revision)
+    {
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "ReviewState" = 2, "PublishedRevision" = "PublishedRevision" + 1,
+                   "ReviewError" = NULL, "PresentationError" = NULL,
+                   "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL,
+                   "DetailImportAuthorizedAt" = COALESCE("DetailImportAuthorizedAt", ?),
+                   "DetailProjectionPendingAt" = NULL
+               WHERE "Id" = ? AND "PublicationJournalJson" = ?
+                 AND "PublishedRevision" + 1 = ?
+                 AND EXISTS (
+                     SELECT 1
+                     FROM "AddonMediaListPublicationJob" AS "job"
+                     JOIN "ManagedLibraryOperation" AS "operation"
+                       ON "operation"."Id" = "job"."OperationId"
+                     JOIN "ManagedLibraryLease" AS "lease"
+                       ON "lease"."OperationId" = "operation"."Id"
+                     WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                       AND "job"."OperationId" = ? AND "job"."Generation" = ?
+                       AND "operation"."State" = 1
+                       AND "operation"."OwnerToken" = ?
+                       AND "operation"."LeaseOwner" = ?
+                       AND "lease"."OwnerToken" = ?
+                       AND "lease"."LeaseOwner" = ?
+                       AND "lease"."LeaseExpiresAt" > ?
+                 )"#,
+        )
+        .bind(&now)
+        .bind(id)
+        .bind(&journal_json)
+        .bind(target_published_revision)
+        .bind(fence.operation_id)
+        .bind(fence.generation)
+        .bind(fence.owner_token)
+        .bind(fence.lease_owner)
+        .bind(fence.owner_token)
+        .bind(fence.lease_owner)
+        .bind(&now)
+        .execute(&mut *commit)
+        .await
+        .repository()?
+    } else {
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "ReviewState" = 2, "PublishedRevision" = "PublishedRevision" + 1,
+                   "ReviewError" = NULL, "PresentationError" = NULL,
+                   "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL,
+                   "DetailImportAuthorizedAt" = COALESCE("DetailImportAuthorizedAt", ?),
+                   "DetailProjectionPendingAt" = NULL
+               WHERE "Id" = ? AND "PublicationJournalJson" = ?"#,
+        )
+        .bind(&now)
+        .bind(id)
+        .bind(&journal_json)
+        .execute(&mut *commit)
+        .await
+        .repository()?
+    };
+    if updated.rows_affected() != 1 {
+        return Err(RepositoryError::Conflict(
+            "the staged add-on media-list publication changed before commit".to_owned(),
+        ));
+    }
+    let detail_now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    sqlx::query(
+        r#"UPDATE "AddonMediaListDetailJob"
+           SET "State" = ?, "RequestedAt" = COALESCE("RequestedAt", ?),
+               "UpdatedAt" = ?
+           WHERE "AddonMediaListId" = ? AND "State" = ?
+             AND EXISTS (
+                 SELECT 1 FROM "AddonMediaList"
+                 WHERE "Id" = ? AND "DetailImportPolicy" = ?
+             )"#,
+    )
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListDetailState::Queued,
+    ))
+    .bind(&detail_now)
+    .bind(&detail_now)
+    .bind(id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListDetailState::NotRequested,
+    ))
+    .bind(id)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListDetailPolicy::Automatic,
+    ))
+    .execute(&mut *commit)
+    .await
+    .repository()?;
+    commit.commit().await.repository()?;
+    cleanup_publication_backup_async(journal).await
+}
+
+#[allow(clippy::too_many_lines)]
+async fn restore_staged_publication_impl(
+    repository: &SqliteAddonMediaListRepository,
+    id: EntityId,
+    message: &str,
+    fence: Option<PublicationClaimFence<'_>>,
+) -> Result<()> {
+    let (journal, journal_json) = load_publication_journal_value(&repository.0, id).await?;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    let restore_journal = journal.clone();
+    tokio::task::spawn_blocking(move || restore_publication_backup(&restore_journal))
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "restore add-on publication",
+                format!("publication restore task failed: {error}"),
+            )
+        })??;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+
+    let mut tx = crate::db::begin_write(&repository.0).await.repository()?;
+    for item in &journal.previous_items {
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem"
+               SET "Published" = ?, "MediaItemId" = ?, "PublishedLiveness" = ?
+               WHERE "Id" = ?"#,
+        )
+        .bind(item.published)
+        .bind(item.media_item_id)
+        .bind(crate::repositories::common::encode_enum(
+            item.published_liveness,
+        ))
+        .bind(item.id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+    }
+    sqlx::query(
+        r#"DELETE FROM "AddonMediaListArtworkMaterialization"
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await
+    .repository()?;
+    for materialization in &journal.previous_materializations {
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListArtworkMaterialization" (
+                   "Id", "AddonMediaListId", "AddonMediaListItemId", "ScopeItemId", "Role",
+                   "Source", "FileName", "Sha256", "PublishedRevision"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(materialization.id)
+        .bind(id)
+        .bind(materialization.item_id)
+        .bind(materialization.scope_item_id)
+        .bind(materialization.role)
+        .bind(&materialization.source)
+        .bind(&materialization.file_name)
+        .bind(&materialization.sha256)
+        .bind(materialization.published_revision)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+    }
+    let updated = if let Some(fence) = fence {
+        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "ReviewState" = ?, "ReviewError" = ?
+               WHERE "Id" = ? AND "PublicationJournalJson" = ?
+                 AND EXISTS (
+                     SELECT 1
+                     FROM "AddonMediaListPublicationJob" AS "job"
+                     JOIN "ManagedLibraryOperation" AS "operation"
+                       ON "operation"."Id" = "job"."OperationId"
+                     JOIN "ManagedLibraryLease" AS "lease"
+                       ON "lease"."OperationId" = "operation"."Id"
+                     WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                       AND "job"."OperationId" = ? AND "job"."Generation" = ?
+                       AND "operation"."State" = 1
+                       AND "operation"."OwnerToken" = ?
+                       AND "operation"."LeaseOwner" = ?
+                       AND "lease"."OwnerToken" = ?
+                       AND "lease"."LeaseOwner" = ?
+                       AND "lease"."LeaseExpiresAt" > ?
+                 )"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            journal.previous_review_state,
+        ))
+        .bind(message)
+        .bind(id)
+        .bind(&journal_json)
+        .bind(fence.operation_id)
+        .bind(fence.generation)
+        .bind(fence.owner_token)
+        .bind(fence.lease_owner)
+        .bind(fence.owner_token)
+        .bind(fence.lease_owner)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .repository()?
+    } else {
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "ReviewState" = ?, "ReviewError" = ?
+               WHERE "Id" = ? AND "PublicationJournalJson" = ?"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            journal.previous_review_state,
+        ))
+        .bind(message)
+        .bind(id)
+        .bind(&journal_json)
+        .execute(&mut *tx)
+        .await
+        .repository()?
+    };
+    if updated.rows_affected() != 1 {
+        return Err(RepositoryError::Conflict(
+            "the staged add-on media-list publication changed before restoration".to_owned(),
+        ));
+    }
+    tx.commit().await.repository()?;
+    Ok(())
+}
+
+async fn reconcile_restored_publication_impl(
+    repository: &SqliteAddonMediaListRepository,
+    id: EntityId,
+    fence: Option<PublicationClaimFence<'_>>,
+) -> Result<()> {
+    let (journal, journal_json) = match load_publication_journal_value(&repository.0, id).await {
+        Ok(journal) => journal,
+        Err(RepositoryError::Conflict(_)) => {
+            let review_state = sqlx::query_scalar::<_, i32>(
+                r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(id)
+            .fetch_optional(&repository.0)
+            .await
+            .repository()?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            })?;
+            if review_state
+                != crate::repositories::common::encode_enum(AddonMediaListReviewState::Publishing)
+            {
+                return Ok(());
+            }
+            return Err(RepositoryError::Conflict(
+                "the publishing list lost its publication journal".to_owned(),
+            ));
+        }
+        Err(error) => return Err(error),
+    };
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    reconcile_projection(&repository.0, id, journal.previous_presentation_kind).await?;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    AddonMediaListSynchronizer::new(repository.0.clone())
+        .match_list_items(id)
+        .await?;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+    }
+    restore_playlist_snapshot(&repository.0, id, journal.previous_playlist.as_ref()).await?;
+
+    let cleared = if let Some(fence) = fence {
+        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL
+               WHERE "Id" = ? AND "PublicationJournalJson" = ?
+                 AND EXISTS (
+                     SELECT 1
+                     FROM "AddonMediaListPublicationJob" AS "job"
+                     JOIN "ManagedLibraryOperation" AS "operation"
+                       ON "operation"."Id" = "job"."OperationId"
+                     JOIN "ManagedLibraryLease" AS "lease"
+                       ON "lease"."OperationId" = "operation"."Id"
+                     WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                       AND "job"."OperationId" = ? AND "job"."Generation" = ?
+                       AND "operation"."State" = 1
+                       AND "operation"."OwnerToken" = ?
+                       AND "operation"."LeaseOwner" = ?
+                       AND "lease"."OwnerToken" = ?
+                       AND "lease"."LeaseOwner" = ?
+                       AND "lease"."LeaseExpiresAt" > ?
+                 )"#,
+        )
+        .bind(id)
+        .bind(&journal_json)
+        .bind(fence.operation_id)
+        .bind(fence.generation)
+        .bind(fence.owner_token)
+        .bind(fence.lease_owner)
+        .bind(fence.owner_token)
+        .bind(fence.lease_owner)
+        .bind(now)
+        .execute(&repository.0)
+        .await
+        .repository()?
+    } else {
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+               SET "PublicationJournalJson" = NULL, "PublicationStartedAt" = NULL
+               WHERE "Id" = ? AND "PublicationJournalJson" = ?"#,
+        )
+        .bind(id)
+        .bind(&journal_json)
+        .execute(&repository.0)
+        .await
+        .repository()?
+    };
+    if cleared.rows_affected() != 1 {
+        return Err(RepositoryError::Conflict(
+            "the restored add-on media-list publication changed before reconciliation".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
+async fn stage_publication_impl(
+    repository: &SqliteAddonMediaListRepository,
+    id: EntityId,
+    fence: Option<PublicationFence<'_>>,
+) -> Result<AddonMediaListPublication> {
+    let form = repository
+        .get_admin_form(id)
+        .await?
+        .ok_or(RepositoryError::NotFound {
+            kind: "add-on media list",
+            id,
+        })?;
+    let existing_journal = sqlx::query_scalar::<_, Option<String>>(
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(id)
+    .fetch_one(&repository.0)
+    .await
+    .repository()?;
+    if let Some(value) = existing_journal.filter(|value| !value.trim().is_empty()) {
+        let journal: PublicationJournal =
+            serde_json::from_str(&value).map_err(|error| RepositoryError::Decode {
+                kind: "add-on publication journal",
+                value: error.to_string(),
+            })?;
+        if fence.is_some_and(|fence| {
+            journal.operation_id == Some(fence.operation_id)
+                && journal.generation == Some(fence.generation)
+                && journal.saved_revision == Some(fence.saved_revision)
+        }) {
+            let library_id = repository.managed_library_id(id).await?.ok_or_else(|| {
+                RepositoryError::Conflict("managed list storage is unavailable".to_owned())
+            })?;
+            return Ok(AddonMediaListPublication {
+                list_id: id,
+                library_id,
+            });
+        }
+        return Err(publication_in_progress());
+    }
+
+    if fence.is_some_and(|fence| form.draft_revision != fence.saved_revision) {
+        return Err(RepositoryError::Conflict(
+            "the saved add-on media-list revision changed before publication staging".to_owned(),
+        ));
+    }
+    if let Some(fence) = fence {
+        ensure_current_publication_fence(
+            &repository.0,
+            id,
+            fence.operation_id,
+            fence.generation,
+            fence.owner_token,
+            fence.lease_owner,
+            false,
+        )
+        .await?;
+    }
+    let readiness = repository.publication_readiness(id).await?;
+    if let Some(blocker) = readiness.blockers.first() {
+        let message = publication_blocker_message(blocker);
+        record_publication_error(&repository.0, id, &message).await?;
+        return Err(RepositoryError::Conflict(message));
+    }
+    if readiness.required_playback_detail_count > 0 {
+        let message = format!(
+            "{} included finite item(s) still require playback details",
+            readiness.required_playback_detail_count
+        );
+        record_publication_error(&repository.0, id, &message).await?;
+        return Err(RepositoryError::Conflict(message));
+    }
+    let library_id = repository.managed_library_id(id).await?.ok_or_else(|| {
+        RepositoryError::Conflict("managed list storage is unavailable".to_owned())
+    })?;
+    let previous_items = sqlx::query(
+        r#"SELECT "Id", "Published", "MediaItemId", "PublishedLiveness"
+           FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ?
+           ORDER BY "Id""#,
+    )
+    .bind(id)
+    .fetch_all(&repository.0)
+    .await
+    .repository()?
+    .iter()
+    .map(|row| {
+        Ok(PublishedItemSnapshot {
+            id: row.try_get("Id").repository()?,
+            published: decode_bool_column(row, "Published")?,
+            media_item_id: row.try_get("MediaItemId").repository()?,
+            published_liveness: crate::repositories::common::decode_enum_column(
+                "RemoteStreamLiveness",
+                row,
+                "PublishedLiveness",
+            )?,
+        })
+    })
+    .collect::<Result<Vec<_>>>()?;
+    let previous_playlist = load_playlist_snapshot(&repository.0, id).await?;
+    let previous_materializations = load_artwork_materializations(&repository.0, id).await?;
+    let (managed_folder, backup_folder) =
+        create_publication_backup(&repository.0, id, fence).await?;
+    let journal = PublicationJournal {
+        operation_id: fence.map(|value| value.operation_id),
+        generation: fence.map(|value| value.generation),
+        saved_revision: fence.map(|value| value.saved_revision),
+        previous_review_state: form.review_state,
+        previous_presentation_kind: form.presentation_kind,
+        previous_items,
+        previous_playlist,
+        managed_folder: Some(managed_folder.to_string_lossy().into_owned()),
+        backup_folder: Some(backup_folder.to_string_lossy().into_owned()),
+        previous_materializations,
+    };
+    let journal_json = match serde_json::to_string(&journal) {
+        Ok(value) => value,
+        Err(error) => {
+            remove_publication_backup(&managed_folder, &backup_folder);
+            return Err(RepositoryError::Decode {
+                kind: "add-on publication journal",
+                value: error.to_string(),
+            });
+        }
+    };
+    let staged = async {
+        let mut tx = crate::db::begin_write(&repository.0).await.repository()?;
+        let updated = if let Some(fence) = fence {
+            sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "ReviewState" = 3, "ReviewError" = NULL,
+                       "PublicationJournalJson" = ?, "PublicationStartedAt" = ?
+                   WHERE "Id" = ? AND "ReviewState" <> 3
+                     AND "DraftRevision" = ?
+                     AND ("PublicationJournalJson" IS NULL OR TRIM("PublicationJournalJson") = '')
+                     AND EXISTS (
+                         SELECT 1
+                         FROM "AddonMediaListPublicationJob" AS "job"
+                         JOIN "ManagedLibraryOperation" AS "operation"
+                           ON "operation"."Id" = "job"."OperationId"
+                         JOIN "ManagedLibraryLease" AS "lease"
+                           ON "lease"."OperationId" = "operation"."Id"
+                         WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                           AND "job"."OperationId" = ? AND "job"."Generation" = ?
+                           AND "operation"."State" = 1
+                           AND "operation"."OwnerToken" = ?
+                           AND "operation"."LeaseOwner" = ?
+                           AND "lease"."OwnerToken" = ?
+                           AND "lease"."LeaseOwner" = ?
+                           AND "lease"."LeaseExpiresAt" > ?
+                     )"#,
+            )
+            .bind(&journal_json)
+            .bind(crate::repositories::common::encode_datetime(
+                chrono::Utc::now(),
+            ))
+            .bind(id)
+            .bind(fence.saved_revision)
+            .bind(fence.operation_id)
+            .bind(fence.generation)
+            .bind(fence.owner_token)
+            .bind(fence.lease_owner)
+            .bind(fence.owner_token)
+            .bind(fence.lease_owner)
+            .bind(crate::repositories::common::encode_datetime(
+                chrono::Utc::now(),
+            ))
+            .execute(&mut *tx)
+            .await
+            .repository()?
+        } else {
+            sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "ReviewState" = 3, "ReviewError" = NULL,
+                       "PublicationJournalJson" = ?, "PublicationStartedAt" = ?
+                   WHERE "Id" = ? AND "ReviewState" <> 3
+                     AND ("PublicationJournalJson" IS NULL OR TRIM("PublicationJournalJson") = '')"#,
+            )
+            .bind(&journal_json)
+            .bind(crate::repositories::common::encode_datetime(
+                chrono::Utc::now(),
+            ))
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .repository()?
+        };
+        if updated.rows_affected() != 1 {
+            return Err(publication_in_progress());
+        }
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem"
+               SET "Published" = "Included", "PublishedLiveness" = "EffectiveLiveness"
+               WHERE "AddonMediaListId" = ?"#,
+        )
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        tx.commit().await.repository()
+    }
+    .await;
+    if let Err(error) = staged {
+        remove_publication_backup(&managed_folder, &backup_folder);
+        return Err(error);
+    }
+    Ok(AddonMediaListPublication {
+        list_id: id,
+        library_id,
     })
 }
 
@@ -2040,6 +2621,7 @@ async fn load_artwork_materializations(
 async fn create_publication_backup(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
+    fence: Option<PublicationFence<'_>>,
 ) -> Result<(PathBuf, PathBuf)> {
     let manifest: String = sqlx::query_scalar(
         r#"SELECT "ManifestPath" FROM "AddonMediaListLibrary"
@@ -2049,6 +2631,37 @@ async fn create_publication_backup(
     .fetch_one(pool)
     .await
     .repository()?;
+    if let Some(fence) = fence {
+        ensure_current_publication_claim(pool, list_id, fence.claim(), false).await?;
+    }
+    let result =
+        tokio::task::spawn_blocking(move || create_publication_backup_on_disk(&manifest, list_id))
+            .await
+            .map_err(|error| {
+                RepositoryError::unavailable(
+                    "snapshot add-on publication",
+                    format!("publication backup task failed: {error}"),
+                )
+            })??;
+    if let Some(fence) = fence {
+        if let Err(error) =
+            ensure_current_publication_claim(pool, list_id, fence.claim(), false).await
+        {
+            let (managed, backup) = result;
+            let _ = tokio::task::spawn_blocking(move || {
+                remove_publication_backup(&managed, &backup);
+            })
+            .await;
+            return Err(error);
+        }
+    }
+    Ok(result)
+}
+
+fn create_publication_backup_on_disk(
+    manifest: &str,
+    list_id: EntityId,
+) -> Result<(PathBuf, PathBuf)> {
     let manifest_path = Path::new(&manifest);
     let managed_path = if manifest_path.is_dir() {
         manifest_path
@@ -2138,6 +2751,13 @@ fn publication_backup_paths(journal: &PublicationJournal) -> Result<(PathBuf, Pa
 
 fn restore_publication_backup(journal: &PublicationJournal) -> Result<()> {
     let (managed, backup) = publication_backup_paths(journal)?;
+    if managed.is_dir() && !backup.exists() {
+        // Recovery may have completed the directory swap immediately before a
+        // process exit. The journal remains the authority for the following
+        // database restoration phases; AMM-J-02 strengthens this inference
+        // with revision markers for every partial swap shape.
+        return Ok(());
+    }
     if !backup.is_dir() || !managed.is_dir() {
         return Err(RepositoryError::unavailable(
             "restore add-on publication",
@@ -2180,6 +2800,17 @@ fn cleanup_publication_backup(journal: &PublicationJournal) -> Result<()> {
     let (managed, backup) = publication_backup_paths(journal)?;
     remove_publication_backup(&managed, &backup);
     Ok(())
+}
+
+async fn cleanup_publication_backup_async(journal: PublicationJournal) -> Result<()> {
+    tokio::task::spawn_blocking(move || cleanup_publication_backup(&journal))
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "complete add-on publication",
+                format!("publication cleanup task failed: {error}"),
+            )
+        })?
 }
 
 fn remove_publication_backup(managed: &Path, backup: &Path) {
@@ -2519,10 +3150,28 @@ async fn mark_list_ready_tx(
     let updated = sqlx::query(
         r#"UPDATE "AddonMediaList"
            SET "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
-               "ReviewError" = NULL
-           WHERE "Id" = ? AND "ReviewState" <> 3"#,
+               "ReviewError" = NULL,
+               "DraftRevision" = "DraftRevision" + 1
+           WHERE "Id" = ? AND "ReviewState" <> 3
+             AND NOT EXISTS (
+                 SELECT 1
+                 FROM "AddonMediaListPublicationJob" AS "job"
+                 JOIN "ManagedLibraryOperation" AS "operation"
+                   ON "operation"."Id" = "job"."OperationId"
+                 WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                   AND "operation"."State" IN (?, ?, ?)
+             )"#,
     )
     .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::ManagedLibraryOperationState::Queued,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::ManagedLibraryOperationState::Running,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+    ))
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -2578,7 +3227,7 @@ async fn addon_media_list_publication_readiness(
         optional_detail_total: progress.map_or(0, |progress| progress.detail_total),
         optional_detail_complete: progress.map_or(0, |progress| progress.detail_complete),
         optional_detail_pending: progress.map_or(0, |progress| progress.detail_pending),
-        saved_revision: form.published_revision,
+        saved_revision: form.draft_revision,
         review_state: form.review_state,
     })
 }
@@ -3000,21 +3649,22 @@ async fn save_list_metadata_override(
             .await
             .repository()?;
     let overrides = metadata_override_json(&metadata_json_value(&provider_json)?, metadata)?;
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
     let updated = sqlx::query(
         r#"UPDATE "AddonMediaList"
-           SET "MetadataOverrideJson" = ?, "MetadataConflictJson" = NULL,
-               "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
-               "ReviewError" = NULL
+           SET "MetadataOverrideJson" = ?, "MetadataConflictJson" = NULL
            WHERE "Id" = ? AND "ReviewState" <> 3"#,
     )
     .bind(overrides)
     .bind(id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .repository()?;
     if updated.rows_affected() != 1 {
         return Err(publication_in_progress());
     }
+    mark_list_ready_tx(&mut tx, id).await?;
+    tx.commit().await.repository()?;
     Ok(())
 }
 

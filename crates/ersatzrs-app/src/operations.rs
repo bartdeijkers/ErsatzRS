@@ -107,6 +107,7 @@ pub struct ScanOperationRegistry {
 
 /// Scan admission failure before a queue token was accepted.
 #[derive(Debug)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) enum ScanAdmissionError<E> {
     /// The native worker has stopped.
     WorkerUnavailable,
@@ -277,6 +278,38 @@ impl std::fmt::Debug for OperationCoordinator {
 }
 
 impl ScanOperationRegistry {
+    /// Mirror one persisted operation into the process-local progress view.
+    pub(crate) fn observe_persisted(&self, operation_id: ScanOperationId, request: ScanRequest) {
+        let mut inner = recover(self.inner.lock());
+        inner.next_id = inner.next_id.max(operation_id.0);
+        match inner.operations.entry(operation_id) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(ScanOperationRecord {
+                    request,
+                    state: ScanOperationState::Queued,
+                    progress: None,
+                });
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry)
+                if matches!(
+                    entry.get().state,
+                    ScanOperationState::Completed | ScanOperationState::Failed { .. }
+                ) =>
+            {
+                entry.insert(ScanOperationRecord {
+                    request,
+                    state: ScanOperationState::Queued,
+                    progress: None,
+                });
+                inner
+                    .terminal_order
+                    .retain(|candidate| *candidate != operation_id);
+            }
+            std::collections::btree_map::Entry::Occupied(_) => {}
+        }
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn admit<E>(
         &self,
         request: ScanRequest,
@@ -286,14 +319,7 @@ impl ScanOperationRegistry {
             .map(|operation_id| operation_id.expect("manual scan admission cannot coalesce"))
     }
 
-    pub(crate) fn admit_if_idle<E>(
-        &self,
-        request: ScanRequest,
-        enqueue: impl FnOnce(ScanWorkRequest) -> std::result::Result<(), E>,
-    ) -> std::result::Result<Option<ScanOperationId>, ScanAdmissionError<E>> {
-        self.admit_inner(request, true, enqueue)
-    }
-
+    #[cfg_attr(not(test), allow(dead_code))]
     fn admit_inner<E>(
         &self,
         request: ScanRequest,
@@ -541,7 +567,7 @@ fn recover<'a, T>(
 #[cfg(test)]
 mod tests {
     use super::{BeginOperationOutcome, OperationCoordinator, OperationKey};
-    use crate::commands::{BeginOperation, ScanRequest};
+    use crate::commands::{BeginOperation, ScanOperationId, ScanRequest};
     use crate::queries::{
         GetLibraryScanStatus, GetOperationStatus, LibraryScanStatus, OperationStatus,
         ScanOperationState,
@@ -686,6 +712,46 @@ mod tests {
             .filter(|snapshot| matches!(snapshot.state, ScanOperationState::Failed { .. }))
             .count();
         assert_eq!(failures, 2);
+    }
+
+    #[test]
+    fn persisted_reclaim_resets_terminal_execution_without_resetting_active_work() {
+        let coordinator =
+            OperationCoordinator::new(EntityLocker::default(), PlayoutBuildActivity::default());
+        let registry = coordinator.scan_activity();
+        let operation_id = ScanOperationId(41);
+        let request = ScanRequest::Library {
+            provider: MediaSourceKind::Local,
+            library_id: 14,
+            deep_scan: true,
+        };
+
+        registry.observe_persisted(operation_id, request);
+        registry
+            .start_guard(operation_id)
+            .expect("first durable execution")
+            .complete();
+
+        registry.observe_persisted(operation_id, request);
+        let reclaimed = registry
+            .start_guard(operation_id)
+            .expect("completed durable execution is runnable after reclaim");
+        registry.observe_persisted(operation_id, request);
+        assert!(
+            registry.start_guard(operation_id).is_none(),
+            "observing an active claim must not admit overlapping local execution"
+        );
+        reclaimed.fail("lease lost");
+
+        registry.observe_persisted(operation_id, request);
+        registry
+            .start_guard(operation_id)
+            .expect("failed durable execution is runnable after reclaim")
+            .complete();
+        assert_eq!(
+            registry.library_status(GetLibraryScanStatus::new(14)),
+            LibraryScanStatus::Completed
+        );
     }
 
     #[test]

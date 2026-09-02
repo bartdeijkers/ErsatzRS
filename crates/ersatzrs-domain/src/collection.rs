@@ -109,6 +109,55 @@ pub enum AddonMediaListReviewState {
     Publishing,
 }
 
+/// Durable operation type sharing one managed-library exclusion boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedLibraryOperationKind {
+    ManualScan,
+    ScheduledScan,
+    StartupReplayScan,
+    Publication,
+    PublicationChildScan,
+    ProviderRefresh,
+    Recovery,
+    Reset,
+}
+
+/// Durable lifecycle shared by managed-library scans and publication work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ManagedLibraryOperationState {
+    #[default]
+    Queued,
+    Running,
+    WaitingToRetry,
+    Completed,
+    Failed,
+}
+
+/// Restart checkpoint for one exact add-on-list publication generation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationPhase {
+    #[default]
+    AwaitingLease,
+    Staging,
+    Scanning,
+    Committing,
+    RestoringFiles,
+    RestoringProjection,
+    Reconciling,
+    Complete,
+}
+
+/// Safe terminal result of the publication state machine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationOutcome {
+    Published,
+    RestoredAfterFailure,
+}
+
 /// Host policy for optional item-detail enrichment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]

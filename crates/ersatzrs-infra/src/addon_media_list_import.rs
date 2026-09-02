@@ -24,7 +24,9 @@ use crate::addon_media_list::{
     decode_media_list_output_for_capability, InstalledAddonMediaListProvider,
     InstalledMediaListImportContext,
 };
-use crate::addon_media_list_sync::{AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer};
+use crate::addon_media_list_sync::{
+    AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer, DetailMergeOutcome,
+};
 use crate::addon_media_storage::validated_folder_name;
 use crate::db::{inserted_id, DbPool};
 use crate::repositories::common::{
@@ -34,6 +36,7 @@ use crate::repositories::SqlxResultExt as _;
 
 const IMPORT_LEASE_SECONDS: i64 = 90;
 const DETAIL_LEASE_SECONDS: i64 = 90;
+const DETAIL_PUBLICATION_RETRY_SECONDS: i64 = 5;
 const MAX_IMPORT_ATTEMPTS: i32 = 5;
 const MAX_DETAIL_ATTEMPTS: i32 = 5;
 const MAX_UNVERSIONED_VERIFICATION_PASS: i32 = 2;
@@ -287,7 +290,7 @@ impl AddonMediaListImportCoordinator {
             sqlx::query(
                 r#"UPDATE "AddonMediaList"
                    SET "AddonId" = ?, "ContentKindOverride" = ?, "DetailImportPolicy" = ?,
-                       "LastError" = NULL
+                       "LastError" = NULL, "DraftRevision" = "DraftRevision" + 1
                    WHERE "Id" = ?"#,
             )
             .bind(addon_id)
@@ -1635,13 +1638,16 @@ impl AddonMediaListImportCoordinator {
             Err(error) => Err(error),
         };
         match result {
-            Ok(()) => {
+            Ok(DetailMergeOutcome::Applied) => {
                 let state = if outcome == "unavailable" {
                     AddonMediaListDetailState::Skipped
                 } else {
                     AddonMediaListDetailState::Complete
                 };
                 self.finish_checkpointed_detail(&job, state).await?;
+            }
+            Ok(DetailMergeOutcome::DeferredForPublication) => {
+                self.defer_checkpointed_detail_for_publication(&job).await?;
             }
             Err(error) => {
                 sqlx::query(
@@ -1939,6 +1945,35 @@ impl AddonMediaListImportCoordinator {
         .execute(&mut *tx)
         .await
         .repository()?;
+        update_detail_progress(&mut tx, job.list_id, &now).await?;
+        tx.commit().await.repository()?;
+        Ok(())
+    }
+
+    async fn defer_checkpointed_detail_for_publication(&self, job: &DetailJob) -> Result<()> {
+        let now = Utc::now();
+        let retry_at = encode_datetime(now + Duration::seconds(DETAIL_PUBLICATION_RETRY_SECONDS));
+        let now = encode_datetime(now);
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let updated = sqlx::query(
+            r#"UPDATE "AddonMediaListDetailJob"
+               SET "LeaseOwner" = NULL, "LeaseExpiresAt" = ?, "UpdatedAt" = ?
+               WHERE "AddonMediaListItemId" = ? AND "State" = ?
+                 AND "ResultRecordJson" IS NOT NULL"#,
+        )
+        .bind(&retry_at)
+        .bind(&now)
+        .bind(job.item_id)
+        .bind(encode_enum(AddonMediaListDetailState::Running))
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the checkpointed detail changed while publication deferral was persisted"
+                    .to_owned(),
+            ));
+        }
         update_detail_progress(&mut tx, job.list_id, &now).await?;
         tx.commit().await.repository()?;
         Ok(())
@@ -3404,6 +3439,183 @@ mod tests {
             .await
             .expect("merged metadata");
             assert!(metadata.contains("Full programme detail"));
+        }
+
+        #[tokio::test]
+        #[allow(clippy::too_many_lines)]
+        async fn checkpointed_review_change_waits_for_publication_then_creates_one_draft() {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let list_id = complete_single_page(
+                &coordinator,
+                "https://media.example.test/publication-detail-race",
+                AddonMediaListDetailPolicy::ManualOnly,
+                "fixture/publication-detail-race",
+                &["episode:1"],
+            )
+            .await;
+            let item_id: EntityId = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("item id");
+            coordinator
+                .request_item_details(list_id, item_id)
+                .await
+                .expect("manual detail request");
+            let job = coordinator
+                .claim_detail_job()
+                .await
+                .expect("claim detail")
+                .expect("manual detail job");
+            coordinator
+                .checkpoint_detail_result(
+                    &job,
+                    MediaListEnrichOutcomeKind::Complete,
+                    None,
+                    &item_record("episode:1", 0, "Changed provider detail"),
+                )
+                .await
+                .expect("checkpoint changed provider detail");
+
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem"
+                   SET "Published" = 1, "MetadataOverrideJson" = '{"plot":"Operator plot"}'
+                   WHERE "Id" = ?"#,
+            )
+            .bind(item_id)
+            .execute(&pool)
+            .await
+            .expect("seed published item override");
+            sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "ReviewState" = ?, "PublishedRevision" = 1
+                   WHERE "Id" = ?"#,
+            )
+            .bind(encode_enum(
+                ersatzrs_domain::AddonMediaListReviewState::Publishing,
+            ))
+            .bind(list_id)
+            .execute(&pool)
+            .await
+            .expect("start publication");
+            let draft_before: i32 = sqlx::query_scalar(
+                r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("draft before deferred merge");
+            let metadata_before: String = sqlx::query_scalar(
+                r#"SELECT "ProviderMetadataJson" FROM "AddonMediaListItem" WHERE "Id" = ?"#,
+            )
+            .bind(item_id)
+            .fetch_one(&pool)
+            .await
+            .expect("metadata before deferred merge");
+
+            assert!(coordinator
+                .process_one_detail()
+                .await
+                .expect("defer checkpoint during publication"));
+            let deferred: (i32, Option<String>, Option<String>) = sqlx::query_as(
+                r#"SELECT "State", "ResultRecordJson", "LeaseExpiresAt"
+                   FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = ?"#,
+            )
+            .bind(item_id)
+            .fetch_one(&pool)
+            .await
+            .expect("deferred detail state");
+            assert_eq!(deferred.0, encode_enum(AddonMediaListDetailState::Running));
+            assert!(
+                deferred.1.is_some(),
+                "the provider result must remain durable"
+            );
+            assert!(deferred.2.is_some(), "the retry must be paced");
+            assert_eq!(
+                sqlx::query_scalar::<_, i32>(
+                    r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#,
+                )
+                .bind(list_id)
+                .fetch_one(&pool)
+                .await
+                .expect("unchanged draft revision"),
+                draft_before
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, String>(
+                    r#"SELECT "ProviderMetadataJson" FROM "AddonMediaListItem" WHERE "Id" = ?"#,
+                )
+                .bind(item_id)
+                .fetch_one(&pool)
+                .await
+                .expect("unchanged provider metadata"),
+                metadata_before
+            );
+            assert!(
+                !coordinator
+                    .process_one_detail()
+                    .await
+                    .expect("paced deferral remains ineligible"),
+                "a deferred checkpoint must not spin while publication is active"
+            );
+
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "ReviewState" = ? WHERE "Id" = ?"#)
+                .bind(encode_enum(
+                    ersatzrs_domain::AddonMediaListReviewState::Published,
+                ))
+                .bind(list_id)
+                .execute(&pool)
+                .await
+                .expect("complete publication");
+            sqlx::query(
+                r#"UPDATE "AddonMediaListDetailJob" SET "LeaseExpiresAt" = NULL
+                   WHERE "AddonMediaListItemId" = ?"#,
+            )
+            .bind(item_id)
+            .execute(&pool)
+            .await
+            .expect("make deferred checkpoint eligible");
+
+            assert!(coordinator
+                .process_one_detail()
+                .await
+                .expect("merge checkpoint after publication"));
+            let final_list: (i32, i32) = sqlx::query_as(
+                r#"SELECT "ReviewState", "DraftRevision"
+                   FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("final list state");
+            assert_eq!(
+                final_list.0,
+                encode_enum(ersatzrs_domain::AddonMediaListReviewState::Ready)
+            );
+            assert_eq!(final_list.1, draft_before.saturating_add(1));
+            let final_detail: (i32, Option<String>) = sqlx::query_as(
+                r#"SELECT "State", "ResultRecordJson" FROM "AddonMediaListDetailJob"
+                   WHERE "AddonMediaListItemId" = ?"#,
+            )
+            .bind(item_id)
+            .fetch_one(&pool)
+            .await
+            .expect("completed detail state");
+            assert_eq!(
+                final_detail.0,
+                encode_enum(AddonMediaListDetailState::Complete)
+            );
+            assert!(final_detail.1.is_some());
+            let final_metadata: String = sqlx::query_scalar(
+                r#"SELECT "ProviderMetadataJson" FROM "AddonMediaListItem" WHERE "Id" = ?"#,
+            )
+            .bind(item_id)
+            .fetch_one(&pool)
+            .await
+            .expect("merged provider metadata");
+            assert!(final_metadata.contains("Changed provider detail"));
         }
 
         #[tokio::test]

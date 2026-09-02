@@ -2,15 +2,16 @@
 
 use ersatzrs_core::locking::PlayoutBuildAdmission;
 use ersatzrs_core::repositories::{
-    AddonMediaListItemReviewEdit, AddonMediaListRepository, AdminSettingsRepository, BlockAdminRow,
-    BlockItemAdmin, BlockRepository, ChannelEditorForm, ChannelNumberUpdate, ChannelRepository,
-    ChannelValidationError, ChannelValidationState, CollectionRepository, DecoAdminRecord,
-    DecoBreakContentAdmin, DecoRepository, DecoTemplateItemAdmin, FfmpegProfileRepository,
-    FillerRepository, LibraryRepository, MediaItemRepository, MultiCollectionItem,
-    PlaybackOverrides, PlaylistEditorAdmin, PlaylistItemInsert, PlayoutAlternateScheduleItemAdmin,
-    PlayoutCreateAdmin, PlayoutRepository, PlayoutTemplateItemAdmin, ProgramScheduleRepository,
-    RepositoryError, RerunCollectionAdmin, RerunCollectionReferenceKind, SavedSearchRepository,
-    ScheduleAdminForm, ScheduleItemAdmin, SettingsMutation, TemplateItemAdmin, TemplateRepository,
+    AddonMediaListItemReviewEdit, AddonMediaListPublicationBlockerKind, AddonMediaListRepository,
+    AdminSettingsRepository, BlockAdminRow, BlockItemAdmin, BlockRepository, ChannelEditorForm,
+    ChannelNumberUpdate, ChannelRepository, ChannelValidationError, ChannelValidationState,
+    CollectionRepository, DecoAdminRecord, DecoBreakContentAdmin, DecoRepository,
+    DecoTemplateItemAdmin, FfmpegProfileRepository, FillerRepository, LibraryRepository,
+    ManagedLibraryOperationRepository, MediaItemRepository, MultiCollectionItem, PlaybackOverrides,
+    PlaylistEditorAdmin, PlaylistItemInsert, PlayoutAlternateScheduleItemAdmin, PlayoutCreateAdmin,
+    PlayoutRepository, PlayoutTemplateItemAdmin, ProgramScheduleRepository, RepositoryError,
+    RerunCollectionAdmin, RerunCollectionReferenceKind, SavedSearchRepository, ScheduleAdminForm,
+    ScheduleItemAdmin, SettingsMutation, TemplateItemAdmin, TemplateRepository,
     WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
@@ -21,15 +22,15 @@ use ersatzrs_domain::{
     CollectionType, ContentLightLevel, DecoBreakPlacement, DecoMode, EntityId, FFmpegProfile,
     FFmpegProfileAudioFormat, FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm,
     FFmpegProfileVideoFormat, FillerKind, FillerMode, FillerPreset, FilterMode,
-    HardwareAccelerationKind, LibraryMediaKind, MasteringDisplayMetadata, MediaSourceKind,
-    NormalizeLoudnessMode, OutputDynamicRange, PlaybackOrder, ScalingBehavior, VaapiDriver,
-    WatermarkLocation, WatermarkSize,
+    HardwareAccelerationKind, LibraryMediaKind, ManagedLibraryOperationKind,
+    MasteringDisplayMetadata, MediaSourceKind, NormalizeLoudnessMode, OutputDynamicRange,
+    PlaybackOrder, ScalingBehavior, VaapiDriver, WatermarkLocation, WatermarkSize,
 };
 
 use crate::operations::OperationCoordinator;
 use crate::operations::OperationKey;
 use crate::ports::SettingsRuntime;
-use crate::ports::{ChannelRuntime, PlayoutBuildQueue, ScanRuntime, ScanWorkQueue};
+use crate::ports::{ChannelRuntime, PlayoutBuildQueue, ScanWorkQueue};
 use crate::ApplicationError;
 
 /// Persist one settings value.
@@ -4461,6 +4462,22 @@ pub struct MatchAddonMediaList {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PublishAddonMediaList {
     pub id: EntityId,
+    /// Exact saved draft revision shown by the editor.
+    pub saved_revision: i32,
+}
+
+/// Durable publication admission result returned without owning execution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PublishAddonMediaListOutcome {
+    /// Required playback details were queued before the revision can publish.
+    Preparing { pending_details: u64 },
+    /// One durable generation is queued or already active.
+    Queued {
+        operation_id: EntityId,
+        generation: i32,
+        saved_revision: i32,
+        existing: bool,
+    },
 }
 
 /// Include or exclude one provider item from publication.
@@ -4661,76 +4678,67 @@ pub async fn match_addon_media_list(
     repository.match_items(command.id).await.map_err(Into::into)
 }
 
-/// Commit the reviewed snapshot for scanning and playout.
+/// Persist one exact reviewed snapshot for background publication.
 pub async fn publish_addon_media_list(
     command: PublishAddonMediaList,
     repository: &dyn AddonMediaListRepository,
-    runtime: &dyn ScanRuntime,
-    queue: &dyn PlayoutBuildQueue,
-    operations: &OperationCoordinator,
-) -> crate::Result<Option<u64>> {
+    managed_operations: &dyn ManagedLibraryOperationRepository,
+) -> crate::Result<PublishAddonMediaListOutcome> {
     validate_positive_id(command.id, "addon_media_list_id")?;
     let readiness =
         crate::queries::addon_media_list_publication_readiness(command.id, repository).await?;
     if let Some(blocker) = readiness.blockers.first() {
+        if !matches!(
+            blocker.kind,
+            AddonMediaListPublicationBlockerKind::PublicationInProgress
+                | AddonMediaListPublicationBlockerKind::RecoveryRequired
+        ) {
+            return validation_error(
+                "publication",
+                format!("publication is blocked by {:?}", blocker.kind),
+            );
+        }
+    } else if readiness.saved_revision != command.saved_revision {
         return validation_error(
-            "publication",
-            format!("publication is blocked by {:?}", blocker.kind),
+            "saved_revision",
+            "the saved add-on media-list revision changed; reload before publishing",
         );
     }
-    let pending_details = repository.prepare_publication_details(command.id).await?;
-    if pending_details > 0 {
-        return Ok(Some(pending_details));
+    if readiness.blockers.is_empty() {
+        let pending_details = repository.prepare_publication_details(command.id).await?;
+        if pending_details > 0 {
+            return Ok(PublishAddonMediaListOutcome::Preparing { pending_details });
+        }
     }
-    let publication = repository.stage_publication(command.id).await?;
-    let publish_result = async {
-        let scan_report = runtime
-            .scan_library(MediaSourceKind::Local, publication.library_id, true, &())
-            .await
-            .map_err(|error| ApplicationError::Unavailable {
-                operation: "publish add-on media list",
-                message: error.to_string(),
-            })?;
+    let form = repository
+        .get_admin_form(command.id)
+        .await?
+        .ok_or(ApplicationError::NotFound {
+            kind: "add-on media list",
+            id: command.id,
+        })?;
+    let library_id =
         repository
-            .commit_staged_publication(command.id)
-            .await
-            .map_err(ApplicationError::from)?;
-        Ok::<_, ApplicationError>(scan_report)
-    }
-    .await;
-    let mut scan_report = match publish_result {
-        Ok(report) => report,
-        Err(error) => {
-            let original_message = error.to_string();
-            let recovery_result = async {
-                repository
-                    .restore_staged_publication(command.id, &original_message)
-                    .await?;
-                repository.reconcile_restored_publication(command.id).await
-            }
-            .await;
-            return match recovery_result {
-                Ok(()) => Err(error),
-                Err(recovery_error) => Err(ApplicationError::Unavailable {
-                    operation: "recover add-on media list publication",
-                    message: format!(
-                        "publication failed ({original_message}); recovery failed ({recovery_error})"
-                    ),
-                }),
-            };
-        }
-    };
-    let pending_report = runtime.pending_playout_refreshes().await.map_err(|error| {
-        ApplicationError::Unavailable {
-            operation: "load committed add-on playlist refreshes",
-            message: error.to_string(),
-        }
-    })?;
-    scan_report
-        .playout_refreshes
-        .extend(pending_report.playout_refreshes);
-    require_scan_playout_refreshes(scan_report, queue, operations)?;
-    Ok(None)
+            .managed_library_id(command.id)
+            .await?
+            .ok_or(ApplicationError::Unavailable {
+                operation: "queue add-on media-list publication",
+                message: "managed list storage is unavailable".to_owned(),
+            })?;
+    let queued = managed_operations
+        .enqueue_publication(
+            command.id,
+            library_id,
+            command.saved_revision,
+            form.published_revision.saturating_add(1),
+        )
+        .await?;
+    Ok(PublishAddonMediaListOutcome::Queued {
+        operation_id: queued.operation.id,
+        generation: queued.job.generation,
+        saved_revision: queued.job.saved_revision,
+        existing: queued.existing,
+    })
 }
 
 /// Include or exclude one item from publication.
@@ -6120,6 +6128,15 @@ pub enum ExecuteScanOutcome {
     Missing,
 }
 
+/// Result of one claimed durable managed-library operation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExecuteManagedLibraryOperationOutcome {
+    Completed,
+    Deferred,
+    LeaseLost,
+    Failed { message: String },
+}
+
 pub(crate) fn request_playout_build(
     command: RequestPlayoutBuild,
     queue: &dyn PlayoutBuildQueue,
@@ -6235,6 +6252,7 @@ where
 pub(crate) async fn request_library_scan(
     command: RequestLibraryScan,
     libraries: &dyn LibraryRepository,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
     queue: &dyn ScanWorkQueue,
     operations: &OperationCoordinator,
 ) -> RequestScanOutcome {
@@ -6256,14 +6274,19 @@ pub(crate) async fn request_library_scan(
             library_id: target.library_id,
             deep_scan: command.deep_scan,
         },
+        ManagedLibraryOperationKind::ManualScan,
+        false,
+        managed_operations,
         queue,
         operations,
     )
+    .await
 }
 
 pub(crate) async fn request_scheduled_library_scan(
     command: RequestScheduledLibraryScan,
     libraries: &dyn LibraryRepository,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
     queue: &dyn ScanWorkQueue,
     operations: &OperationCoordinator,
 ) -> RequestScheduledScanOutcome {
@@ -6283,32 +6306,30 @@ pub(crate) async fn request_scheduled_library_scan(
         );
     }
 
-    match operations.scan_activity().admit_if_idle(
+    match admit_scan_persisted(
         ScanRequest::Library {
             provider: target.provider,
             library_id: target.library_id,
             deep_scan: false,
         },
-        |work| queue.enqueue(work),
-    ) {
+        ManagedLibraryOperationKind::ScheduledScan,
+        true,
+        managed_operations,
+        queue,
+        operations,
+    )
+    .await
+    {
         Ok(Some(operation_id)) => RequestScheduledScanOutcome::Accepted { operation_id },
         Ok(None) => RequestScheduledScanOutcome::AlreadyActive,
-        Err(crate::operations::ScanAdmissionError::WorkerUnavailable) => {
-            RequestScheduledScanOutcome::Unavailable {
-                message: "scanner worker is unavailable".to_owned(),
-            }
-        }
-        Err(crate::operations::ScanAdmissionError::Queue(error)) => {
-            RequestScheduledScanOutcome::Unavailable {
-                message: error.to_string(),
-            }
-        }
+        Err(message) => RequestScheduledScanOutcome::Unavailable { message },
     }
 }
 
 pub(crate) async fn request_show_scan(
     command: RequestShowScan,
     libraries: &dyn LibraryRepository,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
     queue: &dyn ScanWorkQueue,
     operations: &OperationCoordinator,
 ) -> RequestScanOutcome {
@@ -6352,30 +6373,90 @@ pub(crate) async fn request_show_scan(
             deep_scan: command.deep_scan,
         }
     };
-    admit_scan(request, queue, operations)
+    admit_scan(
+        request,
+        ManagedLibraryOperationKind::ManualScan,
+        false,
+        managed_operations,
+        queue,
+        operations,
+    )
+    .await
 }
 
-fn admit_scan(
+async fn admit_scan(
     request: ScanRequest,
+    kind: ManagedLibraryOperationKind,
+    coalesce: bool,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
     queue: &dyn ScanWorkQueue,
     operations: &OperationCoordinator,
 ) -> RequestScanOutcome {
-    match operations
-        .scan_activity()
-        .admit(request, |work| queue.enqueue(work))
+    match admit_scan_persisted(
+        request,
+        kind,
+        coalesce,
+        managed_operations,
+        queue,
+        operations,
+    )
+    .await
     {
-        Ok(operation_id) => RequestScanOutcome::Accepted { operation_id },
-        Err(crate::operations::ScanAdmissionError::WorkerUnavailable) => {
-            RequestScanOutcome::Unavailable {
-                message: "scanner worker is unavailable".to_owned(),
-            }
-        }
-        Err(crate::operations::ScanAdmissionError::Queue(error)) => {
-            RequestScanOutcome::Unavailable {
-                message: error.to_string(),
-            }
-        }
+        Ok(Some(operation_id)) => RequestScanOutcome::Accepted { operation_id },
+        Ok(None) => RequestScanOutcome::Unavailable {
+            message: "scan was coalesced unexpectedly".to_owned(),
+        },
+        Err(message) => RequestScanOutcome::Unavailable { message },
     }
+}
+
+async fn admit_scan_persisted(
+    request: ScanRequest,
+    kind: ManagedLibraryOperationKind,
+    coalesce: bool,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
+    queue: &dyn ScanWorkQueue,
+    operations: &OperationCoordinator,
+) -> std::result::Result<Option<ScanOperationId>, String> {
+    let scan = match request {
+        ScanRequest::Library {
+            provider,
+            deep_scan,
+            ..
+        } => ersatzrs_core::repositories::ManagedLibraryScanSpec {
+            provider,
+            show_id: None,
+            deep_scan,
+        },
+        ScanRequest::Show {
+            provider,
+            show_id,
+            deep_scan,
+            ..
+        } => ersatzrs_core::repositories::ManagedLibraryScanSpec {
+            provider,
+            show_id: Some(show_id),
+            deep_scan,
+        },
+    };
+    let operation = managed_operations
+        .enqueue_scan(kind, request.library_id(), scan, coalesce)
+        .await
+        .map_err(|error| error.to_string())?;
+    let Some(operation) = operation else {
+        return Ok(None);
+    };
+    let operation_id = u64::try_from(operation.id)
+        .map(ScanOperationId)
+        .map_err(|error| error.to_string())?;
+    operations
+        .scan_activity()
+        .observe_persisted(operation_id, request);
+    let _ = queue.enqueue(ScanWorkRequest {
+        operation_id,
+        request,
+    });
+    Ok(Some(operation_id))
 }
 
 fn scan_repository_failure(
@@ -6415,11 +6496,13 @@ mod tests {
     use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity};
     use ersatzrs_core::repositories::{
         AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
-        AddonMediaListPublication, AddonMediaListPublicationReadiness,
-        AddonMediaListReplacementCandidate, AddonMediaListRepository, AdminSettingsRepository,
-        ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow, ChannelValidationState,
-        CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin, CollectionRepository,
-        FfmpegProfileRepository, LibraryRepository, LibraryScanTarget, MediaItemSuggestionAdmin,
+        AddonMediaListPublication, AddonMediaListPublicationEnqueue, AddonMediaListPublicationJob,
+        AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
+        AddonMediaListRepository, AdminSettingsRepository, ChannelEditorForm, ChannelNumberUpdate,
+        ChannelValidationRow, ChannelValidationState, CollectionAdminRow, CollectionDetailAdmin,
+        CollectionMemberAdmin, CollectionRepository, FfmpegProfileRepository, LibraryRepository,
+        LibraryScanTarget, ManagedLibraryOperation, ManagedLibraryOperationClaim,
+        ManagedLibraryOperationRepository, ManagedLibraryScanSpec, MediaItemSuggestionAdmin,
         MultiCollectionAdmin, MultiCollectionAdminRow, MultiCollectionEditorOptions,
         MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow, PlaylistEditorAdmin,
         PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin, PlaylistItemInsert,
@@ -6429,8 +6512,10 @@ mod tests {
     };
     use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
     use ersatzrs_domain::{
-        Collection, CollectionType, EntityId, FFmpegProfile, Library, LibraryMediaKind,
-        MediaSourceKind, Playlist, Resolution, ScanProgressSink, SmartCollection,
+        AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase, Collection,
+        CollectionType, EntityId, FFmpegProfile, Library, LibraryMediaKind,
+        ManagedLibraryOperationKind, ManagedLibraryOperationState, MediaSourceKind, Playlist,
+        Resolution, SmartCollection,
     };
 
     use super::{
@@ -6449,17 +6534,18 @@ mod tests {
         validate_watermark, AddAddonMediaList, AddMediaItemToCollection,
         AssignAddonMediaListEpisodeNumbers, BlockItemAdminForm, ChangeAddonMediaListAddon,
         ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm,
-        PublishAddonMediaList, RequestLibraryScan, RequestPlayoutBuild, RequestPlayoutBuildOutcome,
-        RequestPlayoutBuildRejection, RequestScanOutcome, RequestScanRejection,
-        RequestScheduledLibraryScan, RequestScheduledScanOutcome, RequestShowScan,
-        SaveAddonDetailWaitSettings, SaveCollection, SaveFfmpegProfile, SaveFfmpegSettings,
-        SaveLoggingSettings, SaveMultiCollection, SavePlaylist, SavePlayoutSettings,
-        SaveRerunCollection, SaveSmartCollection, ScanRequest, ScanWorkRequest, WatermarkAdminForm,
+        PublishAddonMediaList, PublishAddonMediaListOutcome, RequestLibraryScan,
+        RequestPlayoutBuild, RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection,
+        RequestScanOutcome, RequestScanRejection, RequestScheduledLibraryScan,
+        RequestScheduledScanOutcome, RequestShowScan, SaveAddonDetailWaitSettings, SaveCollection,
+        SaveFfmpegProfile, SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection,
+        SavePlaylist, SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
+        ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
     use crate::ports::{
-        PlayoutBuildQueue, PlayoutBuildQueueError, ScanRuntime, ScanRuntimeError, ScanWorkQueue,
-        ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
+        PlayoutBuildQueue, PlayoutBuildQueueError, ScanWorkQueue, ScanWorkQueueError,
+        SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
     };
     use ersatzrs_domain::ffmpeg::{ContentLightLevel, OutputDynamicRange};
 
@@ -6495,9 +6581,14 @@ mod tests {
 
         async fn get_admin_form(
             &self,
-            _id: EntityId,
+            id: EntityId,
         ) -> ersatzrs_core::repositories::Result<Option<AddonMediaListAdminForm>> {
-            Ok(None)
+            Ok(Some(AddonMediaListAdminForm {
+                id,
+                published_revision: 2,
+                draft_revision: 5,
+                ..AddonMediaListAdminForm::default()
+            }))
         }
 
         async fn list_items(
@@ -6513,6 +6604,7 @@ mod tests {
         ) -> ersatzrs_core::repositories::Result<AddonMediaListPublicationReadiness> {
             Ok(AddonMediaListPublicationReadiness {
                 required_playback_detail_count: self.pending_publication_details,
+                saved_revision: 5,
                 review_state: ersatzrs_domain::AddonMediaListReviewState::Ready,
                 ..AddonMediaListPublicationReadiness::default()
             })
@@ -6561,7 +6653,7 @@ mod tests {
             &self,
             _id: EntityId,
         ) -> ersatzrs_core::repositories::Result<Option<EntityId>> {
-            Ok(None)
+            Ok(Some(41))
         }
 
         async fn match_items(&self, _id: EntityId) -> ersatzrs_core::repositories::Result<()> {
@@ -6720,62 +6812,240 @@ mod tests {
         }
     }
 
-    struct RecordingPublicationRuntime {
-        events: Arc<Mutex<Vec<String>>>,
-        fail_scan: bool,
+    #[derive(Default)]
+    struct RecordingManagedOperations {
+        next_id: Mutex<EntityId>,
+        scans: Mutex<Vec<ManagedLibraryOperation>>,
+        publication: Mutex<Option<AddonMediaListPublicationEnqueue>>,
+        publication_calls: Mutex<Vec<(EntityId, EntityId, i32, i32)>>,
+    }
+
+    impl RecordingManagedOperations {
+        fn next_id(&self) -> EntityId {
+            let mut next = self.next_id.lock().expect("managed operation id");
+            *next += 1;
+            *next
+        }
     }
 
     #[async_trait]
-    impl ScanRuntime for RecordingPublicationRuntime {
-        async fn pending_playout_refreshes(
+    impl ManagedLibraryOperationRepository for RecordingManagedOperations {
+        async fn enqueue_scan(
             &self,
-        ) -> Result<crate::ScanRuntimeReport, ScanRuntimeError> {
-            self.events
-                .lock()
-                .expect("publication events")
-                .push("pending-refreshes".to_owned());
-            Ok(crate::ScanRuntimeReport {
-                playout_refreshes: vec![ersatzrs_domain::ScanPlayoutRefresh {
-                    playout_id: 77,
-                    reason: ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipAdded,
-                }],
-            })
-        }
-
-        async fn scan_library(
-            &self,
-            provider: MediaSourceKind,
+            kind: ManagedLibraryOperationKind,
             library_id: EntityId,
-            deep_scan: bool,
-            _progress: &dyn ScanProgressSink,
-        ) -> Result<crate::ScanRuntimeReport, ScanRuntimeError> {
-            self.events
-                .lock()
-                .expect("publication events")
-                .push(format!("scan:{provider:?}:{library_id}:{deep_scan}"));
-            if self.fail_scan {
-                Err(ScanRuntimeError::new("injected scan failure"))
-            } else {
-                Ok(crate::ScanRuntimeReport::default())
+            scan: ManagedLibraryScanSpec,
+            coalesce: bool,
+        ) -> ersatzrs_core::repositories::Result<Option<ManagedLibraryOperation>> {
+            let mut scans = self.scans.lock().expect("managed scans");
+            if coalesce
+                && scans.iter().any(|operation| {
+                    operation.library_id == library_id
+                        && matches!(
+                            operation.state,
+                            ManagedLibraryOperationState::Queued
+                                | ManagedLibraryOperationState::Running
+                                | ManagedLibraryOperationState::WaitingToRetry
+                        )
+                })
+            {
+                return Ok(None);
             }
+            let operation = ManagedLibraryOperation {
+                id: self.next_id(),
+                library_id,
+                parent_operation_id: None,
+                owner_token: "owner".to_owned(),
+                kind,
+                state: ManagedLibraryOperationState::Queued,
+                scan: Some(scan),
+                attempt_count: 0,
+                next_eligible_at: None,
+            };
+            scans.push(operation.clone());
+            Ok(Some(operation))
         }
 
-        async fn scan_show(
+        async fn enqueue_publication(
             &self,
-            _provider: MediaSourceKind,
-            _library_id: EntityId,
-            _show_id: EntityId,
-            _deep_scan: bool,
-            _progress: &dyn ScanProgressSink,
-        ) -> Result<(), ScanRuntimeError> {
-            Ok(())
+            list_id: EntityId,
+            library_id: EntityId,
+            saved_revision: i32,
+            target_published_revision: i32,
+        ) -> ersatzrs_core::repositories::Result<AddonMediaListPublicationEnqueue> {
+            self.publication_calls
+                .lock()
+                .expect("publication calls")
+                .push((
+                    list_id,
+                    library_id,
+                    saved_revision,
+                    target_published_revision,
+                ));
+            if let Some(existing) = self.publication.lock().expect("publication").clone() {
+                return Ok(AddonMediaListPublicationEnqueue {
+                    existing: true,
+                    ..existing
+                });
+            }
+            let operation_id = self.next_id();
+            let operation = ManagedLibraryOperation {
+                id: operation_id,
+                library_id,
+                parent_operation_id: None,
+                owner_token: "publication-owner".to_owned(),
+                kind: ManagedLibraryOperationKind::Publication,
+                state: ManagedLibraryOperationState::Queued,
+                scan: None,
+                attempt_count: 0,
+                next_eligible_at: None,
+            };
+            let queued = AddonMediaListPublicationEnqueue {
+                job: AddonMediaListPublicationJob {
+                    id: operation_id,
+                    operation_id,
+                    list_id,
+                    generation: 1,
+                    saved_revision,
+                    target_published_revision,
+                    phase: AddonMediaListPublicationPhase::AwaitingLease,
+                    child_scan_operation_id: None,
+                    original_failure_code: None,
+                    original_failure_diagnostic: None,
+                    recovery_diagnostic: None,
+                    outcome: None,
+                },
+                operation,
+                existing: false,
+            };
+            *self.publication.lock().expect("publication") = Some(queued.clone());
+            Ok(queued)
         }
 
-        async fn extract_embedded_show_subtitles(
+        async fn operation(
             &self,
-            _show_id: EntityId,
-        ) -> Result<(), ScanRuntimeError> {
-            Ok(())
+            _operation_id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<Option<ManagedLibraryOperation>> {
+            unreachable!("operation lookup is not used by command tests")
+        }
+
+        async fn active_scan_operation(
+            &self,
+            library_id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<Option<ManagedLibraryOperation>> {
+            Ok(self
+                .scans
+                .lock()
+                .expect("managed scans")
+                .iter()
+                .find(|operation| {
+                    operation.library_id == library_id
+                        && operation.parent_operation_id.is_none()
+                        && matches!(
+                            operation.kind,
+                            ManagedLibraryOperationKind::ManualScan
+                                | ManagedLibraryOperationKind::ScheduledScan
+                                | ManagedLibraryOperationKind::StartupReplayScan
+                                | ManagedLibraryOperationKind::ProviderRefresh
+                        )
+                        && matches!(
+                            operation.state,
+                            ManagedLibraryOperationState::Queued
+                                | ManagedLibraryOperationState::Running
+                                | ManagedLibraryOperationState::WaitingToRetry
+                        )
+                })
+                .cloned())
+        }
+
+        async fn claim_next(
+            &self,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> ersatzrs_core::repositories::Result<Option<ManagedLibraryOperationClaim>> {
+            unreachable!("claiming is not used by command tests")
+        }
+
+        async fn claim_operation(
+            &self,
+            _operation_id: EntityId,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> ersatzrs_core::repositories::Result<Option<ManagedLibraryOperationClaim>> {
+            unreachable!("claiming is not used by command tests")
+        }
+
+        async fn heartbeat(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            unreachable!("heartbeat is not used by command tests")
+        }
+
+        async fn publication_job(
+            &self,
+            _operation_id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<Option<AddonMediaListPublicationJob>> {
+            unreachable!("job loading is not used by command tests")
+        }
+
+        async fn transition_publication(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _expected: AddonMediaListPublicationPhase,
+            _next: AddonMediaListPublicationPhase,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            unreachable!("transitions are not used by command tests")
+        }
+
+        async fn ensure_publication_child_scan(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _list_id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<ManagedLibraryOperation> {
+            unreachable!("child scans are not used by command tests")
+        }
+
+        async fn record_publication_failure(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _expected: AddonMediaListPublicationPhase,
+            _code: &str,
+            _diagnostic: &str,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            unreachable!("failure recovery is not used by command tests")
+        }
+
+        async fn schedule_publication_recovery_retry(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _diagnostic: &str,
+            _next_eligible_at: chrono::DateTime<chrono::Utc>,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            unreachable!("retry is not used by command tests")
+        }
+
+        async fn complete_publication(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _outcome: AddonMediaListPublicationOutcome,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            unreachable!("completion is not used by command tests")
+        }
+
+        async fn complete_operation(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            unreachable!("completion is not used by command tests")
+        }
+
+        async fn fail_operation(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _code: &str,
+            _diagnostic: &str,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            unreachable!("failure is not used by command tests")
         }
     }
 
@@ -7758,45 +8028,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn add_on_media_list_publication_scans_between_stage_and_commit() {
+    async fn add_on_media_list_publication_persists_exact_revision_and_returns_queued() {
         let events = Arc::new(Mutex::new(Vec::new()));
         let repository = RecordingAddonMediaListRepository {
             publication_events: Arc::clone(&events),
             ..Default::default()
         };
-        let runtime = RecordingPublicationRuntime {
-            events: Arc::clone(&events),
-            fail_scan: false,
-        };
-        let queue = RecordingQueue::default();
-        let operations = coordinator();
+        let managed = RecordingManagedOperations::default();
 
-        publish_addon_media_list(
-            PublishAddonMediaList { id: 7 },
+        let outcome = publish_addon_media_list(
+            PublishAddonMediaList {
+                id: 7,
+                saved_revision: 5,
+            },
             &repository,
-            &runtime,
-            &queue,
-            &operations,
+            &managed,
         )
         .await
         .expect("publish");
 
         assert_eq!(
-            *events.lock().expect("publication events"),
-            [
-                "stage:7",
-                "scan:Local:41:true",
-                "commit:7",
-                "pending-refreshes"
-            ]
+            outcome,
+            PublishAddonMediaListOutcome::Queued {
+                operation_id: 1,
+                generation: 1,
+                saved_revision: 5,
+                existing: false,
+            }
         );
         assert_eq!(
-            *queue.requests.lock().expect("queued refreshes"),
-            [PlayoutBuildRequest {
-                playout_id: 77,
-                mode: PlayoutBuildMode::Refresh,
-            }]
+            *managed.publication_calls.lock().expect("publication calls"),
+            [(7, 41, 5, 3)]
         );
+        assert!(events.lock().expect("publication events").is_empty());
     }
 
     #[tokio::test]
@@ -7807,67 +8071,51 @@ mod tests {
             pending_publication_details: 3,
             ..Default::default()
         };
-        let runtime = RecordingPublicationRuntime {
-            events: Arc::clone(&events),
-            fail_scan: false,
-        };
-        let queue = RecordingQueue::default();
-        let operations = coordinator();
+        let managed = RecordingManagedOperations::default();
 
         let outcome = publish_addon_media_list(
-            PublishAddonMediaList { id: 7 },
+            PublishAddonMediaList {
+                id: 7,
+                saved_revision: 5,
+            },
             &repository,
-            &runtime,
-            &queue,
-            &operations,
+            &managed,
         )
         .await
         .expect("prepare playback details");
 
-        assert_eq!(outcome, Some(3));
+        assert_eq!(
+            outcome,
+            PublishAddonMediaListOutcome::Preparing { pending_details: 3 }
+        );
         assert!(events.lock().expect("publication events").is_empty());
-        assert!(queue.requests.lock().expect("queued refreshes").is_empty());
+        assert!(managed
+            .publication_calls
+            .lock()
+            .expect("publication calls")
+            .is_empty());
     }
 
     #[tokio::test]
-    async fn add_on_media_list_publication_recovers_scan_and_commit_failures() {
-        for fail_scan in [true, false] {
-            let events = Arc::new(Mutex::new(Vec::new()));
-            let repository = RecordingAddonMediaListRepository {
-                publication_events: Arc::clone(&events),
-                fail_publication_commit: !fail_scan,
-                ..Default::default()
-            };
-            let runtime = RecordingPublicationRuntime {
-                events: Arc::clone(&events),
-                fail_scan,
-            };
-            let queue = RecordingQueue::default();
-            let operations = coordinator();
-
-            publish_addon_media_list(
-                PublishAddonMediaList { id: 7 },
-                &repository,
-                &runtime,
-                &queue,
-                &operations,
-            )
-            .await
-            .expect_err("injected publication failure");
-
-            let expected = if fail_scan {
-                vec!["stage:7", "scan:Local:41:true", "restore:7", "reconcile:7"]
-            } else {
-                vec![
-                    "stage:7",
-                    "scan:Local:41:true",
-                    "commit:7",
-                    "restore:7",
-                    "reconcile:7",
-                ]
-            };
-            assert_eq!(*events.lock().expect("publication events"), expected);
-        }
+    async fn add_on_media_list_publication_rejects_a_stale_saved_revision() {
+        let repository = RecordingAddonMediaListRepository::default();
+        let managed = RecordingManagedOperations::default();
+        let error = publish_addon_media_list(
+            PublishAddonMediaList {
+                id: 7,
+                saved_revision: 4,
+            },
+            &repository,
+            &managed,
+        )
+        .await
+        .expect_err("stale revision");
+        assert!(matches!(error, crate::ApplicationError::Validation { .. }));
+        assert!(managed
+            .publication_calls
+            .lock()
+            .expect("publication calls")
+            .is_empty());
     }
 
     #[tokio::test]
@@ -9187,6 +9435,7 @@ mod tests {
             scan_target(2, MediaSourceKind::Plex),
             scan_target(1, MediaSourceKind::Local),
         ]);
+        let managed = RecordingManagedOperations::default();
         let queue = RecordingScanQueue::default();
         let operations = coordinator();
 
@@ -9195,6 +9444,7 @@ mod tests {
                 request_library_scan(
                     RequestLibraryScan::new(library_id, false),
                     &repository,
+                    &managed,
                     &queue,
                     &operations,
                 )
@@ -9218,6 +9468,7 @@ mod tests {
     async fn scheduled_scan_coalesces_active_work_without_dropping_manual_repeats() {
         let repository =
             FakeLibraryRepository::with_targets([scan_target(6, MediaSourceKind::Plex)]);
+        let managed = RecordingManagedOperations::default();
         let queue = RecordingScanQueue::default();
         let operations = coordinator();
 
@@ -9225,6 +9476,7 @@ mod tests {
             request_library_scan(
                 RequestLibraryScan::new(6, false),
                 &repository,
+                &managed,
                 &queue,
                 &operations,
             )
@@ -9235,6 +9487,7 @@ mod tests {
             request_scheduled_library_scan(
                 RequestScheduledLibraryScan::new(6),
                 &repository,
+                &managed,
                 &queue,
                 &operations,
             )
@@ -9251,6 +9504,7 @@ mod tests {
             request_library_scan(
                 RequestLibraryScan::new(6, true),
                 &repository,
+                &managed,
                 &queue,
                 &operations,
             )
@@ -9270,6 +9524,7 @@ mod tests {
             scan_target(3, MediaSourceKind::Local),
             scan_target(4, MediaSourceKind::Jellyfin),
         ]);
+        let managed = RecordingManagedOperations::default();
         let queue = RecordingScanQueue::default();
         let operations = coordinator();
 
@@ -9277,6 +9532,7 @@ mod tests {
             request_show_scan(
                 RequestShowScan::new(3, 30, true),
                 &repository,
+                &managed,
                 &queue,
                 &operations,
             )
@@ -9287,6 +9543,7 @@ mod tests {
             request_show_scan(
                 RequestShowScan::new(4, 40, false),
                 &repository,
+                &managed,
                 &queue,
                 &operations,
             )
@@ -9315,10 +9572,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn scan_admission_reports_validation_and_worker_unavailability() {
+    async fn scan_admission_validates_before_persistence_and_survives_wake_failure() {
         let mut disabled = scan_target(5, MediaSourceKind::Emby);
         disabled.should_sync_items = false;
         let repository = FakeLibraryRepository::with_targets([disabled]);
+        let managed = RecordingManagedOperations::default();
         let queue = RecordingScanQueue::unavailable();
         let operations = coordinator();
 
@@ -9326,6 +9584,7 @@ mod tests {
             request_library_scan(
                 RequestLibraryScan::new(0, false),
                 &repository,
+                &managed,
                 &queue,
                 &operations,
             )
@@ -9336,6 +9595,7 @@ mod tests {
             request_library_scan(
                 RequestLibraryScan::new(5, false),
                 &repository,
+                &managed,
                 &queue,
                 &operations,
             )
@@ -9345,19 +9605,18 @@ mod tests {
 
         let available_repository =
             FakeLibraryRepository::with_targets([scan_target(6, MediaSourceKind::Plex)]);
-        assert_eq!(
+        assert!(matches!(
             request_library_scan(
                 RequestLibraryScan::new(6, false),
                 &available_repository,
+                &managed,
                 &queue,
                 &operations,
             )
             .await,
-            RequestScanOutcome::Unavailable {
-                message: "scanner receiver closed".to_owned(),
-            }
-        );
-        assert!(operations.scan_activity().snapshots().is_empty());
+            RequestScanOutcome::Accepted { .. }
+        ));
+        assert_eq!(operations.scan_activity().snapshots().len(), 1);
     }
 
     fn channel_validation_state() -> ChannelValidationState {

@@ -1,8 +1,10 @@
 use async_trait::async_trait;
 use ersatzrs_app::{MediaSourceRuntime, MediaSourceRuntimeError, PlexPinFlow, RemoteServerInfo};
 use ersatzrs_core::repositories::{
-    JellyfinConnectionConfig, JellyfinService as _, RemoteMediaSourceKind,
+    JellyfinConnectionConfig, JellyfinService as _, ManagedLibraryOperationRepository,
+    ManagedLibraryScanSpec, RemoteMediaSourceKind,
 };
+use ersatzrs_domain::{ManagedLibraryOperationKind, MediaSourceKind};
 use ersatzrs_infra::db::DbPool;
 
 #[derive(Clone)]
@@ -59,22 +61,30 @@ impl MediaSourceRuntime for NativeMediaSourceRuntime {
         if library_ids.is_empty() {
             return;
         }
-        let pool = self.pool.clone();
+        let operations = ersatzrs_infra::repositories::SqliteManagedLibraryOperationRepository(
+            self.pool.clone(),
+        );
         tokio::spawn(async move {
+            let provider = match kind {
+                RemoteMediaSourceKind::Jellyfin => MediaSourceKind::Jellyfin,
+                RemoteMediaSourceKind::Emby => MediaSourceKind::Emby,
+                RemoteMediaSourceKind::Plex => MediaSourceKind::Plex,
+            };
             for library_id in library_ids {
-                let result = match kind {
-                    RemoteMediaSourceKind::Jellyfin => {
-                        ersatzrs_infra::jellyfin::sync_library_by_id(&pool, library_id).await
-                    }
-                    RemoteMediaSourceKind::Emby => {
-                        ersatzrs_infra::emby::sync_library_by_id(&pool, library_id).await
-                    }
-                    RemoteMediaSourceKind::Plex => {
-                        ersatzrs_infra::plex::sync_library_by_id(&pool, library_id).await
-                    }
-                };
+                let result = operations
+                    .enqueue_scan(
+                        ManagedLibraryOperationKind::ProviderRefresh,
+                        library_id,
+                        ManagedLibraryScanSpec {
+                            provider,
+                            show_id: None,
+                            deep_scan: false,
+                        },
+                        true,
+                    )
+                    .await;
                 if let Err(error) = result {
-                    tracing::warn!(library_id, %error, "remote media library sync failed");
+                    tracing::warn!(library_id, %error, "remote media library sync admission failed");
                 }
             }
         });

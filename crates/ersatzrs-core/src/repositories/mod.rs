@@ -15,6 +15,7 @@ mod filler;
 mod graphics;
 mod jellyfin;
 mod library;
+mod managed_library_operation;
 mod media_item;
 mod media_source;
 mod metadata;
@@ -96,6 +97,10 @@ pub use jellyfin::{
 pub use library::{
     AdminExternalCollectionRow, AdminLibraryRow, LibraryRepository, LibraryScanTarget,
     MediaStateRevision,
+};
+pub use managed_library_operation::{
+    AddonMediaListPublicationEnqueue, AddonMediaListPublicationJob, ManagedLibraryOperation,
+    ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
 };
 pub use media_item::MediaItemRepository;
 pub use media_source::{

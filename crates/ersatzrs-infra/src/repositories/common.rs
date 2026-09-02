@@ -5,14 +5,16 @@ use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
     AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListReviewState, ArtworkKind,
-    BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode, ChannelPlayoutMode,
-    ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
-    ChannelTranscodeMode, ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType,
-    ContentKind, DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
+    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListPublicationOutcome,
+    AddonMediaListPublicationPhase, AddonMediaListReviewState, ArtworkKind, BlockStopScheduling,
+    ChannelIdleBehavior, ChannelMusicVideoCreditsMode, ChannelPlayoutMode, ChannelPlayoutSource,
+    ChannelSongVideoMode, ChannelStreamSelectorMode, ChannelSubtitleMode, ChannelTranscodeMode,
+    ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType, ContentKind,
+    DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
     FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat, FillWithGroupMode, FillerKind,
     FillerMode, FilterMode, FixedStartTimeBehavior, GraphicsElementKind, GuideMode,
-    HardwareAccelerationKind, LibraryMediaKind, MarathonGroupBy, MediaItemState, MediaSourceKind,
+    HardwareAccelerationKind, LibraryMediaKind, ManagedLibraryOperationKind,
+    ManagedLibraryOperationState, MarathonGroupBy, MediaItemState, MediaSourceKind,
     MediaStreamKind, MetadataKind, MetadataSource, MultipleMode, NormalizeLoudnessMode,
     OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind, RemoteStreamLiveness,
     ScalingBehavior, StartType, StreamingMode, SubtitleKind, TailMode, VaapiDriver, VideoScanKind,
@@ -526,6 +528,37 @@ db_enum!(MediaSourceKind {
     2 => MediaSourceKind::Plex,
     3 => MediaSourceKind::Jellyfin,
     4 => MediaSourceKind::Emby,
+});
+db_enum!(ManagedLibraryOperationKind {
+    0 => ManagedLibraryOperationKind::ManualScan,
+    1 => ManagedLibraryOperationKind::ScheduledScan,
+    2 => ManagedLibraryOperationKind::StartupReplayScan,
+    3 => ManagedLibraryOperationKind::Publication,
+    4 => ManagedLibraryOperationKind::PublicationChildScan,
+    5 => ManagedLibraryOperationKind::ProviderRefresh,
+    6 => ManagedLibraryOperationKind::Recovery,
+    7 => ManagedLibraryOperationKind::Reset,
+});
+db_enum!(ManagedLibraryOperationState {
+    0 => ManagedLibraryOperationState::Queued,
+    1 => ManagedLibraryOperationState::Running,
+    2 => ManagedLibraryOperationState::WaitingToRetry,
+    3 => ManagedLibraryOperationState::Completed,
+    4 => ManagedLibraryOperationState::Failed,
+});
+db_enum!(AddonMediaListPublicationPhase {
+    0 => AddonMediaListPublicationPhase::AwaitingLease,
+    1 => AddonMediaListPublicationPhase::Staging,
+    2 => AddonMediaListPublicationPhase::Scanning,
+    3 => AddonMediaListPublicationPhase::Committing,
+    4 => AddonMediaListPublicationPhase::RestoringFiles,
+    5 => AddonMediaListPublicationPhase::RestoringProjection,
+    6 => AddonMediaListPublicationPhase::Reconciling,
+    7 => AddonMediaListPublicationPhase::Complete,
+});
+db_enum!(AddonMediaListPublicationOutcome {
+    0 => AddonMediaListPublicationOutcome::Published,
+    1 => AddonMediaListPublicationOutcome::RestoredAfterFailure,
 });
 db_enum!(MediaStreamKind {
     1 => MediaStreamKind::Video,

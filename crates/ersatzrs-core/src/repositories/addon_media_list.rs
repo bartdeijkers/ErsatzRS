@@ -48,6 +48,8 @@ pub struct AddonMediaListAdminRow {
     pub review_error: Option<String>,
     /// Monotonic publication revision used by refresh and audit flows.
     pub published_revision: i32,
+    /// Monotonic saved-draft revision used to bind durable publication jobs.
+    pub draft_revision: i32,
     /// Whether post-publication detail work is automatic or manual-only.
     pub detail_import_policy: AddonMediaListDetailPolicy,
     /// Current durable overview/detail activity, if this list uses import v1.
@@ -81,6 +83,7 @@ pub struct AddonMediaListAdminForm {
     pub review_state: AddonMediaListReviewState,
     pub review_error: Option<String>,
     pub published_revision: i32,
+    pub draft_revision: i32,
     pub detail_import_policy: AddonMediaListDetailPolicy,
     pub import_progress: Option<AddonMediaListImportProgress>,
     /// Legacy list-wide chapter input retained only for ambiguous migrations.
@@ -538,6 +541,25 @@ pub trait AddonMediaListRepository: Send + Sync {
             "not implemented",
         ))
     }
+    /// Stage one exact saved revision for a durable publication generation.
+    async fn stage_publication_revision(
+        &self,
+        id: EntityId,
+        saved_revision: i32,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<AddonMediaListPublication> {
+        let _ = (
+            saved_revision,
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        );
+        self.stage_publication(id).await
+    }
     /// Commit one staged revision after its managed library has been scanned.
     async fn commit_staged_publication(&self, id: EntityId) -> Result<()> {
         let _ = id;
@@ -545,6 +567,25 @@ pub trait AddonMediaListRepository: Send + Sync {
             "commit add-on media-list publication",
             "not implemented",
         ))
+    }
+    /// Commit a staged publication only to the exact fenced target revision.
+    async fn commit_staged_publication_revision(
+        &self,
+        id: EntityId,
+        target_published_revision: i32,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let _ = (
+            target_published_revision,
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        );
+        self.commit_staged_publication(id).await
     }
     /// Restore the last published item snapshot after staging or commit failed.
     async fn restore_staged_publication(&self, id: EntityId, message: &str) -> Result<()> {
@@ -554,6 +595,19 @@ pub trait AddonMediaListRepository: Send + Sync {
             "not implemented",
         ))
     }
+    /// Restore only while the exact durable publication claimant still owns the lease.
+    async fn restore_staged_publication_revision(
+        &self,
+        id: EntityId,
+        message: &str,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let _ = (operation_id, generation, owner_token, lease_owner);
+        self.restore_staged_publication(id, message).await
+    }
     /// Rebuild the prior database projection after its managed files were restored.
     async fn reconcile_restored_publication(&self, id: EntityId) -> Result<()> {
         let _ = id;
@@ -561,6 +615,18 @@ pub trait AddonMediaListRepository: Send + Sync {
             "reconcile restored add-on media-list publication",
             "not implemented",
         ))
+    }
+    /// Reconcile only while the exact durable publication claimant still owns the lease.
+    async fn reconcile_restored_publication_revision(
+        &self,
+        id: EntityId,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let _ = (operation_id, generation, owner_token, lease_owner);
+        self.reconcile_restored_publication(id).await
     }
     /// Publish directly when managed files already exist (mainly repository tests).
     ///
