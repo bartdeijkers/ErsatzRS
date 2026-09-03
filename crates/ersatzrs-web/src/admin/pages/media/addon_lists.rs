@@ -318,6 +318,7 @@ fn review_snapshot(item: &AddonMediaListItemRow) -> AddonMediaListItemReviewEdit
 fn dispatch_review_edit(
     action: ReviewEditAction,
     row_save_states: RwSignal<BTreeMap<i64, RowSaveState>>,
+    readiness_refresh_pending: RwSignal<bool>,
     list_id: i64,
     previous: AddonMediaListItemReviewEdit,
     desired: AddonMediaListItemReviewEdit,
@@ -329,6 +330,7 @@ fn dispatch_review_edit(
     row_save_states.update(|states| {
         states.insert(desired.item_id, RowSaveState::Saving);
     });
+    readiness_refresh_pending.set(true);
     action.dispatch((
         list_id,
         vec![desired],
@@ -498,6 +500,7 @@ fn item_row_view(
     replacement_action: ReplacementAction,
     review_edit_action: ReviewEditAction,
     row_save_states: RwSignal<BTreeMap<i64, RowSaveState>>,
+    readiness_refresh_pending: RwSignal<bool>,
     role_action: ItemRoleAction,
     episode_preview: Memo<BTreeMap<i64, (i32, i32)>>,
     episode_numbering_open: RwSignal<bool>,
@@ -675,6 +678,7 @@ fn item_row_view(
                                 dispatch_review_edit(
                                     review_edit_action,
                                     row_save_states,
+                                    readiness_refresh_pending,
                                     list_id,
                                     review_state,
                                     desired,
@@ -745,6 +749,7 @@ fn item_row_view(
                                                     dispatch_review_edit(
                                                         review_edit_action,
                                                         row_save_states,
+                                                        readiness_refresh_pending,
                                                         list_id,
                                                         review_state,
                                                         desired,
@@ -832,6 +837,7 @@ fn item_row_view(
                                             dispatch_review_edit(
                                                 review_edit_action,
                                                 row_save_states,
+                                                readiness_refresh_pending,
                                                 list_id,
                                                 review_state,
                                                 desired,
@@ -866,6 +872,7 @@ fn item_row_view(
                                     dispatch_review_edit(
                                         review_edit_action,
                                         row_save_states,
+                                        readiness_refresh_pending,
                                         list_id,
                                         review_state,
                                         desired,
@@ -3328,6 +3335,7 @@ fn AddonMediaListEditorIsland(
     let reload_items_action = Action::new(|id: &i64| list_addon_media_list_items(*id));
     let reload_readiness_action =
         Action::new(|id: &i64| get_addon_media_list_publication_readiness(*id));
+    let readiness_refresh_pending = RwSignal::new(false);
     let reload_show_nfo_action = Action::new(|id: &i64| get_addon_media_list_show_nfo(*id));
     let review_edit_action = Action::new(
         |value: &(i64, Vec<AddonMediaListItemReviewEdit>, ReviewUndoEntry)| {
@@ -3372,8 +3380,12 @@ fn AddonMediaListEditorIsland(
             || item_role_action.pending().get()
             || replacement_action.pending().get()
             || request_detail_action.pending().get()
+            || reload_items_action.pending().get()
+            || reload_readiness_action.pending().get()
+            || readiness_refresh_pending.get()
     });
     let reload_items = move || {
+        readiness_refresh_pending.set(true);
         reload_items_action.dispatch(id);
     };
     Effect::new(move |_| {
@@ -3384,6 +3396,7 @@ fn AddonMediaListEditorIsland(
                     reload_readiness_action.dispatch(id);
                 }
                 Err(error) => {
+                    readiness_refresh_pending.set(false);
                     toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
                 }
             }
@@ -3397,6 +3410,7 @@ fn AddonMediaListEditorIsland(
                     toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
                 }
             }
+            readiness_refresh_pending.set(false);
         }
     });
     Effect::new(move |_| {
@@ -4873,6 +4887,7 @@ fn AddonMediaListEditorIsland(
                                         replacement_action,
                                         review_edit_action,
                                         row_save_states,
+                                        readiness_refresh_pending,
                                         item_role_action,
                                         episode_numbering_row_preview,
                                         episode_numbering_open,

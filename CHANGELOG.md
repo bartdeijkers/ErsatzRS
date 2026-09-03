@@ -50,6 +50,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep add-on-list Save and Publish actions disabled until item edits have
+  refreshed publication readiness, preventing a fast follow-up publication
+  from submitting the previous saved revision.
+
 - Run exact-revision add-on-list publication and recovery as durable background
   work behind one shared managed-library lease. Publication now survives
   request cancellation and process restart, deduplicates repeated Publish
