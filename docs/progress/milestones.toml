@@ -2205,7 +2205,7 @@ retry, and the cross-platform partial-swap matrix remain owned by amm-j-02.
 id         = 'amm-j-02'
 phase      = 'AMM-J — Crash-safe publication recovery'
 title      = 'Make publication rollback atomic on Windows and POSIX'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-publication-recovery.md'
 depends_on = ['amm-j-01']
@@ -2219,9 +2219,9 @@ to exactly one complete previous or new revision before cleanup clears the
 journal. NTFS and POSIX fault injection plus SQLite restart tests pass.
 '''
 evidence = '''
-Implemented locally on 2026-09-02, pending the required real-NTFS gate. Managed,
-backup, and failed trees now carry operation/generation/revision markers and
-content fingerprints; same-parent ownership checks and marker-last cleanup make
+Completed on 2026-09-03. Managed, backup, and failed trees carry operation,
+generation, and revision markers plus content fingerprints; same-parent
+ownership checks and marker-last cleanup make
 each safe rename state resumable while foreign or corrupt trees stop without
 deletion. Staging copies bytes instead of hard-linking mutable files. The
 durable coordinator drains its first child scan, commits or restores, runs a
@@ -2236,11 +2236,12 @@ ordering, logical database cardinality, active-journal writer fencing, legacy
 adoption, and a file-backed SQLite close/reopen during verification. The 49
 projection/publication integration tests, 19 filesystem tests, 2,270-test
 canonical closeout with doctests, workspace clippy, and MPEG-TS/HLS runtime
-smoke pass. An independent recovery audit found no remaining blocker.
-The manual `Windows publication filesystem gate` workflow targets the
-self-hosted NTFS release runner and holds a non-delete-shared handle until the
-production retry loop succeeds. AMM-J-02 remains open until that workflow has a
-green run whose URL and exact commit SHA are recorded here.
+smoke pass. An independent recovery audit found no remaining blocker. On
+2026-09-03, the native Windows x64 checkout at exact commit
+`9196c4f831ce68ddcc6a7784bfff746a3040f6a5` passed
+`windows_publication_restore_retries_until_a_held_handle_drains` through
+Nextest run `d2dd956d-3d6e-4fb0-abaa-76929c31d72b`: one test passed in 0.402
+seconds with 830 tests skipped. This closes the real Windows held-handle gate.
 '''
 
 [[milestone]]

@@ -23,9 +23,10 @@ a one-shot directory-rename failure can leave a valid journal permanently
 blocked without startup or admin recovery. AMM-J-01 now moves exact-revision
 publication and recovery into a durable restart-safe coordinator behind one
 shared managed-library lease, including upgrade adoption of stranded journals.
-AMM-J-02 now implements marker-owned byte-isolated backups, resumable swaps,
+AMM-J-02 completes marker-owned byte-isolated backups, resumable swaps,
 bounded Windows sharing retry, post-swap scan/integrity verification, and
-journal-last cleanup; its real-NTFS manual workflow evidence remains open.
+journal-last cleanup, including native Windows held-handle proof at exact
+commit `9196c4f`.
 ADR 0085 broadens the remaining corrective program through AMM-K operator
 lifecycle/navigation, AMM-L cadenced incremental
 refresh/reconciliation, AMM-M inherited yt-dlp access/SponsorBlock/subtitles
@@ -36,9 +37,7 @@ early stop, additions-only automatic publication, and updater rollback.
 '''
 
 next_steps = '''
-Finish `amm-j-02` by running the manual Windows publication filesystem gate on
-the self-hosted NTFS release runner and recording its exact-SHA evidence. Then
-complete AMM-J-03 and AMM-J-04 before delivering ADR 0085 in dependency order
+Complete AMM-J-03 and AMM-J-04 before delivering ADR 0085 in dependency order
 through AMM-K, AMM-L, AMM-M, and AMM-N. Resume Phase 9A at p9a-01 after that
 corrective program by accepting the teletext product and standards contract
 before implementation.
