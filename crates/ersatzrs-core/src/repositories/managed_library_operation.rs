@@ -1,11 +1,13 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
-    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase, EntityId,
+    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
+    AddonMediaListPublicationState, AddonMediaListRecoveryAction, EntityId,
     ManagedLibraryOperationKind, ManagedLibraryOperationState, MediaSourceKind,
 };
 
 use super::Result;
+use serde::{Deserialize, Serialize};
 
 /// Durable scan payload stored with one managed-library operation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,6 +63,25 @@ pub struct AddonMediaListPublicationEnqueue {
     pub existing: bool,
 }
 
+/// Redacted operator-facing status for the newest publication generation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPublicationStatus {
+    pub job_id: EntityId,
+    pub operation_id: EntityId,
+    pub list_id: EntityId,
+    pub generation: i32,
+    pub saved_revision: i32,
+    pub target_published_revision: i32,
+    pub phase: AddonMediaListPublicationPhase,
+    pub state: AddonMediaListPublicationState,
+    pub attempt_count: i32,
+    pub last_progress_at: DateTime<Utc>,
+    pub diagnostic_code: Option<String>,
+    pub recovery_diagnostic_present: bool,
+    pub can_retry: bool,
+    pub can_restore: bool,
+}
+
 /// Storage boundary for durable managed-library admission and publication.
 #[async_trait]
 pub trait ManagedLibraryOperationRepository: Send + Sync {
@@ -109,6 +130,24 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         &self,
         operation_id: EntityId,
     ) -> Result<Option<AddonMediaListPublicationJob>>;
+
+    /// Return the newest generation with lease liveness classified at `now`.
+    async fn publication_status(
+        &self,
+        list_id: EntityId,
+        now: DateTime<Utc>,
+    ) -> Result<Option<AddonMediaListPublicationStatus>>;
+
+    /// Requeue one exact failed or expired generation without bypassing its
+    /// list, generation, or live-lease fence.
+    async fn recover_publication(
+        &self,
+        list_id: EntityId,
+        job_id: EntityId,
+        generation: i32,
+        action: AddonMediaListRecoveryAction,
+        now: DateTime<Utc>,
+    ) -> Result<AddonMediaListPublicationStatus>;
 
     async fn transition_publication(
         &self,

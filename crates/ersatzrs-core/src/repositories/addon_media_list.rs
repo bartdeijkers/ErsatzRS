@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
-    AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemRole,
-    AddonMediaListPresentationKind, AddonMediaListPublicationOutcome, AddonMediaListReviewState,
-    EntityId, RemoteStreamLiveness,
+    AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
+    AddonMediaListDetailState, AddonMediaListImportState, AddonMediaListItemAvailability,
+    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListPublicationOutcome,
+    AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -105,6 +105,7 @@ pub struct AddonMediaListItemAdminRow {
     pub display_title: String,
     pub availability: AddonMediaListItemAvailability,
     pub availability_reason: Option<String>,
+    pub availability_reason_code: Option<AddonMediaListAvailabilityReason>,
     pub replacement_media_item_id: Option<EntityId>,
     pub replacement_media_version_id: Option<EntityId>,
     pub replacement_title: Option<String>,
@@ -227,6 +228,8 @@ pub struct AddonMediaListPublicationBlocker {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListPublicationReadiness {
     pub included_count: u64,
+    /// Selected items omitted from this attempt because access is restricted.
+    pub restricted_excluded_count: u64,
     pub blockers: Vec<AddonMediaListPublicationBlocker>,
     pub recommendation_count: u64,
     pub required_playback_detail_count: u64,
@@ -236,6 +239,8 @@ pub struct AddonMediaListPublicationReadiness {
     pub optional_detail_pending: u64,
     pub saved_revision: i32,
     pub review_state: AddonMediaListReviewState,
+    /// Newest durable job, with live versus expired ownership classified.
+    pub publication: Option<super::AddonMediaListPublicationStatus>,
 }
 
 impl AddonMediaListPublicationReadiness {

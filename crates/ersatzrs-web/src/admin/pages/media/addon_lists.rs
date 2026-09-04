@@ -6,7 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
     AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListReviewState,
+    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListPublicationPhase,
+    AddonMediaListPublicationState, AddonMediaListRecoveryAction, AddonMediaListReviewState,
     RemoteStreamLiveness,
 };
 use leptos::html;
@@ -24,17 +25,19 @@ use crate::admin::server_fns::addon_media_lists::{
     get_addon_media_list_item, get_addon_media_list_publication_readiness,
     get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_providers,
     list_addon_media_lists, match_addon_media_list, publish_addon_media_list,
-    request_addon_media_list_item_details, request_addon_media_list_presentation,
-    resolve_addon_media_list_provider, save_addon_media_list_item_nfo,
-    save_addon_media_list_show_nfo, search_addon_media_list_replacements,
-    set_addon_media_list_item_replacement, set_addon_media_list_item_role, update_addon_media_list,
-    update_addon_media_list_item_chapters, AddonMediaListArtwork, AddonMediaListArtworkRole,
-    AddonMediaListForm, AddonMediaListImportAction, AddonMediaListImportProgressRow,
-    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListItemRow,
-    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
-    AddonMediaListNfoPerson, AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
+    recover_addon_media_list_publication, request_addon_media_list_item_details,
+    request_addon_media_list_presentation, resolve_addon_media_list_provider,
+    save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
+    search_addon_media_list_replacements, set_addon_media_list_item_replacement,
+    set_addon_media_list_item_role, update_addon_media_list, update_addon_media_list_item_chapters,
+    AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListForm,
+    AddonMediaListImportAction, AddonMediaListImportProgressRow, AddonMediaListItemDetail,
+    AddonMediaListItemReviewEdit, AddonMediaListItemRow, AddonMediaListMetadataConflict,
+    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
+    AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationReadiness,
-    AddonMediaListPublishResult, AddonMediaListReplacementRow, AddonMediaListRow,
+    AddonMediaListPublicationStatus, AddonMediaListPublishResult, AddonMediaListReplacementRow,
+    AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
@@ -282,6 +285,10 @@ type ReplacementAction = Action<(i64, Option<(i64, i64)>), Result<(), ServerFnEr
 type ItemRoleAction = Action<(i64, i64, AddonMediaListItemRole), Result<(), ServerFnError>>;
 type ItemDetailAction = Action<i64, Result<Option<AddonMediaListItemDetail>, ServerFnError>>;
 type DetailRequestAction = Action<(i64, i64), Result<(), ServerFnError>>;
+type PublicationRecoveryAction = Action<
+    (i64, i64, i32, AddonMediaListRecoveryAction),
+    Result<AddonMediaListPublicationStatus, ServerFnError>,
+>;
 /// Searching local media that could replace one entry.
 type ReplacementSearchAction =
     Action<String, Result<Vec<AddonMediaListReplacementRow>, ServerFnError>>;
@@ -2744,7 +2751,10 @@ enum PublicationPrimaryAction {
     Save,
     Prepare,
     Publish,
+    Queued,
     Publishing,
+    Restoring,
+    PublishBlocked,
 }
 
 fn publication_primary_action(
@@ -2753,9 +2763,29 @@ fn publication_primary_action(
 ) -> PublicationPrimaryAction {
     if settings_dirty {
         PublicationPrimaryAction::Save
+    } else if let Some(publication) = readiness.publication.as_ref() {
+        match publication.state {
+            AddonMediaListPublicationState::Queued => PublicationPrimaryAction::Queued,
+            AddonMediaListPublicationState::Publishing => PublicationPrimaryAction::Publishing,
+            AddonMediaListPublicationState::Restoring => PublicationPrimaryAction::Restoring,
+            AddonMediaListPublicationState::Waiting
+            | AddonMediaListPublicationState::Expired
+            | AddonMediaListPublicationState::Failed => PublicationPrimaryAction::PublishBlocked,
+            AddonMediaListPublicationState::Complete => {
+                publication_primary_action_without_job(readiness)
+            }
+        }
     } else if readiness.review_state == AddonMediaListReviewState::Publishing {
-        PublicationPrimaryAction::Publishing
-    } else if !readiness.blockers.is_empty() {
+        PublicationPrimaryAction::PublishBlocked
+    } else {
+        publication_primary_action_without_job(readiness)
+    }
+}
+
+fn publication_primary_action_without_job(
+    readiness: &AddonMediaListPublicationReadiness,
+) -> PublicationPrimaryAction {
+    if !readiness.blockers.is_empty() {
         PublicationPrimaryAction::None
     } else if readiness.required_playback_detail_count > 0 {
         if readiness.required_playback_detail_pending > 0 {
@@ -2768,6 +2798,94 @@ fn publication_primary_action(
     } else {
         PublicationPrimaryAction::Publish
     }
+}
+
+const fn publication_phase_text_key(phase: AddonMediaListPublicationPhase) -> TextKey {
+    match phase {
+        AddonMediaListPublicationPhase::AwaitingLease => TextKey::PhaseAwaitingLease,
+        AddonMediaListPublicationPhase::Staging => TextKey::PhaseStaging,
+        AddonMediaListPublicationPhase::Scanning => TextKey::PhaseScanning,
+        AddonMediaListPublicationPhase::Committing => TextKey::PhaseCommitting,
+        AddonMediaListPublicationPhase::RestoringFiles => TextKey::PhaseRestoringFiles,
+        AddonMediaListPublicationPhase::RestoringProjection => TextKey::PhaseRestoringProjection,
+        AddonMediaListPublicationPhase::Reconciling => TextKey::PhaseReconciling,
+        AddonMediaListPublicationPhase::Verifying => TextKey::PhaseVerifying,
+        AddonMediaListPublicationPhase::CleaningUp => TextKey::PhaseCleaningUp,
+        AddonMediaListPublicationPhase::Complete => TextKey::PhaseComplete,
+    }
+}
+
+fn publication_recovery_view(
+    list_id: i64,
+    publication: AddonMediaListPublicationStatus,
+    recovery_action: PublicationRecoveryAction,
+) -> AnyView {
+    let job_id = publication.job_id;
+    let generation = publication.generation;
+    let can_retry = publication.can_retry;
+    let can_restore = publication.can_restore;
+    let phase = tr(publication_phase_text_key(publication.phase));
+    let diagnostic = publication
+        .diagnostic_code
+        .unwrap_or_else(|| tr(TextKey::BlockerRecoveryRequired).to_owned());
+    view! {
+        <aside class=style::recovery_alert role="alert" data-testid="addon-publication-recovery">
+            <strong>{tr(TextKey::PublishBlocked)}</strong>
+            <dl>
+                <div><dt>{tr(TextKey::PublicationPhase)}</dt><dd>{phase}</dd></div>
+                <div><dt>{tr(TextKey::PublicationAttempts)}</dt><dd>{publication.attempt_count}</dd></div>
+                <div><dt>{tr(TextKey::LastProgress)}</dt><dd>{publication.last_progress_at}</dd></div>
+                <div><dt>{tr(TextKey::FailureReason)}</dt><dd>{diagnostic}</dd></div>
+            </dl>
+            <div class=style::recovery_actions>
+                <form method="post" action="/api/addon-lists/recover" style:display=if can_retry { "block" } else { "none" }>
+                    <input type="hidden" name="list_id" value=list_id/>
+                    <input type="hidden" name="job_id" value=job_id/>
+                    <input type="hidden" name="generation" value=generation/>
+                    <input type="hidden" name="action" value="retry"/>
+                    <button
+                        type="submit"
+                        class=style::btn_add
+                        disabled=move || recovery_action.pending().get()
+                        on:click=move |event| {
+                            event.prevent_default();
+                            if !recovery_action.pending().get_untracked() {
+                                recovery_action.dispatch((
+                                    list_id,
+                                    job_id,
+                                    generation,
+                                    AddonMediaListRecoveryAction::Retry,
+                                ));
+                            }
+                        }
+                    >{tr(TextKey::RetryRecovery)}</button>
+                </form>
+                <form method="post" action="/api/addon-lists/recover" style:display=if can_restore { "block" } else { "none" }>
+                    <input type="hidden" name="list_id" value=list_id/>
+                    <input type="hidden" name="job_id" value=job_id/>
+                    <input type="hidden" name="generation" value=generation/>
+                    <input type="hidden" name="action" value="restore"/>
+                    <button
+                        type="submit"
+                        class=style::btn_cancel
+                        disabled=move || recovery_action.pending().get()
+                        on:click=move |event| {
+                            event.prevent_default();
+                            if !recovery_action.pending().get_untracked() {
+                                recovery_action.dispatch((
+                                    list_id,
+                                    job_id,
+                                    generation,
+                                    AddonMediaListRecoveryAction::RestorePreviousRevision,
+                                ));
+                            }
+                        }
+                    >{tr(TextKey::RestorePreviousRevision)}</button>
+                </form>
+            </div>
+        </aside>
+    }
+    .into_any()
 }
 
 const fn publication_blocker_text_key(kind: AddonMediaListPublicationBlockerKind) -> TextKey {
@@ -2890,6 +3008,7 @@ fn AddonMediaListEditorIsland(
     let initial_error_key = match initial_error.as_str() {
         "unsaved" => Some(TextKey::PublishUnsavedChanges),
         "blocked" => Some(TextKey::PublicationBlocked),
+        "recovery" => Some(TextKey::RecoveryFailed),
         "" => None,
         _ => Some(TextKey::AddonMediaListSaveFailed),
     };
@@ -2898,6 +3017,7 @@ fn AddonMediaListEditorIsland(
         "published" => Some(TextKey::Published),
         "publishing" => Some(TextKey::Publishing),
         "preparing" => Some(TextKey::PreparingPublication),
+        "recovery-queued" => Some(TextKey::RecoveryQueued),
         _ => None,
     };
     let form = initial_form.unwrap_or_default();
@@ -3374,6 +3494,10 @@ fn AddonMediaListEditorIsland(
         let (id, saved_revision) = *value;
         async move { publish_addon_media_list(id, saved_revision).await }
     });
+    let recovery_action = Action::new(|value: &(i64, i64, i32, AddonMediaListRecoveryAction)| {
+        let (list_id, job_id, generation, action) = *value;
+        async move { recover_addon_media_list_publication(list_id, job_id, generation, action).await }
+    });
     let row_mutation_pending = Memo::new(move |_| {
         review_edit_action.pending().get()
             || undo_review_edit_action.pending().get()
@@ -3382,6 +3506,7 @@ fn AddonMediaListEditorIsland(
             || request_detail_action.pending().get()
             || reload_items_action.pending().get()
             || reload_readiness_action.pending().get()
+            || recovery_action.pending().get()
             || readiness_refresh_pending.get()
     });
     let reload_items = move || {
@@ -3528,6 +3653,7 @@ fn AddonMediaListEditorIsland(
                 });
                 let mut error_delay_ms = 1_000_u32;
                 let mut last_announcement = None::<(TextKey, u64)>;
+                let mut readiness_error_announced = false;
                 loop {
                     let visibility_delay_ms = web_sys::window()
                         .and_then(|window| window.document())
@@ -3573,6 +3699,23 @@ fn AddonMediaListEditorIsland(
                                 }
                             }
                             import_progress.set(next_form.import_progress);
+                            match get_addon_media_list_publication_readiness(id).await {
+                                Ok(next_readiness) => {
+                                    publication_readiness.set(next_readiness);
+                                    readiness_error_announced = false;
+                                }
+                                Err(error) => {
+                                    error_delay_ms = 2_000;
+                                    if !readiness_error_announced {
+                                        toast.push(
+                                            addon_media_list_error_message(error),
+                                            ToastSeverity::Error,
+                                        );
+                                        readiness_error_announced = true;
+                                    }
+                                    continue;
+                                }
+                            }
                             if next_marker != previous_item_marker {
                                 let became_ready =
                                     next_marker.as_ref().is_some_and(|(state, ..)| {
@@ -3586,18 +3729,30 @@ fn AddonMediaListEditorIsland(
                                     reload_show_nfo_action.dispatch(id);
                                 }
                             }
-                            let should_stop = import_progress.with_untracked(|progress| {
-                                progress.as_ref().is_some_and(|progress| {
-                                    matches!(
-                                        progress.state,
-                                        AddonMediaListImportState::Paused
-                                            | AddonMediaListImportState::NeedsAttention
-                                            | AddonMediaListImportState::Cancelled
-                                            | AddonMediaListImportState::Superseded
-                                    ) || (progress.state == AddonMediaListImportState::Ready
-                                        && progress.detail_pending == 0)
-                                })
-                            });
+                            let publication_active =
+                                publication_readiness.with_untracked(|readiness| {
+                                    readiness.publication.as_ref().is_some_and(|publication| {
+                                        matches!(
+                                            publication.state,
+                                            AddonMediaListPublicationState::Queued
+                                                | AddonMediaListPublicationState::Publishing
+                                                | AddonMediaListPublicationState::Restoring
+                                        )
+                                    })
+                                });
+                            let should_stop = !publication_active
+                                && import_progress.with_untracked(|progress| {
+                                    progress.as_ref().is_some_and(|progress| {
+                                        matches!(
+                                            progress.state,
+                                            AddonMediaListImportState::Paused
+                                                | AddonMediaListImportState::NeedsAttention
+                                                | AddonMediaListImportState::Cancelled
+                                                | AddonMediaListImportState::Superseded
+                                        ) || (progress.state == AddonMediaListImportState::Ready
+                                            && progress.detail_pending == 0)
+                                    })
+                                });
                             if should_stop {
                                 break;
                             }
@@ -3709,6 +3864,23 @@ fn AddonMediaListEditorIsland(
                         ToastSeverity::Info,
                     );
                     reload_items();
+                    reload_readiness_action.dispatch(id);
+                    if !poll_running.get_untracked() {
+                        poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
+                    }
+                }
+                Err(error) => toast.push(
+                    save_failed(addon_media_list_error_message(error)),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = recovery_action.value().get() {
+            match result {
+                Ok(_) => {
+                    toast.push(tr(TextKey::RecoveryQueued).to_string(), ToastSeverity::Info);
                     reload_readiness_action.dispatch(id);
                     if !poll_running.get_untracked() {
                         poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
@@ -3900,7 +4072,10 @@ fn AddonMediaListEditorIsland(
                             <strong>{move || match primary_action.get() {
                                 PublicationPrimaryAction::Save => tr(TextKey::UnsavedChanges),
                                 PublicationPrimaryAction::Prepare => tr(TextKey::PreparePublication),
+                                PublicationPrimaryAction::Queued => tr(TextKey::PublicationQueued),
                                 PublicationPrimaryAction::Publishing => tr(TextKey::Publishing),
+                                PublicationPrimaryAction::Restoring => tr(TextKey::RestoringPublication),
+                                PublicationPrimaryAction::PublishBlocked => tr(TextKey::PublishBlocked),
                                 PublicationPrimaryAction::None
                                     if publication_readiness.with(|readiness| readiness.required_playback_detail_pending > 0) => tr(TextKey::PreparingPublication),
                                 PublicationPrimaryAction::None
@@ -3937,6 +4112,10 @@ fn AddonMediaListEditorIsland(
                             <dt>{tr(TextKey::OptionalDetails)}</dt>
                             <dd><a href="#addon-list-items-heading">{move || publication_readiness.with(|readiness| format!("{} / {}", readiness.optional_detail_complete, readiness.optional_detail_total))}</a></dd>
                         </div>
+                        <div style:display=move || if publication_readiness.with(|readiness| readiness.restricted_excluded_count > 0) { "block" } else { "none" }>
+                            <dt>{tr(TextKey::RestrictedItemsExcluded)}</dt>
+                            <dd>{move || publication_readiness.with(|readiness| readiness.restricted_excluded_count)}</dd>
+                        </div>
                     </dl>
                     <p
                         class=style::readiness_ok
@@ -3955,6 +4134,17 @@ fn AddonMediaListEditorIsland(
                     <p class=style::workflow_message style:display=if initial_status_key.is_some() { "flex" } else { "none" } role="status">
                         {initial_status_key.map(tr).unwrap_or_default()}
                     </p>
+                    {move || publication_readiness.with(|readiness| {
+                        readiness.publication.clone().and_then(|publication| {
+                            matches!(
+                                publication.state,
+                                AddonMediaListPublicationState::Waiting
+                                    | AddonMediaListPublicationState::Expired
+                                    | AddonMediaListPublicationState::Failed
+                            )
+                            .then(|| publication_recovery_view(id, publication, recovery_action))
+                        })
+                    })}
                 </section>
                 <div class=format!("{} {}", style::workflow_action, style::js_only)>
                 <button
@@ -4049,6 +4239,33 @@ fn AddonMediaListEditorIsland(
                     <span style=icon_style(IconName::Clock, "1.125rem") aria-hidden="true"></span>
                     <span>{tr(TextKey::Publishing)}</span>
                 </button>
+                <button
+                    type="button"
+                    class=style::btn_add
+                    disabled=true
+                    style:display=move || if primary_action.get() == PublicationPrimaryAction::Queued { "inline-flex" } else { "none" }
+                >
+                    <span style=icon_style(IconName::Clock, "1.125rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::PublicationQueued)}</span>
+                </button>
+                <button
+                    type="button"
+                    class=style::btn_add
+                    disabled=true
+                    style:display=move || if primary_action.get() == PublicationPrimaryAction::Restoring { "inline-flex" } else { "none" }
+                >
+                    <span style=icon_style(IconName::Clock, "1.125rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::RestoringPublication)}</span>
+                </button>
+                <button
+                    type="button"
+                    class=style::btn_add
+                    disabled=true
+                    style:display=move || if primary_action.get() == PublicationPrimaryAction::PublishBlocked { "inline-flex" } else { "none" }
+                >
+                    <span style=icon_style(IconName::Warning, "1.125rem") aria-hidden="true"></span>
+                    <span>{tr(TextKey::PublishBlocked)}</span>
+                </button>
                 </div>
                 <noscript>
                     <div class=style::nojs_workflow_actions>
@@ -4066,9 +4283,16 @@ fn AddonMediaListEditorIsland(
                             formaction="/api/addon-lists/publish"
                             formmethod="post"
                             class=style::btn_add
+                            disabled=move || !matches!(primary_action.get(), PublicationPrimaryAction::Prepare | PublicationPrimaryAction::Publish)
                         >
                             <span style=icon_style(IconName::Upload, "1.125rem") aria-hidden="true"></span>
-                            <span>{tr(TextKey::PublishList)}</span>
+                            <span>{move || match primary_action.get() {
+                                PublicationPrimaryAction::Queued => tr(TextKey::PublicationQueued),
+                                PublicationPrimaryAction::Publishing => tr(TextKey::Publishing),
+                                PublicationPrimaryAction::Restoring => tr(TextKey::RestoringPublication),
+                                PublicationPrimaryAction::PublishBlocked => tr(TextKey::PublishBlocked),
+                                _ => tr(TextKey::PublishList),
+                            }}</span>
                         </button>
                     </div>
                 </noscript>
@@ -5411,8 +5635,45 @@ mod tests {
         readiness.review_state = AddonMediaListReviewState::Publishing;
         assert_eq!(
             publication_primary_action(false, &readiness),
-            PublicationPrimaryAction::Publishing
+            PublicationPrimaryAction::PublishBlocked
         );
+        let publication_status = |state| AddonMediaListPublicationStatus {
+            job_id: 1,
+            operation_id: 2,
+            generation: 3,
+            saved_revision: 4,
+            target_published_revision: 5,
+            phase: AddonMediaListPublicationPhase::Staging,
+            state,
+            attempt_count: 1,
+            last_progress_at: "2026-09-03T00:00:00Z".to_owned(),
+            diagnostic_code: None,
+            recovery_diagnostic_present: false,
+            can_retry: false,
+            can_restore: false,
+        };
+        for (state, expected) in [
+            (
+                AddonMediaListPublicationState::Queued,
+                PublicationPrimaryAction::Queued,
+            ),
+            (
+                AddonMediaListPublicationState::Publishing,
+                PublicationPrimaryAction::Publishing,
+            ),
+            (
+                AddonMediaListPublicationState::Restoring,
+                PublicationPrimaryAction::Restoring,
+            ),
+            (
+                AddonMediaListPublicationState::Expired,
+                PublicationPrimaryAction::PublishBlocked,
+            ),
+        ] {
+            readiness.publication = Some(publication_status(state));
+            assert_eq!(publication_primary_action(false, &readiness), expected);
+        }
+        readiness.publication = None;
         readiness.review_state = AddonMediaListReviewState::Published;
         assert_eq!(
             publication_primary_action(false, &readiness),

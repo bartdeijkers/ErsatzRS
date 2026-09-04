@@ -5,19 +5,15 @@ status     = 'In progress'
 adr        = ['0068', '0073', '0075', '0078', '0079', '0085']
 
 summary = '''
-ADR 0075 replaces immediate managed-library publication with a provider-neutral
-metadata draft. Generated parent NFOs, the v4 shared contract, per-field
-provider and override snapshots, durable inclusion, atomic publication, the
-shared localized list/item editor, pagination, artwork materialization, health,
-and both official provider mappings are implemented. yt-dlp remains the
-updateable extraction engine; its add-on mapper only translates full yt-dlp
-JSON. Beeld & Geluid uses one cross-platform adapter to normalize scraped data
-and prefer episode-card stills over generic broadcaster artwork. Native Linux,
-WSL, Windows, Chromium, Firefox, migration, and full workspace closeout proof
-complete the original contract. Existing imports can be republished as any
-supported library type without rerunning the provider; the stored snapshot,
-source order, inclusion, and overrides remain the control plane while only the
-projection changes.
+ADR 0075 implements a provider-neutral metadata draft with generated parent
+NFOs, frozen contracts, per-field provider/override snapshots, durable
+inclusion, atomic publication, the localized editor, artwork materialization,
+health, and both official providers. yt-dlp remains the updateable extraction
+engine; its mapper only translates full yt-dlp JSON. Linux, WSL, Windows,
+Chromium, Firefox, migration, and workspace proof complete the original
+contract. Existing imports can be republished as any supported library type
+without rerunning the provider; the snapshot, order, inclusion, and overrides
+remain the control plane while only the projection changes.
 Television drafts provide direct row editing plus atomic, provider-order
 numbering from any included item. Bounded or date-gap-detected assignments and
 responsive bulk media-kind/playback edits share one-step undo.
@@ -55,8 +51,11 @@ After Windows dogfood exposed a stranded journal, AMM-J-01 now provides
 exact-revision durable jobs, shared managed-library leases, expired-worker
 fencing, restart claim/retry, child-scan inheritance, and legacy-journal
 adoption. AMM-J-02 completes atomic recovery, including native Windows
-held-handle proof at exact commit `9196c4f`. AMM-J-03 and AMM-J-04
-retain operator actions and causal history. ADR 0085 opens AMM-K through
+held-handle proof at exact commit `9196c4f`. AMM-J-03 implements typed
+provider-neutral access restrictions, item-scoped publication exclusion,
+redacted durable status, and guarded localized Retry/Restore actions for the
+hydrated and no-JavaScript editor; its packaged Windows restart acceptance is
+still open. AMM-J-04 retains causal history. ADR 0085 opens AMM-K through
 AMM-N for lifecycle/navigation, incremental refresh, inherited yt-dlp playback
 options, storage budgets, validated tool maintenance, and integrated closeout.
 '''
@@ -66,7 +65,7 @@ id          = 'addon-list-publication-recovery-can-stall-permanently-on-windows'
 description = 'Make add-on-list publication and rollback durable, restart-safe, and recoverable through the admin UI after scan failure, process interruption, or a transient Windows filesystem sharing violation; retain a bounded redacted causal history that distinguishes original and recovery failures; keep provider authentication and age restrictions item-scoped.'
 discovered  = '2026-08-31'
 adr         = '0085'
-evidence    = 'Redacted Windows dogfood left a 165-item list in Publishing with an intact journal and previous-revision backup, no failed-publication intermediate directory, and no persisted ReviewError. The publication overlapped a scheduled scan, and the beta could not distinguish request cancellation from a Windows sharing violation. AMM-J-01 now persists exact-revision publication/recovery jobs, coordinates all current managed-library scan origins through one lease, fences expired workers, resumes child scans, retries recovery indefinitely with capped backoff, and adopts legacy stranded journals on upgrade. AMM-J-02 implements operation-owned revision markers, byte-isolated backups, resumable partial swaps, dropped-process cleanup, bounded Windows sharing retry, pre-sealed full-tree fingerprints, a persisted post-swap verification scan, exact logical SQLite/filesystem convergence, active-journal writer fencing, and cleanup-before-terminal-state finalization; POSIX fault injection, legacy restart states, and a file-backed SQLite restart pass. Native Windows x64 Nextest run d2dd956d-3d6e-4fb0-abaa-76929c31d72b passed the held-handle retry-loop regression at exact commit 9196c4f831ce68ddcc6a7784bfff746a3040f6a5. AMM-J-03 owns localized operator recovery and item-scoped restricted outcomes; AMM-J-04 owns the bounded redacted causal event stream. Tracked by AMM-J and plans/addon-list-publication-recovery.md.'
+evidence    = 'Redacted Windows dogfood left a 165-item list in Publishing with an intact journal and previous-revision backup, no failed-publication intermediate directory, and no persisted ReviewError. The publication overlapped a scheduled scan, and the beta could not distinguish request cancellation from a Windows sharing violation. AMM-J-01 now persists exact-revision publication/recovery jobs, coordinates all current managed-library scan origins through one lease, fences expired workers, resumes child scans, retries recovery indefinitely with capped backoff, and adopts legacy stranded journals on upgrade. AMM-J-02 implements operation-owned revision markers, byte-isolated backups, resumable partial swaps, dropped-process cleanup, bounded Windows sharing retry, pre-sealed full-tree fingerprints, a persisted post-swap verification scan, exact logical SQLite/filesystem convergence, active-journal writer fencing, and cleanup-before-terminal-state finalization; POSIX fault injection, legacy restart states, and a file-backed SQLite restart pass. Native Windows x64 Nextest run d2dd956d-3d6e-4fb0-abaa-76929c31d72b passed the held-handle retry-loop regression at exact commit 9196c4f831ce68ddcc6a7784bfff746a3040f6a5. AMM-J-03 adds media-list.list.v6 typed authentication/restriction outcomes in the official yt-dlp add-on, excludes only inaccessible items without valid replacements from the attempted revision, preserves the prior published snapshot until explicit Publish, exposes generation-fenced Retry/Restore actions and the same redacted durable state in Health, and locks edits only under an owner-matched live lease. Focused Rust tests and six Chromium/Firefox scenarios pass, including no-JavaScript restore and restricted-item publication; packaged Windows restart dogfood remains before the milestone can close. AMM-J-04 owns the bounded redacted causal event stream. Tracked by AMM-J and plans/addon-list-publication-recovery.md.'
 resolved    = false
 
 [[debt]]

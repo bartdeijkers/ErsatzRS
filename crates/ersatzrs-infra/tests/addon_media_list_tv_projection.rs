@@ -297,6 +297,65 @@ async fn request_and_publish(
     repositories.addon_media_lists.publish(LIST_ID).await
 }
 
+#[tokio::test]
+async fn restricted_draft_preserves_published_item_until_explicit_publication() {
+    let pool = common::test_db().await;
+    let _directory = seed_managed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Availability" = 1, "AvailabilityReason" = 'provider_restriction',
+               "AvailabilityReasonCode" = 1
+           WHERE "Id" = 10"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("mark the draft item restricted");
+
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT "Published" FROM "AddonMediaListItem" WHERE "Id" = 10"#,
+        )
+        .await,
+        1,
+        "refreshing the draft must preserve current playout membership",
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT "PublishedAvailability" FROM "AddonMediaListItem" WHERE "Id" = 10"#,
+        )
+        .await,
+        0,
+        "refreshing the draft must preserve the last published availability snapshot",
+    );
+
+    request_and_publish(&repositories, AddonMediaListPresentationKind::RemoteStreams)
+        .await
+        .expect("publish remaining usable items");
+
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaListItem"
+               WHERE "ParentProviderId" IS NULL AND "Published" = 1"#,
+        )
+        .await,
+        2,
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT "Published" FROM "AddonMediaListItem" WHERE "Id" = 10"#,
+        )
+        .await,
+        0,
+        "the restricted item is excluded only at the explicit publication boundary",
+    );
+}
+
 async fn save_collection_title(repositories: &Repositories, title: &str) {
     let form = repositories
         .addon_media_lists
@@ -1583,6 +1642,7 @@ async fn database_commit_failure_restores_files_projection_and_playlist_as_one_r
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn staged_publication_rejects_concurrent_draft_mutations() {
     let pool = common::test_db().await;
     let directory = seed_managed_list(&pool).await;
@@ -1591,9 +1651,47 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
         prepare_published_revision(&pool, &repositories, &directory).await;
 
     save_collection_title(&repositories, "Unpublished title").await;
+    let draft = repositories
+        .addon_media_lists
+        .get_admin_form(LIST_ID)
+        .await
+        .expect("load draft")
+        .expect("list exists");
+    let enqueued = repositories
+        .managed_library_operations
+        .enqueue_publication(
+            LIST_ID,
+            1,
+            draft.draft_revision,
+            draft.published_revision.saturating_add(1),
+        )
+        .await
+        .expect("enqueue publication");
+    let claim = repositories
+        .managed_library_operations
+        .claim_operation(enqueued.operation.id, Utc::now())
+        .await
+        .expect("claim publication")
+        .expect("publication is claimable");
+    assert!(repositories
+        .managed_library_operations
+        .transition_publication(
+            &claim,
+            AddonMediaListPublicationPhase::AwaitingLease,
+            AddonMediaListPublicationPhase::Staging,
+        )
+        .await
+        .expect("enter staging"));
     repositories
         .addon_media_lists
-        .stage_publication(LIST_ID)
+        .stage_publication_revision(
+            LIST_ID,
+            enqueued.job.saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
         .await
         .expect("stage draft");
 
@@ -1623,6 +1721,60 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
         .await
         .expect_err("settings mutation must be locked during publication");
     assert!(settings_error.to_string().contains("being published"));
+    let item_error = repositories
+        .addon_media_lists
+        .set_item_included(LIST_ID, 10, true)
+        .await
+        .expect_err("item mutation must be locked during publication");
+    assert!(item_error.to_string().contains("being published"));
+
+    sqlx::query(
+        r#"UPDATE "ManagedLibraryLease"
+           SET "LeaseExpiresAt" = '2020-01-01T00:00:00Z'
+           WHERE "OperationId" = ?"#,
+    )
+    .bind(enqueued.operation.id)
+    .execute(&pool)
+    .await
+    .expect("expire the publication lease");
+    let expired_form = repositories
+        .addon_media_lists
+        .get_show_nfo(LIST_ID)
+        .await
+        .expect("load metadata after expiry");
+    let mut expired_change = expired_form.metadata;
+    expired_change.title = "Saved while recovery is required".to_owned();
+    repositories
+        .addon_media_lists
+        .save_show_nfo(LIST_ID, &expired_change, &expired_form.etag)
+        .await
+        .expect("an expired lease must not keep the draft locked");
+    repositories
+        .addon_media_lists
+        .update_settings(
+            LIST_ID,
+            true,
+            false,
+            AddonMediaListContentKind::TelevisionEpisode,
+            "",
+        )
+        .await
+        .expect("list settings must save while recovery is required");
+    repositories
+        .addon_media_lists
+        .set_item_included(LIST_ID, 10, true)
+        .await
+        .expect("item mutations must save while recovery is required");
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaList"
+               WHERE "Id" = 1 AND "ReviewState" = 1
+                 AND "PublicationJournalJson" IS NOT NULL"#,
+        )
+        .await,
+        1,
+    );
 
     let second_stage_error = repositories
         .addon_media_lists

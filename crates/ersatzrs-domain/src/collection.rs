@@ -52,6 +52,15 @@ pub enum AddonMediaListItemAvailability {
     Unknown,
 }
 
+/// Provider-neutral terminal reason for an unavailable add-on list item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListAvailabilityReason {
+    AuthenticationRequired,
+    ContentRestricted,
+    Unavailable,
+}
+
 /// Provider-neutral playback behavior for a Remote Stream.
 ///
 /// This is deliberately three-state: a missing provider decision must remain
@@ -160,6 +169,27 @@ pub enum AddonMediaListPublicationPhase {
 pub enum AddonMediaListPublicationOutcome {
     Published,
     RestoredAfterFailure,
+}
+
+/// Operator-facing state of one durable add-on-list publication generation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationState {
+    Queued,
+    Waiting,
+    Publishing,
+    Restoring,
+    Expired,
+    Failed,
+    Complete,
+}
+
+/// Explicit recovery transition requested by an operator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListRecoveryAction {
+    Retry,
+    RestorePreviousRevision,
 }
 
 /// Host policy for optional item-detail enrichment.
@@ -468,6 +498,7 @@ pub struct AddonMediaListItem {
     pub content_kind: AddonMediaListContentKind,
     pub availability: AddonMediaListItemAvailability,
     pub availability_reason: Option<String>,
+    pub availability_reason_code: Option<AddonMediaListAvailabilityReason>,
     pub media_item_id: Option<EntityId>,
     pub duration_seconds: Option<u64>,
     pub parent_provider_id: Option<String>,

@@ -100,8 +100,9 @@ pub use library::{
     MediaStateRevision,
 };
 pub use managed_library_operation::{
-    AddonMediaListPublicationEnqueue, AddonMediaListPublicationJob, ManagedLibraryOperation,
-    ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
+    AddonMediaListPublicationEnqueue, AddonMediaListPublicationJob,
+    AddonMediaListPublicationStatus, ManagedLibraryOperation, ManagedLibraryOperationClaim,
+    ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
 };
 pub use media_item::MediaItemRepository;
 pub use media_source::{

@@ -3,22 +3,22 @@ use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
-    AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListPublicationOutcome,
-    AddonMediaListPublicationPhase, AddonMediaListReviewState, ArtworkKind, BlockStopScheduling,
-    ChannelIdleBehavior, ChannelMusicVideoCreditsMode, ChannelPlayoutMode, ChannelPlayoutSource,
-    ChannelSongVideoMode, ChannelStreamSelectorMode, ChannelSubtitleMode, ChannelTranscodeMode,
-    ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType, ContentKind,
-    DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
-    FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat, FillWithGroupMode, FillerKind,
-    FillerMode, FilterMode, FixedStartTimeBehavior, GraphicsElementKind, GuideMode,
-    HardwareAccelerationKind, LibraryMediaKind, ManagedLibraryOperationKind,
-    ManagedLibraryOperationState, MarathonGroupBy, MediaItemState, MediaSourceKind,
-    MediaStreamKind, MetadataKind, MetadataSource, MultipleMode, NormalizeLoudnessMode,
-    OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind, RemoteStreamLiveness,
-    ScalingBehavior, StartType, StreamingMode, SubtitleKind, TailMode, VaapiDriver, VideoScanKind,
-    WatermarkLocation, WatermarkSize,
+    AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
+    AddonMediaListDetailState, AddonMediaListImportState, AddonMediaListItemAvailability,
+    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
+    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase, AddonMediaListReviewState,
+    ArtworkKind, BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode,
+    ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode,
+    ChannelSubtitleMode, ChannelTranscodeMode, ChannelWatermarkImageSource, ChannelWatermarkMode,
+    CollectionType, ContentKind, DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat,
+    FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat,
+    FillWithGroupMode, FillerKind, FillerMode, FilterMode, FixedStartTimeBehavior,
+    GraphicsElementKind, GuideMode, HardwareAccelerationKind, LibraryMediaKind,
+    ManagedLibraryOperationKind, ManagedLibraryOperationState, MarathonGroupBy, MediaItemState,
+    MediaSourceKind, MediaStreamKind, MetadataKind, MetadataSource, MultipleMode,
+    NormalizeLoudnessMode, OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind,
+    RemoteStreamLiveness, ScalingBehavior, StartType, StreamingMode, SubtitleKind, TailMode,
+    VaapiDriver, VideoScanKind, WatermarkLocation, WatermarkSize,
 };
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
@@ -651,6 +651,11 @@ db_enum!(AddonMediaListItemAvailability {
     0 => AddonMediaListItemAvailability::Available,
     1 => AddonMediaListItemAvailability::Unavailable,
     2 => AddonMediaListItemAvailability::Unknown,
+});
+db_enum!(AddonMediaListAvailabilityReason {
+    0 => AddonMediaListAvailabilityReason::AuthenticationRequired,
+    1 => AddonMediaListAvailabilityReason::ContentRestricted,
+    2 => AddonMediaListAvailabilityReason::Unavailable,
 });
 db_enum!(AddonMediaListContentKind {
     0 => AddonMediaListContentKind::Auto,

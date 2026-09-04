@@ -11,6 +11,7 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListPresentationKind,
+    AddonMediaListRecoveryAction,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -19,8 +20,8 @@ use crate::{
     admin::server_fns::addon_media_lists::{
         add_addon_media_list_with_state, delete_addon_media_list_with_state,
         get_addon_media_list_publication_readiness_with_state, match_addon_media_list_with_state,
-        publish_addon_media_list_with_state, update_addon_media_list_with_state,
-        AddonMediaListForm, AddonMediaListPublishResult,
+        publish_addon_media_list_with_state, recover_addon_media_list_publication_with_state,
+        update_addon_media_list_with_state, AddonMediaListForm, AddonMediaListPublishResult,
     },
     host::state::AppState,
 };
@@ -53,6 +54,14 @@ const fn default_true() -> bool {
 #[derive(Debug, Deserialize)]
 pub struct AddonMediaListIdForm {
     id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddonMediaListRecoveryForm {
+    list_id: i64,
+    job_id: i64,
+    generation: i32,
+    action: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -420,6 +429,43 @@ pub async fn publish_addon_media_list_form(
         Err(error) => {
             tracing::error!(%error, addon_media_list_id = id, "failed to publish add-on media list from HTML form");
             Redirect::to(&format!("/media/addon-lists/{id}?error=publish"))
+        }
+    }
+}
+
+pub async fn recover_addon_media_list_publication_form(
+    State(state): State<AppState>,
+    Form(input): Form<AddonMediaListRecoveryForm>,
+) -> Redirect {
+    let action = match input.action.as_str() {
+        "retry" => AddonMediaListRecoveryAction::Retry,
+        "restore" => AddonMediaListRecoveryAction::RestorePreviousRevision,
+        _ => {
+            return Redirect::to(&format!(
+                "/media/addon-lists/{}?error=recovery",
+                input.list_id
+            ));
+        }
+    };
+    match recover_addon_media_list_publication_with_state(
+        &state,
+        input.list_id,
+        input.job_id,
+        input.generation,
+        action,
+    )
+    .await
+    {
+        Ok(_) => Redirect::to(&format!(
+            "/media/addon-lists/{}?status=recovery-queued",
+            input.list_id
+        )),
+        Err(error) => {
+            tracing::error!(%error, addon_media_list_id = input.list_id, publication_job_id = input.job_id, "failed to recover add-on media-list publication from HTML form");
+            Redirect::to(&format!(
+                "/media/addon-lists/{}?error=recovery",
+                input.list_id
+            ))
         }
     }
 }

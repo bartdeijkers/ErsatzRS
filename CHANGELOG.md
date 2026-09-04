@@ -50,6 +50,20 @@ release section when tagging a release.
 
 ### Fixed
 
+- Show durable add-on-list publication phase, attempts, last progress, and
+  redacted failure codes in administration and health, with generation-fenced
+  Retry recovery and Restore previous revision actions for hydrated and
+  no-JavaScript use. Draft settings and item edits now lock only while a live
+  publication lease is executing; expired work is shown as recovery-required
+  instead of indefinitely Publishing.
+
+- Add the `media-list.list.v6` typed availability reason contract. Official
+  providers can classify authentication and content restrictions without
+  exposing cookies or raw provider diagnostics; restricted entries remain in
+  review, preserve the current published snapshot through refresh, and are
+  excluded item-by-item at the next explicit publication unless a valid Local
+  replacement is selected.
+
 - Keep add-on-list Save and Publish actions disabled until item edits have
   refreshed publication readiness, preventing a fast follow-up publication
   from submitting the previous saved revision.

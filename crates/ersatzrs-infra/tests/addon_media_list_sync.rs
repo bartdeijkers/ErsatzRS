@@ -49,6 +49,7 @@ impl AddonMediaListProvider for FakeListProvider {
                 source_url: None,
                 availability: AddonMediaListItemAvailability::Available,
                 availability_reason: None,
+                availability_reason_code: None,
                 content_kind: AddonMediaListContentKind::Movie,
                 collection_role: AddonMediaListItemRole::Auto,
                 duration_seconds: None,
@@ -98,6 +99,7 @@ impl AddonMediaListProvider for FakeRemoteStreamListProvider {
                 source_url: Some("https://example.invalid/watch/100".to_string()),
                 availability: AddonMediaListItemAvailability::Available,
                 availability_reason: None,
+                availability_reason_code: None,
                 content_kind: AddonMediaListContentKind::Auto,
                 collection_role: AddonMediaListItemRole::Auto,
                 duration_seconds: Some(600),
@@ -159,6 +161,7 @@ fn refresh_metadata_snapshot(changed: bool) -> EnumeratedAddonMediaList {
         source_url: Some("https://example.invalid/watch/one".to_owned()),
         availability: AddonMediaListItemAvailability::Available,
         availability_reason: None,
+        availability_reason_code: None,
         content_kind: AddonMediaListContentKind::TelevisionEpisode,
         collection_role: AddonMediaListItemRole::Auto,
         duration_seconds: Some(1_200),
@@ -193,6 +196,7 @@ fn refresh_metadata_snapshot(changed: bool) -> EnumeratedAddonMediaList {
             source_url: Some("https://example.invalid/watch/two".to_owned()),
             availability: AddonMediaListItemAvailability::Available,
             availability_reason: None,
+            availability_reason_code: None,
             content_kind: AddonMediaListContentKind::TelevisionEpisode,
             collection_role: AddonMediaListItemRole::Auto,
             duration_seconds: Some(1_300),
@@ -300,6 +304,7 @@ impl AddonMediaListProvider for ChapterListProvider {
             source_url: Some("https://example.invalid/episode/42".to_owned()),
             availability: AddonMediaListItemAvailability::Available,
             availability_reason: None,
+            availability_reason_code: None,
             content_kind: AddonMediaListContentKind::TelevisionEpisode,
             collection_role: AddonMediaListItemRole::Auto,
             duration_seconds: Some(600),
@@ -328,6 +333,7 @@ impl AddonMediaListProvider for ChapterListProvider {
                     chapter.start_seconds
                 )),
                 availability: AddonMediaListItemAvailability::Available,
+                availability_reason_code: None,
                 availability_reason: None,
                 content_kind: AddonMediaListContentKind::TelevisionEpisode,
                 collection_role: AddonMediaListItemRole::Auto,
@@ -734,7 +740,7 @@ async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_rec
         .await
         .unwrap();
     synchronizer.match_list_items(list_id).await.unwrap();
-    assert_playlist_selection(&pool, list_id, (70, 2, None, None)).await;
+    assert_playlist_selection(&pool, list_id, (10, 1, Some(10), Some(3))).await;
 
     sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Availability" = 0 WHERE "Id" = ?"#)
         .bind(list_item_id)
@@ -742,6 +748,8 @@ async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_rec
         .await
         .unwrap();
     synchronizer.match_list_items(list_id).await.unwrap();
+    assert_playlist_selection(&pool, list_id, (10, 1, Some(10), Some(3))).await;
+    publish_as_remote_streams(&pool, list_id).await;
     assert_playlist_selection(&pool, list_id, (70, 2, None, None)).await;
 }
 
@@ -1274,7 +1282,10 @@ async fn publish_as_remote_streams(pool: &sqlx::SqlitePool, list_id: i64) {
     .unwrap();
     sqlx::query(
         r#"UPDATE "AddonMediaListItem"
-           SET "Published" = "Included", "PublishedLiveness" = "EffectiveLiveness"
+           SET "Published" = "Included", "PublishedLiveness" = "EffectiveLiveness",
+               "PublishedAvailability" = "Availability",
+               "PublishedAvailabilityReason" = "AvailabilityReason",
+               "PublishedAvailabilityReasonCode" = "AvailabilityReasonCode"
            WHERE "AddonMediaListId" = ?"#,
     )
     .bind(list_id)

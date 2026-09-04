@@ -2,8 +2,8 @@
 
 use async_trait::async_trait;
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole,
+    AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListItemAvailability,
+    AddonMediaListItemKind, AddonMediaListItemRole,
 };
 
 use crate::repositories::{AddonMediaListNfoMetadata, Result};
@@ -50,6 +50,8 @@ pub struct EnumeratedAddonMediaListItem {
     pub availability: AddonMediaListItemAvailability,
     /// Optional stable provider reason code.
     pub availability_reason: Option<String>,
+    /// Typed provider-neutral terminal availability reason.
+    pub availability_reason_code: Option<AddonMediaListAvailabilityReason>,
     /// Provider-inferred descriptive content type.
     pub content_kind: AddonMediaListContentKind,
     /// Provider-supplied collection role; independent from list rank.

@@ -2266,10 +2266,19 @@ revision so usable items still publish. Credentials use SecretReference only.
 Chromium, Firefox, Windows dogfood, and packaged restart acceptance pass.
 '''
 evidence = '''
-Not started. The live editor showed an indefinitely disabled Publishing action
-and two blockers without a recovery command. Six age/auth detail failures were
-correctly optional; AMM-J preserves that behavior and covers the playback-
-required case without parsing provider text in the host.
+Implemented but not yet closed: `media-list.list.v6` carries typed
+authentication/restriction outcomes from the official yt-dlp add-on without
+provider-text parsing or cookie material in the host. Restricted selected
+items remain reviewable, preserve the prior published snapshot until explicit
+Publish, and are excluded from the attempted revision only when no valid Local
+replacement exists. The editor and Health share redacted durable status;
+generation-fenced Retry and Restore actions work through hydrated and native
+forms, and only an owner-matched live lease locks edits or renders Publishing.
+Focused repository, application, contract, health, migration, publication,
+hydration, and official-add-on tests pass. Six focused Playwright cases pass in
+Chromium and Firefox, covering Retry, no-JavaScript Restore, and publication
+with one restricted item. Packaged Windows restart dogfood remains open, so the
+milestone stays unclosed.
 '''
 
 [[milestone]]

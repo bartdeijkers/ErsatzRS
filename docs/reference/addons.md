@@ -22,6 +22,7 @@ retroactively.
 | `media-list.list.v3` | Adds duration, artwork, and structured fragment parent/bounds fields. |
 | `media-list.list.v4` | Adds one strict rich metadata document for list/item review, song and image classification, and explicit primary/extra collection roles. |
 | `media-list.list.v5` | Adds provider-neutral Remote Stream liveness without changing non-Remote-Stream records. |
+| `media-list.list.v6` | Adds typed provider-neutral authentication, restriction, and unavailable reasons for item-scoped publication decisions. |
 | `media-list.import.v1` | Pages overview discovery into durable host checkpoints and enriches exactly one committed item per bounded invocation. A package also declares the `media-list.list.vN` record schema it emits. |
 | `declarative-panel.v1` | Renders host-owned text, status, key/value, and link blocks. |
 

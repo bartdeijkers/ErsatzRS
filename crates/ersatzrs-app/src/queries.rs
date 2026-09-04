@@ -12,16 +12,16 @@ use ersatzrs_core::repositories::{
     CollectionRepository, DecoAdminRecord, DecoAdminRow, DecoEditorOptionsAdmin, DecoGroupAdminRow,
     DecoRepository, DecoTemplateAdminRow, DecoTemplateGroupAdminRow, DecoTemplateItemAdmin,
     EpgPreviewChannelState, FfmpegProfileRepository, FillerRepository, LibraryRepository,
-    MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
-    MultiCollectionEditorOptions, PlaylistEditorAdmin, PlaylistEditorOptions,
-    PlaylistGroupAdminRow, PlayoutAlternateSchedulesAdmin, PlayoutKindEditorAdmin,
-    PlayoutListAdminRow, PlayoutRepository, PlayoutTemplatesAdmin, ProgramScheduleRepository,
-    RerunCollectionAdmin, RerunCollectionAdminRow, RerunCollectionEditorOptions,
-    SavedSearchAdminRow, SavedSearchRepository, ScheduleAdminForm, ScheduleAdminRow,
-    ScheduleItemAdmin, ScheduleItemOptions, SequentialPlayoutAdmin, SettingsOptionKind,
-    SettingsSelectOption, SmartCollectionAdminRow, TemplateAdminRow, TemplateBlockAdmin,
-    TemplateBlockGroupAdmin, TemplateGroupAdminRow, TemplateItemAdmin, TemplateRepository,
-    WatermarkRepository,
+    ManagedLibraryOperationRepository, MediaItemSuggestionAdmin, MultiCollectionAdmin,
+    MultiCollectionAdminRow, MultiCollectionEditorOptions, PlaylistEditorAdmin,
+    PlaylistEditorOptions, PlaylistGroupAdminRow, PlayoutAlternateSchedulesAdmin,
+    PlayoutKindEditorAdmin, PlayoutListAdminRow, PlayoutRepository, PlayoutTemplatesAdmin,
+    ProgramScheduleRepository, RerunCollectionAdmin, RerunCollectionAdminRow,
+    RerunCollectionEditorOptions, SavedSearchAdminRow, SavedSearchRepository, ScheduleAdminForm,
+    ScheduleAdminRow, ScheduleItemAdmin, ScheduleItemOptions, SequentialPlayoutAdmin,
+    SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow, TemplateAdminRow,
+    TemplateBlockAdmin, TemplateBlockGroupAdmin, TemplateGroupAdminRow, TemplateItemAdmin,
+    TemplateRepository, WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockDefinition, BlockTemplate, BlockTemplateItem, BlockTemplateSchedule, EffectiveBlock,
@@ -1924,6 +1924,7 @@ pub async fn list_addon_media_list_items(
 pub async fn addon_media_list_publication_readiness(
     id: EntityId,
     repository: &dyn AddonMediaListRepository,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
 ) -> Result<ersatzrs_core::repositories::AddonMediaListPublicationReadiness> {
     if id <= 0 {
         return Err(ApplicationError::Validation {
@@ -1931,10 +1932,14 @@ pub async fn addon_media_list_publication_readiness(
             message: "must be greater than zero".to_owned(),
         });
     }
-    repository
+    let mut readiness = repository
         .publication_readiness(id)
         .await
-        .map_err(Into::into)
+        .map_err(ApplicationError::from)?;
+    readiness.publication = managed_operations
+        .publication_status(id, Utc::now())
+        .await?;
+    Ok(readiness)
 }
 
 /// Load one page of provider items in one availability group.

@@ -4480,6 +4480,15 @@ pub enum PublishAddonMediaListOutcome {
     },
 }
 
+/// Retry or restore one exact durable publication generation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RecoverAddonMediaListPublication {
+    pub list_id: EntityId,
+    pub job_id: EntityId,
+    pub generation: i32,
+    pub action: ersatzrs_domain::AddonMediaListRecoveryAction,
+}
+
 /// Include or exclude one provider item from publication.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SetAddonMediaListItemIncluded {
@@ -4685,13 +4694,29 @@ pub async fn publish_addon_media_list(
     managed_operations: &dyn ManagedLibraryOperationRepository,
 ) -> crate::Result<PublishAddonMediaListOutcome> {
     validate_positive_id(command.id, "addon_media_list_id")?;
-    let readiness =
-        crate::queries::addon_media_list_publication_readiness(command.id, repository).await?;
+    let readiness = crate::queries::addon_media_list_publication_readiness(
+        command.id,
+        repository,
+        managed_operations,
+    )
+    .await?;
+    if readiness.publication.as_ref().is_some_and(|publication| {
+        matches!(
+            publication.state,
+            ersatzrs_domain::AddonMediaListPublicationState::Waiting
+                | ersatzrs_domain::AddonMediaListPublicationState::Expired
+                | ersatzrs_domain::AddonMediaListPublicationState::Failed
+        )
+    }) {
+        return validation_error(
+            "publication",
+            "publication recovery is required before another revision can be published",
+        );
+    }
     if let Some(blocker) = readiness.blockers.first() {
         if !matches!(
             blocker.kind,
             AddonMediaListPublicationBlockerKind::PublicationInProgress
-                | AddonMediaListPublicationBlockerKind::RecoveryRequired
         ) {
             return validation_error(
                 "publication",
@@ -4739,6 +4764,28 @@ pub async fn publish_addon_media_list(
         saved_revision: queued.job.saved_revision,
         existing: queued.existing,
     })
+}
+
+/// Requeue an exact failed/expired publication generation for durable work.
+pub async fn recover_addon_media_list_publication(
+    command: RecoverAddonMediaListPublication,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
+) -> crate::Result<ersatzrs_core::repositories::AddonMediaListPublicationStatus> {
+    validate_positive_id(command.list_id, "addon_media_list_id")?;
+    validate_positive_id(command.job_id, "publication_job_id")?;
+    if command.generation <= 0 {
+        return validation_error("generation", "must be greater than zero");
+    }
+    managed_operations
+        .recover_publication(
+            command.list_id,
+            command.job_id,
+            command.generation,
+            command.action,
+            chrono::Utc::now(),
+        )
+        .await
+        .map_err(Into::into)
 }
 
 /// Include or exclude one item from publication.
@@ -6497,25 +6544,25 @@ mod tests {
     use ersatzrs_core::repositories::{
         AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
         AddonMediaListPublication, AddonMediaListPublicationEnqueue, AddonMediaListPublicationJob,
-        AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
-        AddonMediaListRepository, AdminSettingsRepository, ChannelEditorForm, ChannelNumberUpdate,
-        ChannelValidationRow, ChannelValidationState, CollectionAdminRow, CollectionDetailAdmin,
-        CollectionMemberAdmin, CollectionRepository, FfmpegProfileRepository, LibraryRepository,
-        LibraryScanTarget, ManagedLibraryOperation, ManagedLibraryOperationClaim,
-        ManagedLibraryOperationRepository, ManagedLibraryScanSpec, MediaItemSuggestionAdmin,
-        MultiCollectionAdmin, MultiCollectionAdminRow, MultiCollectionEditorOptions,
-        MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow, PlaylistEditorAdmin,
-        PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin, PlaylistItemInsert,
-        RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
+        AddonMediaListPublicationReadiness, AddonMediaListPublicationStatus,
+        AddonMediaListReplacementCandidate, AddonMediaListRepository, AdminSettingsRepository,
+        ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow, ChannelValidationState,
+        CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin, CollectionRepository,
+        FfmpegProfileRepository, LibraryRepository, LibraryScanTarget, ManagedLibraryOperation,
+        ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
+        MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
+        MultiCollectionEditorOptions, MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow,
+        PlaylistEditorAdmin, PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin,
+        PlaylistItemInsert, RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
         RerunCollectionEditorOptions, RerunCollectionReferenceKind, ScheduleItemAdmin,
         SettingsMutation, SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow,
     };
     use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
     use ersatzrs_domain::{
-        AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase, Collection,
-        CollectionType, EntityId, FFmpegProfile, Library, LibraryMediaKind,
-        ManagedLibraryOperationKind, ManagedLibraryOperationState, MediaSourceKind, Playlist,
-        Resolution, SmartCollection,
+        AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
+        AddonMediaListRecoveryAction, Collection, CollectionType, EntityId, FFmpegProfile, Library,
+        LibraryMediaKind, ManagedLibraryOperationKind, ManagedLibraryOperationState,
+        MediaSourceKind, Playlist, Resolution, SmartCollection,
     };
 
     use super::{
@@ -6986,6 +7033,25 @@ mod tests {
             _operation_id: EntityId,
         ) -> ersatzrs_core::repositories::Result<Option<AddonMediaListPublicationJob>> {
             unreachable!("job loading is not used by command tests")
+        }
+
+        async fn publication_status(
+            &self,
+            _list_id: EntityId,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> ersatzrs_core::repositories::Result<Option<AddonMediaListPublicationStatus>> {
+            Ok(None)
+        }
+
+        async fn recover_publication(
+            &self,
+            _list_id: EntityId,
+            _job_id: EntityId,
+            _generation: i32,
+            _action: AddonMediaListRecoveryAction,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> ersatzrs_core::repositories::Result<AddonMediaListPublicationStatus> {
+            unreachable!("publication recovery is not used by existing command tests")
         }
 
         async fn transition_publication(

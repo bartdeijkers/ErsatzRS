@@ -384,7 +384,12 @@ impl ApplicationServices {
         &self,
         id: i64,
     ) -> Result<ersatzrs_core::repositories::AddonMediaListPublicationReadiness> {
-        queries::addon_media_list_publication_readiness(id, self.ports.addon_media_lists()).await
+        queries::addon_media_list_publication_readiness(
+            id,
+            self.ports.addon_media_lists(),
+            self.ports.managed_library_operations(),
+        )
+        .await
     }
 
     pub async fn get_addon_media_list_item(
@@ -454,6 +459,18 @@ impl ApplicationServices {
         commands::publish_addon_media_list(
             command,
             self.ports.addon_media_lists(),
+            self.ports.managed_library_operations(),
+        )
+        .await
+    }
+
+    /// Retry or restore one exact add-on media-list publication generation.
+    pub async fn recover_addon_media_list_publication(
+        &self,
+        command: commands::RecoverAddonMediaListPublication,
+    ) -> Result<ersatzrs_core::repositories::AddonMediaListPublicationStatus> {
+        commands::recover_addon_media_list_publication(
+            command,
             self.ports.managed_library_operations(),
         )
         .await

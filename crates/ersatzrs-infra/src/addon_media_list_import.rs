@@ -5,7 +5,6 @@ use std::fmt::Write as _;
 use chrono::{Duration, Utc};
 use ersatzrs_addon_contract::{
     AddonMediaListRecord, MediaListDiscoveryPage, MediaListEnrichOutcomeKind,
-    CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5,
 };
 use ersatzrs_core::repositories::{
     AddonMediaListImportAction, AddonMediaListImportProgress, RepositoryError, Result,
@@ -932,22 +931,8 @@ impl AddonMediaListImportCoordinator {
             output.extend_from_slice(json.as_bytes());
             output.push(b'\n');
         }
-        let supports_v3 = matches!(
-            job.record_capability.as_str(),
-            CAPABILITY_MEDIA_LIST_LIST_V3
-                | CAPABILITY_MEDIA_LIST_LIST_V4
-                | CAPABILITY_MEDIA_LIST_LIST_V5
-        );
-        let supports_v4 = matches!(
-            job.record_capability.as_str(),
-            CAPABILITY_MEDIA_LIST_LIST_V4 | CAPABILITY_MEDIA_LIST_LIST_V5
-        );
-        let mut enumerated = decode_media_list_output_for_capability(
-            &output,
-            supports_v3,
-            supports_v4,
-            job.record_capability == CAPABILITY_MEDIA_LIST_LIST_V5,
-        )?;
+        let mut enumerated =
+            decode_media_list_output_for_capability(&output, &job.record_capability)?;
         self.overlay_completed_details(job, pass, &mut enumerated)
             .await?;
 
@@ -1790,22 +1775,7 @@ impl AddonMediaListImportCoordinator {
             })?,
         );
         output.push(b'\n');
-        let supports_v3 = matches!(
-            job.record_capability.as_str(),
-            CAPABILITY_MEDIA_LIST_LIST_V3
-                | CAPABILITY_MEDIA_LIST_LIST_V4
-                | CAPABILITY_MEDIA_LIST_LIST_V5
-        );
-        let supports_v4 = matches!(
-            job.record_capability.as_str(),
-            CAPABILITY_MEDIA_LIST_LIST_V4 | CAPABILITY_MEDIA_LIST_LIST_V5
-        );
-        let mut decoded = decode_media_list_output_for_capability(
-            &output,
-            supports_v3,
-            supports_v4,
-            job.record_capability == CAPABILITY_MEDIA_LIST_LIST_V5,
-        )?;
+        let mut decoded = decode_media_list_output_for_capability(&output, &job.record_capability)?;
         decoded.items.pop().ok_or_else(|| RepositoryError::Decode {
             kind: "media-list enrichment",
             value: "result omitted its item".to_owned(),
@@ -2396,6 +2366,7 @@ fn nonnegative_count(row: &crate::db::DbRow, column: &'static str) -> Result<u64
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V5;
 
     #[test]
     fn fair_use_delay_is_always_inclusive_two_through_sixteen() {

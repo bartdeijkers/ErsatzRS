@@ -1,8 +1,9 @@
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
-    AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListReviewState,
-    RemoteStreamLiveness,
+    AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
+    AddonMediaListDetailState, AddonMediaListImportState, AddonMediaListItemAvailability,
+    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
+    AddonMediaListPublicationPhase, AddonMediaListPublicationState, AddonMediaListRecoveryAction,
+    AddonMediaListReviewState, RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -50,6 +51,7 @@ pub struct AddonMediaListPublicationBlocker {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListPublicationReadiness {
     pub included_count: u64,
+    pub restricted_excluded_count: u64,
     pub blockers: Vec<AddonMediaListPublicationBlocker>,
     pub recommendation_count: u64,
     pub required_playback_detail_count: u64,
@@ -59,6 +61,47 @@ pub struct AddonMediaListPublicationReadiness {
     pub optional_detail_pending: u64,
     pub saved_revision: i32,
     pub review_state: AddonMediaListReviewState,
+    pub publication: Option<AddonMediaListPublicationStatus>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListPublicationStatus {
+    pub job_id: i64,
+    pub operation_id: i64,
+    pub generation: i32,
+    pub saved_revision: i32,
+    pub target_published_revision: i32,
+    pub phase: AddonMediaListPublicationPhase,
+    pub state: AddonMediaListPublicationState,
+    pub attempt_count: i32,
+    pub last_progress_at: String,
+    pub diagnostic_code: Option<String>,
+    pub recovery_diagnostic_present: bool,
+    pub can_retry: bool,
+    pub can_restore: bool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListPublicationStatus>
+    for AddonMediaListPublicationStatus
+{
+    fn from(value: ersatzrs_core::repositories::AddonMediaListPublicationStatus) -> Self {
+        Self {
+            job_id: value.job_id,
+            operation_id: value.operation_id,
+            generation: value.generation,
+            saved_revision: value.saved_revision,
+            target_published_revision: value.target_published_revision,
+            phase: value.phase,
+            state: value.state,
+            attempt_count: value.attempt_count,
+            last_progress_at: value.last_progress_at.to_rfc3339(),
+            diagnostic_code: value.diagnostic_code,
+            recovery_diagnostic_present: value.recovery_diagnostic_present,
+            can_retry: value.can_retry,
+            can_restore: value.can_restore,
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -68,6 +111,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationReadiness>
     fn from(value: ersatzrs_core::repositories::AddonMediaListPublicationReadiness) -> Self {
         Self {
             included_count: value.included_count,
+            restricted_excluded_count: value.restricted_excluded_count,
             blockers: value.blockers.into_iter().map(Into::into).collect(),
             recommendation_count: value.recommendation_count,
             required_playback_detail_count: value.required_playback_detail_count,
@@ -77,6 +121,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationReadiness>
             optional_detail_pending: value.optional_detail_pending,
             saved_revision: value.saved_revision,
             review_state: value.review_state,
+            publication: value.publication.map(Into::into),
         }
     }
 }
@@ -234,6 +279,7 @@ pub struct AddonMediaListItemRow {
     pub display_title: String,
     pub availability: AddonMediaListItemAvailability,
     pub availability_reason: Option<String>,
+    pub availability_reason_code: Option<AddonMediaListAvailabilityReason>,
     pub replacement_media_item_id: Option<i64>,
     pub replacement_media_version_id: Option<i64>,
     pub replacement_title: Option<String>,
@@ -405,6 +451,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMedi
             display_title: row.display_title,
             availability: row.availability,
             availability_reason: row.availability_reason,
+            availability_reason_code: row.availability_reason_code,
             replacement_media_item_id: row.replacement_media_item_id,
             replacement_media_version_id: row.replacement_media_version_id,
             replacement_title: row.replacement_title,
@@ -653,6 +700,7 @@ pub async fn list_addon_media_list_providers(
                     || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V3
                     || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V4
                     || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V5
+                    || capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V6
             })
         })
         .map(|item| AddonMediaListProviderRow {
@@ -826,6 +874,44 @@ pub async fn get_addon_media_list_publication_readiness_with_state(
         .map(Into::into)
 }
 
+/// Retry or restore one exact failed/expired publication generation.
+#[server]
+pub async fn recover_addon_media_list_publication(
+    list_id: i64,
+    job_id: i64,
+    generation: i32,
+    action: AddonMediaListRecoveryAction,
+) -> Result<AddonMediaListPublicationStatus, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    recover_addon_media_list_publication_with_state(&state, list_id, job_id, generation, action)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+pub async fn recover_addon_media_list_publication_with_state(
+    state: &crate::host::state::AppState,
+    list_id: i64,
+    job_id: i64,
+    generation: i32,
+    action: AddonMediaListRecoveryAction,
+) -> ersatzrs_app::Result<AddonMediaListPublicationStatus> {
+    state
+        .application
+        .recover_addon_media_list_publication(
+            ersatzrs_app::commands::RecoverAddonMediaListPublication {
+                list_id,
+                job_id,
+                generation,
+                action,
+            },
+        )
+        .await
+        .map(Into::into)
+}
+
 #[server]
 pub async fn list_addon_media_list_items(
     id: i64,
@@ -847,6 +933,7 @@ pub async fn list_addon_media_list_items(
                     display_title: row.display_title,
                     availability: row.availability,
                     availability_reason: row.availability_reason,
+                    availability_reason_code: row.availability_reason_code,
                     replacement_media_item_id: row.replacement_media_item_id,
                     replacement_media_version_id: row.replacement_media_version_id,
                     replacement_title: row.replacement_title,
@@ -1445,12 +1532,13 @@ fn log_addon_media_list_failure(
 
 /// Every contract version that can enumerate an add-on media list.
 #[cfg(feature = "ssr")]
-const MEDIA_LIST_CAPABILITIES: [&str; 5] = [
+const MEDIA_LIST_CAPABILITIES: [&str; 6] = [
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V1,
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V2,
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V3,
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V4,
     ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V5,
+    ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_LIST_V6,
 ];
 
 /// Select the add-on for one operator source URL when none was chosen.

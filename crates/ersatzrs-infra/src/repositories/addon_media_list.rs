@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::Utc;
 use ersatzrs_core::repositories::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListArtwork,
     AddonMediaListArtworkRole, AddonMediaListArtworkUpload, AddonMediaListImportAction,
@@ -31,7 +32,7 @@ use crate::repositories::addon_publication_fs::{
     self, PublicationFsIdentity, PublicationFsPaths, PublicationTreeRole, RestoreProgress,
 };
 use crate::repositories::common::{
-    decode_bool_column, decode_optional_datetime, decode_optional_enum_column,
+    decode_bool_column, decode_optional_datetime, decode_optional_enum_column, encode_datetime,
 };
 use crate::repositories::SqlxResultExt as _;
 
@@ -216,6 +217,12 @@ struct PublishedItemSnapshot {
     guids: Option<Vec<String>>,
     #[serde(default)]
     published_liveness: RemoteStreamLiveness,
+    #[serde(default)]
+    published_availability: AddonMediaListItemAvailability,
+    #[serde(default)]
+    published_availability_reason: Option<String>,
+    #[serde(default)]
+    published_availability_reason_code: Option<ersatzrs_domain::AddonMediaListAvailabilityReason>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
@@ -761,23 +768,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         }
 
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        let review_state: Option<i32> =
-            sqlx::query_scalar(r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#)
-                .bind(id)
-                .fetch_optional(&mut *tx)
-                .await
-                .repository()?;
-        let Some(review_state) = review_state else {
-            return Err(RepositoryError::NotFound {
-                kind: "add-on media list",
-                id,
-            });
-        };
-        if review_state
-            == crate::repositories::common::encode_enum(AddonMediaListReviewState::Publishing)
-        {
-            return Err(publication_in_progress());
-        }
+        crate::addon_media_list_sync::ensure_not_publishing_tx(&mut tx, id).await?;
 
         for edit in edits {
             let row = sqlx::query(
@@ -866,23 +857,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         missing_only: bool,
     ) -> Result<u64> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        let review_state: Option<i32> =
-            sqlx::query_scalar(r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#)
-                .bind(id)
-                .fetch_optional(&mut *tx)
-                .await
-                .repository()?;
-        let Some(review_state) = review_state else {
-            return Err(RepositoryError::NotFound {
-                kind: "add-on media list",
-                id,
-            });
-        };
-        if review_state
-            == crate::repositories::common::encode_enum(AddonMediaListReviewState::Publishing)
-        {
-            return Err(publication_in_progress());
-        }
+        crate::addon_media_list_sync::ensure_not_publishing_tx(&mut tx, id).await?;
 
         let rows = sqlx::query(
             r#"SELECT "Id", "ProviderMetadataJson", "MetadataOverrideJson",
@@ -1064,6 +1039,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             kind: "add-on media list item",
             id: item_id,
         })?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         if let Some((media_item_id, media_version_id)) = replacement {
             if load_replacement_candidate(&self.0, media_item_id, media_version_id)
                 .await?
@@ -1083,7 +1059,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             .bind(media_version_id)
             .bind(&now)
             .bind(item_id)
-            .execute(&self.0)
+            .execute(&mut *tx)
             .await
             .repository()?;
             if updated.rows_affected() == 0 {
@@ -1097,7 +1073,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 .bind(media_version_id)
                 .bind(&now)
                 .bind(&now)
-                .execute(&self.0)
+                .execute(&mut *tx)
                 .await
                 .repository()?;
             }
@@ -1106,11 +1082,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 r#"DELETE FROM "AddonMediaListItemReplacement" WHERE "AddonMediaListItemId" = ?"#,
             )
             .bind(item_id)
-            .execute(&self.0)
+            .execute(&mut *tx)
             .await
             .repository()?;
         }
-        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         mark_list_ready_tx(&mut tx, list_id).await?;
         tx.commit().await.repository()?;
         Ok(())
@@ -1228,11 +1203,19 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                LEFT JOIN "AddonMediaListDetailJob" AS "detail"
                  ON "detail"."AddonMediaListItemId" = "item"."Id"
                WHERE "item"."AddonMediaListId" = ? AND "item"."Included" = 1
+                 AND ("item"."AvailabilityReasonCode" IS NULL
+                      OR "item"."AvailabilityReasonCode" NOT IN (?, ?))
                  AND "item"."Kind" = ? AND "item"."EffectiveLiveness" = ?
                  AND ("item"."DurationSeconds" IS NULL OR "item"."DurationSeconds" <= 0)
                ORDER BY "item"."Rank", "item"."Id""#,
         )
         .bind(id)
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListAvailabilityReason::AuthenticationRequired,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListAvailabilityReason::ContentRestricted,
+        ))
         .bind(crate::repositories::common::encode_enum(
             AddonMediaListItemKind::RemoteStream,
         ))
@@ -2134,11 +2117,12 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "presentation {presentation_kind:?} has no projection yet"
             )));
         }
+        crate::addon_media_list_sync::ensure_not_publishing(&self.0, id).await?;
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "RequestedPresentationKind" = ?, "PresentationError" = NULL
-               WHERE "Id" = ? AND "ReviewState" <> 3"#,
+               WHERE "Id" = ?"#,
         )
         .bind(crate::repositories::common::encode_enum(presentation_kind))
         .bind(id)
@@ -2331,30 +2315,22 @@ fn decode_optional_u64(row: &crate::db::DbRow, column: &'static str) -> Result<O
         .transpose()
 }
 
-async fn resolve_included_presentation(
-    pool: &Pool<crate::db::Db>,
-    list_id: EntityId,
-) -> Result<AddonMediaListPresentationKind> {
-    let kinds = sqlx::query_scalar::<_, i32>(
-        r#"SELECT DISTINCT "ContentKind" FROM "AddonMediaListItem"
-           WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
-             AND "Included" = 1"#,
-    )
-    .bind(list_id)
-    .fetch_all(pool)
-    .await
-    .repository()?;
-    let [only] = kinds.as_slice() else {
-        return Ok(AddonMediaListPresentationKind::RemoteStreams);
+fn resolve_included_presentation(
+    items: &[&AddonMediaListItemAdminRow],
+) -> AddonMediaListPresentationKind {
+    let mut kinds = items
+        .iter()
+        .filter(|item| item.parent_provider_id.is_none())
+        .map(|item| item.content_kind);
+    let Some(only) = kinds.next() else {
+        return AddonMediaListPresentationKind::RemoteStreams;
     };
-    let Some(kind) =
-        <AddonMediaListContentKind as crate::repositories::common::DbEnum>::from_db_int(*only)
-    else {
-        return Ok(AddonMediaListPresentationKind::RemoteStreams);
-    };
-    Ok(AddonMediaListPresentationKind::from_content_kind(kind)
+    if kinds.any(|kind| kind != only) {
+        return AddonMediaListPresentationKind::RemoteStreams;
+    }
+    AddonMediaListPresentationKind::from_content_kind(only)
         .filter(|presentation| presentation.is_projected())
-        .unwrap_or(AddonMediaListPresentationKind::RemoteStreams))
+        .unwrap_or(AddonMediaListPresentationKind::RemoteStreams)
 }
 
 async fn load_publication_journal(
@@ -2743,7 +2719,9 @@ async fn restore_staged_publication_impl(
     for item in &journal.previous_items {
         sqlx::query(
             r#"UPDATE "AddonMediaListItem"
-               SET "Published" = ?, "MediaItemId" = ?, "PublishedLiveness" = ?
+               SET "Published" = ?, "MediaItemId" = ?, "PublishedLiveness" = ?,
+                   "PublishedAvailability" = ?, "PublishedAvailabilityReason" = ?,
+                   "PublishedAvailabilityReasonCode" = ?
                WHERE "Id" = ?"#,
         )
         .bind(item.published)
@@ -2751,6 +2729,14 @@ async fn restore_staged_publication_impl(
         .bind(crate::repositories::common::encode_enum(
             item.published_liveness,
         ))
+        .bind(crate::repositories::common::encode_enum(
+            item.published_availability,
+        ))
+        .bind(&item.published_availability_reason)
+        .bind(
+            item.published_availability_reason_code
+                .map(crate::repositories::common::encode_enum),
+        )
         .bind(item.id)
         .execute(&mut *tx)
         .await
@@ -2981,7 +2967,12 @@ async fn stage_publication_impl(
         )
         .await?;
     }
-    let readiness = repository.publication_readiness(id).await?;
+    let mut readiness = repository.publication_readiness(id).await?;
+    if fence.is_some() {
+        readiness.blockers.retain(|blocker| {
+            blocker.kind != AddonMediaListPublicationBlockerKind::PublicationInProgress
+        });
+    }
     if let Some(blocker) = readiness.blockers.first() {
         let message = publication_blocker_message(blocker);
         record_publication_error(&repository.0, id, &message).await?;
@@ -2995,6 +2986,13 @@ async fn stage_publication_impl(
         record_publication_error(&repository.0, id, &message).await?;
         return Err(RepositoryError::Conflict(message));
     }
+    let restricted_excluded_ids = repository
+        .list_items(id)
+        .await?
+        .into_iter()
+        .filter(|item| item.included && access_restricted_without_replacement(item))
+        .map(|item| item.id)
+        .collect::<Vec<_>>();
     let library_id = repository.managed_library_id(id).await?.ok_or_else(|| {
         RepositoryError::Conflict("managed list storage is unavailable".to_owned())
     })?;
@@ -3105,13 +3103,29 @@ async fn stage_publication_impl(
         }
         sqlx::query(
             r#"UPDATE "AddonMediaListItem"
-               SET "Published" = "Included", "PublishedLiveness" = "EffectiveLiveness"
+               SET "Published" = "Included",
+                   "PublishedLiveness" = "EffectiveLiveness",
+                   "PublishedAvailability" = "Availability",
+                   "PublishedAvailabilityReason" = "AvailabilityReason",
+                   "PublishedAvailabilityReasonCode" = "AvailabilityReasonCode"
                WHERE "AddonMediaListId" = ?"#,
         )
         .bind(id)
         .execute(&mut *tx)
         .await
         .repository()?;
+        for item_id in restricted_excluded_ids {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem"
+                   SET "Published" = 0
+                   WHERE "AddonMediaListId" = ? AND "Id" = ?"#,
+            )
+            .bind(id)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        }
         tx.commit().await.repository()
     }
     .await;
@@ -3493,7 +3507,9 @@ async fn load_published_item_snapshots(
 ) -> Result<Vec<PublishedItemSnapshot>> {
     let rows = sqlx::query(
         r#"SELECT "Id", "Published", "MediaItemId", "Kind", "ProviderId", "Title",
-                  "Year", "Season", "Episode", "SourceUrl", "Rank", "PublishedLiveness"
+                  "Year", "Season", "Episode", "SourceUrl", "Rank", "PublishedLiveness",
+                  "PublishedAvailability", "PublishedAvailabilityReason",
+                  "PublishedAvailabilityReasonCode"
            FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ?
            ORDER BY "Id""#,
@@ -3536,6 +3552,20 @@ async fn load_published_item_snapshots(
                 &row,
                 "PublishedLiveness",
             )?,
+            published_availability: crate::repositories::common::decode_enum_column(
+                "AddonMediaListItemAvailability",
+                &row,
+                "PublishedAvailability",
+            )?,
+            published_availability_reason: row
+                .try_get("PublishedAvailabilityReason")
+                .repository()?,
+            published_availability_reason_code:
+                crate::repositories::common::decode_optional_enum_column(
+                    "AddonMediaListAvailabilityReason",
+                    &row,
+                    "PublishedAvailabilityReasonCode",
+                )?,
         });
     }
     Ok(snapshots)
@@ -3591,9 +3621,13 @@ async fn verify_published_publication_database(
         r#"SELECT
              COUNT(*) AS "ItemCount",
              COALESCE(SUM(CASE WHEN "Published" = 1 THEN 1 ELSE 0 END), 0) AS "PublishedCount",
-             COALESCE(SUM(CASE WHEN "Included" = 1 THEN 1 ELSE 0 END), 0) AS "IncludedCount",
-             COALESCE(SUM(CASE WHEN "Published" <> "Included"
-                           OR "PublishedLiveness" <> "EffectiveLiveness"
+             COALESCE(SUM(CASE WHEN "Published" = 1
+                           AND ("PublishedLiveness" <> "EffectiveLiveness"
+                                OR "PublishedAvailability" <> "Availability"
+                                OR COALESCE("PublishedAvailabilityReason", '')
+                                   <> COALESCE("AvailabilityReason", '')
+                                OR COALESCE("PublishedAvailabilityReasonCode", -1)
+                                   <> COALESCE("AvailabilityReasonCode", -1))
                       THEN 1 ELSE 0 END), 0) AS "SnapshotMismatchCount",
              COALESCE(SUM(CASE WHEN "Published" = 1 AND (
                            "MediaItemId" IS NULL OR NOT EXISTS (
@@ -3610,9 +3644,15 @@ async fn verify_published_publication_database(
     .repository()?;
     let item_count: i64 = counts.try_get("ItemCount").repository()?;
     let published_count: i64 = counts.try_get("PublishedCount").repository()?;
-    let included_count: i64 = counts.try_get("IncludedCount").repository()?;
     let snapshot_mismatch_count: i64 = counts.try_get("SnapshotMismatchCount").repository()?;
     let unmatched_count: i64 = counts.try_get("UnmatchedCount").repository()?;
+    let publication_selection_complete = SqliteAddonMediaListRepository(pool.clone())
+        .list_items(list_id)
+        .await?
+        .iter()
+        .all(|item| {
+            item.published == (item.included && !access_restricted_without_replacement(item))
+        });
     // Provider identity and replacement playback are deliberately separate:
     // `AddonMediaListItem.MediaItemId` owns the provider match, while an
     // unavailable item's configured replacement is selected only in the
@@ -3661,8 +3701,8 @@ async fn verify_published_publication_database(
         || presentation != resolved_presentation
         || presentation != target.presentation_kind
         || item_count == 0
-        || published_count != included_count
         || published_count != target.published_item_count
+        || !publication_selection_complete
         || snapshot_mismatch_count != 0
         || unmatched_count != 0
         || stable_match_mismatch_count != 0
@@ -4594,31 +4634,31 @@ async fn mark_list_ready_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
 ) -> Result<()> {
+    let now = encode_datetime(Utc::now());
     let updated = sqlx::query(
         r#"UPDATE "AddonMediaList"
            SET "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
                "ReviewError" = NULL,
                "DraftRevision" = "DraftRevision" + 1
-           WHERE "Id" = ? AND "ReviewState" <> 3
+           WHERE "Id" = ?
              AND NOT EXISTS (
                  SELECT 1
                  FROM "AddonMediaListPublicationJob" AS "job"
                  JOIN "ManagedLibraryOperation" AS "operation"
                    ON "operation"."Id" = "job"."OperationId"
+                 JOIN "ManagedLibraryLease" AS "lease"
+                   ON "lease"."OperationId" = "operation"."Id"
+                  AND "lease"."OwnerToken" = "operation"."OwnerToken"
                  WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
-                   AND "operation"."State" IN (?, ?, ?)
+                   AND "operation"."State" = ?
+                   AND "lease"."LeaseExpiresAt" > ?
              )"#,
     )
     .bind(list_id)
     .bind(crate::repositories::common::encode_enum(
-        ersatzrs_domain::ManagedLibraryOperationState::Queued,
-    ))
-    .bind(crate::repositories::common::encode_enum(
         ersatzrs_domain::ManagedLibraryOperationState::Running,
     ))
-    .bind(crate::repositories::common::encode_enum(
-        ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
-    ))
+    .bind(now)
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -4640,19 +4680,32 @@ async fn addon_media_list_publication_readiness(
     items: &[AddonMediaListItemAdminRow],
 ) -> Result<AddonMediaListPublicationReadiness> {
     let list_id = form.id;
-    let presentation = if form.requested_presentation_kind == AddonMediaListPresentationKind::Auto {
-        resolve_included_presentation(pool, list_id).await?
-    } else {
-        form.requested_presentation_kind
-    };
     let included = items
         .iter()
         .filter(|item| item.included)
         .collect::<Vec<_>>();
-    let mut blockers = list_publication_blockers(pool, form, presentation, &included).await?;
+    let attempted = included
+        .iter()
+        .copied()
+        .filter(|item| !access_restricted_without_replacement(item))
+        .collect::<Vec<_>>();
+    let presentation = if form.requested_presentation_kind == AddonMediaListPresentationKind::Auto {
+        resolve_included_presentation(&attempted)
+    } else {
+        form.requested_presentation_kind
+    };
+    let mut blockers = list_publication_blockers(pool, form, presentation, &attempted).await?;
     let detail_states = required_playback_detail_states(pool, list_id).await?;
     let mut item_classification = PublicationItemClassification::default();
     for item in &included {
+        if access_restricted_without_replacement(item) {
+            item_classification.restricted_excluded_count = item_classification
+                .restricted_excluded_count
+                .saturating_add(1);
+            item_classification.recommendation_count =
+                item_classification.recommendation_count.saturating_add(1);
+            continue;
+        }
         classify_item_advisory_and_playback(
             presentation,
             item,
@@ -4665,8 +4718,10 @@ async fn addon_media_list_publication_readiness(
     }
     blockers.extend(item_classification.blockers);
     let progress = form.import_progress.as_ref();
+    let restricted_excluded_count = item_classification.restricted_excluded_count;
     Ok(AddonMediaListPublicationReadiness {
-        included_count: u64::try_from(included.len()).unwrap_or(u64::MAX),
+        included_count: u64::try_from(attempted.len()).unwrap_or(u64::MAX),
+        restricted_excluded_count,
         blockers,
         recommendation_count: item_classification.recommendation_count,
         required_playback_detail_count: item_classification.required_playback_detail_count,
@@ -4676,32 +4731,41 @@ async fn addon_media_list_publication_readiness(
         optional_detail_pending: progress.map_or(0, |progress| progress.detail_pending),
         saved_revision: form.draft_revision,
         review_state: form.review_state,
+        publication: None,
     })
 }
 
-async fn list_publication_blockers(
+async fn publication_operation_blockers(
     pool: &Pool<crate::db::Db>,
-    form: &AddonMediaListAdminForm,
-    presentation: AddonMediaListPresentationKind,
-    included: &[&AddonMediaListItemAdminRow],
+    list_id: EntityId,
 ) -> Result<Vec<AddonMediaListPublicationBlocker>> {
-    let list_id = form.id;
     let mut blockers = Vec::new();
-    if form.review_state == AddonMediaListReviewState::Publishing {
+    let now = encode_datetime(Utc::now());
+    let has_live_publication = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (
+               SELECT 1
+               FROM "AddonMediaListPublicationJob" AS "job"
+               JOIN "ManagedLibraryOperation" AS "operation"
+                 ON "operation"."Id" = "job"."OperationId"
+               JOIN "ManagedLibraryLease" AS "lease"
+                 ON "lease"."OperationId" = "operation"."Id"
+                AND "lease"."OwnerToken" = "operation"."OwnerToken"
+               WHERE "job"."AddonMediaListId" = ?
+                 AND "operation"."State" = ?
+                 AND "lease"."LeaseExpiresAt" > ?
+           )"#,
+    )
+    .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::ManagedLibraryOperationState::Running,
+    ))
+    .bind(&now)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    if has_live_publication {
         blockers.push(publication_blocker(
             AddonMediaListPublicationBlockerKind::PublicationInProgress,
-            None,
-            None,
-            1,
-        ));
-    }
-    if form
-        .import_progress
-        .as_ref()
-        .is_some_and(|progress| progress.state != ersatzrs_domain::AddonMediaListImportState::Ready)
-    {
-        blockers.push(publication_blocker(
-            AddonMediaListPublicationBlockerKind::OverviewIncomplete,
             None,
             None,
             1,
@@ -4714,12 +4778,36 @@ async fn list_publication_blockers(
     .fetch_one(pool)
     .await
     .repository()?;
-    if active_journal
-        .as_deref()
-        .is_some_and(|value| !value.trim().is_empty())
+    if !has_live_publication
+        && active_journal
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
     {
         blockers.push(publication_blocker(
             AddonMediaListPublicationBlockerKind::RecoveryRequired,
+            None,
+            None,
+            1,
+        ));
+    }
+    Ok(blockers)
+}
+
+async fn list_publication_blockers(
+    pool: &Pool<crate::db::Db>,
+    form: &AddonMediaListAdminForm,
+    presentation: AddonMediaListPresentationKind,
+    included: &[&AddonMediaListItemAdminRow],
+) -> Result<Vec<AddonMediaListPublicationBlocker>> {
+    let list_id = form.id;
+    let mut blockers = publication_operation_blockers(pool, list_id).await?;
+    if form
+        .import_progress
+        .as_ref()
+        .is_some_and(|progress| progress.state != ersatzrs_domain::AddonMediaListImportState::Ready)
+    {
+        blockers.push(publication_blocker(
+            AddonMediaListPublicationBlockerKind::OverviewIncomplete,
             None,
             None,
             1,
@@ -4778,6 +4866,19 @@ struct PublicationItemClassification {
     recommendation_count: u64,
     required_playback_detail_count: u64,
     required_playback_detail_pending: u64,
+    restricted_excluded_count: u64,
+}
+
+fn access_restricted_without_replacement(item: &AddonMediaListItemAdminRow) -> bool {
+    item.availability == AddonMediaListItemAvailability::Unavailable
+        && matches!(
+            item.availability_reason_code,
+            Some(
+                ersatzrs_domain::AddonMediaListAvailabilityReason::AuthenticationRequired
+                    | ersatzrs_domain::AddonMediaListAvailabilityReason::ContentRestricted
+            )
+        )
+        && !item.replacement_valid
 }
 
 fn classify_item_advisory_and_playback(
@@ -4813,7 +4914,16 @@ fn classify_item_advisory_and_playback(
             RemoteStreamLiveness::Finite | RemoteStreamLiveness::Live => {}
         }
     }
-    if item.availability == AddonMediaListItemAvailability::Unavailable && !item.replacement_valid {
+    if item.availability == AddonMediaListItemAvailability::Unavailable
+        && !item.replacement_valid
+        && !matches!(
+            item.availability_reason_code,
+            Some(
+                ersatzrs_domain::AddonMediaListAvailabilityReason::AuthenticationRequired
+                    | ersatzrs_domain::AddonMediaListAvailabilityReason::ContentRestricted
+            )
+        )
+    {
         classification.blockers.push(publication_item_blocker(
             AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement,
             item,
@@ -5083,6 +5193,7 @@ async fn save_list_metadata_override(
     metadata: &AddonMediaListNfoMetadata,
     expected_etag: &str,
 ) -> Result<()> {
+    crate::addon_media_list_sync::ensure_not_publishing(pool, id).await?;
     let current = load_list_metadata_form(pool, id).await?;
     if current.etag != expected_etag {
         return Err(RepositoryError::Conflict(
@@ -5100,7 +5211,7 @@ async fn save_list_metadata_override(
     let updated = sqlx::query(
         r#"UPDATE "AddonMediaList"
            SET "MetadataOverrideJson" = ?, "MetadataConflictJson" = NULL
-           WHERE "Id" = ? AND "ReviewState" <> 3"#,
+           WHERE "Id" = ?"#,
     )
     .bind(overrides)
     .bind(id)
@@ -5511,6 +5622,7 @@ impl SqliteAddonMediaListRepository {
                       "detail"."Diagnostic" AS "DetailDiagnostic",
                       "projection"."EpisodeId" AS "ProjectedEpisodeId",
                       "item"."Availability", "item"."AvailabilityReason",
+                      "item"."AvailabilityReasonCode",
                       "replacement"."MediaItemId" AS "ReplacementMediaItemId",
                       "replacement"."MediaVersionId" AS "ReplacementMediaVersionId"
                FROM "AddonMediaListItem" AS "item"
@@ -5580,6 +5692,11 @@ impl SqliteAddonMediaListRepository {
                     "Availability",
                 )?,
                 availability_reason: row.try_get("AvailabilityReason").repository()?,
+                availability_reason_code: crate::repositories::common::decode_optional_enum_column(
+                    "AddonMediaListAvailabilityReason",
+                    &row,
+                    "AvailabilityReasonCode",
+                )?,
                 replacement_media_item_id,
                 replacement_media_version_id,
                 replacement_title: candidate.as_ref().map(|item| item.title.clone()),

@@ -1,12 +1,13 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
-    AddonMediaListPublicationEnqueue, AddonMediaListPublicationJob, ManagedLibraryOperation,
-    ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
-    RepositoryError, Result,
+    AddonMediaListPublicationEnqueue, AddonMediaListPublicationJob,
+    AddonMediaListPublicationStatus, ManagedLibraryOperation, ManagedLibraryOperationClaim,
+    ManagedLibraryOperationRepository, ManagedLibraryScanSpec, RepositoryError, Result,
 };
 use ersatzrs_domain::{
-    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase, EntityId,
+    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
+    AddonMediaListPublicationState, AddonMediaListRecoveryAction, EntityId,
     ManagedLibraryOperationKind, ManagedLibraryOperationState, MediaSourceKind,
 };
 use sqlx::Row as _;
@@ -14,7 +15,8 @@ use uuid::Uuid;
 
 use crate::db::{inserted_id, DbPool};
 use crate::repositories::common::{
-    decode_bool_column, decode_enum_column, decode_optional_datetime, encode_datetime, encode_enum,
+    decode_bool_column, decode_datetime, decode_enum_column, decode_optional_datetime,
+    encode_datetime, encode_enum,
 };
 use crate::repositories::SqlxResultExt as _;
 
@@ -496,6 +498,156 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
             .transpose()
     }
 
+    async fn publication_status(
+        &self,
+        list_id: EntityId,
+        now: DateTime<Utc>,
+    ) -> Result<Option<AddonMediaListPublicationStatus>> {
+        let row = latest_publication_status_row(&self.0, list_id, &encode_datetime(now)).await?;
+        row.as_ref().map(decode_publication_status_row).transpose()
+    }
+
+    async fn recover_publication(
+        &self,
+        list_id: EntityId,
+        job_id: EntityId,
+        generation: i32,
+        action: AddonMediaListRecoveryAction,
+        now: DateTime<Utc>,
+    ) -> Result<AddonMediaListPublicationStatus> {
+        let now_text = encode_datetime(now);
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let row = latest_publication_status_row_tx(&mut tx, list_id, &now_text)
+            .await?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media-list publication",
+                id: job_id,
+            })?;
+        let status = decode_publication_status_row(&row)?;
+        if status.job_id != job_id || status.generation != generation {
+            return Err(RepositoryError::Conflict(
+                "the add-on media-list publication generation changed; reload before recovering"
+                    .to_owned(),
+            ));
+        }
+        if matches!(
+            status.state,
+            AddonMediaListPublicationState::Publishing | AddonMediaListPublicationState::Restoring
+        ) {
+            return Err(RepositoryError::Conflict(
+                "the add-on media-list publication still has a live lease".to_owned(),
+            ));
+        }
+        if matches!(status.state, AddonMediaListPublicationState::Complete) {
+            return Err(RepositoryError::Conflict(
+                "the add-on media-list publication is already complete".to_owned(),
+            ));
+        }
+        if matches!(action, AddonMediaListRecoveryAction::Retry) && !status.can_retry {
+            return Err(RepositoryError::Conflict(
+                "the add-on media-list publication is not awaiting recovery".to_owned(),
+            ));
+        }
+        if matches!(
+            action,
+            AddonMediaListRecoveryAction::RestorePreviousRevision
+        ) && !status.can_restore
+        {
+            return Err(RepositoryError::Conflict(
+                "the previous add-on media-list revision has no recovery journal".to_owned(),
+            ));
+        }
+
+        sqlx::query(
+            r#"DELETE FROM "ManagedLibraryLease"
+               WHERE "OperationId" = ? AND "LeaseExpiresAt" <= ?"#,
+        )
+        .bind(status.operation_id)
+        .bind(&now_text)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+
+        if matches!(
+            action,
+            AddonMediaListRecoveryAction::RestorePreviousRevision
+        ) {
+            let updated = sqlx::query(
+                r#"UPDATE "AddonMediaListPublicationJob"
+                   SET "Phase" = ?, "ChildScanOperationId" = NULL, "Outcome" = NULL,
+                       "OriginalFailureCode" = COALESCE("OriginalFailureCode", ?),
+                       "RecoveryDiagnostic" = NULL, "UpdatedAt" = ?, "CompletedAt" = NULL
+                   WHERE "Id" = ? AND "AddonMediaListId" = ? AND "Generation" = ?"#,
+            )
+            .bind(encode_enum(AddonMediaListPublicationPhase::RestoringFiles))
+            .bind("operator_restore_requested")
+            .bind(&now_text)
+            .bind(job_id)
+            .bind(list_id)
+            .bind(generation)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the add-on media-list publication changed before restore".to_owned(),
+                ));
+            }
+        } else {
+            let updated = sqlx::query(
+                r#"UPDATE "AddonMediaListPublicationJob"
+                   SET "RecoveryDiagnostic" = NULL, "UpdatedAt" = ?, "CompletedAt" = NULL
+                   WHERE "Id" = ? AND "AddonMediaListId" = ? AND "Generation" = ?"#,
+            )
+            .bind(&now_text)
+            .bind(job_id)
+            .bind(list_id)
+            .bind(generation)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the add-on media-list publication changed before retry".to_owned(),
+                ));
+            }
+        }
+
+        let updated = sqlx::query(
+            r#"UPDATE "ManagedLibraryOperation"
+               SET "Kind" = ?, "State" = ?, "NextEligibleAt" = NULL,
+                   "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL,
+                   "DiagnosticCode" = NULL, "Diagnostic" = NULL,
+                   "UpdatedAt" = ?, "CompletedAt" = NULL
+               WHERE "Id" = ?
+                 AND NOT EXISTS (
+                     SELECT 1 FROM "ManagedLibraryLease"
+                     WHERE "OperationId" = ? AND "LeaseExpiresAt" > ?
+                 )"#,
+        )
+        .bind(encode_enum(ManagedLibraryOperationKind::Recovery))
+        .bind(encode_enum(ManagedLibraryOperationState::Queued))
+        .bind(&now_text)
+        .bind(status.operation_id)
+        .bind(status.operation_id)
+        .bind(&now_text)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the add-on media-list publication lease changed before recovery".to_owned(),
+            ));
+        }
+        tx.commit().await.repository()?;
+        self.publication_status(list_id, now)
+            .await?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media-list publication",
+                id: job_id,
+            })
+    }
+
     async fn transition_publication(
         &self,
         claim: &ManagedLibraryOperationClaim,
@@ -953,6 +1105,143 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
             Some((code, bounded_diagnostic(diagnostic))),
         )
         .await
+    }
+}
+
+const PUBLICATION_STATUS_SQL: &str = r#"SELECT "job"."Id" AS "PublicationJobId",
+              "job"."OperationId", "job"."AddonMediaListId", "job"."Generation",
+              "job"."SavedRevision", "job"."TargetPublishedRevision", "job"."Phase",
+              "job"."OriginalFailureCode", "job"."RecoveryDiagnostic",
+              "job"."Outcome", "job"."UpdatedAt" AS "JobUpdatedAt",
+              "operation"."State" AS "OperationState",
+              "operation"."AttemptCount", "operation"."DiagnosticCode",
+              "list"."PublicationJournalJson",
+              EXISTS (
+                  SELECT 1 FROM "ManagedLibraryLease" AS "lease"
+                  WHERE "lease"."OperationId" = "operation"."Id"
+                    AND "lease"."OwnerToken" = "operation"."OwnerToken"
+                    AND "lease"."LeaseExpiresAt" > ?
+              ) AS "LiveLease"
+       FROM "AddonMediaListPublicationJob" AS "job"
+       JOIN "ManagedLibraryOperation" AS "operation"
+         ON "operation"."Id" = "job"."OperationId"
+       JOIN "AddonMediaList" AS "list"
+         ON "list"."Id" = "job"."AddonMediaListId"
+       WHERE "job"."AddonMediaListId" = ?
+       ORDER BY "job"."Generation" DESC, "job"."Id" DESC
+       LIMIT 1"#;
+
+async fn latest_publication_status_row(
+    pool: &DbPool,
+    list_id: EntityId,
+    now: &str,
+) -> Result<Option<crate::db::DbRow>> {
+    sqlx::query(PUBLICATION_STATUS_SQL)
+        .bind(now)
+        .bind(list_id)
+        .fetch_optional(pool)
+        .await
+        .repository()
+}
+
+async fn latest_publication_status_row_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    now: &str,
+) -> Result<Option<crate::db::DbRow>> {
+    sqlx::query(PUBLICATION_STATUS_SQL)
+        .bind(now)
+        .bind(list_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .repository()
+}
+
+fn decode_publication_status_row(
+    row: &crate::db::DbRow,
+) -> Result<AddonMediaListPublicationStatus> {
+    let phase = decode_enum_column("AddonMediaListPublicationPhase", row, "Phase")?;
+    let operation_state =
+        decode_enum_column("ManagedLibraryOperationState", row, "OperationState")?;
+    let live_lease = decode_bool_column(row, "LiveLease")?;
+    let original_failure_code: Option<String> = row.try_get("OriginalFailureCode").repository()?;
+    let recovery_diagnostic: Option<String> = row.try_get("RecoveryDiagnostic").repository()?;
+    let operation_diagnostic_code: Option<String> = row.try_get("DiagnosticCode").repository()?;
+    let journal: Option<String> = row.try_get("PublicationJournalJson").repository()?;
+    let state = match operation_state {
+        ManagedLibraryOperationState::Completed => AddonMediaListPublicationState::Complete,
+        ManagedLibraryOperationState::Failed => AddonMediaListPublicationState::Failed,
+        ManagedLibraryOperationState::Queued => AddonMediaListPublicationState::Queued,
+        ManagedLibraryOperationState::WaitingToRetry => AddonMediaListPublicationState::Waiting,
+        ManagedLibraryOperationState::Running if !live_lease => {
+            AddonMediaListPublicationState::Expired
+        }
+        ManagedLibraryOperationState::Running
+            if matches!(
+                phase,
+                AddonMediaListPublicationPhase::RestoringFiles
+                    | AddonMediaListPublicationPhase::RestoringProjection
+                    | AddonMediaListPublicationPhase::Reconciling
+            ) =>
+        {
+            AddonMediaListPublicationState::Restoring
+        }
+        ManagedLibraryOperationState::Running => AddonMediaListPublicationState::Publishing,
+    };
+    let recovery_required = matches!(
+        state,
+        AddonMediaListPublicationState::Waiting
+            | AddonMediaListPublicationState::Expired
+            | AddonMediaListPublicationState::Failed
+    );
+    let diagnostic_code = original_failure_code
+        .or(operation_diagnostic_code)
+        .map(|value| redacted_diagnostic_code(&value))
+        .or_else(|| match state {
+            AddonMediaListPublicationState::Expired => Some("lease_expired".to_owned()),
+            AddonMediaListPublicationState::Waiting => Some("waiting_to_retry".to_owned()),
+            AddonMediaListPublicationState::Failed => Some("publication_failed".to_owned()),
+            _ => None,
+        });
+    Ok(AddonMediaListPublicationStatus {
+        job_id: row.try_get("PublicationJobId").repository()?,
+        operation_id: row.try_get("OperationId").repository()?,
+        list_id: row.try_get("AddonMediaListId").repository()?,
+        generation: row.try_get("Generation").repository()?,
+        saved_revision: row.try_get("SavedRevision").repository()?,
+        target_published_revision: row.try_get("TargetPublishedRevision").repository()?,
+        phase,
+        state,
+        attempt_count: row.try_get("AttemptCount").repository()?,
+        last_progress_at: decode_datetime(
+            "add-on media-list publication progress",
+            row.try_get::<String, _>("JobUpdatedAt")
+                .repository()?
+                .as_str(),
+        )?,
+        diagnostic_code,
+        recovery_diagnostic_present: recovery_diagnostic
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty()),
+        can_retry: recovery_required,
+        can_restore: recovery_required
+            && journal
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty()),
+    })
+}
+
+fn redacted_diagnostic_code(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase();
+    if !normalized.is_empty()
+        && normalized.len() <= 96
+        && normalized.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        })
+    {
+        normalized
+    } else {
+        "publication_failed".to_owned()
     }
 }
 
@@ -1503,6 +1792,154 @@ mod tests {
                 .count(),
             512
         );
+    }
+
+    #[tokio::test]
+    async fn publication_status_distinguishes_live_and_expired_lease_and_retries_exact_generation()
+    {
+        let pool = pool_with_library().await;
+        seed_publication_list(&pool, "org.example.status").await;
+        let repository = SqliteManagedLibraryOperationRepository(pool.clone());
+        let queued = repository
+            .enqueue_publication(1, 1, 3, 2)
+            .await
+            .expect("enqueue publication");
+        let started = Utc::now();
+        assert_eq!(
+            repository
+                .publication_status(1, started)
+                .await
+                .expect("queued status")
+                .expect("status")
+                .state,
+            AddonMediaListPublicationState::Queued
+        );
+        let claim = repository
+            .claim_operation(queued.operation.id, started)
+            .await
+            .expect("claim publication")
+            .expect("claim");
+        assert!(repository
+            .transition_publication(
+                &claim,
+                AddonMediaListPublicationPhase::AwaitingLease,
+                AddonMediaListPublicationPhase::Staging,
+            )
+            .await
+            .expect("enter staging"));
+        assert_eq!(
+            repository
+                .publication_status(1, started + Duration::seconds(1))
+                .await
+                .expect("live status")
+                .expect("status")
+                .state,
+            AddonMediaListPublicationState::Publishing
+        );
+        let expired_at = started + Duration::seconds(91);
+        let expired = repository
+            .publication_status(1, expired_at)
+            .await
+            .expect("expired status")
+            .expect("status");
+        assert_eq!(expired.state, AddonMediaListPublicationState::Expired);
+        assert!(expired.can_retry);
+        let retried = repository
+            .recover_publication(
+                1,
+                queued.job.id,
+                queued.job.generation,
+                AddonMediaListRecoveryAction::Retry,
+                expired_at,
+            )
+            .await
+            .expect("retry exact generation");
+        assert_eq!(retried.job_id, queued.job.id);
+        assert_eq!(retried.state, AddonMediaListPublicationState::Queued);
+        assert_eq!(retried.phase, AddonMediaListPublicationPhase::Staging);
+        assert!(repository
+            .recover_publication(
+                1,
+                queued.job.id,
+                queued.job.generation + 1,
+                AddonMediaListRecoveryAction::Retry,
+                expired_at,
+            )
+            .await
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn restore_command_requires_a_journal_and_requeues_at_restore_files() {
+        let pool = pool_with_library().await;
+        seed_publication_list(&pool, "org.example.restore").await;
+        let repository = SqliteManagedLibraryOperationRepository(pool.clone());
+        let queued = repository
+            .enqueue_publication(1, 1, 3, 2)
+            .await
+            .expect("enqueue publication");
+        let started = Utc::now();
+        repository
+            .claim_operation(queued.operation.id, started)
+            .await
+            .expect("claim publication")
+            .expect("claim");
+        let expired_at = started + Duration::seconds(91);
+        assert!(repository
+            .recover_publication(
+                1,
+                queued.job.id,
+                queued.job.generation,
+                AddonMediaListRecoveryAction::RestorePreviousRevision,
+                expired_at,
+            )
+            .await
+            .is_err());
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "PublicationJournalJson" = '{}' WHERE "Id" = 1"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed recovery journal");
+        let restored = repository
+            .recover_publication(
+                1,
+                queued.job.id,
+                queued.job.generation,
+                AddonMediaListRecoveryAction::RestorePreviousRevision,
+                expired_at,
+            )
+            .await
+            .expect("restore exact generation");
+        assert_eq!(restored.state, AddonMediaListPublicationState::Queued);
+        assert_eq!(
+            restored.phase,
+            AddonMediaListPublicationPhase::RestoringFiles
+        );
+    }
+
+    async fn seed_publication_list(pool: &DbPool, addon_id: &str) {
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+                   "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+                   "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+               ) VALUES (?, '1.0.0', 1, 'package', 'content', '{}',
+                         'addons/fixture', '2026-09-02T00:00:00Z', '2026-09-02T00:00:00Z')"#,
+        )
+        .bind(addon_id)
+        .execute(pool)
+        .await
+        .expect("seed installation");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+                   "DraftRevision", "PublishedRevision"
+               ) VALUES (1, ?, 'list', 'https://example.invalid/list', 'List', 3, 1)"#,
+        )
+        .bind(addon_id)
+        .execute(pool)
+        .await
+        .expect("seed list");
     }
 
     #[tokio::test]

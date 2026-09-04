@@ -1,6 +1,6 @@
 # Add-on media-list contract reference
 
-`media-list.list.v1` through `media-list.list.v5` define the frozen list and
+`media-list.list.v1` through `media-list.list.v6` define the frozen list and
 item record schemas. Their original one-shot compatibility path enumerates one
 provider-selected list through an enabled add-on. The host invokes the add-on
 with positional operation `list`, sets
@@ -59,6 +59,16 @@ legacy true means live, a positive duration means finite, and false, omitted,
 or null without a positive duration remains unknown. Non-Remote-Stream items
 must not publish a liveness value.
 
+Version 6 adds `availability_reason_code` for unavailable items. Its values are
+`authentication_required`, `content_restricted`, and `unavailable`. The add-on
+owns provider-specific recognition and may retain a bounded legacy
+`availability_reason`; the host never parses that free text. Authentication and
+content restrictions remain visible in review but are excluded from the next
+publication unless the operator selects a valid Local replacement. A provider
+refresh preserves the current published snapshot until the operator explicitly
+publishes the pending exclusion. Credentials, cookies, and raw provider stderr
+must never be emitted in either field.
+
 ## Resumable import orchestration
 
 An add-on may additionally declare `media-list.import.v1` and at least one
@@ -75,7 +85,7 @@ One `discover` request has these fields:
 | Field | Type | Requirement |
 |---|---|---|
 | `source_url` | string | Canonical validated source URL; 1 to 8,192 UTF-8 bytes. |
-| `record_capability` | string | Supported frozen `media-list.list.v1` through `media-list.list.v5` schema. |
+| `record_capability` | string | Supported frozen `media-list.list.v1` through `media-list.list.v6` schema. |
 | `cursor` | string or null | Opaque continuation value; 1 to 4,096 UTF-8 bytes without control characters. Omitted on the first page. |
 | `limits.max_items` | positive integer | Host-selected page cap, at most 250. |
 | `limits.max_output_bytes` | positive integer | Host-selected output cap, at most 4 MiB. |
@@ -193,6 +203,12 @@ Version 5 adds this item field:
 | Field | Type | Requirement |
 |---|---|---|
 | `liveness` | string or null | `unknown`, `finite`, or `live`; only meaningful for `kind: remote_stream`. |
+
+Version 6 adds this item field:
+
+| Field | Type | Requirement |
+|---|---|---|
+| `availability_reason_code` | string or null | `authentication_required`, `content_restricted`, or `unavailable`; permitted only when `availability` is `unavailable`. |
 
 ## Shared metadata document
 

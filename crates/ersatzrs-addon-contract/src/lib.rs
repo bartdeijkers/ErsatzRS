@@ -47,6 +47,8 @@ pub const CAPABILITY_MEDIA_LIST_LIST_V3: &str = "media-list.list.v3";
 pub const CAPABILITY_MEDIA_LIST_LIST_V4: &str = "media-list.list.v4";
 /// Enumerate provider lists with explicit Remote Stream playback behavior.
 pub const CAPABILITY_MEDIA_LIST_LIST_V5: &str = "media-list.list.v5";
+/// Enumerate provider lists with typed terminal availability reasons.
+pub const CAPABILITY_MEDIA_LIST_LIST_V6: &str = "media-list.list.v6";
 /// Page list overviews and enrich one item at a time through host-owned jobs.
 pub const CAPABILITY_MEDIA_LIST_IMPORT_V1: &str = "media-list.import.v1";
 /// Host-rendered declarative add-on panel schema.
@@ -114,6 +116,18 @@ pub enum AddonMediaListItemAvailability {
     Available,
     Unavailable,
     Unknown,
+}
+
+/// Provider-neutral terminal reason for an unavailable add-on list item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListAvailabilityReason {
+    /// Playback requires credentials that were not available to the add-on.
+    AuthenticationRequired,
+    /// Playback is restricted by age, membership, subscription, or visibility policy.
+    ContentRestricted,
+    /// The provider reports no more specific portable reason.
+    Unavailable,
 }
 
 /// Provider-neutral playback behavior for a Remote Stream.
@@ -390,7 +404,7 @@ impl AddonMetadataDocument {
     }
 }
 
-/// One bounded `media-list.list.v1` through `media-list.list.v5` NDJSON record.
+/// One bounded `media-list.list.v1` through `media-list.list.v6` NDJSON record.
 ///
 /// Both variants intentionally retain the frozen, strongly typed record shape.
 /// Boxing either metadata field would be a source-level API break for add-ons
@@ -427,6 +441,8 @@ pub enum AddonMediaListRecord {
         availability: AddonMediaListItemAvailability,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         availability_reason: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        availability_reason_code: Option<AddonMediaListAvailabilityReason>,
         #[serde(default, skip_serializing_if = "content_kind_is_auto")]
         content_kind: AddonMediaListContentKind,
         #[serde(default, skip_serializing_if = "item_role_is_auto")]
@@ -501,6 +517,7 @@ impl AddonMediaListRecord {
             source_url: None,
             availability: AddonMediaListItemAvailability::Available,
             availability_reason: None,
+            availability_reason_code: None,
             content_kind: AddonMediaListContentKind::Auto,
             collection_role: AddonMediaListItemRole::Auto,
             duration_seconds: None,
@@ -541,7 +558,9 @@ impl AddonMediaListRecord {
                 title,
                 kind,
                 source_url,
+                availability,
                 availability_reason,
+                availability_reason_code,
                 parent_provider_id,
                 fragment_start_seconds,
                 fragment_end_seconds,
@@ -565,6 +584,14 @@ impl AddonMediaListRecord {
                     );
                 }
                 validate_availability_reason(availability_reason.as_deref())?;
+                if availability_reason_code.is_some()
+                    && *availability != AddonMediaListItemAvailability::Unavailable
+                {
+                    return invalid(
+                        "media list item availability_reason_code",
+                        "requires unavailable availability",
+                    );
+                }
                 validate_fragment(
                     provider_id,
                     parent_provider_id.as_deref(),
@@ -778,6 +805,7 @@ fn validate_import_record_capability(capability: &str) -> Result<(), ContractErr
             | CAPABILITY_MEDIA_LIST_LIST_V3
             | CAPABILITY_MEDIA_LIST_LIST_V4
             | CAPABILITY_MEDIA_LIST_LIST_V5
+            | CAPABILITY_MEDIA_LIST_LIST_V6
     ) {
         Ok(())
     } else {
@@ -1338,6 +1366,7 @@ impl AddonManifest {
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V3)
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V4)
                 && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V5)
+                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V6)
             {
                 return invalid(
                     "media_list_storage",
@@ -1379,6 +1408,7 @@ impl AddonManifest {
                 CAPABILITY_MEDIA_LIST_LIST_V3,
                 CAPABILITY_MEDIA_LIST_LIST_V4,
                 CAPABILITY_MEDIA_LIST_LIST_V5,
+                CAPABILITY_MEDIA_LIST_LIST_V6,
             ]
             .into_iter()
             .any(|capability| self.has_capability(capability))
@@ -3551,6 +3581,21 @@ name = "Example add-ons"
 {"record_type":"item","provider_id":"movie:1","rank":1,"display_title":"Other","title":"Other","kind":"movie"}
 "#;
         assert!(conform_media_list_output(duplicate).is_err());
+    }
+
+    #[test]
+    fn media_list_v6_conformance_preserves_typed_restriction_reason() {
+        let output = br#"{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"stream:1","rank":0,"display_title":"Restricted","title":"Restricted","kind":"remote_stream","source_url":"https://example.test/restricted","availability":"unavailable","availability_reason":"provider category","availability_reason_code":"content_restricted"}
+"#;
+        let records = conform_media_list_output(output).expect("valid v6 record shape");
+        assert!(matches!(
+            &records[1],
+            AddonMediaListRecord::Item {
+                availability_reason_code: Some(AddonMediaListAvailabilityReason::ContentRestricted),
+                ..
+            }
+        ));
     }
 
     #[test]

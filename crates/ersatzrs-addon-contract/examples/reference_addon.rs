@@ -43,6 +43,7 @@ fn run(output: &mut impl io::Write) -> io::Result<()> {
                     source_url: None,
                     availability: AddonMediaListItemAvailability::Available,
                     availability_reason: None,
+                    availability_reason_code: None,
                     content_kind: AddonMediaListContentKind::Movie,
                     collection_role: AddonMediaListItemRole::Primary,
                     duration_seconds: Some(7_200),

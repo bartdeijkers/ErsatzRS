@@ -258,7 +258,8 @@ impl AddonMediaListSynchronizer {
     ) -> Result<Vec<GeneratedPlaylistItem>> {
         let rows = sqlx::query(
             r#"SELECT "Id", "ProviderId", "Kind", "Title", "Year", "Season", "Episode", "Rank", "SourceUrl",
-                      "Availability", "Published", "DurationSeconds", "PublishedLiveness"
+                      "Availability", "PublishedAvailability", "Published", "DurationSeconds",
+                      "PublishedLiveness"
                FROM "AddonMediaListItem"
                WHERE "AddonMediaListId" = ?
                ORDER BY "Rank", "Id""#,
@@ -269,6 +270,7 @@ impl AddonMediaListSynchronizer {
         .repository()?;
         let mut desired = Vec::new();
         for row in rows {
+            let published = decode_bool_column(&row, "Published")?;
             let item = MatchItem {
                 id: row.try_get("Id").repository()?,
                 addon_id: list.addon_id.clone(),
@@ -286,7 +288,11 @@ impl AddonMediaListSynchronizer {
                 availability: decode_enum_column(
                     "AddonMediaListItemAvailability",
                     &row,
-                    "Availability",
+                    if published {
+                        "PublishedAvailability"
+                    } else {
+                        "Availability"
+                    },
                 )?,
                 duration_seconds: decode_optional_seconds(&row, "DurationSeconds")?,
                 liveness: decode_enum_column("RemoteStreamLiveness", &row, "PublishedLiveness")?,
@@ -321,7 +327,7 @@ impl AddonMediaListSynchronizer {
             if updated.rows_affected() != 1 {
                 return Err(publication_in_progress());
             }
-            if generate_playlist_items && decode_bool_column(&row, "Published")? {
+            if generate_playlist_items && published {
                 if let Some(selection) = self.playlist_selection(&item, matched_id).await? {
                     desired.push(GeneratedPlaylistItem::new(&item, selection));
                 }
@@ -344,20 +350,26 @@ impl AddonMediaListSynchronizer {
         chapter_input: &str,
     ) -> Result<()> {
         let _list = self.load_list(list_id).await?;
+        ensure_not_publishing(&self.pool, list_id).await?;
+        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "AutoRefresh" = ?, "GeneratePlaylist" = ?, "ContentKindOverride" = ?,
                    "ChapterInput" = ?,
                    "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
                    "ReviewError" = NULL, "DraftRevision" = "DraftRevision" + 1
-               WHERE "Id" = ? AND "ReviewState" <> 3
+               WHERE "Id" = ?
                  AND NOT EXISTS (
                      SELECT 1
                      FROM "AddonMediaListPublicationJob" AS "job"
                      JOIN "ManagedLibraryOperation" AS "operation"
                        ON "operation"."Id" = "job"."OperationId"
+                     JOIN "ManagedLibraryLease" AS "lease"
+                       ON "lease"."OperationId" = "operation"."Id"
+                      AND "lease"."OwnerToken" = "operation"."OwnerToken"
                      WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
-                       AND "operation"."State" IN (?, ?, ?)
+                       AND "operation"."State" = ?
+                       AND "lease"."LeaseExpiresAt" > ?
                  )"#,
         )
         .bind(auto_refresh)
@@ -366,14 +378,9 @@ impl AddonMediaListSynchronizer {
         .bind((!chapter_input.is_empty()).then_some(chapter_input))
         .bind(list_id)
         .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::Queued,
-        ))
-        .bind(encode_enum(
             ersatzrs_domain::ManagedLibraryOperationState::Running,
         ))
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
-        ))
+        .bind(now)
         .execute(&self.pool)
         .await
         .repository()?;
@@ -453,6 +460,11 @@ impl AddonMediaListSynchronizer {
                 &row,
                 "Availability",
             )? != item.availability
+            || decode_optional_enum_column::<ersatzrs_domain::AddonMediaListAvailabilityReason>(
+                "AddonMediaListAvailabilityReason",
+                &row,
+                "AvailabilityReasonCode",
+            )? != item.availability_reason_code
             || previous_provider_liveness != item.liveness
             || previous_guids != item.guids;
         let review_required = published && (operational_change || conflicts.is_some());
@@ -487,6 +499,8 @@ impl AddonMediaListSynchronizer {
                 r#"UPDATE "AddonMediaListItem"
                    SET "DisplayTitle" = ?, "Title" = ?, "Year" = ?, "Season" = ?,
                        "Episode" = ?, "AdditionalImageUrls" = ?,
+                       "Availability" = ?, "AvailabilityReason" = ?,
+                       "AvailabilityReasonCode" = ?, "AvailabilityUpdated" = ?,
                        "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
                        "ProviderLiveness" = ?, "EffectiveLiveness" = ?,
                        "LivenessConflict" = ?
@@ -498,6 +512,10 @@ impl AddonMediaListSynchronizer {
             .bind(item.season)
             .bind(item.episode)
             .bind(image_urls)
+            .bind(encode_enum(item.availability))
+            .bind(&item.availability_reason)
+            .bind(item.availability_reason_code.map(encode_enum))
+            .bind(&now)
             .bind(&next_metadata)
             .bind(&conflicts)
             .bind(encode_enum(item.liveness))
@@ -513,6 +531,7 @@ impl AddonMediaListSynchronizer {
                    SET "Kind" = ?, "DisplayTitle" = ?, "Title" = ?, "Year" = ?,
                        "Season" = ?, "Episode" = ?, "SourceUrl" = ?,
                        "Availability" = ?, "AvailabilityReason" = ?,
+                       "AvailabilityReasonCode" = ?,
                        "AvailabilityUpdated" = ?, "ContentKind" = ?, "CollectionRole" = ?,
                        "DurationSeconds" = ?, "AdditionalImageUrls" = ?,
                        "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
@@ -529,6 +548,7 @@ impl AddonMediaListSynchronizer {
             .bind(&item.source_url)
             .bind(encode_enum(item.availability))
             .bind(&item.availability_reason)
+            .bind(item.availability_reason_code.map(encode_enum))
             .bind(&now)
             .bind(encode_enum(item.content_kind))
             .bind(encode_enum(item.collection_role))
@@ -877,12 +897,16 @@ impl AddonMediaListSynchronizer {
                 sqlx::query(
                     r#"UPDATE "AddonMediaListItem"
                        SET "Rank" = ?, "Availability" = ?, "AvailabilityReason" = ?,
-                           "AvailabilityUpdated" = ?, "MediaItemId" = NULL
+                           "AvailabilityReasonCode" = ?, "AvailabilityUpdated" = ?,
+                           "MediaItemId" = NULL
                        WHERE "Id" = ?"#,
                 )
                 .bind(tombstone_rank)
                 .bind(encode_enum(AddonMediaListItemAvailability::Unavailable))
                 .bind(OMITTED_BY_PROVIDER_REASON)
+                .bind(encode_enum(
+                    ersatzrs_domain::AddonMediaListAvailabilityReason::Unavailable,
+                ))
                 .bind(encode_datetime(Utc::now()))
                 .bind(item.id)
                 .execute(&mut *tx)
@@ -923,7 +947,8 @@ impl AddonMediaListSynchronizer {
                        SET "Kind" = ?, "Rank" = ?, "Title" = ?, "Year" = ?,
                            "DisplayTitle" = ?, "Season" = ?, "Episode" = ?,
                            "SourceUrl" = ?, "Availability" = ?,
-                           "AvailabilityReason" = ?, "AvailabilityUpdated" = ?,
+                           "AvailabilityReason" = ?, "AvailabilityReasonCode" = ?,
+                           "AvailabilityUpdated" = ?,
                            "ContentKind" = ?, "DurationSeconds" = ?,
                            "ParentProviderId" = ?, "FragmentStartSeconds" = ?,
                            "FragmentEndSeconds" = ?, "AdditionalImageUrls" = ?,
@@ -943,6 +968,7 @@ impl AddonMediaListSynchronizer {
                     .bind(&item.source_url)
                     .bind(encode_enum(item.availability))
                     .bind(&item.availability_reason)
+                    .bind(item.availability_reason_code.map(encode_enum))
                     .bind(encode_datetime(Utc::now()))
                     .bind(encode_enum(item.content_kind))
                     .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
@@ -2092,11 +2118,12 @@ async fn insert_item(
         r#"INSERT INTO "AddonMediaListItem" (
             "ProviderId", "DisplayTitle", "Episode", "Kind", "MediaItemId",
             "Rank", "Season", "Title", "AddonMediaListId", "Year", "SourceUrl",
-            "Availability", "AvailabilityReason", "AvailabilityUpdated", "ContentKind",
+            "Availability", "AvailabilityReason", "AvailabilityReasonCode",
+            "AvailabilityUpdated", "ContentKind",
             "CollectionRole", "DurationSeconds", "ParentProviderId", "FragmentStartSeconds",
             "FragmentEndSeconds", "AdditionalImageUrls", "ProviderMetadataJson",
             "MetadataOverrideJson", "ProviderLiveness", "EffectiveLiveness"
-           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)"#,
+           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)"#,
     )
     .bind(&item.provider_id)
     .bind(&item.display_title)
@@ -2110,6 +2137,7 @@ async fn insert_item(
     .bind(&item.source_url)
     .bind(encode_enum(item.availability))
     .bind(&item.availability_reason)
+    .bind(item.availability_reason_code.map(encode_enum))
     .bind(encode_datetime(Utc::now()))
     .bind(encode_enum(item.content_kind))
     .bind(encode_enum(item.collection_role))
@@ -2163,25 +2191,26 @@ struct ExistingItem {
 }
 
 pub(crate) async fn ensure_not_publishing(pool: &Pool<Db>, list_id: EntityId) -> Result<()> {
-    let state = sqlx::query_as::<_, (i32, Option<String>, bool)>(
-        r#"SELECT "ReviewState", "PublicationJournalJson", EXISTS (
+    let has_live_lease = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (
                SELECT 1
                FROM "AddonMediaListPublicationJob" AS "job"
                JOIN "ManagedLibraryOperation" AS "operation"
                  ON "operation"."Id" = "job"."OperationId"
+               JOIN "ManagedLibraryLease" AS "lease"
+                 ON "lease"."OperationId" = "operation"."Id"
+                AND "lease"."OwnerToken" = "operation"."OwnerToken"
                WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
-                 AND "operation"."State" IN (?, ?, ?)
+                 AND "operation"."State" = ?
+                 AND "lease"."LeaseExpiresAt" > ?
            )
            FROM "AddonMediaList" WHERE "Id" = ?"#,
     )
     .bind(encode_enum(
-        ersatzrs_domain::ManagedLibraryOperationState::Queued,
-    ))
-    .bind(encode_enum(
         ersatzrs_domain::ManagedLibraryOperationState::Running,
     ))
-    .bind(encode_enum(
-        ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+    .bind(crate::repositories::common::encode_datetime(
+        chrono::Utc::now(),
     ))
     .bind(list_id)
     .fetch_optional(pool)
@@ -2191,38 +2220,36 @@ pub(crate) async fn ensure_not_publishing(pool: &Pool<Db>, list_id: EntityId) ->
         kind: "add-on media list",
         id: list_id,
     })?;
-    if state.0 == 3
-        || state
-            .1
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-        || state.2
-    {
+    if has_live_lease {
         return Err(publication_in_progress());
     }
     Ok(())
 }
 
-async fn ensure_not_publishing_tx(tx: &mut Transaction<'_, Db>, list_id: EntityId) -> Result<()> {
-    let state = sqlx::query_as::<_, (i32, Option<String>, bool)>(
-        r#"SELECT "ReviewState", "PublicationJournalJson", EXISTS (
+pub(crate) async fn ensure_not_publishing_tx(
+    tx: &mut Transaction<'_, Db>,
+    list_id: EntityId,
+) -> Result<()> {
+    let has_live_lease = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (
                SELECT 1
                FROM "AddonMediaListPublicationJob" AS "job"
                JOIN "ManagedLibraryOperation" AS "operation"
                  ON "operation"."Id" = "job"."OperationId"
+               JOIN "ManagedLibraryLease" AS "lease"
+                 ON "lease"."OperationId" = "operation"."Id"
+                AND "lease"."OwnerToken" = "operation"."OwnerToken"
                WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
-                 AND "operation"."State" IN (?, ?, ?)
+                 AND "operation"."State" = ?
+                 AND "lease"."LeaseExpiresAt" > ?
            )
            FROM "AddonMediaList" WHERE "Id" = ?"#,
     )
     .bind(encode_enum(
-        ersatzrs_domain::ManagedLibraryOperationState::Queued,
-    ))
-    .bind(encode_enum(
         ersatzrs_domain::ManagedLibraryOperationState::Running,
     ))
-    .bind(encode_enum(
-        ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+    .bind(crate::repositories::common::encode_datetime(
+        chrono::Utc::now(),
     ))
     .bind(list_id)
     .fetch_optional(&mut **tx)
@@ -2232,13 +2259,7 @@ async fn ensure_not_publishing_tx(tx: &mut Transaction<'_, Db>, list_id: EntityI
         kind: "add-on media list",
         id: list_id,
     })?;
-    if state.0 == 3
-        || state
-            .1
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-        || state.2
-    {
+    if has_live_lease {
         return Err(publication_in_progress());
     }
     Ok(())
@@ -2876,6 +2897,7 @@ mod generated_playlist_refresh_tests {
             .merge_detail_item(
                 LIST_ID,
                 &EnumeratedAddonMediaListItem {
+                    availability_reason_code: None,
                     provider_id: "provider-one".to_owned(),
                     rank: 0,
                     display_title: "Changed provider title".to_owned(),

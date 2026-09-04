@@ -441,6 +441,45 @@ INSERT INTO "AddonMediaListItem" (
   };
 }
 
+function seedPublicationRecovery(
+  seed: MetadataSeed,
+  state: 'expired' | 'failed',
+): { jobId: number; operationId: number; secretMarker: string } {
+  const operationId = seed.listId * 10 + 7;
+  const jobId = operationId + 1;
+  const secretMarker = 'session_cookie=must-not-reach-operator-output';
+  const operationState = state === 'expired' ? 1 : 4;
+  const phase = state === 'expired' ? 3 : 4;
+  sqlite(`
+UPDATE "AddonMediaList"
+SET "ReviewState" = 3, "PublicationJournalJson" = '{}',
+    "PublicationStartedAt" = '2026-09-03T12:00:00Z'
+WHERE "Id" = ${seed.listId};
+INSERT INTO "ManagedLibraryOperation" (
+  "Id", "LibraryId", "OwnerToken", "Kind", "State", "AttemptCount",
+  "LeaseOwner", "LeaseExpiresAt", "DiagnosticCode", "Diagnostic", "CreatedAt", "UpdatedAt"
+) VALUES (
+  ${operationId},
+  (SELECT "LibraryId" FROM "AddonMediaListLibrary" WHERE "AddonMediaListId" = ${seed.listId}),
+  'e2e-recovery-owner', 1, ${operationState}, 2,
+  'expired-worker', '2026-09-03T12:01:00Z', 'sharing_violation',
+  '${secretMarker}', '2026-09-03T12:00:00Z', '2026-09-03T12:02:00Z'
+);
+INSERT INTO "AddonMediaListPublicationJob" (
+  "Id", "OperationId", "AddonMediaListId", "Generation", "SavedRevision",
+  "TargetPublishedRevision", "Phase", "OriginalFailureCode",
+  "OriginalFailureDiagnostic", "RecoveryDiagnostic", "CreatedAt", "UpdatedAt"
+) VALUES (
+  ${jobId}, ${operationId}, ${seed.listId}, 7,
+  (SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId}),
+  (SELECT "PublishedRevision" + 1 FROM "AddonMediaList" WHERE "Id" = ${seed.listId}),
+  ${phase}, 'sharing_violation', '${secretMarker}', '${secretMarker}',
+  '2026-09-03T12:00:00Z', '2026-09-03T12:02:00Z'
+);
+`);
+  return { jobId, operationId, secretMarker };
+}
+
 function seedPaginationItems(seed: MetadataSeed, testInfo: TestInfo): void {
   const suffix = testInfo.project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const values = Array.from({ length: 26 }, (_, offset) => {
@@ -761,6 +800,72 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
           { timeout: 30_000 },
         )
         .toBe('2,1,3');
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('shows expired publication status and retries the exact generation', async ({
+    page,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    const recovery = seedPublicationRecovery(seed, 'expired');
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+
+    const alert = page.getByTestId('addon-publication-recovery');
+    await expect(page.getByRole('button', { name: 'Publish blocked' })).toBeDisabled();
+    await expect(alert).toContainText('Committing');
+    await expect(alert).toContainText('2');
+    await expect(alert).toContainText('sharing_violation');
+    await expect(alert).not.toContainText(recovery.secretMarker);
+    await expect(alert.getByRole('button', { name: 'Retry recovery' })).toBeVisible();
+    await expect(
+      alert.getByRole('button', { name: 'Restore previous revision' }),
+    ).toBeVisible();
+
+    await alert.getByRole('button', { name: 'Retry recovery' }).click();
+    await expect
+      .poll(() =>
+        sqlite(
+          `SELECT "Kind" FROM "ManagedLibraryOperation" WHERE "Id" = ${recovery.operationId};`,
+        ),
+      )
+      .toBe('6');
+    expect(
+      sqlite(`SELECT COUNT(*) || ',' || MAX("Generation")
+FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ${seed.listId};`),
+    ).toBe('1,7');
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('restores the exact failed generation without JavaScript', async ({
+    browser,
+    baseURL,
+  }, testInfo) => {
+    const seed = seedMetadataEditor(testInfo);
+    const recovery = seedPublicationRecovery(seed, 'failed');
+    const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+    const noJsPage = await context.newPage();
+    try {
+      await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
+      const alert = noJsPage.getByTestId('addon-publication-recovery');
+      await expect(alert).toContainText('Restoring files');
+      await expect(alert).not.toContainText(recovery.secretMarker);
+      await alert.getByRole('button', { name: 'Restore previous revision' }).click();
+      await expect(noJsPage).toHaveURL(
+        new RegExp(`/media/addon-lists/${seed.listId}\\?status=recovery-queued$`),
+      );
+      expect(
+        sqlite(`SELECT COUNT(*) || ',' || MAX("Generation")
+FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ${seed.listId};`),
+      ).toBe('1,7');
+      expect(
+        sqlite(
+          `SELECT "Kind" FROM "ManagedLibraryOperation" WHERE "Id" = ${recovery.operationId};`,
+        ),
+      ).toBe('6');
     } finally {
       await context.close();
     }
@@ -1515,16 +1620,20 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
       )
       .toBe('tag-120');
 
-    reviewRow = itemsTable
-      .locator('li[data-item-id]')
-      .filter({ hasText: seed.secondTitle })
-      .first();
-    await reviewRow.getByRole('checkbox', { name: 'Include in publication' }).uncheck();
-    await expect
-      .poll(() =>
-        sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),
-      )
-      .toBe('0');
+    sqlite(`
+UPDATE "AddonMediaListItem"
+SET "Availability" = 1, "AvailabilityReason" = 'not_playable',
+    "AvailabilityReasonCode" = 1
+WHERE "Id" = ${seed.secondItemId};
+`);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+    const restrictedMetric = page.locator('dl div').filter({
+      has: page.getByText('Restricted items excluded from this revision', { exact: true }),
+    });
+    await expect(restrictedMetric).toContainText('1');
+    expect(
+      sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),
+    ).toBe('1');
 
     const generalPanel = editorForm.getByTestId('addon-general-metadata');
     const posterUpload = generalPanel.getByLabel(/^upload image: poster$/i);
@@ -1595,10 +1704,17 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
     expect(
       sqlite(`SELECT "Published" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),
     ).toBe('0');
+    expect(
+      sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),
+    ).toBe('1');
 
     sqlite(`
-UPDATE "AddonMediaListItem" SET "Availability" = 0, "AvailabilityReason" = NULL
+UPDATE "AddonMediaListItem"
+SET "Availability" = 0, "AvailabilityReason" = NULL, "AvailabilityReasonCode" = NULL
 WHERE "Id" = ${seed.secondItemId};
+UPDATE "AddonMediaList"
+SET "ReviewState" = 1, "DraftRevision" = "DraftRevision" + 1
+WHERE "Id" = ${seed.listId};
 `);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     const reincludeRow = page
@@ -1606,12 +1722,9 @@ WHERE "Id" = ${seed.secondItemId};
       .locator('li[data-item-id]')
       .filter({ hasText: seed.secondTitle })
       .first();
-    await reincludeRow.getByRole('checkbox', { name: 'Include in publication' }).check();
-    await expect
-      .poll(() =>
-        sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),
-      )
-      .toBe('1');
+    await expect(
+      reincludeRow.getByRole('checkbox', { name: 'Include in publication' }),
+    ).toBeChecked();
     const secondPublishNavigation = page.waitForEvent('framenavigated');
     await page.getByRole('button', { name: /^publish list$/i }).click();
     await secondPublishNavigation;

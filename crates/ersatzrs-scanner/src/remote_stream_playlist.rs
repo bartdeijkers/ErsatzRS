@@ -1639,7 +1639,8 @@ async fn load_staged_playlist_entries(
     let rows = sqlx::query_as::<_, StagedItemRow>(
         r#"SELECT "ProviderId", "SourceUrl", "Title", "DisplayTitle", "DurationSeconds",
                   "ParentProviderId", "FragmentStartSeconds", "FragmentEndSeconds",
-                  "Availability", "AvailabilityReason", "ContentKind", "AdditionalImageUrls",
+                  "PublishedAvailability", "PublishedAvailabilityReason",
+                  "ContentKind", "AdditionalImageUrls",
                   "PublishedLiveness"
            FROM "AddonMediaListItem"
            WHERE "AddonMediaListId" = ? AND "Published" = 1

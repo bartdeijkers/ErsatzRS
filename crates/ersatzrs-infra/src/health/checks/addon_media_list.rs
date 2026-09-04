@@ -3,7 +3,6 @@ use super::super::{
     HealthCheckStatus, Pool, Result, Row,
 };
 
-const STUCK_PUBLICATION_MINUTES: i64 = 15;
 const STUCK_IMPORT_MINUTES: i64 = 15;
 
 pub(crate) struct AddonMediaListHealthCheck {
@@ -83,8 +82,10 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .collect::<Vec<_>>();
         let presentation_failures = presentation_failures(&rows);
         let publication_failures = publication_failures(&rows);
-        let stuck_publications = stuck_publications(&rows)?;
-        let coordinator_failures = publication_coordinator_failures(&self.pool).await?;
+        let PublicationCoordinatorHealth {
+            failures: coordinator_failures,
+            active: coordinator_activity,
+        } = publication_coordinator_health(&self.pool).await?;
         let invalid_metadata = invalid_metadata(&self.pool).await?;
         let missing_artwork = missing_artwork(&self.pool).await?;
         let import_failures = import_failures(&self.pool).await?;
@@ -99,7 +100,6 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .chain(failures)
             .chain(presentation_failures)
             .chain(publication_failures)
-            .chain(stuck_publications)
             .chain(coordinator_failures)
             .chain(invalid_metadata)
             .chain(missing_artwork)
@@ -174,15 +174,30 @@ impl HealthCheck for AddonMediaListHealthCheck {
             .count();
         if pending_review > 0 {
             let import_activity = import_activity(&self.pool).await?;
+            let publication_activity = if coordinator_activity.is_empty() {
+                String::new()
+            } else {
+                format!("; {}", coordinator_activity.join("; "))
+            };
             return Ok(HealthCheckResult::new(
                 self.title(),
                 HealthCheckStatus::Warning,
                 format!(
-                    "{pending_review} add-on media list(s) await metadata review or publication; {} overview import(s) are active and {} detail item(s) are delayed by retry or provider pacing",
+                    "{pending_review} add-on media list(s) await metadata review or publication; {} overview import(s) are active and {} detail item(s) are delayed by retry or provider pacing{publication_activity}",
                     import_activity.active,
                     detail_activity.waiting,
                 ),
                 "Review and publish the imported metadata before using the new revision",
+            )
+            .with_link("/media/addon-lists"));
+        }
+
+        if !coordinator_activity.is_empty() {
+            return Ok(HealthCheckResult::new(
+                self.title(),
+                HealthCheckStatus::Pass,
+                coordinator_activity.join("; "),
+                "Add-on list publication is making or awaiting progress",
             )
             .with_link("/media/addon-lists"));
         }
@@ -214,6 +229,12 @@ struct DetailActivity {
     active: i64,
     waiting: i64,
     failed: i64,
+}
+
+#[derive(Debug, Default)]
+struct PublicationCoordinatorHealth {
+    failures: Vec<String>,
+    active: Vec<String>,
 }
 
 async fn import_activity(pool: &Pool<Db>) -> Result<ImportActivity> {
@@ -387,34 +408,6 @@ async fn detail_wait_setting_failures(pool: &Pool<Db>) -> Vec<String> {
         .err()
         .map(|error| format!("Add-on detail wait settings are invalid: {error}"))
         .into_iter()
-        .collect()
-}
-
-fn stuck_publications(rows: &[crate::db::DbRow]) -> Result<Vec<String>> {
-    let threshold = chrono::Utc::now() - chrono::Duration::minutes(STUCK_PUBLICATION_MINUTES);
-    rows.iter()
-        .filter(|row| {
-            row.try_get::<i64, _>("ReviewState")
-                .is_ok_and(|state| state == 3)
-        })
-        .filter_map(|row| {
-            let name = row
-                .try_get::<String, _>("Name")
-                .unwrap_or_else(|_| "List".to_owned());
-            let raw = row
-                .try_get::<Option<String>, _>("PublicationStartedAt")
-                .ok()?;
-            match crate::repositories::common::decode_optional_datetime(
-                "add-on publication start",
-                raw,
-            ) {
-                Ok(Some(started)) if started > threshold => None,
-                Ok(_) => Some(Ok(format!(
-                    "{name}: publication has been in progress for more than {STUCK_PUBLICATION_MINUTES} minutes"
-                ))),
-                Err(error) => Some(Err(HealthCheckError::Database(error.to_string()))),
-            }
-        })
         .collect()
 }
 
@@ -623,44 +616,116 @@ fn publication_failures(rows: &[crate::db::DbRow]) -> Vec<String> {
         .collect()
 }
 
-async fn publication_coordinator_failures(pool: &Pool<Db>) -> Result<Vec<String>> {
+async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCoordinatorHealth> {
     let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
-    let failed: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*)
+    let rows = sqlx::query(
+        r#"SELECT "job"."Generation", "job"."Phase",
+                  "job"."OriginalFailureCode", "job"."RecoveryDiagnostic",
+                  "job"."UpdatedAt" AS "LastProgressAt",
+                  "operation"."State", "operation"."AttemptCount",
+                  "operation"."DiagnosticCode",
+                  EXISTS (
+                      SELECT 1 FROM "ManagedLibraryLease" AS "lease"
+                      WHERE "lease"."OperationId" = "operation"."Id"
+                        AND "lease"."OwnerToken" = "operation"."OwnerToken"
+                        AND "lease"."LeaseExpiresAt" > ?
+                  ) AS "LiveLease"
            FROM "AddonMediaListPublicationJob" AS "job"
            JOIN "ManagedLibraryOperation" AS "operation"
              ON "operation"."Id" = "job"."OperationId"
-           WHERE "operation"."State" = 4 AND "job"."Phase" <> 7"#,
+           WHERE "job"."Generation" = (
+                     SELECT MAX("latest"."Generation")
+                     FROM "AddonMediaListPublicationJob" AS "latest"
+                     WHERE "latest"."AddonMediaListId" = "job"."AddonMediaListId"
+                 )
+             AND ("operation"."State" <> 3 OR "job"."Phase" <> 7)
+           ORDER BY "job"."UpdatedAt" DESC, "job"."Id" DESC"#,
     )
-    .fetch_one(pool)
+    .bind(&now)
+    .fetch_all(pool)
     .await
     .map_err(sqlx_error)?;
-    let expired: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*)
-           FROM "AddonMediaListPublicationJob" AS "job"
-           JOIN "ManagedLibraryOperation" AS "operation"
-             ON "operation"."Id" = "job"."OperationId"
-           WHERE "operation"."State" = 1
-             AND "operation"."LeaseExpiresAt" IS NOT NULL
-             AND "operation"."LeaseExpiresAt" <= ?
-             AND "job"."Phase" <> 7"#,
-    )
-    .bind(now)
-    .fetch_one(pool)
-    .await
-    .map_err(sqlx_error)?;
-    let mut failures = Vec::new();
-    if failed > 0 {
-        failures.push(format!(
-            "{failed} durable add-on publication job(s) stopped before a safe terminal phase"
-        ));
+    let mut status = PublicationCoordinatorHealth::default();
+    for row in rows.into_iter().take(5) {
+        let state: i64 = row.try_get("State").map_err(sqlx_error)?;
+        let phase: i64 = row.try_get("Phase").map_err(sqlx_error)?;
+        let live_lease: bool = row.try_get("LiveLease").map_err(sqlx_error)?;
+        let visible_state = match state {
+            0 => "queued",
+            1 if live_lease && matches!(phase, 4..=6) => "restoring",
+            1 if live_lease => "publishing",
+            1 => "expired",
+            2 => "waiting",
+            4 => "failed",
+            _ => continue,
+        };
+        let last_progress: String = row.try_get("LastProgressAt").map_err(sqlx_error)?;
+        let attempts: i64 = row.try_get("AttemptCount").map_err(sqlx_error)?;
+        let generation: i64 = row.try_get("Generation").map_err(sqlx_error)?;
+        let original: Option<String> = row.try_get("OriginalFailureCode").map_err(sqlx_error)?;
+        let operation: Option<String> = row.try_get("DiagnosticCode").map_err(sqlx_error)?;
+        let reason = original.or(operation).map_or_else(
+            || match visible_state {
+                "expired" => "lease_expired".to_owned(),
+                "waiting" => "waiting_to_retry".to_owned(),
+                "failed" => "publication_failed".to_owned(),
+                _ => "none".to_owned(),
+            },
+            |value| redacted_publication_code(&value),
+        );
+        let recovery_diagnostic: Option<String> =
+            row.try_get("RecoveryDiagnostic").map_err(sqlx_error)?;
+        let recovery_marker = if recovery_diagnostic
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            ", recovery diagnostic recorded"
+        } else {
+            ""
+        };
+        if matches!(visible_state, "failed" | "expired" | "waiting") {
+            status.failures.push(format!(
+                "publication generation {generation} {visible_state} in {} after {attempts} attempt(s); last progress {last_progress}; original reason {reason}{recovery_marker}",
+                publication_phase_name(phase)
+            ));
+        } else {
+            status.active.push(format!(
+                "publication generation {generation} {visible_state} in {} after {attempts} attempt(s); last progress {last_progress}",
+                publication_phase_name(phase)
+            ));
+        }
     }
-    if expired > 0 {
-        failures.push(format!(
-            "{expired} durable add-on publication lease(s) expired and await worker recovery"
-        ));
+    Ok(status)
+}
+
+fn publication_phase_name(phase: i64) -> &'static str {
+    match phase {
+        0 => "awaiting lease",
+        1 => "staging",
+        2 => "scanning",
+        3 => "committing",
+        4 => "restoring files",
+        5 => "restoring projection",
+        6 => "reconciling",
+        7 => "complete",
+        8 => "verifying",
+        9 => "cleaning up",
+        _ => "unknown phase",
     }
-    Ok(failures)
+}
+
+fn redacted_publication_code(value: &str) -> String {
+    let normalized = value.trim().to_ascii_lowercase();
+    if !normalized.is_empty()
+        && normalized.len() <= 96
+        && normalized.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'_' | b'-')
+        })
+    {
+        normalized
+    } else {
+        "publication_failed".to_owned()
+    }
 }
 
 async fn count_missing_replacements(pool: &Pool<Db>) -> Result<i64> {
@@ -670,6 +735,8 @@ async fn count_missing_replacements(pool: &Pool<Db>) -> Result<i64> {
            LEFT JOIN "AddonMediaListItemReplacement" AS "replacement"
              ON "replacement"."AddonMediaListItemId" = "item"."Id"
            WHERE "item"."Availability" = 1
+             AND ("item"."AvailabilityReasonCode" IS NULL
+                  OR "item"."AvailabilityReasonCode" = 2)
              AND "replacement"."AddonMediaListItemId" IS NULL"#,
     )
     .fetch_one(pool)
@@ -707,6 +774,7 @@ mod tests {
 
     use super::*;
 
+    #[allow(clippy::too_many_lines)]
     async fn fixture_pool() -> Pool<Db> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
@@ -737,6 +805,7 @@ mod tests {
                 "Included" INTEGER NOT NULL DEFAULT 1,
                 "Published" INTEGER NOT NULL DEFAULT 0,
                 "Availability" INTEGER NOT NULL DEFAULT 0,
+                "AvailabilityReasonCode" INTEGER NULL,
                 "ProviderMetadataJson" TEXT NOT NULL DEFAULT '{}',
                 "MetadataOverrideJson" TEXT NOT NULL DEFAULT '{}',
                 "MetadataConflictJson" TEXT NULL
@@ -780,12 +849,25 @@ mod tests {
             CREATE TABLE "ManagedLibraryOperation" (
                 "Id" INTEGER PRIMARY KEY,
                 "State" INTEGER NOT NULL,
-                "LeaseExpiresAt" TEXT NULL
+                "OwnerToken" TEXT NOT NULL DEFAULT 'owner',
+                "LeaseExpiresAt" TEXT NULL,
+                "AttemptCount" INTEGER NOT NULL DEFAULT 0,
+                "DiagnosticCode" TEXT NULL
+            );
+            CREATE TABLE "ManagedLibraryLease" (
+                "OperationId" INTEGER PRIMARY KEY,
+                "OwnerToken" TEXT NOT NULL DEFAULT 'owner',
+                "LeaseExpiresAt" TEXT NOT NULL
             );
             CREATE TABLE "AddonMediaListPublicationJob" (
                 "Id" INTEGER PRIMARY KEY,
                 "OperationId" INTEGER NOT NULL,
-                "Phase" INTEGER NOT NULL
+                "AddonMediaListId" INTEGER NOT NULL DEFAULT 1,
+                "Generation" INTEGER NOT NULL DEFAULT 1,
+                "Phase" INTEGER NOT NULL,
+                "OriginalFailureCode" TEXT NULL,
+                "RecoveryDiagnostic" TEXT NULL,
+                "UpdatedAt" TEXT NOT NULL DEFAULT '2026-09-03T00:00:00Z'
             );
             CREATE TABLE "AddonProviderHostCooldown" (
                 "ProviderHost" TEXT PRIMARY KEY,
@@ -861,7 +943,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reports_stuck_publication() {
+    async fn reports_expired_publication_as_recovery_required_not_live_work() {
         let pool = fixture_pool().await;
         sqlx::query(
             r#"INSERT INTO "AddonMediaList" (
@@ -871,13 +953,76 @@ mod tests {
         .execute(&pool)
         .await
         .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "ManagedLibraryOperation" ("Id", "State", "AttemptCount")
+               VALUES (10, 1, 2)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("expired operation");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListPublicationJob" (
+                   "Id", "OperationId", "Generation", "Phase", "OriginalFailureCode"
+               ) VALUES (20, 10, 4, 4, 'sharing_violation')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("publication job");
 
         let result = AddonMediaListHealthCheck::new(pool)
             .check()
             .await
             .expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Fail);
-        assert!(result.message.contains("publication has been in progress"));
+        assert!(result.message.contains("generation 4 expired"));
+        assert!(result.message.contains("restoring files"));
+        assert!(result.message.contains("sharing_violation"));
+    }
+
+    #[tokio::test]
+    async fn reports_live_publication_phase_attempts_and_progress() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                    "Id", "AddonId", "Name", "ReviewState", "ProviderMetadataJson"
+               ) VALUES (1, 'org.example.list', 'Fixture', 3, '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "ManagedLibraryOperation" ("Id", "State", "AttemptCount")
+               VALUES (10, 1, 3)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("active operation");
+        sqlx::query(
+            r#"INSERT INTO "ManagedLibraryLease" ("OperationId", "LeaseExpiresAt")
+               VALUES (10, '2999-01-01T00:00:00Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("live lease");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListPublicationJob" (
+                   "Id", "OperationId", "Generation", "Phase", "UpdatedAt"
+               ) VALUES (20, 10, 5, 1, '2026-09-03T12:34:56Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("publication job");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result
+            .message
+            .contains("generation 5 publishing in staging"));
+        assert!(result.message.contains("after 3 attempt(s)"));
+        assert!(result.message.contains("2026-09-03T12:34:56Z"));
     }
 
     #[tokio::test]
@@ -1124,8 +1269,6 @@ mod tests {
             .await
             .expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Fail);
-        assert!(result
-            .message
-            .contains("stopped before a safe terminal phase"));
+        assert!(result.message.contains("generation 1 failed in committing"));
     }
 }

@@ -6,7 +6,7 @@ use ersatzrs_addon_contract::{
     AddonDependency, AddonPanel, AddonPanelBlock, AddonPermissions, AddonSettingDefinition,
     AddonSettingKind, CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1,
     CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4,
-    CAPABILITY_MEDIA_LIST_LIST_V5,
+    CAPABILITY_MEDIA_LIST_LIST_V5, CAPABILITY_MEDIA_LIST_LIST_V6,
 };
 use leptos::{html, prelude::*};
 use leptos_router::hooks::{use_params_map, use_query_map};
@@ -1164,6 +1164,7 @@ fn supports_media_list_import(capabilities: &[String]) -> bool {
                 | CAPABILITY_MEDIA_LIST_LIST_V3
                 | CAPABILITY_MEDIA_LIST_LIST_V4
                 | CAPABILITY_MEDIA_LIST_LIST_V5
+                | CAPABILITY_MEDIA_LIST_LIST_V6
         )
     })
 }

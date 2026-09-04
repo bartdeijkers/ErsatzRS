@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use ersatzrs_addon_contract::{
     conform_media_list_discover_output, conform_media_list_enrich_output,
     conform_media_list_output, validate_operator_source_url, AddonArtworkRole as WireArtworkRole,
+    AddonMediaListAvailabilityReason as WireAvailabilityReason,
     AddonMediaListContentKind as WireContentKind,
     AddonMediaListItemAvailability as WireAvailability, AddonMediaListItemKind as WireItemKind,
     AddonMediaListItemRole as WireItemRole, AddonMediaListRecord, AddonMetadataDocument,
@@ -14,9 +15,9 @@ use ersatzrs_addon_contract::{
     MediaListEnrichRequest, MediaListEnrichmentResult, RemoteStreamLiveness as WireLiveness,
     CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
     CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5,
-    MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS, MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES,
-    MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES, MAX_MEDIA_LIST_OUTPUT_BYTES, MAX_PROVIDER_ID_BYTES,
-    OPERATION_CODE_UNSUPPORTED_URL,
+    CAPABILITY_MEDIA_LIST_LIST_V6, MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS,
+    MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES, MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES,
+    MAX_MEDIA_LIST_OUTPUT_BYTES, MAX_PROVIDER_ID_BYTES, OPERATION_CODE_UNSUPPORTED_URL,
 };
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
@@ -204,7 +205,9 @@ fn managed_runtime_context() -> AddonRuntimeContext {
 }
 
 fn selected_record_capability(manifest: &ersatzrs_addon_contract::AddonManifest) -> &'static str {
-    if manifest.has_capability(CAPABILITY_MEDIA_LIST_LIST_V5) {
+    if manifest.has_capability(CAPABILITY_MEDIA_LIST_LIST_V6) {
+        CAPABILITY_MEDIA_LIST_LIST_V6
+    } else if manifest.has_capability(CAPABILITY_MEDIA_LIST_LIST_V5) {
         CAPABILITY_MEDIA_LIST_LIST_V5
     } else if manifest.has_capability(CAPABILITY_MEDIA_LIST_LIST_V4) {
         CAPABILITY_MEDIA_LIST_LIST_V4
@@ -243,6 +246,11 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
                 RepositoryError::unavailable("load media-list add-on", "add-on is not installed")
             })?;
         let capability = if installation
+            .manifest
+            .has_capability(CAPABILITY_MEDIA_LIST_LIST_V6)
+        {
+            CAPABILITY_MEDIA_LIST_LIST_V6
+        } else if installation
             .manifest
             .has_capability(CAPABILITY_MEDIA_LIST_LIST_V5)
         {
@@ -307,20 +315,7 @@ impl AddonMediaListProvider for InstalledAddonMediaListProvider {
             )
         })?;
 
-        let mut list = decode_media_list_output_for_capability(
-            &output,
-            matches!(
-                capability,
-                CAPABILITY_MEDIA_LIST_LIST_V3
-                    | CAPABILITY_MEDIA_LIST_LIST_V4
-                    | CAPABILITY_MEDIA_LIST_LIST_V5
-            ),
-            matches!(
-                capability,
-                CAPABILITY_MEDIA_LIST_LIST_V4 | CAPABILITY_MEDIA_LIST_LIST_V5
-            ),
-            capability == CAPABILITY_MEDIA_LIST_LIST_V5,
-        )?;
+        let mut list = decode_media_list_output_for_capability(&output, capability)?;
         if !chapter_input.trim().is_empty() {
             add_chapter_fragments(&mut list, addon_id, chapter_input)?;
         }
@@ -403,6 +398,7 @@ fn add_chapter_fragments(
             source_url: Some(fragment_url),
             availability: full.availability,
             availability_reason: full.availability_reason.clone(),
+            availability_reason_code: full.availability_reason_code,
             content_kind: full.content_kind,
             collection_role: full.collection_role,
             duration_seconds: end.map(|end| end - start),
@@ -419,16 +415,32 @@ fn add_chapter_fragments(
 
 #[cfg(test)]
 fn decode_media_list_output(output: &[u8]) -> Result<EnumeratedAddonMediaList> {
-    decode_media_list_output_for_capability(output, true, true, true)
+    decode_media_list_output_for_capability(output, CAPABILITY_MEDIA_LIST_LIST_V6)
 }
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn decode_media_list_output_for_capability(
     output: &[u8],
-    supports_v3_fields: bool,
-    supports_v4_metadata: bool,
-    supports_v5_liveness: bool,
+    capability: &str,
 ) -> Result<EnumeratedAddonMediaList> {
+    let supports_v3_fields = matches!(
+        capability,
+        CAPABILITY_MEDIA_LIST_LIST_V3
+            | CAPABILITY_MEDIA_LIST_LIST_V4
+            | CAPABILITY_MEDIA_LIST_LIST_V5
+            | CAPABILITY_MEDIA_LIST_LIST_V6
+    );
+    let supports_v4_metadata = matches!(
+        capability,
+        CAPABILITY_MEDIA_LIST_LIST_V4
+            | CAPABILITY_MEDIA_LIST_LIST_V5
+            | CAPABILITY_MEDIA_LIST_LIST_V6
+    );
+    let supports_v5_liveness = matches!(
+        capability,
+        CAPABILITY_MEDIA_LIST_LIST_V5 | CAPABILITY_MEDIA_LIST_LIST_V6
+    );
+    let supports_v6_availability_reason = capability == CAPABILITY_MEDIA_LIST_LIST_V6;
     let mut records = conform_media_list_output(output)
         .map_err(|error| RepositoryError::Decode {
             kind: "media-list add-on output",
@@ -499,6 +511,7 @@ pub(crate) fn decode_media_list_output_for_capability(
             source_url,
             availability,
             availability_reason,
+            availability_reason_code,
             content_kind,
             collection_role,
             duration_seconds,
@@ -563,6 +576,12 @@ pub(crate) fn decode_media_list_output_for_capability(
                 value: "liveness requires media-list.list.v5".to_owned(),
             });
         }
+        if availability_reason_code.is_some() && !supports_v6_availability_reason {
+            return Err(RepositoryError::Decode {
+                kind: "media-list add-on output",
+                value: "typed availability reasons require media-list.list.v6".to_owned(),
+            });
+        }
         if !supports_v4_metadata
             && (matches!(content_kind, WireContentKind::Song | WireContentKind::Image)
                 || collection_role != WireItemRole::Auto)
@@ -599,6 +618,7 @@ pub(crate) fn decode_media_list_output_for_capability(
             source_url,
             availability: domain_availability(availability),
             availability_reason,
+            availability_reason_code: availability_reason_code.map(domain_availability_reason),
             content_kind: domain_content_kind(content_kind),
             collection_role: domain_item_role(collection_role),
             duration_seconds,
@@ -727,6 +747,22 @@ const fn domain_availability(
     }
 }
 
+const fn domain_availability_reason(
+    reason: WireAvailabilityReason,
+) -> ersatzrs_domain::AddonMediaListAvailabilityReason {
+    match reason {
+        WireAvailabilityReason::AuthenticationRequired => {
+            ersatzrs_domain::AddonMediaListAvailabilityReason::AuthenticationRequired
+        }
+        WireAvailabilityReason::ContentRestricted => {
+            ersatzrs_domain::AddonMediaListAvailabilityReason::ContentRestricted
+        }
+        WireAvailabilityReason::Unavailable => {
+            ersatzrs_domain::AddonMediaListAvailabilityReason::Unavailable
+        }
+    }
+}
+
 const fn domain_content_kind(kind: WireContentKind) -> ersatzrs_domain::AddonMediaListContentKind {
     match kind {
         WireContentKind::Auto => ersatzrs_domain::AddonMediaListContentKind::Auto,
@@ -763,7 +799,10 @@ mod tests {
         add_chapter_fragments, decode_media_list_output, decode_media_list_output_for_capability,
         require_chapter_capability,
     };
-    use ersatzrs_addon_contract::{CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3};
+    use ersatzrs_addon_contract::{
+        CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3,
+        CAPABILITY_MEDIA_LIST_LIST_V5, CAPABILITY_MEDIA_LIST_LIST_V6,
+    };
 
     /// Refuses to enumerate unless the host supplied its managed `FFmpeg`
     /// paths, the way a manifest declaring `managed_ffmpeg` expects.
@@ -1114,7 +1153,7 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
         let output = br#"{"record_type":"list","provider_id":"x","name":"X"}
 {"record_type":"item","provider_id":"one","rank":0,"display_title":"One","title":"One","kind":"remote_stream","source_url":"https://example.test/one","duration_seconds":60}
 "#;
-        let error = decode_media_list_output_for_capability(output, false, false, false)
+        let error = decode_media_list_output_for_capability(output, CAPABILITY_MEDIA_LIST_LIST_V2)
             .expect_err("v2 must not accept v3 fields");
         assert!(error.to_string().contains("media-list.list.v3"));
     }
@@ -1163,6 +1202,23 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
                 ersatzrs_domain::AddonMediaListItemAvailability::Available,
             ]
         );
+    }
+
+    #[test]
+    fn v6_decodes_typed_access_restrictions_without_parsing_provider_text() {
+        let output = br#"{"record_type":"list","provider_id":"x","name":"X"}
+{"record_type":"item","provider_id":"one","rank":0,"display_title":"One","title":"One","kind":"remote_stream","source_url":"https://example.test/one","availability":"unavailable","availability_reason":"provider-specific text","availability_reason_code":"authentication_required"}
+"#;
+        let list = decode_media_list_output_for_capability(output, CAPABILITY_MEDIA_LIST_LIST_V6)
+            .expect("v6 availability reason");
+        assert_eq!(
+            list.items[0].availability_reason_code,
+            Some(ersatzrs_domain::AddonMediaListAvailabilityReason::AuthenticationRequired)
+        );
+
+        let error = decode_media_list_output_for_capability(output, CAPABILITY_MEDIA_LIST_LIST_V5)
+            .expect_err("v5 must reject the v6 field");
+        assert!(error.to_string().contains("media-list.list.v6"));
     }
 
     #[test]

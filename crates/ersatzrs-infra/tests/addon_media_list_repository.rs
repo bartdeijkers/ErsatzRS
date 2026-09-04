@@ -156,6 +156,71 @@ async fn publication_readiness_distinguishes_blockers_from_optional_review_work(
 }
 
 #[tokio::test]
+async fn publication_readiness_excludes_only_typed_access_restrictions() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount",
+              "ProviderMetadataJson"
+           ) VALUES (
+              1, 'org.example.lists', 'fixture/restricted',
+              'https://example.invalid/restricted', 'Restricted fixture', 2,
+              '{"title":"Restricted fixture"}'
+           )"#,
+    )
+    .await
+    .unwrap();
+    seed_numbering_item(&pool, 10, 0, None, None, true, None, "Restricted").await;
+    seed_numbering_item(&pool, 11, 1, None, None, true, None, "Playable").await;
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Availability" = 1, "AvailabilityReason" = 'not_playable',
+               "AvailabilityReasonCode" = ?, "ProviderLiveness" = 1,
+               "EffectiveLiveness" = 1, "DurationSeconds" = 60
+           WHERE "Id" = 10"#,
+    )
+    .bind(1_i32)
+    .execute(&pool)
+    .await
+    .unwrap();
+    pool.execute(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Availability" = 0, "ProviderLiveness" = 1,
+               "EffectiveLiveness" = 1, "DurationSeconds" = 60
+           WHERE "Id" = 11"#,
+    )
+    .await
+    .unwrap();
+
+    let readiness = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert!(readiness.blockers.is_empty(), "{:#?}", readiness.blockers);
+    assert_eq!(readiness.included_count, 1);
+    assert_eq!(readiness.restricted_excluded_count, 1);
+    assert_eq!(readiness.recommendation_count, 1);
+
+    pool.execute(
+        r#"UPDATE "AddonMediaListItem"
+           SET "AvailabilityReasonCode" = 2 WHERE "Id" = 10"#,
+    )
+    .await
+    .unwrap();
+    let generic_unavailable = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert!(generic_unavailable.blockers.iter().any(|blocker| {
+        blocker.kind == AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement
+    }));
+}
+
+#[tokio::test]
 async fn addon_media_list_repository_propagates_closed_pool_failures() {
     let pool = common::test_db().await;
     let repositories = make_repositories(pool.clone());
