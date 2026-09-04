@@ -2411,7 +2411,7 @@ their later owning milestones.
 id         = 'amm-k-03'
 phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Open Remote Stream details from add-on-list search results'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-02']
@@ -2424,8 +2424,10 @@ search navigation behaves like movie/episode cards with SSR, hydration,
 keyboard, narrow-screen, Chromium, and Firefox proof.
 '''
 evidence = '''
-Not started. search_href deliberately returns an empty string for RemoteStream
-and the router has only list/page Remote Stream routes.
+Implementation planning started 2026-09-04. This slice is reserved for the
+canonical Remote Stream search href and one localized detail surface; lifecycle
+preview, revision management, refresh, provider options, and tool maintenance
+remain in their later owning milestones.
 '''
 
 [[milestone]]
