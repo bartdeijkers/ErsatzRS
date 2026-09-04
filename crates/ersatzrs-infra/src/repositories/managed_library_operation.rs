@@ -846,9 +846,9 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
                 phase: Some(next),
                 attempt: Some(claim.operation.attempt_count),
                 filesystem_transition,
-                published_item_count: counts.published_item_count,
-                playlist_item_count: counts.playlist_item_count,
-                artwork_count: counts.artwork_count,
+                published_item_count: counts.published_items,
+                playlist_item_count: counts.playlist_items,
+                artwork_count: counts.artwork,
                 occurred_at: &now,
                 ..PublicationEventWrite::default()
             },
@@ -1212,9 +1212,9 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
                 phase: Some(AddonMediaListPublicationPhase::Verifying),
                 attempt: Some(claim.operation.attempt_count),
                 filesystem_transition,
-                published_item_count: counts.published_item_count,
-                playlist_item_count: counts.playlist_item_count,
-                artwork_count: counts.artwork_count,
+                published_item_count: counts.published_items,
+                playlist_item_count: counts.playlist_items,
+                artwork_count: counts.artwork,
                 outcome: Some(outcome),
                 occurred_at: &now,
                 ..PublicationEventWrite::default()
@@ -1470,9 +1470,9 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
                 filesystem_transition: Some(
                     AddonMediaListPublicationFilesystemTransition::CleanupCompleted,
                 ),
-                published_item_count: counts.published_item_count,
-                playlist_item_count: counts.playlist_item_count,
-                artwork_count: counts.artwork_count,
+                published_item_count: counts.published_items,
+                playlist_item_count: counts.playlist_items,
+                artwork_count: counts.artwork,
                 outcome: Some(outcome),
                 occurred_at: &now,
                 ..PublicationEventWrite::default()
@@ -1584,9 +1584,9 @@ impl Default for PublicationEventWrite<'_> {
 
 #[derive(Clone, Copy, Default)]
 struct PublicationCounts {
-    published_item_count: Option<i64>,
-    playlist_item_count: Option<i64>,
-    artwork_count: Option<i64>,
+    published_items: Option<i64>,
+    playlist_items: Option<i64>,
+    artwork: Option<i64>,
 }
 
 async fn append_publication_event_for_operation_tx(
@@ -1849,9 +1849,9 @@ async fn publication_counts_tx(
         return Ok(PublicationCounts::default());
     };
     Ok(PublicationCounts {
-        published_item_count: Some(row.try_get("PublishedItemCount").repository()?),
-        playlist_item_count: Some(row.try_get("PlaylistItemCount").repository()?),
-        artwork_count: Some(row.try_get("ArtworkCount").repository()?),
+        published_items: Some(row.try_get("PublishedItemCount").repository()?),
+        playlist_items: Some(row.try_get("PlaylistItemCount").repository()?),
+        artwork: Some(row.try_get("ArtworkCount").repository()?),
     })
 }
 
@@ -2843,26 +2843,7 @@ mod tests {
         let database_path = database_directory.path().join("recovery.db");
         let database_url = format!("sqlite://{}?mode=rwc", database_path.display());
         let pool = pool_with_library_at(&database_url).await;
-        sqlx::query(
-            r#"INSERT INTO "AddonInstallation" (
-                   "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
-                   "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
-               ) VALUES ('org.example.recovery', '1.0.0', 1, 'package', 'content', '{}',
-                         'addons/recovery', '2026-09-02T00:00:00Z', '2026-09-02T00:00:00Z')"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("seed installation");
-        sqlx::query(
-            r#"INSERT INTO "AddonMediaList" (
-                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
-                   "DraftRevision", "PublishedRevision"
-               ) VALUES (1, 'org.example.recovery', 'list', 'https://example.invalid/list',
-                         'List', 3, 1)"#,
-        )
-        .execute(&pool)
-        .await
-        .expect("seed list");
+        seed_publication_list(&pool, "org.example.recovery").await;
         let repository = SqliteManagedLibraryOperationRepository(pool);
         let queued = repository
             .enqueue_publication(1, 1, 3, 2)
@@ -2925,16 +2906,23 @@ mod tests {
                 .await
                 .expect("reopen recovery database"),
         );
+        assert_reclaimed_publication_failure(&repository, queued.operation.id, started).await;
+    }
 
+    async fn assert_reclaimed_publication_failure(
+        repository: &SqliteManagedLibraryOperationRepository,
+        operation_id: EntityId,
+        started: DateTime<Utc>,
+    ) {
         let reclaimed = repository
             .claim_next(started + Duration::seconds(11))
             .await
             .expect("reclaim retry")
             .expect("eligible retry");
-        assert_eq!(reclaimed.operation.id, queued.operation.id);
+        assert_eq!(reclaimed.operation.id, operation_id);
         assert_eq!(reclaimed.operation.attempt_count, 2);
         let job = repository
-            .publication_job(queued.operation.id)
+            .publication_job(operation_id)
             .await
             .expect("load publication job")
             .expect("publication job");
@@ -3178,118 +3166,8 @@ mod tests {
         let mut tx = crate::db::begin_write(&pool)
             .await
             .expect("begin retention transaction");
-        for generation in 1_i32..=52 {
-            let operation_id = i64::from(generation) + 100;
-            let completed_at = if generation == 1 {
-                "2026-07-01T00:00:00Z"
-            } else {
-                "2026-09-03T00:00:00Z"
-            };
-            sqlx::query(
-                r#"INSERT INTO "ManagedLibraryOperation" (
-                       "Id", "LibraryId", "OwnerToken", "Kind", "State",
-                       "CreatedAt", "UpdatedAt", "CompletedAt"
-                   ) VALUES (?, 1, ?, ?, ?, ?, ?, ?)"#,
-            )
-            .bind(operation_id)
-            .bind(format!("retained-{generation}"))
-            .bind(encode_enum(ManagedLibraryOperationKind::Publication))
-            .bind(encode_enum(ManagedLibraryOperationState::Completed))
-            .bind(completed_at)
-            .bind(completed_at)
-            .bind(completed_at)
-            .execute(&mut *tx)
-            .await
-            .expect("seed completed operation");
-            sqlx::query(
-                r#"INSERT INTO "AddonMediaListPublicationJob" (
-                       "Id", "OperationId", "AddonMediaListId", "Generation",
-                       "SavedRevision", "TargetPublishedRevision", "Phase", "Outcome",
-                       "CreatedAt", "UpdatedAt", "CompletedAt"
-                   ) VALUES (?, ?, 1, ?, 3, 2, ?, ?, ?, ?, ?)"#,
-            )
-            .bind(operation_id)
-            .bind(operation_id)
-            .bind(generation)
-            .bind(encode_enum(AddonMediaListPublicationPhase::Complete))
-            .bind(encode_enum(AddonMediaListPublicationOutcome::Published))
-            .bind(completed_at)
-            .bind(completed_at)
-            .bind(completed_at)
-            .execute(&mut *tx)
-            .await
-            .expect("seed completed publication job");
-            append_publication_event_for_job_tx(
-                &mut tx,
-                operation_id,
-                "completed",
-                PublicationEventWrite {
-                    kind: AddonMediaListPublicationEventKind::Completed,
-                    phase: Some(AddonMediaListPublicationPhase::Complete),
-                    outcome: Some(AddonMediaListPublicationOutcome::Published),
-                    occurred_at: completed_at,
-                    ..PublicationEventWrite::default()
-                },
-            )
-            .await
-            .expect("seed completed publication event");
-        }
-        for (operation_id, state) in [
-            (201_i64, ManagedLibraryOperationState::Completed),
-            (202_i64, ManagedLibraryOperationState::Failed),
-        ] {
-            sqlx::query(
-                r#"INSERT INTO "ManagedLibraryOperation" (
-                       "Id", "LibraryId", "OwnerToken", "Kind", "State",
-                       "CreatedAt", "UpdatedAt", "CompletedAt"
-                   ) VALUES (?, 1, ?, ?, ?, '2026-07-01T00:00:00Z',
-                             '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z')"#,
-            )
-            .bind(operation_id)
-            .bind(format!("second-{operation_id}"))
-            .bind(encode_enum(ManagedLibraryOperationKind::Publication))
-            .bind(encode_enum(state))
-            .execute(&mut *tx)
-            .await
-            .expect("seed second-list operation");
-            sqlx::query(
-                r#"INSERT INTO "AddonMediaListPublicationJob" (
-                       "Id", "OperationId", "AddonMediaListId", "Generation",
-                       "SavedRevision", "TargetPublishedRevision", "Phase",
-                       "CreatedAt", "UpdatedAt", "CompletedAt"
-                   ) VALUES (?, ?, 2, ?, 3, 2, ?, '2026-07-01T00:00:00Z',
-                             '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z')"#,
-            )
-            .bind(operation_id)
-            .bind(operation_id)
-            .bind(i32::try_from(operation_id - 200).expect("generation"))
-            .bind(encode_enum(
-                if state == ManagedLibraryOperationState::Completed {
-                    AddonMediaListPublicationPhase::Complete
-                } else {
-                    AddonMediaListPublicationPhase::RestoringFiles
-                },
-            ))
-            .execute(&mut *tx)
-            .await
-            .expect("seed second-list publication job");
-            append_publication_event_for_job_tx(
-                &mut tx,
-                operation_id,
-                "retained",
-                PublicationEventWrite {
-                    kind: if state == ManagedLibraryOperationState::Completed {
-                        AddonMediaListPublicationEventKind::Completed
-                    } else {
-                        AddonMediaListPublicationEventKind::RecoveryFailure
-                    },
-                    occurred_at: "2026-07-01T00:00:00Z",
-                    ..PublicationEventWrite::default()
-                },
-            )
-            .await
-            .expect("seed second-list event");
-        }
+        seed_completed_publication_history(&mut tx).await;
+        seed_recovery_publication_history(&mut tx).await;
         tx.commit().await.expect("commit retention fixtures");
 
         let repository = SqliteManagedLibraryOperationRepository(pool.clone());
@@ -3327,6 +3205,124 @@ mod tests {
                 .await
                 .expect("count retained job rows");
         assert_eq!(job_count, 54);
+    }
+
+    async fn seed_completed_publication_history(tx: &mut sqlx::Transaction<'_, crate::db::Db>) {
+        for generation in 1_i32..=52 {
+            let operation_id = i64::from(generation) + 100;
+            let completed_at = if generation == 1 {
+                "2026-07-01T00:00:00Z"
+            } else {
+                "2026-09-03T00:00:00Z"
+            };
+            sqlx::query(
+                r#"INSERT INTO "ManagedLibraryOperation" (
+                       "Id", "LibraryId", "OwnerToken", "Kind", "State",
+                       "CreatedAt", "UpdatedAt", "CompletedAt"
+                   ) VALUES (?, 1, ?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(operation_id)
+            .bind(format!("retained-{generation}"))
+            .bind(encode_enum(ManagedLibraryOperationKind::Publication))
+            .bind(encode_enum(ManagedLibraryOperationState::Completed))
+            .bind(completed_at)
+            .bind(completed_at)
+            .bind(completed_at)
+            .execute(&mut **tx)
+            .await
+            .expect("seed completed operation");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListPublicationJob" (
+                       "Id", "OperationId", "AddonMediaListId", "Generation",
+                       "SavedRevision", "TargetPublishedRevision", "Phase", "Outcome",
+                       "CreatedAt", "UpdatedAt", "CompletedAt"
+                   ) VALUES (?, ?, 1, ?, 3, 2, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(operation_id)
+            .bind(operation_id)
+            .bind(generation)
+            .bind(encode_enum(AddonMediaListPublicationPhase::Complete))
+            .bind(encode_enum(AddonMediaListPublicationOutcome::Published))
+            .bind(completed_at)
+            .bind(completed_at)
+            .bind(completed_at)
+            .execute(&mut **tx)
+            .await
+            .expect("seed completed publication job");
+            append_publication_event_for_job_tx(
+                tx,
+                operation_id,
+                "completed",
+                PublicationEventWrite {
+                    kind: AddonMediaListPublicationEventKind::Completed,
+                    phase: Some(AddonMediaListPublicationPhase::Complete),
+                    outcome: Some(AddonMediaListPublicationOutcome::Published),
+                    occurred_at: completed_at,
+                    ..PublicationEventWrite::default()
+                },
+            )
+            .await
+            .expect("seed completed publication event");
+        }
+    }
+
+    async fn seed_recovery_publication_history(tx: &mut sqlx::Transaction<'_, crate::db::Db>) {
+        for (operation_id, state) in [
+            (201_i64, ManagedLibraryOperationState::Completed),
+            (202_i64, ManagedLibraryOperationState::Failed),
+        ] {
+            sqlx::query(
+                r#"INSERT INTO "ManagedLibraryOperation" (
+                       "Id", "LibraryId", "OwnerToken", "Kind", "State",
+                       "CreatedAt", "UpdatedAt", "CompletedAt"
+                   ) VALUES (?, 1, ?, ?, ?, '2026-07-01T00:00:00Z',
+                             '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z')"#,
+            )
+            .bind(operation_id)
+            .bind(format!("second-{operation_id}"))
+            .bind(encode_enum(ManagedLibraryOperationKind::Publication))
+            .bind(encode_enum(state))
+            .execute(&mut **tx)
+            .await
+            .expect("seed second-list operation");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListPublicationJob" (
+                       "Id", "OperationId", "AddonMediaListId", "Generation",
+                       "SavedRevision", "TargetPublishedRevision", "Phase",
+                       "CreatedAt", "UpdatedAt", "CompletedAt"
+                   ) VALUES (?, ?, 2, ?, 3, 2, ?, '2026-07-01T00:00:00Z',
+                             '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z')"#,
+            )
+            .bind(operation_id)
+            .bind(operation_id)
+            .bind(i32::try_from(operation_id - 200).expect("generation"))
+            .bind(encode_enum(
+                if state == ManagedLibraryOperationState::Completed {
+                    AddonMediaListPublicationPhase::Complete
+                } else {
+                    AddonMediaListPublicationPhase::RestoringFiles
+                },
+            ))
+            .execute(&mut **tx)
+            .await
+            .expect("seed second-list publication job");
+            append_publication_event_for_job_tx(
+                tx,
+                operation_id,
+                "retained",
+                PublicationEventWrite {
+                    kind: if state == ManagedLibraryOperationState::Completed {
+                        AddonMediaListPublicationEventKind::Completed
+                    } else {
+                        AddonMediaListPublicationEventKind::RecoveryFailure
+                    },
+                    occurred_at: "2026-07-01T00:00:00Z",
+                    ..PublicationEventWrite::default()
+                },
+            )
+            .await
+            .expect("seed second-list event");
+        }
     }
 
     async fn seed_publication_list(pool: &DbPool, addon_id: &str) {

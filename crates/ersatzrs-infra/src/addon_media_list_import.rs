@@ -280,7 +280,7 @@ impl AddonMediaListImportCoordinator {
                 )));
             }
             sqlx::query(
-                r#"SELECT "Id", "ReviewState", "PublicationJournalJson"
+                r#"SELECT "Id", "AddonId", "ReviewState", "PublicationJournalJson"
                    FROM "AddonMediaList" WHERE "Id" = ?"#,
             )
             .bind(list_id)
@@ -289,7 +289,7 @@ impl AddonMediaListImportCoordinator {
             .repository()?
         } else {
             sqlx::query(
-                r#"SELECT "Id", "ReviewState", "PublicationJournalJson" FROM "AddonMediaList"
+                r#"SELECT "Id", "AddonId", "ReviewState", "PublicationJournalJson" FROM "AddonMediaList"
                    WHERE "AddonId" = ? AND "SourceUrl" = ?
                    ORDER BY "Id" LIMIT 1"#,
             )
@@ -301,6 +301,7 @@ impl AddonMediaListImportCoordinator {
         };
         let list_id = if let Some(row) = existing {
             let id: EntityId = row.try_get("Id").repository()?;
+            let previous_addon_id: String = row.try_get("AddonId").repository()?;
             let review_state: i32 = row.try_get("ReviewState").repository()?;
             let publication_journal: Option<String> =
                 row.try_get("PublicationJournalJson").repository()?;
@@ -376,6 +377,13 @@ impl AddonMediaListImportCoordinator {
                         .to_owned(),
                 ));
             }
+            crate::addon_media_list_sync::reconcile_changed_addon_state_in_tx(
+                &mut tx,
+                id,
+                &previous_addon_id,
+                addon_id,
+            )
+            .await?;
             id
         } else {
             let host = Url::parse(&context.source_url)
@@ -2399,7 +2407,10 @@ mod tests {
 
     mod sqlite {
         use super::*;
-        use ersatzrs_core::repositories::AddonMediaListRepository as _;
+        use ersatzrs_core::repositories::{
+            AddonMediaListLifecycleRepository as _, AddonMediaListOptionSchemaRef,
+            AddonMediaListRepository as _,
+        };
 
         use crate::repositories::SqliteAddonMediaListRepository;
 
@@ -2508,6 +2519,244 @@ mod tests {
                 )
                 .await
                 .expect("queue overview import")
+        }
+
+        fn option_schema_fixture() -> (String, AddonMediaListOptionSchemaRef) {
+            let definition = serde_json::json!({
+                "id": "media-list.options.v1",
+                "options": [{
+                    "key": "enabled",
+                    "label": {"en-US": "Enabled"},
+                    "description": {"en-US": "Enable fixture behavior."},
+                    "scope": "both",
+                    "operation_targets": ["playback"],
+                    "applicability": "all",
+                    "kind": "boolean",
+                    "default": true
+                }]
+            })
+            .to_string();
+            let schema = AddonMediaListOptionSchemaRef {
+                addon_id: "org.example.fixture".into(),
+                capability_id: "media-list.options.v1".into(),
+                schema_digest: sha256_hex(definition.as_bytes()),
+            };
+            (definition, schema)
+        }
+
+        async fn install_replacement_addon(temporary: &tempfile::TempDir, pool: &DbPool) {
+            sqlx::query(
+                r#"INSERT INTO "AddonInstallation" (
+                       "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+                       "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+                   ) VALUES ('org.example.replacement', '1.0.0', 1, 'package-2', 'content-2',
+                             '{}', ?, ?, ?)"#,
+            )
+            .bind(
+                temporary
+                    .path()
+                    .join("replacement")
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+            .bind(encode_datetime(Utc::now()))
+            .bind(encode_datetime(Utc::now()))
+            .execute(pool)
+            .await
+            .expect("replacement add-on");
+        }
+
+        async fn seed_option_state(
+            pool: &DbPool,
+            list_id: EntityId,
+            definition: &str,
+            schema: &AddonMediaListOptionSchemaRef,
+        ) {
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListOptionSchema" (
+                       "Id", "AddonId", "CapabilityId", "SchemaDigest", "DefinitionJson", "CreatedAt"
+                   ) VALUES (101, 'org.example.fixture', 'media-list.options.v1', ?, ?,
+                             '2026-09-04 12:00:00')"#,
+            )
+            .bind(&schema.schema_digest)
+            .bind(definition)
+            .execute(pool)
+            .await
+            .expect("seed option schema");
+            sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "DraftOptionSchemaId" = 101, "DraftOptionValuesJson" = '{"enabled":true}'
+                   WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .execute(pool)
+            .await
+            .expect("seed list options");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListItem" (
+                       "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank", "Title",
+                       "DraftOptionOverridesJson"
+                   ) VALUES (102, ?, 'item', 'Item', 4, 0, 'Item', '{"enabled":false}')"#,
+            )
+            .bind(list_id)
+            .execute(pool)
+            .await
+            .expect("seed item options");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListRevision" (
+                       "Id", "AddonMediaListId", "Revision", "OptionSchemaId", "OptionValuesJson"
+                   ) VALUES (103, ?, 1, 101, '{"enabled":true}')"#,
+            )
+            .bind(list_id)
+            .execute(pool)
+            .await
+            .expect("seed published options");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListImportCheckpoint" (
+                       "Id", "AddonMediaListId", "RelativePath", "Generation", "Sha256",
+                       "EntryCount", "PromotedAt"
+                   ) VALUES (104, ?, 'checkpoints/provider.txt', 1, 'checkpoint-digest', 1,
+                             '2026-09-04 12:00:00')"#,
+            )
+            .bind(list_id)
+            .execute(pool)
+            .await
+            .expect("seed provider checkpoint");
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob" SET "CheckpointId" = 104
+                   WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .execute(pool)
+            .await
+            .expect("attach provider checkpoint");
+        }
+
+        async fn draft_option_state(
+            pool: &DbPool,
+            list_id: EntityId,
+        ) -> (Option<EntityId>, String, String) {
+            sqlx::query_as(
+                r#"SELECT "DraftOptionSchemaId", "DraftOptionValuesJson",
+                          (SELECT "DraftOptionOverridesJson" FROM "AddonMediaListItem" WHERE "Id" = 102)
+                   FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(pool)
+            .await
+            .expect("load draft option state")
+        }
+
+        async fn checkpoint_count(pool: &DbPool, list_id: EntityId) -> i64 {
+            sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListImportCheckpoint"
+                   WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(pool)
+            .await
+            .expect("load checkpoint count")
+        }
+
+        async fn assert_historical_options_survive_uninstall(
+            pool: &DbPool,
+            list_id: EntityId,
+            schema: &AddonMediaListOptionSchemaRef,
+        ) {
+            sqlx::query(r#"DELETE FROM "AddonInstallation" WHERE "AddonId" = ?"#)
+                .bind("org.example.fixture")
+                .execute(pool)
+                .await
+                .expect("uninstall the replaced add-on");
+            let repository = SqliteAddonMediaListRepository(pool.clone());
+            let historical_schema = repository
+                .option_schema(schema)
+                .await
+                .expect("load historical schema")
+                .expect("historical schema survives uninstall");
+            assert_eq!(&historical_schema.schema, schema);
+            let historical_options = repository
+                .published_options(list_id, 1, Some(schema))
+                .await
+                .expect("load historical published options")
+                .expect("historical published options survive uninstall");
+            assert_eq!(historical_options.schema.as_ref(), Some(schema));
+            assert_eq!(
+                historical_options.list_values.get("enabled"),
+                Some(&ersatzrs_domain::AddonMediaListOptionValue::Boolean(true))
+            );
+        }
+
+        #[tokio::test]
+        async fn resumable_same_addon_refresh_preserves_and_switch_clears_draft_options() {
+            let (temporary, pool, coordinator) = fixture().await;
+            let source_url = "https://provider.example.test/options";
+            let list_id = queue(
+                &coordinator,
+                source_url,
+                AddonMediaListDetailPolicy::ManualOnly,
+            )
+            .await;
+            let (option_definition, schema_ref) = option_schema_fixture();
+            install_replacement_addon(&temporary, &pool).await;
+            seed_option_state(&pool, list_id, &option_definition, &schema_ref).await;
+
+            coordinator
+                .queue_import(
+                    "org.example.fixture",
+                    &context(source_url),
+                    None,
+                    AddonMediaListContentKind::TelevisionEpisode,
+                    AddonMediaListDetailPolicy::ManualOnly,
+                    Some(list_id),
+                )
+                .await
+                .expect("queue same-add-on refresh");
+            assert_eq!(
+                draft_option_state(&pool, list_id).await,
+                (
+                    Some(101),
+                    r#"{"enabled":true}"#.into(),
+                    r#"{"enabled":false}"#.into()
+                )
+            );
+            assert_eq!(checkpoint_count(&pool, list_id).await, 1);
+
+            coordinator
+                .queue_import(
+                    "org.example.replacement",
+                    &context(source_url),
+                    None,
+                    AddonMediaListContentKind::TelevisionEpisode,
+                    AddonMediaListDetailPolicy::ManualOnly,
+                    Some(list_id),
+                )
+                .await
+                .expect("queue replacement add-on import");
+            assert_eq!(
+                draft_option_state(&pool, list_id).await,
+                (None, "{}".into(), "{}".into())
+            );
+            let retained_revision: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListRevision"
+                   WHERE "Id" = 103 AND "OptionSchemaId" = 101"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("load retained published revision");
+            assert_eq!(retained_revision, 1);
+            assert_eq!(checkpoint_count(&pool, list_id).await, 0);
+            let attached_checkpoint_jobs: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListImportJob"
+                   WHERE "AddonMediaListId" = ? AND "CheckpointId" IS NOT NULL"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("load cleared job checkpoint references");
+            assert_eq!(attached_checkpoint_jobs, 0);
+
+            assert_historical_options_survive_uninstall(&pool, list_id, &schema_ref).await;
         }
 
         #[tokio::test]

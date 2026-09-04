@@ -130,6 +130,7 @@ pub enum ManagedLibraryOperationKind {
     ProviderRefresh,
     Recovery,
     Reset,
+    Reconcile,
 }
 
 /// Durable lifecycle shared by managed-library scans and publication work.

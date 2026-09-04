@@ -1,4 +1,5 @@
 mod addon_media_list;
+mod addon_media_list_lifecycle;
 mod admin_media;
 mod admin_search;
 mod admin_settings;
@@ -37,6 +38,16 @@ pub use addon_media_list::{
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationContinuation,
     AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
     AddonMediaListRepository,
+};
+pub use addon_media_list_lifecycle::{
+    AddonMediaListArtifact, AddonMediaListDraftOptions, AddonMediaListImportCheckpoint,
+    AddonMediaListImportLifecycle, AddonMediaListItemOptionValues, AddonMediaListItemTombstone,
+    AddonMediaListLifecycleJob, AddonMediaListLifecycleRepository, AddonMediaListLifecycleSettings,
+    AddonMediaListOptionSchema, AddonMediaListOptionSchemaRef, AddonMediaListOptionValues,
+    AddonMediaListPublishedOptions, AddonProcessedArtifactPolicy, AddonToolMaintenanceAttempt,
+    CreateAddonMediaListLifecycleJob, PROCESSED_ARTIFACT_GLOBAL_BYTE_LIMIT_KEY,
+    PROCESSED_ARTIFACT_MAX_CONCURRENCY_KEY, PROCESSED_ARTIFACT_MINIMUM_FREE_BYTES_KEY,
+    PROCESSED_ARTIFACT_RETENTION_SECONDS_KEY,
 };
 pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,

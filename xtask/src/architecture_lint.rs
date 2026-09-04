@@ -22,6 +22,7 @@ const SCAN_SERVER_FN_SOURCE: &str = "crates/ersatzrs-web/src/admin/server_fns/li
 const SCAN_MAINTENANCE_SOURCE: &str = "crates/ersatzrs-infra/src/maintenance.rs";
 const CRATES_ROOT: &str = "crates";
 const ADDON_CONTRACT_ROOT: &str = "crates/ersatzrs-addon-contract";
+const OFFICIAL_YTDLP_ADDON_ID: &str = "org.ersatzrs.addon.yt-dlp";
 const PROVIDER_AVAILABILITY_TOKENS: &[&str] =
     &["premium_only", "subscriber_only", "needs_auth", "unlisted"];
 const ADMIN_ROOTS: &[&str] = &[
@@ -93,6 +94,7 @@ fn run_inner(opts: &Opts) -> Result<()> {
     check_scan_orchestration_boundary(workspace)?;
     check_write_transaction_begins(workspace)?;
     check_provider_availability_vocabulary_boundary(workspace)?;
+    check_official_addon_id_boundary(workspace)?;
     check_provider_neutral_media_pages(workspace)?;
     let counts = scan_admin_trees(workspace)?;
 
@@ -258,6 +260,146 @@ fn contains_ascii_identifier_token(contents: &[u8], token: &[u8]) -> bool {
             before.is_none_or(|byte| !is_identifier(*byte))
                 && after.is_none_or(|byte| !is_identifier(*byte))
         })
+}
+
+/// Keep the official add-on identity out of host production code.
+///
+/// The host may interpret provider-neutral capabilities and contracts, but it
+/// has no production use for the exact package identifier. Rejecting the
+/// literal itself also covers aliases, method calls, patterns, and macros.
+/// Only Rust sources below crate `src/` trees are inspected, and test-only
+/// syntax is ignored so fixtures can prove the guard without becoming a
+/// violation themselves.
+fn check_official_addon_id_boundary(workspace: &Path) -> Result<()> {
+    let root = workspace.join(CRATES_ROOT);
+    if !root.is_dir() {
+        anyhow::bail!("crates root does not exist: {}", root.display());
+    }
+
+    let mut files = Vec::new();
+    for entry in walkdir::WalkDir::new(&root) {
+        let entry = entry.context("walk crate source tree for official add-on identifiers")?;
+        let path = entry.path();
+        if entry.file_type().is_file()
+            && path.extension().is_some_and(|extension| extension == "rs")
+            && path
+                .components()
+                .any(|component| component.as_os_str() == "src")
+        {
+            files.push(path.to_path_buf());
+        }
+    }
+    files.sort();
+
+    let mut problems = Vec::new();
+    for path in files {
+        let source =
+            fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        if !source.contains(OFFICIAL_YTDLP_ADDON_ID) {
+            continue;
+        }
+        let display_path = path
+            .strip_prefix(workspace)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        problems.extend(
+            official_addon_id_problems(&display_path, &source)
+                .with_context(|| format!("parse {}", path.display()))?,
+        );
+    }
+
+    if !problems.is_empty() {
+        anyhow::bail!(
+            "official add-on identities must not select Rust host behavior: {}",
+            problems.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn official_addon_id_problems(display_path: &str, source: &str) -> Result<Vec<String>> {
+    let syntax = syn::parse_file(source)?;
+    let mut visitor = OfficialAddonIdVisitor::default();
+    visitor.visit_file(&syntax);
+    Ok(visitor
+        .lines
+        .into_iter()
+        .map(|line| format!("{display_path}:{line} contains the official yt-dlp add-on identifier"))
+        .collect())
+}
+
+#[derive(Default)]
+struct OfficialAddonIdVisitor {
+    lines: Vec<usize>,
+}
+
+impl<'ast> Visit<'ast> for OfficialAddonIdVisitor {
+    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_item_fn(self, item);
+        }
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_item_mod(self, item);
+        }
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_item_impl(self, item);
+        }
+    }
+
+    fn visit_item_const(&mut self, item: &'ast syn::ItemConst) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_item_const(self, item);
+        }
+    }
+
+    fn visit_item_static(&mut self, item: &'ast syn::ItemStatic) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_item_static(self, item);
+        }
+    }
+
+    fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        if !is_test_only(&item.attrs) {
+            syn::visit::visit_impl_item_fn(self, item);
+        }
+    }
+
+    fn visit_lit_str(&mut self, literal: &'ast syn::LitStr) {
+        if literal.value() == OFFICIAL_YTDLP_ADDON_ID {
+            self.lines.push(literal.span().start().line);
+        }
+    }
+
+    fn visit_macro(&mut self, expression: &'ast syn::Macro) {
+        for token in expression.tokens.clone() {
+            record_official_addon_id_macro_token(&token, &mut self.lines);
+        }
+    }
+}
+
+fn record_official_addon_id_macro_token(token: &proc_macro2::TokenTree, lines: &mut Vec<usize>) {
+    match token {
+        proc_macro2::TokenTree::Literal(literal) => {
+            if syn::parse_str::<syn::LitStr>(&literal.to_string())
+                .is_ok_and(|value| value.value() == OFFICIAL_YTDLP_ADDON_ID)
+            {
+                lines.push(literal.span().start().line);
+            }
+        }
+        proc_macro2::TokenTree::Group(group) => {
+            for token in group.stream() {
+                record_official_addon_id_macro_token(&token, lines);
+            }
+        }
+        proc_macro2::TokenTree::Ident(_) | proc_macro2::TokenTree::Punct(_) => {}
+    }
 }
 
 fn forbidden_provider_vocabulary(contents: &[u8]) -> Vec<&'static str> {
@@ -1470,6 +1612,76 @@ mod tests {
             forbidden_provider_vocabulary(b"premium_only and needs_auth"),
             ["premium_only", "needs_auth"]
         );
+    }
+
+    #[test]
+    fn official_addon_identifier_is_rejected_in_production_rust() {
+        let source = r#"
+            fn select_behavior(addon_id: &str) -> bool {
+                addon_id == "org.ersatzrs.addon.yt-dlp"
+            }
+
+            fn select_with_match(addon_id: &str) -> bool {
+                match addon_id {
+                    "org.ersatzrs.addon.yt-dlp" => true,
+                    _ => false,
+                }
+            }
+
+            fn select_with_matches(addon_id: &str) -> bool {
+                matches!(addon_id, "org.ersatzrs.addon.yt-dlp")
+            }
+
+            fn select_with_method(addon_id: &str) -> bool {
+                addon_id.eq("org.ersatzrs.addon.yt-dlp")
+            }
+
+            fn select_with_if_let(addon_id: Option<&str>) -> bool {
+                if let Some("org.ersatzrs.addon.yt-dlp") = addon_id {
+                    true
+                } else {
+                    false
+                }
+            }
+
+            const OFFICIAL_ADDON: &str = "org.ersatzrs.addon.yt-dlp";
+
+            fn select_with_alias(addon_id: &str) -> bool {
+                addon_id == OFFICIAL_ADDON
+            }
+        "#;
+        let problems = official_addon_id_problems("crates/demo/src/lib.rs", source)
+            .expect("fixture should parse");
+        assert_eq!(problems.len(), 6);
+        assert!(problems
+            .iter()
+            .all(|problem| problem.contains("official yt-dlp add-on identifier")));
+    }
+
+    #[test]
+    fn official_addon_identifier_is_ignored_in_tests_and_comments() {
+        let source = r#"
+            // The official package id is org.ersatzrs.addon.yt-dlp.
+            const TOOL_NAME: &str = "yt-dlp";
+
+            #[cfg(test)]
+            mod tests {
+                const ADDON_ID: &str = "org.ersatzrs.addon.yt-dlp";
+
+                #[test]
+                fn fixture_can_name_the_official_package() {
+                    assert_eq!(ADDON_ID, "org.ersatzrs.addon.yt-dlp");
+                }
+            }
+
+            #[test]
+            fn top_level_fixture_can_name_the_official_package() {
+                assert_eq!("org.ersatzrs.addon.yt-dlp", "org.ersatzrs.addon.yt-dlp");
+            }
+        "#;
+        assert!(official_addon_id_problems("crates/demo/src/lib.rs", source)
+            .expect("fixture should parse")
+            .is_empty());
     }
 
     #[test]

@@ -1591,7 +1591,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                     format!("publication marker recovery task failed: {error}"),
                 )
             })?
-            .map_err(publication_fs_repository_error)?;
+            .map_err(|error| publication_fs_repository_error(&error))?;
             if outcome == AddonMediaListPublicationOutcome::Published {
                 ensure_current_publication_claim(&self.0, id, fence, true).await?;
                 let prepare_paths = paths.clone();
@@ -1605,7 +1605,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                         format!("legacy publication fingerprint task failed: {error}"),
                     )
                 })?
-                .map_err(publication_fs_repository_error)?;
+                .map_err(|error| publication_fs_repository_error(&error))?;
                 ensure_current_publication_claim(&self.0, id, fence, true).await?;
                 let persist_paths = paths.clone();
                 tokio::task::spawn_blocking(move || {
@@ -1622,7 +1622,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                         format!("legacy publication sealing task failed: {error}"),
                     )
                 })?
-                .map_err(publication_fs_repository_error)?;
+                .map_err(|error| publication_fs_repository_error(&error))?;
             }
         }
         let role = publication_outcome_role(outcome);
@@ -1636,7 +1636,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 format!("publication verification task failed: {error}"),
             )
         })?
-        .map_err(publication_fs_repository_error)?;
+        .map_err(|error| publication_fs_repository_error(&error))?;
         ensure_current_publication_claim(&self.0, id, fence, true).await?;
         verify_publication_database(
             &self.0,
@@ -1714,7 +1714,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 format!("publication verification task failed: {error}"),
             )
         })?
-        .map_err(publication_fs_repository_error)?;
+        .map_err(|error| publication_fs_repository_error(&error))?;
         ensure_current_publication_claim(&self.0, id, fence, true).await?;
         verify_publication_database(
             &self.0,
@@ -1736,7 +1736,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 format!("publication cleanup task failed: {error}"),
             )
         })?
-        .map_err(publication_fs_repository_error)?;
+        .map_err(|error| publication_fs_repository_error(&error))?;
         ensure_current_publication_claim(&self.0, id, fence, true).await?;
 
         let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
@@ -2558,7 +2558,7 @@ async fn commit_staged_publication_impl(
             format!("publication fingerprint task failed: {error}"),
         )
     })?
-    .map_err(publication_fs_repository_error)?;
+    .map_err(|error| publication_fs_repository_error(&error))?;
     if let Some(fence) = fence {
         ensure_current_publication_claim(&repository.0, id, fence, true).await?;
     }
@@ -2573,7 +2573,7 @@ async fn commit_staged_publication_impl(
             format!("publication sealing task failed: {error}"),
         )
     })?
-    .map_err(publication_fs_repository_error)?;
+    .map_err(|error| publication_fs_repository_error(&error))?;
     if let Some(fence) = fence {
         ensure_current_publication_claim(&repository.0, id, fence, true).await?;
     }
@@ -3225,7 +3225,7 @@ async fn create_publication_backup(
             format!("publication backup task failed: {error}"),
         )
     })?
-    .map_err(publication_fs_repository_error)?;
+    .map_err(|error| publication_fs_repository_error(&error))?;
     if let Some(fence) = fence {
         if let Err(error) =
             ensure_current_publication_claim(pool, list_id, fence.claim(), false).await
@@ -3313,7 +3313,7 @@ async fn cleanup_publication_backup_async(
             format!("publication cleanup task failed: {error}"),
         )
     })?
-    .map_err(publication_fs_repository_error)
+    .map_err(|error| publication_fs_repository_error(&error))
 }
 
 fn publication_fs_identity(
@@ -3387,7 +3387,7 @@ const fn publication_outcome_role(
 }
 
 fn publication_fs_repository_error(
-    error: addon_publication_fs::PublicationFsError,
+    error: &addon_publication_fs::PublicationFsError,
 ) -> RepositoryError {
     let (category, os_error_code) = error.redacted_cause();
     let message = error.to_string();
@@ -3442,7 +3442,7 @@ async fn restore_publication_files(
                 format!("publication marker recovery task failed: {error}"),
             )
         })?
-        .map_err(publication_fs_repository_error)?;
+        .map_err(|error| publication_fs_repository_error(&error))?;
     }
 
     let operation_seed = operation_id.unwrap_or(list_id);
@@ -3501,7 +3501,7 @@ where
                 retry_attempt = retry_attempt.saturating_add(1);
                 tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
             }
-            Err(error) => return Err(publication_fs_repository_error(error)),
+            Err(error) => return Err(publication_fs_repository_error(&error)),
         }
     }
 }
@@ -7694,7 +7694,7 @@ mod tests {
             .open(paths.managed.join("item.yml"))
             .expect("held item without delete sharing");
         let boundary_error = super::publication_fs_repository_error(
-            super::addon_publication_fs::restore_step(&paths, identity)
+            &super::addon_publication_fs::restore_step(&paths, identity)
                 .expect_err("held handle blocks the restore boundary"),
         );
         let boundary_cause = boundary_error

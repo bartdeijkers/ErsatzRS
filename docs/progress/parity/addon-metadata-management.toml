@@ -56,8 +56,8 @@ provider-neutral access restrictions, item-scoped publication exclusion,
 redacted durable status, and guarded localized Retry/Restore actions for the
 hydrated and no-JavaScript editor. Focused acceptance is complete; AMM-N-03
 retains the integrated packaged Windows restart proof.
-AMM-J-04 adds bounded redacted causal history and matching operator
-diagnostics. ADR 0085 opens the remaining AMM-K through AMM-N work.
+AMM-J-04 adds bounded redacted causal history. AMM-K-01 adds fail-closed,
+provider-neutral option and lifecycle persistence; later behavior remains open.
 '''
 
 [[debt]]
@@ -74,7 +74,7 @@ id          = 'addon-list-lifecycle-actions-and-navigation-are-incomplete'
 description = 'Provide truthful Publish blocked remediation, a complete reset-and-reload operation, source/publication/downstream impact preview, bounded revision comparison/restore, always-visible inline list/item metadata, optional episode numbering, Name-before-Id list layout, accessible dialog/table behavior, and a real Remote Stream details route from add-on-list search results.'
 discovered  = '2026-09-01'
 adr         = '0085'
-evidence    = 'The current action model hides Publish when validation blockers exist and reports Publishing from the review-state flag even for an unclaimable recovery journal; blocker copy has no clearing command. No reset/reload, source preflight, general published-to-draft diff, downstream impact, or routine revision comparison/restore exists. General metadata is gated by both an Edit metadata link and icon, the hero title is display-only, SeasonEpisodeMissing is a hard blocker, the list table orders Id before Name, and search_href deliberately returns an empty Remote Stream href. The shared dialog lacks focus containment/aria-labelledby and shared sortable headings are pointer-only without aria-sort. Tracked by AMM-K and plans/addon-list-lifecycle-broadening.md.'
+evidence    = 'The current action model hides Publish when validation blockers exist and reports Publishing from the review-state flag even for an unclaimable recovery journal; blocker copy has no clearing command. No reset/reload, source preflight, general published-to-draft diff, downstream impact, or routine revision comparison/restore exists. General metadata is gated by both an Edit metadata link and icon, the hero title is display-only, SeasonEpisodeMissing is a hard blocker, the list table orders Id before Name, and search_href deliberately returns an empty Remote Stream href. The shared dialog lacks focus containment/aria-labelledby and shared sortable headings are pointer-only without aria-sort. AMM-K-01 now persists fenced reset/reconcile job and retained-revision foundations without enabling those commands or UI prematurely. Tracked by AMM-K and plans/addon-list-lifecycle-broadening.md.'
 resolved    = false
 
 [[debt]]
@@ -82,7 +82,7 @@ id          = 'addon-list-refresh-has-no-cadence-or-incremental-checkpoint'
 description = 'Replace Boolean daily refresh with daily, weekly, monthly, yearly, and never; use a transactionally promoted yt-dlp archive with observable safe early stop to load only new identities; reconcile provider removals/reordering without erasing operator work; refresh complete playlist metadata on an empty item delta; and make review versus additions-only automatic publication explicit.'
 discovered  = '2026-09-01'
 adr         = '0085'
-evidence    = 'Both current coordinators select AutoRefresh = 1 with a one-day LastUpdate cutoff. The official yt-dlp discover adapter re-enumerates flat playlist pages, has no archive path, and cannot guarantee rich list summary/tags from flat output. Official yt-dlp documents --force-write-archive and separately documents --break-on-existing; archive suppression alone does not prove enumeration stopped, and unconditional early stop can miss reordered insertions. No non-destructive full reconcile, two-observation tombstone, or explicit refresh-publication policy exists. Tracked by AMM-L and plans/addon-list-lifecycle-broadening.md.'
+evidence    = 'Both current coordinators select AutoRefresh = 1 with a one-day LastUpdate cutoff. The official yt-dlp discover adapter re-enumerates flat playlist pages, has no archive path, and cannot guarantee rich list summary/tags from flat output. Official yt-dlp documents --force-write-archive and separately documents --break-on-existing; archive suppression alone does not prove enumeration stopped, and unconditional early stop can miss reordered insertions. AMM-K-01 persists typed cadence/publication policy, fenced checkpoints, incremental strategy, and two-observation tombstone state, but AMM-L still owns execution and reconciliation behavior. Tracked by AMM-L and plans/addon-list-lifecycle-broadening.md.'
 resolved    = false
 
 [[debt]]
@@ -90,7 +90,7 @@ id          = 'yt-dlp-list-items-lack-access-sponsorblock-and-subtitle-options'
 description = 'Add inherited list defaults, nullable per-item overrides, bulk preview/undo, and redacted access testing for Firefox, Chrome, or Chromium without persisting cookie material; checked-by-default SponsorBlock removal for finite media under explicit storage budgets; and human-authored default/fallback subtitle artifacts that play on channels.'
 discovered  = '2026-09-01'
 adr         = '0085'
-evidence    = 'The official package currently has no list/item option inheritance, bulk mutation, access-test, or artifact input and its playback command streams directly to stdout. yt-dlp documents browser-cookie enums, --sponsorblock-remove as video-file post-processing, and --write-subs with --no-write-auto-subs. ADR 0052 already implements global subtitle-language precedence, but generated Remote Streams receive no provider subtitle rows. The proposed transient processed cache has no operator-visible global/per-list byte ceilings, minimum-free-space reservation, retention/concurrency, or safe LRU cleanup contract. Tracked by AMM-M and plans/addon-list-lifecycle-broadening.md.'
+evidence    = 'The official package currently has no bulk mutation, access-test, or artifact input and its playback command streams directly to stdout. yt-dlp documents browser-cookie enums, --sponsorblock-remove as video-file post-processing, and --write-subs with --no-write-auto-subs. ADR 0052 already implements global subtitle-language precedence, but generated Remote Streams receive no provider subtitle rows. AMM-K-01 adds schema-declared inherited list/item option storage plus artifact ownership and budget foundations; AMM-M still owns provider declarations, operator UX, production, cleanup, and playback projection. Tracked by AMM-M and plans/addon-list-lifecycle-broadening.md.'
 resolved    = false
 
 [[debt]]
@@ -98,7 +98,7 @@ id          = 'enabled-yt-dlp-tool-is-not-maintained-by-ersatzrs'
 description = 'Run one controlled yt-dlp self-update at every ErsatzRS start and at least daily while its add-on is enabled, with permission review, durable leases, before/after version and digest, post-update validation, last-known-good rollback/quarantine, bounded history, health, and exact manual remediation for installations that cannot self-update.'
 discovered  = '2026-09-01'
 adr         = '0085'
-evidence    = 'The official package tells the operator to update yt-dlp and passes --no-update on discovery, enrichment, and playback. There is no tool-maintenance capability, startup/daily job, per-tool replacement lease, typed update outcome, replacement validation, known-good rollback/quarantine, manual Check for update now, or bounded attempt history. Tracked by AMM-N and plans/addon-list-lifecycle-broadening.md.'
+evidence    = 'The official package tells the operator to update yt-dlp and passes --no-update on discovery, enrichment, and playback. AMM-K-01 adds provider-neutral permission and durable attempt/lease/version/digest/validation/rollback history contracts with actionable aggregate diagnostics, but no startup/daily executor, replacement, quarantine, or manual action exists yet. Tracked by AMM-N and plans/addon-list-lifecycle-broadening.md.'
 resolved    = false
 
 [[debt]]

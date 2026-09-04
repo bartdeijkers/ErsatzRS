@@ -38,6 +38,14 @@ The list and play payloads, environment, output bounds, and NDJSON fields are
 defined by the [Remote Stream playlist reference](remote-stream-playlist-manifests.md).
 Unknown capability versions are rejected.
 
+`media-list.options.v1` is interpreted by the host as a declarative schema and
+cannot be invoked as an executable operation. Draft list defaults and sparse
+item overrides are stored independently from the currently published option
+snapshot. Effective values resolve from item override to list default to the
+frozen schema default. Existing import-v1 and Remote Stream play-v1/v2
+requests remain unchanged; later operation versions must opt into carrying
+published effective values explicitly.
+
 The provider-neutral list payload is defined by the
 [add-on media-list reference](addon-media-lists.md).
 

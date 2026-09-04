@@ -17,207 +17,282 @@ impl AddonMediaListHealthCheck {
 }
 
 #[async_trait]
-#[allow(clippy::too_many_lines)]
 impl HealthCheck for AddonMediaListHealthCheck {
     fn title(&self) -> &'static str {
         "Add-on media lists"
     }
 
     async fn check(&self) -> Result<HealthCheckResult> {
-        let rows = sqlx::query(
-            r#"SELECT "list"."Id", "list"."Name", "list"."LastError", "list"."PresentationError",
-                      "list"."ReviewState", "list"."ReviewError", "list"."PublicationStartedAt",
-                      "addon"."Enabled",
-                      "source"."MediaSourceId", "managed"."LibraryId", "managed"."ManifestPath"
-               FROM "AddonMediaList" AS "list"
-               JOIN "AddonInstallation" AS "addon"
-                 ON "addon"."AddonId" = "list"."AddonId"
-               LEFT JOIN "AddonMediaSource" AS "source"
-                 ON "source"."AddonId" = "list"."AddonId"
-               LEFT JOIN "AddonMediaListLibrary" AS "managed"
-                 ON "managed"."AddonMediaListId" = "list"."Id"
-               ORDER BY "list"."Name", "list"."Id""#,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(sqlx_error)?;
+        let rows = addon_media_list_health_rows(&self.pool).await?;
+        let lifecycle_foundation = lifecycle_foundation_health(&self.pool).await?;
         if rows.is_empty() {
-            return Ok(HealthCheckResult::not_applicable(self.title()));
+            return Ok(lifecycle_foundation.result_without_lists(self.title()));
         }
-
-        let storage_failures = rows
-            .iter()
-            .filter_map(|row| {
-                row.try_get::<Option<i64>, _>("MediaSourceId")
-                    .ok()
-                    .flatten()?;
-                let name = row
-                    .try_get::<String, _>("Name")
-                    .unwrap_or_else(|_| "List".to_owned());
-                let library_id = row.try_get::<Option<i64>, _>("LibraryId").ok().flatten();
-                let manifest_path = row
-                    .try_get::<Option<String>, _>("ManifestPath")
-                    .ok()
-                    .flatten();
-                (library_id.is_none()
-                    || manifest_path
-                        .as_deref()
-                        .is_none_or(|path| !std::path::Path::new(path).is_file()))
-                .then(|| format!("{name}: managed local library is unavailable"))
-            })
-            .take(5)
-            .collect::<Vec<_>>();
-        let failures = rows
-            .iter()
-            .filter_map(|row| {
-                let error = row
-                    .try_get::<Option<String>, _>("LastError")
-                    .ok()
-                    .flatten()?;
-                let name = row
-                    .try_get::<String, _>("Name")
-                    .unwrap_or_else(|_| "List".to_owned());
-                Some(format!("{name}: {error}"))
-            })
-            .take(5)
-            .collect::<Vec<_>>();
-        let presentation_failures = presentation_failures(&rows);
-        let publication_failures = publication_failures(&rows);
-        let PublicationCoordinatorHealth {
-            failures: coordinator_failures,
-            active: coordinator_activity,
-        } = publication_coordinator_health(&self.pool).await?;
-        let invalid_metadata = invalid_metadata(&self.pool).await?;
-        let missing_artwork = missing_artwork(&self.pool).await?;
-        let import_failures = import_failures(&self.pool).await?;
-        let import_failure_link = import_failures
-            .first()
-            .map(|(list_id, _)| format!("/media/addon-lists/{list_id}"));
-        let detail_worker_failures = detail_worker_failures(&self.pool).await?;
-        let detail_wait_setting_failures = detail_wait_setting_failures(&self.pool).await;
-        let cooldown_failures = cooldown_failures(&self.pool).await?;
-        let failures = storage_failures
-            .into_iter()
-            .chain(failures)
-            .chain(presentation_failures)
-            .chain(publication_failures)
-            .chain(coordinator_failures)
-            .chain(invalid_metadata)
-            .chain(missing_artwork)
-            .chain(import_failures.into_iter().map(|(_, message)| message))
-            .chain(detail_worker_failures)
-            .chain(detail_wait_setting_failures)
-            .chain(cooldown_failures)
-            .take(5)
-            .collect::<Vec<_>>();
-        if !failures.is_empty() {
-            return Ok(HealthCheckResult::new(
-                self.title(),
-                HealthCheckStatus::Fail,
-                failures.join("; "),
-                "One or more add-on media lists failed to refresh",
-            )
-            .with_link(import_failure_link.unwrap_or_else(|| "/media/addon-lists".to_owned())));
-        }
-
-        let disabled = rows
-            .iter()
-            .filter(|row| {
-                row.try_get::<i64, _>("Enabled")
-                    .is_ok_and(|value| value == 0)
-            })
-            .count();
-        if disabled > 0 {
-            return Ok(HealthCheckResult::new(
-                self.title(),
-                HealthCheckStatus::Warning,
-                format!("{disabled} list(s) use a disabled add-on"),
-                "An add-on must be enabled before its lists can refresh",
-            )
-            .with_link("/media/addon-lists"));
-        }
-
-        if let Some(result) = replacement_failure(&self.pool, self.title()).await? {
+        let configured = configured_list_health(&self.pool, &rows, lifecycle_foundation).await?;
+        if let Some(result) = configured.failure_result(self.title(), lifecycle_foundation) {
             return Ok(result);
         }
-
-        let metadata_conflicts = count_metadata_conflicts(&self.pool).await?;
-        if metadata_conflicts > 0 {
-            return Ok(HealthCheckResult::new(
-                self.title(),
-                HealthCheckStatus::Warning,
-                format!("{metadata_conflicts} metadata field conflict(s) need review"),
-                "A provider changed fields that have operator overrides",
-            )
-            .with_link("/media/addon-lists"));
-        }
-
-        let detail_activity = detail_activity(&self.pool).await?;
-        if detail_activity.failed > 0 {
-            return Ok(HealthCheckResult::new(
-                self.title(),
-                HealthCheckStatus::Warning,
-                format!(
-                    "{} item detail job(s) need a manual retry; {} are active and {} are waiting for retry or provider pacing",
-                    detail_activity.failed, detail_activity.active, detail_activity.waiting
-                ),
-                "One or more add-on item details could not be loaded",
-            )
-            .with_link("/media/addon-lists"));
-        }
-
-        let pending_review = rows
-            .iter()
-            .filter(|row| {
-                row.try_get::<i64, _>("ReviewState")
-                    .is_ok_and(|state| state != 2)
-            })
-            .count();
-        if pending_review > 0 {
-            let import_activity = import_activity(&self.pool).await?;
-            let publication_activity = if coordinator_activity.is_empty() {
-                String::new()
-            } else {
-                format!("; {}", coordinator_activity.join("; "))
-            };
-            return Ok(HealthCheckResult::new(
-                self.title(),
-                HealthCheckStatus::Warning,
-                format!(
-                    "{pending_review} add-on media list(s) await metadata review or publication; {} overview import(s) are active and {} detail item(s) are delayed by retry or provider pacing{publication_activity}",
-                    import_activity.active,
-                    detail_activity.waiting,
-                ),
-                "Review and publish the imported metadata before using the new revision",
-            )
-            .with_link("/media/addon-lists"));
-        }
-
-        if !coordinator_activity.is_empty() {
-            return Ok(HealthCheckResult::new(
-                self.title(),
-                HealthCheckStatus::Pass,
-                coordinator_activity.join("; "),
-                "Add-on list publication is making or awaiting progress",
-            )
-            .with_link("/media/addon-lists"));
-        }
-
-        if detail_activity.active > 0 || detail_activity.waiting > 0 {
-            return Ok(HealthCheckResult::new(
-                self.title(),
-                HealthCheckStatus::Pass,
-                format!(
-                    "{} item detail job(s) are active and {} are waiting for retry or provider pacing",
-                    detail_activity.active, detail_activity.waiting
-                ),
-                "Add-on detail loading is making or awaiting progress",
-            )
-            .with_link("/media/addon-lists"));
-        }
-
-        Ok(HealthCheckResult::pass(self.title()).with_link("/media/addon-lists"))
+        configured_list_status_result(
+            &self.pool,
+            &rows,
+            &configured.coordinator_activity,
+            lifecycle_foundation,
+            self.title(),
+        )
+        .await
     }
+}
+
+async fn addon_media_list_health_rows(pool: &Pool<Db>) -> Result<Vec<crate::db::DbRow>> {
+    sqlx::query(
+        r#"SELECT "list"."Id", "list"."Name", "list"."LastError", "list"."PresentationError",
+                  "list"."ReviewState", "list"."ReviewError", "list"."PublicationStartedAt",
+                  "addon"."Enabled",
+                  "source"."MediaSourceId", "managed"."LibraryId", "managed"."ManifestPath"
+           FROM "AddonMediaList" AS "list"
+           JOIN "AddonInstallation" AS "addon"
+             ON "addon"."AddonId" = "list"."AddonId"
+           LEFT JOIN "AddonMediaSource" AS "source"
+             ON "source"."AddonId" = "list"."AddonId"
+           LEFT JOIN "AddonMediaListLibrary" AS "managed"
+             ON "managed"."AddonMediaListId" = "list"."Id"
+           ORDER BY "list"."Name", "list"."Id""#,
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(sqlx_error)
+}
+
+struct ConfiguredListHealth {
+    failures: Vec<String>,
+    import_failure_link: Option<String>,
+    coordinator_activity: Vec<String>,
+}
+
+impl ConfiguredListHealth {
+    fn failure_result(
+        &self,
+        title: &'static str,
+        lifecycle_foundation: LifecycleFoundationHealth,
+    ) -> Option<HealthCheckResult> {
+        (!self.failures.is_empty()).then(|| {
+            HealthCheckResult::new(
+                title,
+                HealthCheckStatus::Fail,
+                format!(
+                    "{}; {}",
+                    self.failures.join("; "),
+                    lifecycle_foundation.summary()
+                ),
+                "One or more add-on list or tool-maintenance operations need attention",
+            )
+            .with_link(
+                self.import_failure_link
+                    .clone()
+                    .unwrap_or_else(|| "/media/addon-lists".to_owned()),
+            )
+        })
+    }
+}
+
+async fn configured_list_health(
+    pool: &Pool<Db>,
+    rows: &[crate::db::DbRow],
+    lifecycle_foundation: LifecycleFoundationHealth,
+) -> Result<ConfiguredListHealth> {
+    let storage_failures = rows
+        .iter()
+        .filter_map(|row| {
+            row.try_get::<Option<i64>, _>("MediaSourceId")
+                .ok()
+                .flatten()?;
+            let name = row
+                .try_get::<String, _>("Name")
+                .unwrap_or_else(|_| "List".to_owned());
+            let library_id = row.try_get::<Option<i64>, _>("LibraryId").ok().flatten();
+            let manifest_path = row
+                .try_get::<Option<String>, _>("ManifestPath")
+                .ok()
+                .flatten();
+            (library_id.is_none()
+                || manifest_path
+                    .as_deref()
+                    .is_none_or(|path| !std::path::Path::new(path).is_file()))
+            .then(|| format!("{name}: managed local library is unavailable"))
+        })
+        .take(5)
+        .collect::<Vec<_>>();
+    let refresh_failures = rows
+        .iter()
+        .filter_map(|row| {
+            let error = row
+                .try_get::<Option<String>, _>("LastError")
+                .ok()
+                .flatten()?;
+            let name = row
+                .try_get::<String, _>("Name")
+                .unwrap_or_else(|_| "List".to_owned());
+            Some(format!("{name}: {error}"))
+        })
+        .take(5)
+        .collect::<Vec<_>>();
+    let presentation_failures = presentation_failures(rows);
+    let publication_failures = publication_failures(rows);
+    let PublicationCoordinatorHealth {
+        failures: coordinator_failures,
+        active: coordinator_activity,
+    } = publication_coordinator_health(pool).await?;
+    let invalid_metadata = invalid_metadata(pool).await?;
+    let missing_artwork = missing_artwork(pool).await?;
+    let import_failures = import_failures(pool).await?;
+    let import_failure_link = import_failures
+        .first()
+        .map(|(list_id, _)| format!("/media/addon-lists/{list_id}"));
+    let detail_worker_failures = detail_worker_failures(pool).await?;
+    let detail_wait_setting_failures = detail_wait_setting_failures(pool).await;
+    let cooldown_failures = cooldown_failures(pool).await?;
+    let failures = storage_failures
+        .into_iter()
+        .chain(refresh_failures)
+        .chain(presentation_failures)
+        .chain(publication_failures)
+        .chain(coordinator_failures)
+        .chain(lifecycle_foundation.failures())
+        .chain(invalid_metadata)
+        .chain(missing_artwork)
+        .chain(import_failures.into_iter().map(|(_, message)| message))
+        .chain(detail_worker_failures)
+        .chain(detail_wait_setting_failures)
+        .chain(cooldown_failures)
+        .take(5)
+        .collect();
+    Ok(ConfiguredListHealth {
+        failures,
+        import_failure_link,
+        coordinator_activity,
+    })
+}
+
+async fn configured_list_status_result(
+    pool: &Pool<Db>,
+    rows: &[crate::db::DbRow],
+    coordinator_activity: &[String],
+    lifecycle_foundation: LifecycleFoundationHealth,
+    title: &'static str,
+) -> Result<HealthCheckResult> {
+    let disabled = rows
+        .iter()
+        .filter(|row| {
+            row.try_get::<i64, _>("Enabled")
+                .is_ok_and(|value| value == 0)
+        })
+        .count();
+    if disabled > 0 {
+        return Ok(HealthCheckResult::new(
+            title,
+            HealthCheckStatus::Warning,
+            format!("{disabled} list(s) use a disabled add-on"),
+            "An add-on must be enabled before its lists can refresh",
+        )
+        .with_link("/media/addon-lists"));
+    }
+    if let Some(result) = replacement_failure(pool, title).await? {
+        return Ok(result);
+    }
+    let metadata_conflicts = count_metadata_conflicts(pool).await?;
+    if metadata_conflicts > 0 {
+        return Ok(HealthCheckResult::new(
+            title,
+            HealthCheckStatus::Warning,
+            format!("{metadata_conflicts} metadata field conflict(s) need review"),
+            "A provider changed fields that have operator overrides",
+        )
+        .with_link("/media/addon-lists"));
+    }
+    configured_list_activity_result(
+        pool,
+        rows,
+        coordinator_activity,
+        lifecycle_foundation,
+        title,
+    )
+    .await
+}
+
+async fn configured_list_activity_result(
+    pool: &Pool<Db>,
+    rows: &[crate::db::DbRow],
+    coordinator_activity: &[String],
+    lifecycle_foundation: LifecycleFoundationHealth,
+    title: &'static str,
+) -> Result<HealthCheckResult> {
+    let detail_activity = detail_activity(pool).await?;
+    if detail_activity.failed > 0 {
+        return Ok(HealthCheckResult::new(
+            title,
+            HealthCheckStatus::Warning,
+            format!(
+                "{} item detail job(s) need a manual retry; {} are active and {} are waiting for retry or provider pacing",
+                detail_activity.failed, detail_activity.active, detail_activity.waiting
+            ),
+            "One or more add-on item details could not be loaded",
+        )
+        .with_link("/media/addon-lists"));
+    }
+    let pending_review = rows
+        .iter()
+        .filter(|row| {
+            row.try_get::<i64, _>("ReviewState")
+                .is_ok_and(|state| state != 2)
+        })
+        .count();
+    if pending_review > 0 {
+        let import_activity = import_activity(pool).await?;
+        let publication_activity = if coordinator_activity.is_empty() {
+            String::new()
+        } else {
+            format!("; {}", coordinator_activity.join("; "))
+        };
+        return Ok(HealthCheckResult::new(
+            title,
+            HealthCheckStatus::Warning,
+            format!(
+                "{pending_review} add-on media list(s) await metadata review or publication; {} overview import(s) are active and {} detail item(s) are delayed by retry or provider pacing{publication_activity}",
+                import_activity.active,
+                detail_activity.waiting,
+            ),
+            "Review and publish the imported metadata before using the new revision",
+        )
+        .with_link("/media/addon-lists"));
+    }
+    if !coordinator_activity.is_empty() {
+        return Ok(HealthCheckResult::new(
+            title,
+            HealthCheckStatus::Pass,
+            coordinator_activity.join("; "),
+            "Add-on list publication is making or awaiting progress",
+        )
+        .with_link("/media/addon-lists"));
+    }
+    if detail_activity.active > 0 || detail_activity.waiting > 0 {
+        return Ok(HealthCheckResult::new(
+            title,
+            HealthCheckStatus::Pass,
+            format!(
+                "{} item detail job(s) are active and {} are waiting for retry or provider pacing",
+                detail_activity.active, detail_activity.waiting
+            ),
+            "Add-on detail loading is making or awaiting progress",
+        )
+        .with_link("/media/addon-lists"));
+    }
+    Ok(HealthCheckResult::new(
+        title,
+        HealthCheckStatus::Pass,
+        lifecycle_foundation.summary(),
+        "Add-on list lifecycle foundations are healthy",
+    )
+    .with_link("/media/addon-lists"))
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -236,6 +311,247 @@ struct DetailActivity {
 struct PublicationCoordinatorHealth {
     failures: Vec<String>,
     active: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct LifecycleFoundationHealth {
+    lifecycle_active: i64,
+    lifecycle_waiting: i64,
+    lifecycle_expired: i64,
+    lifecycle_failed: i64,
+    checkpoints: i64,
+    retained_revisions: i64,
+    tombstones: i64,
+    artifacts: i64,
+    artifact_ready: i64,
+    artifact_failed: i64,
+    artifact_bytes: i64,
+    artifact_reserved_bytes: i64,
+    tool_active: i64,
+    tool_waiting: i64,
+    tool_expired: i64,
+    tool_failed: i64,
+    tool_actionable_failed: i64,
+    tool_updated: i64,
+    tool_already_current: i64,
+    tool_manual_update_required: i64,
+    tool_rolled_back: i64,
+    tool_failed_outcome: i64,
+}
+
+impl LifecycleFoundationHealth {
+    fn result_without_lists(self, title: &'static str) -> HealthCheckResult {
+        if !self.has_state() {
+            return HealthCheckResult::not_applicable(title);
+        }
+        let failures = self.failures();
+        if !failures.is_empty() {
+            return HealthCheckResult::new(
+                title,
+                HealthCheckStatus::Fail,
+                format!("{}; {}", failures.join("; "), self.summary()),
+                "One or more add-on list or tool-maintenance operations need attention",
+            )
+            .with_link("/settings/addons");
+        }
+        HealthCheckResult::new(
+            title,
+            HealthCheckStatus::Pass,
+            self.summary(),
+            "Add-on lifecycle or tool maintenance is active or retained",
+        )
+        .with_link("/settings/addons")
+    }
+
+    const fn has_state(self) -> bool {
+        self.lifecycle_active > 0
+            || self.lifecycle_waiting > 0
+            || self.lifecycle_expired > 0
+            || self.lifecycle_failed > 0
+            || self.checkpoints > 0
+            || self.retained_revisions > 0
+            || self.tombstones > 0
+            || self.artifacts > 0
+            || self.tool_active > 0
+            || self.tool_waiting > 0
+            || self.tool_expired > 0
+            || self.tool_failed > 0
+            || self.tool_updated > 0
+            || self.tool_already_current > 0
+            || self.tool_manual_update_required > 0
+            || self.tool_rolled_back > 0
+            || self.tool_failed_outcome > 0
+    }
+
+    fn failures(self) -> Vec<String> {
+        let mut failures = Vec::new();
+        let lifecycle_recovery = self.lifecycle_expired + self.lifecycle_failed;
+        if lifecycle_recovery > 0 {
+            failures.push(format!(
+                "{lifecycle_recovery} lifecycle job(s) require recovery ({} expired, {} failed)",
+                self.lifecycle_expired, self.lifecycle_failed
+            ));
+        }
+        let tool_recovery = self.tool_expired + self.tool_actionable_failed;
+        if tool_recovery > 0 {
+            failures.push(format!(
+                "{tool_recovery} tool maintenance job(s) require recovery ({} expired, {} failed)",
+                self.tool_expired, self.tool_actionable_failed
+            ));
+        }
+        failures
+    }
+
+    fn summary(self) -> String {
+        format!(
+            "lifecycle active={} waiting={} expired={} failed={}; checkpoints={}; retained revisions={}; tombstones={}; artifacts total={} ready={} failed={} bytes={} reserved_bytes={}; tool maintenance active={} waiting={} expired={} failed={}; outcomes updated={} already_current={} manual_update_required={} rolled_back={} failed={}",
+            self.lifecycle_active,
+            self.lifecycle_waiting,
+            self.lifecycle_expired,
+            self.lifecycle_failed,
+            self.checkpoints,
+            self.retained_revisions,
+            self.tombstones,
+            self.artifacts,
+            self.artifact_ready,
+            self.artifact_failed,
+            self.artifact_bytes,
+            self.artifact_reserved_bytes,
+            self.tool_active,
+            self.tool_waiting,
+            self.tool_expired,
+            self.tool_failed,
+            self.tool_updated,
+            self.tool_already_current,
+            self.tool_manual_update_required,
+            self.tool_rolled_back,
+            self.tool_failed_outcome,
+        )
+    }
+}
+
+const LIFECYCLE_FOUNDATION_HEALTH_SQL: &str = r#"SELECT
+               (SELECT COUNT(*)
+                  FROM "AddonMediaListLifecycleJob" AS "job"
+                  JOIN "ManagedLibraryOperation" AS "operation"
+                    ON "operation"."Id" = "job"."OperationId"
+                 WHERE "operation"."State" = 0
+                    OR ("operation"."State" = 1 AND EXISTS (
+                        SELECT 1 FROM "ManagedLibraryLease" AS "lease"
+                         WHERE "lease"."OperationId" = "operation"."Id"
+                           AND "lease"."OwnerToken" = "operation"."OwnerToken"
+                           AND julianday("lease"."LeaseExpiresAt") > julianday(?)
+                    ))) AS "LifecycleActive",
+               (SELECT COUNT(*)
+                  FROM "AddonMediaListLifecycleJob" AS "job"
+                  JOIN "ManagedLibraryOperation" AS "operation"
+                    ON "operation"."Id" = "job"."OperationId"
+                 WHERE "operation"."State" = 2) AS "LifecycleWaiting",
+               (SELECT COUNT(*)
+                  FROM "AddonMediaListLifecycleJob" AS "job"
+                  JOIN "ManagedLibraryOperation" AS "operation"
+                    ON "operation"."Id" = "job"."OperationId"
+                 WHERE "operation"."State" = 1
+                   AND NOT EXISTS (
+                       SELECT 1 FROM "ManagedLibraryLease" AS "lease"
+                        WHERE "lease"."OperationId" = "operation"."Id"
+                          AND "lease"."OwnerToken" = "operation"."OwnerToken"
+                          AND julianday("lease"."LeaseExpiresAt") > julianday(?)
+                   )) AS "LifecycleExpired",
+               (SELECT COUNT(*)
+                  FROM "AddonMediaListLifecycleJob" AS "job"
+                  JOIN "ManagedLibraryOperation" AS "operation"
+                    ON "operation"."Id" = "job"."OperationId"
+                 WHERE "operation"."State" = 4) AS "LifecycleFailed",
+               (SELECT COUNT(*) FROM "AddonMediaListImportCheckpoint") AS "Checkpoints",
+               (SELECT COUNT(*) FROM "AddonMediaListRevision") AS "RetainedRevisions",
+               (SELECT COUNT(*) FROM "AddonMediaListItemTombstone") AS "Tombstones",
+               (SELECT COUNT(*) FROM "AddonMediaListArtifact") AS "Artifacts",
+               (SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "State" = 2)
+                   AS "ArtifactReady",
+               (SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "State" = 3)
+                   AS "ArtifactFailed",
+               (SELECT COALESCE(SUM("ByteLength"), 0) FROM "AddonMediaListArtifact")
+                   AS "ArtifactBytes",
+               (SELECT COALESCE(SUM("ReservedBytes"), 0) FROM "AddonMediaListArtifact")
+                   AS "ArtifactReservedBytes",
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob"
+                 WHERE "State" = 0
+                    OR ("State" = 1 AND "LeaseOwner" IS NOT NULL
+                        AND julianday("LeaseExpiresAt") > julianday(?))) AS "ToolActive",
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "State" = 2)
+                   AS "ToolWaiting",
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob"
+                 WHERE "State" = 1
+                   AND ("LeaseOwner" IS NULL
+                        OR "LeaseExpiresAt" IS NULL
+                        OR julianday("LeaseExpiresAt") <= julianday(?))) AS "ToolExpired",
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "State" = 4)
+                   AS "ToolFailed",
+               (SELECT COUNT(*)
+                  FROM "AddonToolMaintenanceJob" AS "job"
+                 WHERE "job"."State" = 4
+                   AND NOT EXISTS (
+                       SELECT 1 FROM "AddonToolMaintenanceJob" AS "newer"
+                        WHERE "newer"."AddonId" = "job"."AddonId"
+                          AND "newer"."ToolKey" = "job"."ToolKey"
+                          AND (
+                              julianday("newer"."CreatedAt") > julianday("job"."CreatedAt")
+                              OR ("newer"."CreatedAt" = "job"."CreatedAt"
+                                  AND "newer"."Id" > "job"."Id")
+                          )
+                   )) AS "ToolActionableFailed",
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 0)
+                   AS "ToolUpdated",
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 1)
+                   AS "ToolAlreadyCurrent",
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 2)
+                   AS "ToolManualUpdateRequired",
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 3)
+                   AS "ToolRolledBack",
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 4)
+                   AS "ToolFailedOutcome""#;
+
+async fn lifecycle_foundation_health(pool: &Pool<Db>) -> Result<LifecycleFoundationHealth> {
+    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let row = sqlx::query(LIFECYCLE_FOUNDATION_HEALTH_SQL)
+        .bind(&now)
+        .bind(&now)
+        .bind(&now)
+        .bind(&now)
+        .fetch_one(pool)
+        .await
+        .map_err(sqlx_error)?;
+    decode_lifecycle_foundation_health(&row)
+}
+
+fn decode_lifecycle_foundation_health(row: &crate::db::DbRow) -> Result<LifecycleFoundationHealth> {
+    Ok(LifecycleFoundationHealth {
+        lifecycle_active: row.try_get("LifecycleActive").map_err(sqlx_error)?,
+        lifecycle_waiting: row.try_get("LifecycleWaiting").map_err(sqlx_error)?,
+        lifecycle_expired: row.try_get("LifecycleExpired").map_err(sqlx_error)?,
+        lifecycle_failed: row.try_get("LifecycleFailed").map_err(sqlx_error)?,
+        checkpoints: row.try_get("Checkpoints").map_err(sqlx_error)?,
+        retained_revisions: row.try_get("RetainedRevisions").map_err(sqlx_error)?,
+        tombstones: row.try_get("Tombstones").map_err(sqlx_error)?,
+        artifacts: row.try_get("Artifacts").map_err(sqlx_error)?,
+        artifact_ready: row.try_get("ArtifactReady").map_err(sqlx_error)?,
+        artifact_failed: row.try_get("ArtifactFailed").map_err(sqlx_error)?,
+        artifact_bytes: row.try_get("ArtifactBytes").map_err(sqlx_error)?,
+        artifact_reserved_bytes: row.try_get("ArtifactReservedBytes").map_err(sqlx_error)?,
+        tool_active: row.try_get("ToolActive").map_err(sqlx_error)?,
+        tool_waiting: row.try_get("ToolWaiting").map_err(sqlx_error)?,
+        tool_expired: row.try_get("ToolExpired").map_err(sqlx_error)?,
+        tool_failed: row.try_get("ToolFailed").map_err(sqlx_error)?,
+        tool_actionable_failed: row.try_get("ToolActionableFailed").map_err(sqlx_error)?,
+        tool_updated: row.try_get("ToolUpdated").map_err(sqlx_error)?,
+        tool_already_current: row.try_get("ToolAlreadyCurrent").map_err(sqlx_error)?,
+        tool_manual_update_required: row
+            .try_get("ToolManualUpdateRequired")
+            .map_err(sqlx_error)?,
+        tool_rolled_back: row.try_get("ToolRolledBack").map_err(sqlx_error)?,
+        tool_failed_outcome: row.try_get("ToolFailedOutcome").map_err(sqlx_error)?,
+    })
 }
 
 async fn import_activity(pool: &Pool<Db>) -> Result<ImportActivity> {
@@ -617,10 +933,7 @@ fn publication_failures(rows: &[crate::db::DbRow]) -> Vec<String> {
         .collect()
 }
 
-async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCoordinatorHealth> {
-    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
-    let rows = sqlx::query(
-        r#"SELECT "job"."OperationId" AS "CorrelationId",
+const PUBLICATION_COORDINATOR_HEALTH_SQL: &str = r#"SELECT "job"."OperationId" AS "CorrelationId",
                   "job"."Generation", "job"."Phase", "job"."OriginalFailureCode",
                   "job"."UpdatedAt" AS "LastProgressAt",
                   "operation"."State", "operation"."AttemptCount",
@@ -671,21 +984,24 @@ async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCo
                      WHERE "latest"."AddonMediaListId" = "job"."AddonMediaListId"
                  )
              AND ("operation"."State" <> 3 OR "job"."Phase" <> 7)
-           ORDER BY "job"."UpdatedAt" DESC, "job"."Id" DESC"#,
-    )
-    .bind(&now)
-    .bind(crate::repositories::common::encode_enum(
-        AddonMediaListPublicationEventKind::OriginalFailure,
-    ))
-    .bind(crate::repositories::common::encode_enum(
-        AddonMediaListPublicationEventKind::RecoveryFailure,
-    ))
-    .bind(crate::repositories::common::encode_enum(
-        AddonMediaListPublicationEventKind::HistoryTruncated,
-    ))
-    .fetch_all(pool)
-    .await
-    .map_err(sqlx_error)?;
+           ORDER BY "job"."UpdatedAt" DESC, "job"."Id" DESC"#;
+
+async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCoordinatorHealth> {
+    let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+    let rows = sqlx::query(PUBLICATION_COORDINATOR_HEALTH_SQL)
+        .bind(&now)
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListPublicationEventKind::OriginalFailure,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListPublicationEventKind::RecoveryFailure,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListPublicationEventKind::HistoryTruncated,
+        ))
+        .fetch_all(pool)
+        .await
+        .map_err(sqlx_error)?;
     let mut status = PublicationCoordinatorHealth::default();
     for row in rows.into_iter().take(5) {
         let state: i64 = row.try_get("State").map_err(sqlx_error)?;
@@ -967,6 +1283,45 @@ mod tests {
                 "Outcome" INTEGER NULL,
                 "OccurredAt" TEXT NOT NULL
             );
+            CREATE TABLE "AddonMediaListLifecycleJob" (
+                "Id" INTEGER PRIMARY KEY,
+                "OperationId" INTEGER NOT NULL
+            );
+            CREATE TABLE "AddonMediaListImportCheckpoint" (
+                "Id" INTEGER PRIMARY KEY
+            );
+            CREATE TABLE "AddonMediaListRevision" (
+                "Id" INTEGER PRIMARY KEY
+            );
+            CREATE TABLE "AddonMediaListItemTombstone" (
+                "AddonMediaListItemId" INTEGER PRIMARY KEY
+            );
+            CREATE TABLE "AddonMediaListArtifact" (
+                "Id" INTEGER PRIMARY KEY,
+                "State" INTEGER NOT NULL,
+                "ReservedBytes" INTEGER NOT NULL DEFAULT 0,
+                "ByteLength" INTEGER NULL,
+                "CacheKey" TEXT NULL,
+                "RelativePath" TEXT NULL,
+                "Sha256" TEXT NULL,
+                "DiagnosticCode" TEXT NULL
+            );
+            CREATE TABLE "AddonToolMaintenanceJob" (
+                "Id" INTEGER PRIMARY KEY,
+                "AddonId" TEXT NOT NULL DEFAULT 'org.example.tool',
+                "ToolKey" TEXT NOT NULL DEFAULT 'primary',
+                "State" INTEGER NOT NULL,
+                "LeaseOwner" TEXT NULL,
+                "LeaseExpiresAt" TEXT NULL,
+                "Outcome" INTEGER NULL,
+                "BeforeVersion" TEXT NULL,
+                "BeforeSha256" TEXT NULL,
+                "AfterVersion" TEXT NULL,
+                "AfterSha256" TEXT NULL,
+                "DiagnosticCode" TEXT NULL,
+                "Diagnostic" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL DEFAULT '2026-09-04T00:00:00Z'
+            );
             CREATE TABLE "AddonProviderHostCooldown" (
                 "ProviderHost" TEXT PRIMARY KEY,
                 "SampledDelaySeconds" INTEGER NOT NULL
@@ -982,6 +1337,95 @@ mod tests {
         .await
         .expect("fixture");
         pool
+    }
+
+    async fn check_tool_without_lists(
+        state: i64,
+        lease_owner: Option<&str>,
+        lease_expires_at: Option<&str>,
+        outcome: Option<i64>,
+    ) -> HealthCheckResult {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonToolMaintenanceJob" (
+                    "Id", "State", "LeaseOwner", "LeaseExpiresAt", "Outcome", "Diagnostic"
+               ) VALUES (1, ?, ?, ?, ?, 'private tool output')"#,
+        )
+        .bind(state)
+        .bind(lease_owner)
+        .bind(lease_expires_at)
+        .bind(outcome)
+        .execute(&pool)
+        .await
+        .expect("tool maintenance job");
+
+        AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result")
+    }
+
+    #[tokio::test]
+    async fn no_list_active_tool_maintenance_reports_aggregate_pass() {
+        let result = check_tool_without_lists(0, None, None, None).await;
+
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+        assert!(result
+            .message
+            .contains("tool maintenance active=1 waiting=0 expired=0 failed=0"));
+        assert_eq!(
+            result.brief_message,
+            "Add-on lifecycle or tool maintenance is active or retained"
+        );
+        assert_eq!(
+            result.link.as_ref().map(|link| link.link.as_str()),
+            Some("/settings/addons")
+        );
+        assert!(!result.message.contains("private tool output"));
+    }
+
+    #[tokio::test]
+    async fn no_list_expired_tool_maintenance_reports_aggregate_failure() {
+        let result = check_tool_without_lists(
+            1,
+            Some("private-worker"),
+            Some("2000-01-01T00:00:00Z"),
+            None,
+        )
+        .await;
+
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result
+            .message
+            .contains("1 tool maintenance job(s) require recovery (1 expired, 0 failed)"));
+        assert_eq!(
+            result.brief_message,
+            "One or more add-on list or tool-maintenance operations need attention"
+        );
+        assert_eq!(
+            result.link.as_ref().map(|link| link.link.as_str()),
+            Some("/settings/addons")
+        );
+        assert!(!result.message.contains("private-worker"));
+        assert!(!result.message.contains("private tool output"));
+    }
+
+    #[tokio::test]
+    async fn no_list_failed_tool_maintenance_reports_aggregate_failure() {
+        let result = check_tool_without_lists(4, None, None, Some(4)).await;
+
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result
+            .message
+            .contains("1 tool maintenance job(s) require recovery (0 expired, 1 failed)"));
+        assert!(result
+            .message
+            .contains("tool maintenance active=0 waiting=0 expired=0 failed=1"));
+        assert_eq!(
+            result.link.as_ref().map(|link| link.link.as_str()),
+            Some("/settings/addons")
+        );
+        assert!(!result.message.contains("private tool output"));
     }
 
     #[tokio::test]
@@ -1005,6 +1449,201 @@ mod tests {
             result.link.as_ref().map(|link| link.link.as_str()),
             Some("/media/addon-lists")
         );
+    }
+
+    #[tokio::test]
+    async fn reports_safe_lifecycle_foundation_aggregates_without_warning() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                    "Id", "AddonId", "Name", "ProviderMetadataJson"
+               ) VALUES (1, 'org.example.list', 'Fixture', '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(r#"INSERT INTO "AddonMediaListImportCheckpoint" VALUES (1)"#)
+            .execute(&pool)
+            .await
+            .expect("checkpoint");
+        sqlx::query(r#"INSERT INTO "AddonMediaListRevision" VALUES (1)"#)
+            .execute(&pool)
+            .await
+            .expect("revision");
+        sqlx::query(r#"INSERT INTO "AddonMediaListItemTombstone" VALUES (1)"#)
+            .execute(&pool)
+            .await
+            .expect("tombstone");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListArtifact" (
+                    "Id", "State", "ReservedBytes", "ByteLength", "CacheKey",
+                    "RelativePath", "Sha256", "DiagnosticCode"
+               ) VALUES (
+                    1, 2, 8, 123, 'private-cache-key',
+                    '/private/artifact.bin', 'private-artifact-digest', 'private-artifact-error'
+               )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("artifact");
+        sqlx::query(
+            r#"INSERT INTO "AddonToolMaintenanceJob" (
+                    "Id", "State", "Outcome", "BeforeVersion", "BeforeSha256",
+                    "AfterVersion", "AfterSha256", "DiagnosticCode", "Diagnostic"
+               ) VALUES (
+                    1, 3, 0, 'private-before-version', 'private-before-digest',
+                    'private-after-version', 'private-after-digest',
+                    'private-tool-code', 'https://private.invalid/tool?token=secret'
+               )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("tool maintenance");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+        assert!(result.message.contains("checkpoints=1"));
+        assert!(result.message.contains("retained revisions=1"));
+        assert!(result.message.contains("tombstones=1"));
+        assert!(result
+            .message
+            .contains("artifacts total=1 ready=1 failed=0 bytes=123 reserved_bytes=8"));
+        assert!(result.message.contains("outcomes updated=1"));
+        for forbidden in [
+            "/private/artifact.bin",
+            "private-artifact-digest",
+            "private-before-version",
+            "private-after-digest",
+            "https://private.invalid/tool?token=secret",
+        ] {
+            assert!(!result.message.contains(forbidden));
+        }
+    }
+
+    #[tokio::test]
+    async fn reports_only_actionable_lifecycle_foundation_failures() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                    "Id", "AddonId", "Name", "ProviderMetadataJson"
+               ) VALUES (1, 'org.example.list', 'Fixture', '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        for (id, state) in [(1_i64, 0_i64), (2, 2), (3, 1), (4, 4)] {
+            sqlx::query(
+                r#"INSERT INTO "ManagedLibraryOperation" ("Id", "State", "OwnerToken")
+                   VALUES (?, ?, 'owner')"#,
+            )
+            .bind(id)
+            .bind(state)
+            .execute(&pool)
+            .await
+            .expect("operation");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListLifecycleJob" ("Id", "OperationId")
+                   VALUES (?, ?)"#,
+            )
+            .bind(id)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .expect("lifecycle job");
+        }
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListArtifact" (
+                    "Id", "State", "DiagnosticCode"
+               ) VALUES (1, 3, 'private-artifact-failure')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("failed artifact");
+        for (id, state, outcome) in [
+            (1_i64, 2_i64, None),
+            (2, 1, None),
+            (3, 4, Some(4_i64)),
+            (4, 3, Some(2_i64)),
+        ] {
+            sqlx::query(
+                r#"INSERT INTO "AddonToolMaintenanceJob" (
+                        "Id", "ToolKey", "State", "Outcome", "Diagnostic"
+                   ) VALUES (?, ?, ?, ?, 'private-tool-diagnostic')"#,
+            )
+            .bind(id)
+            .bind(format!("tool-{id}"))
+            .bind(state)
+            .bind(outcome)
+            .execute(&pool)
+            .await
+            .expect("tool maintenance job");
+        }
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result
+            .message
+            .contains("2 lifecycle job(s) require recovery (1 expired, 1 failed)"));
+        assert!(result
+            .message
+            .contains("2 tool maintenance job(s) require recovery (1 expired, 1 failed)"));
+        assert!(result
+            .message
+            .contains("lifecycle active=1 waiting=1 expired=1 failed=1"));
+        assert!(result
+            .message
+            .contains("artifacts total=1 ready=0 failed=1"));
+        assert!(result
+            .message
+            .contains("tool maintenance active=0 waiting=1 expired=1 failed=1"));
+        assert!(result.message.contains("manual_update_required=1"));
+        assert_eq!(
+            result.brief_message,
+            "One or more add-on list or tool-maintenance operations need attention"
+        );
+        assert!(!result.message.contains("private-artifact-failure"));
+        assert!(!result.message.contains("private-tool-diagnostic"));
+    }
+
+    #[tokio::test]
+    async fn historical_tool_failure_is_not_actionable_after_a_newer_success() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                    "Id", "AddonId", "Name", "ProviderMetadataJson"
+               ) VALUES (1, 'org.example.list', 'Fixture', '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "AddonToolMaintenanceJob" (
+                    "Id", "State", "Outcome", "Diagnostic"
+               ) VALUES
+                    (1, 4, 4, 'old private failure'),
+                    (2, 3, 0, NULL)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("tool maintenance history");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Pass);
+        assert!(result
+            .message
+            .contains("tool maintenance active=0 waiting=0 expired=0 failed=1"));
+        assert!(result.message.contains("outcomes updated=1"));
+        assert!(result.message.contains("failed=1"));
+        assert!(!result.message.contains("old private failure"));
     }
 
     #[tokio::test]

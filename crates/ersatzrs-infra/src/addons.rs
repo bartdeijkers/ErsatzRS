@@ -27,6 +27,7 @@ use ersatzrs_addon_contract::{
     CAPABILITY_REMOTE_STREAM_PLAY_V2, OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET,
     OPERATION_CODE_MISSING_SETTING,
 };
+use ersatzrs_domain::EntityId;
 use futures_util::StreamExt as _;
 #[cfg(windows)]
 use process_wrap::tokio::JobObject;
@@ -3080,6 +3081,21 @@ async fn remove_owned_media_lists(
     transaction: &mut Transaction<'_, crate::db::Db>,
     addon_id: &str,
 ) -> Result<(), AddonError> {
+    let list_ids = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "Id" FROM "AddonMediaList" WHERE "AddonId" = ?"#,
+    )
+    .bind(addon_id)
+    .fetch_all(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    for list_id in list_ids {
+        crate::addon_media_list_sync::unlink_revision_artifacts_for_list_in_tx(
+            transaction,
+            list_id,
+        )
+        .await
+        .map_err(database_error)?;
+    }
     sqlx::query(
         r#"DELETE FROM "Playlist"
            WHERE "IsSystem" = 1
@@ -4970,6 +4986,7 @@ mod tests {
             host_version: semver::VersionReq::STAR,
             capabilities: vec![AddonCapability {
                 id: CAPABILITY_ADDON_CHECK_V1.to_owned(),
+                options: Vec::new(),
             }],
             dependencies: Vec::new(),
             entrypoints: BTreeMap::from([(
@@ -5897,8 +5914,69 @@ mod tests {
             .is_err());
     }
 
+    async fn insert_pinned_addon_media_list(
+        pool: &DbPool,
+        addon_id: &str,
+        playlist_id: EntityId,
+        is_system: i64,
+        group_id: EntityId,
+    ) {
+        sqlx::query(
+            r#"INSERT INTO "Playlist" ("Id", "IsSystem", "Name", "PlaylistGroupId")
+               VALUES (?, ?, ?, ?)"#,
+        )
+        .bind(playlist_id)
+        .bind(is_system)
+        .bind(format!("Fixture {playlist_id}"))
+        .bind(group_id)
+        .execute(pool)
+        .await
+        .expect("insert playlist");
+        let list = sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "AddonId", "ProviderId", "SourceUrl", "Name", "PlaylistId"
+               ) VALUES (?, ?, 'https://example.test/list', 'Fixture', ?)"#,
+        )
+        .bind(addon_id)
+        .bind(format!("fixture-{playlist_id}"))
+        .bind(playlist_id)
+        .execute(pool)
+        .await
+        .expect("insert add-on media list");
+        let list_id = list.last_insert_rowid();
+        let revision = sqlx::query(
+            r#"INSERT INTO "AddonMediaListRevision" (
+                   "AddonMediaListId", "Revision", "OptionValuesJson"
+               ) VALUES (?, 1, '{}')"#,
+        )
+        .bind(list_id)
+        .execute(pool)
+        .await
+        .expect("insert retained revision");
+        let artifact = sqlx::query(
+            r#"INSERT INTO "AddonMediaListArtifact" (
+                   "AddonMediaListId", "CacheKey", "Kind", "State", "CreatedAt", "UpdatedAt"
+               ) VALUES (?, ?, 1, 0, '2026-09-04 12:00:00', '2026-09-04 12:00:00')"#,
+        )
+        .bind(list_id)
+        .bind(format!("fixture-artifact-{playlist_id}"))
+        .execute(pool)
+        .await
+        .expect("insert retained artifact");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRevisionArtifact" (
+                   "AddonMediaListRevisionId", "AddonMediaListArtifactId"
+               ) VALUES (?, ?)"#,
+        )
+        .bind(revision.last_insert_rowid())
+        .bind(artifact.last_insert_rowid())
+        .execute(pool)
+        .await
+        .expect("pin retained artifact");
+    }
+
     #[tokio::test]
-    async fn forced_reference_cleanup_removes_media_lists_and_only_generated_playlists() {
+    async fn forced_uninstall_cleanup_removes_pinned_lists_and_only_generated_playlists() {
         let temp = tempfile::tempdir().expect("temp directory");
         let database_url = format!("sqlite:{}", temp.path().join("addons.db").display());
         let pool = crate::db::init(&database_url)
@@ -5916,28 +5994,7 @@ mod tests {
         .await
         .expect("insert playlist group");
         for (id, is_system) in [(700_i64, 1_i64), (701, 0)] {
-            sqlx::query(
-                r#"INSERT INTO "Playlist" ("Id", "IsSystem", "Name", "PlaylistGroupId")
-                   VALUES (?, ?, ?, ?)"#,
-            )
-            .bind(id)
-            .bind(is_system)
-            .bind(format!("Fixture {id}"))
-            .bind(group_id)
-            .execute(&pool)
-            .await
-            .expect("insert playlist");
-            sqlx::query(
-                r#"INSERT INTO "AddonMediaList" (
-                       "AddonId", "ProviderId", "SourceUrl", "Name", "PlaylistId"
-                   ) VALUES (?, ?, 'https://example.test/list', 'Fixture', ?)"#,
-            )
-            .bind(&manifest.id)
-            .bind(format!("fixture-{id}"))
-            .bind(id)
-            .execute(&pool)
-            .await
-            .expect("insert add-on media list");
+            insert_pinned_addon_media_list(&pool, &manifest.id, id, is_system, group_id).await;
         }
 
         let mut transaction = pool.begin().await.expect("begin transaction");
@@ -5963,6 +6020,15 @@ mod tests {
                 .expect("load remaining playlist");
         assert_eq!(media_list_count, 0);
         assert_eq!((remaining_playlists, remaining_playlist_id), (1, 701));
+        let retained_state: i64 = sqlx::query_scalar(
+            r#"SELECT
+                   (SELECT COUNT(*) FROM "AddonMediaListArtifact") +
+                   (SELECT COUNT(*) FROM "AddonMediaListRevisionArtifact")"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("count deleted retained artifacts");
+        assert_eq!(retained_state, 0);
     }
 
     #[tokio::test]
@@ -6025,7 +6091,10 @@ mod tests {
                 CAPABILITY_REMOTE_STREAM_PLAY_V1,
             ]
             .into_iter()
-            .map(|id| AddonCapability { id: id.to_owned() }),
+            .map(|id| AddonCapability {
+                id: id.to_owned(),
+                options: Vec::new(),
+            }),
         );
         manifest
             .settings

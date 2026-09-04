@@ -8,8 +8,8 @@ combinations are rejected.
 
 The distribution mechanism for Rust add-ons is the independently versioned
 `ersatzrs-addon-contract` crate in the canonical ErsatzRS GitHub repository.
-Contract version `0.3.0` is the current source version. When that version is
-released, its implementation receives the immutable `addon-contract-v0.3.0`
+Contract version `0.4.0` is the current source version. When that version is
+released, its implementation receives the immutable `addon-contract-v0.4.0`
 tag. Add-ons pin the tag's full commit SHA:
 
 ```toml
@@ -78,7 +78,7 @@ every invocation and by health checks.
 
 | Field | Contract |
 |---|---|
-| `manifest_version` | Integer `1` through `4`; version 2 adds the optional `icon` object, version 3 adds safe suggested secret-reference locations and managed media-list storage, and version 4 adds `default_source_hosts`. |
+| `manifest_version` | Integer `1` through `5`; version 2 adds the optional `icon` object, version 3 adds safe suggested secret-reference locations and managed media-list storage, version 4 adds `default_source_hosts`, and version 5 allows declarative option definitions on a versioned capability. |
 | `id` | Lowercase reverse-DNS identity with at least three components. |
 | `version` | SemVer. |
 | `name`, `summary` | Locale maps with a non-empty `en-US` value. |
@@ -86,7 +86,7 @@ every invocation and by health checks.
 | `source_url` | Credential-free HTTPS URL. |
 | `host_version` | SemVer requirement matched against the ErsatzRS version. |
 | `icon` | Optional schema-v2 object with a package-relative `path` and `media_type` of `png` or `webp`. |
-| `capabilities` | Unique versioned IDs; every executable package includes `addon.check.v1`. |
+| `capabilities` | Unique versioned IDs; every executable package includes `addon.check.v1`. Manifest v5 capabilities may carry the bounded declarative options owned by that exact capability version. |
 | `dependencies` | Unique add-on IDs with SemVer requirements and an optional flag. |
 | `entrypoints` | Exact release RID keys or `any`, with a package-relative path and launcher kind. |
 | `permissions` | Declared network hosts, media-read access, managed FFmpeg access, and external commands. |
@@ -119,6 +119,16 @@ not a secret default; non-secret settings cannot declare it.
 Declarative panels accept text, status, key/value, and HTTPS link blocks without
 URL userinfo. Packages cannot inject HTML, CSS, JavaScript, or WASM into the
 admin UI.
+
+`media-list.options.v1` is a declarative capability, not an executable
+operation. Its option definitions are nested under that exact capability ID,
+which is also the schema namespace and version. Definitions use Boolean or
+finite enum values, declare list-default and/or item-override scope, operation
+targets, applicability, and localized labels and descriptions. The host
+validates the schema before install and rejects unknown keys, invalid values,
+unsupported targets, or a changed definition with the same schema identity
+before persistence or process launch. Packages without this capability keep
+the frozen media-list import and playback request shapes.
 
 ## Permission declarations
 

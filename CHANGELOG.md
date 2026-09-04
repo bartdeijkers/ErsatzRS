@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Add a provider-neutral add-on-list lifecycle persistence foundation for
+  versioned declarative options, explicit refresh cadence and publication
+  policy, durable reset/reconcile and incremental checkpoint state, retained
+  revisions, tombstones, bounded artifact ownership, and redacted tool-update
+  history while preserving legacy add-on request contracts.
+
 - Allow administrators to remove an uploaded offline add-on repository bundle
   from Sources without uninstalling package snapshots or deleting their
   settings and data. Checkout sources remain operator-owned and cannot be

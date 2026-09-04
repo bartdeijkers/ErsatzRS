@@ -3,25 +3,31 @@ use crate::repositories::SqlxResultExt as _;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{
-    AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
-    AddonMediaListDetailState, AddonMediaListImportState, AddonMediaListItemAvailability,
-    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
-    AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
-    AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
-    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
-    AddonMediaListPublicationRetryClass, AddonMediaListRecoveryAction, AddonMediaListReviewState,
-    ArtworkKind, BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode,
-    ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode,
-    ChannelSubtitleMode, ChannelTranscodeMode, ChannelWatermarkImageSource, ChannelWatermarkMode,
-    CollectionType, ContentKind, DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat,
-    FFmpegProfileBitDepth, FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat,
-    FillWithGroupMode, FillerKind, FillerMode, FilterMode, FixedStartTimeBehavior,
-    GraphicsElementKind, GuideMode, HardwareAccelerationKind, LibraryMediaKind,
-    ManagedLibraryOperationKind, ManagedLibraryOperationState, MarathonGroupBy, MediaItemState,
-    MediaSourceKind, MediaStreamKind, MetadataKind, MetadataSource, MultipleMode,
-    NormalizeLoudnessMode, OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind,
-    RemoteStreamLiveness, ScalingBehavior, StartType, StreamingMode, SubtitleKind, TailMode,
-    VaapiDriver, VideoScanKind, WatermarkLocation, WatermarkSize,
+    AddonMediaListArtifactKind, AddonMediaListArtifactState, AddonMediaListAvailabilityReason,
+    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
+    AddonMediaListImportMode, AddonMediaListImportPurpose, AddonMediaListImportState,
+    AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListItemRole, AddonMediaListLifecycleJobKind, AddonMediaListLifecyclePhase,
+    AddonMediaListPresentationKind, AddonMediaListPublicationEnqueueTrigger,
+    AddonMediaListPublicationErrorCategory, AddonMediaListPublicationEventKind,
+    AddonMediaListPublicationFilesystemTransition, AddonMediaListPublicationOutcome,
+    AddonMediaListPublicationPhase, AddonMediaListPublicationRetryClass,
+    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
+    AddonMediaListRefreshPublicationPolicy, AddonMediaListReviewState, AddonToolMaintenanceOutcome,
+    AddonToolMaintenanceRollback, AddonToolMaintenanceState, AddonToolMaintenanceTrigger,
+    AddonToolMaintenanceValidation, ArtworkKind, BlockStopScheduling, ChannelIdleBehavior,
+    ChannelMusicVideoCreditsMode, ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode,
+    ChannelStreamSelectorMode, ChannelSubtitleMode, ChannelTranscodeMode,
+    ChannelWatermarkImageSource, ChannelWatermarkMode, CollectionType, ContentKind,
+    DecoBreakPlacement, DecoMode, FFmpegProfileAudioFormat, FFmpegProfileBitDepth,
+    FFmpegProfileTonemapAlgorithm, FFmpegProfileVideoFormat, FillWithGroupMode, FillerKind,
+    FillerMode, FilterMode, FixedStartTimeBehavior, GraphicsElementKind, GuideMode,
+    HardwareAccelerationKind, LibraryMediaKind, ManagedLibraryOperationKind,
+    ManagedLibraryOperationState, MarathonGroupBy, MediaItemState, MediaSourceKind,
+    MediaStreamKind, MetadataKind, MetadataSource, MultipleMode, NormalizeLoudnessMode,
+    OutputDynamicRange, PlaybackOrder, PlayoutMode, PlayoutScheduleKind, RemoteStreamLiveness,
+    ScalingBehavior, StartType, StreamingMode, SubtitleKind, TailMode, VaapiDriver, VideoScanKind,
+    WatermarkLocation, WatermarkSize,
 };
 use serde::de::DeserializeOwned;
 use sqlx::{Pool, Row};
@@ -541,6 +547,7 @@ db_enum!(ManagedLibraryOperationKind {
     5 => ManagedLibraryOperationKind::ProviderRefresh,
     6 => ManagedLibraryOperationKind::Recovery,
     7 => ManagedLibraryOperationKind::Reset,
+    8 => ManagedLibraryOperationKind::Reconcile,
 });
 db_enum!(ManagedLibraryOperationState {
     0 => ManagedLibraryOperationState::Queued,
@@ -715,6 +722,87 @@ db_enum!(AddonMediaListContentKind {
 db_enum!(AddonMediaListDetailPolicy {
     0 => AddonMediaListDetailPolicy::Automatic,
     1 => AddonMediaListDetailPolicy::ManualOnly,
+});
+db_enum!(AddonMediaListRefreshCadence {
+    0 => AddonMediaListRefreshCadence::Daily,
+    1 => AddonMediaListRefreshCadence::Weekly,
+    2 => AddonMediaListRefreshCadence::Monthly,
+    3 => AddonMediaListRefreshCadence::Yearly,
+    4 => AddonMediaListRefreshCadence::Never,
+});
+db_enum!(AddonMediaListRefreshPublicationPolicy {
+    0 => AddonMediaListRefreshPublicationPolicy::Review,
+    1 => AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions,
+});
+db_enum!(AddonMediaListImportPurpose {
+    0 => AddonMediaListImportPurpose::Refresh,
+    1 => AddonMediaListImportPurpose::Reconcile,
+    2 => AddonMediaListImportPurpose::ResetReload,
+});
+db_enum!(AddonMediaListImportMode {
+    0 => AddonMediaListImportMode::Full,
+    1 => AddonMediaListImportMode::Incremental,
+});
+db_enum!(AddonMediaListIncrementalStrategy {
+    0 => AddonMediaListIncrementalStrategy::None,
+    1 => AddonMediaListIncrementalStrategy::SkipKnown,
+    2 => AddonMediaListIncrementalStrategy::NewestFirstEarlyStop,
+});
+db_enum!(AddonMediaListLifecycleJobKind {
+    0 => AddonMediaListLifecycleJobKind::ResetReload,
+    1 => AddonMediaListLifecycleJobKind::Reconcile,
+});
+db_enum!(AddonMediaListLifecyclePhase {
+    0 => AddonMediaListLifecyclePhase::AwaitingLease,
+    1 => AddonMediaListLifecyclePhase::Quiescing,
+    2 => AddonMediaListLifecyclePhase::UnpublishingFiles,
+    3 => AddonMediaListLifecyclePhase::UnpublishingProjection,
+    4 => AddonMediaListLifecyclePhase::ClearingProviderState,
+    5 => AddonMediaListLifecyclePhase::ClearingCheckpoint,
+    6 => AddonMediaListLifecyclePhase::VerifyingEmpty,
+    7 => AddonMediaListLifecyclePhase::QueueingInitialImport,
+    8 => AddonMediaListLifecyclePhase::EnumeratingSource,
+    9 => AddonMediaListLifecyclePhase::ComparingCandidate,
+    10 => AddonMediaListLifecyclePhase::Complete,
+});
+db_enum!(AddonMediaListArtifactKind {
+    0 => AddonMediaListArtifactKind::Subtitle,
+    1 => AddonMediaListArtifactKind::ProcessedMedia,
+});
+db_enum!(AddonMediaListArtifactState {
+    0 => AddonMediaListArtifactState::Reserved,
+    1 => AddonMediaListArtifactState::Staged,
+    2 => AddonMediaListArtifactState::Ready,
+    3 => AddonMediaListArtifactState::Failed,
+});
+db_enum!(AddonToolMaintenanceTrigger {
+    0 => AddonToolMaintenanceTrigger::Startup,
+    1 => AddonToolMaintenanceTrigger::Daily,
+    2 => AddonToolMaintenanceTrigger::Manual,
+});
+db_enum!(AddonToolMaintenanceState {
+    0 => AddonToolMaintenanceState::Queued,
+    1 => AddonToolMaintenanceState::Running,
+    2 => AddonToolMaintenanceState::WaitingToRetry,
+    3 => AddonToolMaintenanceState::Completed,
+    4 => AddonToolMaintenanceState::Failed,
+});
+db_enum!(AddonToolMaintenanceValidation {
+    0 => AddonToolMaintenanceValidation::NotRun,
+    1 => AddonToolMaintenanceValidation::Passed,
+    2 => AddonToolMaintenanceValidation::Failed,
+});
+db_enum!(AddonToolMaintenanceRollback {
+    0 => AddonToolMaintenanceRollback::NotRequired,
+    1 => AddonToolMaintenanceRollback::Succeeded,
+    2 => AddonToolMaintenanceRollback::Failed,
+});
+db_enum!(AddonToolMaintenanceOutcome {
+    0 => AddonToolMaintenanceOutcome::Updated,
+    1 => AddonToolMaintenanceOutcome::AlreadyCurrent,
+    2 => AddonToolMaintenanceOutcome::ManualUpdateRequired,
+    3 => AddonToolMaintenanceOutcome::RolledBack,
+    4 => AddonToolMaintenanceOutcome::Failed,
 });
 db_enum!(AddonMediaListImportState {
     0 => AddonMediaListImportState::Queued,

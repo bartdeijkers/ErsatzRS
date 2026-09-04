@@ -111,6 +111,7 @@ struct AuditReport {
     episodes: EpisodeAudit,
     failed_build_statuses: i64,
     publication_history: PublicationHistoryAudit,
+    addon_lifecycle: AddonLifecycleAudit,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -163,6 +164,33 @@ struct PublicationHistoryAudit {
     original_failures: i64,
     recovery_failures: i64,
     recent_streams: Vec<PublicationHistoryStream>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct AddonLifecycleAudit {
+    available: bool,
+    lifecycle_active: i64,
+    lifecycle_waiting: i64,
+    lifecycle_expired: i64,
+    lifecycle_failed: i64,
+    checkpoints: i64,
+    retained_revisions: i64,
+    tombstones: i64,
+    artifacts: i64,
+    artifact_pending: i64,
+    artifact_ready: i64,
+    artifact_failed: i64,
+    artifact_bytes: i64,
+    artifact_reserved_bytes: i64,
+    tool_active: i64,
+    tool_waiting: i64,
+    tool_expired: i64,
+    tool_failed: i64,
+    tool_updated: i64,
+    tool_already_current: i64,
+    tool_manual_update_required: i64,
+    tool_rolled_back: i64,
+    tool_failed_outcome: i64,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -322,6 +350,34 @@ impl AuditReport {
                     .map_or_else(|| "none".to_owned(), |code| code.to_string()),
             ));
         }
+        output.push_str(&format!(
+            "runtime-audit: addon_lifecycle available={} active={} waiting={} expired={} failed={} checkpoints={} retained_revisions={} tombstones={}\n\
+             runtime-audit: addon_artifacts total={} pending={} ready={} failed={} bytes={} reserved_bytes={}\n\
+             runtime-audit: addon_tool_maintenance active={} waiting={} expired={} failed={} outcomes_updated={} outcomes_already_current={} outcomes_manual_update_required={} outcomes_rolled_back={} outcomes_failed={}\n",
+            self.addon_lifecycle.available,
+            self.addon_lifecycle.lifecycle_active,
+            self.addon_lifecycle.lifecycle_waiting,
+            self.addon_lifecycle.lifecycle_expired,
+            self.addon_lifecycle.lifecycle_failed,
+            self.addon_lifecycle.checkpoints,
+            self.addon_lifecycle.retained_revisions,
+            self.addon_lifecycle.tombstones,
+            self.addon_lifecycle.artifacts,
+            self.addon_lifecycle.artifact_pending,
+            self.addon_lifecycle.artifact_ready,
+            self.addon_lifecycle.artifact_failed,
+            self.addon_lifecycle.artifact_bytes,
+            self.addon_lifecycle.artifact_reserved_bytes,
+            self.addon_lifecycle.tool_active,
+            self.addon_lifecycle.tool_waiting,
+            self.addon_lifecycle.tool_expired,
+            self.addon_lifecycle.tool_failed,
+            self.addon_lifecycle.tool_updated,
+            self.addon_lifecycle.tool_already_current,
+            self.addon_lifecycle.tool_manual_update_required,
+            self.addon_lifecycle.tool_rolled_back,
+            self.addon_lifecycle.tool_failed_outcome,
+        ));
         let findings = self.findings();
         for finding in &findings {
             output.push_str(&format!("runtime-audit: finding: {finding}\n"));
@@ -363,6 +419,7 @@ fn audit_database(path: &Path) -> Result<AuditReport> {
         episodes: audit_episodes(&connection)?,
         failed_build_statuses: audit_failed_builds(&connection)?,
         publication_history: audit_publication_history(&connection)?,
+        addon_lifecycle: audit_addon_lifecycle(&connection)?,
     })
 }
 
@@ -720,6 +777,103 @@ fn audit_publication_history(connection: &Connection) -> Result<PublicationHisto
     })
 }
 
+fn audit_addon_lifecycle(connection: &Connection) -> Result<AddonLifecycleAudit> {
+    if !table_exists(connection, "AddonMediaListLifecycleJob")? {
+        return Ok(AddonLifecycleAudit::default());
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    connection
+        .query_row(
+            r#"SELECT
+                   (SELECT COUNT(*)
+                      FROM "AddonMediaListLifecycleJob" AS job
+                      JOIN "ManagedLibraryOperation" AS operation
+                        ON operation."Id" = job."OperationId"
+                     WHERE operation."State" = 0
+                        OR (operation."State" = 1 AND EXISTS (
+                            SELECT 1 FROM "ManagedLibraryLease" AS lease
+                             WHERE lease."OperationId" = operation."Id"
+                               AND lease."OwnerToken" = operation."OwnerToken"
+                               AND julianday(lease."LeaseExpiresAt") > julianday(?1)
+                        ))),
+                   (SELECT COUNT(*)
+                      FROM "AddonMediaListLifecycleJob" AS job
+                      JOIN "ManagedLibraryOperation" AS operation
+                        ON operation."Id" = job."OperationId"
+                     WHERE operation."State" = 2),
+                   (SELECT COUNT(*)
+                      FROM "AddonMediaListLifecycleJob" AS job
+                      JOIN "ManagedLibraryOperation" AS operation
+                        ON operation."Id" = job."OperationId"
+                     WHERE operation."State" = 1
+                       AND NOT EXISTS (
+                           SELECT 1 FROM "ManagedLibraryLease" AS lease
+                            WHERE lease."OperationId" = operation."Id"
+                              AND lease."OwnerToken" = operation."OwnerToken"
+                              AND julianday(lease."LeaseExpiresAt") > julianday(?1)
+                       )),
+                   (SELECT COUNT(*)
+                      FROM "AddonMediaListLifecycleJob" AS job
+                      JOIN "ManagedLibraryOperation" AS operation
+                        ON operation."Id" = job."OperationId"
+                     WHERE operation."State" = 4),
+                   (SELECT COUNT(*) FROM "AddonMediaListImportCheckpoint"),
+                   (SELECT COUNT(*) FROM "AddonMediaListRevision"),
+                   (SELECT COUNT(*) FROM "AddonMediaListItemTombstone"),
+                   (SELECT COUNT(*) FROM "AddonMediaListArtifact"),
+                   (SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "State" IN (0, 1)),
+                   (SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "State" = 2),
+                   (SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "State" = 3),
+                   (SELECT COALESCE(SUM("ByteLength"), 0) FROM "AddonMediaListArtifact"),
+                   (SELECT COALESCE(SUM("ReservedBytes"), 0) FROM "AddonMediaListArtifact"),
+                   (SELECT COUNT(*) FROM "AddonToolMaintenanceJob"
+                     WHERE "State" = 0
+                        OR ("State" = 1 AND "LeaseOwner" IS NOT NULL
+                            AND julianday("LeaseExpiresAt") > julianday(?1))),
+                   (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "State" = 2),
+                   (SELECT COUNT(*) FROM "AddonToolMaintenanceJob"
+                     WHERE "State" = 1
+                       AND ("LeaseOwner" IS NULL OR "LeaseExpiresAt" IS NULL
+                            OR julianday("LeaseExpiresAt") <= julianday(?1))),
+                   (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "State" = 4),
+                   (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 0),
+                   (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 1),
+                   (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 2),
+                   (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 3),
+                   (SELECT COUNT(*) FROM "AddonToolMaintenanceJob" WHERE "Outcome" = 4)"#,
+            params![now],
+            |row| {
+                Ok(AddonLifecycleAudit {
+                    available: true,
+                    lifecycle_active: row.get(0)?,
+                    lifecycle_waiting: row.get(1)?,
+                    lifecycle_expired: row.get(2)?,
+                    lifecycle_failed: row.get(3)?,
+                    checkpoints: row.get(4)?,
+                    retained_revisions: row.get(5)?,
+                    tombstones: row.get(6)?,
+                    artifacts: row.get(7)?,
+                    artifact_pending: row.get(8)?,
+                    artifact_ready: row.get(9)?,
+                    artifact_failed: row.get(10)?,
+                    artifact_bytes: row.get(11)?,
+                    artifact_reserved_bytes: row.get(12)?,
+                    tool_active: row.get(13)?,
+                    tool_waiting: row.get(14)?,
+                    tool_expired: row.get(15)?,
+                    tool_failed: row.get(16)?,
+                    tool_updated: row.get(17)?,
+                    tool_already_current: row.get(18)?,
+                    tool_manual_update_required: row.get(19)?,
+                    tool_rolled_back: row.get(20)?,
+                    tool_failed_outcome: row.get(21)?,
+                })
+            },
+        )
+        .context("auditing add-on lifecycle foundation aggregates")
+}
+
 const fn publication_state_name(state: i64, phase: i64, live_lease: bool) -> &'static str {
     match state {
         0 => "queued",
@@ -861,6 +1015,7 @@ mod tests {
         assert_eq!(report.episodes.projected_season_episode_counts, [2]);
         assert_eq!(report.failed_build_statuses, 1);
         assert!(!report.publication_history.available);
+        assert!(!report.addon_lifecycle.available);
 
         let rendered = report.render(&database.path, true);
         assert!(rendered.contains("database=<redacted>"));
@@ -868,6 +1023,57 @@ mod tests {
         assert!(!rendered.contains("playout_id=10"));
         assert!(!rendered.contains(&database.path.display().to_string()));
         assert!(rendered.contains("publication_history available=false"));
+        assert!(rendered.contains("addon_lifecycle available=false"));
+    }
+
+    #[test]
+    fn audits_optional_lifecycle_foundations_as_bounded_private_aggregates() {
+        let database = TempDatabase::new();
+        seed_fixture(&database.path);
+        seed_lifecycle_foundations(&database.path);
+
+        let report = audit_database(&database.path).expect("audit lifecycle foundations");
+        assert!(report.addon_lifecycle.available);
+        assert_eq!(report.addon_lifecycle.lifecycle_active, 2);
+        assert_eq!(report.addon_lifecycle.lifecycle_waiting, 1);
+        assert_eq!(report.addon_lifecycle.lifecycle_expired, 1);
+        assert_eq!(report.addon_lifecycle.lifecycle_failed, 1);
+        assert_eq!(report.addon_lifecycle.checkpoints, 2);
+        assert_eq!(report.addon_lifecycle.retained_revisions, 3);
+        assert_eq!(report.addon_lifecycle.tombstones, 1);
+        assert_eq!(report.addon_lifecycle.artifacts, 4);
+        assert_eq!(report.addon_lifecycle.artifact_pending, 2);
+        assert_eq!(report.addon_lifecycle.artifact_ready, 1);
+        assert_eq!(report.addon_lifecycle.artifact_failed, 1);
+        assert_eq!(report.addon_lifecycle.artifact_bytes, 120);
+        assert_eq!(report.addon_lifecycle.artifact_reserved_bytes, 60);
+        assert_eq!(report.addon_lifecycle.tool_active, 2);
+        assert_eq!(report.addon_lifecycle.tool_waiting, 1);
+        assert_eq!(report.addon_lifecycle.tool_expired, 1);
+        assert_eq!(report.addon_lifecycle.tool_failed, 1);
+
+        for redact in [true, false] {
+            let rendered = report.render(&database.path, redact);
+            assert!(rendered.contains(
+                "addon_lifecycle available=true active=2 waiting=1 expired=1 failed=1 checkpoints=2 retained_revisions=3 tombstones=1"
+            ));
+            assert!(rendered.contains(
+                "addon_artifacts total=4 pending=2 ready=1 failed=1 bytes=120 reserved_bytes=60"
+            ));
+            assert!(rendered.contains(
+                "addon_tool_maintenance active=2 waiting=1 expired=1 failed=1 outcomes_updated=1 outcomes_already_current=1 outcomes_manual_update_required=1 outcomes_rolled_back=1 outcomes_failed=1"
+            ));
+            for forbidden in [
+                "/private/checkpoint.json",
+                "/private/artifact.bin",
+                "private-checkpoint-digest",
+                "private-artifact-digest",
+                "private-tool-version",
+                "https://private.invalid/tool?token=secret",
+            ] {
+                assert!(!rendered.contains(forbidden));
+            }
+        }
     }
 
     #[test]
@@ -1109,5 +1315,99 @@ mod tests {
                 "#,
             )
             .expect("seed publication history fixture");
+    }
+
+    fn seed_lifecycle_foundations(path: &Path) {
+        let connection = Connection::open(path).expect("open lifecycle foundation fixture");
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE "ManagedLibraryOperation" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "OwnerToken" TEXT NOT NULL,
+                    "State" INTEGER NOT NULL
+                );
+                CREATE TABLE "ManagedLibraryLease" (
+                    "OperationId" INTEGER NOT NULL,
+                    "OwnerToken" TEXT NOT NULL,
+                    "LeaseExpiresAt" TEXT NOT NULL
+                );
+                CREATE TABLE "AddonMediaListLifecycleJob" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "OperationId" INTEGER NOT NULL
+                );
+                CREATE TABLE "AddonMediaListImportCheckpoint" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "RelativePath" TEXT NOT NULL,
+                    "Sha256" TEXT NOT NULL
+                );
+                CREATE TABLE "AddonMediaListRevision" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "OptionValuesJson" TEXT NOT NULL
+                );
+                CREATE TABLE "AddonMediaListItemTombstone" (
+                    "AddonMediaListItemId" INTEGER PRIMARY KEY
+                );
+                CREATE TABLE "AddonMediaListArtifact" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "State" INTEGER NOT NULL,
+                    "RelativePath" TEXT NULL,
+                    "ReservedBytes" INTEGER NOT NULL,
+                    "ByteLength" INTEGER NULL,
+                    "Sha256" TEXT NULL,
+                    "DiagnosticCode" TEXT NULL
+                );
+                CREATE TABLE "AddonToolMaintenanceJob" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "State" INTEGER NOT NULL,
+                    "LeaseOwner" TEXT NULL,
+                    "LeaseExpiresAt" TEXT NULL,
+                    "BeforeVersion" TEXT NULL,
+                    "BeforeSha256" TEXT NULL,
+                    "AfterVersion" TEXT NULL,
+                    "AfterSha256" TEXT NULL,
+                    "Outcome" INTEGER NULL,
+                    "DiagnosticCode" TEXT NULL,
+                    "Diagnostic" TEXT NULL
+                );
+
+                INSERT INTO "ManagedLibraryOperation" VALUES
+                    (1, 'owner-1', 0),
+                    (2, 'owner-2', 1),
+                    (3, 'owner-3', 2),
+                    (4, 'owner-4', 1),
+                    (5, 'owner-5', 4);
+                INSERT INTO "ManagedLibraryLease" VALUES
+                    (2, 'owner-2', '2999-01-01T00:00:00Z'),
+                    (4, 'stale-owner', '2999-01-01T00:00:00Z');
+                INSERT INTO "AddonMediaListLifecycleJob" VALUES
+                    (1, 1), (2, 2), (3, 3), (4, 4), (5, 5);
+                INSERT INTO "AddonMediaListImportCheckpoint" VALUES
+                    (1, '/private/checkpoint.json', 'private-checkpoint-digest'),
+                    (2, '/private/checkpoint-2.json', 'private-checkpoint-digest-2');
+                INSERT INTO "AddonMediaListRevision" VALUES
+                    (1, '{"secret":"private-option"}'),
+                    (2, '{}'),
+                    (3, '{}');
+                INSERT INTO "AddonMediaListItemTombstone" VALUES (1);
+                INSERT INTO "AddonMediaListArtifact" VALUES
+                    (1, 0, '/private/artifact.bin', 50, NULL,
+                     'private-artifact-digest', 'private-artifact-code'),
+                    (2, 1, NULL, 10, NULL, NULL, NULL),
+                    (3, 2, NULL, 0, 100, NULL, NULL),
+                    (4, 3, NULL, 0, 20, NULL, 'private-artifact-failure');
+                INSERT INTO "AddonToolMaintenanceJob" VALUES
+                    (1, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+                    (2, 1, 'worker', '2999-01-01T00:00:00Z', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+                    (3, 2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+                    (4, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+                    (5, 4, NULL, NULL, NULL, NULL, NULL, NULL, 4, NULL, 'https://private.invalid/tool?token=secret'),
+                    (6, 3, NULL, NULL, 'private-tool-version', 'private-before-digest', 'private-tool-version-2', 'private-after-digest', 0, NULL, NULL),
+                    (7, 3, NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL),
+                    (8, 3, NULL, NULL, NULL, NULL, NULL, NULL, 2, NULL, NULL),
+                    (9, 3, NULL, NULL, NULL, NULL, NULL, NULL, 3, NULL, NULL);
+                "#,
+            )
+            .expect("seed lifecycle foundation fixture");
     }
 }

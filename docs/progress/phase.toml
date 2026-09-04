@@ -32,6 +32,10 @@ integrated packaged Windows restart repetition remains owned by AMM-N-03.
 AMM-J-04 closes the focused recovery program with bounded, ordered, redacted
 causal history across publication, scan, filesystem, retry, and recovery
 boundaries, plus localized Activity, Health, and runtime-audit projections.
+AMM-K-01 adds the provider-neutral option-schema and lifecycle persistence
+foundation, including fail-closed schema binding, fenced checkpoints/jobs,
+retained revisions, artifact ownership, tombstones, and tool history without
+enabling later lifecycle behavior early.
 ADR 0085 broadens the remaining corrective program through AMM-K operator
 lifecycle/navigation, AMM-L cadenced incremental
 refresh/reconciliation, AMM-M inherited yt-dlp access/SponsorBlock/subtitles
@@ -43,7 +47,7 @@ early stop, additions-only automatic publication, and updater rollback.
 
 next_steps = '''
 Deliver ADR 0085 in dependency order through AMM-K, AMM-L, AMM-M, and AMM-N,
-starting with AMM-K-01. Resume Phase 9A at p9a-01 after that corrective program
+continuing with AMM-K-02. Resume Phase 9A at p9a-01 after that corrective program
 by accepting the teletext product and standards contract before implementation.
 '''
 

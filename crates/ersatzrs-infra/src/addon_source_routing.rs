@@ -149,9 +149,11 @@ mod tests {
             capabilities: vec![
                 AddonCapability {
                     id: CAPABILITY_ADDON_CHECK_V1.to_owned(),
+                    options: Vec::new(),
                 },
                 AddonCapability {
                     id: CAPABILITY_MEDIA_LIST_LIST_V1.to_owned(),
+                    options: Vec::new(),
                 },
             ],
             dependencies: Vec::new(),

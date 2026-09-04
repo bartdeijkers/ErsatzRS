@@ -1,4 +1,5 @@
 mod addon_media_list;
+mod addon_media_list_lifecycle;
 pub(crate) mod addon_publication_fs;
 pub(crate) use addon_media_list::load_replacement_candidate;
 mod admin_media;

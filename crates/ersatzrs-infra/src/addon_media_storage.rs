@@ -673,7 +673,10 @@ mod tests {
                 CAPABILITY_REMOTE_STREAM_PLAY_V1,
             ]
             .into_iter()
-            .map(|id| AddonCapability { id: id.to_owned() })
+            .map(|id| AddonCapability {
+                id: id.to_owned(),
+                options: Vec::new(),
+            })
             .collect(),
             dependencies: Vec::new(),
             entrypoints: BTreeMap::from([(

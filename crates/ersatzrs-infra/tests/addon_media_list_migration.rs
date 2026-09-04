@@ -1,4 +1,135 @@
-use sqlx::{sqlite::SqlitePoolOptions, Executor, Row};
+use sqlx::{sqlite::SqlitePoolOptions, Executor, Row, SqlitePool};
+
+#[tokio::test]
+async fn lifecycle_foundation_backfills_only_truthful_legacy_state() {
+    const LIFECYCLE_FOUNDATION_VERSION: i64 = 202_609_041_500;
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("open lifecycle migration database");
+    pool.execute("PRAGMA foreign_keys = ON").await.unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    let previous = sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version < LIFECYCLE_FOUNDATION_VERSION)
+            .cloned()
+            .collect(),
+    );
+    previous.run(&pool).await.expect("migrate legacy schema");
+    seed_legacy_lifecycle_rows(&pool).await;
+
+    migrations
+        .run(&pool)
+        .await
+        .expect("apply lifecycle foundation migration");
+    assert_lifecycle_foundation_backfill(&pool).await;
+}
+
+async fn seed_legacy_lifecycle_rows(pool: &SqlitePool) {
+    sqlx::raw_sql(
+        r#"
+        INSERT INTO "AddonInstallation" (
+            "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+            "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+        ) VALUES (
+            'org.example.lifecycle', '1.0.0', 1, 'package', 'content', '{}',
+            'addons/lifecycle', '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z'
+        );
+        INSERT INTO "AddonMediaList" (
+            "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "AutoRefresh",
+            "PublishedRevision", "DraftRevision", "LastUpdate"
+        ) VALUES
+            (1, 'org.example.lifecycle', 'daily', 'https://example.invalid/daily',
+             'Daily', 1, 5, 7, '2026-09-03T12:00:00Z'),
+            (2, 'org.example.lifecycle', 'manual', 'https://example.invalid/manual',
+             'Manual', 0, 0, 0, NULL);
+        INSERT INTO "AddonMediaListImportJob" (
+            "AddonMediaListId", "Generation", "State", "RecordCapability",
+            "CreatedAt", "UpdatedAt"
+        ) VALUES (
+            1, 1, 3, 'media-list.list.v1',
+            '2026-09-03T12:00:00Z', '2026-09-03T12:00:00Z'
+        );
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("seed legacy lifecycle rows");
+}
+
+async fn assert_lifecycle_foundation_backfill(pool: &SqlitePool) {
+    let lists = sqlx::query(
+        r#"SELECT "Id", "RefreshCadence", "RefreshPublicationPolicy",
+                  "LastRefreshSucceededAt", "DraftOptionSchemaId",
+                  "DraftOptionValuesJson", "ProcessedArtifactByteLimit"
+           FROM "AddonMediaList" ORDER BY "Id""#,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    assert_eq!(lists[0].get::<i32, _>("RefreshCadence"), 0);
+    assert_eq!(lists[1].get::<i32, _>("RefreshCadence"), 4);
+    assert_eq!(lists[0].get::<i32, _>("RefreshPublicationPolicy"), 0);
+    assert_eq!(
+        lists[0].get::<String, _>("LastRefreshSucceededAt"),
+        "2026-09-03T12:00:00Z"
+    );
+    assert!(lists[0]
+        .get::<Option<i64>, _>("DraftOptionSchemaId")
+        .is_none());
+    assert_eq!(lists[0].get::<String, _>("DraftOptionValuesJson"), "{}");
+    assert!(lists[0]
+        .get::<Option<i64>, _>("ProcessedArtifactByteLimit")
+        .is_none());
+
+    let import = sqlx::query(
+        r#"SELECT "Purpose", "Mode", "IncrementalStrategy", "ExaminedCount",
+                  "ArchivedSkippedCount", "EmittedCount", "CheckpointId"
+           FROM "AddonMediaListImportJob""#,
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(import.get::<i32, _>("Purpose"), 0);
+    assert_eq!(import.get::<i32, _>("Mode"), 0);
+    assert_eq!(import.get::<i32, _>("IncrementalStrategy"), 0);
+    assert_eq!(import.get::<i64, _>("ExaminedCount"), 0);
+    assert_eq!(import.get::<i64, _>("ArchivedSkippedCount"), 0);
+    assert_eq!(import.get::<i64, _>("EmittedCount"), 0);
+    assert!(import.get::<Option<i64>, _>("CheckpointId").is_none());
+
+    let revision = sqlx::query(
+        r#"SELECT "Revision", "SourceDraftRevision", "OptionSchemaId",
+                  "OptionValuesJson", "CompletedAt"
+           FROM "AddonMediaListRevision""#,
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(revision.get::<i32, _>("Revision"), 5);
+    assert!(revision
+        .get::<Option<i32>, _>("SourceDraftRevision")
+        .is_none());
+    assert!(revision.get::<Option<i64>, _>("OptionSchemaId").is_none());
+    assert_eq!(revision.get::<String, _>("OptionValuesJson"), "{}");
+    assert!(revision.get::<Option<String>, _>("CompletedAt").is_none());
+
+    let fabricated_history_count: i64 = sqlx::query_scalar(
+        r#"SELECT
+               (SELECT COUNT(*) FROM "AddonMediaListOptionSchema") +
+               (SELECT COUNT(*) FROM "AddonMediaListImportCheckpoint") +
+               (SELECT COUNT(*) FROM "AddonMediaListLifecycleJob") +
+               (SELECT COUNT(*) FROM "AddonMediaListItemTombstone") +
+               (SELECT COUNT(*) FROM "AddonMediaListArtifact") +
+               (SELECT COUNT(*) FROM "AddonToolMaintenanceJob")"#,
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(fabricated_history_count, 0);
+}
 
 #[tokio::test]
 async fn durable_publication_migration_adopts_a_stranded_legacy_journal() {

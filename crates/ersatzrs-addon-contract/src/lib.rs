@@ -11,7 +11,7 @@ use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
 /// Current package-manifest schema. Schema v1 remains readable.
-pub const ADDON_MANIFEST_VERSION: u32 = 4;
+pub const ADDON_MANIFEST_VERSION: u32 = 5;
 /// Current repository-index schema. Schema v1 remains readable.
 pub const ADDON_REPOSITORY_SCHEMA_VERSION: u32 = 2;
 /// Current schema for an offline add-on repository checkout or bundle.
@@ -51,6 +51,8 @@ pub const CAPABILITY_MEDIA_LIST_LIST_V5: &str = "media-list.list.v5";
 pub const CAPABILITY_MEDIA_LIST_LIST_V6: &str = "media-list.list.v6";
 /// Page list overviews and enrich one item at a time through host-owned jobs.
 pub const CAPABILITY_MEDIA_LIST_IMPORT_V1: &str = "media-list.import.v1";
+/// Declare host-rendered, provider-neutral media-list options.
+pub const CAPABILITY_MEDIA_LIST_OPTIONS_V1: &str = "media-list.options.v1";
 /// Host-rendered declarative add-on panel schema.
 pub const CAPABILITY_DECLARATIVE_PANEL_V1: &str = "declarative-panel.v1";
 /// Maximum UTF-8 bytes for provider/list/item identities stored and indexed by the host.
@@ -73,6 +75,16 @@ pub const MAX_MEDIA_LIST_IMPORT_REQUEST_BYTES: usize = 512 * 1024;
 pub const MAX_MEDIA_LIST_IMPORT_CURSOR_BYTES: usize = 4 * 1024;
 /// Maximum number of overview items accepted from one discovery page.
 pub const MAX_MEDIA_LIST_IMPORT_PAGE_ITEMS: usize = 250;
+/// Maximum option definitions declared by one media-list option schema.
+pub const MAX_MEDIA_LIST_OPTION_DEFINITIONS: usize = 32;
+/// Maximum enum choices declared by one media-list option.
+pub const MAX_MEDIA_LIST_OPTION_CHOICES: usize = 32;
+/// Maximum media-list option values carried in one typed envelope.
+pub const MAX_MEDIA_LIST_OPTION_VALUES: usize = 32;
+/// Maximum UTF-8 bytes in one option key or enum value.
+pub const MAX_MEDIA_LIST_OPTION_IDENTIFIER_BYTES: usize = 64;
+/// Maximum serialized JSON size of one effective option envelope.
+pub const MAX_MEDIA_LIST_OPTION_VALUES_BYTES: usize = 16 * 1024;
 /// Maximum captured output accepted from `remote-stream.list`.
 pub const MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 /// Maximum number of items accepted from one list invocation.
@@ -1332,8 +1344,10 @@ impl AddonManifest {
             if !capability_ids.insert(capability.id.as_str()) {
                 return invalid("capabilities", "duplicate capability id");
             }
+            capability.validate_options(self.manifest_version)?;
         }
         self.validate_media_list_import_capability()?;
+        self.validate_media_list_options_capability()?;
         validate_dependencies(&self.id, &self.dependencies)?;
         for (rid, entrypoint) in &self.entrypoints {
             if rid != "any" && !is_supported_rid(rid) {
@@ -1350,40 +1364,7 @@ impl AddonManifest {
                 return invalid("settings", "duplicate setting key");
             }
         }
-        if let Some(storage) = &self.media_list_storage {
-            if self.manifest_version < 3 {
-                return invalid("media_list_storage", "requires manifest schema version 3");
-            }
-            storage.validate(&self.settings)?;
-            if !self.has_remote_stream_play_capability() {
-                return invalid(
-                    "media_list_storage",
-                    "requires a supported remote-stream.play capability",
-                );
-            }
-            if !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V1)
-                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V2)
-                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V3)
-                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V4)
-                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V5)
-                && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V6)
-            {
-                return invalid(
-                    "media_list_storage",
-                    "requires a supported media-list.list capability",
-                );
-            }
-            if !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
-                && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
-                && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3)
-                && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V4)
-            {
-                return invalid(
-                    "media_list_storage",
-                    "requires a supported remote-stream.list capability",
-                );
-            }
-        }
+        self.validate_media_list_storage()?;
 
         self.validate_default_source_hosts()?;
 
@@ -1416,6 +1397,66 @@ impl AddonManifest {
             return invalid(
                 "capabilities",
                 "media-list.import.v1 requires a supported media-list.list record schema",
+            );
+        }
+        Ok(())
+    }
+
+    fn validate_media_list_options_capability(&self) -> Result<(), ContractError> {
+        if self.has_capability(CAPABILITY_MEDIA_LIST_OPTIONS_V1)
+            && ![
+                CAPABILITY_MEDIA_LIST_LIST_V1,
+                CAPABILITY_MEDIA_LIST_LIST_V2,
+                CAPABILITY_MEDIA_LIST_LIST_V3,
+                CAPABILITY_MEDIA_LIST_LIST_V4,
+                CAPABILITY_MEDIA_LIST_LIST_V5,
+                CAPABILITY_MEDIA_LIST_LIST_V6,
+            ]
+            .into_iter()
+            .any(|capability| self.has_capability(capability))
+        {
+            return invalid(
+                "capabilities",
+                "media-list.options.v1 requires a supported media-list.list capability",
+            );
+        }
+        Ok(())
+    }
+
+    fn validate_media_list_storage(&self) -> Result<(), ContractError> {
+        let Some(storage) = &self.media_list_storage else {
+            return Ok(());
+        };
+        if self.manifest_version < 3 {
+            return invalid("media_list_storage", "requires manifest schema version 3");
+        }
+        storage.validate(&self.settings)?;
+        if !self.has_remote_stream_play_capability() {
+            return invalid(
+                "media_list_storage",
+                "requires a supported remote-stream.play capability",
+            );
+        }
+        if !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V1)
+            && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V2)
+            && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V3)
+            && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V4)
+            && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V5)
+            && !self.has_capability(CAPABILITY_MEDIA_LIST_LIST_V6)
+        {
+            return invalid(
+                "media_list_storage",
+                "requires a supported media-list.list capability",
+            );
+        }
+        if !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V1)
+            && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V2)
+            && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V3)
+            && !self.has_capability(CAPABILITY_REMOTE_STREAM_LIST_V4)
+        {
+            return invalid(
+                "media_list_storage",
+                "requires a supported remote-stream.list capability",
             );
         }
         Ok(())
@@ -1475,6 +1516,36 @@ impl AddonManifest {
     #[must_use]
     pub fn has_capability(&self, capability: &str) -> bool {
         self.capabilities.iter().any(|item| item.id == capability)
+    }
+
+    /// Return the supported media-list option schema, when declared.
+    #[must_use]
+    pub fn media_list_option_schema(&self) -> Option<&AddonCapability> {
+        self.capabilities
+            .iter()
+            .find(|capability| capability.id == CAPABILITY_MEDIA_LIST_OPTIONS_V1)
+    }
+
+    /// Serialize the validated option schema into a deterministic JSON snapshot.
+    ///
+    /// The capability identifier is the schema version. Localized maps use
+    /// [`BTreeMap`], while vector order is declaration order, so the returned
+    /// bytes are stable and suitable for host-side comparison or hashing.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the declared schema is invalid or cannot be encoded.
+    pub fn media_list_option_schema_snapshot(&self) -> Result<Option<String>, ContractError> {
+        let Some(schema) = self.media_list_option_schema() else {
+            return Ok(None);
+        };
+        schema.validate_options(self.manifest_version)?;
+        serde_json::to_string(schema)
+            .map(Some)
+            .map_err(|_| ContractError::Invalid {
+                field: "capabilities.options",
+                message: "could not serialize the option schema".to_owned(),
+            })
     }
 
     /// Whether the package can produce Remote Stream playback bytes.
@@ -1588,12 +1659,371 @@ impl AddonIconMediaType {
     }
 }
 
-/// One versioned executable capability.
+/// One versioned executable or declarative capability.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AddonCapability {
     /// Capability identifier ending in `.v<major>`.
     pub id: String,
+    /// Ordered host-rendered option definitions for `media-list.options.v1`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<AddonMediaListOptionDefinition>,
+}
+
+impl AddonCapability {
+    fn validate_options(&self, manifest_version: u32) -> Result<(), ContractError> {
+        if self.options.is_empty() {
+            if self.id == CAPABILITY_MEDIA_LIST_OPTIONS_V1 {
+                return invalid(
+                    "capabilities.options",
+                    "media-list.options.v1 requires at least one definition",
+                );
+            }
+            return Ok(());
+        }
+        if manifest_version < 5 {
+            return invalid("capabilities.options", "requires manifest schema version 5");
+        }
+        if self.id != CAPABILITY_MEDIA_LIST_OPTIONS_V1 {
+            return invalid(
+                "capabilities.options",
+                "definitions require the supported media-list.options.v1 capability",
+            );
+        }
+        if self.options.len() > MAX_MEDIA_LIST_OPTION_DEFINITIONS {
+            return invalid("capabilities.options", "too many option definitions");
+        }
+        let mut keys = BTreeSet::new();
+        for definition in &self.options {
+            definition.validate()?;
+            if !keys.insert(definition.key.as_str()) {
+                return invalid("capabilities.options", "duplicate option key");
+            }
+        }
+        Ok(())
+    }
+
+    /// Validate stored option values against this exact schema and owner scope.
+    ///
+    /// This validation is intentionally independent from an operation or item
+    /// applicability. A finite-only list default remains valid stored state;
+    /// effective operation validation decides whether it may be used for one
+    /// particular item.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unknown schemas or keys, type/enum mismatches,
+    /// unsupported scopes, or an oversized envelope.
+    pub fn validate_stored_option_values(
+        &self,
+        values: &AddonMediaListOptionValues,
+        scope: AddonMediaListOptionValueScope,
+    ) -> Result<(), ContractError> {
+        self.validate_option_value_envelope(values)?;
+        for key in values.values.keys() {
+            self.definition_for_stored_value(key, scope)?;
+        }
+        Ok(())
+    }
+
+    fn validate_option_value_envelope(
+        &self,
+        values: &AddonMediaListOptionValues,
+    ) -> Result<(), ContractError> {
+        if self.id != CAPABILITY_MEDIA_LIST_OPTIONS_V1 || values.schema != self.id {
+            return invalid(
+                "media_list_option_values.schema",
+                "unsupported option schema",
+            );
+        }
+        self.validate_options(ADDON_MANIFEST_VERSION)?;
+        if values.values.len() > MAX_MEDIA_LIST_OPTION_VALUES {
+            return invalid("media_list_option_values.values", "too many option values");
+        }
+        let serialized = serde_json::to_vec(values).map_err(|_| ContractError::Invalid {
+            field: "media_list_option_values",
+            message: "could not serialize option values".to_owned(),
+        })?;
+        if serialized.len() > MAX_MEDIA_LIST_OPTION_VALUES_BYTES {
+            return invalid(
+                "media_list_option_values",
+                "serialized values are too large",
+            );
+        }
+        for (key, value) in &values.values {
+            let definition = self.definition_for_value(key)?;
+            definition.validate_value(value)?;
+        }
+        Ok(())
+    }
+
+    fn definition_for_value(
+        &self,
+        key: &str,
+    ) -> Result<&AddonMediaListOptionDefinition, ContractError> {
+        self.options
+            .iter()
+            .find(|definition| definition.key == key)
+            .ok_or_else(|| ContractError::Invalid {
+                field: "media_list_option_values.values",
+                message: format!("unknown option key '{key}'"),
+            })
+    }
+
+    fn definition_for_stored_value(
+        &self,
+        key: &str,
+        scope: AddonMediaListOptionValueScope,
+    ) -> Result<&AddonMediaListOptionDefinition, ContractError> {
+        let definition = self.definition_for_value(key)?;
+        if !definition.scope.accepts(scope) {
+            return invalid(
+                "media_list_option_values.values",
+                format!("option '{key}' is not supported at this scope"),
+            );
+        }
+        Ok(definition)
+    }
+
+    /// Validate a bounded option-value envelope for one effective operation.
+    ///
+    /// Storage scope no longer matters after schema defaults, list defaults,
+    /// and item overrides have been resolved. Values outside the requested
+    /// operation or item applicability are rejected rather than silently ignored.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unknown schemas or keys, type/enum mismatches,
+    /// unsupported contexts, or an oversized envelope.
+    pub fn validate_option_values(
+        &self,
+        values: &AddonMediaListOptionValues,
+        operation: AddonMediaListOptionOperation,
+        item_is_finite: bool,
+    ) -> Result<(), ContractError> {
+        self.validate_option_value_envelope(values)?;
+        for key in values.values.keys() {
+            let definition = self.definition_for_value(key)?;
+            if !definition.operation_targets.contains(&operation) {
+                return invalid(
+                    "media_list_option_values.values",
+                    format!("option '{key}' is not supported for this operation"),
+                );
+            }
+            if definition.applicability == AddonMediaListOptionApplicability::FiniteOnly
+                && !item_is_finite
+            {
+                return invalid(
+                    "media_list_option_values.values",
+                    format!("option '{key}' applies only to finite media"),
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Where an operator may set one media-list option.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListOptionScope {
+    ListDefault,
+    ItemOverride,
+    Both,
+}
+
+impl AddonMediaListOptionScope {
+    const fn accepts(self, value_scope: AddonMediaListOptionValueScope) -> bool {
+        matches!(self, Self::Both)
+            || matches!(
+                (self, value_scope),
+                (
+                    Self::ListDefault,
+                    AddonMediaListOptionValueScope::ListDefault
+                ) | (
+                    Self::ItemOverride,
+                    AddonMediaListOptionValueScope::ItemOverride
+                )
+            )
+    }
+}
+
+/// Concrete owner of values being validated against an option schema.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListOptionValueScope {
+    ListDefault,
+    ItemOverride,
+}
+
+/// Bounded operation families to which one option can apply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListOptionOperation {
+    Enrich,
+    Artifact,
+    Preparation,
+    Playback,
+}
+
+/// Media applicability declared independently from provider identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListOptionApplicability {
+    All,
+    FiniteOnly,
+}
+
+/// Primitive rendered for one provider-neutral media-list option.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListOptionKind {
+    Boolean,
+    Enum,
+}
+
+/// One localized enum choice declared by a package.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonMediaListOptionChoice {
+    pub value: String,
+    pub label: BTreeMap<String, String>,
+}
+
+/// One host-rendered media-list option definition.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonMediaListOptionDefinition {
+    pub key: String,
+    pub label: BTreeMap<String, String>,
+    pub description: BTreeMap<String, String>,
+    pub scope: AddonMediaListOptionScope,
+    pub operation_targets: Vec<AddonMediaListOptionOperation>,
+    pub applicability: AddonMediaListOptionApplicability,
+    pub kind: AddonMediaListOptionKind,
+    pub default: AddonMediaListOptionValue,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<AddonMediaListOptionChoice>,
+}
+
+impl AddonMediaListOptionDefinition {
+    fn validate(&self) -> Result<(), ContractError> {
+        if !is_media_list_option_identifier(&self.key) {
+            return invalid(
+                "capabilities.options.key",
+                "must be bounded lowercase snake case",
+            );
+        }
+        validate_option_localization(&self.label, "capabilities.options.label", 256)?;
+        validate_option_localization(&self.description, "capabilities.options.description", 1_024)?;
+        if self.operation_targets.is_empty() || self.operation_targets.len() > 4 {
+            return invalid(
+                "capabilities.options.operation_targets",
+                "must contain between one and four operations",
+            );
+        }
+        if self.operation_targets.iter().collect::<BTreeSet<_>>().len()
+            != self.operation_targets.len()
+        {
+            return invalid(
+                "capabilities.options.operation_targets",
+                "contains a duplicate operation",
+            );
+        }
+        match self.kind {
+            AddonMediaListOptionKind::Boolean => {
+                if !matches!(self.default, AddonMediaListOptionValue::Boolean(_)) {
+                    return invalid(
+                        "capabilities.options.default",
+                        "must be Boolean for a Boolean option",
+                    );
+                }
+                if !self.choices.is_empty() {
+                    return invalid(
+                        "capabilities.options.choices",
+                        "Boolean options cannot declare choices",
+                    );
+                }
+            }
+            AddonMediaListOptionKind::Enum => {
+                let AddonMediaListOptionValue::Enum(default) = &self.default else {
+                    return invalid(
+                        "capabilities.options.default",
+                        "must be an enum value for an enum option",
+                    );
+                };
+                if self.choices.is_empty() || self.choices.len() > MAX_MEDIA_LIST_OPTION_CHOICES {
+                    return invalid(
+                        "capabilities.options.choices",
+                        "enum options require a bounded non-empty choice list",
+                    );
+                }
+                let mut choices = BTreeSet::new();
+                for choice in &self.choices {
+                    if !is_media_list_option_identifier(&choice.value) {
+                        return invalid(
+                            "capabilities.options.choices.value",
+                            "must be bounded lowercase snake case",
+                        );
+                    }
+                    validate_option_localization(
+                        &choice.label,
+                        "capabilities.options.choices.label",
+                        256,
+                    )?;
+                    if !choices.insert(choice.value.as_str()) {
+                        return invalid(
+                            "capabilities.options.choices",
+                            "contains a duplicate value",
+                        );
+                    }
+                }
+                if !choices.contains(default.as_str()) {
+                    return invalid(
+                        "capabilities.options.default",
+                        "must match a declared enum choice",
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_value(&self, value: &AddonMediaListOptionValue) -> Result<(), ContractError> {
+        match (self.kind, value) {
+            (AddonMediaListOptionKind::Boolean, AddonMediaListOptionValue::Boolean(_)) => Ok(()),
+            (AddonMediaListOptionKind::Enum, AddonMediaListOptionValue::Enum(value))
+                if self.choices.iter().any(|choice| choice.value == *value) =>
+            {
+                Ok(())
+            }
+            (AddonMediaListOptionKind::Enum, AddonMediaListOptionValue::Enum(_)) => invalid(
+                "media_list_option_values.values",
+                "contains an undeclared enum value",
+            ),
+            _ => invalid(
+                "media_list_option_values.values",
+                "contains a value of the wrong type",
+            ),
+        }
+    }
+}
+
+/// Typed Boolean or enum value; JSON/TOML retain the primitive type directly.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AddonMediaListOptionValue {
+    Boolean(bool),
+    Enum(String),
+}
+
+/// Values bound to one exact media-list option capability version.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonMediaListOptionValues {
+    pub schema: String,
+    #[serde(default)]
+    pub values: BTreeMap<String, AddonMediaListOptionValue>,
 }
 
 /// One version-constrained add-on dependency.
@@ -3104,6 +3534,37 @@ fn is_setting_key(value: &str) -> bool {
             .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
+fn is_media_list_option_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_MEDIA_LIST_OPTION_IDENTIFIER_BYTES
+        && !value.starts_with('_')
+        && !value.ends_with('_')
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+fn validate_option_localization(
+    values: &BTreeMap<String, String>,
+    field: &'static str,
+    max_value_bytes: usize,
+) -> Result<(), ContractError> {
+    require_english(values, field)?;
+    if values.len() > 16
+        || values.iter().any(|(culture, value)| {
+            culture.is_empty()
+                || culture.len() > 32
+                || culture.chars().any(char::is_control)
+                || value.trim().is_empty()
+                || value.len() > max_value_bytes
+                || value.chars().any(char::is_control)
+        })
+    {
+        return invalid(field, "contains unsafe or excessive localized text");
+    }
+    Ok(())
+}
+
 fn is_environment_reference_name(value: &str) -> bool {
     is_setting_key(value) && !value.starts_with(|character: char| character.is_ascii_digit())
 }
@@ -3168,6 +3629,7 @@ mod tests {
             host_version: VersionReq::STAR,
             capabilities: vec![AddonCapability {
                 id: CAPABILITY_ADDON_CHECK_V1.to_owned(),
+                options: Vec::new(),
             }],
             dependencies: Vec::new(),
             entrypoints: BTreeMap::from([(
@@ -3183,6 +3645,70 @@ mod tests {
             default_source_hosts: Vec::new(),
             panels: Vec::new(),
         }
+    }
+
+    fn boolean_option(key: &str) -> AddonMediaListOptionDefinition {
+        AddonMediaListOptionDefinition {
+            key: key.to_owned(),
+            label: localized("Remove segments"),
+            description: localized("Prepare finite media without marked segments."),
+            scope: AddonMediaListOptionScope::Both,
+            operation_targets: vec![
+                AddonMediaListOptionOperation::Preparation,
+                AddonMediaListOptionOperation::Playback,
+            ],
+            applicability: AddonMediaListOptionApplicability::FiniteOnly,
+            kind: AddonMediaListOptionKind::Boolean,
+            default: AddonMediaListOptionValue::Boolean(true),
+            choices: Vec::new(),
+        }
+    }
+
+    fn enum_option(key: &str) -> AddonMediaListOptionDefinition {
+        AddonMediaListOptionDefinition {
+            key: key.to_owned(),
+            label: localized("Browser profile"),
+            description: localized("Select a browser family without exposing credential data."),
+            scope: AddonMediaListOptionScope::Both,
+            operation_targets: vec![
+                AddonMediaListOptionOperation::Enrich,
+                AddonMediaListOptionOperation::Artifact,
+                AddonMediaListOptionOperation::Preparation,
+                AddonMediaListOptionOperation::Playback,
+            ],
+            applicability: AddonMediaListOptionApplicability::All,
+            kind: AddonMediaListOptionKind::Enum,
+            default: AddonMediaListOptionValue::Enum("none".to_owned()),
+            choices: vec![
+                AddonMediaListOptionChoice {
+                    value: "none".to_owned(),
+                    label: localized("None"),
+                },
+                AddonMediaListOptionChoice {
+                    value: "firefox".to_owned(),
+                    label: localized("Firefox"),
+                },
+            ],
+        }
+    }
+
+    fn manifest_with_option_schema() -> AddonManifest {
+        let mut manifest = valid_manifest();
+        manifest.manifest_version = 5;
+        manifest.capabilities.extend([
+            AddonCapability {
+                id: CAPABILITY_MEDIA_LIST_LIST_V6.to_owned(),
+                options: Vec::new(),
+            },
+            AddonCapability {
+                id: CAPABILITY_MEDIA_LIST_OPTIONS_V1.to_owned(),
+                options: vec![
+                    enum_option("browser_profile"),
+                    boolean_option("remove_segments"),
+                ],
+            },
+        ]);
+        manifest
     }
 
     #[test]
@@ -3203,6 +3729,203 @@ mod tests {
 
         manifest.manifest_version = 2;
         manifest.validate().expect("schema v2 icon");
+    }
+
+    #[test]
+    fn schema_v5_round_trips_a_versioned_media_list_option_schema() {
+        let manifest = manifest_with_option_schema();
+        manifest.validate().expect("valid option schema");
+
+        let document = toml::to_string(&manifest).expect("manifest TOML");
+        let reparsed = toml::from_str::<AddonManifest>(&document).expect("parse manifest TOML");
+        assert_eq!(reparsed, manifest);
+        assert_eq!(
+            manifest.media_list_option_schema_snapshot().unwrap(),
+            reparsed.media_list_option_schema_snapshot().unwrap()
+        );
+
+        let mut legacy = valid_manifest();
+        legacy.manifest_version = 4;
+        let legacy_document = toml::to_string(&legacy).expect("legacy manifest TOML");
+        assert!(!legacy_document.contains("options"));
+        toml::from_str::<AddonManifest>(&legacy_document)
+            .expect("legacy manifest remains readable")
+            .validate()
+            .expect("legacy manifest remains valid");
+    }
+
+    #[test]
+    fn media_list_option_definitions_fail_closed_without_breaking_inert_capabilities() {
+        let mut inert = valid_manifest();
+        inert.capabilities.push(AddonCapability {
+            id: "media-list.options.v99".to_owned(),
+            options: Vec::new(),
+        });
+        inert.validate().expect("unknown capability remains inert");
+
+        inert.manifest_version = 5;
+        inert.capabilities.last_mut().unwrap().options = vec![boolean_option("fixture")];
+        assert!(inert.validate().is_err());
+
+        let mut empty = manifest_with_option_schema();
+        empty
+            .capabilities
+            .iter_mut()
+            .find(|capability| capability.id == CAPABILITY_MEDIA_LIST_OPTIONS_V1)
+            .unwrap()
+            .options
+            .clear();
+        assert!(empty.validate().is_err());
+
+        let mut old_schema = manifest_with_option_schema();
+        old_schema.manifest_version = 4;
+        assert!(old_schema.validate().is_err());
+    }
+
+    #[test]
+    fn media_list_option_definitions_validate_types_bounds_and_localization() {
+        let mut manifest = manifest_with_option_schema();
+        let schema = manifest
+            .capabilities
+            .iter_mut()
+            .find(|capability| capability.id == CAPABILITY_MEDIA_LIST_OPTIONS_V1)
+            .unwrap();
+        schema.options[0].default = AddonMediaListOptionValue::Enum("unknown".to_owned());
+        assert!(manifest.validate().is_err());
+
+        let mut manifest = manifest_with_option_schema();
+        let schema = manifest
+            .capabilities
+            .iter_mut()
+            .find(|capability| capability.id == CAPABILITY_MEDIA_LIST_OPTIONS_V1)
+            .unwrap();
+        schema.options[0]
+            .operation_targets
+            .push(AddonMediaListOptionOperation::Enrich);
+        assert!(manifest.validate().is_err());
+
+        let mut manifest = manifest_with_option_schema();
+        let schema = manifest
+            .capabilities
+            .iter_mut()
+            .find(|capability| capability.id == CAPABILITY_MEDIA_LIST_OPTIONS_V1)
+            .unwrap();
+        schema.options[1].key = schema.options[0].key.clone();
+        assert!(manifest.validate().is_err());
+
+        let mut manifest = manifest_with_option_schema();
+        let schema = manifest
+            .capabilities
+            .iter_mut()
+            .find(|capability| capability.id == CAPABILITY_MEDIA_LIST_OPTIONS_V1)
+            .unwrap();
+        schema.options[0].description.clear();
+        assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn stored_and_effective_media_list_option_values_fail_closed() {
+        let manifest = manifest_with_option_schema();
+        let schema = manifest.media_list_option_schema().unwrap();
+        let valid = AddonMediaListOptionValues {
+            schema: CAPABILITY_MEDIA_LIST_OPTIONS_V1.to_owned(),
+            values: BTreeMap::from([
+                (
+                    "browser_profile".to_owned(),
+                    AddonMediaListOptionValue::Enum("firefox".to_owned()),
+                ),
+                (
+                    "remove_segments".to_owned(),
+                    AddonMediaListOptionValue::Boolean(true),
+                ),
+            ]),
+        };
+        schema
+            .validate_option_values(&valid, AddonMediaListOptionOperation::Playback, true)
+            .expect("valid typed option values");
+
+        let mut invalid = valid.clone();
+        invalid.schema = "media-list.options.v99".to_owned();
+        assert!(schema
+            .validate_stored_option_values(&invalid, AddonMediaListOptionValueScope::ItemOverride,)
+            .is_err());
+
+        let mut invalid = valid.clone();
+        invalid.values.insert(
+            "undeclared".to_owned(),
+            AddonMediaListOptionValue::Boolean(true),
+        );
+        assert!(schema
+            .validate_stored_option_values(&invalid, AddonMediaListOptionValueScope::ItemOverride,)
+            .is_err());
+
+        let mut invalid = valid.clone();
+        invalid.values.insert(
+            "browser_profile".to_owned(),
+            AddonMediaListOptionValue::Boolean(false),
+        );
+        assert!(schema
+            .validate_stored_option_values(&invalid, AddonMediaListOptionValueScope::ItemOverride,)
+            .is_err());
+
+        let mut invalid = valid.clone();
+        invalid.values.insert(
+            "browser_profile".to_owned(),
+            AddonMediaListOptionValue::Enum("unknown".to_owned()),
+        );
+        assert!(schema
+            .validate_stored_option_values(&invalid, AddonMediaListOptionValueScope::ItemOverride,)
+            .is_err());
+
+        assert!(schema
+            .validate_option_values(&valid, AddonMediaListOptionOperation::Playback, false,)
+            .is_err());
+
+        schema
+            .validate_stored_option_values(&valid, AddonMediaListOptionValueScope::ListDefault)
+            .expect("finite-only list defaults remain configurable");
+
+        assert!(schema
+            .validate_option_values(&valid, AddonMediaListOptionOperation::Playback, false,)
+            .is_err());
+
+        assert!(schema
+            .validate_option_values(&valid, AddonMediaListOptionOperation::Enrich, true,)
+            .is_err());
+
+        let mut list_only_schema = schema.clone();
+        list_only_schema.options[0].scope = AddonMediaListOptionScope::ListDefault;
+        let browser_value = AddonMediaListOptionValues {
+            schema: CAPABILITY_MEDIA_LIST_OPTIONS_V1.to_owned(),
+            values: BTreeMap::from([(
+                "browser_profile".to_owned(),
+                AddonMediaListOptionValue::Enum("firefox".to_owned()),
+            )]),
+        };
+        assert!(list_only_schema
+            .validate_stored_option_values(
+                &browser_value,
+                AddonMediaListOptionValueScope::ItemOverride,
+            )
+            .is_err());
+
+        let mut split_scope_schema = schema.clone();
+        split_scope_schema.options[0].scope = AddonMediaListOptionScope::ListDefault;
+        split_scope_schema.options[1].scope = AddonMediaListOptionScope::ItemOverride;
+        split_scope_schema
+            .validate_option_values(&valid, AddonMediaListOptionOperation::Playback, true)
+            .expect("effective values may combine inherited and overridden scopes");
+
+        let oversized = AddonMediaListOptionValues {
+            schema: CAPABILITY_MEDIA_LIST_OPTIONS_V1.to_owned(),
+            values: BTreeMap::from([(
+                "x".repeat(MAX_MEDIA_LIST_OPTION_VALUES_BYTES),
+                AddonMediaListOptionValue::Boolean(true),
+            )]),
+        };
+        assert!(schema
+            .validate_stored_option_values(&oversized, AddonMediaListOptionValueScope::ListDefault,)
+            .is_err());
     }
 
     #[test]
@@ -3347,7 +4070,10 @@ mod tests {
                 CAPABILITY_REMOTE_STREAM_PLAY_V1,
             ]
             .into_iter()
-            .map(|id| AddonCapability { id: id.to_owned() }),
+            .map(|id| AddonCapability {
+                id: id.to_owned(),
+                options: Vec::new(),
+            }),
         );
         manifest
             .validate()
@@ -3358,6 +4084,7 @@ mod tests {
             .retain(|capability| capability.id != CAPABILITY_REMOTE_STREAM_PLAY_V1);
         manifest.capabilities.push(AddonCapability {
             id: CAPABILITY_REMOTE_STREAM_PLAY_V2.to_owned(),
+            options: Vec::new(),
         });
         manifest
             .validate()

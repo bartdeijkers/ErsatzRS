@@ -2328,7 +2328,7 @@ owned by `amm-n-03`.
 id         = 'amm-k-01'
 phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Persist provider-neutral options and complete list lifecycle state'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-j-04']
@@ -2343,9 +2343,19 @@ bounded aggregate state, and no Rust host branch compares the official yt-dlp
 add-on identifier.
 '''
 evidence = '''
-Not started. Source audit found a Boolean AutoRefresh, no item-option or
-artifact/checkpoint persistence, and provider-specific behavior correctly
-confined to the package; ADR 0085 preserves that boundary while extending it.
+Completed 2026-09-04. Manifest v5 declares provider-neutral list/item option
+schemas while legacy requests remain frozen. Typed domain/repository contracts
+and one additive SQLite migration persist fail-closed schema bindings, inherited
+draft and immutable published values, refresh policy, fenced imports and
+lifecycle jobs, tombstones, retained revision/artifact ownership, budgets, and
+tool-maintenance history. Existing refresh success dual-writes the legacy and
+new timestamps. Health and runtime audit expose bounded private aggregates, and
+architecture lint rejects the official yt-dlp package identifier in production
+Rust host syntax. Focused contract, migration, repository, refresh-switch,
+forced-uninstall, Health, architecture-lint, runtime-audit, workspace-check,
+format, and clippy verification passed. Later reset execution, scheduling,
+artifact production, provider commands, and maintenance execution remain in
+their owning AMM-K through AMM-N milestones; no full closeout or CI was run.
 '''
 
 [[milestone]]

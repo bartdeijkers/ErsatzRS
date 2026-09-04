@@ -24,6 +24,7 @@ retroactively.
 | `media-list.list.v5` | Adds provider-neutral Remote Stream liveness without changing non-Remote-Stream records. |
 | `media-list.list.v6` | Adds typed provider-neutral authentication, restriction, and unavailable reasons for item-scoped publication decisions. |
 | `media-list.import.v1` | Pages overview discovery into durable host checkpoints and enriches exactly one committed item per bounded invocation. A package also declares the `media-list.list.vN` record schema it emits. |
+| `media-list.options.v1` | Declares bounded, localized Boolean and enum list/item options for host validation, inheritance, persistence, and publication snapshots. It is declarative and cannot be invoked. |
 | `declarative-panel.v1` | Renders host-owned text, status, key/value, and link blocks. |
 
 Unknown capability versions are never executed. The v1 platform does not
