@@ -51,6 +51,8 @@ pub const CAPABILITY_MEDIA_LIST_LIST_V5: &str = "media-list.list.v5";
 pub const CAPABILITY_MEDIA_LIST_LIST_V6: &str = "media-list.list.v6";
 /// Page list overviews and enrich one item at a time through host-owned jobs.
 pub const CAPABILITY_MEDIA_LIST_IMPORT_V1: &str = "media-list.import.v1";
+/// Discover full or incremental list generations through a staged host-owned archive.
+pub const CAPABILITY_MEDIA_LIST_IMPORT_V2: &str = "media-list.import.v2";
 /// Declare host-rendered, provider-neutral media-list options.
 pub const CAPABILITY_MEDIA_LIST_OPTIONS_V1: &str = "media-list.options.v1";
 /// Probe one media-list source for changes without enumerating its contents.
@@ -77,6 +79,12 @@ pub const MAX_MEDIA_LIST_IMPORT_REQUEST_BYTES: usize = 512 * 1024;
 pub const MAX_MEDIA_LIST_IMPORT_CURSOR_BYTES: usize = 4 * 1024;
 /// Maximum number of overview items accepted from one discovery page.
 pub const MAX_MEDIA_LIST_IMPORT_PAGE_ITEMS: usize = 250;
+/// Maximum UTF-8 bytes in a host-supplied staged archive path.
+pub const MAX_MEDIA_LIST_IMPORT_ARCHIVE_PATH_BYTES: usize = 4 * 1024;
+/// Maximum bytes in one staged incremental archive.
+pub const MAX_MEDIA_LIST_IMPORT_ARCHIVE_BYTES: usize = 4 * 1024 * 1024;
+/// Maximum entries in one staged incremental archive.
+pub const MAX_MEDIA_LIST_IMPORT_ARCHIVE_ENTRIES: usize = MAX_LIST_ITEMS;
 /// Maximum option definitions declared by one media-list option schema.
 pub const MAX_MEDIA_LIST_OPTION_DEFINITIONS: usize = 32;
 /// Maximum enum choices declared by one media-list option.
@@ -685,24 +693,138 @@ impl MediaListDiscoverRequest {
             );
         }
         validate_import_cursor(self.cursor.as_deref())?;
-        if self.limits.max_items == 0
-            || usize::from(self.limits.max_items) > MAX_MEDIA_LIST_IMPORT_PAGE_ITEMS
+        validate_media_list_discover_limits(self.limits)?;
+        validate_import_request_size(self)
+    }
+}
+
+/// Whether one `media-list.import.v2 discover` invocation enumerates a full
+/// generation or only identities not present in the staged archive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaListImportMode {
+    Full,
+    Incremental,
+}
+
+/// Package-declared archive behavior for one v2 discovery invocation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaListIncrementalStrategy {
+    /// Enumerate the bounded source while suppressing archived identities.
+    SkipKnown,
+    /// Stop at the first archived identity for a stable newest-first source.
+    NewestFirstEarlyStop,
+}
+
+/// Host-owned staged archive made available to one v2 discovery invocation.
+///
+/// The package may mutate the file at `staged_path`, but must not emit its
+/// path or contents. The host validates and promotes the successor after the
+/// corresponding database page commits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaListArchiveDescriptor {
+    pub staged_path: String,
+    pub generation: u32,
+    pub entry_count: u32,
+    pub sha256: String,
+    pub max_bytes: u32,
+    pub max_entries: u32,
+}
+
+impl MediaListArchiveDescriptor {
+    /// Validate the portable bounds on a host-owned staged archive.
+    ///
+    /// Path containment and platform-specific absolute-path validation remain
+    /// host responsibilities because this contract is shared with add-ons on
+    /// every supported target.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an empty or excessive path, invalid generation or
+    /// digest, or archive limits beyond the import contract.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        if self.staged_path.is_empty()
+            || self.staged_path.len() > MAX_MEDIA_LIST_IMPORT_ARCHIVE_PATH_BYTES
+            || self.staged_path.chars().any(char::is_control)
         {
             return invalid(
-                "media list discover limits.max_items",
-                "must be between 1 and 250",
+                "media list import archive staged_path",
+                "must be 1 to 4096 UTF-8 bytes without control characters",
             );
         }
-        if self.limits.max_output_bytes == 0
-            || usize::try_from(self.limits.max_output_bytes)
+        if self.generation == 0 {
+            return invalid("media list import archive generation", "must be positive");
+        }
+        if !is_sha256_hex(&self.sha256) {
+            return invalid(
+                "media list import archive sha256",
+                "must be lowercase SHA-256 hex",
+            );
+        }
+        if self.max_bytes == 0
+            || usize::try_from(self.max_bytes)
                 .ok()
-                .is_none_or(|value| value > MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES)
+                .is_none_or(|value| value > MAX_MEDIA_LIST_IMPORT_ARCHIVE_BYTES)
         {
             return invalid(
-                "media list discover limits.max_output_bytes",
+                "media list import archive max_bytes",
                 "must be between 1 and 4194304",
             );
         }
+        if self.max_entries == 0
+            || usize::try_from(self.max_entries)
+                .ok()
+                .is_none_or(|value| value > MAX_MEDIA_LIST_IMPORT_ARCHIVE_ENTRIES)
+        {
+            return invalid(
+                "media list import archive max_entries",
+                "must be between 1 and 10000",
+            );
+        }
+        if self.entry_count > self.max_entries {
+            return invalid(
+                "media list import archive entry_count",
+                "must not exceed max_entries",
+            );
+        }
+        Ok(())
+    }
+}
+
+/// One `media-list.import.v2 discover` request written as JSON to stdin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaListDiscoverV2Request {
+    pub source_url: String,
+    pub record_capability: String,
+    pub mode: MediaListImportMode,
+    pub archive: MediaListArchiveDescriptor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    #[serde(default)]
+    pub limits: MediaListDiscoverLimits,
+}
+
+impl MediaListDiscoverV2Request {
+    /// Validate host and add-on authored v2 discovery bounds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unsupported schemas, empty URLs, invalid archive
+    /// descriptors, or excessive cursor and page limits.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        validate_import_record_capability(&self.record_capability)?;
+        if self.source_url.trim().is_empty() || self.source_url.len() > 8 * 1024 {
+            return invalid(
+                "media list discover source_url",
+                "must be between 1 and 8192 UTF-8 bytes",
+            );
+        }
+        self.archive.validate()?;
+        validate_import_cursor(self.cursor.as_deref())?;
+        validate_media_list_discover_limits(self.limits)?;
         validate_import_request_size(self)
     }
 }
@@ -964,6 +1086,39 @@ pub struct MediaListDiscoveryPage {
     pub records: Vec<AddonMediaListRecord>,
 }
 
+/// First NDJSON record emitted by `media-list.import.v2 discover`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "record_type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum MediaListDiscoverV2Control {
+    Page {
+        complete: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next_cursor: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        total_hint: Option<u32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        revision_token: Option<String>,
+        strategy: MediaListIncrementalStrategy,
+        examined_count: u32,
+        archived_skipped_count: u32,
+        emitted_count: u32,
+    },
+}
+
+/// Validated output from one v2 full or incremental overview page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediaListDiscoveryV2Page {
+    pub complete: bool,
+    pub next_cursor: Option<String>,
+    pub total_hint: Option<u32>,
+    pub revision_token: Option<String>,
+    pub strategy: MediaListIncrementalStrategy,
+    pub examined_count: u32,
+    pub archived_skipped_count: u32,
+    pub emitted_count: u32,
+    pub records: Vec<AddonMediaListRecord>,
+}
+
 /// Typed outcome of one item enrichment attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1027,6 +1182,28 @@ fn validate_import_cursor(cursor: Option<&str>) -> Result<(), ContractError> {
         return invalid(
             "media list import cursor",
             "must be 1 to 4096 UTF-8 bytes without control characters",
+        );
+    }
+    Ok(())
+}
+
+fn validate_media_list_discover_limits(
+    limits: MediaListDiscoverLimits,
+) -> Result<(), ContractError> {
+    if limits.max_items == 0 || usize::from(limits.max_items) > MAX_MEDIA_LIST_IMPORT_PAGE_ITEMS {
+        return invalid(
+            "media list discover limits.max_items",
+            "must be between 1 and 250",
+        );
+    }
+    if limits.max_output_bytes == 0
+        || usize::try_from(limits.max_output_bytes)
+            .ok()
+            .is_none_or(|value| value > MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES)
+    {
+        return invalid(
+            "media list discover limits.max_output_bytes",
+            "must be between 1 and 4194304",
         );
     }
     Ok(())
@@ -1573,8 +1750,14 @@ impl AddonManifest {
     }
 
     fn validate_media_list_import_capability(&self) -> Result<(), ContractError> {
-        if self.has_capability(CAPABILITY_MEDIA_LIST_IMPORT_V1)
-            && ![
+        let import_capability = [
+            CAPABILITY_MEDIA_LIST_IMPORT_V1,
+            CAPABILITY_MEDIA_LIST_IMPORT_V2,
+        ]
+        .into_iter()
+        .find(|capability| self.has_capability(capability));
+        if let Some(import_capability) = import_capability {
+            let has_record_schema = [
                 CAPABILITY_MEDIA_LIST_LIST_V1,
                 CAPABILITY_MEDIA_LIST_LIST_V2,
                 CAPABILITY_MEDIA_LIST_LIST_V3,
@@ -1583,12 +1766,15 @@ impl AddonManifest {
                 CAPABILITY_MEDIA_LIST_LIST_V6,
             ]
             .into_iter()
-            .any(|capability| self.has_capability(capability))
-        {
-            return invalid(
-                "capabilities",
-                "media-list.import.v1 requires a supported media-list.list record schema",
-            );
+            .any(|capability| self.has_capability(capability));
+            if !has_record_schema {
+                return invalid(
+                    "capabilities",
+                    format!(
+                        "{import_capability} requires a supported media-list.list record schema"
+                    ),
+                );
+            }
         }
         Ok(())
     }
@@ -3292,6 +3478,220 @@ pub fn conform_media_list_discover_output(
     })
 }
 
+/// Parse and validate one `media-list.import.v2 discover` NDJSON page.
+///
+/// The request supplies the import mode, current cursor, page bounds, and the
+/// input-only staged archive descriptor. Full generations retain the v1 list
+/// header rule. The first incremental page may omit or refresh the list header
+/// and may validly emit no items when every examined identity was archived.
+///
+/// # Errors
+///
+/// Returns an error when the request or output is malformed, oversized,
+/// internally inconsistent, or fails to make cursor or item progress.
+#[allow(clippy::too_many_lines)] // Keep page framing, record validation, and count checks together.
+pub fn conform_media_list_discover_v2_output(
+    output: &[u8],
+    request: &MediaListDiscoverV2Request,
+) -> Result<MediaListDiscoveryV2Page, ContractError> {
+    request.validate()?;
+    let requested_output_limit =
+        usize::try_from(request.limits.max_output_bytes).map_err(|_| ContractError::Invalid {
+            field: "media list discover v2 max_output_bytes",
+            message: "does not fit the host address space".to_owned(),
+        })?;
+    if output.len() > requested_output_limit {
+        return invalid(
+            "media list discover v2 output",
+            "exceeds the requested output limit",
+        );
+    }
+    let text = std::str::from_utf8(output).map_err(|_| ContractError::Invalid {
+        field: "media list discover v2 output",
+        message: "must be UTF-8".to_owned(),
+    })?;
+    let lines = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>();
+    let control_line = lines.first().ok_or_else(|| ContractError::Invalid {
+        field: "media list discover v2 output",
+        message: "is missing a page control record".to_owned(),
+    })?;
+    let control = parse_media_list_discover_v2_control(control_line, request)?;
+    let MediaListDiscoverV2Control::Page {
+        complete,
+        next_cursor,
+        total_hint,
+        revision_token,
+        strategy,
+        examined_count,
+        archived_skipped_count,
+        emitted_count,
+    } = control;
+
+    let first_page = request.cursor.is_none();
+    let mut records = Vec::new();
+    let mut provider_ids = BTreeSet::new();
+    let mut ranks = BTreeSet::new();
+    let mut list_headers = 0usize;
+    for (index, line) in lines.iter().skip(1).enumerate() {
+        let record = serde_json::from_str::<AddonMediaListRecord>(line).map_err(|error| {
+            record_parse_error("media list discover v2 output", index + 1, &error)
+        })?;
+        record.validate()?;
+        match &record {
+            AddonMediaListRecord::List { .. } => {
+                list_headers += 1;
+                if !first_page || !records.is_empty() || list_headers > 1 {
+                    return invalid(
+                        "media list discover v2 output",
+                        "a list header may only be the first payload record on the first page",
+                    );
+                }
+            }
+            AddonMediaListRecord::Item {
+                provider_id, rank, ..
+            } => {
+                if request.mode == MediaListImportMode::Full && first_page && list_headers == 0 {
+                    return invalid(
+                        "media list discover v2 output",
+                        "the first full page must carry a list header before items",
+                    );
+                }
+                if !provider_ids.insert(provider_id.clone()) || !ranks.insert(*rank) {
+                    return invalid(
+                        "media list discover v2 output",
+                        "item provider_id and rank must be unique within the page",
+                    );
+                }
+                if provider_ids.len() > usize::from(request.limits.max_items) {
+                    return invalid(
+                        "media list discover v2 output",
+                        "contains more items than the requested page limit",
+                    );
+                }
+            }
+        }
+        records.push(record);
+    }
+    if request.mode == MediaListImportMode::Full && first_page && list_headers != 1 {
+        return invalid(
+            "media list discover v2 output",
+            "the first full page must contain exactly one list header",
+        );
+    }
+    if u32::try_from(provider_ids.len()).ok() != Some(emitted_count) {
+        return invalid(
+            "media list discover v2 emitted_count",
+            "must equal the number of emitted item records",
+        );
+    }
+    if !complete && emitted_count == 0 && examined_count == 0 {
+        return invalid(
+            "media list discover v2 output",
+            "an incomplete page must make examined or item progress",
+        );
+    }
+
+    Ok(MediaListDiscoveryV2Page {
+        complete,
+        next_cursor,
+        total_hint,
+        revision_token,
+        strategy,
+        examined_count,
+        archived_skipped_count,
+        emitted_count,
+        records,
+    })
+}
+
+fn parse_media_list_discover_v2_control(
+    control_line: &str,
+    request: &MediaListDiscoverV2Request,
+) -> Result<MediaListDiscoverV2Control, ContractError> {
+    let control = serde_json::from_str::<MediaListDiscoverV2Control>(control_line)
+        .map_err(|error| record_parse_error("media list discover v2 output", 0, &error))?;
+    let MediaListDiscoverV2Control::Page {
+        complete,
+        next_cursor,
+        total_hint,
+        revision_token,
+        examined_count,
+        archived_skipped_count,
+        emitted_count,
+        ..
+    } = &control;
+    validate_import_cursor(next_cursor.as_deref())?;
+    if *complete == next_cursor.is_some() {
+        return invalid(
+            "media list discover v2 page",
+            "complete pages must omit next_cursor and incomplete pages must provide it",
+        );
+    }
+    if next_cursor.is_some() && next_cursor.as_deref() == request.cursor.as_deref() {
+        return invalid(
+            "media list discover v2 next_cursor",
+            "must advance beyond the request cursor",
+        );
+    }
+    if total_hint.is_some_and(|value| {
+        usize::try_from(value)
+            .ok()
+            .is_none_or(|value| value > MAX_LIST_ITEMS)
+    }) {
+        return invalid(
+            "media list discover v2 total_hint",
+            "must not exceed 10000 items",
+        );
+    }
+    if revision_token.as_ref().is_some_and(|value| {
+        value.trim().is_empty()
+            || value.len() > MAX_PROVIDER_ID_BYTES
+            || value.chars().any(char::is_control)
+    }) {
+        return invalid(
+            "media list discover v2 revision_token",
+            "must be 1 to 384 UTF-8 bytes without control characters",
+        );
+    }
+    let Some(classified_count) = archived_skipped_count.checked_add(*emitted_count) else {
+        return invalid("media list discover v2 counts", "must not overflow");
+    };
+    if *examined_count != classified_count {
+        return invalid(
+            "media list discover v2 counts",
+            "examined_count must equal archived_skipped_count plus emitted_count",
+        );
+    }
+    if *examined_count > request.archive.max_entries {
+        return invalid(
+            "media list discover v2 examined_count",
+            "must not exceed the requested archive entry limit",
+        );
+    }
+    if *examined_count > u32::from(request.limits.max_items) {
+        return invalid(
+            "media list discover v2 examined_count",
+            "must not exceed the requested page item limit",
+        );
+    }
+    if *emitted_count > u32::from(request.limits.max_items) {
+        return invalid(
+            "media list discover v2 emitted_count",
+            "must not exceed the requested page item limit",
+        );
+    }
+    if request.mode == MediaListImportMode::Full && *archived_skipped_count != 0 {
+        return invalid(
+            "media list discover v2 archived_skipped_count",
+            "must be zero for a full generation",
+        );
+    }
+    Ok(control)
+}
+
 fn parse_media_list_discover_control(
     control_line: &str,
 ) -> Result<MediaListDiscoverControl, ContractError> {
@@ -3954,6 +4354,30 @@ mod tests {
         manifest
     }
 
+    fn media_list_v2_request(
+        mode: MediaListImportMode,
+        cursor: Option<&str>,
+    ) -> MediaListDiscoverV2Request {
+        MediaListDiscoverV2Request {
+            source_url: "https://example.test/programmes".to_owned(),
+            record_capability: CAPABILITY_MEDIA_LIST_LIST_V6.to_owned(),
+            mode,
+            archive: MediaListArchiveDescriptor {
+                staged_path: "private/import/archive.txt".to_owned(),
+                generation: 1,
+                entry_count: 0,
+                sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                    .to_owned(),
+                max_bytes: u32::try_from(MAX_MEDIA_LIST_IMPORT_ARCHIVE_BYTES)
+                    .expect("archive limit fits in u32"),
+                max_entries: u32::try_from(MAX_MEDIA_LIST_IMPORT_ARCHIVE_ENTRIES)
+                    .expect("archive entry limit fits in u32"),
+            },
+            cursor: cursor.map(str::to_owned),
+            limits: MediaListDiscoverLimits::default(),
+        }
+    }
+
     #[test]
     fn manifest_rejects_paths_outside_the_package() {
         let mut manifest = valid_manifest();
@@ -3972,6 +4396,24 @@ mod tests {
 
         manifest.manifest_version = 2;
         manifest.validate().expect("schema v2 icon");
+    }
+
+    #[test]
+    fn media_list_import_v2_manifest_requires_a_list_record_schema() {
+        let mut manifest = valid_manifest();
+        manifest.capabilities.push(AddonCapability {
+            id: CAPABILITY_MEDIA_LIST_IMPORT_V2.to_owned(),
+            options: Vec::new(),
+        });
+        assert!(manifest.validate().is_err());
+
+        manifest.capabilities.push(AddonCapability {
+            id: CAPABILITY_MEDIA_LIST_LIST_V6.to_owned(),
+            options: Vec::new(),
+        });
+        manifest
+            .validate()
+            .expect("import v2 with a supported list record schema");
     }
 
     #[test]
@@ -4699,6 +5141,106 @@ name = "Example add-ons"
         let mut invalid_cursor = request;
         invalid_cursor.cursor = Some("x".repeat(MAX_MEDIA_LIST_IMPORT_CURSOR_BYTES + 1));
         assert!(invalid_cursor.validate().is_err());
+    }
+
+    #[test]
+    fn media_list_import_v2_request_bounds_the_staged_archive() {
+        let request = media_list_v2_request(MediaListImportMode::Incremental, Some("page-2"));
+        request.validate().expect("bounded v2 discover request");
+
+        let encoded = serde_json::to_string(&request).expect("request JSON");
+        assert!(encoded.contains(r#""mode":"incremental""#));
+        assert!(encoded.contains(r#""staged_path":"private/import/archive.txt""#));
+
+        let mut invalid_digest = request.clone();
+        invalid_digest.archive.sha256 = "A".repeat(64);
+        assert!(invalid_digest.validate().is_err());
+
+        let mut invalid_generation = request.clone();
+        invalid_generation.archive.generation = 0;
+        assert!(invalid_generation.validate().is_err());
+
+        let mut invalid_entries = request;
+        invalid_entries.archive.entry_count = invalid_entries.archive.max_entries + 1;
+        assert!(invalid_entries.validate().is_err());
+    }
+
+    #[test]
+    fn media_list_import_v2_full_and_incremental_headers_are_distinct() {
+        let full = br#"{"record_type":"page","complete":true,"strategy":"skip_known","examined_count":1,"archived_skipped_count":0,"emitted_count":1}
+{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+{"record_type":"item","provider_id":"episode:1","rank":0,"display_title":"Episode 1","title":"Episode 1","kind":"episode"}
+"#;
+        let full_request = media_list_v2_request(MediaListImportMode::Full, None);
+        let page = conform_media_list_discover_v2_output(full, &full_request)
+            .expect("valid full generation");
+        assert_eq!(page.emitted_count, 1);
+        assert_eq!(page.records.len(), 2);
+
+        let full_without_header = br#"{"record_type":"page","complete":true,"strategy":"skip_known","examined_count":1,"archived_skipped_count":0,"emitted_count":1}
+{"record_type":"item","provider_id":"episode:1","rank":0,"display_title":"Episode 1","title":"Episode 1","kind":"episode"}
+"#;
+        assert!(conform_media_list_discover_v2_output(full_without_header, &full_request).is_err());
+
+        let incremental_header_only = br#"{"record_type":"page","complete":true,"strategy":"skip_known","examined_count":0,"archived_skipped_count":0,"emitted_count":0}
+{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+"#;
+        let incremental_request = media_list_v2_request(MediaListImportMode::Incremental, None);
+        let page =
+            conform_media_list_discover_v2_output(incremental_header_only, &incremental_request)
+                .expect("incremental refresh may update only its list header");
+        assert_eq!(page.records.len(), 1);
+        assert_eq!(page.emitted_count, 0);
+
+        let incremental_without_header = br#"{"record_type":"page","complete":true,"strategy":"skip_known","examined_count":0,"archived_skipped_count":0,"emitted_count":0}
+"#;
+        assert!(conform_media_list_discover_v2_output(
+            incremental_without_header,
+            &incremental_request,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn media_list_import_v2_validates_counts_and_all_known_progress() {
+        let request = media_list_v2_request(MediaListImportMode::Incremental, None);
+        let all_known = br#"{"record_type":"page","complete":false,"next_cursor":"page-2","strategy":"newest_first_early_stop","examined_count":2,"archived_skipped_count":2,"emitted_count":0}
+"#;
+        let page = conform_media_list_discover_v2_output(all_known, &request)
+            .expect("all-known page makes examined and cursor progress");
+        assert_eq!(page.archived_skipped_count, 2);
+        assert!(page.records.is_empty());
+
+        let no_progress = br#"{"record_type":"page","complete":false,"next_cursor":"page-2","strategy":"skip_known","examined_count":0,"archived_skipped_count":0,"emitted_count":0}
+"#;
+        assert!(conform_media_list_discover_v2_output(no_progress, &request).is_err());
+
+        let wrong_counts = br#"{"record_type":"page","complete":true,"strategy":"skip_known","examined_count":2,"archived_skipped_count":0,"emitted_count":1}
+{"record_type":"item","provider_id":"episode:1","rank":0,"display_title":"Episode 1","title":"Episode 1","kind":"episode"}
+"#;
+        assert!(conform_media_list_discover_v2_output(wrong_counts, &request).is_err());
+
+        let oversized_examined_page = br#"{"record_type":"page","complete":false,"next_cursor":"page-251","strategy":"skip_known","examined_count":251,"archived_skipped_count":251,"emitted_count":0}
+"#;
+        assert!(conform_media_list_discover_v2_output(oversized_examined_page, &request).is_err());
+
+        let leaked_path = br#"{"record_type":"page","complete":true,"strategy":"skip_known","examined_count":0,"archived_skipped_count":0,"emitted_count":0,"staged_path":"private/archive.txt"}
+"#;
+        assert!(conform_media_list_discover_v2_output(leaked_path, &request).is_err());
+
+        let continuation_request =
+            media_list_v2_request(MediaListImportMode::Incremental, Some("page-2"));
+        let repeated_cursor = br#"{"record_type":"page","complete":false,"next_cursor":"page-2","strategy":"skip_known","examined_count":1,"archived_skipped_count":1,"emitted_count":0}
+"#;
+        assert!(
+            conform_media_list_discover_v2_output(repeated_cursor, &continuation_request,).is_err()
+        );
+
+        let full_with_skip = br#"{"record_type":"page","complete":true,"strategy":"skip_known","examined_count":1,"archived_skipped_count":1,"emitted_count":0}
+{"record_type":"list","provider_id":"fixture/list","name":"Fixture"}
+"#;
+        let full_request = media_list_v2_request(MediaListImportMode::Full, None);
+        assert!(conform_media_list_discover_v2_output(full_with_skip, &full_request).is_err());
     }
 
     #[test]

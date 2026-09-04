@@ -5,14 +5,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
-    AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, AddonMediaListPresentationKind,
-    AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
-    AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
-    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
-    AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
-    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence, AddonMediaListReviewState,
-    RemoteStreamLiveness,
+    AddonMediaListImportMode, AddonMediaListImportState, AddonMediaListIncrementalStrategy,
+    AddonMediaListItemAvailability, AddonMediaListItemKind, AddonMediaListItemRole,
+    AddonMediaListPresentationKind, AddonMediaListPublicationEnqueueTrigger,
+    AddonMediaListPublicationErrorCategory, AddonMediaListPublicationEventKind,
+    AddonMediaListPublicationFilesystemTransition, AddonMediaListPublicationOutcome,
+    AddonMediaListPublicationPhase, AddonMediaListPublicationRetryClass,
+    AddonMediaListPublicationState, AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
+    AddonMediaListReviewState, RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
@@ -687,7 +687,10 @@ fn import_progress_phase(
     policy: AddonMediaListDetailPolicy,
 ) -> TextKey {
     if progress.state == AddonMediaListImportState::Ready {
-        if progress.discovered_count == 0 {
+        if progress.discovered_count == 0
+            && (progress.mode == AddonMediaListImportMode::Full
+                || progress.retained_item_count == 0)
+        {
             return TextKey::EmptyImportNeedsRetry;
         }
         if progress.detail_pending > 0 {
@@ -708,7 +711,24 @@ fn import_can_retry(progress: &AddonMediaListImportProgressRow) -> bool {
     matches!(
         progress.state,
         AddonMediaListImportState::NeedsAttention | AddonMediaListImportState::Cancelled
-    ) || (progress.state == AddonMediaListImportState::Ready && progress.discovered_count == 0)
+    ) || (progress.state == AddonMediaListImportState::Ready
+        && progress.discovered_count == 0
+        && (progress.mode == AddonMediaListImportMode::Full || progress.retained_item_count == 0))
+}
+
+fn import_discovery_summary(progress: &AddonMediaListImportProgressRow) -> String {
+    if progress.strategy == AddonMediaListIncrementalStrategy::None {
+        return format!("{} {}", progress.discovered_count, tr(TextKey::Discovered));
+    }
+    format!(
+        "{} {} · {} {} · {} {}",
+        progress.examined_count,
+        tr(TextKey::Examined),
+        progress.archived_skipped_count,
+        tr(TextKey::ArchivedSkipped),
+        progress.emitted_count,
+        tr(TextKey::Emitted),
+    )
 }
 
 fn format_clock_duration(seconds: u64) -> String {
@@ -759,6 +779,8 @@ fn progress_sample(progress: &AddonMediaListImportProgressRow) -> (bool, u64, Op
         .saturating_add(progress.detail_failed);
     if progress.detail_pending > 0 || detail_done > 0 {
         (true, detail_done, Some(progress.detail_total))
+    } else if progress.strategy != AddonMediaListIncrementalStrategy::None {
+        (false, progress.examined_count, progress.total_hint)
     } else {
         (false, progress.discovered_count, progress.total_hint)
     }
@@ -1746,10 +1768,9 @@ fn AddonMediaListsIsland(
                                                         }
                                                     }, |progress| {
                                                         format!(
-                                                            "{} · {} {} · {} / {} {}",
+                                                            "{} · {} · {} / {} {}",
                                                             tr(import_state_text_key(progress.state)),
-                                                            progress.discovered_count,
-                                                            tr(TextKey::Discovered),
+                                                            import_discovery_summary(progress),
                                                             progress.detail_complete,
                                                             progress.detail_total,
                                                             tr(TextKey::Details),
@@ -5439,7 +5460,16 @@ fn AddonMediaListEditorIsland(
                 let has_current_title = !current_title.is_empty();
                 let has_diagnostic = !diagnostic.is_empty();
                 let has_empty_import = state == AddonMediaListImportState::Ready
-                    && progress.discovered_count == 0;
+                    && progress.discovered_count == 0
+                    && (progress.mode == AddonMediaListImportMode::Full
+                        || progress.retained_item_count == 0);
+                let has_archive_counts =
+                    progress.strategy != AddonMediaListIncrementalStrategy::None;
+                let overview_progress_label = if has_archive_counts {
+                    TextKey::Examined
+                } else {
+                    TextKey::Discovered
+                };
                 let has_detail_failed = progress.detail_failed > 0;
                 let completed = state == AddonMediaListImportState::Ready;
                 let elapsed = elapsed_between(
@@ -5529,9 +5559,9 @@ fn AddonMediaListEditorIsland(
                             <div>
                                 <strong>{tr(phase)}</strong>
                                 <span>{if let Some(total) = total {
-                                    format!("{current} / {total} {}", if is_detail_progress { tr(TextKey::Details) } else { tr(TextKey::Discovered) })
+                                    format!("{current} / {total} {}", if is_detail_progress { tr(TextKey::Details) } else { tr(overview_progress_label) })
                                 } else {
-                                    format!("{current} {}", tr(TextKey::Discovered))
+                                    format!("{current} {}", tr(overview_progress_label))
                                 }}</span>
                             </div>
                             <span class=style::import_progress_percent>{total.map_or_else(|| "…".to_owned(), |_| format!("{percent}%"))}</span>
@@ -5544,6 +5574,7 @@ fn AddonMediaListEditorIsland(
                             <span style:display=if has_estimate { "inline" } else { "none" }>{format!("{}: {estimate}", tr(TextKey::EstimatedRemainingTime))}</span>
                         </p>
                         <p class=style::import_progress_details>
+                            <span style:display=if has_archive_counts { "inline" } else { "none" }>{import_discovery_summary(&progress)}</span>
                             <span>{format!("{} / {} {}", progress.detail_complete, progress.detail_total, tr(TextKey::DetailsComplete))}</span>
                             <span>{format!("{} {}", progress.detail_skipped, tr(TextKey::DetailsSkipped))}</span>
                             <span style:display=if has_detail_failed { "inline" } else { "none" }>{format!("{} {}", progress.detail_failed, tr(TextKey::Failed))}</span>
@@ -7094,6 +7125,44 @@ mod tests {
             TextKey::EmptyImportNeedsRetry
         );
         assert!(import_can_retry(&empty));
+        let unchanged_incremental = AddonMediaListImportProgressRow {
+            state: AddonMediaListImportState::Ready,
+            mode: AddonMediaListImportMode::Incremental,
+            strategy: AddonMediaListIncrementalStrategy::SkipKnown,
+            discovered_count: 0,
+            examined_count: 12,
+            archived_skipped_count: 12,
+            emitted_count: 0,
+            total_hint: Some(12),
+            retained_item_count: 12,
+            ..AddonMediaListImportProgressRow::default()
+        };
+        assert_eq!(
+            import_progress_phase(
+                &unchanged_incremental,
+                false,
+                AddonMediaListDetailPolicy::ManualOnly,
+            ),
+            TextKey::ReadyToReview
+        );
+        assert!(!import_can_retry(&unchanged_incremental));
+        assert_eq!(
+            progress_sample(&unchanged_incremental),
+            (false, 12, Some(12))
+        );
+        let empty_incremental = AddonMediaListImportProgressRow {
+            retained_item_count: 0,
+            ..unchanged_incremental.clone()
+        };
+        assert_eq!(
+            import_progress_phase(
+                &empty_incremental,
+                false,
+                AddonMediaListDetailPolicy::ManualOnly,
+            ),
+            TextKey::EmptyImportNeedsRetry
+        );
+        assert!(import_can_retry(&empty_incremental));
         assert!(!import_can_retry(&AddonMediaListImportProgressRow {
             state: AddonMediaListImportState::Ready,
             discovered_count: 1,

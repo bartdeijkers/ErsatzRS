@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-09-04","summary":"Completed AMM-L-02 transactional add-on list import archives and official yt-dlp skip-known discovery with exact counters and lifecycle fencing."}
 {"agent":"Codex","date":"2026-09-04","summary":"Completed AMM-L-01 fixed and adaptive add-on media-list refresh scheduling with bounded source checks and shared provider pacing."}
 {"agent":"Codex","date":"2026-09-04","summary":"Completed AMM-K-04 durable source, exact change and reset-impact previews, digest-validated bounded revision restore, monotonic recovery, and shared dialog/table accessibility; focused P1/P2 review and checks pass, with packaged browser execution retained by AMM-N-03."}
 {"agent":"Codex","date":"2026-09-04","summary":"Amended AMM-L-01 with opt-in cadence-aware adaptive source polling and bounded provider-neutral probe acceptance."}

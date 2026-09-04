@@ -109,6 +109,51 @@ no-progress pages, changing revision tokens, output beyond 4 MiB, and more than
 after validation. Without a revision token, the host verifies a second complete
 overview pass before making the draft publishable.
 
+### Incremental discover
+
+`media-list.import.v2` keeps the v1 record schemas and enrichment operation,
+and adds full or incremental discovery backed by a staged host-owned archive.
+The request adds these fields:
+
+| Field | Type | Requirement |
+|---|---|---|
+| `mode` | string | `full` or `incremental`. |
+| `archive.staged_path` | string | Host-created private path; 1 to 4,096 UTF-8 bytes without control characters. The host separately enforces absolute-path containment. |
+| `archive.generation` | positive integer | Generation being staged for this invocation. |
+| `archive.entry_count` | non-negative integer | Entries already present in the staged copy; no greater than `max_entries`. |
+| `archive.sha256` | string | Lowercase SHA-256 digest of the staged input. |
+| `archive.max_bytes` | positive integer | Staged archive cap, at most 4 MiB. |
+| `archive.max_entries` | positive integer | Staged entry cap, at most 10,000. |
+
+The package may mutate only the staged file. It must never emit the path,
+archive contents, or provider archive lines in NDJSON, diagnostics, Health
+Checks, or logs. Cancellation and invalid output discard the staged successor;
+the host promotes it only after the matching page commit succeeds.
+
+Every v2 `page` control record additionally reports:
+
+| Field | Type | Requirement |
+|---|---|---|
+| `strategy` | string | `skip_known` or `newest_first_early_stop`; reported for full and incremental invocations. |
+| `examined_count` | non-negative integer | Identities examined during this page. |
+| `archived_skipped_count` | non-negative integer | Examined identities suppressed by the archive. Must be zero in `full` mode. |
+| `emitted_count` | non-negative integer | Item records emitted after the control record. |
+
+`examined_count` must equal `archived_skipped_count + emitted_count`, and
+`emitted_count` must equal the exact number of item records. A full first page
+still requires one list record. Counts may not exceed the request's archive and
+page limits. An incremental first page may contain zero or one list record and
+may complete with zero item records. An incomplete all-known page is valid only
+when its examined count is positive and its cursor advances. Continuation pages
+never contain a list record.
+
+`skip_known` performs bounded enumeration while suppressing archived
+identities. `newest_first_early_stop` is valid only when the package guarantees
+stable newest-first order for that exact source shape and no unseen identity
+can follow the first archived identity. Early stop must not be combined with
+lazy playlist enumeration. Absence from an incremental response is never a
+deletion signal.
+
 ### Enrich
 
 One `enrich` request has these fields:

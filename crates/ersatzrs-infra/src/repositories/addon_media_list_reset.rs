@@ -10,6 +10,7 @@ use ersatzrs_domain::{
 };
 use sqlx::Row as _;
 
+use crate::addon_media_list_archive::remove_relative_archive;
 use crate::addon_media_list_import::AddonMediaListImportCoordinator;
 use crate::addon_media_list_sync::AddonMediaListSynchronizer;
 use crate::db::DbPool;
@@ -153,6 +154,22 @@ async fn quiesce(
         &now,
     )
     .await?;
+    let active_finalization: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (
+               SELECT 1 FROM "AddonMediaListImportJob"
+               WHERE "AddonMediaListId" = ? AND "OverviewComplete" = 1
+                 AND "LeaseOwner" IS NOT NULL
+           )"#,
+    )
+    .bind(job.list_id)
+    .fetch_one(&mut *tx)
+    .await
+    .repository()?;
+    if active_finalization {
+        return Err(RepositoryError::Conflict(
+            "the add-on media list import is finalizing; wait for it to finish".to_owned(),
+        ));
+    }
     sqlx::query(
         r#"UPDATE "AddonMediaListImportJob"
            SET "State" = ?, "CancellationRequested" = 1, "LeaseOwner" = NULL,
@@ -344,6 +361,29 @@ async fn clear_checkpoints(
     claim: &ManagedLibraryOperationClaim,
     job: &AddonMediaListLifecycleJob,
 ) -> Result<()> {
+    ensure_current(
+        pool,
+        claim,
+        job,
+        AddonMediaListLifecyclePhase::ClearingCheckpoint,
+    )
+    .await?;
+    let archives = sqlx::query(
+        r#"SELECT "DataRoot", "RelativePath"
+           FROM "AddonMediaListImportCheckpoint"
+           WHERE "AddonMediaListId" = ? ORDER BY "Id""#,
+    )
+    .bind(job.list_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    for archive in archives {
+        let data_root: Option<String> = archive.try_get("DataRoot").repository()?;
+        let relative_path: String = archive.try_get("RelativePath").repository()?;
+        if let Some(data_root) = data_root {
+            remove_relative_archive(Path::new(&data_root), &relative_path).await?;
+        }
+    }
     let now = encode_datetime(chrono::Utc::now());
     let mut tx = crate::db::begin_write(pool).await.repository()?;
     ensure_current_tx(
@@ -705,6 +745,15 @@ mod tests {
         let manifest = managed.join("playlist.json");
         std::fs::write(&manifest, b"derived").expect("seed managed definition");
         seed_reset_state(&pool, manifest.to_string_lossy().as_ref()).await;
+        let archive_root = temporary.path().join("add-on data");
+        std::fs::create_dir(&archive_root).expect("create archive root");
+        let archive_path = archive_root.join("archive.txt");
+        std::fs::write(&archive_path, b"fixture item\n").expect("seed import archive");
+        sqlx::query(r#"UPDATE "AddonMediaListImportCheckpoint" SET "DataRoot" = ? WHERE "Id" = 1"#)
+            .bind(archive_root.to_string_lossy().as_ref())
+            .execute(&pool)
+            .await
+            .expect("record archive root");
         let claim = reset_claim();
         let mut job = reset_job(AddonMediaListLifecyclePhase::Quiescing);
 
@@ -751,6 +800,7 @@ mod tests {
         )
         .await
         .expect("verify empty reset");
+        assert!(!archive_path.exists());
 
         let retained = sqlx::query(
             r#"SELECT "Name", "AddonId", "ProviderId", "SourceUrl", "AutoRefresh",
@@ -874,6 +924,7 @@ mod tests {
             "reset-owner",
             "reset-lease",
             "media.list.record.v1",
+            "media-list.import.v1",
         )
         .await;
         assert!(matches!(too_early, Err(RepositoryError::Conflict(_))));
@@ -891,6 +942,7 @@ mod tests {
             "reset-owner",
             "reset-lease",
             "media.list.record.v1",
+            "media-list.import.v1",
         )
         .await
         .expect("queue reset import after empty commit");
@@ -901,6 +953,7 @@ mod tests {
             "reset-owner",
             "reset-lease",
             "media.list.record.v1",
+            "media-list.import.v1",
         )
         .await
         .expect("reuse queued reset import");

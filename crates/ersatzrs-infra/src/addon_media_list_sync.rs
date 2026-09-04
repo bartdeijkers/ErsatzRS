@@ -46,6 +46,67 @@ pub(crate) enum DetailMergeOutcome {
     DeferredForPublication,
 }
 
+#[derive(Clone, Copy)]
+struct ImportFinalizationFence<'a> {
+    job_id: EntityId,
+    lease_owner: &'a str,
+    expected_phase: i32,
+    next_phase: i32,
+}
+
+async fn begin_import_finalization_phase(
+    tx: &mut Transaction<'_, Db>,
+    fence: ImportFinalizationFence<'_>,
+) -> Result<()> {
+    let lease_expires = encode_datetime(
+        Utc::now() + Duration::seconds(crate::addon_media_list_import::IMPORT_LEASE_SECONDS),
+    );
+    let updated = sqlx::query(
+        r#"UPDATE "AddonMediaListImportJob" SET "LeaseExpiresAt" = ?, "HeartbeatAt" = ?
+           WHERE "Id" = ? AND "LeaseOwner" = ? AND "OverviewComplete" = 1
+             AND "CancellationRequested" = 0 AND "FinalizationPhase" = ?"#,
+    )
+    .bind(&lease_expires)
+    .bind(encode_datetime(Utc::now()))
+    .bind(fence.job_id)
+    .bind(fence.lease_owner)
+    .bind(fence.expected_phase)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    if updated.rows_affected() != 1 {
+        return Err(RepositoryError::Conflict(
+            "the import finalization lease or phase changed".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+async fn complete_import_finalization_phase(
+    tx: &mut Transaction<'_, Db>,
+    fence: ImportFinalizationFence<'_>,
+) -> Result<()> {
+    let updated = sqlx::query(
+        r#"UPDATE "AddonMediaListImportJob" SET "FinalizationPhase" = ?, "UpdatedAt" = ?
+           WHERE "Id" = ? AND "LeaseOwner" = ? AND "OverviewComplete" = 1
+             AND "CancellationRequested" = 0 AND "FinalizationPhase" = ?"#,
+    )
+    .bind(fence.next_phase)
+    .bind(encode_datetime(Utc::now()))
+    .bind(fence.job_id)
+    .bind(fence.lease_owner)
+    .bind(fence.expected_phase)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    if updated.rows_affected() != 1 {
+        return Err(RepositoryError::Conflict(
+            "the import finalization lease or phase changed".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 impl AddonMediaListMatchReport {
     fn one(playout_refreshes: Vec<ScanPlayoutRefresh>) -> Self {
         Self {
@@ -700,10 +761,12 @@ impl AddonMediaListSynchronizer {
     /// Returns an error when persistence fails.
     pub async fn delete_list(&self, list_id: EntityId) -> Result<()> {
         ensure_not_publishing(&self.pool, list_id).await?;
+        ensure_not_import_finalizing(&self.pool, list_id).await?;
         let library_id = list_library_id(&self.pool, list_id).await?;
         let removal = self.prepare_generated_playlist_removal(list_id).await?;
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         ensure_not_publishing_tx(&mut tx, list_id).await?;
+        ensure_not_import_finalizing_tx(&mut tx, list_id).await?;
         if let Some(removal) = &removal {
             self.remove_generated_playlist_in_tx(&mut tx, list_id, removal, None)
                 .await?;
@@ -937,11 +1000,138 @@ impl AddonMediaListSynchronizer {
         }
     }
 
+    async fn save_import_list_header(
+        &self,
+        job_id: EntityId,
+        lease_owner: &str,
+        list: &AddonMediaList,
+        metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+        incremental: bool,
+    ) -> Result<()> {
+        let fence = ImportFinalizationFence {
+            job_id,
+            lease_owner,
+            expected_phase: 0,
+            next_phase: 1,
+        };
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        begin_import_finalization_phase(&mut tx, fence).await?;
+        let current = sqlx::query(
+            r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson", "MetadataConflictJson"
+               FROM "AddonMediaList" WHERE "Id" = ? AND "AddonId" = ?"#,
+        )
+        .bind(list.id)
+        .bind(&list.addon_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .repository()?
+        .ok_or_else(|| {
+            RepositoryError::Conflict(
+                "the imported list identity changed before finalization".to_owned(),
+            )
+        })?;
+        if !incremental {
+            let provider_metadata = encode_metadata(metadata)?;
+            let previous_provider: String = current.try_get("ProviderMetadataJson").repository()?;
+            let overrides: String = current.try_get("MetadataOverrideJson").repository()?;
+            let existing_conflicts: Option<String> =
+                current.try_get("MetadataConflictJson").repository()?;
+            let conflicts = refresh_conflict_json(
+                &previous_provider,
+                &provider_metadata,
+                &overrides,
+                existing_conflicts.as_deref(),
+            )?;
+            let updated = sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "ProviderId" = ?, "SourceUrl" = ?, "Name" = ?, "Description" = ?,
+                       "ItemCount" = ?, "ContentKindOverride" = ?, "ChapterInput" = ?,
+                       "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
+                       "LastError" = NULL,
+                       "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
+                       "ReviewError" = NULL, "DraftRevision" = "DraftRevision" + 1
+                   WHERE "Id" = ? AND "AddonId" = ? AND "ReviewState" <> 3
+                     AND ("PublicationJournalJson" IS NULL
+                          OR TRIM("PublicationJournalJson") = '')
+                     AND NOT EXISTS (
+                         SELECT 1
+                         FROM "AddonMediaListPublicationJob" AS "job"
+                         JOIN "ManagedLibraryOperation" AS "operation"
+                           ON "operation"."Id" = "job"."OperationId"
+                         WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                           AND "operation"."State" IN (?, ?, ?)
+                     )"#,
+            )
+            .bind(&list.provider_id)
+            .bind(&list.source_url)
+            .bind(&list.name)
+            .bind(&list.description)
+            .bind(list.item_count)
+            .bind(encode_enum(list.content_kind_override))
+            .bind((!list.chapter_input.is_empty()).then_some(&list.chapter_input))
+            .bind(provider_metadata)
+            .bind(conflicts)
+            .bind(list.id)
+            .bind(&list.addon_id)
+            .bind(encode_enum(
+                ersatzrs_domain::ManagedLibraryOperationState::Queued,
+            ))
+            .bind(encode_enum(
+                ersatzrs_domain::ManagedLibraryOperationState::Running,
+            ))
+            .bind(encode_enum(
+                ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+            ))
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(publication_in_progress());
+            }
+        }
+        complete_import_finalization_phase(&mut tx, fence).await?;
+        tx.commit().await.repository()
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn save_list_items(
         &self,
         list_id: EntityId,
         incoming: &[EnumeratedAddonMediaListItem],
+    ) -> Result<AddonMediaList> {
+        self.save_list_items_with_mode(list_id, incoming, false, None)
+            .await
+    }
+
+    async fn save_import_items(
+        &self,
+        job_id: EntityId,
+        lease_owner: &str,
+        list_id: EntityId,
+        incoming: &[EnumeratedAddonMediaListItem],
+        delta: bool,
+    ) -> Result<AddonMediaList> {
+        self.save_list_items_with_mode(
+            list_id,
+            incoming,
+            delta,
+            Some(ImportFinalizationFence {
+                job_id,
+                lease_owner,
+                expected_phase: 1,
+                next_phase: 2,
+            }),
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn save_list_items_with_mode(
+        &self,
+        list_id: EntityId,
+        incoming: &[EnumeratedAddonMediaListItem],
+        delta: bool,
+        finalization: Option<ImportFinalizationFence<'_>>,
     ) -> Result<AddonMediaList> {
         let incoming_ids = incoming
             .iter()
@@ -954,12 +1144,38 @@ impl AddonMediaListSynchronizer {
             .collect::<HashMap<_, _>>();
 
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        if let Some(fence) = finalization {
+            begin_import_finalization_phase(&mut tx, fence).await?;
+        }
         ensure_not_publishing_tx(&mut tx, list_id).await?;
-        sqlx::query(r#"DELETE FROM "AddonMediaListChapter" WHERE "AddonMediaListId" = ?"#)
-            .bind(list_id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
+        if delta {
+            let mut incoming_ranks = incoming
+                .iter()
+                .filter(|item| !existing_ids.contains_key(item.provider_id.as_str()))
+                .map(|item| item.rank)
+                .collect::<Vec<_>>();
+            incoming_ranks.sort_unstable();
+            for item in &existing {
+                if incoming_ids.contains(item.provider_id.as_str()) {
+                    continue;
+                }
+                let shifted_rank = shifted_rank_after_insertions(item.rank, &incoming_ranks);
+                if shifted_rank != item.rank {
+                    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Rank" = ? WHERE "Id" = ?"#)
+                        .bind(shifted_rank)
+                        .bind(item.id)
+                        .execute(&mut *tx)
+                        .await
+                        .repository()?;
+                }
+            }
+        } else {
+            sqlx::query(r#"DELETE FROM "AddonMediaListChapter" WHERE "AddonMediaListId" = ?"#)
+                .bind(list_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        }
         let mut retained_count = 0_usize;
         let mut tombstone_rank = incoming
             .iter()
@@ -968,6 +1184,9 @@ impl AddonMediaListSynchronizer {
             .unwrap_or(-1)
             .saturating_add(1);
         for item in &existing {
+            if delta {
+                break;
+            }
             if !incoming_ids.contains(item.provider_id.as_str()) {
                 if item.parent_provider_id.is_some() {
                     sqlx::query(r#"DELETE FROM "AddonMediaListItem" WHERE "Id" = ?"#)
@@ -1111,6 +1330,13 @@ impl AddonMediaListSynchronizer {
                         ))
                     })?;
             let fragment_item_id = persisted_ids[&item.provider_id.as_str()];
+            if delta {
+                sqlx::query(r#"DELETE FROM "AddonMediaListChapter" WHERE "FragmentItemId" = ?"#)
+                    .bind(fragment_item_id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+            }
             let chapter_index = chapter_indexes.entry(parent_provider_id).or_default();
             sqlx::query(
                 r#"INSERT INTO "AddonMediaListChapter" (
@@ -1140,16 +1366,39 @@ impl AddonMediaListSynchronizer {
         let refreshed_at = Utc::now();
         crate::addon_media_list_refresh::record_refresh_success_tx(&mut tx, list_id, refreshed_at)
             .await?;
+        let item_count = if delta {
+            sqlx::query_scalar::<_, i64>(
+                r#"SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&mut *tx)
+            .await
+            .repository()?
+        } else {
+            i64::try_from(incoming.len().saturating_add(retained_count)).unwrap_or(i64::MAX)
+        };
         sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "ItemCount" = ?
+               SET "ItemCount" = ?,
+                   "ReviewState" = CASE
+                       WHEN ? = 1 AND "ReviewState" <> 0 THEN 1
+                       ELSE "ReviewState"
+                   END,
+                   "ReviewError" = CASE WHEN ? = 1 THEN NULL ELSE "ReviewError" END,
+                   "DraftRevision" = "DraftRevision" + ?
                WHERE "Id" = ?"#,
         )
-        .bind(i32::try_from(incoming.len().saturating_add(retained_count)).unwrap_or(i32::MAX))
+        .bind(item_count)
+        .bind(delta && !incoming.is_empty())
+        .bind(delta && !incoming.is_empty())
+        .bind(i32::from(delta && !incoming.is_empty()))
         .bind(list_id)
         .execute(&mut *tx)
         .await
         .repository()?;
+        if let Some(fence) = finalization {
+            complete_import_finalization_phase(&mut tx, fence).await?;
+        }
         tx.commit().await.repository()?;
 
         self.load_list(list_id).await
@@ -1215,7 +1464,7 @@ impl AddonMediaListSynchronizer {
 
     async fn load_existing_items(&self, list_id: EntityId) -> Result<Vec<ExistingItem>> {
         let rows = sqlx::query(
-            r#"SELECT "Id", "ProviderId", "ParentProviderId", "ProviderMetadataJson",
+            r#"SELECT "Id", "ProviderId", "Rank", "ParentProviderId", "ProviderMetadataJson",
                       "MetadataOverrideJson", "MetadataConflictJson", "ProviderLiveness",
                       "LivenessOverride", "LivenessConflict"
                FROM "AddonMediaListItem"
@@ -1232,6 +1481,7 @@ impl AddonMediaListSynchronizer {
                 Ok(ExistingItem {
                     id: row.try_get("Id").repository()?,
                     provider_id: row.try_get("ProviderId").repository()?,
+                    rank: row.try_get("Rank").repository()?,
                     parent_provider_id: row.try_get("ParentProviderId").repository()?,
                     provider_metadata_json: row.try_get("ProviderMetadataJson").repository()?,
                     metadata_override_json: row.try_get("MetadataOverrideJson").repository()?,
@@ -1794,6 +2044,30 @@ impl AddonMediaListSynchronizer {
     }
 }
 
+fn shifted_rank_after_insertions(rank: i32, sorted_incoming_ranks: &[i32]) -> i32 {
+    sorted_incoming_ranks
+        .iter()
+        .fold(rank, |shifted, incoming| {
+            if *incoming <= shifted {
+                shifted.saturating_add(1)
+            } else {
+                shifted
+            }
+        })
+}
+
+#[cfg(test)]
+mod incremental_rank_tests {
+    use super::shifted_rank_after_insertions;
+
+    #[test]
+    fn consecutive_insertions_advance_the_retained_rank_each_time() {
+        assert_eq!(shifted_rank_after_insertions(0, &[0, 1]), 2);
+        assert_eq!(shifted_rank_after_insertions(3, &[0, 2, 5]), 6);
+        assert_eq!(shifted_rank_after_insertions(3, &[4]), 3);
+    }
+}
+
 /// Imports and refreshes provider data through an installed add-on.
 pub struct AddonMediaListRemoteSynchronizer<P> {
     local: AddonMediaListSynchronizer,
@@ -1810,6 +2084,120 @@ where
             local: AddonMediaListSynchronizer::new(pool),
             provider,
         }
+    }
+
+    async fn import_finalization_phase(&self, job_id: EntityId, lease_owner: &str) -> Result<i32> {
+        sqlx::query_scalar(
+            r#"SELECT "FinalizationPhase" FROM "AddonMediaListImportJob"
+               WHERE "Id" = ? AND "LeaseOwner" = ? AND "OverviewComplete" = 1
+                 AND "CancellationRequested" = 0"#,
+        )
+        .bind(job_id)
+        .bind(lease_owner)
+        .fetch_optional(&self.local.pool)
+        .await
+        .repository()?
+        .ok_or_else(|| {
+            RepositoryError::Conflict("the import finalization lease changed".to_owned())
+        })
+    }
+
+    pub(crate) async fn persist_import_generation(
+        &self,
+        job_id: EntityId,
+        lease_owner: &str,
+        list: &AddonMediaList,
+        enumerated: &mut EnumeratedAddonMediaList,
+        incremental: bool,
+    ) -> Result<AddonMediaList> {
+        let mut phase = self.import_finalization_phase(job_id, lease_owner).await?;
+        if phase == 0 {
+            self.local
+                .save_import_list_header(
+                    job_id,
+                    lease_owner,
+                    list,
+                    &enumerated.metadata,
+                    incremental,
+                )
+                .await?;
+            phase = 1;
+        }
+        if phase == 1 {
+            if !incremental && list.chapter_input.trim().is_empty() {
+                self.expand_item_chapters(list.id, &list.addon_id, enumerated)
+                    .await?;
+            }
+            self.local
+                .save_import_items(job_id, lease_owner, list.id, &enumerated.items, incremental)
+                .await?;
+            phase = 2;
+        }
+        if !(2..=4).contains(&phase) {
+            return Err(RepositoryError::Conflict(
+                "the import finalization phase is invalid for item persistence".to_owned(),
+            ));
+        }
+        self.local.load_list(list.id).await
+    }
+
+    pub(crate) async fn complete_import_projection(
+        &self,
+        job_id: EntityId,
+        lease_owner: &str,
+        list_id: EntityId,
+        requested_folder: Option<&str>,
+    ) -> Result<()> {
+        let phase = self.import_finalization_phase(job_id, lease_owner).await?;
+        if (3..=4).contains(&phase) {
+            return Ok(());
+        }
+        if phase != 2 {
+            return Err(RepositoryError::Conflict(
+                "the import finalization phase is invalid for list projection".to_owned(),
+            ));
+        }
+        let fence = ImportFinalizationFence {
+            job_id,
+            lease_owner,
+            expected_phase: 2,
+            next_phase: 3,
+        };
+        let mut renewal = crate::db::begin_write(&self.local.pool)
+            .await
+            .repository()?;
+        begin_import_finalization_phase(&mut renewal, fence).await?;
+        renewal.commit().await.repository()?;
+
+        let list = self.local.load_list(list_id).await?;
+        if has_media_source(&self.local.pool, &list.addon_id).await? {
+            ensure_list_library(
+                &self.local.pool,
+                list.id,
+                &list.addon_id,
+                &list.name,
+                &list.source_url,
+                &list.chapter_input,
+                requested_folder,
+            )
+            .await?;
+        }
+        let review_state: i32 =
+            sqlx::query_scalar(r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(list.id)
+                .fetch_one(&self.local.pool)
+                .await
+                .repository()?;
+        if review_state == 2 {
+            self.local.match_list_items(list.id).await?;
+        }
+
+        let mut tx = crate::db::begin_write(&self.local.pool)
+            .await
+            .repository()?;
+        begin_import_finalization_phase(&mut tx, fence).await?;
+        complete_import_finalization_phase(&mut tx, fence).await?;
+        tx.commit().await.repository()
     }
 
     /// Add or refresh an add-on media list, then match its persisted items.
@@ -2074,6 +2462,12 @@ where
                        ON "operation"."Id" = "job"."OperationId"
                      WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
                        AND "operation"."State" IN (?, ?, ?)
+                 )
+                 AND NOT EXISTS (
+                     SELECT 1 FROM "AddonMediaListImportJob" AS "import"
+                     WHERE "import"."AddonMediaListId" = "AddonMediaList"."Id"
+                       AND "import"."OverviewComplete" = 1
+                       AND "import"."LeaseOwner" IS NOT NULL
                  )"#,
         )
         .bind(addon_id)
@@ -2092,6 +2486,22 @@ where
         .await
         .repository()?;
         if updated.rows_affected() != 1 {
+            let finalizing: bool = sqlx::query_scalar(
+                r#"SELECT EXISTS (
+                       SELECT 1 FROM "AddonMediaListImportJob"
+                       WHERE "AddonMediaListId" = ? AND "OverviewComplete" = 1
+                         AND "LeaseOwner" IS NOT NULL
+                   )"#,
+            )
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .repository()?;
+            if finalizing {
+                return Err(RepositoryError::Conflict(
+                    "the add-on media list import is finalizing; wait for it to finish".to_owned(),
+                ));
+            }
             return Err(publication_in_progress());
         }
         reconcile_changed_addon_state_in_tx(&mut tx, id, &previous_addon_id, addon_id).await?;
@@ -2182,11 +2592,22 @@ pub(crate) async fn reconcile_changed_addon_state_in_tx(
     .execute(&mut **tx)
     .await
     .repository()?;
-    sqlx::query(r#"DELETE FROM "AddonMediaListImportCheckpoint" WHERE "AddonMediaListId" = ?"#)
-        .bind(list_id)
-        .execute(&mut **tx)
-        .await
-        .repository()?;
+    sqlx::query(
+        r#"UPDATE "AddonMediaListImportJob" SET "CheckpointId" = NULL
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    sqlx::query(
+        r#"UPDATE "AddonMediaListImportCheckpoint" SET "Committed" = 0
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
     sqlx::query(
         r#"DELETE FROM "AddonMediaListSourceChangeObservation"
            WHERE "AddonMediaListId" = ?"#,
@@ -2306,6 +2727,7 @@ async fn insert_item_guids(
 struct ExistingItem {
     id: EntityId,
     provider_id: String,
+    rank: i32,
     parent_provider_id: Option<String>,
     provider_metadata_json: String,
     metadata_override_json: String,
@@ -2347,6 +2769,49 @@ pub(crate) async fn ensure_not_publishing(pool: &Pool<Db>, list_id: EntityId) ->
     })?;
     if has_live_lease {
         return Err(publication_in_progress());
+    }
+    Ok(())
+}
+
+pub(crate) async fn ensure_not_import_finalizing(pool: &Pool<Db>, list_id: EntityId) -> Result<()> {
+    let finalizing = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (
+               SELECT 1 FROM "AddonMediaListImportJob"
+               WHERE "AddonMediaListId" = ? AND "OverviewComplete" = 1
+                 AND "LeaseOwner" IS NOT NULL
+           )"#,
+    )
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    if finalizing {
+        return Err(RepositoryError::Conflict(
+            "the add-on media list import is finalizing; wait for it to finish".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+async fn ensure_not_import_finalizing_tx(
+    tx: &mut Transaction<'_, Db>,
+    list_id: EntityId,
+) -> Result<()> {
+    let finalizing = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (
+               SELECT 1 FROM "AddonMediaListImportJob"
+               WHERE "AddonMediaListId" = ? AND "OverviewComplete" = 1
+                 AND "LeaseOwner" IS NOT NULL
+           )"#,
+    )
+    .bind(list_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if finalizing {
+        return Err(RepositoryError::Conflict(
+            "the add-on media list import is finalizing; wait for it to finish".to_owned(),
+        ));
     }
     Ok(())
 }

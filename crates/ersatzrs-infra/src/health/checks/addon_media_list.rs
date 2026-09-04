@@ -789,8 +789,12 @@ async fn detail_activity(pool: &Pool<Db>) -> Result<DetailActivity> {
 
 async fn import_failures(pool: &Pool<Db>) -> Result<Vec<(i64, String)>> {
     let rows = sqlx::query(
-        r#"SELECT "list"."Id" AS "ListId", "list"."Name", "job"."State",
+        r#"SELECT "list"."Id" AS "ListId", "list"."Name", "job"."State", "job"."Mode",
                   "job"."DiscoveredCount", "job"."Diagnostic",
+                  CAST(CASE WHEN EXISTS (
+                      SELECT 1 FROM "AddonMediaListItem" AS "item"
+                      WHERE "item"."AddonMediaListId" = "list"."Id"
+                  ) THEN 1 ELSE 0 END AS SIGNED) AS "HasRetainedItems",
                   "job"."LastProgressAt", "job"."UpdatedAt"
            FROM "AddonMediaListImportJob" AS "job"
            JOIN "AddonMediaList" AS "list" ON "list"."Id" = "job"."AddonMediaListId"
@@ -810,10 +814,15 @@ async fn import_failures(pool: &Pool<Db>) -> Result<Vec<(i64, String)>> {
             .try_get::<String, _>("Name")
             .unwrap_or_else(|_| "List".to_owned());
         let state = row.try_get::<i64, _>("State").map_err(sqlx_error)?;
+        let mode = row.try_get::<i64, _>("Mode").map_err(sqlx_error)?;
         let discovered_count = row
             .try_get::<i64, _>("DiscoveredCount")
             .map_err(sqlx_error)?;
-        if state == 3 && discovered_count == 0 {
+        let has_retained_items = row
+            .try_get::<i64, _>("HasRetainedItems")
+            .map_err(sqlx_error)?
+            != 0;
+        if state == 3 && discovered_count == 0 && (mode == 0 || !has_retained_items) {
             failures.push((
                 list_id,
                 format!(
@@ -1428,6 +1437,7 @@ mod tests {
                 "AddonMediaListId" INTEGER NOT NULL,
                 "Generation" INTEGER NOT NULL,
                 "State" INTEGER NOT NULL,
+                "Mode" INTEGER NOT NULL DEFAULT 0,
                 "DiscoveredCount" INTEGER NOT NULL DEFAULT 0,
                 "Diagnostic" TEXT NULL,
                 "LastProgressAt" TEXT NULL,
@@ -1730,7 +1740,6 @@ mod tests {
         .execute(&pool)
         .await
         .expect("list");
-
         let result = AddonMediaListHealthCheck::new(pool)
             .check()
             .await
@@ -2227,6 +2236,48 @@ mod tests {
             result.link.as_ref().map(|link| link.link.as_str()),
             Some("/media/addon-lists/42")
         );
+    }
+
+    #[tokio::test]
+    async fn empty_incremental_completion_is_not_reported_as_a_failed_import() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" ("Id", "AddonId", "Name")
+               VALUES (42, 'org.example.list', 'Unchanged list')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListImportJob" (
+                    "Id", "AddonMediaListId", "Generation", "State", "Mode",
+                    "DiscoveredCount", "UpdatedAt"
+               ) VALUES (7, 42, 1, 3, 1, 0, '2026-08-25T00:00:00Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("unchanged incremental import");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItem" (
+                   "Id", "AddonMediaListId", "DisplayTitle"
+               ) VALUES (1, 42, 'Retained item')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("retained baseline item");
+
+        let failures = import_failures(&pool).await.expect("import failures");
+        assert!(failures.is_empty());
+
+        sqlx::query(r#"DELETE FROM "AddonMediaListItem" WHERE "AddonMediaListId" = 42"#)
+            .execute(&pool)
+            .await
+            .expect("remove retained baseline item");
+        let failures = import_failures(&pool)
+            .await
+            .expect("empty incremental failures");
+        assert_eq!(failures.len(), 1);
+        assert!(failures[0].1.contains("contains no items"));
     }
 
     #[tokio::test]

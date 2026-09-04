@@ -1,6 +1,7 @@
 //! Adapter for provider-neutral media-list add-ons.
 
 use std::collections::{BTreeMap, HashSet};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -12,10 +13,12 @@ use ersatzrs_addon_contract::{
     AddonMediaListContentKind as WireContentKind,
     AddonMediaListItemAvailability as WireAvailability, AddonMediaListItemKind as WireItemKind,
     AddonMediaListItemRole as WireItemRole, AddonMediaListRecord, AddonMetadataDocument,
-    AddonOperationError, MediaListDiscoverLimits, MediaListDiscoverRequest, MediaListDiscoveryPage,
-    MediaListEnrichRequest, MediaListEnrichmentResult, MediaListSourceCheckRequest,
-    MediaListSourceCheckResult, RemoteStreamLiveness as WireLiveness,
-    CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
+    AddonOperationError, MediaListArchiveDescriptor, MediaListDiscoverLimits,
+    MediaListDiscoverRequest, MediaListDiscoverV2Request, MediaListDiscoveryPage,
+    MediaListDiscoveryV2Page, MediaListEnrichRequest, MediaListEnrichmentResult,
+    MediaListImportMode, MediaListSourceCheckRequest, MediaListSourceCheckResult,
+    RemoteStreamLiveness as WireLiveness, CAPABILITY_MEDIA_LIST_IMPORT_V1,
+    CAPABILITY_MEDIA_LIST_IMPORT_V2, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
     CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5,
     CAPABILITY_MEDIA_LIST_LIST_V6, CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1,
     MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS, MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES,
@@ -35,10 +38,12 @@ use ersatzrs_core::repositories::{RepositoryError, Result};
 
 use crate::addon_chapters::{fragment_guid, fragment_stream_url};
 use crate::addons::{
-    invoke_enabled_addon, invoke_enabled_addon_with_input, load_installed_addon, AddonInvocation,
+    invoke_enabled_addon, invoke_enabled_addon_with_input,
+    invoke_enabled_addon_with_input_and_redactions, load_installed_addon, AddonInvocation,
     AddonRuntimeContext,
 };
 use crate::db::DbPool;
+use crate::file_system_layout::addon_data_folder;
 
 const SOURCE_URL_ENVIRONMENT: &str = "ERSATZRS_MEDIA_LIST_URL";
 const CHAPTER_INPUT_ENVIRONMENT: &str = "ERSATZRS_MEDIA_LIST_CHAPTERS";
@@ -61,6 +66,32 @@ impl InstalledAddonMediaListProvider {
         addon_id: &str,
         source_url: &str,
     ) -> Result<Option<InstalledMediaListImportContext>> {
+        self.resolve_import_context(addon_id, source_url, None)
+            .await
+    }
+
+    /// Resolve an already-persisted import and record contract after a package update.
+    pub(crate) async fn import_context_for_contract(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        import_capability: &str,
+        record_capability: &str,
+    ) -> Result<Option<InstalledMediaListImportContext>> {
+        self.resolve_import_context(
+            addon_id,
+            source_url,
+            Some((import_capability, record_capability)),
+        )
+        .await
+    }
+
+    async fn resolve_import_context(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        frozen_contract: Option<(&str, &str)>,
+    ) -> Result<Option<InstalledMediaListImportContext>> {
         let installation = load_installed_addon(&self.pool, addon_id)
             .await
             .map_err(|error| {
@@ -69,13 +100,25 @@ impl InstalledAddonMediaListProvider {
             .ok_or_else(|| {
                 RepositoryError::unavailable("load media-list add-on", "add-on is not installed")
             })?;
-        if !installation
-            .manifest
-            .has_capability(CAPABILITY_MEDIA_LIST_IMPORT_V1)
-        {
-            return Ok(None);
-        }
-        let record_capability = selected_record_capability(&installation.manifest);
+        let (import_capability, record_capability) = match frozen_contract {
+            Some((import_capability, record_capability))
+                if installation.manifest.has_capability(import_capability)
+                    && installation.manifest.has_capability(record_capability) =>
+            {
+                (import_capability, record_capability)
+            }
+            Some(_) => return Ok(None),
+            None => {
+                let Some(import_capability) = selected_import_capability(&installation.manifest)
+                else {
+                    return Ok(None);
+                };
+                (
+                    import_capability,
+                    selected_record_capability(&installation.manifest),
+                )
+            }
+        };
         let source_url = validate_operator_source_url(
             source_url,
             &installation.manifest.permissions.network_hosts,
@@ -90,6 +133,8 @@ impl InstalledAddonMediaListProvider {
         Ok(Some(InstalledMediaListImportContext {
             source_url,
             record_capability: record_capability.to_owned(),
+            import_capability: import_capability.to_owned(),
+            data_dir: addon_data_folder(&installation.data_namespace, addon_id),
         }))
     }
 
@@ -229,6 +274,61 @@ impl InstalledAddonMediaListProvider {
         })
     }
 
+    /// Fetch one bounded v2 overview page against an invocation-private archive.
+    pub(crate) async fn discover_v2(
+        &self,
+        addon_id: &str,
+        context: &InstalledMediaListImportContext,
+        cursor: Option<&str>,
+        mode: MediaListImportMode,
+        archive: MediaListArchiveDescriptor,
+    ) -> Result<MediaListDiscoveryV2Page> {
+        let sensitive_values = vec![archive.staged_path.clone()];
+        let request = MediaListDiscoverV2Request {
+            source_url: context.source_url.clone(),
+            record_capability: context.record_capability.clone(),
+            mode,
+            archive,
+            cursor: cursor.map(ToOwned::to_owned),
+            limits: MediaListDiscoverLimits::default(),
+        };
+        request
+            .validate()
+            .map_err(|error| RepositoryError::Decode {
+                kind: "media-list v2 discover request",
+                value: error.to_string(),
+            })?;
+        let input = serde_json::to_vec(&request).map_err(|error| RepositoryError::Decode {
+            kind: "media-list v2 discover request",
+            value: error.to_string(),
+        })?;
+        let runtime = managed_runtime_context();
+        let output = invoke_enabled_addon_with_input_and_redactions(
+            &self.pool,
+            addon_id,
+            AddonInvocation {
+                capability: CAPABILITY_MEDIA_LIST_IMPORT_V2,
+                operation: "discover",
+                runtime: &runtime,
+                extra_environment: &BTreeMap::new(),
+                timeout: Duration::from_secs(45),
+                max_output_bytes: MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES,
+            },
+            &input,
+            &sensitive_values,
+        )
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable("invoke media-list v2 discovery", error.to_string())
+        })?;
+        ersatzrs_addon_contract::conform_media_list_discover_v2_output(&output, &request).map_err(
+            |error| RepositoryError::Decode {
+                kind: "media-list v2 discover output",
+                value: error.to_string(),
+            },
+        )
+    }
+
     /// Enrich exactly one committed overview item through the same bounded runner.
     pub(crate) async fn enrich(
         &self,
@@ -260,7 +360,7 @@ impl InstalledAddonMediaListProvider {
             &self.pool,
             addon_id,
             AddonInvocation {
-                capability: CAPABILITY_MEDIA_LIST_IMPORT_V1,
+                capability: &context.import_capability,
                 operation: "enrich",
                 runtime: &runtime,
                 extra_environment: &BTreeMap::new(),
@@ -286,6 +386,8 @@ impl InstalledAddonMediaListProvider {
 pub(crate) struct InstalledMediaListImportContext {
     pub(crate) source_url: String,
     pub(crate) record_capability: String,
+    pub(crate) import_capability: String,
+    pub(crate) data_dir: PathBuf,
 }
 
 fn managed_runtime_context() -> AddonRuntimeContext {
@@ -308,6 +410,18 @@ fn selected_record_capability(manifest: &ersatzrs_addon_contract::AddonManifest)
         CAPABILITY_MEDIA_LIST_LIST_V2
     } else {
         CAPABILITY_MEDIA_LIST_LIST_V1
+    }
+}
+
+fn selected_import_capability(
+    manifest: &ersatzrs_addon_contract::AddonManifest,
+) -> Option<&'static str> {
+    if manifest.has_capability(CAPABILITY_MEDIA_LIST_IMPORT_V2) {
+        Some(CAPABILITY_MEDIA_LIST_IMPORT_V2)
+    } else if manifest.has_capability(CAPABILITY_MEDIA_LIST_IMPORT_V1) {
+        Some(CAPABILITY_MEDIA_LIST_IMPORT_V1)
+    } else {
+        None
     }
 }
 
@@ -891,8 +1005,10 @@ mod tests {
         require_chapter_capability,
     };
     use ersatzrs_addon_contract::{
-        CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3,
-        CAPABILITY_MEDIA_LIST_LIST_V5, CAPABILITY_MEDIA_LIST_LIST_V6,
+        CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_IMPORT_V2,
+        CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
+        CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V5,
+        CAPABILITY_MEDIA_LIST_LIST_V6,
     };
 
     /// Refuses to enumerate unless the host supplied its managed `FFmpeg`
@@ -1018,6 +1134,58 @@ printf '%s\n' '{"outcome":"unchanged","validator":"next-opaque-etag","source_upd
     #[cfg(unix)]
     async fn fixture_media_list_addon(root: &std::path::Path) -> crate::db::DbPool {
         fixture_media_list_addon_with_script(root, FIXTURE_SCRIPT, &[]).await
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn additive_package_upgrade_preserves_a_frozen_import_contract() {
+        let temporary = tempfile::tempdir().expect("temporary folder");
+        let root = temporary.path().join("package");
+        let pool = fixture_media_list_addon(&root).await;
+        let manifest_json: String = sqlx::query_scalar(
+            r#"SELECT "ManifestJson" FROM "AddonInstallation" WHERE "AddonId" = ?"#,
+        )
+        .bind("org.ersatzrs.addon.fixture")
+        .fetch_one(&pool)
+        .await
+        .expect("installed manifest");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&manifest_json).expect("manifest JSON");
+        manifest["capabilities"] = serde_json::json!([
+            {"id": "addon.check.v1"},
+            {"id": CAPABILITY_MEDIA_LIST_LIST_V1},
+            {"id": CAPABILITY_MEDIA_LIST_LIST_V5},
+            {"id": CAPABILITY_MEDIA_LIST_IMPORT_V1},
+            {"id": CAPABILITY_MEDIA_LIST_IMPORT_V2}
+        ]);
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson" = ? WHERE "AddonId" = ?"#)
+            .bind(manifest.to_string())
+            .bind("org.ersatzrs.addon.fixture")
+            .execute(&pool)
+            .await
+            .expect("install additive package update");
+
+        let provider = super::InstalledAddonMediaListProvider::new(pool);
+        let preferred = provider
+            .import_context("org.ersatzrs.addon.fixture", "https://example.test/list")
+            .await
+            .unwrap()
+            .expect("preferred upgraded contract");
+        assert_eq!(preferred.import_capability, CAPABILITY_MEDIA_LIST_IMPORT_V2);
+        assert_eq!(preferred.record_capability, CAPABILITY_MEDIA_LIST_LIST_V5);
+
+        let frozen = provider
+            .import_context_for_contract(
+                "org.ersatzrs.addon.fixture",
+                "https://example.test/list",
+                CAPABILITY_MEDIA_LIST_IMPORT_V1,
+                CAPABILITY_MEDIA_LIST_LIST_V1,
+            )
+            .await
+            .unwrap()
+            .expect("frozen pre-upgrade contract");
+        assert_eq!(frozen.import_capability, CAPABILITY_MEDIA_LIST_IMPORT_V1);
+        assert_eq!(frozen.record_capability, CAPABILITY_MEDIA_LIST_LIST_V1);
     }
 
     #[cfg(unix)]

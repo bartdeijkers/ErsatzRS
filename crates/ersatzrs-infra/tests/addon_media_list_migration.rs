@@ -241,6 +241,82 @@ async fn adaptive_refresh_migration_adds_bounded_cascade_owned_state() {
 }
 
 #[tokio::test]
+async fn import_v2_migration_freezes_legacy_jobs_to_the_v1_transport() {
+    const IMPORT_V2_VERSION: i64 = 202_609_042_000;
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("open import v2 migration database");
+    pool.execute("PRAGMA foreign_keys = ON").await.unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    let previous = sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version < IMPORT_V2_VERSION)
+            .cloned()
+            .collect(),
+    );
+    previous.run(&pool).await.expect("migrate pre-v2 schema");
+    seed_legacy_lifecycle_rows(&pool).await;
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListImportCheckpoint" (
+               "AddonMediaListId", "RelativePath", "Generation", "Sha256",
+               "EntryCount", "PromotedAt"
+           ) VALUES (1, 'legacy/archive.txt', 1, 'legacy-digest', 1,
+                     '2026-09-04T12:00:00Z')"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed legacy committed checkpoint");
+
+    migrations
+        .run(&pool)
+        .await
+        .expect("apply import v2 migration");
+
+    let migrated_job = sqlx::query(
+        r#"SELECT "ImportCapability", "FinalizationPhase"
+           FROM "AddonMediaListImportJob""#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let capability: String = migrated_job.get("ImportCapability");
+    assert_eq!(capability, "media-list.import.v1");
+    assert_eq!(migrated_job.get::<i32, _>("FinalizationPhase"), 0);
+
+    let legacy_checkpoint = sqlx::query(
+        r#"SELECT "DataRoot", "Committed" FROM "AddonMediaListImportCheckpoint"
+           WHERE "AddonMediaListId" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(legacy_checkpoint
+        .get::<Option<String>, _>("DataRoot")
+        .is_none());
+    assert_eq!(legacy_checkpoint.get::<i32, _>("Committed"), 1);
+
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListImportCheckpoint" (
+               "AddonMediaListId", "RelativePath", "Generation", "Sha256",
+               "EntryCount", "PromotedAt", "DataRoot", "Committed"
+           ) VALUES (1, 'private/job/archive.txt', 2, 'job-digest', 2,
+                     '2026-09-04T12:01:00Z', 'private-data', 0)"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("persist parallel job checkpoint");
+    let checkpoint_count: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaListImportCheckpoint""#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(checkpoint_count, 2);
+}
+
+#[tokio::test]
 async fn durable_publication_migration_adopts_a_stranded_legacy_journal() {
     const DURABLE_PUBLICATION_VERSION: i64 = 202_609_021_200;
     let pool = SqlitePoolOptions::new()

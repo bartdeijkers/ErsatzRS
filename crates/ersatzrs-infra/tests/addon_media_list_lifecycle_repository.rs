@@ -574,6 +574,16 @@ async fn assert_checkpoint_storage(pool: &sqlx::SqlitePool) -> (i64, i64) {
         )
         .await
         .unwrap();
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListImportCheckpoint" (
+               "AddonMediaListId", "RelativePath", "Generation", "Sha256", "EntryCount",
+               "PromotedAt", "Committed"
+           ) VALUES (1, 'checkpoints/private-page.txt', 99, 'private-page-digest', 99, ?, 0)"#,
+    )
+    .bind(fixed_time().to_rfc3339())
+    .execute(pool)
+    .await
+    .unwrap();
     assert_eq!(
         repositories
             .addon_media_lists

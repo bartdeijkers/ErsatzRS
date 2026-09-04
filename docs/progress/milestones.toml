@@ -2527,7 +2527,7 @@ automatic publication remain in AMM-L-02 through L-05.
 id         = 'amm-l-02'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Use a transactional yt-dlp archive for new-item discovery'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-01']
@@ -2546,11 +2546,27 @@ fixtures. Invalid/cancelled output does not advance the archive, reset/reload
 clears it, and delta absence is never inferred as provider deletion.
 '''
 evidence = '''
-Implementation planning claimed by Codex on 2026-09-04. This slice is reserved
-for import v2 delta semantics, host-owned archive staging and atomic checkpoint
-promotion, exact discovery counters, and the official yt-dlp skip-known path.
-Rich header refresh, reconciliation/removal evidence, and automatic publication
-remain in AMM-L-03 through L-05.
+Completed on 2026-09-04. media-list.import.v2 freezes full or incremental mode,
+record and import capabilities, strategy, exact examined/skipped/emitted counts,
+and a bounded invocation-private archive descriptor. The host copies only the
+committed archive into a private stage, rejects any decoded path disclosure,
+seals immutable candidates, and commits each page and job-private checkpoint in
+one SQLite transaction; only a completely merged generation promotes the live
+checkpoint. Cancellation, invalid output, lease takeover, restart, retry,
+provider switch, reset, delete, and forced uninstall are fenced without losing
+the previous committed header or archive. Delta absence never removes saved
+items, and empty incremental success requires retained content.
+
+Official yt-dlp 0.7.7 passes the staged archive to --download-archive and
+--force-write-archive on Windows and POSIX. Its current public playlist and
+direct-video shapes declare skip-known, never use --break-on-existing or
+--lazy-playlist, retain provider ranks, and pass full, unchanged, later-addition,
+and reordered-known/unseen fixtures with paths containing spaces. Focused
+contract, migration, 32 coordinator, archive, lifecycle, health, progress UI,
+hydration, Deno, and package tests pass. Focused Clippy passes after excluding
+only unrelated pre-existing warnings in untouched files. Rich header refresh,
+reconciliation/removal evidence, and automatic publication remain in AMM-L-03
+through L-05.
 '''
 
 [[milestone]]

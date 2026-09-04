@@ -810,7 +810,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     ) -> Result<Option<AddonMediaListImportCheckpoint>> {
         let row = sqlx::query(
             r#"SELECT * FROM "AddonMediaListImportCheckpoint"
-               WHERE "AddonMediaListId" = ?"#,
+               WHERE "AddonMediaListId" = ? AND "Committed" = 1"#,
         )
         .bind(list_id)
         .fetch_optional(&self.0)
@@ -832,7 +832,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let current = sqlx::query(
             r#"SELECT * FROM "AddonMediaListImportCheckpoint"
-               WHERE "AddonMediaListId" = ?"#,
+               WHERE "AddonMediaListId" = ? AND "Committed" = 1"#,
         )
         .bind(list_id)
         .fetch_optional(&mut *tx)
@@ -841,7 +841,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         .as_ref()
         .map(decode_import_checkpoint_row)
         .transpose()?;
-        if let Some(current) = current {
+        if let Some(current) = current.as_ref() {
             let entry_count = u64::try_from(entry_count).unwrap_or_default();
             if generation < current.generation
                 || (generation == current.generation && entry_count < current.entry_count)
@@ -860,32 +860,42 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
                 && sha256 == current.sha256
             {
                 tx.commit().await.repository()?;
-                return Ok(current);
+                return Ok(current.clone());
             }
         }
-        let updated = sqlx::query(
-            r#"INSERT INTO "AddonMediaListImportCheckpoint" (
-                   "AddonMediaListId", "RelativePath", "Generation", "Sha256", "EntryCount", "PromotedAt"
-               ) VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT("AddonMediaListId") DO UPDATE SET
-                   "RelativePath" = excluded."RelativePath",
-                   "Generation" = excluded."Generation",
-                   "Sha256" = excluded."Sha256",
-                   "EntryCount" = excluded."EntryCount",
-                   "PromotedAt" = excluded."PromotedAt"
-               WHERE excluded."Generation" > "AddonMediaListImportCheckpoint"."Generation"
-                  OR (excluded."Generation" = "AddonMediaListImportCheckpoint"."Generation"
-                      AND excluded."EntryCount" > "AddonMediaListImportCheckpoint"."EntryCount")"#,
-        )
-        .bind(list_id)
-        .bind(relative_path)
-        .bind(generation)
-        .bind(sha256)
-        .bind(entry_count)
-        .bind(encode_datetime(promoted_at))
-        .execute(&mut *tx)
-        .await
-        .repository()?;
+        let updated = if let Some(current) = current {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportCheckpoint"
+                   SET "RelativePath" = ?, "Generation" = ?, "Sha256" = ?,
+                       "EntryCount" = ?, "PromotedAt" = ?
+                   WHERE "Id" = ? AND "Committed" = 1"#,
+            )
+            .bind(relative_path)
+            .bind(generation)
+            .bind(sha256)
+            .bind(entry_count)
+            .bind(encode_datetime(promoted_at))
+            .bind(current.id)
+            .execute(&mut *tx)
+            .await
+            .repository()?
+        } else {
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListImportCheckpoint" (
+                       "AddonMediaListId", "RelativePath", "Generation", "Sha256",
+                       "EntryCount", "PromotedAt", "Committed"
+                   ) VALUES (?, ?, ?, ?, ?, ?, 1)"#,
+            )
+            .bind(list_id)
+            .bind(relative_path)
+            .bind(generation)
+            .bind(sha256)
+            .bind(entry_count)
+            .bind(encode_datetime(promoted_at))
+            .execute(&mut *tx)
+            .await
+            .repository()?
+        };
         if updated.rows_affected() != 1 {
             return Err(RepositoryError::Conflict(
                 "import checkpoint cannot regress or replace an established page identity".into(),
@@ -893,7 +903,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         }
         let row = sqlx::query(
             r#"SELECT * FROM "AddonMediaListImportCheckpoint"
-               WHERE "AddonMediaListId" = ?"#,
+               WHERE "AddonMediaListId" = ? AND "Committed" = 1"#,
         )
         .bind(list_id)
         .fetch_one(&mut *tx)

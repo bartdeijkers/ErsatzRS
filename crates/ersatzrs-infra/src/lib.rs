@@ -3,6 +3,7 @@
 pub mod addon_artwork;
 pub mod addon_chapters;
 pub mod addon_media_list;
+mod addon_media_list_archive;
 pub mod addon_media_list_import;
 pub mod addon_media_list_refresh;
 pub mod addon_media_list_source_probe;

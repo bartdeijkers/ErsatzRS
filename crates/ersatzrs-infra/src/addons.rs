@@ -18,14 +18,15 @@ use ersatzrs_addon_contract::{
     AddonEntrypointKind, AddonIconMediaType, AddonManifest, AddonOperationError,
     AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon, CatalogPackage,
     LocalRepositoryManifest, RepositoryManifest, CAPABILITY_ADDON_CHECK_V1,
-    CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
-    CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5,
-    CAPABILITY_MEDIA_LIST_LIST_V6, CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1,
-    CAPABILITY_REMOTE_STREAM_ITEM_V1, CAPABILITY_REMOTE_STREAM_ITEM_V2,
-    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
-    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
-    CAPABILITY_REMOTE_STREAM_PLAY_V1, CAPABILITY_REMOTE_STREAM_PLAY_V2, OPERATION_CODE_FAILED,
-    OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
+    CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_IMPORT_V2,
+    CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3,
+    CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5, CAPABILITY_MEDIA_LIST_LIST_V6,
+    CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1, CAPABILITY_REMOTE_STREAM_ITEM_V1,
+    CAPABILITY_REMOTE_STREAM_ITEM_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
+    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
+    CAPABILITY_REMOTE_STREAM_LIST_V4, CAPABILITY_REMOTE_STREAM_PLAY_V1,
+    CAPABILITY_REMOTE_STREAM_PLAY_V2, OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET,
+    OPERATION_CODE_MISSING_SETTING,
 };
 use ersatzrs_domain::EntityId;
 use futures_util::StreamExt as _;
@@ -3081,6 +3082,24 @@ async fn remove_owned_media_lists(
     transaction: &mut Transaction<'_, crate::db::Db>,
     addon_id: &str,
 ) -> Result<(), AddonError> {
+    let active_finalization = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (
+               SELECT 1
+               FROM "AddonMediaListImportJob" AS "job"
+               JOIN "AddonMediaList" AS "list" ON "list"."Id" = "job"."AddonMediaListId"
+               WHERE "list"."AddonId" = ? AND "job"."OverviewComplete" = 1
+                 AND "job"."LeaseOwner" IS NOT NULL
+           )"#,
+    )
+    .bind(addon_id)
+    .fetch_one(&mut **transaction)
+    .await
+    .map_err(database_error)?;
+    if active_finalization {
+        return Err(AddonError::Validation(
+            "an owned add-on media list import is finalizing; wait for it to finish".to_owned(),
+        ));
+    }
     let list_ids = sqlx::query_scalar::<_, EntityId>(
         r#"SELECT "Id" FROM "AddonMediaList" WHERE "AddonId" = ?"#,
     )
@@ -3233,11 +3252,13 @@ fn validate_supported_operation(capability: &str, operation: &str) -> Result<(),
         ) | (
             CAPABILITY_REMOTE_STREAM_ITEM_V1 | CAPABILITY_REMOTE_STREAM_ITEM_V2,
             "item"
-        ) | (CAPABILITY_MEDIA_LIST_IMPORT_V1, "discover" | "enrich")
-            | (
-                CAPABILITY_REMOTE_STREAM_PLAY_V1 | CAPABILITY_REMOTE_STREAM_PLAY_V2,
-                "play"
-            )
+        ) | (
+            CAPABILITY_MEDIA_LIST_IMPORT_V1 | CAPABILITY_MEDIA_LIST_IMPORT_V2,
+            "discover" | "enrich",
+        ) | (
+            CAPABILITY_REMOTE_STREAM_PLAY_V1 | CAPABILITY_REMOTE_STREAM_PLAY_V2,
+            "play"
+        )
     );
     if !supported {
         return Err(AddonError::Validation(format!(
@@ -3341,6 +3362,18 @@ pub async fn invoke_enabled_addon_with_input(
     invocation: AddonInvocation<'_>,
     input: &[u8],
 ) -> Result<Vec<u8>, AddonError> {
+    invoke_enabled_addon_with_input_and_redactions(pool, addon_id, invocation, input, &[]).await
+}
+
+/// Invoke one enabled capability while treating invocation-private values as
+/// sensitive in both successful output and diagnostics.
+pub(crate) async fn invoke_enabled_addon_with_input_and_redactions(
+    pool: &DbPool,
+    addon_id: &str,
+    invocation: AddonInvocation<'_>,
+    input: &[u8],
+    sensitive_values: &[String],
+) -> Result<Vec<u8>, AddonError> {
     let mut command = resolve_enabled_addon_command(
         pool,
         addon_id,
@@ -3362,6 +3395,7 @@ pub async fn invoke_enabled_addon_with_input(
         invocation.timeout,
         invocation.max_output_bytes,
         input,
+        sensitive_values,
     )
     .await
     .map_err(AddonError::into_operation)
@@ -3372,7 +3406,7 @@ async fn run_bounded_command(
     timeout: Duration,
     max_output_bytes: usize,
 ) -> Result<Vec<u8>, AddonError> {
-    run_bounded_command_inner(command, timeout, max_output_bytes, None).await
+    run_bounded_command_inner(command, timeout, max_output_bytes, None, &[]).await
 }
 
 async fn run_bounded_command_with_input(
@@ -3380,8 +3414,16 @@ async fn run_bounded_command_with_input(
     timeout: Duration,
     max_output_bytes: usize,
     input: &[u8],
+    sensitive_values: &[String],
 ) -> Result<Vec<u8>, AddonError> {
-    run_bounded_command_inner(command, timeout, max_output_bytes, Some(input)).await
+    run_bounded_command_inner(
+        command,
+        timeout,
+        max_output_bytes,
+        Some(input),
+        sensitive_values,
+    )
+    .await
 }
 
 async fn run_bounded_command_inner(
@@ -3389,6 +3431,7 @@ async fn run_bounded_command_inner(
     timeout: Duration,
     max_output_bytes: usize,
     input: Option<&[u8]>,
+    sensitive_values: &[String],
 ) -> Result<Vec<u8>, AddonError> {
     let mut process = addon_process(command);
     process
@@ -3468,22 +3511,71 @@ async fn run_bounded_command_inner(
         return Err(AddonError::Operation(operation_error_from_stderr(
             &stderr,
             &command.environment,
+            sensitive_values,
             status,
+        )));
+    }
+    if output_contains_sensitive_value(&stdout, sensitive_values) {
+        return Err(AddonError::Operation(AddonOperationError::new(
+            OPERATION_CODE_FAILED,
+            "add-on output contained private host data",
         )));
     }
     Ok(stdout)
 }
 
+fn output_contains_sensitive_value(output: &[u8], sensitive_values: &[String]) -> bool {
+    if sensitive_values.iter().any(|value| {
+        !value.is_empty()
+            && output
+                .windows(value.len())
+                .any(|window| window == value.as_bytes())
+    }) {
+        return true;
+    }
+    let Ok(output) = std::str::from_utf8(output) else {
+        return false;
+    };
+    output.lines().any(|line| {
+        serde_json::from_str::<serde_json::Value>(line)
+            .is_ok_and(|value| json_value_contains_sensitive_value(&value, sensitive_values))
+    })
+}
+
+fn json_value_contains_sensitive_value(
+    value: &serde_json::Value,
+    sensitive_values: &[String],
+) -> bool {
+    match value {
+        serde_json::Value::String(value) => sensitive_values
+            .iter()
+            .any(|sensitive| !sensitive.is_empty() && value.contains(sensitive)),
+        serde_json::Value::Array(values) => values
+            .iter()
+            .any(|value| json_value_contains_sensitive_value(value, sensitive_values)),
+        serde_json::Value::Object(values) => values.iter().any(|(key, value)| {
+            sensitive_values
+                .iter()
+                .any(|sensitive| !sensitive.is_empty() && key.contains(sensitive))
+                || json_value_contains_sensitive_value(value, sensitive_values)
+        }),
+        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {
+            false
+        }
+    }
+}
+
 fn operation_error_from_stderr(
     stderr: &[u8],
     environment: &BTreeMap<String, String>,
+    sensitive_values: &[String],
     status: ExitStatus,
 ) -> AddonOperationError {
     let raw = String::from_utf8_lossy(stderr);
-    if let Some(diagnostic) = structured_operation_error(&raw, environment) {
+    if let Some(diagnostic) = structured_operation_error(&raw, environment, sensitive_values) {
         return diagnostic;
     }
-    let detail = redact_and_bound(&raw, environment, 1_024);
+    let detail = redact_and_bound_with_values(&raw, environment, sensitive_values, 1_024);
     let message = if detail.is_empty() {
         format!("add-on entrypoint exited with {status}")
     } else {
@@ -3495,13 +3587,19 @@ fn operation_error_from_stderr(
 fn structured_operation_error(
     stderr: &str,
     environment: &BTreeMap<String, String>,
+    sensitive_values: &[String],
 ) -> Option<AddonOperationError> {
     if let Some(line) = stderr.lines().rev().find(|line| !line.trim().is_empty()) {
         if let Ok(diagnostic) = serde_json::from_str::<AddonOperationError>(line.trim()) {
             if diagnostic.validate().is_ok() {
                 return Some(AddonOperationError::new(
                     &diagnostic.code,
-                    redact_and_bound(&diagnostic.message, environment, 1_024),
+                    redact_and_bound_with_values(
+                        &diagnostic.message,
+                        environment,
+                        sensitive_values,
+                        1_024,
+                    ),
                 ));
             }
         }
@@ -4898,6 +4996,15 @@ fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
 }
 
 fn redact_and_bound(value: &str, environment: &BTreeMap<String, String>, limit: usize) -> String {
+    redact_and_bound_with_values(value, environment, &[], limit)
+}
+
+fn redact_and_bound_with_values(
+    value: &str,
+    environment: &BTreeMap<String, String>,
+    sensitive_values: &[String],
+    limit: usize,
+) -> String {
     if environment
         .keys()
         .any(|key| key.starts_with("ERSATZRS_ADDON_SECRET_FILE_"))
@@ -4914,6 +5021,12 @@ fn redact_and_bound(value: &str, environment: &BTreeMap<String, String>, limit: 
         })
         .map(|(_, value)| value.as_str())
         .collect::<Vec<_>>();
+    redactions.extend(
+        sensitive_values
+            .iter()
+            .map(String::as_str)
+            .filter(|value| !value.is_empty()),
+    );
     redactions.sort_unstable_by_key(|value| std::cmp::Reverse(value.len()));
     redactions.dedup();
     let redacted = redactions.iter().fold(value.to_owned(), |safe, secret| {
@@ -5923,7 +6036,7 @@ mod tests {
         playlist_id: EntityId,
         is_system: i64,
         group_id: EntityId,
-    ) {
+    ) -> EntityId {
         sqlx::query(
             r#"INSERT INTO "Playlist" ("Id", "IsSystem", "Name", "PlaylistGroupId")
                VALUES (?, ?, ?, ?)"#,
@@ -5976,6 +6089,7 @@ mod tests {
         .execute(pool)
         .await
         .expect("pin retained artifact");
+        list_id
     }
 
     #[tokio::test]
@@ -5996,9 +6110,46 @@ mod tests {
         .execute(&pool)
         .await
         .expect("insert playlist group");
+        let mut list_ids = Vec::new();
         for (id, is_system) in [(700_i64, 1_i64), (701, 0)] {
-            insert_pinned_addon_media_list(&pool, &manifest.id, id, is_system, group_id).await;
+            list_ids.push(
+                insert_pinned_addon_media_list(&pool, &manifest.id, id, is_system, group_id).await,
+            );
         }
+
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListImportJob" (
+                   "AddonMediaListId", "Generation", "State", "RecordCapability",
+                   "OverviewComplete", "FinalizationPhase", "LeaseOwner", "LeaseExpiresAt",
+                   "CreatedAt", "UpdatedAt"
+               ) VALUES (?, 1, 1, 'media-list.list.v5', 1, 2, 'finalizer',
+                         '2099-01-01T00:00:00Z', '2026-09-04T12:00:00Z',
+                         '2026-09-04T12:00:00Z')"#,
+        )
+        .bind(list_ids[0])
+        .execute(&pool)
+        .await
+        .expect("insert active list finalization");
+
+        let mut blocked = pool.begin().await.expect("begin blocked transaction");
+        let error = remove_owned_media_lists(&mut blocked, &manifest.id)
+            .await
+            .expect_err("active finalization must block forced list removal");
+        assert!(matches!(error, AddonError::Validation(_)));
+        blocked.rollback().await.expect("roll back blocked removal");
+        let retained_lists =
+            sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "AddonMediaList""#)
+                .fetch_one(&pool)
+                .await
+                .expect("count retained lists");
+        assert_eq!(retained_lists, 2);
+        sqlx::query(
+            r#"UPDATE "AddonMediaListImportJob"
+               SET "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("release list finalization");
 
         let mut transaction = pool.begin().await.expect("begin transaction");
         remove_owned_media_lists(&mut transaction, &manifest.id)
@@ -6326,6 +6477,7 @@ mod tests {
         let diagnostic = structured_operation_error(
             "provider prose\n{\"code\":\"provider-rejected\",\"message\":\"secret-value was rejected\"}\n",
             &environment,
+            &[],
         )
         .expect("structured diagnostic");
         assert_eq!(diagnostic.code, "provider-rejected");
@@ -6341,9 +6493,47 @@ mod tests {
         let diagnostic = structured_operation_error(
             "{\"code\":\"future-provider-code\",\"message\":\"provider detail\"}",
             &environment,
+            &[],
         )
         .expect("structured diagnostic");
         assert_eq!(diagnostic.code, "future-provider-code");
         assert_eq!(diagnostic.message, FILE_SECRET_DIAGNOSTIC);
+    }
+
+    #[test]
+    fn structured_operation_diagnostics_redact_invocation_private_values() {
+        let private_path = "private staging/archive.txt".to_owned();
+        let diagnostic = structured_operation_error(
+            "{\"code\":\"provider-failed\",\"message\":\"private staging/archive.txt failed\"}",
+            &BTreeMap::new(),
+            &[private_path],
+        )
+        .expect("structured diagnostic");
+        assert_eq!(diagnostic.message, "[redacted] failed");
+    }
+
+    #[test]
+    fn successful_output_cannot_echo_an_invocation_private_value() {
+        let private_path = "private staging/archive.txt".to_owned();
+        let output = br#"{"record_type":"list","name":"private staging/archive.txt"}"#;
+        assert!(output_contains_sensitive_value(
+            output,
+            &[private_path.clone()]
+        ));
+
+        let windows_path = r"C:\private staging\archive.txt".to_owned();
+        let escaped_windows =
+            br#"{"record_type":"list","name":"C:\\private staging\\archive.txt"}"#;
+        assert!(output_contains_sensitive_value(
+            escaped_windows,
+            &[windows_path]
+        ));
+
+        let unicode_escaped =
+            br#"{"record_type":"list","name":"\u0070rivate staging/archive.txt"}"#;
+        assert!(output_contains_sensitive_value(
+            unicode_escaped,
+            &[private_path]
+        ));
     }
 }

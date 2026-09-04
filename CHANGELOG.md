@@ -15,6 +15,14 @@ release section when tagging a release.
 
 ### Added
 
+- Add transactionally checkpointed incremental discovery for add-on media
+  lists. The host gives providers only an invocation-private archive, commits
+  the archive and page together, preserves the last complete checkpoint across
+  cancellation and restart, and exposes exact examined, skipped-known, and
+  emitted counts. The official yt-dlp package uses this contract on Windows
+  and POSIX without unsafe early stop, so unchanged playlists emit no duplicate
+  items and reordered playlists cannot hide a later unseen item.
+
 - Add localized fixed and opt-in adaptive refresh cadences for add-on media
   lists. One restart-safe coordinator persists due, retry, success-anchor,
   conditional-validator, and bounded source-change history state; unchanged

@@ -4,16 +4,19 @@ use std::fmt::Write as _;
 
 use chrono::{Duration, Utc};
 use ersatzrs_addon_contract::{
-    AddonMediaListRecord, MediaListDiscoveryPage, MediaListEnrichOutcomeKind,
+    AddonMediaListRecord, MediaListArchiveDescriptor, MediaListDiscoveryPage,
+    MediaListDiscoveryV2Page, MediaListEnrichOutcomeKind, MediaListImportMode as WireImportMode,
+    MediaListIncrementalStrategy as WireIncrementalStrategy, CAPABILITY_MEDIA_LIST_IMPORT_V2,
 };
 use ersatzrs_core::repositories::{
-    AddonMediaListImportAction, AddonMediaListImportProgress, RepositoryError, Result,
+    AddonMediaListImportAction, AddonMediaListImportCheckpoint, AddonMediaListImportProgress,
+    RepositoryError, Result,
 };
 use ersatzrs_domain::{
     AddonMediaList, AddonMediaListContentKind, AddonMediaListDetailPolicy,
     AddonMediaListDetailState, AddonMediaListDetailWaitRange, AddonMediaListImportMode,
-    AddonMediaListImportPurpose, AddonMediaListImportState, AddonMediaListLifecyclePhase,
-    AddonMediaListPresentationKind, EntityId,
+    AddonMediaListImportPurpose, AddonMediaListImportState, AddonMediaListIncrementalStrategy,
+    AddonMediaListLifecyclePhase, AddonMediaListPresentationKind, EntityId,
 };
 use sha2::{Digest as _, Sha256};
 use sqlx::Row as _;
@@ -24,17 +27,21 @@ use crate::addon_media_list::{
     decode_media_list_output_for_capability, InstalledAddonMediaListProvider,
     InstalledMediaListImportContext,
 };
+use crate::addon_media_list_archive::{
+    prepare_import_archive, remove_relative_archive, SealedImportArchive, MAX_IMPORT_ARCHIVE_BYTES,
+    MAX_IMPORT_ARCHIVE_ENTRIES,
+};
 use crate::addon_media_list_sync::{
     AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer, DetailMergeOutcome,
 };
 use crate::addon_media_storage::validated_folder_name;
 use crate::db::{inserted_id, DbPool};
 use crate::repositories::common::{
-    decode_bool_column, decode_enum_column, encode_datetime, encode_enum,
+    decode_bool_column, decode_datetime, decode_enum_column, encode_datetime, encode_enum,
 };
 use crate::repositories::SqlxResultExt as _;
 
-const IMPORT_LEASE_SECONDS: i64 = 90;
+pub(crate) const IMPORT_LEASE_SECONDS: i64 = 90;
 const DETAIL_LEASE_SECONDS: i64 = 90;
 const DETAIL_PUBLICATION_RETRY_SECONDS: i64 = 5;
 const MAX_IMPORT_ATTEMPTS: i32 = 5;
@@ -94,6 +101,7 @@ impl AddonMediaListImportCoordinator {
             owner_token,
             lease_owner,
             &context.record_capability,
+            &context.import_capability,
         )
         .await
     }
@@ -160,6 +168,7 @@ pub(crate) async fn persist_reset_reload_import(
     owner_token: &str,
     lease_owner: &str,
     record_capability: &str,
+    import_capability: &str,
 ) -> Result<EntityId> {
     let now = encode_datetime(Utc::now());
     let mut tx = crate::db::begin_write(pool).await.repository()?;
@@ -206,14 +215,15 @@ pub(crate) async fn persist_reset_reload_import(
     }
     let result = sqlx::query(
         r#"INSERT INTO "AddonMediaListImportJob" (
-                   "AddonMediaListId", "Generation", "State", "RecordCapability",
+                   "AddonMediaListId", "Generation", "State", "RecordCapability", "ImportCapability",
                    "Purpose", "Mode", "IncrementalStrategy", "CreatedAt", "UpdatedAt",
                    "LastProgressAt"
-               ) VALUES (?, 1, ?, ?, ?, ?, 0, ?, ?, ?)"#,
+               ) VALUES (?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?)"#,
     )
     .bind(list_id)
     .bind(encode_enum(AddonMediaListImportState::Queued))
     .bind(record_capability)
+    .bind(import_capability)
     .bind(encode_enum(AddonMediaListImportPurpose::ResetReload))
     .bind(encode_enum(AddonMediaListImportMode::Full))
     .bind(&now)
@@ -252,6 +262,9 @@ impl AddonMediaListImportCoordinator {
         let current_addon_id: String = row.try_get("AddonId").repository()?;
         let addon_id = addon_id.trim();
         if current_addon_id == addon_id {
+            let _ = self
+                .cleanup_unreferenced_import_archives_for_list(list_id)
+                .await;
             return Ok(());
         }
         let source_url: String = row.try_get("SourceUrl").repository()?;
@@ -265,9 +278,13 @@ impl AddonMediaListImportCoordinator {
             decode_enum_column("AddonMediaListDetailPolicy", &row, "DetailImportPolicy")?;
         let context = self.provider.import_context(addon_id, &source_url).await?;
         let Some(context) = context.filter(|_| chapter_input.trim().is_empty()) else {
-            return AddonMediaListRemoteSynchronizer::new(self.pool.clone(), self.provider.clone())
+            AddonMediaListRemoteSynchronizer::new(self.pool.clone(), self.provider.clone())
                 .change_addon(list_id, addon_id)
+                .await?;
+            let _ = self
+                .cleanup_unreferenced_import_archives_for_list(list_id)
                 .await;
+            return Ok(());
         };
         self.queue_import(
             addon_id,
@@ -330,9 +347,25 @@ impl AddonMediaListImportCoordinator {
             .await
             .repository()?
         };
-        let list_id = if let Some(row) = existing {
+        let (list_id, same_addon) = if let Some(row) = existing {
             let id: EntityId = row.try_get("Id").repository()?;
             let previous_addon_id: String = row.try_get("AddonId").repository()?;
+            let active_finalization: bool = sqlx::query_scalar(
+                r#"SELECT EXISTS (
+                       SELECT 1 FROM "AddonMediaListImportJob"
+                       WHERE "AddonMediaListId" = ? AND "OverviewComplete" = 1
+                         AND "LeaseOwner" IS NOT NULL
+                   )"#,
+            )
+            .bind(id)
+            .fetch_one(&mut *tx)
+            .await
+            .repository()?;
+            if active_finalization {
+                return Err(RepositoryError::Conflict(
+                    "the add-on media list import is finalizing; wait for it to finish".to_owned(),
+                ));
+            }
             let review_state: i32 = row.try_get("ReviewState").repository()?;
             let publication_journal: Option<String> =
                 row.try_get("PublicationJournalJson").repository()?;
@@ -373,7 +406,10 @@ impl AddonMediaListImportCoordinator {
             let updated = sqlx::query(
                 r#"UPDATE "AddonMediaList"
                    SET "AddonId" = ?, "ContentKindOverride" = ?, "DetailImportPolicy" = ?,
-                       "LastError" = NULL, "DraftRevision" = "DraftRevision" + 1
+                       "LastError" = NULL,
+                       "DraftRevision" = "DraftRevision" + CASE
+                           WHEN "AddonId" <> ? OR "ContentKindOverride" <> ?
+                                OR "DetailImportPolicy" <> ? THEN 1 ELSE 0 END
                    WHERE "Id" = ? AND "ReviewState" <> 3
                      AND ("PublicationJournalJson" IS NULL
                           OR TRIM("PublicationJournalJson") = '')
@@ -386,6 +422,9 @@ impl AddonMediaListImportCoordinator {
                            AND "operation"."State" IN (?, ?, ?)
                      )"#,
             )
+            .bind(addon_id)
+            .bind(encode_enum(content_kind_override))
+            .bind(encode_enum(detail_policy))
             .bind(addon_id)
             .bind(encode_enum(content_kind_override))
             .bind(encode_enum(detail_policy))
@@ -415,7 +454,7 @@ impl AddonMediaListImportCoordinator {
                 addon_id,
             )
             .await?;
-            id
+            (id, previous_addon_id == addon_id)
         } else {
             let host = Url::parse(&context.source_url)
                 .ok()
@@ -440,7 +479,71 @@ impl AddonMediaListImportCoordinator {
             .execute(&mut *tx)
             .await
             .repository()?;
-            inserted_id(&mut tx, result).await.repository()?
+            (inserted_id(&mut tx, result).await.repository()?, false)
+        };
+
+        if same_addon && context.import_capability == CAPABILITY_MEDIA_LIST_IMPORT_V2 {
+            let active_v2: bool = sqlx::query_scalar(
+                r#"SELECT EXISTS (
+                       SELECT 1 FROM "AddonMediaListImportJob"
+                       WHERE "AddonMediaListId" = ? AND "ImportCapability" = ?
+                         AND "State" IN (?, ?, ?, ?, ?)
+                   )"#,
+            )
+            .bind(list_id)
+            .bind(CAPABILITY_MEDIA_LIST_IMPORT_V2)
+            .bind(encode_enum(AddonMediaListImportState::Queued))
+            .bind(encode_enum(AddonMediaListImportState::Discovering))
+            .bind(encode_enum(AddonMediaListImportState::Verifying))
+            .bind(encode_enum(AddonMediaListImportState::Paused))
+            .bind(encode_enum(AddonMediaListImportState::NeedsAttention))
+            .fetch_one(&mut *tx)
+            .await
+            .repository()?;
+            if active_v2 {
+                tx.commit().await.repository()?;
+                return Ok(list_id);
+            }
+        }
+
+        let has_checkpoint =
+            if same_addon && context.import_capability == CAPABILITY_MEDIA_LIST_IMPORT_V2 {
+                sqlx::query_scalar::<_, bool>(
+                    r#"SELECT EXISTS (
+                       SELECT 1 FROM "AddonMediaListImportCheckpoint"
+                       WHERE "AddonMediaListId" = ? AND "Committed" = 1
+                   )"#,
+                )
+                .bind(list_id)
+                .fetch_one(&mut *tx)
+                .await
+                .repository()?
+            } else {
+                false
+            };
+        let mode = if has_checkpoint {
+            AddonMediaListImportMode::Incremental
+        } else {
+            AddonMediaListImportMode::Full
+        };
+        let retained_header = if mode == AddonMediaListImportMode::Incremental {
+            sqlx::query_scalar::<_, String>(
+                r#"SELECT "job"."ListRecordJson"
+                   FROM "AddonMediaListImportJob" AS "job"
+                   JOIN "AddonMediaListImportCheckpoint" AS "checkpoint"
+                     ON "checkpoint"."Id" = "job"."CheckpointId"
+                    AND "checkpoint"."Committed" = 1
+                   WHERE "job"."AddonMediaListId" = ? AND "job"."State" = ?
+                     AND "job"."ListRecordJson" IS NOT NULL
+                   ORDER BY "job"."Generation" DESC LIMIT 1"#,
+            )
+            .bind(list_id)
+            .bind(encode_enum(AddonMediaListImportState::Ready))
+            .fetch_optional(&mut *tx)
+            .await
+            .repository()?
+        } else {
+            None
         };
 
         let generation: i32 = sqlx::query_scalar(
@@ -454,8 +557,8 @@ impl AddonMediaListImportCoordinator {
         sqlx::query(
             r#"UPDATE "AddonMediaListImportJob"
                SET "State" = ?, "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL,
-                   "UpdatedAt" = ?
-               WHERE "AddonMediaListId" = ? AND "State" IN (?, ?, ?, ?, ?)"#,
+                   "CheckpointId" = NULL, "UpdatedAt" = ?
+               WHERE "AddonMediaListId" = ? AND "State" IN (?, ?, ?, ?, ?, ?)"#,
         )
         .bind(encode_enum(AddonMediaListImportState::Superseded))
         .bind(&now)
@@ -465,19 +568,25 @@ impl AddonMediaListImportCoordinator {
         .bind(encode_enum(AddonMediaListImportState::Verifying))
         .bind(encode_enum(AddonMediaListImportState::Paused))
         .bind(encode_enum(AddonMediaListImportState::NeedsAttention))
+        .bind(encode_enum(AddonMediaListImportState::Cancelled))
         .execute(&mut *tx)
         .await
         .repository()?;
         sqlx::query(
             r#"INSERT INTO "AddonMediaListImportJob" (
                 "AddonMediaListId", "Generation", "State", "RecordCapability",
-                "RequestedFolder", "CreatedAt", "UpdatedAt", "LastProgressAt"
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "ImportCapability", "Purpose", "Mode", "IncrementalStrategy",
+                "ListRecordJson", "RequestedFolder", "CreatedAt", "UpdatedAt", "LastProgressAt"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)"#,
         )
         .bind(list_id)
         .bind(generation)
         .bind(encode_enum(AddonMediaListImportState::Queued))
         .bind(&context.record_capability)
+        .bind(&context.import_capability)
+        .bind(encode_enum(AddonMediaListImportPurpose::Refresh))
+        .bind(encode_enum(mode))
+        .bind(retained_header)
         .bind(requested_folder)
         .bind(&now)
         .bind(&now)
@@ -486,6 +595,9 @@ impl AddonMediaListImportCoordinator {
         .await
         .repository()?;
         tx.commit().await.repository()?;
+        let _ = self
+            .cleanup_unreferenced_import_archives_for_list(list_id)
+            .await;
         Ok(list_id)
     }
 
@@ -497,12 +609,16 @@ impl AddonMediaListImportCoordinator {
     /// contract failures are checkpointed as retry/attention state.
     pub async fn process_one_import_page(&self) -> Result<bool> {
         self.recover_cancelled_imports().await?;
+        let _ = self.cleanup_one_unreferenced_import_archive(None).await;
         let Some(job) = self.claim_import_job().await? else {
             return Ok(false);
         };
         if job.overview_complete {
-            if let Err(error) = self.finalize_import_pass(&job).await {
-                self.fail_import(job.id, &error.to_string(), false).await?;
+            match self.finalize_import_pass(&job).await {
+                Ok(()) => {
+                    let _ = self.cleanup_one_unreferenced_import_archive(None).await;
+                }
+                Err(error) => self.fail_import(&job, &error.to_string(), false).await?,
             }
             return Ok(true);
         }
@@ -511,25 +627,20 @@ impl AddonMediaListImportCoordinator {
         };
         let context = match self
             .provider
-            .import_context(&job.addon_id, &job.source_url)
+            .import_context_for_contract(
+                &job.addon_id,
+                &job.source_url,
+                &job.import_capability,
+                &job.record_capability,
+            )
             .await
         {
-            Ok(Some(context)) if context.record_capability == job.record_capability => context,
-            Ok(Some(_)) => {
-                self.release_import_provider_slot(&provider_slot).await?;
-                self.fail_import(
-                    job.id,
-                    "the add-on record schema changed during this import",
-                    false,
-                )
-                .await?;
-                return Ok(true);
-            }
+            Ok(Some(context)) => context,
             Ok(None) => {
                 self.release_import_provider_slot(&provider_slot).await?;
                 self.fail_import(
-                    job.id,
-                    "the installed add-on no longer supports media-list.import.v1",
+                    &job,
+                    "the installed add-on no longer supports the frozen import capability",
                     false,
                 )
                 .await?;
@@ -537,24 +648,255 @@ impl AddonMediaListImportCoordinator {
             }
             Err(error) => {
                 self.release_import_provider_slot(&provider_slot).await?;
-                self.fail_import(job.id, &error.to_string(), true).await?;
+                self.fail_import(&job, &error.to_string(), true).await?;
                 return Ok(true);
             }
         };
-        let result = self
-            .provider
-            .discover(&job.addon_id, &context, job.cursor.as_deref())
-            .await;
-        self.release_import_provider_slot(&provider_slot).await?;
-        match result {
-            Ok(page) => {
-                if let Err(error) = self.commit_import_page(&job, page).await {
-                    self.fail_import(job.id, &error.to_string(), false).await?;
-                }
+        if job.import_capability == CAPABILITY_MEDIA_LIST_IMPORT_V2 {
+            self.process_v2_import_page(&job, &context, &provider_slot)
+                .await?;
+        } else {
+            let result = self
+                .provider
+                .discover(&job.addon_id, &context, job.cursor.as_deref())
+                .await;
+            self.release_import_provider_slot(&provider_slot).await?;
+            match result {
+                Ok(page) => match self
+                    .commit_import_page_checkpoint(&job, page.into(), None)
+                    .await
+                {
+                    Ok(PageCommitOutcome::Committed { complete }) if complete => {
+                        if let Err(error) = self.finalize_import_pass(&job).await {
+                            self.fail_import(&job, &error.to_string(), false).await?;
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(error) => self.fail_import(&job, &error.to_string(), false).await?,
+                },
+                Err(error) => self.fail_import(&job, &error.to_string(), true).await?,
             }
-            Err(error) => self.fail_import(job.id, &error.to_string(), true).await?,
         }
         Ok(true)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn process_v2_import_page(
+        &self,
+        job: &ImportJob,
+        context: &InstalledMediaListImportContext,
+        provider_slot: &ImportProviderSlot,
+    ) -> Result<()> {
+        let checkpoint = self.resume_import_checkpoint(job).await?;
+        let needs_base_checkpoint =
+            job.mode == AddonMediaListImportMode::Incremental || job.cursor.is_some();
+        if needs_base_checkpoint && checkpoint.is_none() {
+            self.release_import_provider_slot(provider_slot).await?;
+            self.fail_import(
+                job,
+                "the incremental import checkpoint is unavailable; reset and reload the list",
+                false,
+            )
+            .await?;
+            return Ok(());
+        }
+        let base_checkpoint = if needs_base_checkpoint {
+            checkpoint.as_ref()
+        } else {
+            None
+        };
+        let prepared = match prepare_import_archive(
+            context.data_dir.clone(),
+            job.list_id,
+            job.generation,
+            base_checkpoint,
+        )
+        .await
+        {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                self.release_import_provider_slot(provider_slot).await?;
+                self.fail_import(job, &error.to_string(), false).await?;
+                return Ok(());
+            }
+        };
+        let Some(staged_path) = prepared.staged_path().to_str().map(str::to_owned) else {
+            prepared.discard().await;
+            self.release_import_provider_slot(provider_slot).await?;
+            self.fail_import(
+                job,
+                "the private import archive path is not valid UTF-8",
+                false,
+            )
+            .await?;
+            return Ok(());
+        };
+        let descriptor = MediaListArchiveDescriptor {
+            staged_path,
+            generation: prepared.generation()?,
+            entry_count: prepared.entry_count(),
+            sha256: prepared.sha256().to_owned(),
+            max_bytes: u32::try_from(MAX_IMPORT_ARCHIVE_BYTES).unwrap_or(u32::MAX),
+            max_entries: MAX_IMPORT_ARCHIVE_ENTRIES,
+        };
+        let mode = match job.mode {
+            AddonMediaListImportMode::Full => WireImportMode::Full,
+            AddonMediaListImportMode::Incremental => WireImportMode::Incremental,
+        };
+        let result = self
+            .provider
+            .discover_v2(
+                &job.addon_id,
+                context,
+                job.cursor.as_deref(),
+                mode,
+                descriptor,
+            )
+            .await;
+        self.release_import_provider_slot(provider_slot).await?;
+        let page = match result {
+            Ok(page) => page,
+            Err(error) => {
+                prepared.discard().await;
+                self.fail_import(job, &error.to_string(), true).await?;
+                return Ok(());
+            }
+        };
+        let sealed = match prepared.seal().await {
+            Ok(sealed) => sealed,
+            Err(error) => {
+                self.fail_import(job, &error.to_string(), false).await?;
+                return Ok(());
+            }
+        };
+        if let Err(error) = validate_archive_advance(&sealed, page.emitted_count) {
+            sealed.discard_candidate().await;
+            self.fail_import(job, &error.to_string(), false).await?;
+            return Ok(());
+        }
+        let page = ImportPage::from(page);
+        match self
+            .commit_import_page_checkpoint(job, page, Some(&sealed))
+            .await
+        {
+            Ok(PageCommitOutcome::Cancelled) => sealed.discard_candidate().await,
+            Ok(PageCommitOutcome::Committed { complete }) => {
+                let _ = self
+                    .cleanup_one_unreferenced_import_archive(Some(job.list_id))
+                    .await;
+                if complete {
+                    match self.finalize_import_pass(job).await {
+                        Ok(()) => {
+                            let _ = self.cleanup_one_unreferenced_import_archive(None).await;
+                        }
+                        Err(error) => self.fail_import(job, &error.to_string(), false).await?,
+                    }
+                }
+            }
+            Err(error) => {
+                sealed.discard_candidate().await;
+                self.fail_import(job, &error.to_string(), false).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn current_import_checkpoint(
+        &self,
+        list_id: EntityId,
+    ) -> Result<Option<AddonMediaListImportCheckpoint>> {
+        let row = sqlx::query(
+            r#"SELECT "Id", "AddonMediaListId", "RelativePath", "Generation",
+                      "Sha256", "EntryCount", "PromotedAt"
+               FROM "AddonMediaListImportCheckpoint"
+               WHERE "AddonMediaListId" = ? AND "Committed" = 1"#,
+        )
+        .bind(list_id)
+        .fetch_optional(&self.pool)
+        .await
+        .repository()?;
+        row.map(|row| decode_import_checkpoint(&row)).transpose()
+    }
+
+    async fn resume_import_checkpoint(
+        &self,
+        job: &ImportJob,
+    ) -> Result<Option<AddonMediaListImportCheckpoint>> {
+        let row = sqlx::query(
+            r#"SELECT "checkpoint"."Id", "checkpoint"."AddonMediaListId",
+                      "checkpoint"."RelativePath", "checkpoint"."Generation",
+                      "checkpoint"."Sha256", "checkpoint"."EntryCount",
+                      "checkpoint"."PromotedAt"
+               FROM "AddonMediaListImportJob" AS "job"
+               JOIN "AddonMediaListImportCheckpoint" AS "checkpoint"
+                 ON "checkpoint"."Id" = "job"."CheckpointId"
+               WHERE "job"."Id" = ?"#,
+        )
+        .bind(job.id)
+        .fetch_optional(&self.pool)
+        .await
+        .repository()?;
+        if let Some(row) = row {
+            return decode_import_checkpoint(&row).map(Some);
+        }
+        if job.mode == AddonMediaListImportMode::Incremental {
+            return self.current_import_checkpoint(job.list_id).await;
+        }
+        Ok(None)
+    }
+
+    async fn cleanup_one_unreferenced_import_archive(
+        &self,
+        list_id: Option<EntityId>,
+    ) -> Result<bool> {
+        let row = sqlx::query(
+            r#"SELECT "checkpoint"."Id", "checkpoint"."DataRoot",
+                      "checkpoint"."RelativePath"
+               FROM "AddonMediaListImportCheckpoint" AS "checkpoint"
+               WHERE "checkpoint"."Committed" = 0
+                 AND (? IS NULL OR "checkpoint"."AddonMediaListId" = ?)
+                 AND NOT EXISTS (
+                     SELECT 1 FROM "AddonMediaListImportJob" AS "job"
+                     WHERE "job"."CheckpointId" = "checkpoint"."Id"
+                 )
+               ORDER BY "checkpoint"."Id" LIMIT 1"#,
+        )
+        .bind(list_id)
+        .bind(list_id)
+        .fetch_optional(&self.pool)
+        .await
+        .repository()?;
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let id: EntityId = row.try_get("Id").repository()?;
+        let data_root: Option<String> = row.try_get("DataRoot").repository()?;
+        let relative_path: String = row.try_get("RelativePath").repository()?;
+        if let Some(data_root) = data_root {
+            remove_relative_archive(std::path::Path::new(&data_root), &relative_path).await?;
+        }
+        sqlx::query(
+            r#"DELETE FROM "AddonMediaListImportCheckpoint"
+               WHERE "Id" = ? AND "Committed" = 0
+                 AND NOT EXISTS (
+                     SELECT 1 FROM "AddonMediaListImportJob"
+                     WHERE "CheckpointId" = ?
+                 )"#,
+        )
+        .bind(id)
+        .bind(id)
+        .execute(&self.pool)
+        .await
+        .repository()?;
+        Ok(true)
+    }
+
+    async fn cleanup_unreferenced_import_archives_for_list(&self, list_id: EntityId) -> Result<()> {
+        while self
+            .cleanup_one_unreferenced_import_archive(Some(list_id))
+            .await?
+        {}
+        Ok(())
     }
 
     async fn claim_import_provider_slot(
@@ -648,8 +990,9 @@ impl AddonMediaListImportCoordinator {
         let lease_expires = encode_datetime(now + Duration::seconds(IMPORT_LEASE_SECONDS));
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let row = sqlx::query(
-            r#"SELECT "job"."Id", "job"."AddonMediaListId",
-                      "job"."RecordCapability", "job"."Cursor",
+            r#"SELECT "job"."Id", "job"."AddonMediaListId", "job"."Generation",
+                      "job"."RecordCapability", "job"."ImportCapability", "job"."Mode",
+                      "job"."Cursor",
                       "job"."VerificationPass", "job"."ExpectedIdentityHash",
                       CAST(CASE WHEN "job"."OverviewComplete" = 1 THEN 1 ELSE 0 END AS SIGNED)
                           AS "OverviewComplete",
@@ -704,9 +1047,12 @@ impl AddonMediaListImportCoordinator {
         let job = ImportJob {
             id,
             list_id: row.try_get("AddonMediaListId").repository()?,
+            generation: row.try_get("Generation").repository()?,
             addon_id: row.try_get("AddonId").repository()?,
             source_url: row.try_get("SourceUrl").repository()?,
             record_capability: row.try_get("RecordCapability").repository()?,
+            import_capability: row.try_get("ImportCapability").repository()?,
+            mode: decode_enum_column("AddonMediaListImportMode", &row, "Mode")?,
             cursor: row.try_get("Cursor").repository()?,
             verification_pass,
             expected_identity_hash: row.try_get("ExpectedIdentityHash").repository()?,
@@ -718,14 +1064,23 @@ impl AddonMediaListImportCoordinator {
     }
 
     #[allow(clippy::too_many_lines)] // The page and every cursor/item checkpoint commit atomically.
-    async fn commit_import_page(
+    async fn commit_import_page_checkpoint(
         &self,
         job: &ImportJob,
-        page: MediaListDiscoveryPage,
-    ) -> Result<()> {
+        page: ImportPage,
+        sealed_archive: Option<&SealedImportArchive>,
+    ) -> Result<PageCommitOutcome> {
+        let ImportPage {
+            complete,
+            next_cursor,
+            total_hint,
+            revision_token,
+            records,
+            v2,
+        } = page;
         let mut list_record = None;
         let mut item_records = Vec::new();
-        for record in page.records {
+        for record in records {
             match record {
                 AddonMediaListRecord::List { .. } => list_record = Some(record),
                 AddonMediaListRecord::Item { .. } => item_records.push(record),
@@ -735,7 +1090,9 @@ impl AddonMediaListImportCoordinator {
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let current = sqlx::query(
             r#"SELECT "Cursor", "RevisionToken", "ListRecordJson", "DiscoveredCount",
-                      "VerificationPass",
+                      "VerificationPass", "IncrementalStrategy", "ExaminedCount",
+                      "ArchivedSkippedCount", "EmittedCount", "CheckpointId",
+                      "LeaseOwner", "ImportCapability", "Mode",
                       CAST(CASE WHEN "CancellationRequested" = 1 THEN 1 ELSE 0 END AS SIGNED)
                           AS "CancellationRequested"
                FROM "AddonMediaListImportJob" WHERE "Id" = ?"#,
@@ -757,7 +1114,20 @@ impl AddonMediaListImportCoordinator {
             .await
             .repository()?;
             tx.commit().await.repository()?;
-            return Ok(());
+            return Ok(PageCommitOutcome::Cancelled);
+        }
+        let persisted_lease_owner: Option<String> = current.try_get("LeaseOwner").repository()?;
+        let persisted_import_capability: String =
+            current.try_get("ImportCapability").repository()?;
+        let persisted_mode: AddonMediaListImportMode =
+            decode_enum_column("AddonMediaListImportMode", &current, "Mode")?;
+        if persisted_lease_owner.as_deref() != Some(job.lease_owner.as_str())
+            || persisted_import_capability != job.import_capability
+            || persisted_mode != job.mode
+        {
+            return Err(RepositoryError::Conflict(
+                "the import lease or transport changed while a page was running".to_owned(),
+            ));
         }
         let persisted_pass: i32 = current.try_get("VerificationPass").repository()?;
         let persisted_cursor: Option<String> = current.try_get("Cursor").repository()?;
@@ -768,9 +1138,7 @@ impl AddonMediaListImportCoordinator {
         }
         let persisted_count: i32 = current.try_get("DiscoveredCount").repository()?;
         let persisted_revision: Option<String> = current.try_get("RevisionToken").repository()?;
-        if (persisted_count > 0 || job.cursor.is_some())
-            && persisted_revision != page.revision_token
-        {
+        if (persisted_count > 0 || job.cursor.is_some()) && persisted_revision != revision_token {
             return Err(RepositoryError::Conflict(
                 "the provider revision changed between overview pages".to_owned(),
             ));
@@ -783,10 +1151,22 @@ impl AddonMediaListImportCoordinator {
             })?;
             let previous: Option<String> = current.try_get("ListRecordJson").repository()?;
             if let Some(previous) = previous {
-                if previous != json {
+                if previous != json
+                    && !(job.mode == AddonMediaListImportMode::Incremental && job.cursor.is_none())
+                {
                     return Err(RepositoryError::Conflict(
                         "the provider list header changed during overview verification".to_owned(),
                     ));
+                }
+                if previous != json {
+                    sqlx::query(
+                        r#"UPDATE "AddonMediaListImportJob" SET "ListRecordJson" = ? WHERE "Id" = ?"#,
+                    )
+                    .bind(json)
+                    .bind(job.id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
                 }
             } else {
                 sqlx::query(
@@ -847,7 +1227,7 @@ impl AddonMediaListImportCoordinator {
             .repository()?;
         }
 
-        if let Some(next_cursor) = page.next_cursor.as_deref() {
+        if let Some(next_cursor) = next_cursor.as_deref() {
             let hash = sha256_hex(next_cursor.as_bytes());
             let seen: Option<i32> = sqlx::query_scalar(
                 r#"SELECT 1 FROM "AddonMediaListImportCursor"
@@ -879,40 +1259,191 @@ impl AddonMediaListImportCoordinator {
         }
         let discovered_count =
             persisted_count.saturating_add(i32::try_from(item_records.len()).unwrap_or(i32::MAX));
+        let (strategy, examined_count, archived_skipped_count, emitted_count, checkpoint_id) =
+            if let Some(v2) = v2 {
+                let sealed = sealed_archive.ok_or_else(|| {
+                    RepositoryError::Conflict(
+                        "the v2 import page has no sealed archive candidate".to_owned(),
+                    )
+                })?;
+                let strategy = match v2.strategy {
+                    WireIncrementalStrategy::SkipKnown => {
+                        AddonMediaListIncrementalStrategy::SkipKnown
+                    }
+                    WireIncrementalStrategy::NewestFirstEarlyStop => {
+                        AddonMediaListIncrementalStrategy::NewestFirstEarlyStop
+                    }
+                };
+                let previous_strategy: AddonMediaListIncrementalStrategy = decode_enum_column(
+                    "AddonMediaListIncrementalStrategy",
+                    &current,
+                    "IncrementalStrategy",
+                )?;
+                if previous_strategy != AddonMediaListIncrementalStrategy::None
+                    && previous_strategy != strategy
+                {
+                    return Err(RepositoryError::Conflict(
+                        "the provider changed incremental strategy between pages".to_owned(),
+                    ));
+                }
+                let current_checkpoint_id: Option<EntityId> =
+                    current.try_get("CheckpointId").repository()?;
+                let expected_checkpoint = sqlx::query(
+                    r#"SELECT "Id", "RelativePath", "Generation"
+                       FROM "AddonMediaListImportCheckpoint"
+                       WHERE "AddonMediaListId" = ?
+                         AND ("Id" = ? OR (? IS NULL AND "Committed" = 1))
+                       ORDER BY CASE WHEN "Id" = ? THEN 0 ELSE 1 END LIMIT 1"#,
+                )
+                .bind(job.list_id)
+                .bind(current_checkpoint_id)
+                .bind(current_checkpoint_id)
+                .bind(current_checkpoint_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .repository()?;
+                match (
+                    sealed.previous_relative_path.as_deref(),
+                    expected_checkpoint.as_ref(),
+                ) {
+                    (Some(expected), Some(row)) => {
+                        let checkpoint_path: String = row.try_get("RelativePath").repository()?;
+                        if checkpoint_path != expected {
+                            return Err(RepositoryError::Conflict(
+                                "the import archive changed while a page was running".to_owned(),
+                            ));
+                        }
+                    }
+                    (None, None)
+                        if job.mode == AddonMediaListImportMode::Full && job.cursor.is_none() => {}
+                    _ if job.mode == AddonMediaListImportMode::Incremental => {
+                        return Err(RepositoryError::Conflict(
+                            "the incremental import archive changed while a page was running"
+                                .to_owned(),
+                        ));
+                    }
+                    _ => {
+                        return Err(RepositoryError::Conflict(
+                            "the full import archive changed while a page was running".to_owned(),
+                        ));
+                    }
+                }
+                let checkpoint_id = if sealed.reused_previous {
+                    sqlx::query_scalar(
+                        r#"SELECT "Id" FROM "AddonMediaListImportCheckpoint"
+                       WHERE "AddonMediaListId" = ? AND "RelativePath" = ?"#,
+                    )
+                    .bind(job.list_id)
+                    .bind(&sealed.relative_path)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .repository()?
+                } else {
+                    let data_root = sealed.data_root().to_str().ok_or_else(|| {
+                        RepositoryError::Conflict(
+                            "the private import archive root is not valid UTF-8".to_owned(),
+                        )
+                    })?;
+                    let result = sqlx::query(
+                        r#"INSERT INTO "AddonMediaListImportCheckpoint" (
+                               "AddonMediaListId", "RelativePath", "Generation", "Sha256",
+                               "EntryCount", "PromotedAt", "DataRoot", "Committed"
+                           ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)"#,
+                    )
+                    .bind(job.list_id)
+                    .bind(&sealed.relative_path)
+                    .bind(job.generation)
+                    .bind(&sealed.sha256)
+                    .bind(i64::from(sealed.entry_count))
+                    .bind(encode_datetime(Utc::now()))
+                    .bind(data_root)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                    inserted_id(&mut tx, result).await.repository()?
+                };
+                let persisted_examined: i64 = current.try_get("ExaminedCount").repository()?;
+                let persisted_skipped: i64 =
+                    current.try_get("ArchivedSkippedCount").repository()?;
+                let persisted_emitted: i64 = current.try_get("EmittedCount").repository()?;
+                (
+                    strategy,
+                    persisted_examined.saturating_add(i64::from(v2.examined_count)),
+                    persisted_skipped.saturating_add(i64::from(v2.archived_skipped_count)),
+                    persisted_emitted.saturating_add(i64::from(v2.emitted_count)),
+                    Some(checkpoint_id),
+                )
+            } else {
+                if sealed_archive.is_some() {
+                    return Err(RepositoryError::Conflict(
+                        "a v1 import page cannot promote an archive".to_owned(),
+                    ));
+                }
+                (
+                    AddonMediaListIncrementalStrategy::None,
+                    current.try_get("ExaminedCount").repository()?,
+                    current.try_get("ArchivedSkippedCount").repository()?,
+                    current.try_get("EmittedCount").repository()?,
+                    current.try_get("CheckpointId").repository()?,
+                )
+            };
         sqlx::query(
             r#"UPDATE "AddonMediaListImportJob"
                SET "Cursor" = ?, "RevisionToken" = ?, "TotalHint" = ?,
                    "DiscoveredCount" = ?, "OverviewComplete" = ?,
+                   "IncrementalStrategy" = ?, "ExaminedCount" = ?,
+                   "ArchivedSkippedCount" = ?, "EmittedCount" = ?, "CheckpointId" = ?,
                    "Diagnostic" = NULL, "AttemptCount" = 0,
                    "NextEligibleAt" = NULL, "HeartbeatAt" = ?, "LastProgressAt" = ?,
-                   "UpdatedAt" = ?, "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL
+                   "UpdatedAt" = ?,
+                   "LeaseOwner" = CASE WHEN ? THEN "LeaseOwner" ELSE NULL END,
+                   "LeaseExpiresAt" = CASE WHEN ? THEN "LeaseExpiresAt" ELSE NULL END
                WHERE "Id" = ?"#,
         )
-        .bind(page.next_cursor.as_deref())
-        .bind(page.revision_token.as_deref())
-        .bind(page.total_hint.map(i64::from))
+        .bind(next_cursor.as_deref())
+        .bind(revision_token.as_deref())
+        .bind(total_hint.map(i64::from))
         .bind(discovered_count)
-        .bind(page.complete)
+        .bind(complete)
+        .bind(encode_enum(strategy))
+        .bind(examined_count)
+        .bind(archived_skipped_count)
+        .bind(emitted_count)
+        .bind(checkpoint_id)
         .bind(&now)
         .bind(&now)
         .bind(&now)
+        .bind(complete)
+        .bind(complete)
         .bind(job.id)
         .execute(&mut *tx)
         .await
         .repository()?;
         tx.commit().await.repository()?;
+        Ok(PageCommitOutcome::Committed { complete })
+    }
 
-        if !page.complete {
-            return Ok(());
+    #[cfg(test)]
+    async fn commit_import_page(
+        &self,
+        job: &ImportJob,
+        page: MediaListDiscoveryPage,
+    ) -> Result<()> {
+        match self
+            .commit_import_page_checkpoint(job, page.into(), None)
+            .await?
+        {
+            PageCommitOutcome::Cancelled => Ok(()),
+            PageCommitOutcome::Committed { complete: true } => self.finalize_import_pass(job).await,
+            PageCommitOutcome::Committed { complete: false } => Ok(()),
         }
-        self.finalize_import_pass(job).await
     }
 
     async fn finalize_import_pass(&self, job: &ImportJob) -> Result<()> {
         let row = sqlx::query(
             r#"SELECT CAST(CASE WHEN "OverviewComplete" = 1 THEN 1 ELSE 0 END AS SIGNED)
                           AS "OverviewComplete",
-                      "RevisionToken"
+                      "RevisionToken", "LeaseOwner"
                FROM "AddonMediaListImportJob" WHERE "Id" = ?"#,
         )
         .bind(job.id)
@@ -924,11 +1455,22 @@ impl AddonMediaListImportCoordinator {
                 "the overview pass is not completely checkpointed".to_owned(),
             ));
         }
+        let lease_owner: Option<String> = row.try_get("LeaseOwner").repository()?;
+        if lease_owner.as_deref() != Some(job.lease_owner.as_str()) {
+            return Err(RepositoryError::Conflict(
+                "the import lease changed before finalization".to_owned(),
+            ));
+        }
         let revision_token: Option<String> = row.try_get("RevisionToken").repository()?;
         let now = encode_datetime(Utc::now());
+        if job.import_capability == CAPABILITY_MEDIA_LIST_IMPORT_V2 {
+            return self
+                .promote_complete_overview(job, job.verification_pass)
+                .await;
+        }
         let identity_hash = self.identity_hash(job.id, job.verification_pass).await?;
         if revision_token.is_none() && job.verification_pass == 0 {
-            self.start_unversioned_verification(job.id, 1, &identity_hash, &now)
+            self.start_unversioned_verification(job, 1, &identity_hash, &now)
                 .await?;
             return Ok(());
         }
@@ -937,7 +1479,7 @@ impl AddonMediaListImportCoordinator {
         {
             if job.verification_pass < MAX_UNVERSIONED_VERIFICATION_PASS {
                 self.start_unversioned_verification(
-                    job.id,
+                    job,
                     job.verification_pass.saturating_add(1),
                     &identity_hash,
                     &now,
@@ -956,28 +1498,36 @@ impl AddonMediaListImportCoordinator {
 
     async fn start_unversioned_verification(
         &self,
-        job_id: EntityId,
+        job: &ImportJob,
         verification_pass: i32,
         expected_identity_hash: &str,
         now: &str,
     ) -> Result<()> {
-        sqlx::query(
+        let updated = sqlx::query(
             r#"UPDATE "AddonMediaListImportJob"
                SET "State" = ?, "VerificationPass" = ?, "ExpectedIdentityHash" = ?,
                    "Cursor" = NULL, "RevisionToken" = NULL, "DiscoveredCount" = 0,
                    "TotalHint" = NULL, "OverviewComplete" = 0,
-                   "UpdatedAt" = ?, "LastProgressAt" = ?
-               WHERE "Id" = ?"#,
+                   "FinalizationPhase" = 0,
+                   "UpdatedAt" = ?, "LastProgressAt" = ?,
+                   "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL
+               WHERE "Id" = ? AND "LeaseOwner" = ?"#,
         )
         .bind(encode_enum(AddonMediaListImportState::Verifying))
         .bind(verification_pass)
         .bind(expected_identity_hash)
         .bind(now)
         .bind(now)
-        .bind(job_id)
+        .bind(job.id)
+        .bind(&job.lease_owner)
         .execute(&self.pool)
         .await
         .repository()?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the import lease changed before verification".to_owned(),
+            ));
+        }
         Ok(())
     }
 
@@ -1047,56 +1597,6 @@ impl AddonMediaListImportCoordinator {
         self.overlay_completed_details(job, pass, &mut enumerated)
             .await?;
 
-        let conflicting: Option<EntityId> = sqlx::query_scalar(
-            r#"SELECT "Id" FROM "AddonMediaList"
-               WHERE "AddonId" = ? AND "ProviderId" = ? AND "Id" <> ? LIMIT 1"#,
-        )
-        .bind(&job.addon_id)
-        .bind(&enumerated.provider_id)
-        .bind(job.list_id)
-        .fetch_optional(&self.pool)
-        .await
-        .repository()?;
-        if conflicting.is_some() {
-            return Err(RepositoryError::Conflict(
-                "another imported list already owns this provider identity".to_owned(),
-            ));
-        }
-        let promoted = sqlx::query(
-            r#"UPDATE "AddonMediaList" SET "ProviderId" = ?
-               WHERE "Id" = ? AND "ReviewState" <> 3
-                 AND ("PublicationJournalJson" IS NULL
-                      OR TRIM("PublicationJournalJson") = '')
-                 AND NOT EXISTS (
-                     SELECT 1
-                     FROM "AddonMediaListPublicationJob" AS "publication"
-                     JOIN "ManagedLibraryOperation" AS "operation"
-                       ON "operation"."Id" = "publication"."OperationId"
-                     WHERE "publication"."AddonMediaListId" = "AddonMediaList"."Id"
-                       AND "operation"."State" IN (?, ?, ?)
-                 )"#,
-        )
-        .bind(&enumerated.provider_id)
-        .bind(job.list_id)
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::Queued,
-        ))
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::Running,
-        ))
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
-        ))
-        .execute(&self.pool)
-        .await
-        .repository()?;
-        if promoted.rows_affected() != 1 {
-            return Err(RepositoryError::Conflict(
-                "the add-on media list is being published; wait for publication to finish"
-                    .to_owned(),
-            ));
-        }
-
         let chapter_input = row
             .try_get::<Option<String>, _>("ChapterInput")
             .repository()?
@@ -1126,27 +1626,119 @@ impl AddonMediaListImportCoordinator {
             last_error: None,
         };
         let requested_folder: Option<String> = row.try_get("RequestedFolder").repository()?;
-        AddonMediaListRemoteSynchronizer::new(self.pool.clone(), self.provider.clone())
-            .persist_enumerated(&list, &mut enumerated, requested_folder.as_deref())
+        let synchronizer =
+            AddonMediaListRemoteSynchronizer::new(self.pool.clone(), self.provider.clone());
+        synchronizer
+            .persist_import_generation(
+                job.id,
+                &job.lease_owner,
+                &list,
+                &mut enumerated,
+                job.mode == AddonMediaListImportMode::Incremental,
+            )
             .await?;
-        self.initialize_detail_jobs(job.id, job.list_id, pass)
+        synchronizer
+            .complete_import_projection(
+                job.id,
+                &job.lease_owner,
+                job.list_id,
+                requested_folder.as_deref(),
+            )
             .await?;
+        self.initialize_detail_jobs(job, job.list_id, pass).await?;
         let now = encode_datetime(Utc::now());
-        sqlx::query(
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let fenced = sqlx::query(
+            r#"UPDATE "AddonMediaListImportJob" SET "HeartbeatAt" = ?
+               WHERE "Id" = ? AND "LeaseOwner" = ? AND "OverviewComplete" = 1
+                 AND "CancellationRequested" = 0 AND "FinalizationPhase" = 4"#,
+        )
+        .bind(&now)
+        .bind(job.id)
+        .bind(&job.lease_owner)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if fenced.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the import finalization lease or phase changed".to_owned(),
+            ));
+        }
+        if job.import_capability == CAPABILITY_MEDIA_LIST_IMPORT_V2 {
+            let checkpoint_id: Option<EntityId> = sqlx::query_scalar(
+                r#"SELECT "CheckpointId" FROM "AddonMediaListImportJob"
+                   WHERE "Id" = ? AND "LeaseOwner" = ? AND "FinalizationPhase" = 4"#,
+            )
+            .bind(job.id)
+            .bind(&job.lease_owner)
+            .fetch_optional(&mut *tx)
+            .await
+            .repository()?
+            .flatten();
+            let checkpoint_id = checkpoint_id.ok_or_else(|| {
+                RepositoryError::Conflict(
+                    "the completed v2 import has no resumable archive checkpoint".to_owned(),
+                )
+            })?;
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob" SET "CheckpointId" = NULL
+                   WHERE "AddonMediaListId" = ? AND "Id" <> ?"#,
+            )
+            .bind(job.list_id)
+            .bind(job.id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportCheckpoint" SET "Committed" = 0
+                   WHERE "AddonMediaListId" = ? AND "Id" <> ? AND "Committed" = 1"#,
+            )
+            .bind(job.list_id)
+            .bind(checkpoint_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            let promoted = sqlx::query(
+                r#"UPDATE "AddonMediaListImportCheckpoint"
+                   SET "Committed" = 1, "Generation" = ?, "PromotedAt" = ?
+                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+            )
+            .bind(job.generation)
+            .bind(&now)
+            .bind(checkpoint_id)
+            .bind(job.list_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            if promoted.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the v2 import archive checkpoint changed before finalization".to_owned(),
+                ));
+            }
+        }
+        let completed = sqlx::query(
             r#"UPDATE "AddonMediaListImportJob"
                SET "State" = ?, "CompletedAt" = ?, "UpdatedAt" = ?,
                    "LastProgressAt" = ?, "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL,
                    "Diagnostic" = NULL, "OverviewComplete" = 0
-               WHERE "Id" = ?"#,
+               WHERE "Id" = ? AND "LeaseOwner" = ? AND "FinalizationPhase" = 4
+                 AND "CancellationRequested" = 0"#,
         )
         .bind(encode_enum(AddonMediaListImportState::Ready))
         .bind(&now)
         .bind(&now)
         .bind(&now)
         .bind(job.id)
-        .execute(&self.pool)
+        .bind(&job.lease_owner)
+        .execute(&mut *tx)
         .await
         .repository()?;
+        if completed.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the import lease changed before finalization".to_owned(),
+            ));
+        }
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -1220,10 +1812,31 @@ impl AddonMediaListImportCoordinator {
     #[allow(clippy::too_many_lines)] // Initialization reconciles every item state in one transaction.
     async fn initialize_detail_jobs(
         &self,
-        import_job_id: EntityId,
+        job: &ImportJob,
         list_id: EntityId,
         pass: i32,
     ) -> Result<()> {
+        let phase: i32 = sqlx::query_scalar(
+            r#"SELECT "FinalizationPhase" FROM "AddonMediaListImportJob"
+               WHERE "Id" = ? AND "LeaseOwner" = ? AND "OverviewComplete" = 1
+                 AND "CancellationRequested" = 0"#,
+        )
+        .bind(job.id)
+        .bind(&job.lease_owner)
+        .fetch_optional(&self.pool)
+        .await
+        .repository()?
+        .ok_or_else(|| {
+            RepositoryError::Conflict("the import finalization lease changed".to_owned())
+        })?;
+        if phase == 4 {
+            return Ok(());
+        }
+        if phase != 3 {
+            return Err(RepositoryError::Conflict(
+                "the import finalization phase is invalid for detail initialization".to_owned(),
+            ));
+        }
         let source_url: String =
             sqlx::query_scalar(r#"SELECT "SourceUrl" FROM "AddonMediaList" WHERE "Id" = ?"#)
                 .bind(list_id)
@@ -1243,13 +1856,31 @@ impl AddonMediaListImportCoordinator {
                  AND "item"."ParentProviderId" IS NULL"#,
         )
         .bind(list_id)
-        .bind(import_job_id)
+        .bind(job.id)
         .bind(pass)
         .fetch_all(&self.pool)
         .await
         .repository()?;
         let now = encode_datetime(Utc::now());
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let lease_expires = encode_datetime(Utc::now() + Duration::seconds(IMPORT_LEASE_SECONDS));
+        let fenced = sqlx::query(
+            r#"UPDATE "AddonMediaListImportJob" SET "LeaseExpiresAt" = ?, "HeartbeatAt" = ?
+               WHERE "Id" = ? AND "LeaseOwner" = ? AND "OverviewComplete" = 1
+                 AND "CancellationRequested" = 0 AND "FinalizationPhase" = 3"#,
+        )
+        .bind(&lease_expires)
+        .bind(&now)
+        .bind(job.id)
+        .bind(&job.lease_owner)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if fenced.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the import finalization lease or phase changed".to_owned(),
+            ));
+        }
         for row in rows {
             let item_id: EntityId = row.try_get("Id").repository()?;
             let fingerprint: String = row.try_get("OverviewFingerprint").repository()?;
@@ -1325,32 +1956,60 @@ impl AddonMediaListImportCoordinator {
                 .repository()?;
             }
         }
+        let advanced = sqlx::query(
+            r#"UPDATE "AddonMediaListImportJob" SET "FinalizationPhase" = 4, "UpdatedAt" = ?
+               WHERE "Id" = ? AND "LeaseOwner" = ? AND "OverviewComplete" = 1
+                 AND "CancellationRequested" = 0 AND "FinalizationPhase" = 3"#,
+        )
+        .bind(&now)
+        .bind(job.id)
+        .bind(&job.lease_owner)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if advanced.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the import finalization lease or phase changed".to_owned(),
+            ));
+        }
         tx.commit().await.repository()?;
         Ok(())
     }
 
-    async fn fail_import(&self, job_id: EntityId, diagnostic: &str, retryable: bool) -> Result<()> {
+    async fn fail_import(&self, job: &ImportJob, diagnostic: &str, retryable: bool) -> Result<()> {
+        let now = Utc::now();
+        let now_text = encode_datetime(now);
         let row = sqlx::query(
             r#"SELECT "AttemptCount", "AddonMediaListId"
-               FROM "AddonMediaListImportJob" WHERE "Id" = ?"#,
+               FROM "AddonMediaListImportJob"
+               WHERE "Id" = ? AND "LeaseOwner" = ? AND "LeaseExpiresAt" > ?
+                 AND "State" IN (?, ?)"#,
         )
-        .bind(job_id)
-        .fetch_one(&self.pool)
+        .bind(job.id)
+        .bind(&job.lease_owner)
+        .bind(&now_text)
+        .bind(encode_enum(AddonMediaListImportState::Discovering))
+        .bind(encode_enum(AddonMediaListImportState::Verifying))
+        .fetch_optional(&self.pool)
         .await
         .repository()?;
+        let Some(row) = row else {
+            return Ok(());
+        };
         let attempts: i32 = row.try_get("AttemptCount").repository()?;
         let list_id: Option<EntityId> = row.try_get("AddonMediaListId").repository()?;
         let attempts = attempts.saturating_add(1);
         let retry = retryable && attempts < MAX_IMPORT_ATTEMPTS;
-        let now = Utc::now();
         let retry_at =
             retry.then(|| encode_datetime(now + Duration::seconds(import_retry_seconds(attempts))));
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
-        sqlx::query(
+        let updated = sqlx::query(
             r#"UPDATE "AddonMediaListImportJob"
                SET "State" = ?, "AttemptCount" = ?, "Diagnostic" = ?,
                    "NextEligibleAt" = ?, "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL,
-                   "UpdatedAt" = ? WHERE "Id" = ?"#,
+                   "UpdatedAt" = ?
+               WHERE "Id" = ? AND "LeaseOwner" = ? AND "LeaseExpiresAt" > ?
+                 AND "State" IN (?, ?)"#,
         )
         .bind(encode_enum(if retry {
             AddonMediaListImportState::Queued
@@ -1360,11 +2019,19 @@ impl AddonMediaListImportCoordinator {
         .bind(attempts)
         .bind(bound_diagnostic(diagnostic))
         .bind(retry_at.as_deref())
-        .bind(encode_datetime(now))
-        .bind(job_id)
+        .bind(&now_text)
+        .bind(job.id)
+        .bind(&job.lease_owner)
+        .bind(&now_text)
+        .bind(encode_enum(AddonMediaListImportState::Discovering))
+        .bind(encode_enum(AddonMediaListImportState::Verifying))
         .execute(&mut *tx)
         .await
         .repository()?;
+        if updated.rows_affected() != 1 {
+            tx.rollback().await.repository()?;
+            return Ok(());
+        }
         if let Some(list_id) = list_id {
             sqlx::query(r#"UPDATE "AddonMediaList" SET "RefreshRetryAt" = ? WHERE "Id" = ?"#)
                 .bind(retry_at.as_deref())
@@ -1558,7 +2225,7 @@ impl AddonMediaListImportCoordinator {
                WHERE "Id" = (
                    SELECT "Id" FROM "AddonMediaListImportJob"
                    WHERE "AddonMediaListId" = ? ORDER BY "Generation" DESC LIMIT 1
-               )"#,
+               ) AND NOT ("OverviewComplete" = 1 AND "LeaseOwner" IS NOT NULL)"#,
         )
         .bind(encode_enum(state))
         .bind(cancellation)
@@ -1569,6 +2236,25 @@ impl AddonMediaListImportCoordinator {
         .await
         .repository()?;
         if updated.rows_affected() != 1 {
+            let finalizing: bool = sqlx::query_scalar(
+                r#"SELECT EXISTS (
+                       SELECT 1 FROM "AddonMediaListImportJob"
+                       WHERE "Id" = (
+                           SELECT "Id" FROM "AddonMediaListImportJob"
+                           WHERE "AddonMediaListId" = ?
+                           ORDER BY "Generation" DESC LIMIT 1
+                       ) AND "OverviewComplete" = 1 AND "LeaseOwner" IS NOT NULL
+                   )"#,
+            )
+            .bind(list_id)
+            .fetch_one(&self.pool)
+            .await
+            .repository()?;
+            if finalizing {
+                return Err(RepositoryError::Conflict(
+                    "the add-on media list import is finalizing; wait for it to finish".to_owned(),
+                ));
+            }
             return Err(RepositoryError::NotFound {
                 kind: "add-on media-list import",
                 id: list_id,
@@ -1577,12 +2263,14 @@ impl AddonMediaListImportCoordinator {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn retry_import(&self, list_id: EntityId) -> Result<()> {
         let now = encode_datetime(Utc::now());
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let previous = sqlx::query(
-            r#"SELECT "Id", "Generation", "State", "RecordCapability", "RequestedFolder",
-                      "DiscoveredCount"
+            r#"SELECT "Id", "Generation", "State", "RecordCapability", "ImportCapability",
+                      "Mode", "ListRecordJson", "RequestedFolder", "DiscoveredCount",
+                      "OverviewComplete", "FinalizationPhase"
                FROM "AddonMediaListImportJob"
                WHERE "AddonMediaListId" = ? ORDER BY "Generation" DESC LIMIT 1"#,
         )
@@ -1608,10 +2296,52 @@ impl AddonMediaListImportCoordinator {
                 "only failed, cancelled, or empty completed imports can be retried".to_owned(),
             ));
         }
+        let import_capability: String = previous.try_get("ImportCapability").repository()?;
+        let overview_complete: bool = previous.try_get("OverviewComplete").repository()?;
+        let finalization_phase: i32 = previous.try_get("FinalizationPhase").repository()?;
+        if (import_capability == CAPABILITY_MEDIA_LIST_IMPORT_V2
+            || overview_complete
+            || finalization_phase > 0)
+            && matches!(
+                previous_state,
+                AddonMediaListImportState::NeedsAttention | AddonMediaListImportState::Cancelled
+            )
+        {
+            let resumed = sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob"
+                   SET "State" = ?, "CancellationRequested" = 0, "AttemptCount" = 0,
+                       "Diagnostic" = NULL, "NextEligibleAt" = NULL,
+                       "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL,
+                       "UpdatedAt" = ?, "LastProgressAt" = ?
+                   WHERE "Id" = ? AND "State" = ?"#,
+            )
+            .bind(encode_enum(AddonMediaListImportState::Queued))
+            .bind(&now)
+            .bind(&now)
+            .bind(previous_id)
+            .bind(encode_enum(previous_state))
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            if resumed.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the import changed while it was being retried".to_owned(),
+                ));
+            }
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "LastError" = NULL WHERE "Id" = ?"#)
+                .bind(list_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            tx.commit().await.repository()?;
+            return Ok(());
+        }
         let generation = previous_generation.checked_add(1).ok_or_else(|| {
             RepositoryError::Conflict("the import generation limit was reached".to_owned())
         })?;
         let record_capability: String = previous.try_get("RecordCapability").repository()?;
+        let mode: i32 = previous.try_get("Mode").repository()?;
+        let retained_header: Option<String> = previous.try_get("ListRecordJson").repository()?;
         let requested_folder: Option<String> = previous.try_get("RequestedFolder").repository()?;
         let superseded = sqlx::query(
             r#"UPDATE "AddonMediaListImportJob"
@@ -1634,13 +2364,18 @@ impl AddonMediaListImportCoordinator {
         sqlx::query(
             r#"INSERT INTO "AddonMediaListImportJob" (
                 "AddonMediaListId", "Generation", "State", "RecordCapability",
-                "RequestedFolder", "CreatedAt", "UpdatedAt", "LastProgressAt"
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "ImportCapability", "Purpose", "Mode", "ListRecordJson", "RequestedFolder",
+                "CreatedAt", "UpdatedAt", "LastProgressAt"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(list_id)
         .bind(generation)
         .bind(encode_enum(AddonMediaListImportState::Queued))
         .bind(record_capability)
+        .bind(import_capability)
+        .bind(encode_enum(AddonMediaListImportPurpose::Refresh))
+        .bind(mode)
+        .bind(retained_header)
         .bind(requested_folder)
         .bind(&now)
         .bind(&now)
@@ -2291,11 +3026,15 @@ impl AddonMediaListImportCoordinator {
         list_id: EntityId,
     ) -> Result<Option<AddonMediaListImportProgress>> {
         let job = sqlx::query(
-            r#"SELECT "State", "CreatedAt", "DiscoveredCount",
+            r#"SELECT "State", "Mode", "IncrementalStrategy", "CreatedAt", "DiscoveredCount",
+                      "ExaminedCount", "ArchivedSkippedCount", "EmittedCount",
                       CAST("TotalHint" AS SIGNED) AS "TotalHint",
+                      CAST((SELECT COUNT(*) FROM "AddonMediaListItem" AS "item"
+                            WHERE "item"."AddonMediaListId" = "job"."AddonMediaListId") AS SIGNED)
+                          AS "RetainedItemCount",
                       "LastProgressAt", "Diagnostic"
-               FROM "AddonMediaListImportJob"
-               WHERE "AddonMediaListId" = ? ORDER BY "Generation" DESC LIMIT 1"#,
+               FROM "AddonMediaListImportJob" AS "job"
+               WHERE "job"."AddonMediaListId" = ? ORDER BY "Generation" DESC LIMIT 1"#,
         )
         .bind(list_id)
         .fetch_optional(&self.pool)
@@ -2342,13 +3081,23 @@ impl AddonMediaListImportCoordinator {
         .repository()?;
         Ok(Some(AddonMediaListImportProgress {
             state: decode_enum_column("AddonMediaListImportState", &job, "State")?,
+            mode: decode_enum_column("AddonMediaListImportMode", &job, "Mode")?,
+            strategy: decode_enum_column(
+                "AddonMediaListIncrementalStrategy",
+                &job,
+                "IncrementalStrategy",
+            )?,
             started_at: job.try_get("CreatedAt").repository()?,
             discovered_count: u64::try_from(job.try_get::<i32, _>("DiscoveredCount").repository()?)
                 .unwrap_or_default(),
+            examined_count: nonnegative_count(&job, "ExaminedCount")?,
+            archived_skipped_count: nonnegative_count(&job, "ArchivedSkippedCount")?,
+            emitted_count: nonnegative_count(&job, "EmittedCount")?,
             total_hint: job
                 .try_get::<Option<i64>, _>("TotalHint")
                 .repository()?
                 .and_then(|value| u64::try_from(value).ok()),
+            retained_item_count: nonnegative_count(&job, "RetainedItemCount")?,
             detail_total: nonnegative_count(&counts, "Total")?,
             detail_complete: nonnegative_count(&counts, "Complete")?,
             detail_skipped: nonnegative_count(&counts, "Skipped")?,
@@ -2382,12 +3131,70 @@ async fn update_detail_progress(
 }
 
 #[derive(Debug)]
+struct ImportPage {
+    complete: bool,
+    next_cursor: Option<String>,
+    total_hint: Option<u32>,
+    revision_token: Option<String>,
+    records: Vec<AddonMediaListRecord>,
+    v2: Option<ImportV2Page>,
+}
+
+impl From<MediaListDiscoveryPage> for ImportPage {
+    fn from(page: MediaListDiscoveryPage) -> Self {
+        Self {
+            complete: page.complete,
+            next_cursor: page.next_cursor,
+            total_hint: page.total_hint,
+            revision_token: page.revision_token,
+            records: page.records,
+            v2: None,
+        }
+    }
+}
+
+impl From<MediaListDiscoveryV2Page> for ImportPage {
+    fn from(page: MediaListDiscoveryV2Page) -> Self {
+        Self {
+            complete: page.complete,
+            next_cursor: page.next_cursor,
+            total_hint: page.total_hint,
+            revision_token: page.revision_token,
+            records: page.records,
+            v2: Some(ImportV2Page {
+                strategy: page.strategy,
+                examined_count: page.examined_count,
+                archived_skipped_count: page.archived_skipped_count,
+                emitted_count: page.emitted_count,
+            }),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ImportV2Page {
+    strategy: WireIncrementalStrategy,
+    examined_count: u32,
+    archived_skipped_count: u32,
+    emitted_count: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PageCommitOutcome {
+    Cancelled,
+    Committed { complete: bool },
+}
+
+#[derive(Debug)]
 struct ImportJob {
     id: EntityId,
     list_id: EntityId,
+    generation: i32,
     addon_id: String,
     source_url: String,
     record_capability: String,
+    import_capability: String,
+    mode: AddonMediaListImportMode,
     cursor: Option<String>,
     verification_pass: i32,
     expected_identity_hash: Option<String>,
@@ -2556,6 +3363,41 @@ fn nonnegative_count(row: &crate::db::DbRow, column: &'static str) -> Result<u64
     })
 }
 
+fn decode_import_checkpoint(row: &crate::db::DbRow) -> Result<AddonMediaListImportCheckpoint> {
+    let promoted_at: String = row.try_get("PromotedAt").repository()?;
+    Ok(AddonMediaListImportCheckpoint {
+        id: row.try_get("Id").repository()?,
+        list_id: row.try_get("AddonMediaListId").repository()?,
+        relative_path: row.try_get("RelativePath").repository()?,
+        generation: row.try_get("Generation").repository()?,
+        sha256: row.try_get("Sha256").repository()?,
+        entry_count: u64::try_from(row.try_get::<i64, _>("EntryCount").repository()?).map_err(
+            |_| RepositoryError::Decode {
+                kind: "add-on media-list import checkpoint entry count",
+                value: "negative value".to_owned(),
+            },
+        )?,
+        promoted_at: decode_datetime("add-on media-list checkpoint timestamp", &promoted_at)?,
+    })
+}
+
+fn validate_archive_advance(archive: &SealedImportArchive, emitted_count: u32) -> Result<()> {
+    let expected = archive
+        .initial_entry_count
+        .checked_add(emitted_count)
+        .ok_or_else(|| {
+            RepositoryError::Conflict(
+                "the staged archive entry count exceeds its supported bound".to_owned(),
+            )
+        })?;
+    if archive.entry_count != expected {
+        return Err(RepositoryError::Conflict(
+            "the staged archive advance does not match the emitted page items".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2632,6 +3474,21 @@ mod tests {
             InstalledMediaListImportContext {
                 source_url: source_url.to_owned(),
                 record_capability: CAPABILITY_MEDIA_LIST_LIST_V5.to_owned(),
+                import_capability: ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_IMPORT_V1
+                    .to_owned(),
+                data_dir: std::path::PathBuf::from("unused-v1-data-dir"),
+            }
+        }
+
+        fn v2_context(
+            source_url: &str,
+            data_dir: &std::path::Path,
+        ) -> InstalledMediaListImportContext {
+            InstalledMediaListImportContext {
+                source_url: source_url.to_owned(),
+                record_capability: CAPABILITY_MEDIA_LIST_LIST_V5.to_owned(),
+                import_capability: CAPABILITY_MEDIA_LIST_IMPORT_V2.to_owned(),
+                data_dir: data_dir.to_path_buf(),
             }
         }
 
@@ -2704,6 +3561,99 @@ mod tests {
                 )
                 .await
                 .expect("queue overview import")
+        }
+
+        async fn queue_v2(
+            coordinator: &AddonMediaListImportCoordinator,
+            source_url: &str,
+            data_dir: &std::path::Path,
+            target_list_id: Option<EntityId>,
+        ) -> EntityId {
+            coordinator
+                .queue_import(
+                    "org.example.fixture",
+                    &v2_context(source_url, data_dir),
+                    None,
+                    AddonMediaListContentKind::TelevisionEpisode,
+                    AddonMediaListDetailPolicy::ManualOnly,
+                    target_list_id,
+                )
+                .await
+                .expect("queue v2 overview import")
+        }
+
+        async fn seal_v2_archive(
+            coordinator: &AddonMediaListImportCoordinator,
+            job: &ImportJob,
+            data_dir: &std::path::Path,
+            contents: &[u8],
+        ) -> SealedImportArchive {
+            let checkpoint = coordinator
+                .resume_import_checkpoint(job)
+                .await
+                .expect("load current archive checkpoint");
+            let prepared = prepare_import_archive(
+                data_dir.to_path_buf(),
+                job.list_id,
+                job.generation,
+                checkpoint.as_ref(),
+            )
+            .await
+            .expect("prepare v2 archive");
+            tokio::fs::write(prepared.staged_path(), contents)
+                .await
+                .expect("write staged v2 archive");
+            prepared.seal().await.expect("seal v2 archive")
+        }
+
+        async fn commit_complete_v2_page(
+            coordinator: &AddonMediaListImportCoordinator,
+            job: &ImportJob,
+            sealed: &SealedImportArchive,
+            total_hint: u32,
+            examined_count: u32,
+            archived_skipped_count: u32,
+            records: Vec<AddonMediaListRecord>,
+        ) {
+            let emitted_count = u32::try_from(
+                records
+                    .iter()
+                    .filter(|record| matches!(record, AddonMediaListRecord::Item { .. }))
+                    .count(),
+            )
+            .expect("bounded v2 item count");
+            validate_archive_advance(sealed, emitted_count).expect("valid archive advance");
+            let outcome = coordinator
+                .commit_import_page_checkpoint(
+                    job,
+                    MediaListDiscoveryV2Page {
+                        complete: true,
+                        next_cursor: None,
+                        total_hint: Some(total_hint),
+                        revision_token: Some(format!("generation-{}", job.generation)),
+                        strategy: WireIncrementalStrategy::SkipKnown,
+                        examined_count,
+                        archived_skipped_count,
+                        emitted_count,
+                        records,
+                    }
+                    .into(),
+                    Some(sealed),
+                )
+                .await
+                .expect("commit v2 page");
+            assert!(matches!(
+                outcome,
+                PageCommitOutcome::Committed { complete: true }
+            ));
+            coordinator
+                .cleanup_one_unreferenced_import_archive(Some(job.list_id))
+                .await
+                .expect("clean obsolete v2 archive");
+            coordinator
+                .finalize_import_pass(job)
+                .await
+                .expect("finalize v2 page");
         }
 
         fn option_schema_fixture() -> (String, AddonMediaListOptionSchemaRef) {
@@ -2906,7 +3856,32 @@ mod tests {
                 )
             );
             assert_eq!(checkpoint_count(&pool, list_id).await, 1);
-
+            let old_data_root = temporary.path().join("old provider data");
+            let old_archive = old_data_root.join("checkpoints/provider.txt");
+            tokio::fs::create_dir_all(old_archive.parent().unwrap())
+                .await
+                .expect("create old archive directory");
+            tokio::fs::write(&old_archive, b"fixture item\n")
+                .await
+                .expect("write old provider archive");
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportCheckpoint" SET "DataRoot" = ?
+                   WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(old_data_root.to_string_lossy().as_ref())
+            .bind(list_id)
+            .execute(&pool)
+            .await
+            .expect("record old archive ownership");
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob" SET "ImportCapability" = ?
+                   WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(CAPABILITY_MEDIA_LIST_IMPORT_V2)
+            .bind(list_id)
+            .execute(&pool)
+            .await
+            .expect("mark old v2 generation");
             coordinator
                 .queue_import(
                     "org.example.replacement",
@@ -2931,6 +3906,7 @@ mod tests {
             .expect("load retained published revision");
             assert_eq!(retained_revision, 1);
             assert_eq!(checkpoint_count(&pool, list_id).await, 0);
+            assert!(!old_archive.exists());
             let attached_checkpoint_jobs: i64 = sqlx::query_scalar(
                 r#"SELECT COUNT(*) FROM "AddonMediaListImportJob"
                    WHERE "AddonMediaListId" = ? AND "CheckpointId" IS NOT NULL"#,
@@ -3390,6 +4366,488 @@ mod tests {
                 "episode:1"
             );
             assert_eq!(rows[1].try_get::<i32, _>("Rank").unwrap(), 1);
+        }
+
+        #[tokio::test]
+        #[allow(clippy::too_many_lines)]
+        async fn v2_checkpoint_skips_unchanged_items_and_merges_only_later_additions() {
+            let (temporary, pool, coordinator) = fixture().await;
+            let data_dir = temporary.path().join("add-on data with spaces");
+            let source_url = "https://media.example.test/incremental";
+            let list_id = queue_v2(&coordinator, source_url, &data_dir, None).await;
+            let first_job = coordinator
+                .claim_import_job()
+                .await
+                .expect("claim full v2 import")
+                .expect("full v2 import");
+            assert_eq!(first_job.mode, AddonMediaListImportMode::Full);
+            let first_archive =
+                seal_v2_archive(&coordinator, &first_job, &data_dir, b"fixture first\n").await;
+            validate_archive_advance(&first_archive, 1).unwrap();
+            let first_outcome = coordinator
+                .commit_import_page_checkpoint(
+                    &first_job,
+                    MediaListDiscoveryV2Page {
+                        complete: false,
+                        next_cursor: Some("page-2".to_owned()),
+                        total_hint: Some(2),
+                        revision_token: Some("generation-1".to_owned()),
+                        strategy: WireIncrementalStrategy::SkipKnown,
+                        examined_count: 1,
+                        archived_skipped_count: 0,
+                        emitted_count: 1,
+                        records: vec![
+                            list_record("fixture/incremental"),
+                            item_record("first", 0, "First overview"),
+                        ],
+                    }
+                    .into(),
+                    Some(&first_archive),
+                )
+                .await
+                .expect("checkpoint first full page");
+            assert!(matches!(
+                first_outcome,
+                PageCommitOutcome::Committed { complete: false }
+            ));
+            assert!(coordinator
+                .current_import_checkpoint(list_id)
+                .await
+                .unwrap()
+                .is_none());
+            let second_job = coordinator
+                .claim_import_job()
+                .await
+                .expect("claim second full v2 page")
+                .expect("second full v2 page");
+            let second_archive = seal_v2_archive(
+                &coordinator,
+                &second_job,
+                &data_dir,
+                b"fixture first\nfixture second\n",
+            )
+            .await;
+            commit_complete_v2_page(
+                &coordinator,
+                &second_job,
+                &second_archive,
+                2,
+                1,
+                0,
+                vec![item_record("second", 1, "Second overview")],
+            )
+            .await;
+            let draft_after_full: i32 = sqlx::query_scalar(
+                r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("load full draft revision");
+
+            queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
+            let unchanged_job = coordinator
+                .claim_import_job()
+                .await
+                .expect("claim unchanged v2 import")
+                .expect("unchanged v2 import");
+            assert_eq!(unchanged_job.mode, AddonMediaListImportMode::Incremental);
+            let unchanged_archive = seal_v2_archive(
+                &coordinator,
+                &unchanged_job,
+                &data_dir,
+                b"fixture first\nfixture second\n",
+            )
+            .await;
+            assert!(unchanged_archive.reused_previous);
+            commit_complete_v2_page(
+                &coordinator,
+                &unchanged_job,
+                &unchanged_archive,
+                2,
+                2,
+                2,
+                Vec::new(),
+            )
+            .await;
+            let draft_after_unchanged: i32 = sqlx::query_scalar(
+                r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("load unchanged draft revision");
+            assert_eq!(draft_after_unchanged, draft_after_full);
+            let unchanged_progress = coordinator.progress(list_id).await.unwrap().unwrap();
+            assert_eq!(
+                unchanged_progress.mode,
+                AddonMediaListImportMode::Incremental
+            );
+            assert_eq!(unchanged_progress.examined_count, 2);
+            assert_eq!(unchanged_progress.archived_skipped_count, 2);
+            assert_eq!(unchanged_progress.emitted_count, 0);
+
+            queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
+            let addition_job = coordinator
+                .claim_import_job()
+                .await
+                .expect("claim addition v2 import")
+                .expect("addition v2 import");
+            let addition_archive = seal_v2_archive(
+                &coordinator,
+                &addition_job,
+                &data_dir,
+                b"fixture first\nfixture second\nfixture third\nfixture fourth\n",
+            )
+            .await;
+            commit_complete_v2_page(
+                &coordinator,
+                &addition_job,
+                &addition_archive,
+                4,
+                4,
+                2,
+                vec![
+                    item_record("third", 0, "Third overview"),
+                    item_record("fourth", 1, "Fourth overview"),
+                ],
+            )
+            .await;
+
+            let identities: Vec<(String, i32)> = sqlx::query_as(
+                r#"SELECT "ProviderId", "Rank" FROM "AddonMediaListItem"
+                   WHERE "AddonMediaListId" = ? ORDER BY "Rank", "Id""#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .expect("load incrementally merged items");
+            assert_eq!(
+                identities,
+                vec![
+                    ("third".to_owned(), 0),
+                    ("fourth".to_owned(), 1),
+                    ("first".to_owned(), 2),
+                    ("second".to_owned(), 3),
+                ]
+            );
+            let addition_progress = coordinator.progress(list_id).await.unwrap().unwrap();
+            assert_eq!(addition_progress.examined_count, 4);
+            assert_eq!(addition_progress.archived_skipped_count, 2);
+            assert_eq!(addition_progress.emitted_count, 2);
+        }
+
+        #[tokio::test]
+        async fn v2_invalid_and_cancelled_pages_do_not_advance_the_live_checkpoint() {
+            let (temporary, pool, coordinator) = fixture().await;
+            let data_dir = temporary.path().join("private data");
+            let source_url = "https://media.example.test/checkpoint-fence";
+            let list_id = queue_v2(&coordinator, source_url, &data_dir, None).await;
+            let full_job = coordinator.claim_import_job().await.unwrap().unwrap();
+            let full_archive =
+                seal_v2_archive(&coordinator, &full_job, &data_dir, b"fixture first\n").await;
+            commit_complete_v2_page(
+                &coordinator,
+                &full_job,
+                &full_archive,
+                1,
+                1,
+                0,
+                vec![
+                    list_record("fixture/checkpoint-fence"),
+                    item_record("first", 0, "First overview"),
+                ],
+            )
+            .await;
+            let checkpoint_before = coordinator
+                .current_import_checkpoint(list_id)
+                .await
+                .unwrap()
+                .expect("live checkpoint");
+
+            queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
+            let incremental_job = coordinator.claim_import_job().await.unwrap().unwrap();
+            let invalid_archive = seal_v2_archive(
+                &coordinator,
+                &incremental_job,
+                &data_dir,
+                b"fixture first\nfixture unreported\n",
+            )
+            .await;
+            assert!(validate_archive_advance(&invalid_archive, 0).is_err());
+            invalid_archive.discard_candidate().await;
+            assert_eq!(
+                coordinator
+                    .current_import_checkpoint(list_id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .relative_path,
+                checkpoint_before.relative_path
+            );
+
+            let cancelled_archive = seal_v2_archive(
+                &coordinator,
+                &incremental_job,
+                &data_dir,
+                b"fixture first\nfixture second\n",
+            )
+            .await;
+            validate_archive_advance(&cancelled_archive, 1).unwrap();
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob" SET "CancellationRequested" = 1
+                   WHERE "Id" = ?"#,
+            )
+            .bind(incremental_job.id)
+            .execute(&pool)
+            .await
+            .expect("cancel running v2 page");
+            let outcome = coordinator
+                .commit_import_page_checkpoint(
+                    &incremental_job,
+                    MediaListDiscoveryV2Page {
+                        complete: true,
+                        next_cursor: None,
+                        total_hint: Some(2),
+                        revision_token: Some("cancelled".to_owned()),
+                        strategy: WireIncrementalStrategy::SkipKnown,
+                        examined_count: 2,
+                        archived_skipped_count: 1,
+                        emitted_count: 1,
+                        records: vec![
+                            serde_json::from_value(serde_json::json!({
+                                "record_type": "list",
+                                "provider_id": "fixture/cancel-between-pages",
+                                "name": "Uncommitted header"
+                            }))
+                            .expect("changed incremental header"),
+                            item_record("second", 1, "Second overview"),
+                        ],
+                    }
+                    .into(),
+                    Some(&cancelled_archive),
+                )
+                .await
+                .expect("commit cancelled v2 page");
+            assert!(matches!(outcome, PageCommitOutcome::Cancelled));
+            cancelled_archive.discard_candidate().await;
+            let checkpoint_after = coordinator
+                .current_import_checkpoint(list_id)
+                .await
+                .unwrap()
+                .expect("retained live checkpoint");
+            assert_eq!(
+                checkpoint_after.relative_path,
+                checkpoint_before.relative_path
+            );
+            assert_eq!(checkpoint_after.sha256, checkpoint_before.sha256);
+            assert_eq!(checkpoint_after.entry_count, checkpoint_before.entry_count);
+        }
+
+        #[tokio::test]
+        async fn cancelling_after_a_v2_page_keeps_unmerged_items_discoverable() {
+            let (temporary, pool, coordinator) = fixture().await;
+            let data_dir = temporary.path().join("private data");
+            let source_url = "https://media.example.test/cancel-between-pages";
+            let list_id = queue_v2(&coordinator, source_url, &data_dir, None).await;
+            let full_job = coordinator.claim_import_job().await.unwrap().unwrap();
+            let full_archive =
+                seal_v2_archive(&coordinator, &full_job, &data_dir, b"fixture first\n").await;
+            commit_complete_v2_page(
+                &coordinator,
+                &full_job,
+                &full_archive,
+                1,
+                1,
+                0,
+                vec![
+                    list_record("fixture/cancel-between-pages"),
+                    item_record("first", 0, "First overview"),
+                ],
+            )
+            .await;
+            let committed_before = coordinator
+                .current_import_checkpoint(list_id)
+                .await
+                .unwrap()
+                .unwrap();
+
+            queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
+            let page_job = coordinator.claim_import_job().await.unwrap().unwrap();
+            let page_archive = seal_v2_archive(
+                &coordinator,
+                &page_job,
+                &data_dir,
+                b"fixture first\nfixture second\n",
+            )
+            .await;
+            validate_archive_advance(&page_archive, 1).unwrap();
+            let outcome = coordinator
+                .commit_import_page_checkpoint(
+                    &page_job,
+                    MediaListDiscoveryV2Page {
+                        complete: false,
+                        next_cursor: Some("page-2".to_owned()),
+                        total_hint: Some(3),
+                        revision_token: Some("generation-2".to_owned()),
+                        strategy: WireIncrementalStrategy::SkipKnown,
+                        examined_count: 2,
+                        archived_skipped_count: 1,
+                        emitted_count: 1,
+                        records: vec![item_record("second", 1, "Second overview")],
+                    }
+                    .into(),
+                    Some(&page_archive),
+                )
+                .await
+                .expect("checkpoint first incremental page");
+            assert!(matches!(
+                outcome,
+                PageCommitOutcome::Committed { complete: false }
+            ));
+            assert_eq!(
+                coordinator
+                    .current_import_checkpoint(list_id)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .relative_path,
+                committed_before.relative_path
+            );
+
+            coordinator
+                .control_import(list_id, AddonMediaListImportAction::Cancel)
+                .await
+                .expect("cancel partial generation");
+            queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
+            let unchanged_job = coordinator.claim_import_job().await.unwrap().unwrap();
+            let resumed_from = coordinator
+                .resume_import_checkpoint(&unchanged_job)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(resumed_from.relative_path, committed_before.relative_path);
+            assert_eq!(resumed_from.entry_count, 1);
+            let unchanged_archive =
+                seal_v2_archive(&coordinator, &unchanged_job, &data_dir, b"fixture first\n").await;
+            commit_complete_v2_page(
+                &coordinator,
+                &unchanged_job,
+                &unchanged_archive,
+                1,
+                1,
+                1,
+                Vec::new(),
+            )
+            .await;
+            let retained_name: String =
+                sqlx::query_scalar(r#"SELECT "Name" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                    .bind(list_id)
+                    .fetch_one(&pool)
+                    .await
+                    .expect("load retained committed header");
+            assert_eq!(retained_name, "Fixture programmes");
+
+            queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
+            let restarted_job = coordinator.claim_import_job().await.unwrap().unwrap();
+            let restarted_archive = seal_v2_archive(
+                &coordinator,
+                &restarted_job,
+                &data_dir,
+                b"fixture first\nfixture second\n",
+            )
+            .await;
+            commit_complete_v2_page(
+                &coordinator,
+                &restarted_job,
+                &restarted_archive,
+                2,
+                2,
+                1,
+                vec![item_record("second", 1, "Second overview")],
+            )
+            .await;
+            let identities: Vec<String> = sqlx::query_scalar(
+                r#"SELECT "ProviderId" FROM "AddonMediaListItem"
+                   WHERE "AddonMediaListId" = ? ORDER BY "Rank""#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .expect("load recovered delta");
+            assert_eq!(identities, vec!["first".to_owned(), "second".to_owned()]);
+        }
+
+        #[tokio::test]
+        async fn failed_archive_cleanup_keeps_its_locator_for_restart_retry() {
+            let (temporary, pool, coordinator) = fixture().await;
+            let data_dir = temporary.path().join("private data");
+            let list_id = queue_v2(
+                &coordinator,
+                "https://media.example.test/archive-cleanup",
+                &data_dir,
+                None,
+            )
+            .await;
+            let relative_path =
+                format!("media-list-checkpoints/list-{list_id}/obsolete/archive.txt");
+            let archive_path = data_dir.join(&relative_path);
+            tokio::fs::create_dir_all(&archive_path)
+                .await
+                .expect("create directory that cannot be removed as a file");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListImportCheckpoint" (
+                       "AddonMediaListId", "RelativePath", "Generation", "Sha256",
+                       "EntryCount", "PromotedAt", "DataRoot", "Committed"
+                   ) VALUES (?, ?, 1, 'obsolete', 1, ?, ?, 0)"#,
+            )
+            .bind(list_id)
+            .bind(&relative_path)
+            .bind(encode_datetime(Utc::now()))
+            .bind(data_dir.to_string_lossy().into_owned())
+            .execute(&pool)
+            .await
+            .expect("persist obsolete archive locator");
+
+            assert!(coordinator
+                .cleanup_one_unreferenced_import_archive(Some(list_id))
+                .await
+                .is_err());
+            let retained: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListImportCheckpoint"
+                   WHERE "AddonMediaListId" = ? AND "Committed" = 0"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count retained cleanup locator");
+            assert_eq!(retained, 1);
+            assert!(coordinator
+                .process_one_import_page()
+                .await
+                .expect("cleanup failure must not block import work"));
+
+            tokio::fs::remove_dir(&archive_path)
+                .await
+                .expect("replace blocking directory");
+            tokio::fs::write(&archive_path, b"fixture obsolete\n")
+                .await
+                .expect("restore removable archive");
+            let restarted = AddonMediaListImportCoordinator::new(pool.clone());
+            assert!(restarted
+                .cleanup_one_unreferenced_import_archive(Some(list_id))
+                .await
+                .expect("retry cleanup after restart"));
+            assert!(!archive_path.exists());
+            let remaining: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListImportCheckpoint"
+                   WHERE "AddonMediaListId" = ? AND "Committed" = 0"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count cleaned archive locators");
+            assert_eq!(remaining, 0);
         }
 
         #[tokio::test]
@@ -4572,6 +6030,306 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn v2_retry_resumes_the_same_checkpointed_generation() {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let list_id = queue(
+                &coordinator,
+                "https://media.example.test/retry-v2",
+                AddonMediaListDetailPolicy::ManualOnly,
+            )
+            .await;
+            let job_id: EntityId = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "AddonMediaListImportJob"
+                   WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("load queued import");
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob"
+                   SET "ImportCapability" = ?, "Mode" = ?, "State" = ?,
+                       "Cursor" = 'page-2', "OverviewComplete" = 1,
+                       "CancellationRequested" = 1, "Diagnostic" = 'promotion failed'
+                   WHERE "Id" = ?"#,
+            )
+            .bind(CAPABILITY_MEDIA_LIST_IMPORT_V2)
+            .bind(encode_enum(AddonMediaListImportMode::Incremental))
+            .bind(encode_enum(AddonMediaListImportState::Cancelled))
+            .bind(job_id)
+            .execute(&pool)
+            .await
+            .expect("checkpoint failed v2 import");
+
+            coordinator
+                .control_import(list_id, AddonMediaListImportAction::Retry)
+                .await
+                .expect("retry checkpointed v2 import");
+
+            let rows = sqlx::query(
+                r#"SELECT "Id", "Generation", "State", "ImportCapability", "Mode", "Cursor",
+                          CAST(CASE WHEN "OverviewComplete" = 1 THEN 1 ELSE 0 END AS SIGNED)
+                              AS "OverviewComplete",
+                          CAST(CASE WHEN "CancellationRequested" = 1 THEN 1 ELSE 0 END AS SIGNED)
+                              AS "CancellationRequested",
+                          "Diagnostic"
+                   FROM "AddonMediaListImportJob" WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .expect("load retried v2 import");
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].try_get::<EntityId, _>("Id").unwrap(), job_id);
+            assert_eq!(rows[0].try_get::<i32, _>("Generation").unwrap(), 1);
+            assert_eq!(
+                rows[0].try_get::<i32, _>("State").unwrap(),
+                encode_enum(AddonMediaListImportState::Queued)
+            );
+            assert_eq!(
+                rows[0].try_get::<String, _>("ImportCapability").unwrap(),
+                CAPABILITY_MEDIA_LIST_IMPORT_V2
+            );
+            assert_eq!(
+                rows[0].try_get::<i32, _>("Mode").unwrap(),
+                encode_enum(AddonMediaListImportMode::Incremental)
+            );
+            assert_eq!(
+                rows[0]
+                    .try_get::<Option<String>, _>("Cursor")
+                    .unwrap()
+                    .as_deref(),
+                Some("page-2")
+            );
+            assert!(decode_bool_column(&rows[0], "OverviewComplete").unwrap());
+            assert!(!decode_bool_column(&rows[0], "CancellationRequested").unwrap());
+            assert!(rows[0]
+                .try_get::<Option<String>, _>("Diagnostic")
+                .unwrap()
+                .is_none());
+        }
+
+        #[tokio::test]
+        async fn v1_retry_resumes_a_partially_finalized_generation() {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let list_id = queue(
+                &coordinator,
+                "https://media.example.test/retry-v1-finalization",
+                AddonMediaListDetailPolicy::ManualOnly,
+            )
+            .await;
+            let job_id: EntityId = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "AddonMediaListImportJob"
+                   WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("load queued import");
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob"
+                   SET "State" = ?, "OverviewComplete" = 1, "FinalizationPhase" = 2,
+                       "Diagnostic" = 'projection failed'
+                   WHERE "Id" = ?"#,
+            )
+            .bind(encode_enum(AddonMediaListImportState::NeedsAttention))
+            .bind(job_id)
+            .execute(&pool)
+            .await
+            .expect("checkpoint failed v1 finalization");
+
+            coordinator
+                .control_import(list_id, AddonMediaListImportAction::Retry)
+                .await
+                .expect("retry partial v1 finalization");
+
+            let rows = sqlx::query(
+                r#"SELECT "Id", "Generation", "State", "FinalizationPhase"
+                   FROM "AddonMediaListImportJob" WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .expect("load retried v1 import");
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].try_get::<EntityId, _>("Id").unwrap(), job_id);
+            assert_eq!(rows[0].try_get::<i32, _>("Generation").unwrap(), 1);
+            assert_eq!(
+                rows[0].try_get::<i32, _>("State").unwrap(),
+                encode_enum(AddonMediaListImportState::Queued)
+            );
+            assert_eq!(rows[0].try_get::<i32, _>("FinalizationPhase").unwrap(), 2);
+        }
+
+        #[tokio::test]
+        async fn finalization_lease_takeover_fences_stale_writes_and_list_mutations() {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let source_url = "https://media.example.test/finalization-fence";
+            let list_id = queue(
+                &coordinator,
+                source_url,
+                AddonMediaListDetailPolicy::ManualOnly,
+            )
+            .await;
+            let stale = coordinator.claim_import_job().await.unwrap().unwrap();
+            let successor_owner = "successor-finalizer";
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob"
+                   SET "OverviewComplete" = 1, "FinalizationPhase" = 0,
+                       "LeaseOwner" = ?, "LeaseExpiresAt" = ?
+                   WHERE "Id" = ?"#,
+            )
+            .bind(successor_owner)
+            .bind(encode_datetime(Utc::now() + Duration::minutes(5)))
+            .bind(stale.id)
+            .execute(&pool)
+            .await
+            .expect("transfer finalization lease");
+
+            let header = serde_json::to_string(&list_record("fixture/finalization-fence"))
+                .expect("serialize finalization header");
+            let item = serde_json::to_string(&item_record("episode:1", 0, "Overview"))
+                .expect("serialize finalization item");
+            let mut enumerated = decode_media_list_output_for_capability(
+                format!("{header}\n{item}\n").as_bytes(),
+                CAPABILITY_MEDIA_LIST_LIST_V5,
+            )
+            .expect("decode finalization snapshot");
+            let list = AddonMediaList {
+                id: list_id,
+                addon_id: "org.example.fixture".to_owned(),
+                source_url: source_url.to_owned(),
+                provider_id: enumerated.provider_id.clone(),
+                name: enumerated.name.clone(),
+                description: enumerated.description.clone(),
+                item_count: 1,
+                refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence::Never,
+                generate_playlist: false,
+                content_kind_override: AddonMediaListContentKind::TelevisionEpisode,
+                presentation_kind: AddonMediaListPresentationKind::RemoteStreams,
+                requested_presentation_kind: AddonMediaListPresentationKind::RemoteStreams,
+                presentation_error: None,
+                chapter_input: String::new(),
+                playlist_id: None,
+                last_update: None,
+                last_match: None,
+                last_error: None,
+            };
+            let stale_write =
+                AddonMediaListRemoteSynchronizer::new(pool.clone(), coordinator.provider.clone())
+                    .persist_import_generation(
+                        stale.id,
+                        &stale.lease_owner,
+                        &list,
+                        &mut enumerated,
+                        false,
+                    )
+                    .await;
+            assert!(matches!(stale_write, Err(RepositoryError::Conflict(_))));
+            let item_count: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count stale items");
+            assert_eq!(item_count, 0);
+
+            let cancel = coordinator
+                .control_import(list_id, AddonMediaListImportAction::Cancel)
+                .await;
+            assert!(matches!(cancel, Err(RepositoryError::Conflict(_))));
+            let requeue = coordinator
+                .queue_import(
+                    "org.example.fixture",
+                    &context(source_url),
+                    None,
+                    AddonMediaListContentKind::TelevisionEpisode,
+                    AddonMediaListDetailPolicy::ManualOnly,
+                    Some(list_id),
+                )
+                .await;
+            assert!(matches!(requeue, Err(RepositoryError::Conflict(_))));
+            let delete = AddonMediaListSynchronizer::new(pool.clone())
+                .delete_list(list_id)
+                .await;
+            assert!(matches!(delete, Err(RepositoryError::Conflict(_))));
+
+            let current_owner: Option<String> = sqlx::query_scalar(
+                r#"SELECT "LeaseOwner" FROM "AddonMediaListImportJob" WHERE "Id" = ?"#,
+            )
+            .bind(stale.id)
+            .fetch_one(&pool)
+            .await
+            .expect("load current finalization owner");
+            assert_eq!(current_owner.as_deref(), Some(successor_owner));
+        }
+
+        #[tokio::test]
+        async fn stale_import_failures_cannot_overwrite_control_or_a_successor_lease() {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let list_id = queue(
+                &coordinator,
+                "https://media.example.test/stale-worker",
+                AddonMediaListDetailPolicy::ManualOnly,
+            )
+            .await;
+            let stale = coordinator.claim_import_job().await.unwrap().unwrap();
+            coordinator
+                .control_import(list_id, AddonMediaListImportAction::Pause)
+                .await
+                .expect("pause claimed import");
+            coordinator
+                .fail_import(&stale, "stale provider failure", true)
+                .await
+                .expect("discard stale failure after pause");
+            let paused: (i32, Option<String>) = sqlx::query_as(
+                r#"SELECT "State", "Diagnostic" FROM "AddonMediaListImportJob"
+                   WHERE "Id" = ?"#,
+            )
+            .bind(stale.id)
+            .fetch_one(&pool)
+            .await
+            .expect("load paused import");
+            assert_eq!(paused.0, encode_enum(AddonMediaListImportState::Paused));
+            assert!(paused.1.is_none());
+
+            coordinator
+                .control_import(list_id, AddonMediaListImportAction::Resume)
+                .await
+                .expect("resume import");
+            let expired = coordinator.claim_import_job().await.unwrap().unwrap();
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob" SET "LeaseExpiresAt" = '2000-01-01T00:00:00Z'
+                   WHERE "Id" = ?"#,
+            )
+            .bind(expired.id)
+            .execute(&pool)
+            .await
+            .expect("expire first claimant");
+            let successor = coordinator.claim_import_job().await.unwrap().unwrap();
+            assert_ne!(expired.lease_owner, successor.lease_owner);
+            coordinator
+                .fail_import(&expired, "late provider failure", false)
+                .await
+                .expect("discard stale failure after reclaim");
+            let current: (i32, Option<String>, Option<String>) = sqlx::query_as(
+                r#"SELECT "State", "LeaseOwner", "Diagnostic"
+                   FROM "AddonMediaListImportJob" WHERE "Id" = ?"#,
+            )
+            .bind(expired.id)
+            .fetch_one(&pool)
+            .await
+            .expect("load successor claim");
+            assert_eq!(
+                current.0,
+                encode_enum(AddonMediaListImportState::Discovering)
+            );
+            assert_eq!(current.1.as_deref(), Some(successor.lease_owner.as_str()));
+            assert!(current.2.is_none());
+        }
+
+        #[tokio::test]
         async fn duplicate_identity_across_overview_pages_is_rejected() {
             let (_temporary, _pool, coordinator) = fixture().await;
             queue(
@@ -4737,7 +6495,7 @@ mod tests {
                 .await
                 .expect_err("repeatedly changing verification pass");
             coordinator
-                .fail_import(third.id, &error.to_string(), false)
+                .fail_import(&third, &error.to_string(), false)
                 .await
                 .expect("checkpoint repeated churn failure");
             let progress = coordinator.progress(list_id).await.unwrap().unwrap();

@@ -1,7 +1,8 @@
 use ersatzrs_domain::{
     AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
-    AddonMediaListDetailState, AddonMediaListImportState, AddonMediaListItemAvailability,
-    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
+    AddonMediaListDetailState, AddonMediaListImportMode, AddonMediaListImportState,
+    AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListItemRole, AddonMediaListPresentationKind,
     AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
     AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
     AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
@@ -591,9 +592,15 @@ pub struct AddonMediaListForm {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListImportProgressRow {
     pub state: AddonMediaListImportState,
+    pub mode: AddonMediaListImportMode,
+    pub strategy: AddonMediaListIncrementalStrategy,
     pub started_at: String,
     pub discovered_count: u64,
+    pub examined_count: u64,
+    pub archived_skipped_count: u64,
+    pub emitted_count: u64,
     pub total_hint: Option<u64>,
+    pub retained_item_count: u64,
     pub detail_total: u64,
     pub detail_complete: u64,
     pub detail_skipped: u64,
@@ -637,9 +644,15 @@ impl From<ersatzrs_core::repositories::AddonMediaListImportProgress>
     fn from(progress: ersatzrs_core::repositories::AddonMediaListImportProgress) -> Self {
         Self {
             state: progress.state,
+            mode: progress.mode,
+            strategy: progress.strategy,
             started_at: progress.started_at,
             discovered_count: progress.discovered_count,
+            examined_count: progress.examined_count,
+            archived_skipped_count: progress.archived_skipped_count,
+            emitted_count: progress.emitted_count,
             total_hint: progress.total_hint,
+            retained_item_count: progress.retained_item_count,
             detail_total: progress.detail_total,
             detail_complete: progress.detail_complete,
             detail_skipped: progress.detail_skipped,

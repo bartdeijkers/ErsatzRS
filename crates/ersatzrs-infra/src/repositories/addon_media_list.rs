@@ -2385,8 +2385,6 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn delete(&self, id: EntityId) -> Result<()> {
-        crate::addon_media_list_sync::ensure_not_publishing(&self.0, id).await?;
-        reconcile_projection(&self.0, id, AddonMediaListPresentationKind::RemoteStreams).await?;
         AddonMediaListSynchronizer::new(self.0.clone())
             .delete_list(id)
             .await
