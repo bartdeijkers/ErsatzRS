@@ -58,8 +58,9 @@ release section when tagging a release.
   and reset/reload workflows explicit, retain redacted causal diagnostics,
   preview source/change/downstream impact, compare/restore bounded revisions,
   reconcile without erasing edits, expose inline metadata and Remote Stream
-  details, add five refresh cadences and observable safe yt-dlp archive early
-  stop, carry inherited/bulk browser-cookie/SponsorBlock/subtitle behavior into
+  details, add fixed and opt-in cadence-aware adaptive refresh plus observable
+  safe yt-dlp archive early stop, carry inherited/bulk
+  browser-cookie/SponsorBlock/subtitle behavior into
   playback under artifact budgets, and run permission-reviewed, validated,
   rollback-safe yt-dlp maintenance at startup and daily.
 

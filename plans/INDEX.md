@@ -153,8 +153,9 @@ changelog, and git history for evidence. The authoritative live state is always
   AMM-J through AMM-N: shared publication/scan ownership, truthful blocked
   actions and causal history, complete reset/reload, non-destructive reconcile,
   source/change/impact previews, bounded revision restore, inline metadata and
-  Remote Stream details, five refresh cadences, observable safe yt-dlp archive
-  early stop and rich headers, inherited/bulk cookies/SponsorBlock/subtitles,
+  Remote Stream details, fixed and cadence-aware adaptive refresh, observable
+  safe yt-dlp archive early stop and rich headers, inherited/bulk
+  cookies/SponsorBlock/subtitles,
   artifact budgets, and validated startup/daily yt-dlp maintenance with
   rollback.
 - `playout-refresh-and-addon-tv-deduplication.md` — corrective Windows-dogfood

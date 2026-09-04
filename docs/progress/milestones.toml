@@ -2473,21 +2473,32 @@ their later owning milestones.
 [[milestone]]
 id         = 'amm-l-01'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
-title      = 'Replace daily auto-refresh with five explicit cadences'
+title      = 'Replace daily auto-refresh with fixed and adaptive cadences'
 status     = 'Not started'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-01']
 acceptance = '''
-Daily, weekly, monthly, yearly, and never are localized select values backed by
-a persisted cadence, next due instant, retry eligibility, and success anchor.
-The migration maps true to daily and false to never. UTC/calendar tests cover
-month end, leap day, DST, manual success, failure, restart, disabled add-ons,
-and repeated hourly ticks without duplicate or catch-up generations.
+Adaptive, daily, weekly, monthly, yearly, and never are localized select values
+backed by a persisted cadence, next due instant, retry eligibility, and success
+anchor. The migration maps true to daily and false to never. Adaptive is
+offered only for a provider-declared bounded source-change probe. It persists a
+bounded history of actual change observations, predicts from their median
+positive interval, probes shortly before the expected update, clamps the next
+probe between one hour and 30 days, and falls back to daily until at least
+three usable intervals exist. Unchanged probes use bounded increasing miss
+intervals and do not launch a full import or alter change history. UTC/calendar
+and virtual-time tests cover month end, leap day, DST, changed/unchanged and
+conditional-validator outcomes, cold start, missed predictions, manual
+success, failure backoff and Retry-After precedence, restart, disabled add-ons,
+shared-limiter jitter, and repeated hourly ticks without duplicate or catch-up
+generations.
 '''
 evidence = '''
 Not started. Both current refresh coordinators query AutoRefresh = 1 against a
-one-day LastUpdate cutoff and the admin renders a daily checkbox.
+one-day LastUpdate cutoff and the admin renders a daily checkbox. No package
+can declare a cheap source-change probe, and no adaptive observation history is
+persisted.
 '''
 
 [[milestone]]

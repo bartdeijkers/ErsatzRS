@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-09-01)
+Accepted (2026-09-01), amended (2026-09-04)
 
 ## Implementation
 
@@ -67,6 +67,7 @@ ErsatzRS will not branch on the yt-dlp add-on identifier. Optional versioned
 capabilities will extend the shared add-on contract for:
 
 - schema-declared list and item options;
+- bounded source-change probes for cadence-aware adaptive scheduling;
 - incremental list discovery with a host-owned provider checkpoint;
 - bounded provider-produced artifacts such as subtitle sidecars; and
 - external-tool maintenance.
@@ -162,11 +163,12 @@ copied per revision. **Compare revisions** is read-only; **Restore revision**
 runs through the same durable publication coordinator and creates a new
 monotonic revision, so restore never rewrites history.
 
-### Replace daily refresh with an explicit cadence
+### Replace daily refresh with an explicit or adaptive cadence
 
-`AutoRefresh` becomes a cadence with exactly these UI values: `daily`,
+`AutoRefresh` becomes a cadence with these UI values: `adaptive`, `daily`,
 `weekly`, `monthly`, `yearly`, and `never`. Existing true values migrate to
-`daily`; false values migrate to `never`.
+`daily`; false values migrate to `never`, so migration never opts a list into
+learned scheduling.
 
 The next due instant is persisted. Daily and weekly add one and seven days.
 Monthly and yearly use calendar arithmetic and clamp invalid month-end or
@@ -174,6 +176,27 @@ leap-day dates to the last valid day. A successful manual or automatic refresh
 becomes the new anchor. Failure uses a separate bounded retry time and does not
 advance the cadence. Startup and the hourly maintenance tick enqueue one due
 generation without catch-up bursts or duplicate claims.
+
+The 2026-09-04 amendment adds `adaptive` as an explicit opt-in for a package
+that declares `media-list.source-check.v1`. The bounded probe reports `changed`
+or `unchanged`, a package-owned opaque validator, and bounded recent
+source-update instants when the source exposes them. An RSS or Atom package
+should use HTTP conditional requests such as ETag or Last-Modified when
+available. The host persists only validated scheduling observations and never
+interprets or logs a source URL, credential, or opaque validator.
+
+Adaptive scheduling uses a bounded rolling history of actual source changes,
+not job successes. It predicts the next change from the median positive
+interval, schedules the probe shortly before that instant, and clamps the
+result to a one-hour minimum and a 30-day maximum. Until the source supplies at
+least three usable intervals, adaptive cadence falls back to daily. An
+unchanged prediction uses bounded increasing miss intervals rather than
+restarting a full import on every maintenance tick; a detected change resets
+the miss count and enqueues the normal durable refresh path. Failure backoff,
+`Retry-After`, the shared provider-host limiter, and positive jitter may delay
+a probe but never create duplicate work. Manual refresh remains available and
+valid change observations from it may improve the model without moving a
+failed or unchanged observation into the change history.
 
 For an incremental-capable provider, the host stages a private `archive.txt`
 copy for each discovery invocation. The yt-dlp package passes that path through

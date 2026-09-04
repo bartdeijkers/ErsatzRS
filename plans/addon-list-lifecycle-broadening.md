@@ -2,7 +2,8 @@
 
 ## Status
 
-Execution plan registered on 2026-09-01 and broadened on 2026-09-02. It
+Execution plan registered on 2026-09-01, broadened on 2026-09-02, and amended
+on 2026-09-04 with opt-in adaptive refresh scheduling. It
 extends Add-on Metadata Management from the corrective AMM-J publication work
 through AMM-K, AMM-L, AMM-M, and AMM-N. ADR 0085 owns the accepted architecture
 and product decisions; this plan owns delivery order and acceptance. None of
@@ -529,6 +530,7 @@ version and digest, validation, rollback, outcome, and next attempt.
 | Capability | Host responsibility | Package responsibility |
 | --- | --- | --- |
 | `media-list.options.v1` | Render, localize, validate, inherit, bulk-preview/undo, persist, snapshot, and pass declared effective values. | Declare list/item scopes and interpret only supported values. |
+| `media-list.source-check.v1` | Schedule and durably deduplicate probes, validate and retain bounded change observations, derive the adaptive next due instant, and enqueue refresh only after change. | Perform a bounded cheap check, use conditional validators where supported, and report changed/unchanged plus bounded source-update instants without exposing secrets. |
 | `media-list.import.v2` | Own generation, strategy counters, checkpoint promotion, delta merge, reconcile tombstones, leases, bounds, and reset. | Produce bounded header/delta/full records, declare safe early-stop strategy, and operate yt-dlp archive arguments. |
 | `media-list.artifacts.v1` | Create scratch root, validate manifest/files, publish atomically, project tracks. | Fetch only requested human subtitles and describe returned artifacts. |
 | `remote-stream.play.v3` | Pass published option snapshot and own cancellation/output limits. | Apply browser cookies and select direct or prepared media behavior. |
@@ -634,12 +636,20 @@ Chromium/Firefox execution remains part of the integrated AMM-N-03 closeout.
 
 ## AMM-L — Cadenced incremental refresh and rich headers
 
-### AMM-L-01 — Five refresh cadences
+### AMM-L-01 — Fixed and adaptive refresh cadences
 
 - Migrate the Boolean, persist next due/retry state, and use one scheduler path
   for legacy and resumable providers.
-- Prove daily/weekly/monthly/yearly/never, calendar clamping, manual refresh,
-  restart, failure backoff, disabled add-on, and duplicate tick behavior.
+- Add opt-in adaptive scheduling for providers that declare a bounded
+  source-change probe. Learn from a bounded history of actual source changes,
+  use conditional RSS/Atom validators when available, predict shortly before
+  the median observed interval, clamp probes between one hour and 30 days, and
+  fall back to daily until at least three usable intervals exist.
+- Prove adaptive/daily/weekly/monthly/yearly/never, calendar clamping, changed
+  versus unchanged probes, cold-start fallback, missed-prediction spacing,
+  manual refresh, restart, failure backoff and Retry-After precedence, disabled
+  add-on, shared-limiter jitter, and duplicate tick behavior. An unchanged
+  probe must not launch a full import or enter the source-change history.
 
 ### AMM-L-02 — Transactional yt-dlp archive
 
@@ -770,7 +780,7 @@ Chromium/Firefox execution remains part of the integrated AMM-N-03 closeout.
 | SponsorBlock checkbox checked by default | `amm-k-01`, `amm-m-01` |
 | Human subtitles using default/fallback languages and channel playback | `amm-m-02`, `amm-n-03` |
 | Rich playlist summary/tags metadata | `amm-l-03` |
-| Daily/weekly/monthly/yearly/never refresh | `amm-l-01` |
+| Adaptive/daily/weekly/monthly/yearly/never refresh | `amm-l-01` |
 | Proper incremental `archive.txt` | `amm-l-02` |
 | Name before Id | `amm-k-02` |
 | Search Remote Stream details | `amm-k-03` |
