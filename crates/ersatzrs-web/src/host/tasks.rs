@@ -7,6 +7,7 @@ use ersatzrs_core::repositories::{
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_domain::{EntityId, ManagedLibraryOperationState};
 use ersatzrs_infra::addon_media_list_import::AddonMediaListImportCoordinator;
+use ersatzrs_infra::addon_media_list_refresh::AddonMediaListRefreshCoordinator;
 use ersatzrs_infra::addon_media_list_source_probe::AddonMediaListSourceProbeCoordinator;
 use ersatzrs_infra::addon_media_list_sync::{
     AddonMediaListMatchReport, AddonMediaListSynchronizer,
@@ -235,6 +236,7 @@ async fn run_addon_media_list_imports(
     shutdown: CancellationToken,
 ) {
     let coordinator = AddonMediaListImportCoordinator::new(pool.clone());
+    let refresh_coordinator = AddonMediaListRefreshCoordinator::new(pool.clone());
     let source_probes = AddonMediaListSourceProbeCoordinator::new(pool.clone());
     let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
     loop {
@@ -243,6 +245,7 @@ async fn run_addon_media_list_imports(
             _ = interval.tick() => {}
         }
         let work = async {
+            let refreshed = refresh_coordinator.process_one(chrono::Utc::now()).await?;
             let probed = source_probes
                 .process_one_source_probe(chrono::Utc::now())
                 .await?;
@@ -269,7 +272,7 @@ async fn run_addon_media_list_imports(
                 }
             }
             Ok::<_, ersatzrs_core::repositories::RepositoryError>(
-                probed || imported || detailed || projected.is_some(),
+                refreshed || probed || imported || detailed || projected.is_some(),
             )
         };
         tokio::select! {
@@ -343,9 +346,9 @@ async fn run_addon_media_list_maintenance(
             tracing::warn!(error = %error, "failed to prune add-on publication revisions");
         }
 
-        let coordinator = AddonMediaListImportCoordinator::new(pool.clone());
-        if let Err(error) = coordinator.refresh_due_auto_lists().await {
-            tracing::warn!(error = %error, "failed to refresh due add-on media lists");
+        let coordinator = AddonMediaListRefreshCoordinator::new(pool.clone());
+        if let Err(error) = coordinator.admit_due(chrono::Utc::now()).await {
+            tracing::warn!(error = %error, "failed to admit due add-on media-list refreshes");
         }
 
         let sync = AddonMediaListSynchronizer::new(pool.clone());

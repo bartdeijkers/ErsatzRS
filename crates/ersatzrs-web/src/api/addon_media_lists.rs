@@ -11,7 +11,7 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListPresentationKind,
-    AddonMediaListRecoveryAction,
+    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -43,14 +43,18 @@ pub struct AddonMediaListAddForm {
     load_item_details: bool,
     #[serde(default)]
     presentation_kind: AddonMediaListPresentationKind,
-    #[serde(default)]
-    auto_refresh: bool,
+    #[serde(default = "default_refresh_cadence")]
+    refresh_cadence: AddonMediaListRefreshCadence,
     #[serde(default)]
     generate_playlist: bool,
 }
 
 const fn default_true() -> bool {
     true
+}
+
+const fn default_refresh_cadence() -> AddonMediaListRefreshCadence {
+    AddonMediaListRefreshCadence::Daily
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,8 +139,7 @@ pub struct AddonMediaListSaveForm {
     id: i64,
     #[serde(default)]
     saved_revision: i32,
-    #[serde(default)]
-    auto_refresh: bool,
+    refresh_cadence: AddonMediaListRefreshCadence,
     #[serde(default)]
     generate_playlist: bool,
     #[serde(default)]
@@ -310,6 +313,7 @@ pub async fn add_addon_media_list_form(
         } else {
             AddonMediaListDetailPolicy::ManualOnly
         },
+        input.refresh_cadence,
     )
     .await;
     match result {
@@ -318,7 +322,7 @@ pub async fn add_addon_media_list_form(
                 .application
                 .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
                     id,
-                    auto_refresh: input.auto_refresh,
+                    refresh_cadence: input.refresh_cadence,
                     generate_playlist: input.generate_playlist,
                     content_kind_override: presentation_content_kind(input.presentation_kind),
                     chapter_input: input.chapter_input,
@@ -390,7 +394,10 @@ pub async fn save_addon_media_list_form(
         addon_id: current.addon_id,
         source_url: current.source_url,
         folder_name: current.folder_name,
-        auto_refresh: input.auto_refresh,
+        refresh_cadence: input.refresh_cadence,
+        last_refresh_succeeded_at: current.last_refresh_succeeded_at,
+        next_refresh_at: current.next_refresh_at,
+        refresh_retry_at: current.refresh_retry_at,
         generate_playlist: input.generate_playlist,
         content_kind_override: presentation_content_kind(input.presentation_kind),
         legacy_chapter_input: current.legacy_chapter_input,
@@ -479,7 +486,7 @@ pub async fn publish_addon_media_list_form(
     } else {
         AddonMediaListDetailPolicy::ManualOnly
     };
-    if current.auto_refresh != input.auto_refresh
+    if current.refresh_cadence != input.refresh_cadence
         || current.generate_playlist != input.generate_playlist
         || current.requested_presentation_kind != input.presentation_kind
         || current.detail_import_policy != submitted_policy
@@ -930,11 +937,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn save_form_defaults_missing_checkboxes_to_false() {
+    fn save_form_requires_cadence_and_defaults_missing_checkboxes_to_false() {
         let body = Bytes::from_static(b"id=42&presentation_kind=television_show");
+        assert!(serde_urlencoded::from_bytes::<AddonMediaListSaveForm>(&body).is_err());
+        let body =
+            Bytes::from_static(b"id=42&presentation_kind=television_show&refresh_cadence=never");
         let parsed: AddonMediaListSaveForm = serde_urlencoded::from_bytes(&body).unwrap();
         assert_eq!(parsed.id, 42);
-        assert!(!parsed.auto_refresh);
+        assert_eq!(parsed.refresh_cadence, AddonMediaListRefreshCadence::Never);
         assert!(!parsed.generate_playlist);
         assert!(!parsed.load_item_details);
         assert_eq!(
@@ -967,7 +977,7 @@ mod tests {
     #[test]
     fn save_form_rebuilds_visible_metadata_without_dropping_unedited_fields() {
         let body = Bytes::from_static(
-            b"id=42&presentation_kind=other_videos&metadata_etag=revision&metadata_title=Programme&metadata_original_title=Original&metadata_plot=Summary&metadata_year=2026&metadata_genres=Archive%2C+News&metadata_tags=featured%0Alocal&metadata_people=Presenter+%7C+Host&metadata_poster=https%3A%2F%2Fexample.invalid%2Fposter.jpg",
+            b"id=42&presentation_kind=other_videos&refresh_cadence=daily&metadata_etag=revision&metadata_title=Programme&metadata_original_title=Original&metadata_plot=Summary&metadata_year=2026&metadata_genres=Archive%2C+News&metadata_tags=featured%0Alocal&metadata_people=Presenter+%7C+Host&metadata_poster=https%3A%2F%2Fexample.invalid%2Fposter.jpg",
         );
         let parsed: AddonMediaListSaveForm = serde_urlencoded::from_bytes(&body).unwrap();
         let original = AddonMediaListNfoMetadata {
@@ -1075,12 +1085,15 @@ mod tests {
     #[test]
     fn import_form_carries_every_visible_source_setting() {
         let body = Bytes::from_static(
-            b"addon_id=org.example.list&source_url=https%3A%2F%2Fexample.invalid%2Flist&folder_name=Watchlist&presentation_kind=movies&auto_refresh=true&generate_playlist=true&load_item_details=true",
+            b"addon_id=org.example.list&source_url=https%3A%2F%2Fexample.invalid%2Flist&folder_name=Watchlist&presentation_kind=movies&refresh_cadence=monthly&generate_playlist=true&load_item_details=true",
         );
         let parsed: AddonMediaListAddForm = serde_urlencoded::from_bytes(&body).unwrap();
         assert_eq!(parsed.addon_id, "org.example.list");
         assert_eq!(parsed.folder_name, "Watchlist");
-        assert!(parsed.auto_refresh);
+        assert_eq!(
+            parsed.refresh_cadence,
+            AddonMediaListRefreshCadence::Monthly
+        );
         assert!(parsed.generate_playlist);
         assert!(parsed.load_item_details);
         assert_eq!(

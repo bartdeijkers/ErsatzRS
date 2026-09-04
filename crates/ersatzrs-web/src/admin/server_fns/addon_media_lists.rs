@@ -6,7 +6,8 @@ use ersatzrs_domain::{
     AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
     AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
     AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
-    AddonMediaListRecoveryAction, AddonMediaListReviewState, RemoteStreamLiveness,
+    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence, AddonMediaListReviewState,
+    RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -546,7 +547,10 @@ pub struct AddonMediaListRow {
     pub name: String,
     pub item_count: i32,
     pub match_count: i32,
-    pub auto_refresh: bool,
+    pub refresh_cadence: AddonMediaListRefreshCadence,
+    pub last_refresh_succeeded_at: Option<String>,
+    pub next_refresh_at: Option<String>,
+    pub refresh_retry_at: Option<String>,
     pub generate_playlist: bool,
     pub presentation_kind: AddonMediaListPresentationKind,
     pub requested_presentation_kind: AddonMediaListPresentationKind,
@@ -566,7 +570,10 @@ pub struct AddonMediaListForm {
     pub addon_id: String,
     pub source_url: String,
     pub folder_name: String,
-    pub auto_refresh: bool,
+    pub refresh_cadence: AddonMediaListRefreshCadence,
+    pub last_refresh_succeeded_at: Option<String>,
+    pub next_refresh_at: Option<String>,
+    pub refresh_retry_at: Option<String>,
     pub generate_playlist: bool,
     pub content_kind_override: AddonMediaListContentKind,
     pub presentation_kind: AddonMediaListPresentationKind,
@@ -649,6 +656,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListImportProgress>
 pub struct AddonMediaListProviderRow {
     pub addon_id: String,
     pub name: String,
+    pub supports_adaptive_refresh: bool,
 }
 
 // These independent transport projections mirror the admin read model; they
@@ -1087,6 +1095,7 @@ pub async fn list_addon_media_list_providers(
             })
         })
         .map(|item| AddonMediaListProviderRow {
+            supports_adaptive_refresh: item.manifest.has_media_list_source_check_capability(),
             addon_id: item.addon_id,
             name: item
                 .manifest
@@ -1178,7 +1187,10 @@ pub async fn list_addon_media_lists_with_state(
                 name: row.name,
                 item_count: row.item_count,
                 match_count: row.match_count,
-                auto_refresh: row.auto_refresh,
+                refresh_cadence: row.refresh_cadence,
+                last_refresh_succeeded_at: row.last_refresh_succeeded_at,
+                next_refresh_at: row.next_refresh_at,
+                refresh_retry_at: row.refresh_retry_at,
                 generate_playlist: row.generate_playlist,
                 presentation_kind: row.presentation_kind,
                 requested_presentation_kind: row.requested_presentation_kind,
@@ -1226,7 +1238,10 @@ pub async fn get_addon_media_list_form(
                 addon_id: form.addon_id,
                 source_url: form.source_url,
                 folder_name: form.folder_name,
-                auto_refresh: form.auto_refresh,
+                refresh_cadence: form.refresh_cadence,
+                last_refresh_succeeded_at: form.last_refresh_succeeded_at,
+                next_refresh_at: form.next_refresh_at,
+                refresh_retry_at: form.refresh_retry_at,
                 generate_playlist: form.generate_playlist,
                 content_kind_override: form.content_kind_override,
                 presentation_kind: form.presentation_kind,
@@ -1910,11 +1925,12 @@ pub async fn add_addon_media_list(
     content_kind_override: AddonMediaListContentKind,
     chapter_input: String,
     load_item_details: bool,
+    refresh_cadence: AddonMediaListRefreshCadence,
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    add_addon_media_list_with_state(
+    let id = add_addon_media_list_with_state(
         &state,
         addon_id,
         source_url,
@@ -1926,9 +1942,30 @@ pub async fn add_addon_media_list(
         } else {
             AddonMediaListDetailPolicy::ManualOnly
         },
+        refresh_cadence,
     )
     .await
-    .map_err(ServerFnError::new)
+    .map_err(ServerFnError::new)?;
+    let mut form = state
+        .application
+        .get_addon_media_list(id)
+        .await
+        .map_err(ServerFnError::new)?
+        .ok_or_else(|| ServerFnError::new("imported add-on list was not found"))?;
+    form.refresh_cadence = refresh_cadence;
+    state
+        .application
+        .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
+            id,
+            refresh_cadence: form.refresh_cadence,
+            generate_playlist: form.generate_playlist,
+            content_kind_override: form.content_kind_override,
+            chapter_input: form.legacy_chapter_input,
+            detail_import_policy: form.detail_import_policy,
+        })
+        .await
+        .map_err(ServerFnError::new)?;
+    Ok(id)
 }
 
 #[server]
@@ -2180,6 +2217,7 @@ async fn resolve_media_list_addon(
 }
 
 #[cfg(feature = "ssr")]
+#[allow(clippy::too_many_arguments)] // Mirrors the add form's provider and persisted settings.
 pub async fn add_addon_media_list_with_state(
     state: &crate::host::state::AppState,
     addon_id: String,
@@ -2188,6 +2226,7 @@ pub async fn add_addon_media_list_with_state(
     content_kind_override: AddonMediaListContentKind,
     chapter_input: String,
     detail_import_policy: AddonMediaListDetailPolicy,
+    refresh_cadence: AddonMediaListRefreshCadence,
 ) -> ersatzrs_app::Result<i64> {
     // An omitted choice is resolved from the URL rather than rejected, so the
     // operator only has to name an add-on when nothing claims the host.
@@ -2196,6 +2235,31 @@ pub async fn add_addon_media_list_with_state(
     } else {
         addon_id
     };
+    if refresh_cadence == AddonMediaListRefreshCadence::Adaptive {
+        let supports_adaptive = state
+            .application
+            .addon_overview()
+            .await
+            .map_err(|error| ersatzrs_app::ApplicationError::Unavailable {
+                operation: "validate adaptive add-on media-list refresh",
+                message: error.to_string(),
+            })?
+            .installed
+            .into_iter()
+            .any(|item| {
+                item.enabled
+                    && item.addon_id == addon_id
+                    && item.manifest.has_media_list_source_check_capability()
+            });
+        if !supports_adaptive {
+            return Err(ersatzrs_app::ApplicationError::Validation {
+                field: "refresh_cadence",
+                message:
+                    "Adaptive refresh requires an enabled add-on with media-list.source-check.v1"
+                        .to_owned(),
+            });
+        }
+    }
     let logged_addon_id = addon_id.clone();
     let list_id = state
         .application
@@ -2261,7 +2325,7 @@ pub async fn update_addon_media_list_with_state(
         .application
         .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
             id: form.id,
-            auto_refresh: form.auto_refresh,
+            refresh_cadence: form.refresh_cadence,
             generate_playlist: form.generate_playlist,
             content_kind_override: form.content_kind_override,
             chapter_input: form.legacy_chapter_input,

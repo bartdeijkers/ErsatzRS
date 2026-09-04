@@ -3,7 +3,7 @@ use ersatzrs_domain::{
     AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
     AddonMediaListDetailState, AddonMediaListImportState, AddonMediaListItemAvailability,
     AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListPublicationOutcome,
-    AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
+    AddonMediaListRefreshCadence, AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -27,12 +27,18 @@ pub struct AddonMediaListAdminRow {
     pub item_count: i32,
     /// Number of items matched to local media.
     pub match_count: i32,
-    /// Whether daily provider refresh is enabled.
-    pub auto_refresh: bool,
+    /// Provider refresh policy selected by the operator.
+    pub refresh_cadence: AddonMediaListRefreshCadence,
     /// Whether a host-owned generated playlist is maintained.
     pub generate_playlist: bool,
     /// Last successful provider refresh timestamp.
     pub last_update: Option<String>,
+    /// Persisted cadence anchor advanced only by a successful source refresh.
+    pub last_refresh_succeeded_at: Option<String>,
+    /// Next fixed refresh or adaptive source check.
+    pub next_refresh_at: Option<String>,
+    /// Retry eligibility after the latest failed refresh or source check.
+    pub refresh_retry_at: Option<String>,
     /// Last successful local matching timestamp.
     pub last_match: Option<String>,
     /// Last provider refresh failure, if any.
@@ -92,8 +98,14 @@ pub struct AddonMediaListAdminForm {
     pub source_url: String,
     /// Safe host-managed library folder below the configured add-on root.
     pub folder_name: String,
-    /// Whether daily provider refresh is enabled.
-    pub auto_refresh: bool,
+    /// Provider refresh policy selected by the operator.
+    pub refresh_cadence: AddonMediaListRefreshCadence,
+    /// Persisted cadence anchor advanced only by a successful source refresh.
+    pub last_refresh_succeeded_at: Option<String>,
+    /// Next fixed refresh or adaptive source check.
+    pub next_refresh_at: Option<String>,
+    /// Retry eligibility after the latest failed refresh or source check.
+    pub refresh_retry_at: Option<String>,
     /// Whether a host-owned generated playlist is maintained.
     pub generate_playlist: bool,
     /// Optional list-wide content classification; `Auto` keeps each
@@ -880,11 +892,11 @@ pub trait AddonMediaListRepository: Send + Sync {
     /// Item identity is provider-scoped, so items enumerated by the new add-on
     /// replace the previous ones rather than being migrated.
     async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()>;
-    /// Update refresh and generated-playlist settings.
+    /// Update refresh cadence and generated-playlist settings.
     async fn update_settings(
         &self,
         id: EntityId,
-        auto_refresh: bool,
+        refresh_cadence: AddonMediaListRefreshCadence,
         generate_playlist: bool,
         content_kind_override: AddonMediaListContentKind,
         chapter_input: &str,

@@ -2,7 +2,10 @@ use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckError, HealthCheckResult,
     HealthCheckStatus, Pool, Result, Row,
 };
-use ersatzrs_domain::AddonMediaListPublicationEventKind;
+use ersatzrs_addon_contract::{AddonManifest, CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1};
+use ersatzrs_domain::{
+    AddonMediaListPublicationEventKind, AddonMediaListRefreshCadence, AddonMediaListRefreshState,
+};
 
 const STUCK_IMPORT_MINUTES: i64 = 15;
 
@@ -32,6 +35,9 @@ impl HealthCheck for AddonMediaListHealthCheck {
         if let Some(result) = configured.failure_result(self.title(), lifecycle_foundation) {
             return Ok(result);
         }
+        if let Some(result) = configured.warning_result(self.title(), lifecycle_foundation) {
+            return Ok(result);
+        }
         configured_list_status_result(
             &self.pool,
             &rows,
@@ -47,11 +53,17 @@ async fn addon_media_list_health_rows(pool: &Pool<Db>) -> Result<Vec<crate::db::
     sqlx::query(
         r#"SELECT "list"."Id", "list"."Name", "list"."LastError", "list"."PresentationError",
                   "list"."ReviewState", "list"."ReviewError", "list"."PublicationStartedAt",
-                  "addon"."Enabled",
+                  "list"."RefreshCadence",
+                  "addon"."Enabled" AS "AddonEnabled",
+                  "addon"."ManifestJson" AS "AddonManifestJson",
+                  "refresh"."State" AS "RefreshState",
+                  "refresh"."DiagnosticCode" AS "RefreshDiagnosticCode",
                   "source"."MediaSourceId", "managed"."LibraryId", "managed"."ManifestPath"
            FROM "AddonMediaList" AS "list"
-           JOIN "AddonInstallation" AS "addon"
+           LEFT JOIN "AddonInstallation" AS "addon"
              ON "addon"."AddonId" = "list"."AddonId"
+           LEFT JOIN "AddonMediaListRefreshState" AS "refresh"
+             ON "refresh"."AddonMediaListId" = "list"."Id"
            LEFT JOIN "AddonMediaSource" AS "source"
              ON "source"."AddonId" = "list"."AddonId"
            LEFT JOIN "AddonMediaListLibrary" AS "managed"
@@ -65,6 +77,7 @@ async fn addon_media_list_health_rows(pool: &Pool<Db>) -> Result<Vec<crate::db::
 
 struct ConfiguredListHealth {
     failures: Vec<String>,
+    warnings: Vec<String>,
     import_failure_link: Option<String>,
     coordinator_activity: Vec<String>,
 }
@@ -93,6 +106,26 @@ impl ConfiguredListHealth {
             )
         })
     }
+
+    fn warning_result(
+        &self,
+        title: &'static str,
+        lifecycle_foundation: LifecycleFoundationHealth,
+    ) -> Option<HealthCheckResult> {
+        (!self.warnings.is_empty()).then(|| {
+            HealthCheckResult::new(
+                title,
+                HealthCheckStatus::Warning,
+                format!(
+                    "{}; {}",
+                    self.warnings.join("; "),
+                    lifecycle_foundation.summary()
+                ),
+                "Review the affected add-on or choose another refresh cadence",
+            )
+            .with_link("/media/addon-lists")
+        })
+    }
 }
 
 async fn configured_list_health(
@@ -100,6 +133,8 @@ async fn configured_list_health(
     rows: &[crate::db::DbRow],
     lifecycle_foundation: LifecycleFoundationHealth,
 ) -> Result<ConfiguredListHealth> {
+    let cadence_warnings = cadence_warnings(rows);
+    let refresh_terminal_failures = refresh_terminal_failures(rows);
     let storage_failures = rows
         .iter()
         .filter_map(|row| {
@@ -153,6 +188,7 @@ async fn configured_list_health(
     let cooldown_failures = cooldown_failures(pool).await?;
     let failures = storage_failures
         .into_iter()
+        .chain(refresh_terminal_failures)
         .chain(refresh_failures)
         .chain(presentation_failures)
         .chain(publication_failures)
@@ -168,9 +204,84 @@ async fn configured_list_health(
         .collect();
     Ok(ConfiguredListHealth {
         failures,
+        warnings: cadence_warnings,
         import_failure_link,
         coordinator_activity,
     })
+}
+
+fn cadence_warnings(rows: &[crate::db::DbRow]) -> Vec<String> {
+    rows.iter()
+        .filter_map(|row| {
+            let name = row
+                .try_get::<String, _>("Name")
+                .unwrap_or_else(|_| "List".to_owned());
+            let adaptive = row
+                .try_get::<i64, _>("RefreshCadence")
+                .is_ok_and(|cadence| {
+                    cadence
+                        == i64::from(crate::repositories::common::encode_enum(
+                            AddonMediaListRefreshCadence::Adaptive,
+                        ))
+                });
+            if adaptive {
+                let enabled = row
+                    .try_get::<Option<i64>, _>("AddonEnabled")
+                    .ok()
+                    .flatten();
+                if enabled.is_none() {
+                    return Some(format!("{name}: adaptive refresh add-on is missing"));
+                }
+                if enabled == Some(0) {
+                    return Some(format!("{name}: adaptive refresh add-on is disabled"));
+                }
+                let supports_source_check = row
+                    .try_get::<Option<String>, _>("AddonManifestJson")
+                    .ok()
+                    .flatten()
+                    .and_then(|json| serde_json::from_str::<AddonManifest>(&json).ok())
+                    .is_some_and(|manifest| {
+                        manifest.has_capability(CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1)
+                    });
+                if !supports_source_check {
+                    return Some(format!(
+                        "{name}: adaptive refresh add-on no longer declares {CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1}"
+                    ));
+                }
+            }
+            None
+        })
+        .take(5)
+        .collect()
+}
+
+fn refresh_terminal_failures(rows: &[crate::db::DbRow]) -> Vec<String> {
+    rows.iter()
+        .filter_map(|row| {
+            let capability_unavailable = row
+                .try_get::<Option<String>, _>("RefreshDiagnosticCode")
+                .ok()
+                .flatten()
+                .is_some_and(|code| code == "capability-unavailable");
+            let terminal = row
+                .try_get::<Option<i64>, _>("RefreshState")
+                .ok()
+                .flatten()
+                .is_some_and(|state| {
+                    state
+                        == i64::from(crate::repositories::common::encode_enum(
+                            AddonMediaListRefreshState::Failed,
+                        ))
+                });
+            (terminal && !capability_unavailable).then(|| {
+                let name = row
+                    .try_get::<String, _>("Name")
+                    .unwrap_or_else(|_| "List".to_owned());
+                format!("{name}: automatic refresh stopped after a terminal failure")
+            })
+        })
+        .take(5)
+        .collect()
 }
 
 async fn configured_list_status_result(
@@ -183,8 +294,8 @@ async fn configured_list_status_result(
     let disabled = rows
         .iter()
         .filter(|row| {
-            row.try_get::<i64, _>("Enabled")
-                .is_ok_and(|value| value == 0)
+            row.try_get::<Option<i64>, _>("AddonEnabled")
+                .is_ok_and(|value| value == Some(0))
         })
         .count();
     if disabled > 0 {
@@ -1260,11 +1371,17 @@ mod tests {
             .expect("pool");
         sqlx::raw_sql(
             r#"
-            CREATE TABLE "AddonInstallation" ("AddonId" TEXT PRIMARY KEY, "Enabled" INTEGER);
+            CREATE TABLE "AddonInstallation" (
+                "AddonId" TEXT PRIMARY KEY,
+                "Enabled" INTEGER,
+                "ManifestJson" TEXT NULL
+            );
             CREATE TABLE "AddonMediaList" (
                 "Id" INTEGER PRIMARY KEY,
                 "AddonId" TEXT NOT NULL,
                 "Name" TEXT NOT NULL,
+                "RefreshCadence" INTEGER NOT NULL DEFAULT 4,
+                "NextRefreshAt" TEXT NULL,
                 "LastError" TEXT NULL,
                 "PresentationError" TEXT NULL,
                 "ReviewState" INTEGER NOT NULL DEFAULT 2,
@@ -1435,6 +1552,20 @@ mod tests {
                 "ProviderHost" TEXT PRIMARY KEY,
                 "SampledDelaySeconds" INTEGER NOT NULL
             );
+            CREATE TABLE "AddonMediaListRefreshState" (
+                "AddonMediaListId" INTEGER PRIMARY KEY,
+                "Generation" INTEGER NOT NULL DEFAULT 0,
+                "State" INTEGER NOT NULL DEFAULT 0,
+                "Validator" TEXT NULL,
+                "MissCount" INTEGER NOT NULL DEFAULT 0,
+                "AttemptCount" INTEGER NOT NULL DEFAULT 0,
+                "LeaseOwner" TEXT NULL,
+                "LeaseExpiresAt" TEXT NULL,
+                "NextEligibleAt" TEXT NULL,
+                "LastOutcome" INTEGER NULL,
+                "DiagnosticCode" TEXT NULL,
+                "UpdatedAt" TEXT NOT NULL DEFAULT '2026-09-04T00:00:00Z'
+            );
             CREATE TABLE "ConfigElement" (
                 "Key" TEXT PRIMARY KEY,
                 "Value" TEXT NOT NULL
@@ -1446,6 +1577,58 @@ mod tests {
         .await
         .expect("fixture");
         pool
+    }
+
+    fn manifest_with_source_check(enabled: bool) -> String {
+        let capabilities = if enabled {
+            serde_json::json!([{"id": CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1}])
+        } else {
+            serde_json::json!([])
+        };
+        serde_json::json!({
+            "manifest_version": 1,
+            "id": "org.example.list",
+            "version": "1.0.0",
+            "name": {"en-US": "Fixture"},
+            "summary": {"en-US": "Fixture"},
+            "license": "MIT",
+            "source_url": "https://example.test/source",
+            "host_version": "*",
+            "capabilities": capabilities,
+            "entrypoints": {},
+            "permissions": {},
+            "settings": [],
+            "panels": []
+        })
+        .to_string()
+    }
+
+    async fn insert_adaptive_list(pool: &Pool<Db>, addon_id: &str) {
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                    "Id", "AddonId", "Name", "RefreshCadence", "ProviderMetadataJson"
+               ) VALUES (1, ?, 'Adaptive fixture', ?, '{"title":"Adaptive fixture"}')"#,
+        )
+        .bind(addon_id)
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListRefreshCadence::Adaptive,
+        ))
+        .execute(pool)
+        .await
+        .expect("adaptive list");
+    }
+
+    async fn set_fixture_addon(pool: &Pool<Db>, enabled: bool, source_check: bool) {
+        sqlx::query(
+            r#"UPDATE "AddonInstallation"
+                  SET "Enabled" = ?, "ManifestJson" = ?
+                WHERE "AddonId" = 'org.example.list'"#,
+        )
+        .bind(enabled)
+        .bind(manifest_with_source_check(source_check))
+        .execute(pool)
+        .await
+        .expect("fixture add-on");
     }
 
     async fn check_tool_without_lists(
@@ -1558,6 +1741,163 @@ mod tests {
             result.link.as_ref().map(|link| link.link.as_str()),
             Some("/media/addon-lists")
         );
+    }
+
+    #[tokio::test]
+    async fn reports_missing_addon_for_adaptive_refresh() {
+        let pool = fixture_pool().await;
+        insert_adaptive_list(&pool, "org.example.missing").await;
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result
+            .message
+            .contains("Adaptive fixture: adaptive refresh add-on is missing"));
+    }
+
+    #[tokio::test]
+    async fn reports_disabled_addon_for_adaptive_refresh() {
+        let pool = fixture_pool().await;
+        set_fixture_addon(&pool, false, true).await;
+        insert_adaptive_list(&pool, "org.example.list").await;
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result
+            .message
+            .contains("Adaptive fixture: adaptive refresh add-on is disabled"));
+    }
+
+    #[tokio::test]
+    async fn reports_lost_source_check_capability_for_adaptive_refresh() {
+        let pool = fixture_pool().await;
+        set_fixture_addon(&pool, true, false).await;
+        insert_adaptive_list(&pool, "org.example.list").await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRefreshState" (
+                    "AddonMediaListId", "State", "DiagnosticCode"
+               ) VALUES (1, ?, 'capability-unavailable')"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListRefreshState::Failed,
+        ))
+        .execute(&pool)
+        .await
+        .expect("persist lost-capability outcome");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert!(result.message.contains(
+            "Adaptive fixture: adaptive refresh add-on no longer declares media-list.source-check.v1"
+        ));
+    }
+
+    #[tokio::test]
+    async fn reports_terminal_source_check_failure_without_provider_diagnostics() {
+        let pool = fixture_pool().await;
+        set_fixture_addon(&pool, true, true).await;
+        insert_adaptive_list(&pool, "org.example.list").await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRefreshState" (
+                    "AddonMediaListId", "State", "LastOutcome", "DiagnosticCode"
+               ) VALUES (
+                    1, ?, 3,
+                    'https://provider.invalid/list?token=secret /private/list cookie=session-secret'
+               )"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListRefreshState::Failed,
+        ))
+        .execute(&pool)
+        .await
+        .expect("terminal source check");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result
+            .message
+            .contains("Adaptive fixture: automatic refresh stopped after a terminal failure"));
+        for forbidden in [
+            "provider.invalid",
+            "token=secret",
+            "/private/list",
+            "cookie=session-secret",
+        ] {
+            assert!(!result.message.contains(forbidden));
+        }
+    }
+
+    #[tokio::test]
+    async fn reports_terminal_fixed_cadence_failure() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" ("Id", "AddonId", "Name", "RefreshCadence")
+               VALUES (1, 'org.example.list', 'Weekly fixture', ?)"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListRefreshCadence::Weekly,
+        ))
+        .execute(&pool)
+        .await
+        .expect("weekly list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRefreshState" ("AddonMediaListId", "State")
+               VALUES (1, ?)"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            AddonMediaListRefreshState::Failed,
+        ))
+        .execute(&pool)
+        .await
+        .expect("terminal refresh state");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result
+            .message
+            .contains("Weekly fixture: automatic refresh stopped after a terminal failure"));
+    }
+
+    #[tokio::test]
+    async fn does_not_treat_an_overdue_adaptive_probe_as_a_health_failure() {
+        let pool = fixture_pool().await;
+        set_fixture_addon(&pool, true, true).await;
+        insert_adaptive_list(&pool, "org.example.list").await;
+        sqlx::query(
+            r#"UPDATE "AddonMediaList"
+                  SET "NextRefreshAt" = '2000-01-01T00:00:00Z'
+                WHERE "Id" = 1"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("overdue adaptive list");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+
+        assert_eq!(result.status, HealthCheckStatus::Pass, "{}", result.message);
     }
 
     #[tokio::test]

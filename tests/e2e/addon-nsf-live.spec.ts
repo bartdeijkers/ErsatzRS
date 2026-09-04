@@ -445,9 +445,7 @@ test.describe('AMM-G07 NSF live acceptance', () => {
     await page.getByLabel('Add-on', { exact: true }).selectOption(ADDON_ID);
     await page.getByLabel('Collection Type', { exact: true }).selectOption('remote_streams');
     await page.getByLabel('Storage folder').fill('nsf-live');
-    await page
-      .getByRole('checkbox', { name: 'Update list from the provider once each day' })
-      .uncheck();
+    await page.getByRole('combobox', { name: 'Automatic Refresh' }).selectOption('never');
     await page
       .getByRole('checkbox', { name: 'Create playlist in original order' })
       .check();

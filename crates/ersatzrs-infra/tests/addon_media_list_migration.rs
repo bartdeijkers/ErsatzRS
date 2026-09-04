@@ -62,7 +62,7 @@ async fn seed_legacy_lifecycle_rows(pool: &SqlitePool) {
 async fn assert_lifecycle_foundation_backfill(pool: &SqlitePool) {
     let lists = sqlx::query(
         r#"SELECT "Id", "RefreshCadence", "RefreshPublicationPolicy",
-                  "LastRefreshSucceededAt", "DraftOptionSchemaId",
+                  "LastRefreshSucceededAt", "NextRefreshAt", "DraftOptionSchemaId",
                   "DraftOptionValuesJson", "ProcessedArtifactByteLimit"
            FROM "AddonMediaList" ORDER BY "Id""#,
     )
@@ -76,6 +76,11 @@ async fn assert_lifecycle_foundation_backfill(pool: &SqlitePool) {
         lists[0].get::<String, _>("LastRefreshSucceededAt"),
         "2026-09-03T12:00:00Z"
     );
+    assert_eq!(
+        lists[0].get::<String, _>("NextRefreshAt"),
+        "2026-09-04 12:00:00"
+    );
+    assert!(lists[1].get::<Option<String>, _>("NextRefreshAt").is_none());
     assert!(lists[0]
         .get::<Option<i64>, _>("DraftOptionSchemaId")
         .is_none());
@@ -129,6 +134,110 @@ async fn assert_lifecycle_foundation_backfill(pool: &SqlitePool) {
     .await
     .unwrap();
     assert_eq!(fabricated_history_count, 0);
+}
+
+#[tokio::test]
+async fn adaptive_refresh_migration_adds_bounded_cascade_owned_state() {
+    const ADAPTIVE_REFRESH_VERSION: i64 = 202_609_041_900;
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("open adaptive refresh migration database");
+    pool.execute("PRAGMA foreign_keys = ON").await.unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    let previous = sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version < ADAPTIVE_REFRESH_VERSION)
+            .cloned()
+            .collect(),
+    );
+    previous
+        .run(&pool)
+        .await
+        .expect("migrate pre-adaptive schema");
+    seed_legacy_lifecycle_rows(&pool).await;
+
+    migrations
+        .run(&pool)
+        .await
+        .expect("apply adaptive refresh migration");
+
+    let fabricated_state: i64 = sqlx::query_scalar(
+        r#"SELECT
+               (SELECT COUNT(*) FROM "AddonMediaListRefreshState") +
+               (SELECT COUNT(*) FROM "AddonMediaListSourceChangeObservation")"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(fabricated_state, 0);
+
+    sqlx::raw_sql(
+        r#"
+        UPDATE "AddonMediaList" SET "RefreshCadence" = 5 WHERE "Id" = 1;
+        INSERT INTO "AddonMediaListRefreshState" (
+            "AddonMediaListId", "Generation", "State", "Validator",
+            "MissCount", "AttemptCount", "NextEligibleAt", "LastOutcome",
+            "UpdatedAt"
+        ) VALUES (
+            1, 3, 3, 'opaque-validator', 2, 1,
+            '2026-09-04T12:00:00Z', 2, '2026-09-04T11:00:00Z'
+        );
+        INSERT INTO "AddonMediaListSourceChangeObservation" (
+            "AddonMediaListId", "SourceUpdatedAt"
+        ) VALUES
+            (1, '2026-09-02T12:00:00Z'),
+            (1, '2026-09-03T12:00:00Z');
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("persist adaptive refresh state");
+
+    let state = sqlx::query(
+        r#"SELECT "list"."RefreshCadence", "refresh"."Generation",
+                  "refresh"."State", "refresh"."MissCount",
+                  "refresh"."AttemptCount", "refresh"."LastOutcome"
+           FROM "AddonMediaList" AS "list"
+           JOIN "AddonMediaListRefreshState" AS "refresh"
+             ON "refresh"."AddonMediaListId" = "list"."Id"
+           WHERE "list"."Id" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(state.get::<i32, _>("RefreshCadence"), 5);
+    assert_eq!(state.get::<i64, _>("Generation"), 3);
+    assert_eq!(state.get::<i32, _>("State"), 3);
+    assert_eq!(state.get::<i64, _>("MissCount"), 2);
+    assert_eq!(state.get::<i64, _>("AttemptCount"), 1);
+    assert_eq!(state.get::<i32, _>("LastOutcome"), 2);
+
+    let negative_attempt = sqlx::query(
+        r#"INSERT INTO "AddonMediaListRefreshState" (
+               "AddonMediaListId", "Generation", "State", "MissCount",
+               "AttemptCount", "UpdatedAt"
+           ) VALUES (2, 0, 0, 0, -1, '2026-09-04T12:00:00Z')"#,
+    )
+    .execute(&pool)
+    .await;
+    assert!(negative_attempt.is_err());
+
+    sqlx::query(r#"DELETE FROM "AddonMediaList" WHERE "Id" = 1"#)
+        .execute(&pool)
+        .await
+        .expect("delete owning list");
+    let owned_rows: i64 = sqlx::query_scalar(
+        r#"SELECT
+               (SELECT COUNT(*) FROM "AddonMediaListRefreshState") +
+               (SELECT COUNT(*) FROM "AddonMediaListSourceChangeObservation")"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(owned_rows, 0);
 }
 
 #[tokio::test]

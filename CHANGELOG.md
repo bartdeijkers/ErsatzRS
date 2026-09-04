@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Added
 
+- Add localized fixed and opt-in adaptive refresh cadences for add-on media
+  lists. One restart-safe coordinator persists due, retry, success-anchor,
+  conditional-validator, and bounded source-change history state; unchanged
+  probes avoid full imports, failures honor bounded backoff and Retry-After,
+  and Health reports disabled or capability-lost adaptive configurations and
+  terminal refresh failures without exposing provider diagnostics.
+
 - Add durable non-mutating source tests, exact saved-draft and reset-impact
   previews, and digest-validated publication history for add-on media lists.
   Operators can compare retained revisions and restore an older snapshot through

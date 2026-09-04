@@ -755,6 +755,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "Artiste introuvable",
         TextKey::AfterDurationEnd => "Après la fin de la durée",
         TextKey::AutomaticRefresh => "Actualisation automatique",
+        TextKey::AdaptiveRefreshUnavailable => "L’actualisation adaptative est indisponible, car cette extension ne prend plus en charge les contrôles de source. Choisissez une autre fréquence pour reprendre l’actualisation automatique.",
+        TextKey::RefreshCadenceAdaptive => "Adaptative",
+        TextKey::RefreshCadenceDaily => "Quotidienne",
+        TextKey::RefreshCadenceWeekly => "Hebdomadaire",
+        TextKey::RefreshCadenceMonthly => "Mensuelle",
+        TextKey::RefreshCadenceYearly => "Annuelle",
+        TextKey::RefreshCadenceNever => "Jamais",
+        TextKey::LastSuccessfulRefresh => "Dernière actualisation réussie",
+        TextKey::NextScheduledRefresh => "Prochaine actualisation planifiée",
+        TextKey::RefreshRetryAt => "Nouvelle tentative possible à partir de",
         TextKey::Back => "Retour",
         TextKey::BackToSettings => "Retour aux paramètres",
         TextKey::BackToArtists => "Retour aux artistes",
@@ -2142,9 +2152,6 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnableToLoadMediaInfo => "Impossible de charger les infos média",
         TextKey::UnableToLoadPlaybackTroubleshooting => {
             "Impossible de charger le contexte de dépannage de lecture"
-        },
-        TextKey::UpdateAddonMediaListDaily => {
-            "Mettre à jour la liste depuis le fournisseur une fois par jour"
         },
         TextKey::UploadLogo => "Envoyer un logo",
         TextKey::UploadLogoHelp => {

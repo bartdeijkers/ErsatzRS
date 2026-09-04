@@ -9,8 +9,9 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, RemoteStreamLiveness,
+    AddonMediaListItemRole, AddonMediaListRefreshCadence, RemoteStreamLiveness,
 };
+use ersatzrs_infra::addon_media_list_refresh::AddonMediaListRefreshCoordinator;
 use ersatzrs_infra::addon_media_list_sync::{
     AddonMediaListRemoteSynchronizer, AddonMediaListSynchronizer,
 };
@@ -392,7 +393,15 @@ async fn add_refresh_match_and_generate_playlist() {
     assert_eq!(item.get::<Option<i64>, _>("MediaItemId"), None);
 
     AddonMediaListSynchronizer::new(pool.clone())
-        .update_settings(list_id, true, true, AddonMediaListContentKind::Auto, "")
+        .update_settings(
+            list_id,
+            AddonMediaListRefreshCadence::Daily,
+            None,
+            true,
+            true,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
         .await
         .unwrap();
     publish_as_remote_streams(&pool, list_id).await;
@@ -655,7 +664,15 @@ async fn remote_stream_items_match_by_url_and_use_remote_stream_collection_type(
         .await
         .unwrap();
     AddonMediaListSynchronizer::new(pool.clone())
-        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto, "")
+        .update_settings(
+            list_id,
+            AddonMediaListRefreshCadence::Never,
+            None,
+            true,
+            true,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
         .await
         .unwrap();
     publish_as_remote_streams(&pool, list_id).await;
@@ -728,7 +745,15 @@ async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_rec
 
     let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
     synchronizer
-        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto, "")
+        .update_settings(
+            list_id,
+            AddonMediaListRefreshCadence::Never,
+            None,
+            true,
+            true,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
         .await
         .unwrap();
     publish_as_remote_streams(&pool, list_id).await;
@@ -801,7 +826,15 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
     .await
     .unwrap();
     AddonMediaListSynchronizer::new(pool.clone())
-        .update_settings(list_id, false, true, AddonMediaListContentKind::Auto, "")
+        .update_settings(
+            list_id,
+            AddonMediaListRefreshCadence::Never,
+            None,
+            true,
+            true,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
         .await
         .unwrap();
     publish_as_remote_streams(&pool, list_id).await;
@@ -896,7 +929,15 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
     assert!(last_match.is_some());
 
     local
-        .update_settings(50, true, true, AddonMediaListContentKind::Auto, "")
+        .update_settings(
+            50,
+            AddonMediaListRefreshCadence::Daily,
+            None,
+            true,
+            true,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
         .await
         .unwrap();
     let playlist_id: Option<i64> =
@@ -915,7 +956,15 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
     assert_eq!(ranks, vec![3]);
 
     local
-        .update_settings(50, true, false, AddonMediaListContentKind::Auto, "")
+        .update_settings(
+            50,
+            AddonMediaListRefreshCadence::Daily,
+            None,
+            true,
+            false,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
         .await
         .unwrap();
     let linked_playlist: Option<i64> =
@@ -940,7 +989,15 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
     assert_eq!(playlist_count, 0);
 
     local
-        .update_settings(50, false, true, AddonMediaListContentKind::Auto, "")
+        .update_settings(
+            50,
+            AddonMediaListRefreshCadence::Never,
+            None,
+            true,
+            true,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
         .await
         .unwrap();
     publish_as_remote_streams(&pool, 50).await;
@@ -1117,9 +1174,18 @@ async fn automatic_refresh_skips_lists_owned_by_disabled_addons() {
         .execute(&pool)
         .await
         .unwrap();
+    sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "RefreshCadence" = ?, "NextRefreshAt" = NULL
+           WHERE "Id" = 60"#,
+    )
+    .bind(AddonMediaListRefreshCadence::Daily as i32)
+    .execute(&pool)
+    .await
+    .unwrap();
 
-    let refresh = AddonMediaListRemoteSynchronizer::new(pool.clone(), FailingListProvider);
-    assert_eq!(refresh.refresh_due_auto_lists().await.unwrap(), 0);
+    let refresh = AddonMediaListRefreshCoordinator::new(pool.clone());
+    assert_eq!(refresh.admit_due(chrono::Utc::now()).await.unwrap(), 0);
 
     let last_error: Option<String> =
         sqlx::query_scalar(r#"SELECT "LastError" FROM "AddonMediaList" WHERE "Id" = 60"#)

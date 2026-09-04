@@ -281,93 +281,6 @@ impl AddonMediaListImportCoordinator {
         Ok(())
     }
 
-    /// Queue due automatic refreshes through the resumable transport whenever
-    /// the installed package supports it. An unfinished generation is never
-    /// superseded by the hourly maintenance tick.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when due lists cannot be loaded or decoded. A failure
-    /// to queue one individual provider is retained on that list and does not
-    /// abort the remaining refresh candidates.
-    pub async fn refresh_due_auto_lists(&self) -> Result<usize> {
-        let cutoff = encode_datetime(Utc::now() - Duration::days(1));
-        let rows = sqlx::query(
-            r#"SELECT "list"."AddonId", "list"."SourceUrl",
-                      "list"."ContentKindOverride", "list"."ChapterInput",
-                      "list"."DetailImportPolicy"
-               FROM "AddonMediaList" AS "list"
-               JOIN "AddonInstallation" AS "addon"
-                 ON "addon"."AddonId" = "list"."AddonId"
-               WHERE "list"."AutoRefresh" = 1
-                 AND "addon"."Enabled" = 1
-                 AND ("list"."LastUpdate" IS NULL OR "list"."LastUpdate" <= ?)
-                 AND ("list"."PublicationJournalJson" IS NULL
-                      OR TRIM("list"."PublicationJournalJson") = '')
-                 AND NOT EXISTS (
-                     SELECT 1
-                     FROM "AddonMediaListPublicationJob" AS "publication"
-                     JOIN "ManagedLibraryOperation" AS "operation"
-                       ON "operation"."Id" = "publication"."OperationId"
-                     WHERE "publication"."AddonMediaListId" = "list"."Id"
-                       AND "operation"."State" IN (?, ?, ?)
-                 )
-                 AND NOT EXISTS (
-                     SELECT 1 FROM "AddonMediaListImportJob" AS "job"
-                     WHERE "job"."AddonMediaListId" = "list"."Id"
-                       AND "job"."State" IN (?, ?, ?, ?, ?)
-                 )
-               ORDER BY "list"."Id""#,
-        )
-        .bind(&cutoff)
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::Queued,
-        ))
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::Running,
-        ))
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
-        ))
-        .bind(encode_enum(AddonMediaListImportState::Queued))
-        .bind(encode_enum(AddonMediaListImportState::Discovering))
-        .bind(encode_enum(AddonMediaListImportState::Verifying))
-        .bind(encode_enum(AddonMediaListImportState::Paused))
-        .bind(encode_enum(AddonMediaListImportState::NeedsAttention))
-        .fetch_all(&self.pool)
-        .await
-        .repository()?;
-
-        let mut queued = 0_usize;
-        for row in rows {
-            let addon_id: String = row.try_get("AddonId").repository()?;
-            let source_url: String = row.try_get("SourceUrl").repository()?;
-            let content_kind =
-                decode_enum_column("AddonMediaListContentKind", &row, "ContentKindOverride")?;
-            let detail_policy =
-                decode_enum_column("AddonMediaListDetailPolicy", &row, "DetailImportPolicy")?;
-            let chapter_input = row
-                .try_get::<Option<String>, _>("ChapterInput")
-                .repository()?
-                .unwrap_or_default();
-            if self
-                .add_or_refresh(
-                    &addon_id,
-                    &source_url,
-                    None,
-                    content_kind,
-                    &chapter_input,
-                    detail_policy,
-                )
-                .await
-                .is_ok()
-            {
-                queued += 1;
-            }
-        }
-        Ok(queued)
-    }
-
     #[allow(clippy::too_many_lines)] // One transaction owns list identity and generation creation.
     async fn queue_import(
         &self,
@@ -593,6 +506,9 @@ impl AddonMediaListImportCoordinator {
             }
             return Ok(true);
         }
+        let Some(provider_slot) = self.claim_import_provider_slot(&job).await? else {
+            return Ok(false);
+        };
         let context = match self
             .provider
             .import_context(&job.addon_id, &job.source_url)
@@ -600,6 +516,7 @@ impl AddonMediaListImportCoordinator {
         {
             Ok(Some(context)) if context.record_capability == job.record_capability => context,
             Ok(Some(_)) => {
+                self.release_import_provider_slot(&provider_slot).await?;
                 self.fail_import(
                     job.id,
                     "the add-on record schema changed during this import",
@@ -609,6 +526,7 @@ impl AddonMediaListImportCoordinator {
                 return Ok(true);
             }
             Ok(None) => {
+                self.release_import_provider_slot(&provider_slot).await?;
                 self.fail_import(
                     job.id,
                     "the installed add-on no longer supports media-list.import.v1",
@@ -618,15 +536,17 @@ impl AddonMediaListImportCoordinator {
                 return Ok(true);
             }
             Err(error) => {
+                self.release_import_provider_slot(&provider_slot).await?;
                 self.fail_import(job.id, &error.to_string(), true).await?;
                 return Ok(true);
             }
         };
-        match self
+        let result = self
             .provider
             .discover(&job.addon_id, &context, job.cursor.as_deref())
-            .await
-        {
+            .await;
+        self.release_import_provider_slot(&provider_slot).await?;
+        match result {
             Ok(page) => {
                 if let Err(error) = self.commit_import_page(&job, page).await {
                     self.fail_import(job.id, &error.to_string(), false).await?;
@@ -635,6 +555,70 @@ impl AddonMediaListImportCoordinator {
             Err(error) => self.fail_import(job.id, &error.to_string(), true).await?,
         }
         Ok(true)
+    }
+
+    async fn claim_import_provider_slot(
+        &self,
+        job: &ImportJob,
+    ) -> Result<Option<ImportProviderSlot>> {
+        let range = load_detail_wait_range(&self.pool).await?;
+        let delay = sample_provider_delay_seconds(Uuid::new_v4().as_bytes(), range);
+        let provider_host = provider_host(&job.source_url)?;
+        let now = Utc::now();
+        let now_text = encode_datetime(now);
+        let lease_expires = encode_datetime(now + Duration::seconds(IMPORT_LEASE_SECONDS));
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        if let Some(blocked_until) = crate::addon_media_list_refresh::claim_provider_host(
+            &mut tx,
+            &provider_host,
+            &now_text,
+            &job.lease_owner,
+            &lease_expires,
+            delay,
+        )
+        .await?
+        {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListImportJob"
+                   SET "State" = ?, "NextEligibleAt" = ?, "LeaseOwner" = NULL,
+                       "LeaseExpiresAt" = NULL, "UpdatedAt" = ?
+                   WHERE "Id" = ? AND "LeaseOwner" = ?"#,
+            )
+            .bind(encode_enum(AddonMediaListImportState::Queued))
+            .bind(blocked_until)
+            .bind(&now_text)
+            .bind(job.id)
+            .bind(&job.lease_owner)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            tx.commit().await.repository()?;
+            return Ok(None);
+        }
+        tx.commit().await.repository()?;
+        Ok(Some(ImportProviderSlot {
+            provider_host,
+            lease_owner: job.lease_owner.clone(),
+            delay,
+        }))
+    }
+
+    async fn release_import_provider_slot(&self, slot: &ImportProviderSlot) -> Result<()> {
+        let completed = Utc::now();
+        let now = encode_datetime(completed);
+        let next = encode_datetime(completed + Duration::seconds(i64::from(slot.delay)));
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        crate::addon_media_list_refresh::release_provider_host_lease(
+            &mut tx,
+            &slot.provider_host,
+            &slot.lease_owner,
+            &now,
+            &next,
+            slot.delay,
+        )
+        .await?;
+        tx.commit().await.repository()?;
+        Ok(())
     }
 
     async fn recover_cancelled_imports(&self) -> Result<()> {
@@ -727,6 +711,7 @@ impl AddonMediaListImportCoordinator {
             verification_pass,
             expected_identity_hash: row.try_get("ExpectedIdentityHash").repository()?,
             overview_complete: decode_bool_column(&row, "OverviewComplete")?,
+            lease_owner,
         };
         tx.commit().await.repository()?;
         Ok(Some(job))
@@ -1124,7 +1109,7 @@ impl AddonMediaListImportCoordinator {
             name: enumerated.name.clone(),
             description: enumerated.description.clone(),
             item_count: i32::try_from(enumerated.items.len()).unwrap_or(i32::MAX),
-            auto_refresh: false,
+            refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence::Never,
             generate_playlist: false,
             content_kind_override: decode_enum_column(
                 "AddonMediaListContentKind",
@@ -1345,18 +1330,22 @@ impl AddonMediaListImportCoordinator {
     }
 
     async fn fail_import(&self, job_id: EntityId, diagnostic: &str, retryable: bool) -> Result<()> {
-        let attempts: i32 = sqlx::query_scalar(
-            r#"SELECT "AttemptCount" FROM "AddonMediaListImportJob" WHERE "Id" = ?"#,
+        let row = sqlx::query(
+            r#"SELECT "AttemptCount", "AddonMediaListId"
+               FROM "AddonMediaListImportJob" WHERE "Id" = ?"#,
         )
         .bind(job_id)
         .fetch_one(&self.pool)
         .await
         .repository()?;
+        let attempts: i32 = row.try_get("AttemptCount").repository()?;
+        let list_id: Option<EntityId> = row.try_get("AddonMediaListId").repository()?;
         let attempts = attempts.saturating_add(1);
         let retry = retryable && attempts < MAX_IMPORT_ATTEMPTS;
         let now = Utc::now();
         let retry_at =
             retry.then(|| encode_datetime(now + Duration::seconds(import_retry_seconds(attempts))));
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         sqlx::query(
             r#"UPDATE "AddonMediaListImportJob"
                SET "State" = ?, "AttemptCount" = ?, "Diagnostic" = ?,
@@ -1370,12 +1359,21 @@ impl AddonMediaListImportCoordinator {
         }))
         .bind(attempts)
         .bind(bound_diagnostic(diagnostic))
-        .bind(retry_at)
+        .bind(retry_at.as_deref())
         .bind(encode_datetime(now))
         .bind(job_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .repository()?;
+        if let Some(list_id) = list_id {
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "RefreshRetryAt" = ? WHERE "Id" = ?"#)
+                .bind(retry_at.as_deref())
+                .bind(list_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+        }
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -2394,6 +2392,14 @@ struct ImportJob {
     verification_pass: i32,
     expected_identity_hash: Option<String>,
     overview_complete: bool,
+    lease_owner: String,
+}
+
+#[derive(Debug)]
+struct ImportProviderSlot {
+    provider_host: String,
+    lease_owner: String,
+    delay: u32,
 }
 
 #[derive(Debug)]
@@ -2517,7 +2523,10 @@ pub(crate) async fn load_detail_wait_range(pool: &DbPool) -> Result<AddonMediaLi
     )
 }
 
-fn sample_provider_delay_seconds(seed: &[u8], range: AddonMediaListDetailWaitRange) -> u32 {
+pub(crate) fn sample_provider_delay_seconds(
+    seed: &[u8],
+    range: AddonMediaListDetailWaitRange,
+) -> u32 {
     let spread = u64::from(range.maximum_seconds) - u64::from(range.minimum_seconds) + 1;
     let value = seed.iter().fold(0_u64, |accumulator, byte| {
         accumulator.wrapping_mul(257) ^ u64::from(*byte)
@@ -4400,6 +4409,60 @@ mod tests {
             .expect("decode cooldown")
             .expect("cooldown timestamp");
             assert!(next >= Utc::now() + Duration::seconds(100));
+        }
+
+        #[tokio::test]
+        async fn overview_import_respects_the_shared_provider_host_cooldown() {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let list_id = queue(
+                &coordinator,
+                "https://media.example.test/shared-overview",
+                AddonMediaListDetailPolicy::ManualOnly,
+            )
+            .await;
+            let now = encode_datetime(Utc::now());
+            let blocked_until = encode_datetime(Utc::now() + Duration::minutes(10));
+            sqlx::query(
+                r#"INSERT INTO "AddonProviderHostCooldown" (
+                       "ProviderHost", "NextEligibleAt", "SampledDelaySeconds",
+                       "LastAttemptAt", "UpdatedAt"
+                   ) VALUES ('media.example.test', ?, 600, ?, ?)"#,
+            )
+            .bind(&blocked_until)
+            .bind(&now)
+            .bind(&now)
+            .execute(&pool)
+            .await
+            .expect("seed shared provider cooldown");
+
+            assert!(!coordinator.process_one_import_page().await.unwrap());
+
+            let row = sqlx::query(
+                r#"SELECT "State", "NextEligibleAt", "LeaseOwner", "LeaseExpiresAt"
+                   FROM "AddonMediaListImportJob" WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("read deferred overview import");
+            assert_eq!(
+                row.try_get::<i32, _>("State").unwrap(),
+                encode_enum(AddonMediaListImportState::Queued)
+            );
+            assert_eq!(
+                row.try_get::<Option<String>, _>("NextEligibleAt")
+                    .unwrap()
+                    .as_deref(),
+                Some(blocked_until.as_str())
+            );
+            assert!(row
+                .try_get::<Option<String>, _>("LeaseOwner")
+                .unwrap()
+                .is_none());
+            assert!(row
+                .try_get::<Option<String>, _>("LeaseExpiresAt")
+                .unwrap()
+                .is_none());
         }
 
         #[tokio::test]

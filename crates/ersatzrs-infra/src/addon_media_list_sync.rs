@@ -341,10 +341,13 @@ impl AddonMediaListSynchronizer {
     /// # Errors
     ///
     /// Returns an error when the list does not exist or persistence fails.
+    #[allow(clippy::too_many_arguments)] // Mirrors the persisted operator settings edited as one unit.
     pub async fn update_settings(
         &self,
         list_id: EntityId,
-        auto_refresh: bool,
+        refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence,
+        next_refresh_at: Option<&str>,
+        cadence_changed: bool,
         generate_playlist: bool,
         content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
         chapter_input: &str,
@@ -352,9 +355,12 @@ impl AddonMediaListSynchronizer {
         let _list = self.load_list(list_id).await?;
         ensure_not_publishing(&self.pool, list_id).await?;
         let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "AutoRefresh" = ?, "RefreshCadence" = ?,
+                   "NextRefreshAt" = ?,
+                   "RefreshRetryAt" = CASE WHEN ? THEN NULL ELSE "RefreshRetryAt" END,
                    "GeneratePlaylist" = ?, "ContentKindOverride" = ?,
                    "ChapterInput" = ?,
                    "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
@@ -373,8 +379,10 @@ impl AddonMediaListSynchronizer {
                        AND "lease"."LeaseExpiresAt" > ?
                  )"#,
         )
-        .bind(auto_refresh)
-        .bind(if auto_refresh { 0 } else { 4 })
+        .bind(refresh_cadence == ersatzrs_domain::AddonMediaListRefreshCadence::Daily)
+        .bind(encode_enum(refresh_cadence))
+        .bind(next_refresh_at)
+        .bind(cadence_changed)
         .bind(generate_playlist)
         .bind(encode_enum(content_kind_override))
         .bind((!chapter_input.is_empty()).then_some(chapter_input))
@@ -382,13 +390,34 @@ impl AddonMediaListSynchronizer {
         .bind(encode_enum(
             ersatzrs_domain::ManagedLibraryOperationState::Running,
         ))
-        .bind(now)
-        .execute(&self.pool)
+        .bind(&now)
+        .execute(&mut *tx)
         .await
         .repository()?;
         if updated.rows_affected() != 1 {
             return Err(publication_in_progress());
         }
+
+        if cadence_changed {
+            sqlx::query(
+                r#"UPDATE "AddonMediaListRefreshState"
+                   SET "State" = ?, "MissCount" = 0, "AttemptCount" = 0,
+                       "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL,
+                       "NextEligibleAt" = ?, "DiagnosticCode" = NULL,
+                       "UpdatedAt" = ?
+                   WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(encode_enum(
+                ersatzrs_domain::AddonMediaListRefreshState::Idle,
+            ))
+            .bind(next_refresh_at)
+            .bind(&now)
+            .bind(list_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+        }
+        tx.commit().await.repository()?;
 
         Ok(())
     }
@@ -1108,15 +1137,14 @@ impl AddonMediaListSynchronizer {
             *chapter_index = chapter_index.saturating_add(1);
         }
 
-        let refreshed_at = encode_datetime(Utc::now());
+        let refreshed_at = Utc::now();
+        crate::addon_media_list_refresh::record_refresh_success_tx(&mut tx, list_id, refreshed_at)
+            .await?;
         sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "LastUpdate" = ?, "LastRefreshSucceededAt" = ?,
-                   "ItemCount" = ?, "LastError" = NULL
+               SET "ItemCount" = ?
                WHERE "Id" = ?"#,
         )
-        .bind(&refreshed_at)
-        .bind(&refreshed_at)
         .bind(i32::try_from(incoming.len().saturating_add(retained_count)).unwrap_or(i32::MAX))
         .bind(list_id)
         .execute(&mut *tx)
@@ -1146,7 +1174,11 @@ impl AddonMediaListSynchronizer {
             name: row.try_get("Name").repository()?,
             description: row.try_get("Description").repository()?,
             item_count: row.try_get("ItemCount").repository()?,
-            auto_refresh: decode_bool_column(&row, "AutoRefresh")?,
+            refresh_cadence: decode_enum_column(
+                "AddonMediaListRefreshCadence",
+                &row,
+                "RefreshCadence",
+            )?,
             generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
             content_kind_override: decode_enum_column(
                 "AddonMediaListContentKind",
@@ -1856,7 +1888,7 @@ where
             name: enumerated.name.clone(),
             description: enumerated.description.clone(),
             item_count: i32::try_from(enumerated.items.len()).unwrap_or(i32::MAX),
-            auto_refresh: false,
+            refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence::Never,
             generate_playlist: false,
             content_kind_override,
             presentation_kind: ersatzrs_domain::AddonMediaListPresentationKind::RemoteStreams,
@@ -1991,7 +2023,7 @@ where
             name: enumerated.name.clone(),
             description: enumerated.description.clone(),
             item_count: i32::try_from(enumerated.items.len()).unwrap_or(i32::MAX),
-            auto_refresh: false,
+            refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence::Never,
             generate_playlist: false,
             content_kind_override,
             presentation_kind: ersatzrs_domain::AddonMediaListPresentationKind::RemoteStreams,
@@ -2122,75 +2154,6 @@ where
         }
         Ok(())
     }
-
-    /// Refresh auto-refresh lists whose provider update is older than one day.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when list loading, API reads, or persistence fails.
-    pub async fn refresh_due_auto_lists(&self) -> Result<usize> {
-        let cutoff = Utc::now() - Duration::days(1);
-        let rows = sqlx::query(
-            r#"SELECT "list"."AddonId", "list"."SourceUrl", "list"."ContentKindOverride",
-                      "list"."ChapterInput"
-               FROM "AddonMediaList" AS "list"
-               JOIN "AddonInstallation" AS "addon"
-                 ON "addon"."AddonId" = "list"."AddonId"
-               WHERE "list"."AutoRefresh" = 1
-                 AND "addon"."Enabled" = 1
-                 AND ("list"."LastUpdate" IS NULL OR "list"."LastUpdate" <= ?)
-                 AND ("list"."PublicationJournalJson" IS NULL
-                      OR TRIM("list"."PublicationJournalJson") = '')
-                 AND NOT EXISTS (
-                     SELECT 1
-                     FROM "AddonMediaListPublicationJob" AS "job"
-                     JOIN "ManagedLibraryOperation" AS "operation"
-                       ON "operation"."Id" = "job"."OperationId"
-                     WHERE "job"."AddonMediaListId" = "list"."Id"
-                       AND "operation"."State" IN (?, ?, ?)
-                 )
-               ORDER BY "list"."Id""#,
-        )
-        .bind(encode_datetime(cutoff))
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::Queued,
-        ))
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::Running,
-        ))
-        .bind(encode_enum(
-            ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
-        ))
-        .fetch_all(&self.local.pool)
-        .await
-        .repository()?;
-
-        let mut count = 0;
-        for row in rows {
-            let addon_id: String = row.try_get("AddonId").repository()?;
-            let source_url: String = row.try_get("SourceUrl").repository()?;
-            let content_kind_override =
-                decode_enum_column("AddonMediaListContentKind", &row, "ContentKindOverride")?;
-            let chapter_input = row
-                .try_get::<Option<String>, _>("ChapterInput")
-                .repository()?
-                .unwrap_or_default();
-            if self
-                .add_or_refresh(
-                    &addon_id,
-                    &source_url,
-                    None,
-                    content_kind_override,
-                    &chapter_input,
-                )
-                .await
-                .is_ok()
-            {
-                count += 1;
-            }
-        }
-        Ok(count)
-    }
 }
 
 pub(crate) async fn reconcile_changed_addon_state_in_tx(
@@ -2220,6 +2183,19 @@ pub(crate) async fn reconcile_changed_addon_state_in_tx(
     .await
     .repository()?;
     sqlx::query(r#"DELETE FROM "AddonMediaListImportCheckpoint" WHERE "AddonMediaListId" = ?"#)
+        .bind(list_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    sqlx::query(
+        r#"DELETE FROM "AddonMediaListSourceChangeObservation"
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    sqlx::query(r#"DELETE FROM "AddonMediaListRefreshState" WHERE "AddonMediaListId" = ?"#)
         .bind(list_id)
         .execute(&mut **tx)
         .await

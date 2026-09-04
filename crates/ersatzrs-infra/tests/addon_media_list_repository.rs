@@ -6,7 +6,8 @@ use ersatzrs_core::repositories::{
     RepositoryError,
 };
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListPresentationKind, RemoteStreamLiveness,
+    AddonMediaListContentKind, AddonMediaListPresentationKind, AddonMediaListRefreshCadence,
+    RemoteStreamLiveness,
 };
 use ersatzrs_infra::repositories::make_repositories;
 use sqlx::Executor;
@@ -19,10 +20,10 @@ async fn addon_media_list_repository_lists_strict_rows_and_persists_page_size() 
     pool.execute(
         r#"INSERT INTO "AddonMediaList" (
             "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
-            "AutoRefresh", "GeneratePlaylist", "ItemCount"
+            "AutoRefresh", "RefreshCadence", "GeneratePlaylist", "ItemCount"
            ) VALUES (
             1, 'org.example.lists', 'alice/watchlist',
-            'https://example.invalid/alice/watchlist', 'Watchlist', 1, 0, 2
+            'https://example.invalid/alice/watchlist', 'Watchlist', 1, 0, 0, 2
            )"#,
     )
     .await
@@ -66,7 +67,7 @@ async fn addon_media_list_repository_lists_strict_rows_and_persists_page_size() 
     assert_eq!(rows[0].addon_id, "org.example.lists");
     assert_eq!(rows[0].provider_id, "alice/watchlist");
     assert_eq!(rows[0].match_count, 0);
-    assert!(rows[0].auto_refresh);
+    assert_eq!(rows[0].refresh_cadence, AddonMediaListRefreshCadence::Daily);
     assert!(!rows[0].generate_playlist);
     assert_eq!(
         rows[0].presentation_kind,

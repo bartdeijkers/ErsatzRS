@@ -475,7 +475,6 @@
     line-height: 1.35;
 }
 
-.compact-toggle,
 .playlist-option {
     display: flex;
     align-items: center;
@@ -485,14 +484,6 @@
     font-size: 0.875rem;
 }
 
-.compact-toggle {
-    padding: 0 0.75rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    background: var(--color-bg);
-}
-
-.compact-toggle input,
 .playlist-option input {
     width: 1.15rem;
     height: 1.15rem;

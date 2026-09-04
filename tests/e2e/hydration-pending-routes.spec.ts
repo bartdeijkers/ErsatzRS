@@ -735,15 +735,18 @@ SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
     await page.getByLabel('Add-on list URL').fill(seed.importSourceUrl);
     await page.getByLabel('Add-on', { exact: true }).selectOption(seed.addonId);
     await page.getByLabel('Collection Type', { exact: true }).selectOption('movies');
+    const addRefreshCadence = page.getByRole('combobox', { name: 'Automatic Refresh' });
+    await expect(addRefreshCadence).toHaveValue('daily');
+    await expect(addRefreshCadence.locator('option[value="adaptive"]')).toBeDisabled();
     await page.getByLabel('Storage folder').fill(`E2E Import ${testInfo.project.name}`);
     await page.getByRole('button', { name: 'Import overview' }).click();
     await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
     await waitForHydration(page);
     await expect.poll(() => sqlite(`
-SELECT "ContentKindOverride" FROM "AddonMediaList"
+SELECT "ContentKindOverride" || ',' || "RefreshCadence" FROM "AddonMediaList"
 WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
   AND "ProviderId" = '${sqlEscape(seed.importProviderId)}';
-`)).toBe('2');
+`)).toBe('2,0');
     await page.reload();
     await waitForHydration(page);
     await expect(page.getByText(seed.importListName)).toBeVisible();
@@ -779,10 +782,23 @@ SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
 SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = ${seed.deleteListId};
 `)).toBe('0');
 
+    // A package can lose its source-check capability after Adaptive was saved.
+    // Keep that value visible and submittable so unrelated edits do not silently
+    // replace it with the form default.
+    sqlite(`
+UPDATE "AddonMediaList" SET "RefreshCadence" = 5 WHERE "Id" = ${seed.editorListId};
+`);
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
     await expect(page.locator('form[action="/api/addon-lists/save"]')).toBeVisible();
     await page.getByLabel('Collection Type', { exact: true }).selectOption('other_videos');
-    await page.locator('input[name="auto_refresh"]').check();
+    const refreshCadence = page.getByRole('combobox', { name: 'Automatic Refresh' });
+    await expect(refreshCadence).toHaveValue('adaptive');
+    await expect(refreshCadence.locator('option[value="adaptive"]')).toBeEnabled();
+    await expect(page.getByTestId('adaptive-refresh-unavailable')).toBeVisible();
+    await refreshCadence.selectOption('weekly');
+    await expect(page.getByTestId('addon-list-refresh-status')).toContainText(
+      'Last successful refresh',
+    );
     await page.locator('input[name="generate_playlist"]').uncheck();
     const saveNavigation = page.waitForEvent('framenavigated');
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
@@ -791,7 +807,7 @@ SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = ${seed.deleteListId};
     await waitForHydration(page);
 
     expect(sqlite(`
-SELECT "AutoRefresh" || ',' || "GeneratePlaylist" || ',' || "ContentKindOverride"
+SELECT "RefreshCadence" || ',' || "GeneratePlaylist" || ',' || "ContentKindOverride"
 FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
 `)).toBe('1,0,4');
     // Saving edits the review draft but leaves the published playlist intact.

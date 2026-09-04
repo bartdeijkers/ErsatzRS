@@ -10,6 +10,29 @@ pub enum AddonMediaListRefreshCadence {
     Yearly,
     #[default]
     Never,
+    Adaptive,
+}
+
+/// Durable execution state shared by fixed and adaptive list refreshes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListRefreshState {
+    #[default]
+    Idle,
+    Queued,
+    Running,
+    WaitingToRetry,
+    Failed,
+}
+
+/// Validated terminal outcome of one adaptive source-change probe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListSourceCheckOutcome {
+    Changed,
+    Unchanged,
+    TransientFailure,
+    PermanentFailure,
 }
 
 /// Whether a successful refresh always enters review or may publish pure additions.
@@ -157,7 +180,10 @@ pub enum AddonToolMaintenanceOutcome {
 
 #[cfg(test)]
 mod tests {
-    use super::{AddonMediaListOptionValue, AddonMediaListRefreshCadence};
+    use super::{
+        AddonMediaListOptionValue, AddonMediaListRefreshCadence, AddonMediaListRefreshState,
+        AddonMediaListSourceCheckOutcome,
+    };
 
     #[test]
     fn lifecycle_values_keep_provider_neutral_wire_names() {
@@ -172,6 +198,18 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&AddonMediaListOptionValue::Enum("choice".into())).unwrap(),
             "\"choice\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AddonMediaListRefreshCadence::Adaptive).unwrap(),
+            "\"adaptive\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AddonMediaListRefreshState::WaitingToRetry).unwrap(),
+            "\"waiting_to_retry\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AddonMediaListSourceCheckOutcome::PermanentFailure).unwrap(),
+            "\"permanent_failure\""
         );
     }
 }

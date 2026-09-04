@@ -763,6 +763,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "No se ha encontrado el artista",
         TextKey::AfterDurationEnd => "Después del final de la duración",
         TextKey::AutomaticRefresh => "Actualización automática",
+        TextKey::AdaptiveRefreshUnavailable => "La actualización adaptativa no está disponible porque este complemento ya no admite comprobaciones del origen. Elija otra frecuencia para reanudar la actualización automática.",
+        TextKey::RefreshCadenceAdaptive => "Adaptativa",
+        TextKey::RefreshCadenceDaily => "Diaria",
+        TextKey::RefreshCadenceWeekly => "Semanal",
+        TextKey::RefreshCadenceMonthly => "Mensual",
+        TextKey::RefreshCadenceYearly => "Anual",
+        TextKey::RefreshCadenceNever => "Nunca",
+        TextKey::LastSuccessfulRefresh => "Última actualización correcta",
+        TextKey::NextScheduledRefresh => "Próxima actualización programada",
+        TextKey::RefreshRetryAt => "Reintento disponible a partir de",
         TextKey::Back => "Volver",
         TextKey::BackToSettings => "Volver a los ajustes",
         TextKey::BackToArtists => "Volver a los artistas",
@@ -2112,7 +2122,6 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UnableToLoadPlaybackTroubleshooting => {
             "No se ha podido cargar el contexto de diagnóstico de reproducción"
         }
-        TextKey::UpdateAddonMediaListDaily => "Actualizar la lista desde el proveedor una vez al día",
         TextKey::UploadLogo => "Cargar logotipo",
         TextKey::UploadLogoHelp => {
             "Elige una imagen local para sustituir el logotipo guardado del canal al guardar"

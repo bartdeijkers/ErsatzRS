@@ -2485,7 +2485,7 @@ production, and tool maintenance remain in their later owning milestones.
 id         = 'amm-l-01'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Replace daily auto-refresh with fixed and adaptive cadences'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-01']
@@ -2506,11 +2506,21 @@ shared-limiter jitter, and repeated hourly ticks without duplicate or catch-up
 generations.
 '''
 evidence = '''
-Implementation planning claimed by Codex on 2026-09-04. This slice is reserved
-for fixed/adaptive cadence scheduling, a bounded provider-neutral source-change
-probe, truthful persisted due/retry/anchor state, and the matching admin and
-health projections. Incremental archive discovery, rich header refresh,
-reconciliation, and automatic publication remain in AMM-L-02 through L-05.
+Completed on 2026-09-04. The persisted six-value cadence replaces Boolean
+daily selection, with migration backfill, truthful success/due/retry state,
+calendar-safe fixed scheduling, durable admission and capped retry. Adaptive
+refresh is capability-gated through the bounded media-list.source-check.v1
+contract, retains sixteen actual change instants, forwards conditional
+validators, predicts from the median interval, backs off unchanged and failed
+probes, honors Retry-After, and launches the existing resumable import only for
+a changed result. Overview, detail, and source-check work share the persisted
+provider-host limiter and positive 2-16 second jitter. Capability loss remains
+saved and surfaces as a warning instead of silently changing cadence. Focused
+contract, repository, migration, import, synchronization, projection,
+scheduler, health, web-form, hydration, and architecture checks pass. Browser
+scenarios are authored; packaged browser execution remains owned by AMM-N-03.
+Incremental archive discovery, rich header refresh, reconciliation, and
+automatic publication remain in AMM-L-02 through L-05.
 '''
 
 [[milestone]]

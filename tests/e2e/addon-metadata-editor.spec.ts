@@ -901,6 +901,7 @@ UPDATE "AddonMediaListItem" SET "Included" = 0 WHERE "Id" = ${seed.secondItemId}
       await expect(noJsPage.getByRole('heading', { name: 'Add add-on list' })).toBeVisible();
       await expect(noJsPage.getByLabel('Add-on', { exact: true })).toHaveValue(seed.addonId);
       await noJsPage.getByLabel('Add-on list URL').fill(seed.noJsSourceUrl);
+      await noJsPage.getByRole('combobox', { name: 'Automatic Refresh' }).selectOption('monthly');
       await noJsPage.getByRole('button', { name: 'Import overview' }).click();
       await expect(noJsPage).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/, {
         timeout: 60_000,
@@ -913,6 +914,11 @@ WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
   AND "Name" = '${sqlEscape(seed.noJsListName)}';
 `), { timeout: 60_000 })
         .toBe('1');
+      expect(sqlite(`
+SELECT "RefreshCadence" FROM "AddonMediaList"
+WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
+  AND "ProviderId" = '${sqlEscape(seed.noJsProviderId)}';
+`)).toBe('2');
 
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       await noJsPage.getByRole('button', { name: 'Test source' }).click();

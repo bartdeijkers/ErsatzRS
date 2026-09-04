@@ -6,18 +6,22 @@ use std::time::Duration;
 use async_trait::async_trait;
 use ersatzrs_addon_contract::{
     conform_media_list_discover_output, conform_media_list_enrich_output,
-    conform_media_list_output, validate_operator_source_url, AddonArtworkRole as WireArtworkRole,
+    conform_media_list_output, parse_media_list_source_check_output, validate_operator_source_url,
+    AddonArtworkRole as WireArtworkRole,
     AddonMediaListAvailabilityReason as WireAvailabilityReason,
     AddonMediaListContentKind as WireContentKind,
     AddonMediaListItemAvailability as WireAvailability, AddonMediaListItemKind as WireItemKind,
     AddonMediaListItemRole as WireItemRole, AddonMediaListRecord, AddonMetadataDocument,
     AddonOperationError, MediaListDiscoverLimits, MediaListDiscoverRequest, MediaListDiscoveryPage,
-    MediaListEnrichRequest, MediaListEnrichmentResult, RemoteStreamLiveness as WireLiveness,
+    MediaListEnrichRequest, MediaListEnrichmentResult, MediaListSourceCheckRequest,
+    MediaListSourceCheckResult, RemoteStreamLiveness as WireLiveness,
     CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
     CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5,
-    CAPABILITY_MEDIA_LIST_LIST_V6, MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS,
-    MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES, MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES,
-    MAX_MEDIA_LIST_OUTPUT_BYTES, MAX_PROVIDER_ID_BYTES, OPERATION_CODE_UNSUPPORTED_URL,
+    CAPABILITY_MEDIA_LIST_LIST_V6, CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1,
+    MAX_AVAILABILITY_REASON_BYTES, MAX_LIST_ITEMS, MAX_MEDIA_LIST_IMPORT_ITEM_OUTPUT_BYTES,
+    MAX_MEDIA_LIST_IMPORT_PAGE_OUTPUT_BYTES, MAX_MEDIA_LIST_OUTPUT_BYTES,
+    MAX_MEDIA_LIST_SOURCE_CHECK_OUTPUT_BYTES, MAX_PROVIDER_ID_BYTES,
+    OPERATION_CODE_UNSUPPORTED_URL,
 };
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
@@ -87,6 +91,93 @@ impl InstalledAddonMediaListProvider {
             source_url,
             record_capability: record_capability.to_owned(),
         }))
+    }
+
+    /// Whether an installed package declares the bounded adaptive source check.
+    pub(crate) async fn supports_source_check(&self, addon_id: &str) -> Result<bool> {
+        Ok(load_installed_addon(&self.pool, addon_id)
+            .await
+            .map_err(|error| {
+                RepositoryError::unavailable("load media-list add-on", error.to_string())
+            })?
+            .is_some_and(|installation| {
+                installation
+                    .manifest
+                    .has_media_list_source_check_capability()
+            }))
+    }
+
+    /// Run one bounded provider-declared source-change check.
+    pub(crate) async fn source_check(
+        &self,
+        addon_id: &str,
+        source_url: &str,
+        validator: Option<&str>,
+    ) -> Result<MediaListSourceCheckResult> {
+        let installation = load_installed_addon(&self.pool, addon_id)
+            .await
+            .map_err(|error| {
+                RepositoryError::unavailable("load media-list add-on", error.to_string())
+            })?
+            .ok_or_else(|| {
+                RepositoryError::unavailable("load media-list add-on", "add-on is not installed")
+            })?;
+        if !installation
+            .manifest
+            .has_media_list_source_check_capability()
+        {
+            return Err(RepositoryError::unavailable(
+                "check media-list source",
+                "the add-on does not declare media-list.source-check.v1",
+            ));
+        }
+        let source_url = validate_operator_source_url(
+            source_url,
+            &installation.manifest.permissions.network_hosts,
+        )
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "validate media-list source URL",
+                AddonOperationError::new(OPERATION_CODE_UNSUPPORTED_URL, error.to_string())
+                    .to_string(),
+            )
+        })?;
+        let request = MediaListSourceCheckRequest {
+            source_url,
+            validator: validator.map(ToOwned::to_owned),
+        };
+        request
+            .validate()
+            .map_err(|error| RepositoryError::Decode {
+                kind: "media-list source check request",
+                value: error.to_string(),
+            })?;
+        let input = serde_json::to_vec(&request).map_err(|error| RepositoryError::Decode {
+            kind: "media-list source check request",
+            value: error.to_string(),
+        })?;
+        let runtime = managed_runtime_context();
+        let output = invoke_enabled_addon_with_input(
+            &self.pool,
+            addon_id,
+            AddonInvocation {
+                capability: CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1,
+                operation: "check",
+                runtime: &runtime,
+                extra_environment: &BTreeMap::new(),
+                timeout: Duration::from_secs(15),
+                max_output_bytes: MAX_MEDIA_LIST_SOURCE_CHECK_OUTPUT_BYTES,
+            },
+            &input,
+        )
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable("invoke media-list source check", error.to_string())
+        })?;
+        parse_media_list_source_check_output(&output).map_err(|error| RepositoryError::Decode {
+            kind: "media-list source check output",
+            value: error.to_string(),
+        })
     }
 
     /// Fetch exactly one bounded overview page without opening item details.
@@ -831,6 +922,18 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
 "#;
 
     #[cfg(unix)]
+    const SOURCE_CHECK_FIXTURE_SCRIPT: &str = r#"#!/bin/sh
+set -eu
+test "$1" = 'check'
+request=$(cat)
+case "$request" in
+  *'"source_url":"https://example.test/feed"'*'"validator":"opaque-etag"'*) ;;
+  *) exit 4 ;;
+esac
+printf '%s\n' '{"outcome":"unchanged","validator":"next-opaque-etag","source_updated_at":[],"code":null,"retry_after_seconds":null}'
+"#;
+
+    #[cfg(unix)]
     async fn fixture_media_list_addon_with_script(
         root: &std::path::Path,
         source: &str,
@@ -915,6 +1018,51 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
     #[cfg(unix)]
     async fn fixture_media_list_addon(root: &std::path::Path) -> crate::db::DbPool {
         fixture_media_list_addon_with_script(root, FIXTURE_SCRIPT, &[]).await
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn source_check_invocation_uses_the_bounded_contract() {
+        use ersatzrs_addon_contract::MediaListSourceCheckOutcome;
+
+        let temporary = tempfile::tempdir().expect("temporary folder");
+        let root = temporary.path().join("package");
+        let pool = fixture_media_list_addon_with_script(
+            &root,
+            SOURCE_CHECK_FIXTURE_SCRIPT,
+            &["example.test"],
+        )
+        .await;
+        let manifest_text: String = sqlx::query_scalar(
+            r#"SELECT "ManifestJson" FROM "AddonInstallation" WHERE "AddonId" = ?"#,
+        )
+        .bind("org.ersatzrs.addon.fixture")
+        .fetch_one(&pool)
+        .await
+        .expect("load fixture manifest");
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(&manifest_text).expect("parse fixture manifest");
+        manifest["capabilities"]
+            .as_array_mut()
+            .expect("fixture capabilities")
+            .push(serde_json::json!({"id": "media-list.source-check.v1"}));
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson" = ? WHERE "AddonId" = ?"#)
+            .bind(manifest.to_string())
+            .bind("org.ersatzrs.addon.fixture")
+            .execute(&pool)
+            .await
+            .expect("enable source-check capability");
+
+        let result = super::InstalledAddonMediaListProvider::new(pool)
+            .source_check(
+                "org.ersatzrs.addon.fixture",
+                "https://example.test/feed",
+                Some("opaque-etag"),
+            )
+            .await
+            .expect("invoke bounded source check");
+        assert_eq!(result.outcome, MediaListSourceCheckOutcome::Unchanged);
+        assert_eq!(result.validator.as_deref(), Some("next-opaque-etag"));
     }
 
     #[cfg(unix)]

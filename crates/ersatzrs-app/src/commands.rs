@@ -4555,8 +4555,8 @@ pub struct SetAddonMediaListItemRole {
 pub struct UpdateAddonMediaList {
     /// Persisted Add-on media list identity.
     pub id: EntityId,
-    /// Refresh the list from its provider on the daily cadence.
-    pub auto_refresh: bool,
+    /// Fixed, adaptive, or disabled provider refresh policy.
+    pub refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence,
     /// Maintain a generated playlist for matched rows.
     pub generate_playlist: bool,
     /// Force one descriptive content type for all entries, or retain
@@ -4948,7 +4948,7 @@ pub async fn update_addon_media_list(
     repository
         .update_settings(
             command.id,
-            command.auto_refresh,
+            command.refresh_cadence,
             command.generate_playlist,
             command.content_kind_override,
             command.chapter_input.trim(),
@@ -6965,7 +6965,7 @@ mod tests {
         async fn update_settings(
             &self,
             _id: EntityId,
-            _auto_refresh: bool,
+            _refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence,
             _generate_playlist: bool,
             _content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
             _chapter_input: &str,

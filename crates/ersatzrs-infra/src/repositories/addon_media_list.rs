@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListAdminSortDirection,
     AddonMediaListAdminSortField, AddonMediaListArtwork, AddonMediaListArtworkRole,
@@ -17,7 +17,7 @@ use ersatzrs_domain::{
     AddonMediaListDetailState, AddonMediaListItemAvailability, AddonMediaListItemKind,
     AddonMediaListItemRole, AddonMediaListPresentationKind,
     AddonMediaListPublicationFilesystemTransition, AddonMediaListPublicationOutcome,
-    AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
+    AddonMediaListRefreshCadence, AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
 };
 use sha2::{Digest as _, Sha256};
 use sqlx::{Pool, Row};
@@ -43,6 +43,15 @@ use crate::repositories::SqlxResultExt as _;
 
 const PAGE_SIZE_KEY: &str = "pages.addon_media_lists.page_size";
 const REVISION_BLOB_STORE_ID_KEY: &str = "addon_media_list.revision_blob_store_id";
+
+fn parse_admin_datetime(value: &str) -> Result<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(value)
+        .map(|value| value.with_timezone(&Utc))
+        .map_err(|error| RepositoryError::Decode {
+            kind: "add-on media-list refresh timestamp",
+            value: error.to_string(),
+        })
+}
 const DETAIL_PROJECTION_BATCH_SECONDS: i64 = 30;
 
 /// Project one quiet batch of safe post-publication detail updates.
@@ -376,8 +385,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         let rows = sqlx::query(
             r#"SELECT "list"."Id", "list"."AddonId", "list"."ProviderId",
                       "list"."SourceUrl", COALESCE("list"."Name", '') AS "Name",
-                      "list"."ItemCount", "list"."AutoRefresh", "list"."GeneratePlaylist",
-                      "list"."LastUpdate", "list"."LastMatch", "list"."LastError",
+                      "list"."ItemCount", "list"."RefreshCadence", "list"."GeneratePlaylist",
+                      "list"."LastUpdate", "list"."LastRefreshSucceededAt",
+                      "list"."NextRefreshAt", "list"."RefreshRetryAt",
+                      "list"."LastMatch", "list"."LastError",
                       "list"."PresentationKind", "list"."RequestedPresentationKind",
                       "list"."PresentationError", "list"."ReviewState", "list"."ReviewError",
                       "list"."PublishedRevision", "list"."DraftRevision",
@@ -389,8 +400,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 AND "matched"."MediaItemId" IS NOT NULL
                GROUP BY "list"."Id", "list"."AddonId", "list"."ProviderId",
                         "list"."SourceUrl", "list"."Name", "list"."ItemCount",
-                        "list"."AutoRefresh", "list"."GeneratePlaylist",
-                        "list"."LastUpdate", "list"."LastMatch", "list"."LastError",
+                        "list"."RefreshCadence", "list"."GeneratePlaylist",
+                        "list"."LastUpdate", "list"."LastRefreshSucceededAt",
+                        "list"."NextRefreshAt", "list"."RefreshRetryAt",
+                        "list"."LastMatch", "list"."LastError",
                         "list"."PresentationKind", "list"."RequestedPresentationKind",
                         "list"."PresentationError", "list"."ReviewState", "list"."ReviewError",
                         "list"."PublishedRevision", "list"."DraftRevision",
@@ -433,11 +446,30 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                             value: match_count.to_string(),
                         }
                     })?,
-                    auto_refresh: decode_bool_column(row, "AutoRefresh")?,
+                    refresh_cadence: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListRefreshCadence",
+                        row,
+                        "RefreshCadence",
+                    )?,
                     generate_playlist: decode_bool_column(row, "GeneratePlaylist")?,
                     last_update: decode_optional_datetime(
                         "AddonMediaList.LastUpdate",
                         row.try_get("LastUpdate").repository()?,
+                    )?
+                    .map(|value| value.to_rfc3339()),
+                    last_refresh_succeeded_at: decode_optional_datetime(
+                        "AddonMediaList.LastRefreshSucceededAt",
+                        row.try_get("LastRefreshSucceededAt").repository()?,
+                    )?
+                    .map(|value| value.to_rfc3339()),
+                    next_refresh_at: decode_optional_datetime(
+                        "AddonMediaList.NextRefreshAt",
+                        row.try_get("NextRefreshAt").repository()?,
+                    )?
+                    .map(|value| value.to_rfc3339()),
+                    refresh_retry_at: decode_optional_datetime(
+                        "AddonMediaList.RefreshRetryAt",
+                        row.try_get("RefreshRetryAt").repository()?,
                     )?
                     .map(|value| value.to_rfc3339()),
                     last_match: decode_optional_datetime(
@@ -489,7 +521,9 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>> {
         let row = sqlx::query(
             r#"SELECT "list"."Id", "list"."Name", "list"."AddonId", "list"."SourceUrl",
-                      "list"."AutoRefresh", "list"."GeneratePlaylist",
+                      "list"."RefreshCadence", "list"."GeneratePlaylist",
+                      "list"."LastRefreshSucceededAt", "list"."NextRefreshAt",
+                      "list"."RefreshRetryAt",
                       "list"."ContentKindOverride", "list"."PresentationKind",
                       "list"."RequestedPresentationKind", "list"."PresentationError",
                       "list"."ChapterInput", "list"."ReviewState", "list"."ReviewError",
@@ -513,7 +547,26 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                     addon_id: row.try_get("AddonId").repository()?,
                     source_url: row.try_get("SourceUrl").repository()?,
                     folder_name: row.try_get("FolderName").repository()?,
-                    auto_refresh: decode_bool_column(&row, "AutoRefresh")?,
+                    refresh_cadence: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListRefreshCadence",
+                        &row,
+                        "RefreshCadence",
+                    )?,
+                    last_refresh_succeeded_at: decode_optional_datetime(
+                        "AddonMediaList.LastRefreshSucceededAt",
+                        row.try_get("LastRefreshSucceededAt").repository()?,
+                    )?
+                    .map(|value| value.to_rfc3339()),
+                    next_refresh_at: decode_optional_datetime(
+                        "AddonMediaList.NextRefreshAt",
+                        row.try_get("NextRefreshAt").repository()?,
+                    )?
+                    .map(|value| value.to_rfc3339()),
+                    refresh_retry_at: decode_optional_datetime(
+                        "AddonMediaList.RefreshRetryAt",
+                        row.try_get("RefreshRetryAt").repository()?,
+                    )?
+                    .map(|value| value.to_rfc3339()),
                     generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
                     content_kind_override: crate::repositories::common::decode_enum_column(
                         "AddonMediaListContentKind",
@@ -2090,7 +2143,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     async fn update_settings(
         &self,
         id: EntityId,
-        auto_refresh: bool,
+        refresh_cadence: AddonMediaListRefreshCadence,
         generate_playlist: bool,
         content_kind_override: AddonMediaListContentKind,
         chapter_input: &str,
@@ -2102,6 +2155,39 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 kind: "add-on media list",
                 id,
             })?;
+        let cadence_changed = existing.refresh_cadence != refresh_cadence;
+        if cadence_changed
+            && refresh_cadence == AddonMediaListRefreshCadence::Adaptive
+            && !InstalledAddonMediaListProvider::new(self.0.clone())
+                .supports_source_check(&existing.addon_id)
+                .await?
+        {
+            return Err(RepositoryError::unavailable(
+                "enable adaptive add-on list refresh",
+                "the selected add-on does not declare media-list.source-check.v1",
+            ));
+        }
+        let now = Utc::now();
+        let next_refresh_at = if cadence_changed {
+            match refresh_cadence {
+                AddonMediaListRefreshCadence::Never => None,
+                AddonMediaListRefreshCadence::Adaptive => Some(encode_datetime(now)),
+                cadence => existing
+                    .last_refresh_succeeded_at
+                    .as_deref()
+                    .map(parse_admin_datetime)
+                    .transpose()?
+                    .and_then(|anchor| {
+                        crate::addon_media_list_refresh::next_fixed_refresh_at(cadence, anchor)
+                    })
+                    .map_or_else(
+                        || Some(encode_datetime(now)),
+                        |due| Some(encode_datetime(due)),
+                    ),
+            }
+        } else {
+            existing.next_refresh_at.clone()
+        };
         // A library-type edit changes only the local publication projection.
         // The imported provider snapshot is already durable, so changing its
         // list-wide content-kind override must not execute the add-on again.
@@ -2122,7 +2208,9 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         AddonMediaListSynchronizer::new(self.0.clone())
             .update_settings(
                 id,
-                auto_refresh,
+                refresh_cadence,
+                next_refresh_at.as_deref(),
+                cadence_changed,
                 generate_playlist,
                 content_kind_override,
                 chapter_input,

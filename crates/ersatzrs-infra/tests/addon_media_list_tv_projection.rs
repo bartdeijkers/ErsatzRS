@@ -18,7 +18,7 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListPresentationKind, AddonMediaListPublicationOutcome,
-    AddonMediaListPublicationPhase,
+    AddonMediaListPublicationPhase, AddonMediaListRefreshCadence,
 };
 use ersatzrs_infra::addon_media_list_sync::AddonMediaListSynchronizer;
 use ersatzrs_infra::repositories::{
@@ -1775,7 +1775,7 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
         .addon_media_lists
         .update_settings(
             LIST_ID,
-            true,
+            AddonMediaListRefreshCadence::Daily,
             false,
             AddonMediaListContentKind::TelevisionEpisode,
             "",
@@ -1815,7 +1815,7 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
         .addon_media_lists
         .update_settings(
             LIST_ID,
-            true,
+            AddonMediaListRefreshCadence::Daily,
             false,
             AddonMediaListContentKind::TelevisionEpisode,
             "",
@@ -2872,7 +2872,7 @@ async fn configure_verifiable_tv_publication(pool: &SqlitePool, repositories: &R
         .addon_media_lists
         .update_settings(
             LIST_ID,
-            true,
+            AddonMediaListRefreshCadence::Daily,
             true,
             AddonMediaListContentKind::TelevisionEpisode,
             "",
@@ -3827,7 +3827,13 @@ async fn restored_verification_accepts_logical_content_with_regenerated_database
         .expect("request failed candidate presentation");
     repositories
         .addon_media_lists
-        .update_settings(LIST_ID, true, false, AddonMediaListContentKind::Movie, "")
+        .update_settings(
+            LIST_ID,
+            AddonMediaListRefreshCadence::Daily,
+            false,
+            AddonMediaListContentKind::Movie,
+            "",
+        )
         .await
         .expect("disable the candidate generated playlist");
     let saved_revision = scalar::<i32>(

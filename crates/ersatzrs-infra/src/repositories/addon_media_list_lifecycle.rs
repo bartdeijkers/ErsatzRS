@@ -110,8 +110,8 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         .bind(encode_optional_datetime(settings.retry_at))
         .bind(encode_optional_datetime(settings.last_success_at))
         .bind(byte_limit)
-        // Only Daily is executable by the frozen Boolean scheduler. The
-        // calendar scheduler introduced by AMM-L will own the other cadences.
+        // Keep the retired Boolean column truthful for older readers without
+        // collapsing the other cadences into its former daily-only meaning.
         .bind(settings.cadence == AddonMediaListRefreshCadence::Daily)
         .bind(list_id)
         .execute(&self.0)

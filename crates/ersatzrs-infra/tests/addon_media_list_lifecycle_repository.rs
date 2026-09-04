@@ -378,7 +378,7 @@ async fn lifecycle_and_global_artifact_policy_round_trip_without_enabling_behavi
             .unwrap(),
         Some(settings)
     );
-    // The frozen Boolean scheduler must not run a monthly cadence as daily.
+    // The retired Boolean projection must not describe monthly as daily.
     let legacy_auto_refresh: bool =
         sqlx::query_scalar(r#"SELECT "AutoRefresh" FROM "AddonMediaList" WHERE "Id" = 1"#)
             .fetch_one(&pool)

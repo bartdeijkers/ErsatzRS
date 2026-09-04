@@ -11,7 +11,8 @@ use ersatzrs_domain::{
     AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
     AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
     AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
-    AddonMediaListRecoveryAction, AddonMediaListReviewState, RemoteStreamLiveness,
+    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence, AddonMediaListReviewState,
+    RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
@@ -1447,6 +1448,7 @@ fn AddonMediaListsIsland(
     let add_source_url = RwSignal::new(String::new());
     let add_folder_name = RwSignal::new(String::new());
     let add_content_kind = RwSignal::new(AddonMediaListContentKind::Auto);
+    let add_refresh_cadence = RwSignal::new(AddonMediaListRefreshCadence::Daily);
     let add_load_item_details = RwSignal::new(true);
     let add_open = RwSignal::new(false);
     let has_initial_error = !initial_error.is_empty();
@@ -1478,9 +1480,22 @@ fn AddonMediaListsIsland(
     });
 
     let add_action = Action::new(
-        |value: &(String, String, String, AddonMediaListContentKind, bool)| {
-            let (addon_id, source_url, folder_name, content_kind_override, load_item_details) =
-                value.clone();
+        |value: &(
+            String,
+            String,
+            String,
+            AddonMediaListContentKind,
+            AddonMediaListRefreshCadence,
+            bool,
+        )| {
+            let (
+                addon_id,
+                source_url,
+                folder_name,
+                content_kind_override,
+                refresh_cadence,
+                load_item_details,
+            ) = value.clone();
             async move {
                 add_addon_media_list(
                     addon_id,
@@ -1489,6 +1504,7 @@ fn AddonMediaListsIsland(
                     content_kind_override,
                     String::new(),
                     load_item_details,
+                    refresh_cadence,
                 )
                 .await
             }
@@ -1513,6 +1529,7 @@ fn AddonMediaListsIsland(
                     add_addon_id.set(String::new());
                     add_addon_chosen.set(false);
                     add_load_item_details.set(true);
+                    add_refresh_cadence.set(AddonMediaListRefreshCadence::Daily);
                     add_open.set(false);
                     data.refetch();
                 }
@@ -1839,9 +1856,10 @@ fn AddonMediaListsIsland(
                 source_url=add_source_url
                 folder_name=add_folder_name
                 content_kind=add_content_kind
+                refresh_cadence=add_refresh_cadence
                 load_item_details=add_load_item_details
                 providers=providers
-                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind, bool)| {
+                on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind, AddonMediaListRefreshCadence, bool)| {
                     add_action.dispatch(value);
                 })
             />
@@ -1875,10 +1893,34 @@ fn AddAddonMediaListDialog(
     source_url: RwSignal<String>,
     folder_name: RwSignal<String>,
     content_kind: RwSignal<AddonMediaListContentKind>,
+    refresh_cadence: RwSignal<AddonMediaListRefreshCadence>,
     load_item_details: RwSignal<bool>,
     providers: Vec<AddonMediaListProviderRow>,
-    on_submit: Callback<(String, String, String, AddonMediaListContentKind, bool)>,
+    on_submit: Callback<(
+        String,
+        String,
+        String,
+        AddonMediaListContentKind,
+        AddonMediaListRefreshCadence,
+        bool,
+    )>,
 ) -> impl IntoView {
+    let adaptive_provider_ids = StoredValue::new(
+        providers
+            .iter()
+            .filter(|provider| provider.supports_adaptive_refresh)
+            .map(|provider| provider.addon_id.clone())
+            .collect::<BTreeSet<_>>(),
+    );
+    let supports_adaptive_refresh =
+        Memo::new(move |_| adaptive_provider_ids.with_value(|ids| ids.contains(&addon_id.get())));
+    Effect::new(move |_| {
+        if !supports_adaptive_refresh.get()
+            && refresh_cadence.get_untracked() == AddonMediaListRefreshCadence::Adaptive
+        {
+            refresh_cadence.set(AddonMediaListRefreshCadence::Daily);
+        }
+    });
     // Resolving on change rather than on every keystroke keeps one request per
     // pasted or completed URL instead of one per character.
     let resolve_action = Action::new(|url: &String| {
@@ -1926,12 +1968,13 @@ fn AddAddonMediaListDialog(
                         let source_url = source_url.get_untracked();
                         let folder_name = folder_name.get_untracked();
                         let content_kind = content_kind.get_untracked();
+                        let refresh_cadence = refresh_cadence.get_untracked();
                         let load_item_details = load_item_details.get_untracked();
                         // The add-on may be empty: the server resolves it
                         // from the URL, so the same rule applies to the plain
                         // HTML form post.
                         if !source_url.trim().is_empty() {
-                            on_submit.run((addon_id, source_url, folder_name, content_kind, load_item_details));
+                            on_submit.run((addon_id, source_url, folder_name, content_kind, refresh_cadence, load_item_details));
                         }
                     }
                 >
@@ -2011,6 +2054,15 @@ fn AddAddonMediaListDialog(
                             </select>
                         </label>
                         <label class=style::dialog_field>
+                            <span>{tr(TextKey::AutomaticRefresh)}</span>
+                            <RefreshCadenceSelect
+                                cadence=refresh_cadence
+                                supports_adaptive=Signal::derive(move || supports_adaptive_refresh.get())
+                                preserve_unavailable_adaptive=false
+                                class_name=""
+                            />
+                        </label>
+                        <label class=style::dialog_field>
                             <span>{tr(TextKey::AddonMediaListFolder)}</span>
                             <input
                                 type="text"
@@ -2085,6 +2137,67 @@ const fn presentation_icon(presentation: AddonMediaListPresentationKind) -> Icon
     }
 }
 
+const fn refresh_cadence_value(cadence: AddonMediaListRefreshCadence) -> &'static str {
+    match cadence {
+        AddonMediaListRefreshCadence::Adaptive => "adaptive",
+        AddonMediaListRefreshCadence::Daily => "daily",
+        AddonMediaListRefreshCadence::Weekly => "weekly",
+        AddonMediaListRefreshCadence::Monthly => "monthly",
+        AddonMediaListRefreshCadence::Yearly => "yearly",
+        AddonMediaListRefreshCadence::Never => "never",
+    }
+}
+
+fn refresh_cadence_from_value(value: &str) -> AddonMediaListRefreshCadence {
+    match value {
+        "adaptive" => AddonMediaListRefreshCadence::Adaptive,
+        "weekly" => AddonMediaListRefreshCadence::Weekly,
+        "monthly" => AddonMediaListRefreshCadence::Monthly,
+        "yearly" => AddonMediaListRefreshCadence::Yearly,
+        "never" => AddonMediaListRefreshCadence::Never,
+        _ => AddonMediaListRefreshCadence::Daily,
+    }
+}
+
+const fn refresh_cadence_icon(cadence: AddonMediaListRefreshCadence) -> IconName {
+    if matches!(cadence, AddonMediaListRefreshCadence::Never) {
+        IconName::RefreshOff
+    } else {
+        IconName::Clock
+    }
+}
+
+#[component]
+fn RefreshCadenceSelect(
+    cadence: RwSignal<AddonMediaListRefreshCadence>,
+    supports_adaptive: Signal<bool>,
+    preserve_unavailable_adaptive: bool,
+    class_name: &'static str,
+) -> impl IntoView {
+    view! {
+        <select
+            class=class_name
+            name="refresh_cadence"
+            aria-label=tr(TextKey::AutomaticRefresh)
+            prop:value=move || refresh_cadence_value(cadence.get())
+            on:change=move |event| {
+                cadence.set(refresh_cadence_from_value(&event_target_value(&event)));
+            }
+        >
+            <option
+                value="adaptive"
+                disabled=move || !supports_adaptive.get() && !preserve_unavailable_adaptive
+                selected=move || cadence.get() == AddonMediaListRefreshCadence::Adaptive
+            >{tr(TextKey::RefreshCadenceAdaptive)}</option>
+            <option value="daily" selected=move || cadence.get() == AddonMediaListRefreshCadence::Daily>{tr(TextKey::RefreshCadenceDaily)}</option>
+            <option value="weekly" selected=move || cadence.get() == AddonMediaListRefreshCadence::Weekly>{tr(TextKey::RefreshCadenceWeekly)}</option>
+            <option value="monthly" selected=move || cadence.get() == AddonMediaListRefreshCadence::Monthly>{tr(TextKey::RefreshCadenceMonthly)}</option>
+            <option value="yearly" selected=move || cadence.get() == AddonMediaListRefreshCadence::Yearly>{tr(TextKey::RefreshCadenceYearly)}</option>
+            <option value="never" selected=move || cadence.get() == AddonMediaListRefreshCadence::Never>{tr(TextKey::RefreshCadenceNever)}</option>
+        </select>
+    }
+}
+
 const fn presentation_text_key(presentation: AddonMediaListPresentationKind) -> TextKey {
     match presentation {
         AddonMediaListPresentationKind::TelevisionShow => TextKey::TvShows,
@@ -2138,6 +2251,16 @@ fn AddAddonMediaListPageIsland(
     providers: Vec<AddonMediaListProviderRow>,
     initial_addon_id: String,
 ) -> impl IntoView {
+    let any_adaptive_provider = providers
+        .iter()
+        .any(|provider| provider.supports_adaptive_refresh);
+    let adaptive_provider_ids = StoredValue::new(
+        providers
+            .iter()
+            .filter(|provider| provider.supports_adaptive_refresh)
+            .map(|provider| provider.addon_id.clone())
+            .collect::<BTreeSet<_>>(),
+    );
     let context_addon_name = providers
         .iter()
         .find(|provider| provider.addon_id == initial_addon_id)
@@ -2148,11 +2271,22 @@ fn AddAddonMediaListPageIsland(
     let source_url = RwSignal::new(String::new());
     let folder_name = RwSignal::new(String::new());
     let presentation = RwSignal::new(AddonMediaListPresentationKind::TelevisionShow);
-    let auto_refresh = RwSignal::new(true);
+    let refresh_cadence = RwSignal::new(AddonMediaListRefreshCadence::Daily);
     let generate_playlist = RwSignal::new(false);
     let load_item_details = RwSignal::new(true);
     let resolved_name = RwSignal::new(String::new());
+    let hydrated = RwSignal::new(false);
     let toast = use_toast();
+    let supports_adaptive_refresh =
+        Memo::new(move |_| adaptive_provider_ids.with_value(|ids| ids.contains(&addon_id.get())));
+    Effect::new(move |_| hydrated.set(true));
+    Effect::new(move |_| {
+        if !supports_adaptive_refresh.get()
+            && refresh_cadence.get() == AddonMediaListRefreshCadence::Adaptive
+        {
+            refresh_cadence.set(AddonMediaListRefreshCadence::Daily);
+        }
+    });
 
     let resolve_action = Action::new(|url: &String| {
         let url = url.clone();
@@ -2180,7 +2314,7 @@ fn AddAddonMediaListPageIsland(
             String,
             String,
             AddonMediaListPresentationKind,
-            bool,
+            AddonMediaListRefreshCadence,
             bool,
             bool,
         )| {
@@ -2189,7 +2323,7 @@ fn AddAddonMediaListPageIsland(
                 source_url,
                 folder_name,
                 presentation,
-                auto_refresh,
+                refresh_cadence,
                 playlist,
                 load_item_details,
             ) = value.clone();
@@ -2201,12 +2335,13 @@ fn AddAddonMediaListPageIsland(
                     presentation_content_kind(presentation),
                     String::new(),
                     load_item_details,
+                    refresh_cadence,
                 )
                 .await?;
                 let mut form = get_addon_media_list_form(id)
                     .await?
                     .ok_or_else(|| ServerFnError::new("imported add-on list was not found"))?;
-                form.auto_refresh = auto_refresh;
+                form.refresh_cadence = refresh_cadence;
                 form.generate_playlist = playlist;
                 update_addon_media_list(form).await?;
                 request_addon_media_list_presentation(id, presentation, None).await?;
@@ -2261,7 +2396,7 @@ fn AddAddonMediaListPageIsland(
                             source_url.get_untracked(),
                             folder_name.get_untracked(),
                             presentation.get_untracked(),
-                            auto_refresh.get_untracked(),
+                            refresh_cadence.get_untracked(),
                             generate_playlist.get_untracked(),
                             load_item_details.get_untracked(),
                         ));
@@ -2347,16 +2482,24 @@ fn AddAddonMediaListPageIsland(
                                 <option value="remote_streams">{tr(TextKey::RemoteStreams)}</option>
                             </select>
                         </label>
-                        <div class=style::source_field>
+                        <label class=style::source_field>
                             <span class=style::field_title>
-                                <span style=move || icon_style(if auto_refresh.get() { IconName::Clock } else { IconName::RefreshOff }, "1.05rem") aria-hidden="true"></span>
+                                <span style=move || icon_style(refresh_cadence_icon(refresh_cadence.get()), "1.05rem") aria-hidden="true"></span>
                                 <span>{tr(TextKey::AutomaticRefresh)}</span>
                             </span>
-                            <label class=style::compact_toggle>
-                                <input type="checkbox" name="auto_refresh" value="true" prop:checked=move || auto_refresh.get() on:change=move |event| auto_refresh.set(event_target_checked(&event))/>
-                                <span>{tr(TextKey::UpdateAddonMediaListDaily)}</span>
-                            </label>
-                        </div>
+                            <RefreshCadenceSelect
+                                cadence=refresh_cadence
+                                supports_adaptive=Signal::derive(move || {
+                                    if hydrated.get() {
+                                        supports_adaptive_refresh.get()
+                                    } else {
+                                        any_adaptive_provider
+                                    }
+                                })
+                                preserve_unavailable_adaptive=false
+                                class_name=style::boxed_input
+                            />
+                        </label>
                     </div>
 
                     <label class=style::source_field>
@@ -3760,7 +3903,7 @@ fn AddonMediaListEditorIsland(
     );
     let submit_addon_id = addon_id.clone();
     let submit_source_url = source_url.clone();
-    let auto_refresh = RwSignal::new(form.auto_refresh);
+    let refresh_cadence = RwSignal::new(form.refresh_cadence);
     let generate_playlist = RwSignal::new(form.generate_playlist);
     let detail_import_policy = RwSignal::new(form.detail_import_policy);
     let publication_readiness = RwSignal::new(initial_readiness);
@@ -3859,6 +4002,24 @@ fn AddonMediaListEditorIsland(
     let display_id = form.source_url.clone();
     let display_folder = form.folder_name.clone();
     let form_addon_id = form.addon_id.clone();
+    let supports_adaptive_refresh = providers
+        .iter()
+        .any(|provider| provider.addon_id == form.addon_id && provider.supports_adaptive_refresh);
+    let last_refresh_succeeded_at = form
+        .last_refresh_succeeded_at
+        .as_deref()
+        .and_then(format_progress_timestamp)
+        .unwrap_or_else(|| tr(TextKey::NeverRefreshed).to_owned());
+    let next_refresh_at = form
+        .next_refresh_at
+        .as_deref()
+        .and_then(format_progress_timestamp)
+        .unwrap_or_else(|| tr(TextKey::NotAvailable).to_owned());
+    let refresh_retry_at = form
+        .refresh_retry_at
+        .as_deref()
+        .and_then(format_progress_timestamp)
+        .unwrap_or_else(|| tr(TextKey::NotAvailable).to_owned());
     let detected_provider_name = providers
         .iter()
         .find(|provider| provider.addon_id == form.addon_id)
@@ -3917,12 +4078,11 @@ fn AddonMediaListEditorIsland(
     let episode_numbering_start_item_id = RwSignal::new(None::<i64>);
     let episode_numbering_auto_detect = RwSignal::new(false);
     let episode_numbering_minimum_gap_days = RwSignal::new("90".to_owned());
-    let checked_auto_refresh = form.auto_refresh;
     let checked_generate_playlist = form.generate_playlist;
     let replacement_target = RwSignal::new(None::<i64>);
     let replacement_query = RwSignal::new(String::new());
     let replacement_results = RwSignal::new(Vec::<AddonMediaListReplacementRow>::new());
-    let saved_auto_refresh = form.auto_refresh;
+    let saved_refresh_cadence = form.refresh_cadence;
     let saved_generate_playlist = form.generate_playlist;
     let saved_detail_import_policy = form.detail_import_policy;
     let saved_content_kind_override = form.content_kind_override;
@@ -3953,7 +4113,7 @@ fn AddonMediaListEditorIsland(
         })
     });
     let settings_dirty = Memo::new(move |_| {
-        auto_refresh.get() != saved_auto_refresh
+        refresh_cadence.get() != saved_refresh_cadence
             || generate_playlist.get() != saved_generate_playlist
             || detail_import_policy.get() != saved_detail_import_policy
             || content_kind_override.get() != saved_content_kind_override
@@ -5110,7 +5270,10 @@ fn AddonMediaListEditorIsland(
                             addon_id: submit_addon_id.clone(),
                             source_url: submit_source_url.clone(),
                             folder_name: form.folder_name.clone(),
-                            auto_refresh: auto_refresh.get_untracked(),
+                            refresh_cadence: refresh_cadence.get_untracked(),
+                            last_refresh_succeeded_at: form.last_refresh_succeeded_at.clone(),
+                            next_refresh_at: form.next_refresh_at.clone(),
+                            refresh_retry_at: form.refresh_retry_at.clone(),
                             generate_playlist: generate_playlist.get_untracked(),
                             content_kind_override: content_kind_override.get_untracked(),
                             legacy_chapter_input: legacy_chapter_input.clone(),
@@ -5687,20 +5850,29 @@ fn AddonMediaListEditorIsland(
                                 </label>
                                 <div class=style::source_field>
                                     <span class=style::field_title>
-                                        <span style=move || icon_style(if auto_refresh.get() { IconName::Clock } else { IconName::RefreshOff }, "1rem") aria-hidden="true"></span>
+                                        <span style=move || icon_style(refresh_cadence_icon(refresh_cadence.get()), "1rem") aria-hidden="true"></span>
                                         <span>{tr(TextKey::AutomaticRefresh)}</span>
                                     </span>
-                                    <label class=style::compact_toggle>
-                                        <input
-                                            type="checkbox"
-                                            name="auto_refresh"
-                                            value="true"
-                                            checked=checked_auto_refresh
-                                            prop:checked=move || auto_refresh.get()
-                                            on:change=move |event| auto_refresh.set(event_target_checked(&event))
-                                        />
-                                        <span>{tr(TextKey::UpdateAddonMediaListDaily)}</span>
-                                    </label>
+                                    <RefreshCadenceSelect
+                                        cadence=refresh_cadence
+                                        supports_adaptive=Signal::derive(move || supports_adaptive_refresh)
+                                        preserve_unavailable_adaptive=saved_refresh_cadence == AddonMediaListRefreshCadence::Adaptive
+                                        class_name=style::boxed_input
+                                    />
+                                    <p
+                                        class=style::review_error
+                                        role="alert"
+                                        data-testid="adaptive-refresh-unavailable"
+                                        style:display=move || if !supports_adaptive_refresh && refresh_cadence.get() == AddonMediaListRefreshCadence::Adaptive { "flex" } else { "none" }
+                                    >
+                                        <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
+                                        <span>{tr(TextKey::AdaptiveRefreshUnavailable)}</span>
+                                    </p>
+                                    <dl class=style::operator_metrics data-testid="addon-list-refresh-status">
+                                        <div><dt>{tr(TextKey::LastSuccessfulRefresh)}</dt><dd>{last_refresh_succeeded_at}</dd></div>
+                                        <div><dt>{tr(TextKey::NextScheduledRefresh)}</dt><dd>{next_refresh_at}</dd></div>
+                                        <div><dt>{tr(TextKey::RefreshRetryAt)}</dt><dd>{refresh_retry_at}</dd></div>
+                                    </dl>
                                 </div>
                                 <p class=style::type_change_note data-testid="addon-media-type-change-help">
                                     <span style=icon_style(IconName::Edit, "1rem") aria-hidden="true"></span>

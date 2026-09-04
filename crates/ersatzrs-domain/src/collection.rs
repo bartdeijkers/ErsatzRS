@@ -531,7 +531,7 @@ pub struct AddonMediaList {
     pub name: String,
     pub description: Option<String>,
     pub item_count: i32,
-    pub auto_refresh: bool,
+    pub refresh_cadence: crate::AddonMediaListRefreshCadence,
     pub generate_playlist: bool,
     pub content_kind_override: AddonMediaListContentKind,
     pub presentation_kind: AddonMediaListPresentationKind,

@@ -20,12 +20,12 @@ use ersatzrs_addon_contract::{
     LocalRepositoryManifest, RepositoryManifest, CAPABILITY_ADDON_CHECK_V1,
     CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
     CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5,
-    CAPABILITY_MEDIA_LIST_LIST_V6, CAPABILITY_REMOTE_STREAM_ITEM_V1,
-    CAPABILITY_REMOTE_STREAM_ITEM_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
-    CAPABILITY_REMOTE_STREAM_LIST_V4, CAPABILITY_REMOTE_STREAM_PLAY_V1,
-    CAPABILITY_REMOTE_STREAM_PLAY_V2, OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET,
-    OPERATION_CODE_MISSING_SETTING,
+    CAPABILITY_MEDIA_LIST_LIST_V6, CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1,
+    CAPABILITY_REMOTE_STREAM_ITEM_V1, CAPABILITY_REMOTE_STREAM_ITEM_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
+    CAPABILITY_REMOTE_STREAM_PLAY_V1, CAPABILITY_REMOTE_STREAM_PLAY_V2, OPERATION_CODE_FAILED,
+    OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
 };
 use ersatzrs_domain::EntityId;
 use futures_util::StreamExt as _;
@@ -3215,25 +3215,25 @@ async fn resolve_addon_command(
 fn validate_supported_operation(capability: &str, operation: &str) -> Result<(), AddonError> {
     let supported = matches!(
         (capability, operation),
-        (CAPABILITY_ADDON_CHECK_V1, "check")
-            | (
-                CAPABILITY_MEDIA_LIST_LIST_V1
-                    | CAPABILITY_MEDIA_LIST_LIST_V2
-                    | CAPABILITY_MEDIA_LIST_LIST_V3
-                    | CAPABILITY_MEDIA_LIST_LIST_V4
-                    | CAPABILITY_MEDIA_LIST_LIST_V5
-                    | CAPABILITY_MEDIA_LIST_LIST_V6
-                    | CAPABILITY_REMOTE_STREAM_LIST_V1
-                    | CAPABILITY_REMOTE_STREAM_LIST_V2
-                    | CAPABILITY_REMOTE_STREAM_LIST_V3
-                    | CAPABILITY_REMOTE_STREAM_LIST_V4,
-                "list",
-            )
-            | (
-                CAPABILITY_REMOTE_STREAM_ITEM_V1 | CAPABILITY_REMOTE_STREAM_ITEM_V2,
-                "item"
-            )
-            | (CAPABILITY_MEDIA_LIST_IMPORT_V1, "discover" | "enrich")
+        (
+            CAPABILITY_ADDON_CHECK_V1 | CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1,
+            "check",
+        ) | (
+            CAPABILITY_MEDIA_LIST_LIST_V1
+                | CAPABILITY_MEDIA_LIST_LIST_V2
+                | CAPABILITY_MEDIA_LIST_LIST_V3
+                | CAPABILITY_MEDIA_LIST_LIST_V4
+                | CAPABILITY_MEDIA_LIST_LIST_V5
+                | CAPABILITY_MEDIA_LIST_LIST_V6
+                | CAPABILITY_REMOTE_STREAM_LIST_V1
+                | CAPABILITY_REMOTE_STREAM_LIST_V2
+                | CAPABILITY_REMOTE_STREAM_LIST_V3
+                | CAPABILITY_REMOTE_STREAM_LIST_V4,
+            "list",
+        ) | (
+            CAPABILITY_REMOTE_STREAM_ITEM_V1 | CAPABILITY_REMOTE_STREAM_ITEM_V2,
+            "item"
+        ) | (CAPABILITY_MEDIA_LIST_IMPORT_V1, "discover" | "enrich")
             | (
                 CAPABILITY_REMOTE_STREAM_PLAY_V1 | CAPABILITY_REMOTE_STREAM_PLAY_V2,
                 "play"
@@ -5478,6 +5478,9 @@ mod tests {
     fn only_host_supported_capability_operations_can_dispatch() {
         assert!(validate_supported_operation(CAPABILITY_ADDON_CHECK_V1, "check").is_ok());
         assert!(validate_supported_operation(CAPABILITY_MEDIA_LIST_LIST_V1, "list").is_ok());
+        assert!(
+            validate_supported_operation(CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1, "check").is_ok()
+        );
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_LIST_V1, "list").is_ok());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V1, "play").is_ok());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V2, "play").is_ok());

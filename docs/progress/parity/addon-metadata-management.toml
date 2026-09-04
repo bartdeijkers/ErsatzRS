@@ -56,10 +56,9 @@ provider-neutral access restrictions, item-scoped publication exclusion,
 redacted durable status, and guarded localized Retry/Restore actions for the
 hydrated and no-JavaScript editor. Focused acceptance is complete; AMM-N-03
 retains the integrated packaged Windows restart proof.
-AMM-J-04 adds causal history. AMM-K completes lifecycle, reset, metadata,
-stream details, previews, safe restore, and shared accessibility. Refresh,
-options, artifacts, and tool maintenance remain
-under AMM-L through AMM-N.
+AMM-J-04 and AMM-K complete recovery history and operator lifecycle. AMM-L-01
+adds fixed and adaptive refresh. Incremental discovery, reconciliation,
+options, artifacts, and tool maintenance remain under AMM-L through AMM-N.
 '''
 
 [[debt]]
@@ -85,7 +84,7 @@ id          = 'addon-list-refresh-has-no-cadence-or-incremental-checkpoint'
 description = 'Replace Boolean daily refresh with adaptive, daily, weekly, monthly, yearly, and never; let capable providers use a bounded source-change probe and persisted update history to anticipate updates without full-import overhead; use a transactionally promoted yt-dlp archive with observable safe early stop to load only new identities; reconcile provider removals/reordering without erasing operator work; refresh complete playlist metadata on an empty item delta; and make review versus additions-only automatic publication explicit.'
 discovered  = '2026-09-01'
 adr         = '0085'
-evidence    = 'Both current coordinators select AutoRefresh = 1 with a one-day LastUpdate cutoff. No package can declare a bounded source-change probe, and the host persists neither conditional-validator outcomes nor source-change observations for adaptive scheduling. The official yt-dlp discover adapter re-enumerates flat playlist pages, has no archive path, and cannot guarantee rich list summary/tags from flat output. Official yt-dlp documents --force-write-archive and separately documents --break-on-existing; archive suppression alone does not prove enumeration stopped, and unconditional early stop can miss reordered insertions. AMM-K-01 persists typed cadence/publication policy, fenced checkpoints, incremental strategy, and two-observation tombstone state, but AMM-L still owns adaptive/fixed execution and reconciliation behavior. Tracked by AMM-L and plans/addon-list-lifecycle-broadening.md.'
+evidence    = 'AMM-L-01 replaces Boolean daily selection with persisted adaptive, daily, weekly, monthly, yearly, and never cadences; durable due/retry/anchor state; calendar-safe fixed scheduling; and a bounded provider-neutral source-change probe with conditional validators, sixteen retained change observations, median prediction, capped miss/failure backoff, Retry-After precedence, and shared provider-host pacing. Changed probes launch the existing resumable import while unchanged probes preserve the draft. The official yt-dlp discover adapter still re-enumerates flat playlist pages, has no archive path, and cannot guarantee rich list summary/tags from flat output. Official yt-dlp documents --force-write-archive and separately documents --break-on-existing; archive suppression alone does not prove enumeration stopped, and unconditional early stop can miss reordered insertions. AMM-L-02 through L-05 still own transactional archive discovery, header-only refresh, provider reconciliation, and additions-only automatic publication. Tracked by AMM-L and plans/addon-list-lifecycle-broadening.md.'
 resolved    = false
 
 [[debt]]

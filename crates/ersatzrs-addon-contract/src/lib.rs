@@ -53,6 +53,8 @@ pub const CAPABILITY_MEDIA_LIST_LIST_V6: &str = "media-list.list.v6";
 pub const CAPABILITY_MEDIA_LIST_IMPORT_V1: &str = "media-list.import.v1";
 /// Declare host-rendered, provider-neutral media-list options.
 pub const CAPABILITY_MEDIA_LIST_OPTIONS_V1: &str = "media-list.options.v1";
+/// Probe one media-list source for changes without enumerating its contents.
+pub const CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1: &str = "media-list.source-check.v1";
 /// Host-rendered declarative add-on panel schema.
 pub const CAPABILITY_DECLARATIVE_PANEL_V1: &str = "declarative-panel.v1";
 /// Maximum UTF-8 bytes for provider/list/item identities stored and indexed by the host.
@@ -85,6 +87,14 @@ pub const MAX_MEDIA_LIST_OPTION_VALUES: usize = 32;
 pub const MAX_MEDIA_LIST_OPTION_IDENTIFIER_BYTES: usize = 64;
 /// Maximum serialized JSON size of one effective option envelope.
 pub const MAX_MEDIA_LIST_OPTION_VALUES_BYTES: usize = 16 * 1024;
+/// Maximum serialized request accepted by one source-change probe.
+pub const MAX_MEDIA_LIST_SOURCE_CHECK_REQUEST_BYTES: usize = 64 * 1024;
+/// Maximum serialized result accepted from one source-change probe.
+pub const MAX_MEDIA_LIST_SOURCE_CHECK_OUTPUT_BYTES: usize = 64 * 1024;
+/// Maximum UTF-8 bytes in one package-owned conditional validator.
+pub const MAX_MEDIA_LIST_SOURCE_CHECK_VALIDATOR_BYTES: usize = 4 * 1024;
+/// Maximum source update instants accepted from one source-change probe.
+pub const MAX_MEDIA_LIST_SOURCE_UPDATE_INSTANTS: usize = 16;
 /// Maximum captured output accepted from `remote-stream.list`.
 pub const MAX_REMOTE_STREAM_LIST_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 /// Maximum number of items accepted from one list invocation.
@@ -749,6 +759,186 @@ impl MediaListEnrichRequest {
     }
 }
 
+/// One bounded `media-list.source-check.v1 check` request written as JSON to stdin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaListSourceCheckRequest {
+    pub source_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validator: Option<String>,
+}
+
+impl MediaListSourceCheckRequest {
+    /// Validate the source and opaque conditional validator bounds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the source, validator, or serialized request is
+    /// empty or exceeds its protocol bound.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        if self.source_url.trim().is_empty() || self.source_url.len() > 8 * 1024 {
+            return invalid(
+                "media list source check source_url",
+                "must be between 1 and 8192 UTF-8 bytes",
+            );
+        }
+        validate_source_check_validator(self.validator.as_deref())?;
+        validate_source_check_serialized_size(
+            self,
+            "media list source check request",
+            MAX_MEDIA_LIST_SOURCE_CHECK_REQUEST_BYTES,
+        )
+    }
+}
+
+/// Typed terminal result of one bounded source-change probe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MediaListSourceCheckOutcome {
+    Changed,
+    Unchanged,
+    TransientFailure,
+    PermanentFailure,
+}
+
+/// One `media-list.source-check.v1 check` result emitted as bounded JSON.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MediaListSourceCheckResult {
+    pub outcome: MediaListSourceCheckOutcome,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validator: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_updated_at: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retry_after_seconds: Option<u32>,
+}
+
+impl MediaListSourceCheckResult {
+    /// Validate one source-check result before it influences durable scheduling.
+    ///
+    /// Successful outcomes may carry an opaque validator and up to sixteen UTC
+    /// update instants. Failure outcomes carry only a canonical diagnostic code,
+    /// plus an optional bounded retry hint for transient failures.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for oversized, malformed, or contradictory fields.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        let succeeded = matches!(
+            self.outcome,
+            MediaListSourceCheckOutcome::Changed | MediaListSourceCheckOutcome::Unchanged
+        );
+        if succeeded {
+            if self.code.is_some() || self.retry_after_seconds.is_some() {
+                return invalid(
+                    "media list source check result",
+                    "changed and unchanged outcomes must not carry failure fields",
+                );
+            }
+            validate_source_check_validator(self.validator.as_deref())?;
+            validate_source_update_instants(&self.source_updated_at)?;
+        } else {
+            if self.validator.is_some() || !self.source_updated_at.is_empty() {
+                return invalid(
+                    "media list source check result",
+                    "failure outcomes must not carry a validator or source update instants",
+                );
+            }
+            let code = self.code.as_deref().ok_or_else(|| ContractError::Invalid {
+                field: "media list source check code",
+                message: "is required for failure outcomes".to_owned(),
+            })?;
+            if code != sanitize_addon_diagnostic_code(code) {
+                return invalid(
+                    "media list source check code",
+                    "must be 1 to 128 lowercase ASCII code characters",
+                );
+            }
+            if self.retry_after_seconds.is_some_and(|value| value > 86_400) {
+                return invalid(
+                    "media list source check retry_after_seconds",
+                    "must not exceed 86400 seconds",
+                );
+            }
+            if self.outcome != MediaListSourceCheckOutcome::TransientFailure
+                && self.retry_after_seconds.is_some()
+            {
+                return invalid(
+                    "media list source check retry_after_seconds",
+                    "is only valid for transient_failure",
+                );
+            }
+        }
+        validate_source_check_serialized_size(
+            self,
+            "media list source check result",
+            MAX_MEDIA_LIST_SOURCE_CHECK_OUTPUT_BYTES,
+        )
+    }
+}
+
+fn validate_source_check_validator(validator: Option<&str>) -> Result<(), ContractError> {
+    if validator.is_some_and(|value| {
+        value.is_empty()
+            || value.len() > MAX_MEDIA_LIST_SOURCE_CHECK_VALIDATOR_BYTES
+            || value.chars().any(char::is_control)
+    }) {
+        return invalid(
+            "media list source check validator",
+            "must be 1 to 4096 UTF-8 bytes without control characters",
+        );
+    }
+    Ok(())
+}
+
+fn validate_source_update_instants(instants: &[String]) -> Result<(), ContractError> {
+    if instants.len() > MAX_MEDIA_LIST_SOURCE_UPDATE_INSTANTS {
+        return invalid(
+            "media list source check source_updated_at",
+            "must contain at most 16 instants",
+        );
+    }
+    let mut unique = BTreeSet::new();
+    for value in instants {
+        if value.len() > 64 {
+            return invalid(
+                "media list source check source_updated_at",
+                "must contain bounded RFC 3339 UTC instants",
+            );
+        }
+        let instant =
+            chrono::DateTime::parse_from_rfc3339(value).map_err(|_| ContractError::Invalid {
+                field: "media list source check source_updated_at",
+                message: "must contain RFC 3339 UTC instants".to_owned(),
+            })?;
+        if instant.offset().local_minus_utc() != 0 || !unique.insert(instant) {
+            return invalid(
+                "media list source check source_updated_at",
+                "must contain unique UTC instants",
+            );
+        }
+    }
+    Ok(())
+}
+
+fn validate_source_check_serialized_size<T: Serialize>(
+    value: &T,
+    field: &'static str,
+    limit: usize,
+) -> Result<(), ContractError> {
+    let bytes = serde_json::to_vec(value).map_err(|error| ContractError::Invalid {
+        field,
+        message: error.to_string(),
+    })?;
+    if bytes.len() > limit {
+        return invalid(field, format!("exceeds the {limit}-byte limit"));
+    }
+    Ok(())
+}
+
 /// First NDJSON record emitted by `media-list.import.v1 discover`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "record_type", rename_all = "snake_case", deny_unknown_fields)]
@@ -1348,6 +1538,7 @@ impl AddonManifest {
         }
         self.validate_media_list_import_capability()?;
         self.validate_media_list_options_capability()?;
+        self.validate_media_list_source_check_capability()?;
         validate_dependencies(&self.id, &self.dependencies)?;
         for (rid, entrypoint) in &self.entrypoints {
             if rid != "any" && !is_supported_rid(rid) {
@@ -1418,6 +1609,27 @@ impl AddonManifest {
             return invalid(
                 "capabilities",
                 "media-list.options.v1 requires a supported media-list.list capability",
+            );
+        }
+        Ok(())
+    }
+
+    fn validate_media_list_source_check_capability(&self) -> Result<(), ContractError> {
+        if self.has_capability(CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1)
+            && ![
+                CAPABILITY_MEDIA_LIST_LIST_V1,
+                CAPABILITY_MEDIA_LIST_LIST_V2,
+                CAPABILITY_MEDIA_LIST_LIST_V3,
+                CAPABILITY_MEDIA_LIST_LIST_V4,
+                CAPABILITY_MEDIA_LIST_LIST_V5,
+                CAPABILITY_MEDIA_LIST_LIST_V6,
+            ]
+            .into_iter()
+            .any(|capability| self.has_capability(capability))
+        {
+            return invalid(
+                "capabilities",
+                "media-list.source-check.v1 requires a supported media-list.list capability",
             );
         }
         Ok(())
@@ -1524,6 +1736,12 @@ impl AddonManifest {
         self.capabilities
             .iter()
             .find(|capability| capability.id == CAPABILITY_MEDIA_LIST_OPTIONS_V1)
+    }
+
+    /// Whether the package can perform a bounded media-list source probe.
+    #[must_use]
+    pub fn has_media_list_source_check_capability(&self) -> bool {
+        self.has_capability(CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1)
     }
 
     /// Serialize the validated option schema into a deterministic JSON snapshot.
@@ -2889,6 +3107,31 @@ fn declared_host_score(pattern: &str, host: &str) -> Option<usize> {
     }
 }
 
+/// Parse and validate one bounded `media-list.source-check.v1` JSON result.
+///
+/// # Errors
+///
+/// Returns an error when the output is oversized, malformed, or contradicts
+/// its typed outcome.
+pub fn parse_media_list_source_check_output(
+    output: &[u8],
+) -> Result<MediaListSourceCheckResult, ContractError> {
+    if output.len() > MAX_MEDIA_LIST_SOURCE_CHECK_OUTPUT_BYTES {
+        return invalid(
+            "media list source check output",
+            "exceeds the 65536-byte limit",
+        );
+    }
+    let result = serde_json::from_slice::<MediaListSourceCheckResult>(output).map_err(|error| {
+        ContractError::Invalid {
+            field: "media list source check output",
+            message: error.to_string(),
+        }
+    })?;
+    result.validate()?;
+    Ok(result)
+}
+
 /// Parse and validate captured `media-list.list.v1` or v2 NDJSON output.
 ///
 /// This function is intended for both host ingestion and add-on conformance
@@ -3752,6 +3995,115 @@ mod tests {
             .expect("legacy manifest remains readable")
             .validate()
             .expect("legacy manifest remains valid");
+    }
+
+    #[test]
+    fn source_check_capability_requires_a_supported_media_list_schema() {
+        let mut manifest = valid_manifest();
+        manifest.capabilities.push(AddonCapability {
+            id: CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1.to_owned(),
+            options: Vec::new(),
+        });
+        assert!(manifest.validate().is_err());
+
+        manifest.capabilities.push(AddonCapability {
+            id: CAPABILITY_MEDIA_LIST_LIST_V6.to_owned(),
+            options: Vec::new(),
+        });
+        manifest
+            .validate()
+            .expect("source check is paired with a media-list schema");
+        assert!(manifest.has_media_list_source_check_capability());
+    }
+
+    #[test]
+    fn source_check_request_and_success_result_are_bounded_and_round_trip() {
+        let request = MediaListSourceCheckRequest {
+            source_url: "https://example.test/feed".to_owned(),
+            validator: Some("opaque-etag".to_owned()),
+        };
+        request.validate().expect("bounded request");
+        let encoded = serde_json::to_vec(&request).expect("serialize request");
+        assert_eq!(
+            std::str::from_utf8(&encoded).unwrap(),
+            r#"{"source_url":"https://example.test/feed","validator":"opaque-etag"}"#
+        );
+        assert_eq!(
+            serde_json::from_slice::<MediaListSourceCheckRequest>(&encoded).unwrap(),
+            request
+        );
+
+        let result = MediaListSourceCheckResult {
+            outcome: MediaListSourceCheckOutcome::Changed,
+            validator: Some("next-opaque-etag".to_owned()),
+            source_updated_at: vec![
+                "2026-09-03T12:00:00Z".to_owned(),
+                "2026-09-04T12:00:00+00:00".to_owned(),
+            ],
+            code: None,
+            retry_after_seconds: None,
+        };
+        let encoded = serde_json::to_vec(&result).expect("serialize source-check result");
+        assert_eq!(
+            std::str::from_utf8(&encoded).unwrap(),
+            r#"{"outcome":"changed","validator":"next-opaque-etag","source_updated_at":["2026-09-03T12:00:00Z","2026-09-04T12:00:00+00:00"]}"#
+        );
+        assert_eq!(
+            parse_media_list_source_check_output(&encoded).unwrap(),
+            result
+        );
+
+        let mut oversized_validator = request;
+        oversized_validator.validator =
+            Some("x".repeat(MAX_MEDIA_LIST_SOURCE_CHECK_VALIDATOR_BYTES + 1));
+        assert!(oversized_validator.validate().is_err());
+
+        let mut too_many_instants = result;
+        too_many_instants.source_updated_at = (0..=MAX_MEDIA_LIST_SOURCE_UPDATE_INSTANTS)
+            .map(|second| format!("2026-09-04T12:00:{second:02}Z"))
+            .collect();
+        assert!(too_many_instants.validate().is_err());
+    }
+
+    #[test]
+    fn source_check_result_rejects_contradictory_or_unsafe_fields() {
+        let transient = MediaListSourceCheckResult {
+            outcome: MediaListSourceCheckOutcome::TransientFailure,
+            validator: None,
+            source_updated_at: Vec::new(),
+            code: Some("provider-rate-limited".to_owned()),
+            retry_after_seconds: Some(120),
+        };
+        transient.validate().expect("bounded transient retry hint");
+
+        let mut permanent_with_retry = transient.clone();
+        permanent_with_retry.outcome = MediaListSourceCheckOutcome::PermanentFailure;
+        assert!(permanent_with_retry.validate().is_err());
+
+        let mut failure_with_validator = transient;
+        failure_with_validator.validator = Some("must-not-survive".to_owned());
+        assert!(failure_with_validator.validate().is_err());
+
+        let changed_with_failure = MediaListSourceCheckResult {
+            outcome: MediaListSourceCheckOutcome::Changed,
+            validator: None,
+            source_updated_at: Vec::new(),
+            code: Some("contradictory".to_owned()),
+            retry_after_seconds: None,
+        };
+        assert!(changed_with_failure.validate().is_err());
+
+        let non_utc = MediaListSourceCheckResult {
+            outcome: MediaListSourceCheckOutcome::Unchanged,
+            validator: None,
+            source_updated_at: vec!["2026-09-04T13:00:00+01:00".to_owned()],
+            code: None,
+            retry_after_seconds: None,
+        };
+        assert!(non_utc.validate().is_err());
+
+        let oversized_output = vec![b'x'; MAX_MEDIA_LIST_SOURCE_CHECK_OUTPUT_BYTES + 1];
+        assert!(parse_media_list_source_check_output(&oversized_output).is_err());
     }
 
     #[test]
