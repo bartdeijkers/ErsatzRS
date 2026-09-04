@@ -2485,7 +2485,7 @@ production, and tool maintenance remain in their later owning milestones.
 id         = 'amm-l-01'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Replace daily auto-refresh with fixed and adaptive cadences'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-01']
@@ -2506,10 +2506,11 @@ shared-limiter jitter, and repeated hourly ticks without duplicate or catch-up
 generations.
 '''
 evidence = '''
-Not started. Both current refresh coordinators query AutoRefresh = 1 against a
-one-day LastUpdate cutoff and the admin renders a daily checkbox. No package
-can declare a cheap source-change probe, and no adaptive observation history is
-persisted.
+Implementation planning claimed by Codex on 2026-09-04. This slice is reserved
+for fixed/adaptive cadence scheduling, a bounded provider-neutral source-change
+probe, truthful persisted due/retry/anchor state, and the matching admin and
+health projections. Incremental archive discovery, rich header refresh,
+reconciliation, and automatic publication remain in AMM-L-02 through L-05.
 '''
 
 [[milestone]]
