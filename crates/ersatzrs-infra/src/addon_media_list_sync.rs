@@ -5,7 +5,7 @@ use crate::db::inserted_id;
 use crate::repositories::SqlxResultExt as _;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
 };
@@ -111,6 +111,7 @@ async fn update_incremental_import_list_header(
     tx: &mut Transaction<'_, Db>,
     list: &AddonMediaList,
     metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+    bump_revision: bool,
 ) -> Result<()> {
     let current = sqlx::query(
         r#"SELECT "Name", "Description", "ProviderMetadataJson",
@@ -156,7 +157,7 @@ async fn update_incremental_import_list_header(
            SET "Name" = ?, "Description" = ?, "ProviderMetadataJson" = ?,
                "MetadataConflictJson" = ?, "LastError" = NULL,
                "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
-               "ReviewError" = NULL, "DraftRevision" = "DraftRevision" + 1
+               "ReviewError" = NULL, "DraftRevision" = "DraftRevision" + ?
            WHERE "Id" = ? AND "AddonId" = ? AND "ReviewState" <> 3
              AND ("PublicationJournalJson" IS NULL
                   OR TRIM("PublicationJournalJson") = '')
@@ -173,6 +174,7 @@ async fn update_incremental_import_list_header(
     .bind(next_description)
     .bind(provider_metadata)
     .bind(conflicts)
+    .bind(i32::from(bump_revision))
     .bind(list.id)
     .bind(&list.addon_id)
     .bind(encode_enum(
@@ -1094,6 +1096,7 @@ impl AddonMediaListSynchronizer {
         list: &AddonMediaList,
         metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
         incremental: bool,
+        bump_revision: bool,
     ) -> Result<()> {
         let fence = ImportFinalizationFence {
             job_id,
@@ -1104,7 +1107,7 @@ impl AddonMediaListSynchronizer {
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         begin_import_finalization_phase(&mut tx, fence).await?;
         if incremental {
-            update_incremental_import_list_header(&mut tx, list, metadata).await?;
+            update_incremental_import_list_header(&mut tx, list, metadata, bump_revision).await?;
         } else {
             let current = sqlx::query(
                 r#"SELECT "ProviderId", "Description", "ProviderMetadataJson",
@@ -1202,7 +1205,7 @@ impl AddonMediaListSynchronizer {
         list_id: EntityId,
         incoming: &[EnumeratedAddonMediaListItem],
     ) -> Result<AddonMediaList> {
-        self.save_list_items_with_mode(list_id, incoming, false, None)
+        self.save_list_items_with_mode(list_id, incoming, false, None, None)
             .await
     }
 
@@ -1218,6 +1221,30 @@ impl AddonMediaListSynchronizer {
             list_id,
             incoming,
             delta,
+            None,
+            Some(ImportFinalizationFence {
+                job_id,
+                lease_owner,
+                expected_phase: 1,
+                next_phase: 2,
+            }),
+        )
+        .await
+    }
+
+    async fn save_reconcile_items(
+        &self,
+        job_id: EntityId,
+        lease_owner: &str,
+        list_id: EntityId,
+        generation: i32,
+        incoming: &[EnumeratedAddonMediaListItem],
+    ) -> Result<AddonMediaList> {
+        self.save_list_items_with_mode(
+            list_id,
+            incoming,
+            false,
+            Some(generation),
             Some(ImportFinalizationFence {
                 job_id,
                 lease_owner,
@@ -1234,6 +1261,7 @@ impl AddonMediaListSynchronizer {
         list_id: EntityId,
         incoming: &[EnumeratedAddonMediaListItem],
         delta: bool,
+        reconcile_generation: Option<i32>,
         finalization: Option<ImportFinalizationFence<'_>>,
     ) -> Result<AddonMediaList> {
         let incoming_ids = incoming
@@ -1245,6 +1273,8 @@ impl AddonMediaListSynchronizer {
             .iter()
             .map(|item| (item.provider_id.as_str(), item.id))
             .collect::<HashMap<_, _>>();
+        let observed_at = Utc::now();
+        let observed_at_text = encode_datetime(observed_at);
 
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         if let Some(fence) = finalization {
@@ -1291,7 +1321,7 @@ impl AddonMediaListSynchronizer {
                 break;
             }
             if !incoming_ids.contains(item.provider_id.as_str()) {
-                if item.parent_provider_id.is_some() {
+                if item.parent_provider_id.is_some() && reconcile_generation.is_none() {
                     sqlx::query(r#"DELETE FROM "AddonMediaListItem" WHERE "Id" = ?"#)
                         .bind(item.id)
                         .execute(&mut *tx)
@@ -1307,7 +1337,7 @@ impl AddonMediaListSynchronizer {
                     r#"UPDATE "AddonMediaListItem"
                        SET "Rank" = ?, "Availability" = ?, "AvailabilityReason" = ?,
                            "AvailabilityReasonCode" = ?, "AvailabilityUpdated" = ?,
-                           "MediaItemId" = NULL
+                           "MediaItemId" = CASE WHEN ? THEN "MediaItemId" ELSE NULL END
                        WHERE "Id" = ?"#,
                 )
                 .bind(tombstone_rank)
@@ -1316,7 +1346,8 @@ impl AddonMediaListSynchronizer {
                 .bind(encode_enum(
                     ersatzrs_domain::AddonMediaListAvailabilityReason::Unavailable,
                 ))
-                .bind(encode_datetime(Utc::now()))
+                .bind(&observed_at_text)
+                .bind(reconcile_generation.is_some())
                 .bind(item.id)
                 .execute(&mut *tx)
                 .await
@@ -1354,17 +1385,22 @@ impl AddonMediaListSynchronizer {
                     sqlx::query(
                         r#"UPDATE "AddonMediaListItem"
                        SET "Kind" = ?, "Rank" = ?, "Title" = ?, "Year" = ?,
-                           "DisplayTitle" = ?, "Season" = ?, "Episode" = ?,
+                           "DisplayTitle" = ?,
+                           "Season" = CASE WHEN ? THEN "Season" ELSE ? END,
+                           "Episode" = CASE WHEN ? THEN "Episode" ELSE ? END,
                            "SourceUrl" = ?, "Availability" = ?,
                            "AvailabilityReason" = ?, "AvailabilityReasonCode" = ?,
                            "AvailabilityUpdated" = ?,
-                           "ContentKind" = ?, "DurationSeconds" = ?,
+                           "ContentKind" = CASE WHEN ? THEN "ContentKind" ELSE ? END,
+                           "DurationSeconds" = ?,
                            "ParentProviderId" = ?, "FragmentStartSeconds" = ?,
                            "FragmentEndSeconds" = ?, "AdditionalImageUrls" = ?,
                            "ProviderMetadataJson" = ?, "MetadataConflictJson" = ?,
                            "ProviderLiveness" = ?, "EffectiveLiveness" = ?,
                            "LivenessConflict" = ?,
-                           "MediaItemId" = NULL
+                           "MediaItemId" = CASE WHEN ? THEN "MediaItemId" ELSE NULL END,
+                           "LastReconcileGeneration" =
+                               COALESCE(?, "LastReconcileGeneration")
                        WHERE "Id" = ?"#,
                     )
                     .bind(encode_enum(item.kind))
@@ -1372,13 +1408,16 @@ impl AddonMediaListSynchronizer {
                     .bind(&item.title)
                     .bind(item.year)
                     .bind(&item.display_title)
+                    .bind(reconcile_generation.is_some())
                     .bind(item.season)
+                    .bind(reconcile_generation.is_some())
                     .bind(item.episode)
                     .bind(&item.source_url)
                     .bind(encode_enum(item.availability))
                     .bind(&item.availability_reason)
                     .bind(item.availability_reason_code.map(encode_enum))
                     .bind(encode_datetime(Utc::now()))
+                    .bind(reconcile_generation.is_some())
                     .bind(encode_enum(item.content_kind))
                     .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
                     .bind(&item.parent_provider_id)
@@ -1396,6 +1435,8 @@ impl AddonMediaListSynchronizer {
                     .bind(encode_enum(item.liveness))
                     .bind(encode_enum(effective_liveness))
                     .bind(liveness_conflict)
+                    .bind(reconcile_generation.is_some())
+                    .bind(reconcile_generation)
                     .bind(existing_id)
                     .execute(&mut *tx)
                     .await
@@ -1410,7 +1451,7 @@ impl AddonMediaListSynchronizer {
                     insert_item_guids(&mut tx, existing_id, &item.guids).await?;
                     existing_id
                 } else {
-                    let item_id = insert_item(&mut tx, list_id, item).await?;
+                    let item_id = insert_item(&mut tx, list_id, item, reconcile_generation).await?;
                     insert_item_guids(&mut tx, item_id, &item.guids).await?;
                     item_id
                 };
@@ -1466,8 +1507,7 @@ impl AddonMediaListSynchronizer {
             *chapter_index = chapter_index.saturating_add(1);
         }
 
-        let refreshed_at = Utc::now();
-        crate::addon_media_list_refresh::record_refresh_success_tx(&mut tx, list_id, refreshed_at)
+        crate::addon_media_list_refresh::record_refresh_success_tx(&mut tx, list_id, observed_at)
             .await?;
         let item_count = if delta {
             sqlx::query_scalar::<_, i64>(
@@ -1480,6 +1520,7 @@ impl AddonMediaListSynchronizer {
         } else {
             i64::try_from(incoming.len().saturating_add(retained_count)).unwrap_or(i64::MAX)
         };
+        let draft_changed = reconcile_generation.is_some() || (delta && !incoming.is_empty());
         sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "ItemCount" = ?,
@@ -1492,9 +1533,9 @@ impl AddonMediaListSynchronizer {
                WHERE "Id" = ?"#,
         )
         .bind(item_count)
-        .bind(delta && !incoming.is_empty())
-        .bind(delta && !incoming.is_empty())
-        .bind(i32::from(delta && !incoming.is_empty()))
+        .bind(draft_changed)
+        .bind(draft_changed)
+        .bind(i32::from(draft_changed))
         .bind(list_id)
         .execute(&mut *tx)
         .await
@@ -2222,6 +2263,7 @@ where
                     list,
                     &enumerated.metadata,
                     incremental,
+                    true,
                 )
                 .await?;
             phase = 1;
@@ -2242,6 +2284,126 @@ where
             ));
         }
         self.local.load_list(list.id).await
+    }
+
+    pub(crate) async fn persist_reconcile_generation(
+        &self,
+        job_id: EntityId,
+        lease_owner: &str,
+        generation: i32,
+        list: &AddonMediaList,
+        enumerated: &mut EnumeratedAddonMediaList,
+    ) -> Result<AddonMediaList> {
+        let mut phase = self.import_finalization_phase(job_id, lease_owner).await?;
+        if phase == 0 {
+            self.local
+                .save_import_list_header(
+                    job_id,
+                    lease_owner,
+                    list,
+                    &enumerated.metadata,
+                    true,
+                    false,
+                )
+                .await?;
+            phase = 1;
+        }
+        if phase == 1 {
+            if list.chapter_input.trim().is_empty() {
+                self.expand_item_chapters(list.id, &list.addon_id, enumerated)
+                    .await?;
+            }
+            self.local
+                .save_reconcile_items(job_id, lease_owner, list.id, generation, &enumerated.items)
+                .await?;
+            phase = 2;
+        }
+        if !(2..=4).contains(&phase) {
+            return Err(RepositoryError::Conflict(
+                "the reconcile finalization phase is invalid for item persistence".to_owned(),
+            ));
+        }
+        self.local.load_list(list.id).await
+    }
+
+    /// Commit absence/reappearance evidence only at the same database boundary
+    /// that makes a fully finalized reconciliation ready for review.
+    pub(crate) async fn finalize_reconcile_evidence_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+        list_id: EntityId,
+        generation: i32,
+        observed_at: DateTime<Utc>,
+    ) -> Result<()> {
+        let automatic_confirmation_cutoff = encode_datetime(observed_at - Duration::hours(24));
+        let observed_at = encode_datetime(observed_at);
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItemTombstone" (
+                   "AddonMediaListItemId", "MissingSince", "LastObservedAt",
+                   "ObservationCount", "LastReconcileGeneration", "ConfirmedAt", "ReappearedAt"
+               )
+               SELECT "item"."Id", ?, ?, 1, ?, NULL, NULL
+               FROM "AddonMediaListItem" AS "item"
+               WHERE "item"."AddonMediaListId" = ?
+                 AND ("item"."LastReconcileGeneration" IS NULL
+                      OR "item"."LastReconcileGeneration" <> ?)
+               ON CONFLICT ("AddonMediaListItemId") DO UPDATE SET
+                   "MissingSince" = CASE
+                       WHEN "AddonMediaListItemTombstone"."ReappearedAt" IS NOT NULL
+                           THEN excluded."MissingSince"
+                       ELSE "AddonMediaListItemTombstone"."MissingSince"
+                   END,
+                   "LastObservedAt" = excluded."LastObservedAt",
+                   "ObservationCount" = CASE
+                       WHEN "AddonMediaListItemTombstone"."ReappearedAt" IS NOT NULL THEN 1
+                       ELSE "AddonMediaListItemTombstone"."ObservationCount" + 1
+                   END,
+                   "LastReconcileGeneration" = excluded."LastReconcileGeneration",
+                   "ConfirmedAt" = CASE
+                       WHEN "AddonMediaListItemTombstone"."ReappearedAt" IS NOT NULL THEN NULL
+                       WHEN "AddonMediaListItemTombstone"."ConfirmedAt" IS NOT NULL
+                           THEN "AddonMediaListItemTombstone"."ConfirmedAt"
+                       WHEN "AddonMediaListItemTombstone"."MissingSince" <= ?
+                           THEN excluded."LastObservedAt"
+                       ELSE NULL
+                   END,
+                   "ReappearedAt" = NULL
+               WHERE "AddonMediaListItemTombstone"."LastReconcileGeneration" <
+                     excluded."LastReconcileGeneration""#,
+        )
+        .bind(&observed_at)
+        .bind(&observed_at)
+        .bind(generation)
+        .bind(list_id)
+        .bind(generation)
+        .bind(&automatic_confirmation_cutoff)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItemTombstone" AS "tombstone"
+               SET "ReappearedAt" = ?, "ConfirmedAt" = NULL,
+                   "LastReconcileGeneration" = ?
+               WHERE "tombstone"."ReappearedAt" IS NULL
+                 AND "tombstone"."LastReconcileGeneration" < ?
+                 AND EXISTS (
+                     SELECT 1
+                     FROM "AddonMediaListItem" AS "item"
+                     WHERE "item"."Id" = "tombstone"."AddonMediaListItemId"
+                       AND "item"."AddonMediaListId" = ?
+                       AND "item"."LastReconcileGeneration" = ?
+                 )"#,
+        )
+        .bind(&observed_at)
+        .bind(generation)
+        .bind(generation)
+        .bind(list_id)
+        .bind(generation)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        Ok(())
     }
 
     pub(crate) async fn complete_import_projection(
@@ -2762,6 +2924,7 @@ async fn insert_item(
     tx: &mut sqlx::Transaction<'_, Db>,
     list_id: EntityId,
     item: &EnumeratedAddonMediaListItem,
+    reconcile_generation: Option<i32>,
 ) -> Result<EntityId> {
     let result = sqlx::query(
         r#"INSERT INTO "AddonMediaListItem" (
@@ -2771,8 +2934,9 @@ async fn insert_item(
             "AvailabilityUpdated", "ContentKind",
             "CollectionRole", "DurationSeconds", "ParentProviderId", "FragmentStartSeconds",
             "FragmentEndSeconds", "AdditionalImageUrls", "ProviderMetadataJson",
-            "MetadataOverrideJson", "ProviderLiveness", "EffectiveLiveness"
-           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?)"#,
+            "MetadataOverrideJson", "ProviderLiveness", "EffectiveLiveness",
+            "LastReconcileGeneration"
+           ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?)"#,
     )
     .bind(&item.provider_id)
     .bind(&item.display_title)
@@ -2804,6 +2968,7 @@ async fn insert_item(
     .bind(encode_metadata(&item.metadata)?)
     .bind(encode_enum(item.liveness))
     .bind(encode_enum(item.liveness))
+    .bind(reconcile_generation)
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -3504,6 +3669,407 @@ const fn collection_type_for_kind(kind: AddonMediaListItemKind) -> i32 {
         AddonMediaListItemKind::Season => COLLECTION_TYPE_SEASON,
         AddonMediaListItemKind::Episode => COLLECTION_TYPE_EPISODE,
         AddonMediaListItemKind::RemoteStream => COLLECTION_TYPE_REMOTE_STREAM,
+    }
+}
+
+#[cfg(test)]
+mod reconcile_tests {
+    use ersatzrs_core::repositories::AddonMediaListLifecycleRepository as _;
+    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::{Executor as _, Row as _};
+
+    use super::*;
+
+    struct UnusedProvider;
+
+    #[async_trait::async_trait]
+    impl AddonMediaListProvider for UnusedProvider {
+        async fn enumerate(
+            &self,
+            _addon_id: &str,
+            _source_url: &str,
+            _chapter_input: &str,
+        ) -> ersatzrs_core::repositories::Result<EnumeratedAddonMediaList> {
+            unreachable!("the evidence fixture does not invoke a provider")
+        }
+    }
+
+    async fn finalize_evidence(
+        synchronizer: &AddonMediaListRemoteSynchronizer<UnusedProvider>,
+        pool: &DbPool,
+        generation: i32,
+    ) {
+        let mut tx = crate::db::begin_write(pool)
+            .await
+            .expect("begin evidence transaction");
+        synchronizer
+            .finalize_reconcile_evidence_in_tx(&mut tx, 10, generation, Utc::now())
+            .await
+            .expect("finalize reconcile evidence");
+        tx.commit().await.expect("commit reconcile evidence");
+    }
+
+    fn source_item(title: &str, rank: i32) -> EnumeratedAddonMediaListItem {
+        EnumeratedAddonMediaListItem {
+            provider_id: "provider-item".to_owned(),
+            rank,
+            display_title: title.to_owned(),
+            title: title.to_owned(),
+            year: Some(2026),
+            season: Some(1),
+            episode: Some(1),
+            kind: AddonMediaListItemKind::RemoteStream,
+            guids: vec!["fixture:provider-item".to_owned()],
+            source_url: Some("https://media.example.test/item".to_owned()),
+            availability: AddonMediaListItemAvailability::Available,
+            availability_reason: None,
+            availability_reason_code: None,
+            content_kind: ersatzrs_domain::AddonMediaListContentKind::Movie,
+            collection_role: ersatzrs_domain::AddonMediaListItemRole::Auto,
+            duration_seconds: Some(600),
+            liveness: RemoteStreamLiveness::Finite,
+            parent_provider_id: None,
+            fragment_start_seconds: None,
+            fragment_end_seconds: None,
+            additional_image_urls: Vec::new(),
+            metadata: Default::default(),
+        }
+    }
+
+    fn chapter_fragment(rank: i32) -> EnumeratedAddonMediaListItem {
+        EnumeratedAddonMediaListItem {
+            provider_id: "provider-item/chapter/0".to_owned(),
+            rank,
+            display_title: "Chapter one".to_owned(),
+            title: "Chapter one".to_owned(),
+            year: Some(2026),
+            season: Some(1),
+            episode: Some(1),
+            kind: AddonMediaListItemKind::RemoteStream,
+            guids: Vec::new(),
+            source_url: Some("https://media.example.test/item".to_owned()),
+            availability: AddonMediaListItemAvailability::Available,
+            availability_reason: None,
+            availability_reason_code: None,
+            content_kind: ersatzrs_domain::AddonMediaListContentKind::Movie,
+            collection_role: ersatzrs_domain::AddonMediaListItemRole::Auto,
+            duration_seconds: Some(300),
+            liveness: RemoteStreamLiveness::Finite,
+            parent_provider_id: Some("provider-item".to_owned()),
+            fragment_start_seconds: Some(0),
+            fragment_end_seconds: Some(300),
+            additional_image_urls: Vec::new(),
+            metadata: Default::default(),
+        }
+    }
+
+    async fn fixture() -> DbPool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect SQLite fixture");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate SQLite fixture");
+        pool.execute("PRAGMA foreign_keys = OFF")
+            .await
+            .expect("disable fixture foreign keys");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount",
+                   "ReviewState", "DraftRevision", "PublishedRevision"
+               ) VALUES (10, 'fixture.addon', 'fixture-list',
+                         'https://media.example.test/list', 'Fixture list', 1, ?, 4, 2)"#,
+        )
+        .bind(encode_enum(
+            ersatzrs_domain::AddonMediaListReviewState::Published,
+        ))
+        .execute(&pool)
+        .await
+        .expect("seed list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItem" (
+                   "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
+                   "MediaItemId", "Rank", "Title", "Season", "Episode", "SourceUrl",
+                   "Availability", "ContentKind", "Included", "Published",
+                   "MetadataOverrideJson", "LivenessOverride", "EffectiveLiveness",
+                   "DraftOptionOverridesJson", "CollectionRole"
+               ) VALUES (
+                   20, 10, 'provider-item', 'Operator item', ?, 321, 0, 'Operator item',
+                   7, 8, 'https://media.example.test/old', ?, ?, 0, 1,
+                   '{"title":"Operator title"}', ?, ?, '{"quality":"high"}', ?
+               )"#,
+        )
+        .bind(encode_enum(AddonMediaListItemKind::RemoteStream))
+        .bind(encode_enum(AddonMediaListItemAvailability::Available))
+        .bind(encode_enum(
+            ersatzrs_domain::AddonMediaListContentKind::TelevisionEpisode,
+        ))
+        .bind(encode_enum(RemoteStreamLiveness::Live))
+        .bind(encode_enum(RemoteStreamLiveness::Live))
+        .bind(encode_enum(
+            ersatzrs_domain::AddonMediaListItemRole::Primary,
+        ))
+        .execute(&pool)
+        .await
+        .expect("seed operator-reviewed item");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItemReplacement" (
+                   "AddonMediaListItemId", "MediaItemId", "MediaVersionId", "CreatedAt", "UpdatedAt"
+               ) VALUES (20, 400, 401, '2026-09-04T10:00:00Z', '2026-09-04T10:00:00Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed replacement");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListArtifact" (
+                   "Id", "AddonMediaListId", "AddonMediaListItemId", "CacheKey", "Kind",
+                   "State", "CreatedAt", "UpdatedAt"
+               ) VALUES (30, 10, 20, 'fixture-artifact', ?, ?,
+                         '2026-09-04T10:00:00Z', '2026-09-04T10:00:00Z')"#,
+        )
+        .bind(encode_enum(
+            ersatzrs_domain::AddonMediaListArtifactKind::ProcessedMedia,
+        ))
+        .bind(encode_enum(
+            ersatzrs_domain::AddonMediaListArtifactState::Ready,
+        ))
+        .execute(&pool)
+        .await
+        .expect("seed item artifact");
+        pool
+    }
+
+    #[tokio::test]
+    async fn reconciliation_requires_two_observations_and_preserves_operator_state() {
+        let pool = fixture().await;
+        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
+        let evidence = AddonMediaListRemoteSynchronizer::new(pool.clone(), UnusedProvider);
+
+        synchronizer
+            .save_list_items_with_mode(10, &[], false, Some(5), None)
+            .await
+            .expect("record first complete absence");
+        finalize_evidence(&evidence, &pool, 5).await;
+        synchronizer
+            .save_list_items_with_mode(10, &[], false, Some(5), None)
+            .await
+            .expect("replay first generation idempotently");
+        finalize_evidence(&evidence, &pool, 5).await;
+        let first = sqlx::query(
+            r#"SELECT "ObservationCount", "ConfirmedAt", "LastReconcileGeneration"
+               FROM "AddonMediaListItemTombstone" WHERE "AddonMediaListItemId" = 20"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load first absence");
+        assert_eq!(first.get::<i32, _>("ObservationCount"), 1);
+        assert_eq!(first.get::<Option<String>, _>("ConfirmedAt"), None);
+        assert_eq!(first.get::<i32, _>("LastReconcileGeneration"), 5);
+        let first_diff = crate::repositories::SqliteAddonMediaListRepository(pool.clone())
+            .saved_draft_diff(10)
+            .await
+            .expect("load first-absence diff");
+        assert_eq!(first_diff.pending_removal_item_ids, [20]);
+        assert_eq!(first_diff.pending_removal_generations.get(&20), Some(&5));
+
+        let preserved: (
+            Option<i64>,
+            bool,
+            bool,
+            Option<i32>,
+            Option<i32>,
+            i32,
+            String,
+            Option<i32>,
+            String,
+            i32,
+        ) = sqlx::query_as(
+            r#"SELECT "MediaItemId", "Included", "Published", "Season", "Episode",
+                          "ContentKind", "MetadataOverrideJson", "LivenessOverride",
+                          "DraftOptionOverridesJson", "CollectionRole"
+                   FROM "AddonMediaListItem" WHERE "Id" = 20"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load preserved operator state");
+        assert_eq!(
+            preserved,
+            (
+                Some(321),
+                false,
+                true,
+                Some(7),
+                Some(8),
+                encode_enum(ersatzrs_domain::AddonMediaListContentKind::TelevisionEpisode),
+                r#"{"title":"Operator title"}"#.to_owned(),
+                Some(encode_enum(RemoteStreamLiveness::Live)),
+                r#"{"quality":"high"}"#.to_owned(),
+                encode_enum(ersatzrs_domain::AddonMediaListItemRole::Primary),
+            )
+        );
+        let related: (i64, i64) = sqlx::query_as(
+            r#"SELECT
+                   (SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
+                    WHERE "AddonMediaListItemId" = 20),
+                   (SELECT COUNT(*) FROM "AddonMediaListArtifact"
+                    WHERE "AddonMediaListItemId" = 20)"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load retained replacement and artifact");
+        assert_eq!(related, (1, 1));
+
+        crate::repositories::SqliteAddonMediaListRepository(pool.clone())
+            .confirm_item_tombstone(20, 5, Utc::now())
+            .await
+            .expect("confirm first absence explicitly");
+        let confirmed: Option<String> = sqlx::query_scalar(
+            r#"SELECT "ConfirmedAt" FROM "AddonMediaListItemTombstone"
+               WHERE "AddonMediaListItemId" = 20"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load explicit confirmation");
+        assert!(confirmed.is_some());
+        synchronizer
+            .save_list_items_with_mode(
+                10,
+                &[source_item("Provider return", 3)],
+                false,
+                Some(6),
+                None,
+            )
+            .await
+            .expect("clear explicit confirmation on reappearance");
+        finalize_evidence(&evidence, &pool, 6).await;
+        let reappeared: Option<String> = sqlx::query_scalar(
+            r#"SELECT "ReappearedAt" FROM "AddonMediaListItemTombstone"
+               WHERE "AddonMediaListItemId" = 20"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load explicit reappearance marker");
+        assert!(reappeared.is_some());
+
+        synchronizer
+            .save_list_items_with_mode(10, &[], false, Some(7), None)
+            .await
+            .expect("record a new first absence");
+        finalize_evidence(&evidence, &pool, 7).await;
+
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItemTombstone"
+               SET "MissingSince" = '2026-09-01T00:00:00Z'
+               WHERE "AddonMediaListItemId" = 20"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("age first observation");
+        synchronizer
+            .save_list_items_with_mode(10, &[], false, Some(8), None)
+            .await
+            .expect("record second complete absence");
+        finalize_evidence(&evidence, &pool, 8).await;
+        let second: (i32, Option<String>, i32) = sqlx::query_as(
+            r#"SELECT "ObservationCount", "ConfirmedAt", "LastReconcileGeneration"
+               FROM "AddonMediaListItemTombstone" WHERE "AddonMediaListItemId" = 20"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load confirmed absence");
+        assert_eq!(second.0, 2);
+        assert!(second.1.is_some());
+        assert_eq!(second.2, 8);
+
+        synchronizer
+            .save_list_items_with_mode(
+                10,
+                &[source_item("Provider return", 3)],
+                false,
+                Some(9),
+                None,
+            )
+            .await
+            .expect("clear tombstone on reappearance");
+        finalize_evidence(&evidence, &pool, 9).await;
+        let reappeared: Option<String> = sqlx::query_scalar(
+            r#"SELECT "ReappearedAt" FROM "AddonMediaListItemTombstone"
+               WHERE "AddonMediaListItemId" = 20"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load reappearance marker");
+        assert!(reappeared.is_some());
+        let reappeared_diff = crate::repositories::SqliteAddonMediaListRepository(pool.clone())
+            .saved_draft_diff(10)
+            .await
+            .expect("load reappearance diff");
+        assert_eq!(reappeared_diff.reappeared_item_ids, [20]);
+        let returned: (i64, i32, Option<i32>, Option<i32>, i32, bool, bool) = sqlx::query_as(
+            r#"SELECT "Id", "Rank", "Season", "Episode", "ContentKind", "Included", "Published"
+               FROM "AddonMediaListItem" WHERE "ProviderId" = 'provider-item'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load reappeared item");
+        assert_eq!(
+            returned,
+            (
+                20,
+                3,
+                Some(7),
+                Some(8),
+                encode_enum(ersatzrs_domain::AddonMediaListContentKind::TelevisionEpisode),
+                false,
+                true,
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn reconciliation_evidence_includes_expanded_chapter_fragments() {
+        let pool = fixture().await;
+        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
+        let evidence = AddonMediaListRemoteSynchronizer::new(pool.clone(), UnusedProvider);
+
+        synchronizer
+            .save_list_items_with_mode(
+                10,
+                &[source_item("Provider item", 0), chapter_fragment(1)],
+                false,
+                Some(5),
+                None,
+            )
+            .await
+            .expect("persist expanded reconcile identities");
+        finalize_evidence(&evidence, &pool, 5).await;
+
+        let generations = sqlx::query(
+            r#"SELECT "ProviderId", "LastReconcileGeneration"
+               FROM "AddonMediaListItem"
+               WHERE "AddonMediaListId" = 10
+               ORDER BY "ProviderId""#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("load expanded reconcile identities");
+        assert_eq!(generations.len(), 2);
+        assert!(generations
+            .iter()
+            .all(|row| row.get::<Option<i32>, _>("LastReconcileGeneration") == Some(5)));
+        let tombstone_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "AddonMediaListItemTombstone"
+               WHERE "AddonMediaListItemId" IN (
+                   SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = 10
+               )"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("count false absence evidence");
+        assert_eq!(tombstone_count, 0);
     }
 }
 

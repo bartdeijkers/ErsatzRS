@@ -5,14 +5,15 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
-    AddonMediaListImportMode, AddonMediaListImportState, AddonMediaListIncrementalStrategy,
-    AddonMediaListItemAvailability, AddonMediaListItemKind, AddonMediaListItemRole,
-    AddonMediaListPresentationKind, AddonMediaListPublicationEnqueueTrigger,
-    AddonMediaListPublicationErrorCategory, AddonMediaListPublicationEventKind,
-    AddonMediaListPublicationFilesystemTransition, AddonMediaListPublicationOutcome,
-    AddonMediaListPublicationPhase, AddonMediaListPublicationRetryClass,
-    AddonMediaListPublicationState, AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
-    AddonMediaListReviewState, RemoteStreamLiveness,
+    AddonMediaListImportMode, AddonMediaListImportPurpose, AddonMediaListImportState,
+    AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListItemRole, AddonMediaListPresentationKind,
+    AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
+    AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
+    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
+    AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
+    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence, AddonMediaListReviewState,
+    RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
@@ -24,16 +25,17 @@ use crate::admin::server_fns::addon_media_lists::get_addon_media_list_show_nfo;
 use crate::admin::server_fns::addon_media_lists::{
     add_addon_media_list, apply_addon_media_list_content_kind,
     apply_addon_media_list_item_review_edits, change_addon_media_list_addon,
-    compare_addon_media_list_revisions, control_addon_media_list_import, delete_addon_media_list,
-    get_addon_media_list_form, get_addon_media_list_item, get_addon_media_list_publication_history,
+    compare_addon_media_list_revisions, confirm_addon_media_list_removal,
+    control_addon_media_list_import, delete_addon_media_list, get_addon_media_list_form,
+    get_addon_media_list_item, get_addon_media_list_publication_history,
     get_addon_media_list_publication_readiness, get_addon_media_list_reset_impact,
     get_addon_media_list_revision_history, get_addon_media_list_saved_draft_diff,
     get_addon_media_list_source_probe, get_addon_media_lists_page_size,
     list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
-    match_addon_media_list, publish_addon_media_list, recover_addon_media_list_publication,
-    redacted_publication_diagnostics_json, request_addon_media_list_item_details,
-    request_addon_media_list_presentation, reset_addon_media_list,
-    resolve_addon_media_list_provider, restore_addon_media_list_revision,
+    match_addon_media_list, publish_addon_media_list, reconcile_addon_media_list,
+    recover_addon_media_list_publication, redacted_publication_diagnostics_json,
+    request_addon_media_list_item_details, request_addon_media_list_presentation,
+    reset_addon_media_list, resolve_addon_media_list_provider, restore_addon_media_list_revision,
     save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
     search_addon_media_list_replacements, set_addon_media_list_item_replacement,
     set_addon_media_list_item_role, test_addon_media_list_source, update_addon_media_list,
@@ -47,10 +49,10 @@ use crate::admin::server_fns::addon_media_lists::{
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationEventRow,
     AddonMediaListPublicationHistoryJobRow, AddonMediaListPublicationHistoryRow,
     AddonMediaListPublicationReadiness, AddonMediaListPublicationStatus,
-    AddonMediaListPublishResult, AddonMediaListReplacementRow, AddonMediaListResetImpactRow,
-    AddonMediaListResetResult, AddonMediaListRestoreResult, AddonMediaListRevisionDiffRow,
-    AddonMediaListRevisionSummaryRow, AddonMediaListRow, AddonMediaListSourceProbeOutcome,
-    AddonMediaListSourceProbeRow, AddonMediaListSourceProbeState,
+    AddonMediaListPublishResult, AddonMediaListReconcileResult, AddonMediaListReplacementRow,
+    AddonMediaListResetImpactRow, AddonMediaListResetResult, AddonMediaListRestoreResult,
+    AddonMediaListRevisionDiffRow, AddonMediaListRevisionSummaryRow, AddonMediaListRow,
+    AddonMediaListSourceProbeOutcome, AddonMediaListSourceProbeRow, AddonMediaListSourceProbeState,
 };
 use crate::admin::ui::primitives::{
     button::{Button, ButtonVariant},
@@ -121,6 +123,8 @@ enum DraftReviewCategory {
     Excluded,
     Unavailable,
     Conflicted,
+    PendingRemoval,
+    Reappeared,
     RemovalCandidate,
 }
 
@@ -131,6 +135,8 @@ fn draft_review_category(value: &str) -> Option<DraftReviewCategory> {
         "excluded" => Some(DraftReviewCategory::Excluded),
         "unavailable" => Some(DraftReviewCategory::Unavailable),
         "conflicted" => Some(DraftReviewCategory::Conflicted),
+        "pending_removal" => Some(DraftReviewCategory::PendingRemoval),
+        "reappeared" => Some(DraftReviewCategory::Reappeared),
         "removal_candidate" => Some(DraftReviewCategory::RemovalCandidate),
         _ => None,
     }
@@ -143,6 +149,8 @@ const fn draft_review_category_value(category: DraftReviewCategory) -> &'static 
         DraftReviewCategory::Excluded => "excluded",
         DraftReviewCategory::Unavailable => "unavailable",
         DraftReviewCategory::Conflicted => "conflicted",
+        DraftReviewCategory::PendingRemoval => "pending_removal",
+        DraftReviewCategory::Reappeared => "reappeared",
         DraftReviewCategory::RemovalCandidate => "removal_candidate",
     }
 }
@@ -154,6 +162,8 @@ const fn draft_review_category_text_key(category: DraftReviewCategory) -> TextKe
         DraftReviewCategory::Excluded => TextKey::ExcludedItems,
         DraftReviewCategory::Unavailable => TextKey::Unavailable,
         DraftReviewCategory::Conflicted => TextKey::Conflicts,
+        DraftReviewCategory::PendingRemoval => TextKey::PendingRemovals,
+        DraftReviewCategory::Reappeared => TextKey::Reappearances,
         DraftReviewCategory::RemovalCandidate => TextKey::RemovalCandidates,
     }
 }
@@ -168,6 +178,8 @@ fn draft_review_item_ids(
         DraftReviewCategory::Excluded => &diff.excluded_item_ids,
         DraftReviewCategory::Unavailable => &diff.unavailable_item_ids,
         DraftReviewCategory::Conflicted => &diff.conflicted_item_ids,
+        DraftReviewCategory::PendingRemoval => &diff.pending_removal_item_ids,
+        DraftReviewCategory::Reappeared => &diff.reappeared_item_ids,
         DraftReviewCategory::RemovalCandidate => &diff.removal_candidate_item_ids,
     }
 }
@@ -688,6 +700,7 @@ fn import_progress_phase(
 ) -> TextKey {
     if progress.state == AddonMediaListImportState::Ready {
         if progress.discovered_count == 0
+            && progress.purpose != AddonMediaListImportPurpose::Reconcile
             && (progress.mode == AddonMediaListImportMode::Full
                 || progress.retained_item_count == 0)
         {
@@ -713,6 +726,7 @@ fn import_can_retry(progress: &AddonMediaListImportProgressRow) -> bool {
         AddonMediaListImportState::NeedsAttention | AddonMediaListImportState::Cancelled
     ) || (progress.state == AddonMediaListImportState::Ready
         && progress.discovered_count == 0
+        && progress.purpose != AddonMediaListImportPurpose::Reconcile
         && (progress.mode == AddonMediaListImportMode::Full || progress.retained_item_count == 0))
 }
 
@@ -3897,6 +3911,8 @@ fn AddonMediaListEditorIsland(
         "blocked" => Some(TextKey::PublicationBlocked),
         "recovery" => Some(TextKey::RecoveryFailed),
         "reset" => Some(TextKey::ResetAddonMediaListFailed),
+        "reconcile" => Some(TextKey::ReconcileFailed),
+        "removal-confirmation" => Some(TextKey::RemovalConfirmationFailed),
         "source-test" => Some(TextKey::SourceTestFailed),
         "revision-restore" => Some(TextKey::RestoreRevisionFailed),
         "" => None,
@@ -3909,6 +3925,8 @@ fn AddonMediaListEditorIsland(
         "preparing" => Some(TextKey::PreparingPublication),
         "recovery-queued" => Some(TextKey::RecoveryQueued),
         "reset-queued" => Some(TextKey::ResetQueued),
+        "reconcile-queued" => Some(TextKey::ReconcileQueued),
+        "removal-confirmed" => Some(TextKey::RemovalConfirmed),
         "source-test-queued" => Some(TextKey::SourceTestQueued),
         "revision-restore-queued" => Some(TextKey::RestoreRevisionQueued),
         _ => None,
@@ -4052,6 +4070,7 @@ fn AddonMediaListEditorIsland(
     let apply_content_kind_open = RwSignal::new(false);
     let reset_open = RwSignal::new(false);
     let reset_status_visible = RwSignal::new(initial_status == "reset-queued");
+    let reconcile_status_visible = RwSignal::new(initial_status == "reconcile-queued");
     let restore_open = RwSignal::new(false);
     let restore_revision = RwSignal::new(None::<i32>);
     let reset_confirmed_name = RwSignal::new(String::new());
@@ -4070,6 +4089,11 @@ fn AddonMediaListEditorIsland(
     let reset_action = Action::new(|value: &(i64, String)| {
         let (id, confirmed_name) = value.clone();
         async move { reset_addon_media_list(id, confirmed_name).await }
+    });
+    let reconcile_action = Action::new(|id: &i64| reconcile_addon_media_list(*id));
+    let confirm_removal_action = Action::new(|value: &(i64, i64, i32)| {
+        let (list_id, item_id, expected_generation) = *value;
+        async move { confirm_addon_media_list_removal(list_id, item_id, expected_generation).await }
     });
     let source_test_action = Action::new(|value: &(i64, i32)| {
         let (id, saved_revision) = *value;
@@ -4985,6 +5009,41 @@ fn AddonMediaListEditorIsland(
         }
     });
     Effect::new(move |_| {
+        if let Some(result) = reconcile_action.value().get() {
+            match result {
+                Ok(AddonMediaListReconcileResult::Queued { .. }) => {
+                    toast.push(tr(TextKey::ReconcileQueued).to_owned(), ToastSeverity::Info);
+                    reconcile_status_visible.set(true);
+                    focus_browser_element_after_render("addon-list-reconcile-status");
+                    if !poll_running.get_untracked() {
+                        poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
+                    }
+                }
+                Err(_) => toast.push(
+                    tr(TextKey::ReconcileFailed).to_owned(),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = confirm_removal_action.value().get() {
+            match result {
+                Ok(()) => {
+                    toast.push(
+                        tr(TextKey::RemovalConfirmed).to_owned(),
+                        ToastSeverity::Success,
+                    );
+                    reload_items();
+                }
+                Err(_) => toast.push(
+                    tr(TextKey::RemovalConfirmationFailed).to_owned(),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
         if let Some(result) = source_test_action.value().get() {
             match result {
                 Ok(_) => {
@@ -5667,7 +5726,38 @@ fn AddonMediaListEditorIsland(
                         <h2 id="addon-list-draft-diff-heading">{tr(TextKey::DraftChanges)}</h2>
                         <p>{tr(TextKey::ExactDraftDiffHelp)}</p>
                     </div>
+                    <div class=style::js_only>
+                        <Button
+                            variant=ButtonVariant::Secondary
+                            disabled=Signal::derive(move || reconcile_action.pending().get())
+                            on_click=Some(Callback::new(move |()| {
+                                reconcile_status_visible.set(false);
+                                reconcile_action.dispatch(id);
+                            }))
+                        >
+                            <span style=icon_style(IconName::Refresh, "1rem") aria-hidden="true"></span>
+                            <span>{tr(TextKey::ReconcileEntireSource)}</span>
+                        </Button>
+                    </div>
                 </header>
+                <p>{tr(TextKey::ReconcileEntireSourceHelp)}</p>
+                <p
+                    id="addon-list-reconcile-status"
+                    class=style::workflow_message
+                    role="status"
+                    aria-live="polite"
+                    tabindex="-1"
+                    style:display=move || if reconcile_status_visible.get() { "flex" } else { "none" }
+                >{tr(TextKey::ReconcileQueued)}</p>
+                <noscript>
+                    <form method="post" action="/api/addon-lists/reconcile">
+                        <input type="hidden" name="id" value=id />
+                        <button type="submit" class=style::btn_add>
+                            <span style=icon_style(IconName::Refresh, "1rem") aria-hidden="true"></span>
+                            <span>{tr(TextKey::ReconcileEntireSource)}</span>
+                        </button>
+                    </form>
+                </noscript>
                 <p class=style::empty style:display=move || if draft_diff.with(|value| value.exact) { "none" } else { "block" }>{tr(TextKey::DraftDiffUnavailable)}</p>
                 <dl class=style::operator_metrics style:display=move || if draft_diff.with(|value| value.exact) { "grid" } else { "none" }>
                     <div><dt>{format!("{} · {}", tr(TextKey::Items), tr(TextKey::Added))}</dt><dd><a data-testid="draft-diff-added" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Added))>{move || draft_diff.with(|value| value.added)}</a></dd></div>
@@ -5675,8 +5765,69 @@ fn AddonMediaListEditorIsland(
                     <div><dt>{tr(TextKey::ExcludedItems)}</dt><dd><a data-testid="draft-diff-excluded" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Excluded))>{move || draft_diff.with(|value| value.excluded)}</a></dd></div>
                     <div><dt>{tr(TextKey::Unavailable)}</dt><dd><a data-testid="draft-diff-unavailable" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Unavailable))>{move || draft_diff.with(|value| value.unavailable)}</a></dd></div>
                     <div><dt>{tr(TextKey::Conflicts)}</dt><dd><a data-testid="draft-diff-conflicted" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Conflicted))>{move || draft_diff.with(|value| value.conflicted)}</a></dd></div>
+                    <div><dt>{tr(TextKey::PendingRemovals)}</dt><dd><a data-testid="draft-diff-pending-removals" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::PendingRemoval))>{move || draft_diff.with(|value| value.pending_removals)}</a></dd></div>
+                    <div><dt>{tr(TextKey::Reappearances)}</dt><dd><a data-testid="draft-diff-reappeared" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Reappeared))>{move || draft_diff.with(|value| value.reappeared)}</a></dd></div>
                     <div><dt>{tr(TextKey::RemovalCandidates)}</dt><dd><a data-testid="draft-diff-removal-candidates" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::RemovalCandidate))>{move || draft_diff.with(|value| value.removal_candidates)}</a></dd></div>
                 </dl>
+                <div
+                    class=style::revision_rows
+                    style:display=move || if draft_diff.with(|value| value.pending_removals > 0) { "grid" } else { "none" }
+                >
+                    <For
+                        each=move || {
+                            let pending = draft_diff.with(|value| {
+                                value.pending_removal_item_ids.iter().copied().collect::<BTreeSet<_>>()
+                            });
+                            items.with(|items| {
+                                items
+                                    .iter()
+                                    .filter(|item| pending.contains(&item.id))
+                                    .map(|item| (item.id, item.display_title.clone()))
+                                    .collect::<Vec<_>>()
+                            })
+                        }
+                        key=|(item_id, _)| *item_id
+                        children=move |(item_id, title)| view! {
+                            <div class=style::revision_row>
+                                <div>
+                                    <strong>{title}</strong>
+                                    <span>{tr(TextKey::PendingRemovalHelp)}</span>
+                                </div>
+                                <span>{tr(TextKey::PendingRemovals)}</span>
+                                <div class=style::js_only>
+                                    <Button
+                                        variant=ButtonVariant::Secondary
+                                        disabled=Signal::derive(move || confirm_removal_action.pending().get())
+                                        on_click=Some(Callback::new(move |()| {
+                                            if let Some(generation) = draft_diff.with_untracked(|value| {
+                                                value.pending_removal_generations.get(&item_id).copied()
+                                            }) {
+                                                confirm_removal_action.dispatch((id, item_id, generation));
+                                            }
+                                        }))
+                                    >{tr(TextKey::ConfirmRemoval)}</Button>
+                                </div>
+                                <noscript>
+                                    <form method="post" action="/api/addon-lists/confirm-removal">
+                                        <input type="hidden" name="list_id" value=id />
+                                        <input type="hidden" name="item_id" value=item_id />
+                                        <input
+                                            type="hidden"
+                                            name="expected_generation"
+                                            value=move || draft_diff.with(|value| {
+                                                value.pending_removal_generations
+                                                    .get(&item_id)
+                                                    .copied()
+                                                    .unwrap_or_default()
+                                            })
+                                        />
+                                        <button type="submit" class=style::btn_add>{tr(TextKey::ConfirmRemoval)}</button>
+                                    </form>
+                                </noscript>
+                            </div>
+                        }
+                    />
+                </div>
             </section>
 
             <section class=style::operator_panel aria-labelledby="addon-list-revision-history-heading">
@@ -6826,7 +6977,9 @@ mod tests {
             excluded_item_ids: vec![13],
             unavailable_item_ids: vec![14],
             conflicted_item_ids: vec![15],
-            removal_candidate_item_ids: vec![16],
+            pending_removal_item_ids: vec![16],
+            reappeared_item_ids: vec![17],
+            removal_candidate_item_ids: vec![18],
             ..AddonMediaListDraftDiffRow::default()
         };
         for (value, item_id) in [
@@ -6835,7 +6988,9 @@ mod tests {
             ("excluded", 13),
             ("unavailable", 14),
             ("conflicted", 15),
-            ("removal_candidate", 16),
+            ("pending_removal", 16),
+            ("reappeared", 17),
+            ("removal_candidate", 18),
         ] {
             let category = draft_review_category(value).unwrap();
             assert!(item_matches_draft_category(item_id, Some(category), &diff));
@@ -7125,6 +7280,19 @@ mod tests {
             TextKey::EmptyImportNeedsRetry
         );
         assert!(import_can_retry(&empty));
+        let empty_reconcile = AddonMediaListImportProgressRow {
+            purpose: AddonMediaListImportPurpose::Reconcile,
+            ..empty.clone()
+        };
+        assert_eq!(
+            import_progress_phase(
+                &empty_reconcile,
+                false,
+                AddonMediaListDetailPolicy::ManualOnly,
+            ),
+            TextKey::ReadyToReview
+        );
+        assert!(!import_can_retry(&empty_reconcile));
         let unchanged_incremental = AddonMediaListImportProgressRow {
             state: AddonMediaListImportState::Ready,
             mode: AddonMediaListImportMode::Incremental,

@@ -822,6 +822,7 @@ fn tombstone_fixture() -> AddonMediaListItemTombstone {
         observation_count: 2,
         last_reconcile_generation: 2,
         confirmed_at: None,
+        reappeared_at: None,
     }
 }
 

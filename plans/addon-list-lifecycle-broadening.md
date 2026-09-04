@@ -686,6 +686,21 @@ Source map:
 
 ### AMM-L-04 — Non-destructive full-source reconciliation
 
+Source map:
+
+- ErsatzTV has no repository-installed add-on draft/reconcile equivalent; ADR
+  0085 owns this ErsatzRS extension.
+- `ersatzrs-app` admits one durable Reconcile operation through the existing
+  managed-library coordinator. `ersatzrs-infra` runs import v2 in Full mode
+  against a scratch archive, merges only after complete validation, and reuses
+  the existing draft-diff and publication transaction.
+- The existing `/media/addon-lists/:id` island owns the Reconcile and confirm
+  actions. Matching native POST forms remain the no-JavaScript path; action
+  status stays mounted so hydration does not change the page shape.
+- Side effects are limited to the saved draft, reconciliation tombstones, and
+  the candidate archive. The current publication and operator-owned item state
+  remain unchanged until explicit Publish.
+
 - Add Reconcile entire source using a full scratch generation and staged full
   archive while retaining publication, overrides, inclusion, numbering,
   replacements, and options.
@@ -694,6 +709,10 @@ Source map:
   reappearance, and never advance absence on incomplete/failed output.
 - Preview additions, changes, reordering, reappearances, and removal candidates
   before explicit Publish; keep Reset and Reload as the separate clean slate.
+- Reuse the existing lifecycle/import/publication boundaries rather than adding
+  a reconcile-specific executor or diff model. Automatic publication policy,
+  notifications, and speculative provider-specific absence rules remain in
+  AMM-L-05 or the provider contract that owns them.
 
 ### AMM-L-05 — Safe refresh publication policy
 

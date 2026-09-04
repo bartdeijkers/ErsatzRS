@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Added
 
+- Add non-destructive full-source reconciliation for add-on media lists. A
+  complete validated scratch import previews additions, provider changes,
+  reordering, reappearances, and missing items while retaining operator edits
+  and the current publication. Missing items require a second complete
+  observation at least 24 hours later or explicit confirmation before Publish
+  removes them, and Publish atomically accepts the matching staged archive.
+
 - Add transactionally checkpointed incremental discovery for add-on media
   lists. The host gives providers only an invocation-private archive, commits
   the archive and page together, preserves the last complete checkpoint across

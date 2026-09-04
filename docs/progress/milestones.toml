@@ -2607,7 +2607,7 @@ remain in AMM-L-04 and L-05.
 id         = 'amm-l-04'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Reconcile a complete source without erasing operator work'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-03']
@@ -2624,17 +2624,31 @@ promotes the matching staged archive atomically; Reset and Reload remains the
 separate clean-slate action.
 '''
 evidence = '''
-Implementation planning reserved for Codex on 2026-09-04 after AMM-L-03. This
-slice owns complete scratch reconciliation, two-observation removal evidence,
-reappearance, retained operator state, and matching archive promotion. Refresh
-publication policy remains in AMM-L-05.
+Completed on 2026-09-04. Reconcile entire source is one coalesced durable
+managed-library operation that queues import v2 in Full/Reconcile mode against
+a scratch archive. Only a complete validated generation merges provider rows;
+the current publication, inclusion, numbering, replacements, list/item options,
+metadata and liveness overrides, artifacts, and local matches remain intact.
+Absence and reappearance evidence commits only in the final Ready transaction:
+same-generation replay is idempotent, a later complete observation confirms an
+absence only after 24 hours, explicit confirmation is generation-fenced, and a
+new presence is previewed until Publish. Failed/cancelled/incomplete work cannot
+advance the evidence. The existing exact draft diff previews additions,
+metadata/order changes, pending/confirmed removals, and reappearances in the
+localized hydrated and native-form editor. Explicit Publish alone promotes the
+matching staged archive, removes confirmed items, and clears accepted
+reappearance markers in its existing transaction; Reset and reload remains the
+separate clean-slate operation. Focused migration, reconcile/import,
+operator-state, archive rollback/promotion, app command, web progress/category,
+native check, hydration, architecture, formatting, and progress checks pass.
+Automatic refresh publication remains in AMM-L-05.
 '''
 
 [[milestone]]
 id         = 'amm-l-05'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Make refresh publication policy explicit and safe'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-04']
@@ -2650,7 +2664,8 @@ tests cover duplicate ticks, concurrent manual work, failure, and notification
 deduplication.
 '''
 evidence = '''
-Not started. Cadence without an explicit refresh-to-publication policy leaves
+Implementation planning reserved for Codex on 2026-09-04 after AMM-L-04.
+Cadence without an explicit refresh-to-publication policy leaves
 operators unable to tell whether new items reach channels automatically, while
 unrestricted auto-publication would bypass the existing review contract.
 '''

@@ -1830,6 +1830,10 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             AddonMediaListPublicationOutcome::Published => AddonMediaListReviewState::Published,
             AddonMediaListPublicationOutcome::RestoredAfterFailure => journal.previous_review_state,
         };
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        if outcome == AddonMediaListPublicationOutcome::Published {
+            accept_reconcile_candidate_in_tx(&mut tx, id, &now).await?;
+        }
         let cleared = sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "ReviewState" = ?, "PublicationJournalJson" = NULL,
@@ -1869,7 +1873,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         .bind(owner_token)
         .bind(lease_owner)
         .bind(now)
-        .execute(&self.0)
+        .execute(&mut *tx)
         .await
         .repository()?;
         if cleared.rows_affected() != 1 {
@@ -1877,7 +1881,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "the verified add-on publication changed before finalization".to_owned(),
             ));
         }
-        Ok(())
+        tx.commit().await.repository()
     }
 
     async fn upload_artwork(
@@ -3113,13 +3117,29 @@ async fn stage_publication_impl(
         record_publication_error(&repository.0, id, &message).await?;
         return Err(RepositoryError::Conflict(message));
     }
-    let restricted_excluded_ids = repository
+    let mut publication_excluded_ids = repository
         .list_items(id)
         .await?
         .into_iter()
         .filter(|item| item.included && access_restricted_without_replacement(item))
         .map(|item| item.id)
         .collect::<Vec<_>>();
+    publication_excluded_ids.extend(
+        sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "tombstone"."AddonMediaListItemId"
+               FROM "AddonMediaListItemTombstone" AS "tombstone"
+               JOIN "AddonMediaListItem" AS "item"
+                 ON "item"."Id" = "tombstone"."AddonMediaListItemId"
+               WHERE "item"."AddonMediaListId" = ?
+                 AND "tombstone"."ConfirmedAt" IS NOT NULL"#,
+        )
+        .bind(id)
+        .fetch_all(&repository.0)
+        .await
+        .repository()?,
+    );
+    publication_excluded_ids.sort_unstable();
+    publication_excluded_ids.dedup();
     let library_id = repository.managed_library_id(id).await?.ok_or_else(|| {
         RepositoryError::Conflict("managed list storage is unavailable".to_owned())
     })?;
@@ -3264,7 +3284,7 @@ async fn stage_publication_impl(
         .execute(&mut *tx)
         .await
         .repository()?;
-        for item_id in restricted_excluded_ids {
+        for item_id in publication_excluded_ids {
             sqlx::query(
                 r#"UPDATE "AddonMediaListItem"
                    SET "Published" = 0
@@ -3944,6 +3964,207 @@ where
             Err(error) => return Err(publication_fs_repository_error(&error)),
         }
     }
+}
+
+async fn accept_reconcile_candidate_in_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    accepted_at: &str,
+) -> Result<()> {
+    let candidate = sqlx::query(
+        r#"SELECT "import"."Id" AS "ImportJobId",
+                  "import"."Generation" AS "ImportGeneration",
+                  "import"."CheckpointId"
+           FROM "AddonMediaListLifecycleJob" AS "lifecycle"
+           JOIN "AddonMediaListImportJob" AS "import"
+             ON "import"."Id" = "lifecycle"."CandidateImportJobId"
+           JOIN "AddonMediaListImportCheckpoint" AS "checkpoint"
+             ON "checkpoint"."Id" = "import"."CheckpointId"
+           WHERE "lifecycle"."AddonMediaListId" = ?
+             AND "lifecycle"."Kind" = ? AND "lifecycle"."Phase" = ?
+             AND "import"."Purpose" = ? AND "import"."Mode" = ?
+             AND "import"."State" = ? AND "checkpoint"."Committed" = 0
+             AND "import"."Generation" = (
+                 SELECT MAX("newest"."Generation")
+                 FROM "AddonMediaListImportJob" AS "newest"
+                 WHERE "newest"."AddonMediaListId" = ? AND "newest"."State" = ?
+             )
+           ORDER BY "lifecycle"."Generation" DESC, "lifecycle"."Id" DESC
+           LIMIT 1"#,
+    )
+    .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListLifecycleJobKind::Reconcile,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListLifecyclePhase::Complete,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListImportPurpose::Reconcile,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListImportMode::Full,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListImportState::Ready,
+    ))
+    .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListImportState::Ready,
+    ))
+    .fetch_optional(&mut **tx)
+    .await
+    .repository()?;
+
+    let unaccepted_reconcile_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM "AddonMediaListLifecycleJob" AS "lifecycle"
+           JOIN "AddonMediaListImportJob" AS "import"
+             ON "import"."Id" = "lifecycle"."CandidateImportJobId"
+           LEFT JOIN "AddonMediaListImportCheckpoint" AS "checkpoint"
+             ON "checkpoint"."Id" = "import"."CheckpointId"
+           WHERE "lifecycle"."AddonMediaListId" = ?
+             AND "lifecycle"."Kind" = ? AND "lifecycle"."Phase" = ?
+             AND "import"."Purpose" = ? AND "import"."Mode" = ?
+             AND "import"."State" = ?
+             AND ("import"."CheckpointId" IS NULL OR "checkpoint"."Committed" = 0)"#,
+    )
+    .bind(list_id)
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListLifecycleJobKind::Reconcile,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListLifecyclePhase::Complete,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListImportPurpose::Reconcile,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListImportMode::Full,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListImportState::Ready,
+    ))
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if candidate.is_none() {
+        if unaccepted_reconcile_count > 0 {
+            return Err(RepositoryError::Conflict(
+                "the completed reconciliation no longer matches a promotable staged archive"
+                    .to_owned(),
+            ));
+        }
+    }
+
+    let accepted_generation = if let Some(candidate) = candidate {
+        let import_job_id: EntityId = candidate.try_get("ImportJobId").repository()?;
+        let import_generation: i32 = candidate.try_get("ImportGeneration").repository()?;
+        let checkpoint_id: EntityId = candidate.try_get("CheckpointId").repository()?;
+
+        sqlx::query(
+            r#"UPDATE "AddonMediaListImportJob" SET "CheckpointId" = NULL
+               WHERE "AddonMediaListId" = ? AND "Id" <> ?"#,
+        )
+        .bind(list_id)
+        .bind(import_job_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        sqlx::query(
+            r#"UPDATE "AddonMediaListImportCheckpoint" SET "Committed" = 0
+               WHERE "AddonMediaListId" = ? AND "Id" <> ? AND "Committed" = 1"#,
+        )
+        .bind(list_id)
+        .bind(checkpoint_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        let promoted = sqlx::query(
+            r#"UPDATE "AddonMediaListImportCheckpoint"
+               SET "Committed" = 1, "Generation" = ?, "PromotedAt" = ?
+               WHERE "Id" = ? AND "AddonMediaListId" = ? AND "Committed" = 0"#,
+        )
+        .bind(import_generation)
+        .bind(accepted_at)
+        .bind(checkpoint_id)
+        .bind(list_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        if promoted.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the reconciliation archive changed before publication acceptance".to_owned(),
+            ));
+        }
+        Some(import_generation)
+    } else {
+        None
+    };
+
+    sqlx::query(
+        r#"DELETE FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "Id" IN (
+               SELECT "AddonMediaListItemId" FROM "AddonMediaListItemTombstone"
+               WHERE "ConfirmedAt" IS NOT NULL
+    )"#,
+    )
+    .bind(list_id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    sqlx::query(
+        r#"DELETE FROM "AddonMediaListItemTombstone"
+           WHERE "ReappearedAt" IS NOT NULL
+             AND "AddonMediaListItemId" IN (
+                 SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?
+             )"#,
+    )
+    .bind(list_id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "ItemCount" = (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?) WHERE "Id" = ?"#)
+        .bind(list_id)
+        .bind(list_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    if let Some(import_generation) = accepted_generation {
+        sqlx::query(
+            r#"UPDATE "AddonMediaListLifecycleJob"
+               SET "CandidateImportJobId" = NULL, "UpdatedAt" = ?
+               WHERE "AddonMediaListId" = ? AND "Kind" = ? AND "Phase" = ?
+                 AND "CandidateImportJobId" IN (
+                     SELECT "Id" FROM "AddonMediaListImportJob"
+                     WHERE "AddonMediaListId" = ? AND "Generation" <= ?
+                       AND "Purpose" = ? AND "Mode" = ? AND "State" = ?
+                 )"#,
+        )
+        .bind(accepted_at)
+        .bind(list_id)
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListLifecycleJobKind::Reconcile,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListLifecyclePhase::Complete,
+        ))
+        .bind(list_id)
+        .bind(import_generation)
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListImportPurpose::Reconcile,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListImportMode::Full,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListImportState::Ready,
+        ))
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    }
+    Ok(())
 }
 
 async fn load_published_item_snapshots(
@@ -5125,9 +5346,22 @@ async fn addon_media_list_publication_readiness(
     items: &[AddonMediaListItemAdminRow],
 ) -> Result<AddonMediaListPublicationReadiness> {
     let list_id = form.id;
+    let removal_candidate_ids = sqlx::query_scalar::<_, EntityId>(
+        r#"SELECT "AddonMediaListItemId" FROM "AddonMediaListItemTombstone"
+           WHERE "ConfirmedAt" IS NOT NULL
+             AND "AddonMediaListItemId" IN (
+                 SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?
+             )"#,
+    )
+    .bind(list_id)
+    .fetch_all(pool)
+    .await
+    .repository()?
+    .into_iter()
+    .collect::<std::collections::BTreeSet<_>>();
     let included = items
         .iter()
-        .filter(|item| item.included)
+        .filter(|item| item.included && !removal_candidate_ids.contains(&item.id))
         .collect::<Vec<_>>();
     let attempted = included
         .iter()
@@ -8047,7 +8281,219 @@ fn decode_replacement_candidate(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_safe_remote_artwork_url, FlatProjection};
+    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::Executor as _;
+
+    use super::{accept_reconcile_candidate_in_tx, is_safe_remote_artwork_url, FlatProjection};
+
+    #[tokio::test]
+    async fn reconcile_acceptance_atomically_promotes_the_matching_import_generation() {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect SQLite fixture");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate SQLite fixture");
+        pool.execute("PRAGMA foreign_keys = OFF")
+            .await
+            .expect("disable fixture foreign keys");
+        sqlx::raw_sql(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount"
+               ) VALUES (1, 'fixture.addon', 'fixture-list',
+                         'https://media.example.test/list', 'Fixture list', 3);
+               INSERT INTO "AddonMediaListItem" (
+                   "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
+                   "Rank", "Title"
+               ) VALUES
+                   (20, 1, 'missing-item', 'Missing item', 4, 0, 'Missing item'),
+                   (21, 1, 'returned-item', 'Returned item', 4, 1, 'Returned item'),
+                   (22, 1, 'pending-item', 'Pending item', 4, 2, 'Pending item');
+               INSERT INTO "AddonMediaListImportCheckpoint" (
+                   "Id", "AddonMediaListId", "RelativePath", "Generation", "Sha256",
+                   "EntryCount", "PromotedAt", "Committed"
+               ) VALUES
+                   (30, 1, 'checkpoints/current.txt', 6, 'current', 1,
+                    '2026-09-04T10:00:00Z', 1),
+                   (31, 1, 'checkpoints/reconcile.txt', 7, 'candidate', 0,
+                    '2026-09-04T11:00:00Z', 0);"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed list and checkpoints");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListImportJob" (
+                   "Id", "AddonMediaListId", "Generation", "State", "RecordCapability",
+                   "ImportCapability", "Purpose", "Mode", "CheckpointId", "CreatedAt", "UpdatedAt"
+               ) VALUES (40, 1, 6, ?, 'media-list.record.v1', 'media-list.import.v2', ?, ?, 30,
+                         '2026-09-04T10:00:00Z', '2026-09-04T10:00:00Z'),
+                        (41, 1, 7, ?, 'media-list.record.v1', 'media-list.import.v2', ?, ?, 31,
+                         '2026-09-04T11:00:00Z', '2026-09-04T11:00:00Z')"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListImportState::Ready,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListImportPurpose::Refresh,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListImportMode::Incremental,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListImportState::Ready,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListImportPurpose::Reconcile,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListImportMode::Full,
+        ))
+        .execute(&pool)
+        .await
+        .expect("seed import generations");
+        sqlx::query(
+            r#"INSERT INTO "ManagedLibraryOperation" (
+                   "Id", "LibraryId", "OwnerToken", "Kind", "State", "CreatedAt", "UpdatedAt"
+               ) VALUES (50, 99, 'owner', ?, ?, '2026-09-04T11:00:00Z', '2026-09-04T11:00:00Z')"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationKind::Reconcile,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationState::Completed,
+        ))
+        .execute(&pool)
+        .await
+        .expect("seed reconcile operation");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLifecycleJob" (
+                   "Id", "OperationId", "AddonMediaListId", "Generation", "Kind", "Phase",
+                   "SavedDraftRevision", "SavedPublishedRevision", "CandidateImportJobId",
+                   "CreatedAt", "UpdatedAt", "CompletedAt"
+               ) VALUES (60, 50, 1, 2, ?, ?, 3, 1, 41,
+                         '2026-09-04T11:00:00Z', '2026-09-04T11:00:00Z',
+                         '2026-09-04T11:00:00Z')"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListLifecycleJobKind::Reconcile,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListLifecyclePhase::Complete,
+        ))
+        .execute(&pool)
+        .await
+        .expect("seed completed reconcile");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItemTombstone" (
+                   "AddonMediaListItemId", "MissingSince", "LastObservedAt", "ObservationCount",
+                   "LastReconcileGeneration", "ConfirmedAt", "ReappearedAt"
+               ) VALUES
+                   (20, '2026-09-03T10:00:00Z', '2026-09-04T11:00:00Z', 2, 7,
+                    '2026-09-04T11:00:00Z', NULL),
+                   (21, '2026-09-02T10:00:00Z', '2026-09-03T11:00:00Z', 1, 7,
+                    NULL, '2026-09-04T11:00:00Z'),
+                   (22, '2026-09-04T11:00:00Z', '2026-09-04T11:00:00Z', 1, 7,
+                    NULL, NULL)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed confirmed absence");
+
+        let mut rolled_back = crate::db::begin_write(&pool).await.expect("begin rollback");
+        accept_reconcile_candidate_in_tx(&mut rolled_back, 1, "2026-09-04T12:00:00Z")
+            .await
+            .expect("stage reconcile acceptance");
+        rolled_back.rollback().await.expect("rollback acceptance");
+        let before: (i64, i64, i64) = sqlx::query_as(
+            r#"SELECT
+                   (SELECT "Committed" FROM "AddonMediaListImportCheckpoint" WHERE "Id" = 30),
+                   (SELECT "Committed" FROM "AddonMediaListImportCheckpoint" WHERE "Id" = 31),
+                   (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "Id" = 20)"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load rolled-back state");
+        assert_eq!(before, (1, 0, 1));
+
+        sqlx::query(
+            r#"UPDATE "AddonMediaListImportJob" SET "CheckpointId" = NULL WHERE "Id" = 41"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("detach stale candidate archive");
+        let mut stale = crate::db::begin_write(&pool)
+            .await
+            .expect("begin stale acceptance");
+        let error = accept_reconcile_candidate_in_tx(&mut stale, 1, "2026-09-04T12:00:00Z")
+            .await
+            .expect_err("a detached candidate must not publish silently");
+        assert!(matches!(
+            error,
+            ersatzrs_core::repositories::RepositoryError::Conflict(_)
+        ));
+        stale.rollback().await.expect("rollback stale acceptance");
+        sqlx::query(r#"UPDATE "AddonMediaListImportJob" SET "CheckpointId" = 31 WHERE "Id" = 41"#)
+            .execute(&pool)
+            .await
+            .expect("restore candidate archive");
+
+        let mut committed = crate::db::begin_write(&pool)
+            .await
+            .expect("begin acceptance");
+        accept_reconcile_candidate_in_tx(&mut committed, 1, "2026-09-04T12:00:00Z")
+            .await
+            .expect("accept reconcile candidate");
+        committed.commit().await.expect("commit acceptance");
+        let after: (i64, i64, Option<i64>, i64, i64, i64, i64, i64, Option<i64>) = sqlx::query_as(
+            r#"SELECT
+                   (SELECT "Committed" FROM "AddonMediaListImportCheckpoint" WHERE "Id" = 30),
+                   (SELECT "Committed" FROM "AddonMediaListImportCheckpoint" WHERE "Id" = 31),
+                   (SELECT "CheckpointId" FROM "AddonMediaListImportJob" WHERE "Id" = 40),
+                   (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "Id" = 20),
+                   (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "Id" = 21),
+                   (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "Id" = 22),
+                   (SELECT COUNT(*) FROM "AddonMediaListItemTombstone"
+                    WHERE "AddonMediaListItemId" = 21),
+                   (SELECT "ItemCount" FROM "AddonMediaList" WHERE "Id" = 1),
+                   (SELECT "CandidateImportJobId" FROM "AddonMediaListLifecycleJob"
+                    WHERE "Id" = 60)"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load committed state");
+        assert_eq!(after, (0, 1, None, 0, 1, 1, 0, 2, None));
+
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItemTombstone"
+               SET "ConfirmedAt" = '2026-09-04T12:30:00Z'
+               WHERE "AddonMediaListItemId" = 22"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("confirm the pending removal after its archive was accepted");
+        let mut later_publication = crate::db::begin_write(&pool)
+            .await
+            .expect("begin later publication acceptance");
+        accept_reconcile_candidate_in_tx(&mut later_publication, 1, "2026-09-04T13:00:00Z")
+            .await
+            .expect("publish a confirmed removal without another reconcile archive");
+        later_publication
+            .commit()
+            .await
+            .expect("commit later removal acceptance");
+        let later: (i64, i64) = sqlx::query_as(
+            r#"SELECT
+                   (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "Id" = 22),
+                   (SELECT "ItemCount" FROM "AddonMediaList" WHERE "Id" = 1)"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("load later removal state");
+        assert_eq!(later, (0, 1));
+    }
 
     /// Every classification must map to a root the NFO serializer accepts.
     /// `Song` once mapped to an invented `song` root, so saving the NFO of any

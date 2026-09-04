@@ -81,6 +81,14 @@ pub struct AddonMediaListResetEnqueue {
     pub existing: bool,
 }
 
+/// Result of atomically deduplicating a non-destructive full-source reconcile.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddonMediaListReconcileEnqueue {
+    pub job: AddonMediaListLifecycleJob,
+    pub operation: ManagedLibraryOperation,
+    pub existing: bool,
+}
+
 /// Redacted operator-facing status for the newest publication generation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListPublicationStatus {
@@ -204,6 +212,15 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         ))
     }
 
+    /// Atomically create or coalesce one non-destructive reconcile generation.
+    async fn enqueue_reconcile(&self, list_id: EntityId) -> Result<AddonMediaListReconcileEnqueue> {
+        let _ = list_id;
+        Err(super::RepositoryError::unavailable(
+            "enqueue add-on media-list reconcile",
+            "not implemented",
+        ))
+    }
+
     async fn operation(&self, operation_id: EntityId) -> Result<Option<ManagedLibraryOperation>>;
 
     /// Return the oldest active root scan that would coalesce a new scan for
@@ -243,8 +260,28 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         Ok(None)
     }
 
+    /// Load the reconcile job owned by one managed-library operation.
+    async fn reconcile_job(
+        &self,
+        operation_id: EntityId,
+    ) -> Result<Option<AddonMediaListLifecycleJob>> {
+        let _ = operation_id;
+        Ok(None)
+    }
+
     /// Advance one reset phase only while the caller still owns the library lease.
     async fn transition_reset_reload(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        expected: AddonMediaListLifecyclePhase,
+        next: AddonMediaListLifecyclePhase,
+    ) -> Result<bool> {
+        let _ = (claim, expected, next);
+        Ok(false)
+    }
+
+    /// Advance one reconcile phase only while the caller owns the library lease.
+    async fn transition_reconcile(
         &self,
         claim: &ManagedLibraryOperationClaim,
         expected: AddonMediaListLifecyclePhase,
@@ -296,6 +333,29 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
 
     /// Atomically link the candidate import and finish the reset operation.
     async fn complete_reset_reload(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        candidate_import_job_id: EntityId,
+    ) -> Result<bool> {
+        let _ = (claim, candidate_import_job_id);
+        Ok(false)
+    }
+
+    /// Queue or resume the reconcile's complete scratch import.
+    async fn queue_reconcile_import(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        job: &AddonMediaListLifecycleJob,
+    ) -> Result<EntityId> {
+        let _ = (claim, job);
+        Err(super::RepositoryError::unavailable(
+            "queue add-on media-list reconcile import",
+            "not implemented",
+        ))
+    }
+
+    /// Link the reconcile candidate and finish the managed operation.
+    async fn complete_reconcile(
         &self,
         claim: &ManagedLibraryOperationClaim,
         candidate_import_job_id: EntityId,

@@ -1164,9 +1164,10 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         let current = load_item_tombstone_in_tx(&mut tx, tombstone.item_id).await?;
         match (current, expected_generation) {
             (None, None) => {
-                if tombstone.confirmed_at.is_some() {
+                if tombstone.confirmed_at.is_some() || tombstone.reappeared_at.is_some() {
                     return Err(RepositoryError::Conflict(
-                        "initial tombstone observations cannot be pre-confirmed".into(),
+                        "initial tombstone observations cannot be pre-confirmed or reappeared"
+                            .into(),
                     ));
                 }
                 insert_item_tombstone_in_tx(&mut tx, tombstone).await?;
@@ -1192,9 +1193,12 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
                         "the add-on media-list item tombstone generation is stale".into(),
                     ));
                 }
-                if tombstone.confirmed_at != current.confirmed_at {
+                if tombstone.confirmed_at != current.confirmed_at
+                    || tombstone.reappeared_at != current.reappeared_at
+                {
                     return Err(RepositoryError::Conflict(
-                        "tombstone observation updates cannot change confirmation".into(),
+                        "tombstone observation updates cannot change confirmation or reappearance"
+                            .into(),
                     ));
                 }
                 if tombstone.observation_count <= current.observation_count {
@@ -1223,7 +1227,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaListItemTombstone" SET "ConfirmedAt" = ?
                WHERE "AddonMediaListItemId" = ? AND "LastReconcileGeneration" = ?
-                 AND "ConfirmedAt" IS NULL"#,
+                 AND "ConfirmedAt" IS NULL AND "ReappearedAt" IS NULL"#,
         )
         .bind(encode_datetime(confirmed_at))
         .bind(item_id)
@@ -1232,6 +1236,37 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         .await
         .repository()?;
         if updated.rows_affected() == 1 {
+            let marked = sqlx::query(
+                r#"UPDATE "AddonMediaList"
+                   SET "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
+                       "ReviewError" = NULL, "DraftRevision" = "DraftRevision" + 1
+                   WHERE "Id" = (
+                       SELECT "AddonMediaListId" FROM "AddonMediaListItem" WHERE "Id" = ?
+                   )
+                     AND "ReviewState" <> 3
+                     AND ("PublicationJournalJson" IS NULL
+                          OR TRIM("PublicationJournalJson") = '')
+                     AND NOT EXISTS (
+                         SELECT 1
+                         FROM "AddonMediaListPublicationJob" AS "job"
+                         JOIN "ManagedLibraryOperation" AS "operation"
+                           ON "operation"."Id" = "job"."OperationId"
+                         WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                           AND "operation"."State" IN (?, ?, ?)
+                     )"#,
+            )
+            .bind(item_id)
+            .bind(encode_enum(ManagedLibraryOperationState::Queued))
+            .bind(encode_enum(ManagedLibraryOperationState::Running))
+            .bind(encode_enum(ManagedLibraryOperationState::WaitingToRetry))
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            if marked.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the add-on media list changed while removal was confirmed".to_owned(),
+                ));
+            }
             return tx.commit().await.repository();
         }
         let exists: bool = sqlx::query_scalar(
@@ -2833,7 +2868,8 @@ async fn calculate_saved_draft_diff_in_tx(
     let rows = sqlx::query(
         r#"SELECT "item"."Id", "item"."ProviderId", "item"."Included", "item"."Availability",
                   "item"."MetadataConflictJson", "item"."LivenessConflict",
-                  "tombstone"."ConfirmedAt"
+                  "tombstone"."MissingSince", "tombstone"."ConfirmedAt",
+                  "tombstone"."ReappearedAt", "tombstone"."LastReconcileGeneration"
            FROM "AddonMediaListItem" AS "item"
            LEFT JOIN "AddonMediaListItemTombstone" AS "tombstone"
              ON "tombstone"."AddonMediaListItemId" = "item"."Id"
@@ -2902,13 +2938,28 @@ async fn calculate_saved_draft_diff_in_tx(
             result.conflicted += 1;
             result.conflicted_item_ids.push(item_id);
         }
-        if row
+        let missing_since = row
+            .try_get::<Option<String>, _>("MissingSince")
+            .repository()?;
+        let confirmed_at = row
             .try_get::<Option<String>, _>("ConfirmedAt")
-            .repository()?
-            .is_some()
-        {
+            .repository()?;
+        let reappeared_at = row
+            .try_get::<Option<String>, _>("ReappearedAt")
+            .repository()?;
+        if reappeared_at.is_some() {
+            result.reappeared += 1;
+            result.reappeared_item_ids.push(item_id);
+        } else if confirmed_at.is_some() {
             result.removal_candidates += 1;
             result.removal_candidate_item_ids.push(item_id);
+        } else if missing_since.is_some() {
+            result.pending_removals += 1;
+            result.pending_removal_item_ids.push(item_id);
+            result.pending_removal_generations.insert(
+                item_id,
+                row.try_get("LastReconcileGeneration").repository()?,
+            );
         }
     }
     Ok(result)
@@ -3700,6 +3751,10 @@ fn decode_tombstone_row(row: &crate::db::DbRow) -> Result<AddonMediaListItemTomb
             "AddonMediaListItemTombstone.ConfirmedAt",
             row.try_get("ConfirmedAt").repository()?,
         )?,
+        reappeared_at: decode_optional_datetime(
+            "AddonMediaListItemTombstone.ReappearedAt",
+            row.try_get("ReappearedAt").repository()?,
+        )?,
     })
 }
 
@@ -3727,14 +3782,15 @@ async fn insert_item_tombstone_in_tx(
     sqlx::query(
         r#"INSERT INTO "AddonMediaListItemTombstone" (
                "AddonMediaListItemId", "MissingSince", "LastObservedAt",
-               "ObservationCount", "LastReconcileGeneration", "ConfirmedAt"
-           ) VALUES (?, ?, ?, ?, ?, NULL)"#,
+               "ObservationCount", "LastReconcileGeneration", "ConfirmedAt", "ReappearedAt"
+           ) VALUES (?, ?, ?, ?, ?, NULL, ?)"#,
     )
     .bind(tombstone.item_id)
     .bind(encode_datetime(tombstone.missing_since))
     .bind(encode_datetime(tombstone.last_observed_at))
     .bind(i64::from(tombstone.observation_count))
     .bind(tombstone.last_reconcile_generation)
+    .bind(tombstone.reappeared_at.map(encode_datetime))
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -3749,12 +3805,13 @@ async fn update_item_tombstone_in_tx(
     let updated = sqlx::query(
         r#"UPDATE "AddonMediaListItemTombstone"
            SET "LastObservedAt" = ?, "ObservationCount" = ?,
-               "LastReconcileGeneration" = ?
+               "LastReconcileGeneration" = ?, "ReappearedAt" = ?
            WHERE "AddonMediaListItemId" = ? AND "LastReconcileGeneration" = ?"#,
     )
     .bind(encode_datetime(tombstone.last_observed_at))
     .bind(i64::from(tombstone.observation_count))
     .bind(tombstone.last_reconcile_generation)
+    .bind(tombstone.reappeared_at.map(encode_datetime))
     .bind(tombstone.item_id)
     .bind(expected_generation)
     .execute(&mut **tx)
@@ -3854,6 +3911,7 @@ fn tombstones_are_identical(
         && left.observation_count == right.observation_count
         && left.last_reconcile_generation == right.last_reconcile_generation
         && left.confirmed_at.map(encode_datetime) == right.confirmed_at.map(encode_datetime)
+        && left.reappeared_at.map(encode_datetime) == right.reappeared_at.map(encode_datetime)
 }
 
 fn decode_required_datetime(

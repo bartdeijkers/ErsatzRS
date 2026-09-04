@@ -42,6 +42,9 @@ incremental import v2 semantics, transactionally promoted host-owned archives,
 exact discovery counters, and the official yt-dlp skip-known implementation
 without unsafe early stop. AMM-L-03 adds a bounded independent playlist-header
 probe and omission-safe provider metadata refresh for empty item deltas.
+AMM-L-04 adds non-destructive full-source reconciliation with success-fenced
+two-observation removal evidence, restart-safe reappearance previews, retained
+operator state, and exact staged-archive acceptance on explicit publication.
 ADR 0085 broadens the remaining corrective program through AMM-K operator
 lifecycle/navigation, AMM-L cadenced incremental
 refresh/reconciliation, AMM-M inherited yt-dlp access/SponsorBlock/subtitles
@@ -53,7 +56,7 @@ early stop, additions-only automatic publication, and updater rollback.
 
 next_steps = '''
 Deliver ADR 0085 in dependency order through AMM-K, AMM-L, AMM-M, and AMM-N,
-continuing with AMM-L-04. Resume Phase 9A at p9a-01 after that corrective program
+continuing with AMM-L-05. Resume Phase 9A at p9a-01 after that corrective program
 by accepting the teletext product and standards contract before implementation.
 '''
 

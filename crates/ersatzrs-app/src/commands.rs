@@ -4511,6 +4511,30 @@ pub enum ResetAddonMediaListOutcome {
     },
 }
 
+/// Request a complete, non-destructive source reconciliation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ReconcileAddonMediaList {
+    pub id: EntityId,
+}
+
+/// Durable reconcile admission result returned without owning execution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReconcileAddonMediaListOutcome {
+    Queued {
+        operation_id: EntityId,
+        generation: i32,
+        existing: bool,
+    },
+}
+
+/// Confirm one first-observation absence as an explicit removal candidate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ConfirmAddonMediaListRemoval {
+    pub list_id: EntityId,
+    pub item_id: EntityId,
+    pub expected_generation: i32,
+}
+
 /// Durable publication admission result returned without owning execution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PublishAddonMediaListOutcome {
@@ -4883,6 +4907,54 @@ pub async fn reset_addon_media_list(
         generation: enqueue.job.generation,
         existing: enqueue.existing,
     })
+}
+
+/// Validate and durably admit one full-source reconcile generation.
+pub async fn reconcile_addon_media_list(
+    command: ReconcileAddonMediaList,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
+) -> crate::Result<ReconcileAddonMediaListOutcome> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    let enqueue = managed_operations.enqueue_reconcile(command.id).await?;
+    Ok(ReconcileAddonMediaListOutcome::Queued {
+        operation_id: enqueue.operation.id,
+        generation: enqueue.job.generation,
+        existing: enqueue.existing,
+    })
+}
+
+/// Confirm only the current tombstone after verifying that the item belongs to
+/// the requested list. The repository generation fence prevents a stale UI
+/// action from confirming a later reconciliation observation.
+pub async fn confirm_addon_media_list_removal(
+    command: ConfirmAddonMediaListRemoval,
+    lists: &dyn AddonMediaListRepository,
+    lifecycle: &dyn ersatzrs_core::repositories::AddonMediaListLifecycleRepository,
+) -> crate::Result<()> {
+    validate_positive_id(command.list_id, "addon_media_list_id")?;
+    validate_positive_id(command.item_id, "addon_media_list_item_id")?;
+    validate_positive_id(
+        i64::from(command.expected_generation),
+        "last_reconcile_generation",
+    )?;
+    if lists
+        .get_item_detail(command.list_id, command.item_id)
+        .await?
+        .is_none()
+    {
+        return Err(crate::ApplicationError::NotFound {
+            kind: "add-on media-list item",
+            id: command.item_id,
+        });
+    }
+    lifecycle
+        .confirm_item_tombstone(
+            command.item_id,
+            command.expected_generation,
+            chrono::Utc::now(),
+        )
+        .await?;
+    Ok(())
 }
 
 /// Requeue an exact failed/expired publication generation for durable work.
@@ -6669,21 +6741,22 @@ mod tests {
         AddonMediaListPublication, AddonMediaListPublicationEnqueue,
         AddonMediaListPublicationFailureCause, AddonMediaListPublicationHistory,
         AddonMediaListPublicationJob, AddonMediaListPublicationReadiness,
-        AddonMediaListPublicationStatus, AddonMediaListReplacementCandidate,
-        AddonMediaListRepository, AdminSettingsRepository, ChannelEditorForm, ChannelNumberUpdate,
-        ChannelValidationRow, ChannelValidationState, CollectionAdminRow, CollectionDetailAdmin,
-        CollectionMemberAdmin, CollectionRepository, FfmpegProfileRepository, LibraryRepository,
-        LibraryScanTarget, ManagedLibraryOperation, ManagedLibraryOperationClaim,
-        ManagedLibraryOperationRepository, ManagedLibraryScanSpec, MediaItemSuggestionAdmin,
-        MultiCollectionAdmin, MultiCollectionAdminRow, MultiCollectionEditorOptions,
-        MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow, PlaylistEditorAdmin,
-        PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin, PlaylistItemInsert,
-        RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
+        AddonMediaListPublicationStatus, AddonMediaListReconcileEnqueue,
+        AddonMediaListReplacementCandidate, AddonMediaListRepository, AdminSettingsRepository,
+        ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow, ChannelValidationState,
+        CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin, CollectionRepository,
+        FfmpegProfileRepository, LibraryRepository, LibraryScanTarget, ManagedLibraryOperation,
+        ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
+        MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
+        MultiCollectionEditorOptions, MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow,
+        PlaylistEditorAdmin, PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin,
+        PlaylistItemInsert, RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
         RerunCollectionEditorOptions, RerunCollectionReferenceKind, ScheduleItemAdmin,
         SettingsMutation, SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow,
     };
     use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
     use ersatzrs_domain::{
+        AddonMediaListLifecycleJobKind, AddonMediaListLifecyclePhase,
         AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
         AddonMediaListRecoveryAction, Collection, CollectionType, EntityId, FFmpegProfile, Library,
         LibraryMediaKind, ManagedLibraryOperationKind, ManagedLibraryOperationState,
@@ -6696,9 +6769,9 @@ mod tests {
         create_playlist_group, delete_playlist, finalize_initial_playout_build, legacy_nvenc_tune,
         normalize_channel_form, normalize_channel_number_updates, normalize_legacy_nvenc_preset,
         normalize_schedule_item, normalized_hdr_metadata, parse_hdr_content_light,
-        parse_hdr_mastering_display, publish_addon_media_list, request_library_scan,
-        request_playout_build, request_scheduled_library_scan, request_show_scan,
-        save_addon_detail_wait_settings, save_collection, save_ffmpeg_profile,
+        parse_hdr_mastering_display, publish_addon_media_list, reconcile_addon_media_list,
+        request_library_scan, request_playout_build, request_scheduled_library_scan,
+        request_show_scan, save_addon_detail_wait_settings, save_collection, save_ffmpeg_profile,
         save_ffmpeg_settings, save_logging_settings, save_multi_collection, save_playlist,
         save_playout_settings, save_rerun_collection, save_smart_collection, set_windows_startup,
         validate_channel_form, validate_channel_number_updates, validate_output_dynamic_range,
@@ -6706,12 +6779,13 @@ mod tests {
         validate_watermark, AddAddonMediaList, AddMediaItemToCollection,
         AssignAddonMediaListEpisodeNumbers, BlockItemAdminForm, ChangeAddonMediaListAddon,
         ChangeCollectionItem, CreatePlaylistGroup, DeletePlaylist, FfmpegProfileAdminForm,
-        PublishAddonMediaList, PublishAddonMediaListOutcome, RequestLibraryScan,
-        RequestPlayoutBuild, RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection,
-        RequestScanOutcome, RequestScanRejection, RequestScheduledLibraryScan,
-        RequestScheduledScanOutcome, RequestShowScan, SaveAddonDetailWaitSettings, SaveCollection,
-        SaveFfmpegProfile, SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection,
-        SavePlaylist, SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
+        PublishAddonMediaList, PublishAddonMediaListOutcome, ReconcileAddonMediaList,
+        ReconcileAddonMediaListOutcome, RequestLibraryScan, RequestPlayoutBuild,
+        RequestPlayoutBuildOutcome, RequestPlayoutBuildRejection, RequestScanOutcome,
+        RequestScanRejection, RequestScheduledLibraryScan, RequestScheduledScanOutcome,
+        RequestShowScan, SaveAddonDetailWaitSettings, SaveCollection, SaveFfmpegProfile,
+        SaveFfmpegSettings, SaveLoggingSettings, SaveMultiCollection, SavePlaylist,
+        SavePlayoutSettings, SaveRerunCollection, SaveSmartCollection, ScanRequest,
         ScanWorkRequest, WatermarkAdminForm,
     };
     use crate::operations::OperationCoordinator;
@@ -6992,6 +7066,7 @@ mod tests {
         scans: Mutex<Vec<ManagedLibraryOperation>>,
         publication: Mutex<Option<AddonMediaListPublicationEnqueue>>,
         publication_calls: Mutex<Vec<(EntityId, EntityId, i32, i32)>>,
+        reconcile: Mutex<Option<AddonMediaListReconcileEnqueue>>,
     }
 
     impl RecordingManagedOperations {
@@ -7095,6 +7170,51 @@ mod tests {
                 existing: false,
             };
             *self.publication.lock().expect("publication") = Some(queued.clone());
+            Ok(queued)
+        }
+
+        async fn enqueue_reconcile(
+            &self,
+            list_id: EntityId,
+        ) -> ersatzrs_core::repositories::Result<AddonMediaListReconcileEnqueue> {
+            if let Some(existing) = self.reconcile.lock().expect("reconcile").clone() {
+                return Ok(AddonMediaListReconcileEnqueue {
+                    existing: true,
+                    ..existing
+                });
+            }
+            let operation_id = self.next_id();
+            let operation = ManagedLibraryOperation {
+                id: operation_id,
+                library_id: 41,
+                parent_operation_id: None,
+                owner_token: "reconcile-owner".to_owned(),
+                kind: ManagedLibraryOperationKind::Reconcile,
+                state: ManagedLibraryOperationState::Queued,
+                scan: None,
+                attempt_count: 0,
+                next_eligible_at: None,
+            };
+            let now = chrono::Utc::now();
+            let queued = AddonMediaListReconcileEnqueue {
+                job: ersatzrs_core::repositories::AddonMediaListLifecycleJob {
+                    id: operation_id,
+                    operation_id,
+                    list_id,
+                    generation: 1,
+                    kind: AddonMediaListLifecycleJobKind::Reconcile,
+                    phase: AddonMediaListLifecyclePhase::AwaitingLease,
+                    saved_draft_revision: 5,
+                    saved_published_revision: 2,
+                    candidate_import_job_id: None,
+                    created_at: now,
+                    updated_at: now,
+                    completed_at: None,
+                },
+                operation,
+                existing: false,
+            };
+            *self.reconcile.lock().expect("reconcile") = Some(queued.clone());
             Ok(queued)
         }
 
@@ -8303,6 +8423,35 @@ mod tests {
             [(7, 41, 5, 3)]
         );
         assert!(events.lock().expect("publication events").is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_on_media_list_reconcile_returns_the_coalesced_durable_generation() {
+        let managed = RecordingManagedOperations::default();
+
+        let first = reconcile_addon_media_list(ReconcileAddonMediaList { id: 7 }, &managed)
+            .await
+            .expect("queue reconcile");
+        let duplicate = reconcile_addon_media_list(ReconcileAddonMediaList { id: 7 }, &managed)
+            .await
+            .expect("coalesce reconcile");
+
+        assert_eq!(
+            first,
+            ReconcileAddonMediaListOutcome::Queued {
+                operation_id: 1,
+                generation: 1,
+                existing: false,
+            }
+        );
+        assert_eq!(
+            duplicate,
+            ReconcileAddonMediaListOutcome::Queued {
+                operation_id: 1,
+                generation: 1,
+                existing: true,
+            }
+        );
     }
 
     #[tokio::test]

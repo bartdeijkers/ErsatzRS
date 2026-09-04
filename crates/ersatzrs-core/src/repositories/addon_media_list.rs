@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use ersatzrs_domain::{
     AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
-    AddonMediaListDetailState, AddonMediaListImportMode, AddonMediaListImportState,
-    AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability, AddonMediaListItemRole,
-    AddonMediaListPresentationKind, AddonMediaListPublicationOutcome, AddonMediaListRefreshCadence,
-    AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
+    AddonMediaListDetailState, AddonMediaListImportMode, AddonMediaListImportPurpose,
+    AddonMediaListImportState, AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability,
+    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListPublicationOutcome,
+    AddonMediaListRefreshCadence, AddonMediaListReviewState, EntityId, RemoteStreamLiveness,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -214,6 +214,7 @@ pub struct AddonMediaListItemReviewEdit {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListImportProgress {
     pub state: AddonMediaListImportState,
+    pub purpose: AddonMediaListImportPurpose,
     pub mode: AddonMediaListImportMode,
     pub strategy: AddonMediaListIncrementalStrategy,
     pub started_at: String,

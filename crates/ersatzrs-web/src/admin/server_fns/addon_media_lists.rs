@@ -1,8 +1,8 @@
 use ersatzrs_domain::{
     AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
-    AddonMediaListDetailState, AddonMediaListImportMode, AddonMediaListImportState,
-    AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, AddonMediaListPresentationKind,
+    AddonMediaListDetailState, AddonMediaListImportMode, AddonMediaListImportPurpose,
+    AddonMediaListImportState, AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability,
+    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
     AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
     AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
     AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
@@ -76,6 +76,15 @@ pub enum AddonMediaListResetResult {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AddonMediaListReconcileResult {
+    Queued {
+        operation_id: i64,
+        generation: i32,
+        existing: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListRestoreResult {
     pub operation_id: i64,
     pub generation: i32,
@@ -131,13 +140,18 @@ pub struct AddonMediaListDraftDiffRow {
     pub excluded: u64,
     pub unavailable: u64,
     pub conflicted: u64,
+    pub pending_removals: u64,
+    pub reappeared: u64,
     pub removal_candidates: u64,
     pub added_item_ids: Vec<i64>,
     pub metadata_changed_item_ids: Vec<i64>,
     pub excluded_item_ids: Vec<i64>,
     pub unavailable_item_ids: Vec<i64>,
     pub conflicted_item_ids: Vec<i64>,
+    pub pending_removal_item_ids: Vec<i64>,
+    pub reappeared_item_ids: Vec<i64>,
     pub removal_candidate_item_ids: Vec<i64>,
+    pub pending_removal_generations: BTreeMap<i64, i32>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -241,13 +255,18 @@ mod lifecycle_transport {
                 excluded: value.excluded,
                 unavailable: value.unavailable,
                 conflicted: value.conflicted,
+                pending_removals: value.pending_removals,
+                reappeared: value.reappeared,
                 removal_candidates: value.removal_candidates,
                 added_item_ids: value.added_item_ids,
                 metadata_changed_item_ids: value.metadata_changed_item_ids,
                 excluded_item_ids: value.excluded_item_ids,
                 unavailable_item_ids: value.unavailable_item_ids,
                 conflicted_item_ids: value.conflicted_item_ids,
+                pending_removal_item_ids: value.pending_removal_item_ids,
+                reappeared_item_ids: value.reappeared_item_ids,
                 removal_candidate_item_ids: value.removal_candidate_item_ids,
+                pending_removal_generations: value.pending_removal_generations,
             }
         }
     }
@@ -592,6 +611,7 @@ pub struct AddonMediaListForm {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListImportProgressRow {
     pub state: AddonMediaListImportState,
+    pub purpose: AddonMediaListImportPurpose,
     pub mode: AddonMediaListImportMode,
     pub strategy: AddonMediaListIncrementalStrategy,
     pub started_at: String,
@@ -644,6 +664,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListImportProgress>
     fn from(progress: ersatzrs_core::repositories::AddonMediaListImportProgress) -> Self {
         Self {
             state: progress.state,
+            purpose: progress.purpose,
             mode: progress.mode,
             strategy: progress.strategy,
             started_at: progress.started_at,
@@ -2041,6 +2062,62 @@ pub async fn reset_addon_media_list_with_state(
                 existing,
             },
         })
+}
+
+/// Enumerate the complete source into a review draft without changing the
+/// current publication or operator-owned item state.
+#[server]
+pub async fn reconcile_addon_media_list(
+    id: i64,
+) -> Result<AddonMediaListReconcileResult, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    reconcile_addon_media_list_with_state(&state, id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+pub async fn reconcile_addon_media_list_with_state(
+    state: &crate::host::state::AppState,
+    id: i64,
+) -> ersatzrs_app::Result<AddonMediaListReconcileResult> {
+    state
+        .application
+        .reconcile_addon_media_list(ersatzrs_app::commands::ReconcileAddonMediaList { id })
+        .await
+        .map(|outcome| match outcome {
+            ersatzrs_app::commands::ReconcileAddonMediaListOutcome::Queued {
+                operation_id,
+                generation,
+                existing,
+            } => AddonMediaListReconcileResult::Queued {
+                operation_id,
+                generation,
+                existing,
+            },
+        })
+}
+
+#[server]
+pub async fn confirm_addon_media_list_removal(
+    list_id: i64,
+    item_id: i64,
+    expected_generation: i32,
+) -> Result<(), ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .confirm_addon_media_list_removal(ersatzrs_app::commands::ConfirmAddonMediaListRemoval {
+            list_id,
+            item_id,
+            expected_generation,
+        })
+        .await
+        .map_err(ServerFnError::new)
 }
 
 #[cfg(feature = "ssr")]

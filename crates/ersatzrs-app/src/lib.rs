@@ -581,6 +581,27 @@ impl ApplicationServices {
         commands::reset_addon_media_list(command, self.ports.managed_library_operations()).await
     }
 
+    /// Atomically enqueue or coalesce a non-destructive full-source reconcile.
+    pub async fn reconcile_addon_media_list(
+        &self,
+        command: commands::ReconcileAddonMediaList,
+    ) -> Result<commands::ReconcileAddonMediaListOutcome> {
+        commands::reconcile_addon_media_list(command, self.ports.managed_library_operations()).await
+    }
+
+    /// Confirm one first-observation reconcile absence as a removal candidate.
+    pub async fn confirm_addon_media_list_removal(
+        &self,
+        command: commands::ConfirmAddonMediaListRemoval,
+    ) -> Result<()> {
+        commands::confirm_addon_media_list_removal(
+            command,
+            self.ports.addon_media_lists(),
+            self.ports.addon_media_list_lifecycle(),
+        )
+        .await
+    }
+
     /// Retry or restore one exact add-on media-list publication generation.
     pub async fn recover_addon_media_list_publication(
         &self,
@@ -3175,6 +3196,9 @@ async fn execute_managed_library_operation(
         ManagedOperationExecutionPath::ResetReload => {
             return execute_addon_media_list_reset_reload(application, claim).await;
         }
+        ManagedOperationExecutionPath::Reconcile => {
+            return execute_addon_media_list_reconcile(application, claim).await;
+        }
         ManagedOperationExecutionPath::Scan => {
             return execute_durable_scan(application, claim).await
         }
@@ -3724,6 +3748,7 @@ enum ManagedOperationExecutionPath {
     Scan,
     Publication,
     ResetReload,
+    Reconcile,
 }
 
 const fn managed_operation_execution_path(
@@ -3732,6 +3757,9 @@ const fn managed_operation_execution_path(
     match kind {
         ersatzrs_domain::ManagedLibraryOperationKind::Reset => {
             ManagedOperationExecutionPath::ResetReload
+        }
+        ersatzrs_domain::ManagedLibraryOperationKind::Reconcile => {
+            ManagedOperationExecutionPath::Reconcile
         }
         ersatzrs_domain::ManagedLibraryOperationKind::Publication
         | ersatzrs_domain::ManagedLibraryOperationKind::Recovery => {
@@ -3986,6 +4014,139 @@ async fn fail_reset_operation(
     commands::ExecuteManagedLibraryOperationOutcome::Failed { message }
 }
 
+#[allow(clippy::too_many_lines)] // Keep the short durable phase machine visible in one place.
+async fn execute_addon_media_list_reconcile(
+    application: &ApplicationServices,
+    claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+) -> commands::ExecuteManagedLibraryOperationOutcome {
+    use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
+    use ersatzrs_domain::AddonMediaListLifecyclePhase as Phase;
+
+    for _ in 0..4 {
+        let job = match application
+            .ports
+            .managed_library_operations()
+            .reconcile_job(claim.operation.id)
+            .await
+        {
+            Ok(Some(job)) => job,
+            Ok(None) => {
+                return fail_reconcile_operation(
+                    application,
+                    claim,
+                    "reconcile lifecycle job is missing".to_owned(),
+                )
+                .await;
+            }
+            Err(error) => {
+                return Outcome::Failed {
+                    message: error.to_string(),
+                }
+            }
+        };
+        match job.phase {
+            Phase::AwaitingLease => {
+                match application
+                    .ports
+                    .managed_library_operations()
+                    .transition_reconcile(claim, job.phase, Phase::EnumeratingSource)
+                    .await
+                {
+                    Ok(true) => {}
+                    Ok(false) => return Outcome::LeaseLost,
+                    Err(error) => {
+                        return Outcome::Failed {
+                            message: error.to_string(),
+                        }
+                    }
+                }
+            }
+            Phase::EnumeratingSource => {
+                if let Err(error) = application
+                    .ports
+                    .managed_library_operations()
+                    .queue_reconcile_import(claim, &job)
+                    .await
+                {
+                    return fail_reconcile_operation(application, claim, error.to_string()).await;
+                }
+                match application
+                    .ports
+                    .managed_library_operations()
+                    .transition_reconcile(claim, job.phase, Phase::ComparingCandidate)
+                    .await
+                {
+                    Ok(true) => {}
+                    Ok(false) => return Outcome::LeaseLost,
+                    Err(error) => {
+                        return Outcome::Failed {
+                            message: error.to_string(),
+                        }
+                    }
+                }
+            }
+            Phase::ComparingCandidate => {
+                let Some(candidate) = job.candidate_import_job_id else {
+                    return fail_reconcile_operation(
+                        application,
+                        claim,
+                        "reconcile candidate import is missing".to_owned(),
+                    )
+                    .await;
+                };
+                return match application
+                    .ports
+                    .managed_library_operations()
+                    .complete_reconcile(claim, candidate)
+                    .await
+                {
+                    Ok(true) => Outcome::Completed,
+                    Ok(false) => Outcome::LeaseLost,
+                    Err(error) => Outcome::Failed {
+                        message: error.to_string(),
+                    },
+                };
+            }
+            Phase::Complete => {
+                return match application
+                    .ports
+                    .managed_library_operations()
+                    .complete_operation(claim)
+                    .await
+                {
+                    Ok(true) => Outcome::Completed,
+                    Ok(false) => Outcome::LeaseLost,
+                    Err(error) => Outcome::Failed {
+                        message: error.to_string(),
+                    },
+                };
+            }
+            _ => {
+                return fail_reconcile_operation(
+                    application,
+                    claim,
+                    "reconcile entered a reset-only phase".to_owned(),
+                )
+                .await;
+            }
+        }
+    }
+    Outcome::Deferred
+}
+
+async fn fail_reconcile_operation(
+    application: &ApplicationServices,
+    claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+    message: String,
+) -> commands::ExecuteManagedLibraryOperationOutcome {
+    let _ = application
+        .ports
+        .managed_library_operations()
+        .fail_operation(claim, "reconcile_failed", "source reconciliation failed")
+        .await;
+    commands::ExecuteManagedLibraryOperationOutcome::Failed { message }
+}
+
 async fn execute_durable_scan(
     application: &ApplicationServices,
     claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
@@ -4195,10 +4356,16 @@ mod scan_execution_tests {
     use crate::queries::{GetLibraryScanStatus, LibraryScanStatus, ScanOperationState};
 
     #[test]
-    fn reset_operations_use_the_lifecycle_worker_instead_of_generic_scan() {
+    fn lifecycle_operations_do_not_use_the_generic_scan_worker() {
         assert_eq!(
             managed_operation_execution_path(ersatzrs_domain::ManagedLibraryOperationKind::Reset),
             ManagedOperationExecutionPath::ResetReload
+        );
+        assert_eq!(
+            managed_operation_execution_path(
+                ersatzrs_domain::ManagedLibraryOperationKind::Reconcile
+            ),
+            ManagedOperationExecutionPath::Reconcile
         );
     }
 

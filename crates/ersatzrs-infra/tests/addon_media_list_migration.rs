@@ -317,6 +317,70 @@ async fn import_v2_migration_freezes_legacy_jobs_to_the_v1_transport() {
 }
 
 #[tokio::test]
+async fn reappearance_marker_migration_preserves_existing_tombstones() {
+    const REAPPEARANCE_VERSION: i64 = 202_609_042_100;
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .expect("open reappearance migration database");
+    pool.execute("PRAGMA foreign_keys = ON").await.unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    let previous = sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version < REAPPEARANCE_VERSION)
+            .cloned()
+            .collect(),
+    );
+    previous
+        .run(&pool)
+        .await
+        .expect("migrate pre-reappearance schema");
+    seed_legacy_lifecycle_rows(&pool).await;
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListItem" (
+               "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Title", "Kind", "Rank"
+           ) VALUES (10, 1, 'fixture-item', 'Fixture item', 'Fixture item', 4, 0)"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed tombstone item");
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListItemTombstone" (
+               "AddonMediaListItemId", "MissingSince", "LastObservedAt",
+               "ObservationCount", "LastReconcileGeneration"
+           ) VALUES (10, '2026-09-03T00:00:00Z', '2026-09-03T00:00:00Z', 1, 4)"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed existing tombstone");
+
+    migrations
+        .run(&pool)
+        .await
+        .expect("apply reappearance migration");
+
+    let row = sqlx::query(
+        r#"SELECT "ObservationCount", "LastReconcileGeneration", "ReappearedAt"
+           FROM "AddonMediaListItemTombstone" WHERE "AddonMediaListItemId" = 10"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("load migrated tombstone");
+    assert_eq!(row.get::<i32, _>("ObservationCount"), 1);
+    assert_eq!(row.get::<i32, _>("LastReconcileGeneration"), 4);
+    assert!(row.get::<Option<String>, _>("ReappearedAt").is_none());
+    let item_generation: Option<i32> = sqlx::query_scalar(
+        r#"SELECT "LastReconcileGeneration" FROM "AddonMediaListItem" WHERE "Id" = 10"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("load migrated item generation");
+    assert_eq!(item_generation, None);
+}
+
+#[tokio::test]
 async fn durable_publication_migration_adopts_a_stranded_legacy_journal() {
     const DURABLE_PUBLICATION_VERSION: i64 = 202_609_021_200;
     let pool = SqlitePoolOptions::new()

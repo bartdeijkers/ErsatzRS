@@ -6,7 +6,7 @@ adr        = ['0068', '0073', '0075', '0078', '0079', '0085']
 
 summary = '''
 ADR 0075 implements a provider-neutral metadata draft with generated parent
-NFOs, frozen contracts, per-field provider/override snapshots, durable
+NFOs, frozen contracts, provider/override snapshots, durable
 inclusion, atomic publication, the localized editor, artwork materialization,
 health, and both official providers. yt-dlp remains the updateable extraction
 engine; its mapper only translates full yt-dlp JSON. Existing imports can be
@@ -46,19 +46,20 @@ SQLite/MySQL repairs remove only safe exact duplicates. Aggregate health and
 runtime-audit diagnostics plus a 27-episode browser proof keep the invariant
 visible without exposing media paths.
 AMM-I closes the import/review UX gaps under `amm-i-01`.
-After Windows dogfood exposed a stranded journal, AMM-J-01 now provides
-exact-revision durable jobs, shared managed-library leases, expired-worker
-fencing, restart claim/retry, child-scan inheritance, and legacy-journal
-adoption. AMM-J-02 completes atomic recovery, including native Windows
-held-handle proof at exact commit `9196c4f`. AMM-J-03 implements typed
+After Windows dogfood exposed a stranded journal, AMM-J-01 adds restart-safe
+exact-revision jobs, shared managed-library leases, and legacy-journal adoption.
+AMM-J-02 completes atomic recovery, including native Windows held-handle proof
+at exact commit `9196c4f`. AMM-J-03 implements typed
 provider-neutral access restrictions, item-scoped publication exclusion,
 redacted durable status, and guarded localized Retry/Restore actions for the
 hydrated and no-JavaScript editor. Focused acceptance is complete; AMM-N-03
 retains the integrated packaged Windows restart proof.
 AMM-J-04 and AMM-K close recovery and lifecycle. AMM-L-01 implements cadences,
 L-02 transactional skip-known archives/counters, and L-03 bounded omission-safe
-rich headers on empty deltas. L-04/L-05 reconciliation/publication policy and
-AMM-M/N options, artifacts, and tool maintenance remain.
+rich headers on empty deltas. L-04 adds complete scratch reconciliation,
+two-observation removal evidence, operator-state preservation, and exact staged
+archive acceptance. L-05 publication policy and AMM-M/N options, artifacts, and
+tool maintenance remain.
 '''
 
 [[debt]]

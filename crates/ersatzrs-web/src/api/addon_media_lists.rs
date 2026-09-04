@@ -21,9 +21,10 @@ use crate::{
         add_addon_media_list_with_state, delete_addon_media_list_with_state,
         get_addon_media_list_publication_history_with_state,
         get_addon_media_list_publication_readiness_with_state, match_addon_media_list_with_state,
-        publish_addon_media_list_with_state, recover_addon_media_list_publication_with_state,
-        redacted_publication_diagnostics_json, reset_addon_media_list_with_state,
-        update_addon_media_list_with_state, AddonMediaListForm, AddonMediaListPublishResult,
+        publish_addon_media_list_with_state, reconcile_addon_media_list_with_state,
+        recover_addon_media_list_publication_with_state, redacted_publication_diagnostics_json,
+        reset_addon_media_list_with_state, update_addon_media_list_with_state, AddonMediaListForm,
+        AddonMediaListPublishResult,
     },
     host::state::AppState,
 };
@@ -74,6 +75,13 @@ pub struct AddonMediaListRecoveryForm {
 pub struct AddonMediaListResetForm {
     id: i64,
     confirmed_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddonMediaListRemovalConfirmationForm {
+    list_id: i64,
+    item_id: i64,
+    expected_generation: i32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -585,6 +593,58 @@ pub async fn reset_addon_media_list_form(
                 "failed to reset and reload add-on media list from HTML form"
             );
             Redirect::to(&format!("/media/addon-lists/{}?error=reset", input.id))
+        }
+    }
+}
+
+pub async fn reconcile_addon_media_list_form(
+    State(state): State<AppState>,
+    Form(input): Form<AddonMediaListIdForm>,
+) -> Redirect {
+    match reconcile_addon_media_list_with_state(&state, input.id).await {
+        Ok(_) => Redirect::to(&format!(
+            "/media/addon-lists/{}?status=reconcile-queued",
+            input.id
+        )),
+        Err(error) => {
+            tracing::warn!(
+                addon_media_list_id = input.id,
+                error = %error,
+                "failed to reconcile add-on media list from HTML form"
+            );
+            Redirect::to(&format!("/media/addon-lists/{}?error=reconcile", input.id))
+        }
+    }
+}
+
+pub async fn confirm_addon_media_list_removal_form(
+    State(state): State<AppState>,
+    Form(input): Form<AddonMediaListRemovalConfirmationForm>,
+) -> Redirect {
+    match state
+        .application
+        .confirm_addon_media_list_removal(ersatzrs_app::commands::ConfirmAddonMediaListRemoval {
+            list_id: input.list_id,
+            item_id: input.item_id,
+            expected_generation: input.expected_generation,
+        })
+        .await
+    {
+        Ok(()) => Redirect::to(&format!(
+            "/media/addon-lists/{}?status=removal-confirmed",
+            input.list_id
+        )),
+        Err(error) => {
+            tracing::warn!(
+                addon_media_list_id = input.list_id,
+                addon_media_list_item_id = input.item_id,
+                error = %error,
+                "failed to confirm add-on media-list removal"
+            );
+            Redirect::to(&format!(
+                "/media/addon-lists/{}?error=removal-confirmation",
+                input.list_id
+            ))
         }
     }
 }

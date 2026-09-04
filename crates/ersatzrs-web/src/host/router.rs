@@ -338,6 +338,14 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::addon_media_lists::reset_addon_media_list_form),
         )
         .route(
+            "/api/addon-lists/reconcile",
+            post(api::addon_media_lists::reconcile_addon_media_list_form),
+        )
+        .route(
+            "/api/addon-lists/confirm-removal",
+            post(api::addon_media_lists::confirm_addon_media_list_removal_form),
+        )
+        .route(
             "/api/addon-lists/test-source",
             post(api::addon_media_lists::test_addon_media_list_source_form),
         )

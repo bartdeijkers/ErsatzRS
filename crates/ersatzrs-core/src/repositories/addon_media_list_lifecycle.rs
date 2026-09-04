@@ -218,13 +218,18 @@ pub struct AddonMediaListDraftDiff {
     pub excluded: u64,
     pub unavailable: u64,
     pub conflicted: u64,
+    pub pending_removals: u64,
+    pub reappeared: u64,
     pub removal_candidates: u64,
     pub added_item_ids: Vec<EntityId>,
     pub metadata_changed_item_ids: Vec<EntityId>,
     pub excluded_item_ids: Vec<EntityId>,
     pub unavailable_item_ids: Vec<EntityId>,
     pub conflicted_item_ids: Vec<EntityId>,
+    pub pending_removal_item_ids: Vec<EntityId>,
+    pub reappeared_item_ids: Vec<EntityId>,
     pub removal_candidate_item_ids: Vec<EntityId>,
+    pub pending_removal_generations: BTreeMap<EntityId, i32>,
 }
 
 /// Current dependency counts shown before a destructive reset.
@@ -354,6 +359,7 @@ pub struct AddonMediaListItemTombstone {
     pub observation_count: u32,
     pub last_reconcile_generation: i32,
     pub confirmed_at: Option<DateTime<Utc>>,
+    pub reappeared_at: Option<DateTime<Utc>>,
 }
 
 /// Host/list/item-owned artifact metadata. Paths must remain relative to host storage.
