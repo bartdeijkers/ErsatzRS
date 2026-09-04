@@ -4538,6 +4538,253 @@ mod tests {
         }
 
         #[tokio::test]
+        #[allow(clippy::too_many_lines)] // One lifecycle proves incremental and legacy full merges.
+        async fn v2_empty_delta_refreshes_present_header_fields_without_erasing_rich_metadata() {
+            let (temporary, pool, coordinator) = fixture().await;
+            let data_dir = temporary.path().join("private header data");
+            let source_url = "https://media.example.test/rich-header";
+            let list_id = queue_v2(&coordinator, source_url, &data_dir, None).await;
+            let full_job = coordinator.claim_import_job().await.unwrap().unwrap();
+            let full_archive =
+                seal_v2_archive(&coordinator, &full_job, &data_dir, b"fixture first\n").await;
+            let original_header = serde_json::from_value(serde_json::json!({
+                "record_type": "list",
+                "provider_id": "fixture/rich-header",
+                "name": "Original provider title",
+                "description": "Original provider summary",
+                "metadata": {
+                    "title": "Original provider title",
+                    "plot": "Original provider summary",
+                    "tags": ["archive", "music"],
+                    "people": [{"name": "Fixture channel", "role": "Channel", "order": 0}],
+                    "artwork": [{
+                        "url": "https://images.example.test/header.jpg",
+                        "role": "fanart"
+                    }],
+                    "guids": ["yt-dlp-playlist://playlist-1"]
+                }
+            }))
+            .expect("original rich list header");
+            commit_complete_v2_page(
+                &coordinator,
+                &full_job,
+                &full_archive,
+                1,
+                1,
+                0,
+                vec![original_header, item_record("first", 0, "First overview")],
+            )
+            .await;
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "MetadataOverrideJson" = ? WHERE "Id" = ?"#)
+                .bind(r#"{"plot":"Operator summary"}"#)
+                .bind(list_id)
+                .execute(&pool)
+                .await
+                .expect("save operator metadata override");
+            let revision_before: i32 = sqlx::query_scalar(
+                r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("load original draft revision");
+
+            queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
+            let incremental_job = coordinator.claim_import_job().await.unwrap().unwrap();
+            let unchanged_archive = seal_v2_archive(
+                &coordinator,
+                &incremental_job,
+                &data_dir,
+                b"fixture first\n",
+            )
+            .await;
+            let changed_sparse_header = serde_json::from_value(serde_json::json!({
+                "record_type": "list",
+                "provider_id": "fixture/rich-header",
+                "name": "Renamed provider title",
+                "description": "Changed provider summary",
+                "metadata": {
+                    "title": "Renamed provider title",
+                    "plot": "Changed provider summary",
+                    "tags": ["archive", "updated"]
+                }
+            }))
+            .expect("changed sparse list header");
+            commit_complete_v2_page(
+                &coordinator,
+                &incremental_job,
+                &unchanged_archive,
+                1,
+                1,
+                1,
+                vec![changed_sparse_header],
+            )
+            .await;
+
+            let row = sqlx::query(
+                r#"SELECT "Name", "Description", "ItemCount", "DraftRevision",
+                          "ProviderMetadataJson", "MetadataOverrideJson", "MetadataConflictJson"
+                   FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("load merged provider header");
+            assert_eq!(
+                row.try_get::<String, _>("Name").unwrap(),
+                "Renamed provider title"
+            );
+            assert_eq!(
+                row.try_get::<Option<String>, _>("Description").unwrap(),
+                Some("Changed provider summary".to_owned())
+            );
+            assert_eq!(row.try_get::<i32, _>("ItemCount").unwrap(), 1);
+            assert_eq!(
+                row.try_get::<i32, _>("DraftRevision").unwrap(),
+                revision_before + 1
+            );
+            assert_eq!(
+                row.try_get::<String, _>("MetadataOverrideJson").unwrap(),
+                r#"{"plot":"Operator summary"}"#
+            );
+            let provider_metadata: serde_json::Value =
+                serde_json::from_str(&row.try_get::<String, _>("ProviderMetadataJson").unwrap())
+                    .expect("decode merged provider metadata");
+            assert_eq!(provider_metadata["title"], "Renamed provider title");
+            assert_eq!(provider_metadata["plot"], "Changed provider summary");
+            assert_eq!(
+                provider_metadata["tags"],
+                serde_json::json!(["archive", "updated"])
+            );
+            assert_eq!(
+                provider_metadata["people"],
+                serde_json::json!([{
+                    "name": "Fixture channel",
+                    "role": "Channel",
+                    "order": 0,
+                    "thumb": null
+                }])
+            );
+            assert_eq!(
+                provider_metadata["artwork"],
+                serde_json::json!([{
+                    "url": "https://images.example.test/header.jpg",
+                    "role": "fanart",
+                    "width": null,
+                    "height": null,
+                    "language": null
+                }])
+            );
+            assert_eq!(
+                provider_metadata["guids"],
+                serde_json::json!(["yt-dlp-playlist://playlist-1"])
+            );
+            let conflicts: serde_json::Value = serde_json::from_str(
+                &row.try_get::<Option<String>, _>("MetadataConflictJson")
+                    .unwrap()
+                    .expect("provider change beneath override records a conflict"),
+            )
+            .expect("decode metadata conflict");
+            assert_eq!(
+                conflicts["plot"]["provider_before"],
+                "Original provider summary"
+            );
+            assert_eq!(
+                conflicts["plot"]["provider_after"],
+                "Changed provider summary"
+            );
+            assert_eq!(conflicts["plot"]["operator_value"], "Operator summary");
+            let item_count: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("count retained items");
+            assert_eq!(item_count, 1);
+
+            sqlx::query(
+                r#"DELETE FROM "AddonMediaListImportCheckpoint" WHERE "AddonMediaListId" = ?"#,
+            )
+            .bind(list_id)
+            .execute(&pool)
+            .await
+            .expect("remove the legacy list's unavailable v2 checkpoint");
+            queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
+            let full_upgrade_job = coordinator.claim_import_job().await.unwrap().unwrap();
+            assert_eq!(full_upgrade_job.mode, AddonMediaListImportMode::Full);
+            let full_upgrade_archive = seal_v2_archive(
+                &coordinator,
+                &full_upgrade_job,
+                &data_dir,
+                b"fixture first\n",
+            )
+            .await;
+            let sparse_full_header = serde_json::from_value(serde_json::json!({
+                "record_type": "list",
+                "provider_id": "fixture/rich-header",
+                "name": "Full upgrade title",
+                "metadata": {
+                    "title": "Full upgrade title",
+                    "tags": ["full-upgrade"]
+                }
+            }))
+            .expect("sparse same-provider full header");
+            commit_complete_v2_page(
+                &coordinator,
+                &full_upgrade_job,
+                &full_upgrade_archive,
+                1,
+                1,
+                0,
+                vec![
+                    sparse_full_header,
+                    item_record("first", 0, "Reloaded overview"),
+                ],
+            )
+            .await;
+            let reloaded = sqlx::query(
+                r#"SELECT "Description", "ProviderMetadataJson", "MetadataConflictJson"
+                   FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .expect("load same-provider full metadata");
+            assert_eq!(
+                reloaded
+                    .try_get::<Option<String>, _>("Description")
+                    .unwrap(),
+                Some("Changed provider summary".to_owned())
+            );
+            let reloaded_metadata: serde_json::Value = serde_json::from_str(
+                &reloaded
+                    .try_get::<String, _>("ProviderMetadataJson")
+                    .unwrap(),
+            )
+            .expect("decode same-provider full metadata");
+            assert_eq!(reloaded_metadata["title"], "Full upgrade title");
+            assert_eq!(
+                reloaded_metadata["tags"],
+                serde_json::json!(["full-upgrade"])
+            );
+            assert_eq!(reloaded_metadata["people"], provider_metadata["people"]);
+            assert_eq!(reloaded_metadata["artwork"], provider_metadata["artwork"]);
+            assert_eq!(reloaded_metadata["guids"], provider_metadata["guids"]);
+            let retained_conflicts: serde_json::Value = serde_json::from_str(
+                &reloaded
+                    .try_get::<Option<String>, _>("MetadataConflictJson")
+                    .unwrap()
+                    .expect("retain conflict for omitted provider field"),
+            )
+            .expect("decode retained full-import conflict");
+            assert_eq!(
+                retained_conflicts["plot"]["provider_after"],
+                "Changed provider summary"
+            );
+        }
+
+        #[tokio::test]
         async fn v2_invalid_and_cancelled_pages_do_not_advance_the_live_checkpoint() {
             let (temporary, pool, coordinator) = fixture().await;
             let data_dir = temporary.path().join("private data");

@@ -107,6 +107,92 @@ async fn complete_import_finalization_phase(
     Ok(())
 }
 
+async fn update_incremental_import_list_header(
+    tx: &mut Transaction<'_, Db>,
+    list: &AddonMediaList,
+    metadata: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+) -> Result<()> {
+    let current = sqlx::query(
+        r#"SELECT "Name", "Description", "ProviderMetadataJson",
+                  "MetadataOverrideJson", "MetadataConflictJson"
+           FROM "AddonMediaList" WHERE "Id" = ? AND "AddonId" = ?"#,
+    )
+    .bind(list.id)
+    .bind(&list.addon_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .repository()?
+    .ok_or_else(|| {
+        RepositoryError::Conflict(
+            "the imported list identity changed before finalization".to_owned(),
+        )
+    })?;
+    let previous_provider: String = current.try_get("ProviderMetadataJson").repository()?;
+    let provider_metadata = merge_present_metadata(&previous_provider, metadata)?;
+    let overrides: String = current.try_get("MetadataOverrideJson").repository()?;
+    let existing_conflicts: Option<String> =
+        current.try_get("MetadataConflictJson").repository()?;
+    let conflicts = refresh_conflict_json(
+        &previous_provider,
+        &provider_metadata,
+        &overrides,
+        existing_conflicts.as_deref(),
+    )?;
+    let current_name: String = current.try_get("Name").repository()?;
+    let current_description: Option<String> = current.try_get("Description").repository()?;
+    let next_description = list
+        .description
+        .clone()
+        .or_else(|| current_description.clone());
+    let changed = current_name != list.name
+        || current_description != next_description
+        || previous_provider != provider_metadata
+        || existing_conflicts != conflicts;
+    if !changed {
+        return Ok(());
+    }
+    let updated = sqlx::query(
+        r#"UPDATE "AddonMediaList"
+           SET "Name" = ?, "Description" = ?, "ProviderMetadataJson" = ?,
+               "MetadataConflictJson" = ?, "LastError" = NULL,
+               "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
+               "ReviewError" = NULL, "DraftRevision" = "DraftRevision" + 1
+           WHERE "Id" = ? AND "AddonId" = ? AND "ReviewState" <> 3
+             AND ("PublicationJournalJson" IS NULL
+                  OR TRIM("PublicationJournalJson") = '')
+             AND NOT EXISTS (
+                 SELECT 1
+                 FROM "AddonMediaListPublicationJob" AS "job"
+                 JOIN "ManagedLibraryOperation" AS "operation"
+                   ON "operation"."Id" = "job"."OperationId"
+                 WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                   AND "operation"."State" IN (?, ?, ?)
+             )"#,
+    )
+    .bind(&list.name)
+    .bind(next_description)
+    .bind(provider_metadata)
+    .bind(conflicts)
+    .bind(list.id)
+    .bind(&list.addon_id)
+    .bind(encode_enum(
+        ersatzrs_domain::ManagedLibraryOperationState::Queued,
+    ))
+    .bind(encode_enum(
+        ersatzrs_domain::ManagedLibraryOperationState::Running,
+    ))
+    .bind(encode_enum(
+        ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
+    ))
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    if updated.rows_affected() != 1 {
+        return Err(publication_in_progress());
+    }
+    Ok(())
+}
+
 impl AddonMediaListMatchReport {
     fn one(playout_refreshes: Vec<ScanPlayoutRefresh>) -> Self {
         Self {
@@ -1000,6 +1086,7 @@ impl AddonMediaListSynchronizer {
         }
     }
 
+    #[allow(clippy::too_many_lines)] // Keep the fenced full-header replacement in one transaction.
     async fn save_import_list_header(
         &self,
         job_id: EntityId,
@@ -1016,23 +1103,39 @@ impl AddonMediaListSynchronizer {
         };
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         begin_import_finalization_phase(&mut tx, fence).await?;
-        let current = sqlx::query(
-            r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson", "MetadataConflictJson"
-               FROM "AddonMediaList" WHERE "Id" = ? AND "AddonId" = ?"#,
-        )
-        .bind(list.id)
-        .bind(&list.addon_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .repository()?
-        .ok_or_else(|| {
-            RepositoryError::Conflict(
-                "the imported list identity changed before finalization".to_owned(),
+        if incremental {
+            update_incremental_import_list_header(&mut tx, list, metadata).await?;
+        } else {
+            let current = sqlx::query(
+                r#"SELECT "ProviderId", "Description", "ProviderMetadataJson",
+                          "MetadataOverrideJson", "MetadataConflictJson"
+                   FROM "AddonMediaList" WHERE "Id" = ? AND "AddonId" = ?"#,
             )
-        })?;
-        if !incremental {
-            let provider_metadata = encode_metadata(metadata)?;
+            .bind(list.id)
+            .bind(&list.addon_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .repository()?
+            .ok_or_else(|| {
+                RepositoryError::Conflict(
+                    "the imported list identity changed before finalization".to_owned(),
+                )
+            })?;
             let previous_provider: String = current.try_get("ProviderMetadataJson").repository()?;
+            let current_provider_id: String = current.try_get("ProviderId").repository()?;
+            let same_provider = current_provider_id == list.provider_id;
+            let provider_metadata = if same_provider {
+                merge_present_metadata(&previous_provider, metadata)?
+            } else {
+                encode_metadata(metadata)?
+            };
+            let description = if same_provider {
+                list.description
+                    .clone()
+                    .or(current.try_get("Description").repository()?)
+            } else {
+                list.description.clone()
+            };
             let overrides: String = current.try_get("MetadataOverrideJson").repository()?;
             let existing_conflicts: Option<String> =
                 current.try_get("MetadataConflictJson").repository()?;
@@ -1065,7 +1168,7 @@ impl AddonMediaListSynchronizer {
             .bind(&list.provider_id)
             .bind(&list.source_url)
             .bind(&list.name)
-            .bind(&list.description)
+            .bind(description)
             .bind(list.item_count)
             .bind(encode_enum(list.content_kind_override))
             .bind((!list.chapter_input.is_empty()).then_some(&list.chapter_input))
@@ -2972,6 +3075,53 @@ fn encode_metadata(
 ) -> Result<String> {
     serde_json::to_string(metadata).map_err(|error| RepositoryError::Decode {
         kind: "add-on metadata document",
+        value: error.to_string(),
+    })
+}
+
+fn merge_present_metadata(
+    previous_json: &str,
+    incoming: &ersatzrs_core::repositories::AddonMediaListNfoMetadata,
+) -> Result<String> {
+    let mut merged: serde_json::Value =
+        serde_json::from_str(previous_json).map_err(|error| RepositoryError::Decode {
+            kind: "stored add-on provider metadata",
+            value: error.to_string(),
+        })?;
+    let previous = merged.clone();
+    let incoming = serde_json::to_value(incoming).map_err(|error| RepositoryError::Decode {
+        kind: "refreshed add-on provider metadata",
+        value: error.to_string(),
+    })?;
+    let merged_fields = merged
+        .as_object_mut()
+        .ok_or_else(|| RepositoryError::Decode {
+            kind: "stored add-on provider metadata",
+            value: "expected an object".to_owned(),
+        })?;
+    let incoming_fields = incoming
+        .as_object()
+        .ok_or_else(|| RepositoryError::Decode {
+            kind: "refreshed add-on provider metadata",
+            value: "expected an object".to_owned(),
+        })?;
+    for (field, value) in incoming_fields {
+        let present = match value {
+            serde_json::Value::Null => false,
+            serde_json::Value::String(value) => !value.trim().is_empty(),
+            serde_json::Value::Array(value) => !value.is_empty(),
+            serde_json::Value::Object(value) => !value.is_empty(),
+            serde_json::Value::Bool(_) | serde_json::Value::Number(_) => true,
+        };
+        if present {
+            merged_fields.insert(field.clone(), value.clone());
+        }
+    }
+    if merged == previous {
+        return Ok(previous_json.to_owned());
+    }
+    serde_json::to_string(&merged).map_err(|error| RepositoryError::Decode {
+        kind: "merged add-on provider metadata",
         value: error.to_string(),
     })
 }

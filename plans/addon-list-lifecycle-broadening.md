@@ -668,6 +668,17 @@ Chromium/Firefox execution remains part of the integrated AMM-N-03 closeout.
 
 ### AMM-L-03 — Complete playlist metadata with empty deltas
 
+Source map:
+
+- ErsatzTV UI, validators, handlers, and repositories: none; repository-installed
+  add-on drafts are the ADR 0085 ErsatzRS extension.
+- Official provider package: the yt-dlp Deno import adapter performs the bounded
+  header and archive-filtered entry operations for both native entrypoints.
+- ErsatzRS host: `ersatzrs-infra` validates the existing provider-neutral list
+  record and merges the committed header under the import finalization fence.
+- Side effects: only list draft metadata and its existing override/conflict state
+  change; item reconciliation and refresh publication remain in AMM-L-04/L-05.
+
 - Add bounded header extraction and map summary/description, tags, people,
   artwork, and stable identifiers.
 - Prove untouched fields update, overrides/conflicts survive, zero-new-item

@@ -2573,7 +2573,7 @@ through L-05.
 id         = 'amm-l-03'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Refresh complete playlist metadata independently of item deltas'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-02']
@@ -2586,17 +2586,28 @@ cannot erase richer saved metadata. Frozen Windows/POSIX fixtures and host
 merge tests cover an empty delta and changed header.
 '''
 evidence = '''
-Implementation planning claimed by Codex on 2026-09-04. This slice is reserved
-for bounded playlist-header extraction, provider-neutral rich list metadata,
-and merge behavior when item discovery emits an empty delta. Reconciliation
-and automatic publication remain in AMM-L-04 and L-05.
+Completed 2026-09-04. Official yt-dlp 0.7.8 runs one first-entry bounded flat
+header probe independently from archive-filtered v2 discovery, maps provider
+title, optional summary, tags, channel/uploader people, artwork, and stable
+playlist or direct-video GUIDs, and emits that header when the item delta is
+empty. The host overlays only present header fields under the durable
+finalization fence, preserves richer saved fields omitted by flat extraction,
+retains operator overrides, records provider changes beneath them as conflicts,
+and increments the draft revision only for a semantic change. The same merge
+protects a same-provider legacy list's first full v2 refresh, while a provider
+switch still replaces the old provider document. The native
+Windows/POSIX package fixture proves separate exact header/archive argument
+shapes and a changed rich header with zero emitted items; focused Deno and Rust
+tests prove unchanged revision stability, empty-delta item retention, metadata
+merge, and conflict preservation. Reconciliation and automatic publication
+remain in AMM-L-04 and L-05.
 '''
 
 [[milestone]]
 id         = 'amm-l-04'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Reconcile a complete source without erasing operator work'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-03']
@@ -2613,9 +2624,10 @@ promotes the matching staged archive atomically; Reset and Reload remains the
 separate clean-slate action.
 '''
 evidence = '''
-Not started. The current broadened design can suppress archived identities but
-otherwise leaves provider removals indefinitely or requires destructive reset,
-which discards operator review state.
+Implementation planning reserved for Codex on 2026-09-04 after AMM-L-03. This
+slice owns complete scratch reconciliation, two-observation removal evidence,
+reappearance, retained operator state, and matching archive promotion. Refresh
+publication policy remains in AMM-L-05.
 '''
 
 [[milestone]]

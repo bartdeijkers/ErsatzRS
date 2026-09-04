@@ -21,7 +21,10 @@ release section when tagging a release.
   cancellation and restart, and exposes exact examined, skipped-known, and
   emitted counts. The official yt-dlp package uses this contract on Windows
   and POSIX without unsafe early stop, so unchanged playlists emit no duplicate
-  items and reordered playlists cannot hide a later unseen item.
+  items and reordered playlists cannot hide a later unseen item. A separate
+  bounded playlist-header probe refreshes rich provider metadata even when the
+  item delta is empty, while preserving operator overrides, conflicts, and
+  richer fields omitted by flat extraction.
 
 - Add localized fixed and opt-in adaptive refresh cadences for add-on media
   lists. One restart-safe coordinator persists due, retry, success-anchor,
