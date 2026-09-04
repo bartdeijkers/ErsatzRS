@@ -2573,7 +2573,7 @@ through L-05.
 id         = 'amm-l-03'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Refresh complete playlist metadata independently of item deltas'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-02']
@@ -2586,9 +2586,10 @@ cannot erase richer saved metadata. Frozen Windows/POSIX fixtures and host
 merge tests cover an empty delta and changed header.
 '''
 evidence = '''
-Not started. The mapper accepts description and tags, but receives only the
-flat discovery object and therefore cannot guarantee that playlist-level rich
-metadata is present.
+Implementation planning claimed by Codex on 2026-09-04. This slice is reserved
+for bounded playlist-header extraction, provider-neutral rich list metadata,
+and merge behavior when item discovery emits an empty delta. Reconciliation
+and automatic publication remain in AMM-L-04 and L-05.
 '''
 
 [[milestone]]
