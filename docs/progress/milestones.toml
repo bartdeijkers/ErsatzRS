@@ -2362,7 +2362,7 @@ their owning AMM-K through AMM-N milestones; no full closeout or CI was run.
 id         = 'amm-k-02'
 phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Add clean reset, always-visible metadata, and optional numbering'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-01']
@@ -2378,9 +2378,10 @@ The list table presents Name before Id. Localized hydrated/no-JS, keyboard,
 320-pixel, 200%-zoom, Chromium, and Firefox acceptance passes.
 '''
 evidence = '''
-Not started. Current UI hides list metadata behind duplicate text/icon toggles,
-orders Id before Name, and readiness hard-blocks missing season/episode data;
-there is no complete unload-and-reload command.
+Implementation planning started 2026-09-04. This slice is reserved for the
+existing editor/readiness surfaces plus one durable reset-and-reload command;
+preview, revision comparison, refresh, provider options, and tool maintenance
+remain in their later owning milestones.
 '''
 
 [[milestone]]
