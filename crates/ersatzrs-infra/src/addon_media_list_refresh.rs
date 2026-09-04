@@ -51,7 +51,7 @@ impl AddonMediaListRefreshCoordinator {
     pub fn new(pool: DbPool) -> Self {
         Self {
             provider: InstalledAddonMediaListProvider::new(pool.clone()),
-            imports: AddonMediaListImportCoordinator::new(pool.clone()),
+            imports: AddonMediaListImportCoordinator::for_scheduled_refresh(pool.clone()),
             pool,
         }
     }

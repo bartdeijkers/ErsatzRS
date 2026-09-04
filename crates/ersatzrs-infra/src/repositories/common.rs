@@ -592,6 +592,7 @@ db_enum!(AddonMediaListPublicationEventKind {
 db_enum!(AddonMediaListPublicationEnqueueTrigger {
     0 => AddonMediaListPublicationEnqueueTrigger::Operator,
     1 => AddonMediaListPublicationEnqueueTrigger::RestoreRevision,
+    2 => AddonMediaListPublicationEnqueueTrigger::AutomaticRefresh,
 });
 db_enum!(AddonMediaListPublicationFilesystemTransition {
     0 => AddonMediaListPublicationFilesystemTransition::PreviousBackedUp,

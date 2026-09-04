@@ -251,6 +251,11 @@ async fn run_addon_media_list_imports(
                 .await?;
             let imported = coordinator.process_one_import_page().await?;
             let detailed = coordinator.process_one_detail().await?;
+            let auto_published = ersatzrs_infra::addon_media_list_auto_publication::process_one(
+                &pool,
+                chrono::Utc::now(),
+            )
+            .await?;
             let projected =
                 ersatzrs_infra::repositories::project_one_pending_detail_batch(&pool).await?;
             if let Some((list_id, library_id)) = projected {
@@ -272,7 +277,12 @@ async fn run_addon_media_list_imports(
                 }
             }
             Ok::<_, ersatzrs_core::repositories::RepositoryError>(
-                refreshed || probed || imported || detailed || projected.is_some(),
+                refreshed
+                    || probed
+                    || imported
+                    || detailed
+                    || auto_published
+                    || projected.is_some(),
             )
         };
         tokio::select! {

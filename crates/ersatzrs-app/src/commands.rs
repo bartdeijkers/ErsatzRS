@@ -4581,6 +4581,8 @@ pub struct UpdateAddonMediaList {
     pub id: EntityId,
     /// Fixed, adaptive, or disabled provider refresh policy.
     pub refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence,
+    /// Whether safe additions from scheduled refreshes may publish automatically.
+    pub refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
     /// Maintain a generated playlist for matched rows.
     pub generate_playlist: bool,
     /// Force one descriptive content type for all entries, or retain
@@ -5021,6 +5023,7 @@ pub async fn update_addon_media_list(
         .update_settings(
             command.id,
             command.refresh_cadence,
+            command.refresh_publication_policy,
             command.generate_playlist,
             command.content_kind_override,
             command.chapter_input.trim(),
@@ -7040,6 +7043,7 @@ mod tests {
             &self,
             _id: EntityId,
             _refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence,
+            _refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
             _generate_playlist: bool,
             _content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
             _chapter_input: &str,

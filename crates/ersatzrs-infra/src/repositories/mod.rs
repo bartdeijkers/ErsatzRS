@@ -1,4 +1,5 @@
 mod addon_media_list;
+pub(crate) mod addon_media_list_auto_eligibility;
 mod addon_media_list_lifecycle;
 pub(crate) mod addon_media_list_reset;
 pub(crate) mod addon_publication_fs;
@@ -16,7 +17,7 @@ mod ffmpeg_profile;
 mod filler;
 mod graphics;
 mod library;
-mod managed_library_operation;
+pub(crate) mod managed_library_operation;
 mod media_item;
 mod media_source;
 mod metadata;

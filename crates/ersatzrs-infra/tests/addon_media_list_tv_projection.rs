@@ -1744,6 +1744,47 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
         )
         .await
         .expect("enter staging"));
+    // Automatic work cannot use the ordinary publication lease to bypass
+    // additions-only validation, even when the saved revision still matches.
+    sqlx::query(r#"UPDATE "AddonMediaListPublicationEvent" SET "EnqueueTrigger" = 2 WHERE "PublicationJobId" = ? AND "EnqueueTrigger" = 0"#)
+        .bind(enqueued.job.id).execute(&pool).await.expect("mark automatic admission");
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy" = 1 WHERE "Id" = 1"#)
+        .execute(&pool)
+        .await
+        .expect("enable automatic publication");
+    sqlx::query(r#"INSERT INTO "AddonMediaListAutoPublication" (
+        "AddonMediaListId", "DraftRevision", "PublishedRevision", "State", "RecordedAt", "OperationId"
+    ) VALUES (1, ?, ?, 'queued', ?, ?)"#)
+        .bind(draft.draft_revision).bind(draft.published_revision)
+        .bind(Utc::now().to_rfc3339()).bind(enqueued.operation.id)
+        .execute(&pool).await.expect("seed exact automatic candidate");
+    let error = repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            enqueued.job.saved_revision,
+            enqueued.operation.id,
+            enqueued.job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await
+        .expect_err("existing title changes must remain review-only");
+    assert!(error.to_string().contains("requires review before staging"));
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaList" WHERE "PublicationJournalJson" IS NOT NULL"#
+        )
+        .await,
+        0
+    );
+    sqlx::query(r#"UPDATE "AddonMediaListPublicationEvent" SET "EnqueueTrigger" = 0 WHERE "PublicationJobId" = ? AND "EnqueueTrigger" = 2"#)
+        .bind(enqueued.job.id).execute(&pool).await.expect("restore explicit operator admission");
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy" = 0 WHERE "Id" = 1"#)
+        .execute(&pool)
+        .await
+        .expect("restore review policy");
     repositories
         .addon_media_lists
         .stage_publication_revision(
@@ -1776,6 +1817,7 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
         .update_settings(
             LIST_ID,
             AddonMediaListRefreshCadence::Daily,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions,
             false,
             AddonMediaListContentKind::TelevisionEpisode,
             "",
@@ -1783,6 +1825,16 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
         .await
         .expect_err("settings mutation must be locked during publication");
     assert!(settings_error.to_string().contains("being published"));
+    let unchanged = repositories
+        .addon_media_lists
+        .get_admin_form(LIST_ID)
+        .await
+        .expect("read locked settings")
+        .expect("list exists");
+    assert_eq!(
+        unchanged.refresh_publication_policy,
+        ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review
+    );
     let item_error = repositories
         .addon_media_lists
         .set_item_included(LIST_ID, 10, true)
@@ -1816,6 +1868,7 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
         .update_settings(
             LIST_ID,
             AddonMediaListRefreshCadence::Daily,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             false,
             AddonMediaListContentKind::TelevisionEpisode,
             "",
@@ -2873,6 +2926,7 @@ async fn configure_verifiable_tv_publication(pool: &SqlitePool, repositories: &R
         .update_settings(
             LIST_ID,
             AddonMediaListRefreshCadence::Daily,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             true,
             AddonMediaListContentKind::TelevisionEpisode,
             "",
@@ -3830,6 +3884,7 @@ async fn restored_verification_accepts_logical_content_with_regenerated_database
         .update_settings(
             LIST_ID,
             AddonMediaListRefreshCadence::Daily,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             false,
             AddonMediaListContentKind::Movie,
             "",

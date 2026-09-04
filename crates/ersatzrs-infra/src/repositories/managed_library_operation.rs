@@ -29,6 +29,167 @@ use crate::repositories::common::{
     decode_optional_enum_column, encode_datetime, encode_enum,
 };
 
+#[allow(clippy::too_many_lines)] // One transaction owns admission and its causal history.
+pub(crate) async fn enqueue_publication_in_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    library_id: EntityId,
+    saved_revision: i32,
+    expected_next_published_revision: i32,
+    trigger: AddonMediaListPublicationEnqueueTrigger,
+) -> Result<AddonMediaListPublicationEnqueue> {
+    let now = encode_datetime(Utc::now());
+    if let Some(row) = active_publication_row(tx, list_id).await? {
+        let (job, operation) = decode_publication_row(&row)?;
+        return Ok(AddonMediaListPublicationEnqueue {
+            job,
+            operation,
+            existing: true,
+        });
+    }
+    let row = sqlx::query(
+        r#"SELECT "DraftRevision", "PublishedRevision"
+               FROM "AddonMediaList" WHERE "Id" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .repository()?
+    .ok_or(RepositoryError::NotFound {
+        kind: "add-on media list",
+        id: list_id,
+    })?;
+    let current_saved: i32 = row.try_get("DraftRevision").repository()?;
+    let current_published: i32 = row.try_get("PublishedRevision").repository()?;
+    if current_saved != saved_revision {
+        return Err(RepositoryError::Conflict(
+            "the saved add-on media-list revision changed before publication was queued".to_owned(),
+        ));
+    }
+    if let Some(row) =
+        completed_publication_row(tx, list_id, saved_revision, current_published).await?
+    {
+        let (job, operation) = decode_publication_row(&row)?;
+        return Ok(AddonMediaListPublicationEnqueue {
+            job,
+            operation,
+            existing: true,
+        });
+    }
+    if current_published.checked_add(1) != Some(expected_next_published_revision) {
+        return Err(RepositoryError::Conflict(
+            "the published add-on media-list revision changed before publication was queued"
+                .to_owned(),
+        ));
+    }
+    let target_published_revision =
+        next_publication_revision_tx(tx, list_id, current_published).await?;
+    let generation = sqlx::query_scalar::<_, i32>(
+        r#"SELECT COALESCE(MAX("Generation"), 0) + 1
+               FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    let owner_token = Uuid::new_v4().to_string();
+    let operation_result = sqlx::query(
+        r#"INSERT INTO "ManagedLibraryOperation" (
+                   "LibraryId", "OwnerToken", "Kind", "State", "CreatedAt", "UpdatedAt"
+               ) VALUES (?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(library_id)
+    .bind(&owner_token)
+    .bind(encode_enum(ManagedLibraryOperationKind::Publication))
+    .bind(encode_enum(ManagedLibraryOperationState::Queued))
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    let operation_id = inserted_id(tx, operation_result).await.repository()?;
+    let job_result = sqlx::query(
+        r#"INSERT INTO "AddonMediaListPublicationJob" (
+                   "OperationId", "AddonMediaListId", "Generation", "SavedRevision",
+                   "TargetPublishedRevision", "Phase", "CreatedAt", "UpdatedAt"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+    )
+    .bind(operation_id)
+    .bind(list_id)
+    .bind(generation)
+    .bind(saved_revision)
+    .bind(target_published_revision)
+    .bind(encode_enum(AddonMediaListPublicationPhase::AwaitingLease))
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    let job_id = inserted_id(tx, job_result).await.repository()?;
+    append_publication_event_for_job_tx(
+        tx,
+        job_id,
+        "enqueued",
+        PublicationEventWrite {
+            kind: AddonMediaListPublicationEventKind::Enqueued,
+            enqueue_trigger: Some(trigger),
+            phase: Some(AddonMediaListPublicationPhase::AwaitingLease),
+            occurred_at: &now,
+            ..PublicationEventWrite::default()
+        },
+    )
+    .await?;
+    if let Some(owner_operation_id) =
+        competing_lease_operation_tx(tx, library_id, operation_id, &now).await?
+    {
+        append_publication_event_for_job_tx(
+            tx,
+            job_id,
+            "lease_wait:0",
+            PublicationEventWrite {
+                kind: AddonMediaListPublicationEventKind::LeaseWaitStarted,
+                phase: Some(AddonMediaListPublicationPhase::AwaitingLease),
+                attempt: Some(0),
+                related_operation_id: Some(owner_operation_id),
+                occurred_at: &now,
+                ..PublicationEventWrite::default()
+            },
+        )
+        .await?;
+    }
+    prune_publication_history_tx(tx, &now).await?;
+    Ok(AddonMediaListPublicationEnqueue {
+        job: AddonMediaListPublicationJob {
+            id: job_id,
+            operation_id,
+            list_id,
+            generation,
+            saved_revision,
+            target_published_revision,
+            source_published_revision: None,
+            restore_materialized_at: None,
+            phase: AddonMediaListPublicationPhase::AwaitingLease,
+            child_scan_operation_id: None,
+            original_failure_code: None,
+            original_failure_diagnostic: None,
+            recovery_diagnostic: None,
+            outcome: None,
+        },
+        operation: ManagedLibraryOperation {
+            id: operation_id,
+            library_id,
+            parent_operation_id: None,
+            owner_token,
+            kind: ManagedLibraryOperationKind::Publication,
+            state: ManagedLibraryOperationState::Queued,
+            scan: None,
+            attempt_count: 0,
+            next_eligible_at: None,
+        },
+        existing: false,
+    })
+}
+
 const LEASE_SECONDS: i64 = 90;
 const PUBLICATION_HISTORY_LIMIT: i32 = 256;
 const PUBLICATION_TERMINAL_HISTORY_DAYS: i64 = 30;
@@ -113,161 +274,18 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
         saved_revision: i32,
         expected_next_published_revision: i32,
     ) -> Result<AddonMediaListPublicationEnqueue> {
-        let now = encode_datetime(Utc::now());
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        if let Some(row) = active_publication_row(&mut tx, list_id).await? {
-            let (job, operation) = decode_publication_row(&row)?;
-            tx.commit().await.repository()?;
-            return Ok(AddonMediaListPublicationEnqueue {
-                job,
-                operation,
-                existing: true,
-            });
-        }
-        let row = sqlx::query(
-            r#"SELECT "DraftRevision", "PublishedRevision"
-               FROM "AddonMediaList" WHERE "Id" = ?"#,
-        )
-        .bind(list_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .repository()?
-        .ok_or(RepositoryError::NotFound {
-            kind: "add-on media list",
-            id: list_id,
-        })?;
-        let current_saved: i32 = row.try_get("DraftRevision").repository()?;
-        let current_published: i32 = row.try_get("PublishedRevision").repository()?;
-        if current_saved != saved_revision {
-            return Err(RepositoryError::Conflict(
-                "the saved add-on media-list revision changed before publication was queued"
-                    .to_owned(),
-            ));
-        }
-        if let Some(row) =
-            completed_publication_row(&mut tx, list_id, saved_revision, current_published).await?
-        {
-            let (job, operation) = decode_publication_row(&row)?;
-            tx.commit().await.repository()?;
-            return Ok(AddonMediaListPublicationEnqueue {
-                job,
-                operation,
-                existing: true,
-            });
-        }
-        if current_published.checked_add(1) != Some(expected_next_published_revision) {
-            return Err(RepositoryError::Conflict(
-                "the published add-on media-list revision changed before publication was queued"
-                    .to_owned(),
-            ));
-        }
-        let target_published_revision =
-            next_publication_revision_tx(&mut tx, list_id, current_published).await?;
-        let generation = sqlx::query_scalar::<_, i32>(
-            r#"SELECT COALESCE(MAX("Generation"), 0) + 1
-               FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ?"#,
-        )
-        .bind(list_id)
-        .fetch_one(&mut *tx)
-        .await
-        .repository()?;
-        let owner_token = Uuid::new_v4().to_string();
-        let operation_result = sqlx::query(
-            r#"INSERT INTO "ManagedLibraryOperation" (
-                   "LibraryId", "OwnerToken", "Kind", "State", "CreatedAt", "UpdatedAt"
-               ) VALUES (?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(library_id)
-        .bind(&owner_token)
-        .bind(encode_enum(ManagedLibraryOperationKind::Publication))
-        .bind(encode_enum(ManagedLibraryOperationState::Queued))
-        .bind(&now)
-        .bind(&now)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        let operation_id = inserted_id(&mut tx, operation_result).await.repository()?;
-        let job_result = sqlx::query(
-            r#"INSERT INTO "AddonMediaListPublicationJob" (
-                   "OperationId", "AddonMediaListId", "Generation", "SavedRevision",
-                   "TargetPublishedRevision", "Phase", "CreatedAt", "UpdatedAt"
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(operation_id)
-        .bind(list_id)
-        .bind(generation)
-        .bind(saved_revision)
-        .bind(target_published_revision)
-        .bind(encode_enum(AddonMediaListPublicationPhase::AwaitingLease))
-        .bind(&now)
-        .bind(&now)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        let job_id = inserted_id(&mut tx, job_result).await.repository()?;
-        append_publication_event_for_job_tx(
+        let result = enqueue_publication_in_tx(
             &mut tx,
-            job_id,
-            "enqueued",
-            PublicationEventWrite {
-                kind: AddonMediaListPublicationEventKind::Enqueued,
-                enqueue_trigger: Some(AddonMediaListPublicationEnqueueTrigger::Operator),
-                phase: Some(AddonMediaListPublicationPhase::AwaitingLease),
-                occurred_at: &now,
-                ..PublicationEventWrite::default()
-            },
+            list_id,
+            library_id,
+            saved_revision,
+            expected_next_published_revision,
+            AddonMediaListPublicationEnqueueTrigger::Operator,
         )
         .await?;
-        if let Some(owner_operation_id) =
-            competing_lease_operation_tx(&mut tx, library_id, operation_id, &now).await?
-        {
-            append_publication_event_for_job_tx(
-                &mut tx,
-                job_id,
-                "lease_wait:0",
-                PublicationEventWrite {
-                    kind: AddonMediaListPublicationEventKind::LeaseWaitStarted,
-                    phase: Some(AddonMediaListPublicationPhase::AwaitingLease),
-                    attempt: Some(0),
-                    related_operation_id: Some(owner_operation_id),
-                    occurred_at: &now,
-                    ..PublicationEventWrite::default()
-                },
-            )
-            .await?;
-        }
-        prune_publication_history_tx(&mut tx, &now).await?;
         tx.commit().await.repository()?;
-        Ok(AddonMediaListPublicationEnqueue {
-            job: AddonMediaListPublicationJob {
-                id: job_id,
-                operation_id,
-                list_id,
-                generation,
-                saved_revision,
-                target_published_revision,
-                source_published_revision: None,
-                restore_materialized_at: None,
-                phase: AddonMediaListPublicationPhase::AwaitingLease,
-                child_scan_operation_id: None,
-                original_failure_code: None,
-                original_failure_diagnostic: None,
-                recovery_diagnostic: None,
-                outcome: None,
-            },
-            operation: ManagedLibraryOperation {
-                id: operation_id,
-                library_id,
-                parent_operation_id: None,
-                owner_token,
-                kind: ManagedLibraryOperationKind::Publication,
-                state: ManagedLibraryOperationState::Queued,
-                scan: None,
-                attempt_count: 0,
-                next_eligible_at: None,
-            },
-            existing: false,
-        })
+        Ok(result)
     }
 
     async fn enqueue_revision_restore(

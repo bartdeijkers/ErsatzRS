@@ -396,6 +396,7 @@ async fn add_refresh_match_and_generate_playlist() {
         .update_settings(
             list_id,
             AddonMediaListRefreshCadence::Daily,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             None,
             true,
             true,
@@ -449,6 +450,62 @@ async fn add_refresh_match_and_generate_playlist() {
     .await
     .unwrap();
     assert_eq!(stale_playlist_items, 0);
+}
+
+#[tokio::test]
+async fn refresh_publication_policy_saves_with_cadence_and_round_trips() {
+    use ersatzrs_domain::AddonMediaListRefreshPublicationPolicy;
+    let pool = common::test_db().await;
+    seed_addon(&pool).await;
+    let list_id = AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeListProvider)
+        .add_or_refresh(
+            "org.example.lists",
+            "https://example.invalid/list",
+            None,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
+        .await
+        .unwrap();
+    let repository = SqliteAddonMediaListRepository(pool.clone());
+    assert_eq!(
+        repository
+            .get_admin_form(list_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .refresh_publication_policy,
+        AddonMediaListRefreshPublicationPolicy::Review
+    );
+    for (cadence, policy) in [
+        (
+            AddonMediaListRefreshCadence::Weekly,
+            AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions,
+        ),
+        (
+            AddonMediaListRefreshCadence::Never,
+            AddonMediaListRefreshPublicationPolicy::Review,
+        ),
+    ] {
+        repository
+            .update_settings(
+                list_id,
+                cadence,
+                policy,
+                false,
+                AddonMediaListContentKind::Auto,
+                "",
+            )
+            .await
+            .unwrap();
+        let form = repository.get_admin_form(list_id).await.unwrap().unwrap();
+        assert_eq!(form.refresh_cadence, cadence);
+        assert_eq!(form.refresh_publication_policy, policy);
+        assert_eq!(
+            form.next_refresh_at.is_none(),
+            cadence == AddonMediaListRefreshCadence::Never
+        );
+    }
 }
 
 #[tokio::test]
@@ -667,6 +724,7 @@ async fn remote_stream_items_match_by_url_and_use_remote_stream_collection_type(
         .update_settings(
             list_id,
             AddonMediaListRefreshCadence::Never,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             None,
             true,
             true,
@@ -748,6 +806,7 @@ async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_rec
         .update_settings(
             list_id,
             AddonMediaListRefreshCadence::Never,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             None,
             true,
             true,
@@ -829,6 +888,7 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
         .update_settings(
             list_id,
             AddonMediaListRefreshCadence::Never,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             None,
             true,
             true,
@@ -932,6 +992,7 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
         .update_settings(
             50,
             AddonMediaListRefreshCadence::Daily,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             None,
             true,
             true,
@@ -959,6 +1020,7 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
         .update_settings(
             50,
             AddonMediaListRefreshCadence::Daily,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             None,
             true,
             false,
@@ -992,6 +1054,7 @@ async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lif
         .update_settings(
             50,
             AddonMediaListRefreshCadence::Never,
+            ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Review,
             None,
             true,
             true,

@@ -12,6 +12,7 @@ use ersatzrs_core::repositories::{
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListPresentationKind,
     AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
+    AddonMediaListRefreshPublicationPolicy,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -148,6 +149,8 @@ pub struct AddonMediaListSaveForm {
     #[serde(default)]
     saved_revision: i32,
     refresh_cadence: AddonMediaListRefreshCadence,
+    #[serde(default)]
+    refresh_publication_policy: AddonMediaListRefreshPublicationPolicy,
     #[serde(default)]
     generate_playlist: bool,
     #[serde(default)]
@@ -331,6 +334,7 @@ pub async fn add_addon_media_list_form(
                 .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
                     id,
                     refresh_cadence: input.refresh_cadence,
+                    refresh_publication_policy: AddonMediaListRefreshPublicationPolicy::Review,
                     generate_playlist: input.generate_playlist,
                     content_kind_override: presentation_content_kind(input.presentation_kind),
                     chapter_input: input.chapter_input,
@@ -397,6 +401,7 @@ pub async fn save_addon_media_list_form(
         }
     };
     let form = AddonMediaListForm {
+        auto_publication_hold: current.auto_publication_hold.map(Into::into),
         id,
         name: current.name,
         addon_id: current.addon_id,
@@ -404,6 +409,7 @@ pub async fn save_addon_media_list_form(
         folder_name: current.folder_name,
         refresh_cadence: input.refresh_cadence,
         last_refresh_succeeded_at: current.last_refresh_succeeded_at,
+        refresh_publication_policy: input.refresh_publication_policy,
         next_refresh_at: current.next_refresh_at,
         refresh_retry_at: current.refresh_retry_at,
         generate_playlist: input.generate_playlist,
@@ -495,6 +501,7 @@ pub async fn publish_addon_media_list_form(
         AddonMediaListDetailPolicy::ManualOnly
     };
     if current.refresh_cadence != input.refresh_cadence
+        || current.refresh_publication_policy != input.refresh_publication_policy
         || current.generate_playlist != input.generate_playlist
         || current.requested_presentation_kind != input.presentation_kind
         || current.detail_import_policy != submitted_policy
@@ -1005,12 +1012,33 @@ mod tests {
         let parsed: AddonMediaListSaveForm = serde_urlencoded::from_bytes(&body).unwrap();
         assert_eq!(parsed.id, 42);
         assert_eq!(parsed.refresh_cadence, AddonMediaListRefreshCadence::Never);
+        assert_eq!(
+            parsed.refresh_publication_policy,
+            AddonMediaListRefreshPublicationPolicy::Review
+        );
         assert!(!parsed.generate_playlist);
         assert!(!parsed.load_item_details);
         assert_eq!(
             parsed.presentation_kind,
             AddonMediaListPresentationKind::TelevisionShow
         );
+    }
+
+    #[test]
+    fn save_form_accepts_explicit_automatic_publication_and_rejects_unknown_policy() {
+        let parsed: AddonMediaListSaveForm = serde_urlencoded::from_str(
+            "id=42&refresh_cadence=weekly&refresh_publication_policy=auto_publish_additions",
+        )
+        .unwrap();
+        assert_eq!(parsed.refresh_cadence, AddonMediaListRefreshCadence::Weekly);
+        assert_eq!(
+            parsed.refresh_publication_policy,
+            AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions
+        );
+        assert!(serde_urlencoded::from_str::<AddonMediaListSaveForm>(
+            "id=42&refresh_cadence=weekly&refresh_publication_policy=publish_everything",
+        )
+        .is_err());
     }
 
     #[test]

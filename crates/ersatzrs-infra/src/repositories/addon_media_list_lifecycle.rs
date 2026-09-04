@@ -1687,7 +1687,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
 const REVISION_SNAPSHOT_VERSION: i32 = 1;
 const RETAINED_COMPLETE_REVISION_COUNT: usize = 3;
 
-async fn capture_current_revision_snapshot(
+pub(crate) async fn capture_current_revision_snapshot(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
     revision: i32,

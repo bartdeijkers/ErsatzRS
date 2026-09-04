@@ -111,6 +111,7 @@ pub enum TextKey {
     EventRecoveryRequested,
     EventCompleted,
     EventHistoryTruncated,
+    TriggerAutomaticRefresh,
     TriggerOperator,
     TriggerRestoreRevision,
     TestSource,
@@ -440,6 +441,20 @@ pub enum TextKey {
     AfterDurationEnd,
     AutomaticRefresh,
     AdaptiveRefreshUnavailable,
+    RefreshPublicationPolicy,
+    RefreshPublicationReview,
+    RefreshPublicationAutomatic,
+    RefreshPublicationPolicyHelp,
+    AutoPublicationHeld,
+    AutoPublicationBaselineUnavailable,
+    AutoPublicationExistingChanges,
+    AutoPublicationConflicts,
+    AutoPublicationRemovals,
+    AutoPublicationRestricted,
+    AutoPublicationUnavailable,
+    AutoPublicationOptionsChanged,
+    AutoPublicationPreparationFailed,
+    AutoPublicationConcurrentChange,
     RefreshCadenceAdaptive,
     RefreshCadenceDaily,
     RefreshCadenceWeekly,
@@ -1855,6 +1870,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::EventRecoveryRequested,
     TextKey::EventCompleted,
     TextKey::EventHistoryTruncated,
+    TextKey::TriggerAutomaticRefresh,
     TextKey::TriggerOperator,
     TextKey::TriggerRestoreRevision,
     TextKey::TestSource,
@@ -2182,6 +2198,20 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AfterDurationEnd,
     TextKey::AutomaticRefresh,
     TextKey::AdaptiveRefreshUnavailable,
+    TextKey::RefreshPublicationPolicy,
+    TextKey::RefreshPublicationReview,
+    TextKey::RefreshPublicationAutomatic,
+    TextKey::RefreshPublicationPolicyHelp,
+    TextKey::AutoPublicationHeld,
+    TextKey::AutoPublicationBaselineUnavailable,
+    TextKey::AutoPublicationExistingChanges,
+    TextKey::AutoPublicationConflicts,
+    TextKey::AutoPublicationRemovals,
+    TextKey::AutoPublicationRestricted,
+    TextKey::AutoPublicationUnavailable,
+    TextKey::AutoPublicationOptionsChanged,
+    TextKey::AutoPublicationPreparationFailed,
+    TextKey::AutoPublicationConcurrentChange,
     TextKey::RefreshCadenceAdaptive,
     TextKey::RefreshCadenceDaily,
     TextKey::RefreshCadenceWeekly,
@@ -4035,6 +4065,9 @@ pub fn health_check_message_text(
     } else {
         message
     };
+    if title == "Add-on media lists" && displayed_message == "Automatic publication needs review" {
+        return text(language, TextKey::AutoPublicationHeld).to_owned();
+    }
     if title == CLASSIC_PLAYOUT_STATE_TITLE {
         if let Some(playouts) = displayed_message
             .strip_prefix(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX)
@@ -4545,6 +4578,23 @@ mod tests {
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(title, CLASSIC_PLAYOUT_STATE_TITLE);
                 assert!(!localized.starts_with(CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX));
+            }
+        }
+    }
+
+    #[test]
+    fn automatic_publication_hold_health_is_localized_for_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let localized = health_check_message_text(
+                language,
+                "Add-on media lists",
+                "Automatic publication needs review",
+                "Automatic publication needs review",
+            );
+            assert_eq!(localized, text(language, TextKey::AutoPublicationHeld));
+            if definition.code != UiLanguage::English.code() {
+                assert_ne!(localized, "Automatic publication needs review");
             }
         }
     }

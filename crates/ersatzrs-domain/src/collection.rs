@@ -220,6 +220,7 @@ pub enum AddonMediaListPublicationEventKind {
 pub enum AddonMediaListPublicationEnqueueTrigger {
     Operator,
     RestoreRevision,
+    AutomaticRefresh,
 }
 
 /// Filesystem boundary represented by a publication phase event.

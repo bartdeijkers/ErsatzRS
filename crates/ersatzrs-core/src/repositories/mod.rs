@@ -32,11 +32,11 @@ mod watermark;
 pub use addon_media_list::{
     AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListAdminSortDirection,
     AddonMediaListAdminSortField, AddonMediaListArtwork, AddonMediaListArtworkRole,
-    AddonMediaListArtworkUpload, AddonMediaListImportAction, AddonMediaListImportProgress,
-    AddonMediaListItemAdminRow, AddonMediaListItemCounts, AddonMediaListItemDetail,
-    AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict, AddonMediaListNfoForm,
-    AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListNfoPerson,
-    AddonMediaListPublication, AddonMediaListPublicationBlocker,
+    AddonMediaListArtworkUpload, AddonMediaListAutoPublicationHold, AddonMediaListImportAction,
+    AddonMediaListImportProgress, AddonMediaListItemAdminRow, AddonMediaListItemCounts,
+    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict,
+    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoOwnership,
+    AddonMediaListNfoPerson, AddonMediaListPublication, AddonMediaListPublicationBlocker,
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationContinuation,
     AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
     AddonMediaListRepository,
@@ -107,6 +107,7 @@ pub use emby::{
     EmbySeasonPage, EmbyService, EmbyShowItem, EmbyShowPage,
 };
 pub use error::{RepositoryError, Result};
+pub use ersatzrs_domain::AddonMediaListAutoPublicationHoldReason;
 pub use ffmpeg_profile::FfmpegProfileRepository;
 pub use filler::FillerRepository;
 pub use graphics::GraphicsRepository;

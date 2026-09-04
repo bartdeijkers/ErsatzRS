@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Added
 
+- Add an opt-in automatic publication policy for scheduled add-on-list
+  refreshes after the first explicit Publish. Only validated additions use
+  the existing exact-revision publication lease; changes to current items,
+  removals, conflicts, access restrictions, unavailable items, or failed
+  preparation remain review drafts with localized Activity and Health notices.
+  Manual Refresh, Reconcile, and Reset and reload still require review.
+
 - Add non-destructive full-source reconciliation for add-on media lists. A
   complete validated scratch import previews additions, provider changes,
   reordering, reappearances, and missing items while retaining operator edits

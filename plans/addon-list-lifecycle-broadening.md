@@ -716,6 +716,30 @@ Source map:
 
 ### AMM-L-05 — Safe refresh publication policy
 
+- Confirmed scope: only scheduler-admitted refreshes may auto-publish, and a
+  list needs one explicit initial Publish. Manual Refresh, Reconcile, and
+  Reset and Reload remain review operations.
+- Source map: this is the ADR 0085 extension with no ErsatzTV equivalent.
+  Reuse `addon_media_list_refresh` admission, import finalization, the retained
+  revision snapshot comparison, and the managed-library publication lease.
+  One list-owned assessment retains the import identity, saved/baseline
+  revisions, outcome, typed hold reason, and publication operation. The
+  existing import worker resumes assessments after restart.
+- UI source map: `/media/addon-lists/{id}` uses its current settings form,
+  island, server function, and native POST fallback. Place the policy selector
+  beside cadence and show the current typed hold in Activity. Reuse existing
+  layout/primitives and translate all labels and the Health projection.
+- Automatic admission checks the complete published baseline and saved draft
+  in one transaction; only new included identities and their displacement of
+  existing ranks may differ, with retained relative order unchanged. Required
+  preparation uses the current detail queue without clearing retry backoff.
+  Preexisting unpublished additions and intervening manual refreshes remain
+  review-only. Concurrent operator changes,
+  changed policy, or a different baseline invalidate the automatic candidate.
+- Verify focused classification, admission/restart, preparation, policy-save,
+  localized hold and browser paths; review/fix P1/P2 before a local commit.
+  No CI or full closeout is run during this slice.
+
 - Persist Review changes before publishing as the default and optional
   Automatically publish validated additions.
 - Permit automatic publication only for a pure additions set through the

@@ -35,6 +35,9 @@ impl HealthCheck for AddonMediaListHealthCheck {
         if let Some(result) = configured.failure_result(self.title(), lifecycle_foundation) {
             return Ok(result);
         }
+        if let Some(result) = automatic_publication_hold_warning(&self.pool, self.title()).await? {
+            return Ok(result);
+        }
         if let Some(result) = configured.warning_result(self.title(), lifecycle_foundation) {
             return Ok(result);
         }
@@ -47,6 +50,35 @@ impl HealthCheck for AddonMediaListHealthCheck {
         )
         .await
     }
+}
+
+async fn automatic_publication_hold_warning(
+    pool: &Pool<Db>,
+    title: &'static str,
+) -> Result<Option<HealthCheckResult>> {
+    // Match the editor's current hold projection; changing policy or resolving
+    // the assessment must clear this warning without exposing provider data.
+    let list_id = sqlx::query_scalar::<_, i64>(
+        r#"SELECT "list"."Id"
+           FROM "AddonMediaListAutoPublication" AS "auto"
+           JOIN "AddonMediaList" AS "list" ON "list"."Id" = "auto"."AddonMediaListId"
+           WHERE "auto"."State" = 'held' AND "list"."RefreshPublicationPolicy" = 1
+           ORDER BY "auto"."RecordedAt", "list"."Id" LIMIT 1"#,
+    )
+    .fetch_optional(pool)
+    .await
+    .map_err(sqlx_error)?;
+    Ok(list_id.map(|id| {
+        HealthCheckResult::new(
+            title,
+            HealthCheckStatus::Warning,
+            "Automatic publication needs review",
+            "Automatic publication needs review",
+        )
+        .with_link(format!(
+            "/media/addon-lists/{id}#addon-list-publication-activity"
+        ))
+    }))
 }
 
 async fn addon_media_list_health_rows(pool: &Pool<Db>) -> Result<Vec<crate::db::DbRow>> {
@@ -1390,6 +1422,7 @@ mod tests {
                 "AddonId" TEXT NOT NULL,
                 "Name" TEXT NOT NULL,
                 "RefreshCadence" INTEGER NOT NULL DEFAULT 4,
+                "RefreshPublicationPolicy" INTEGER NOT NULL DEFAULT 0,
                 "NextRefreshAt" TEXT NULL,
                 "LastError" TEXT NULL,
                 "PresentationError" TEXT NULL,
@@ -1579,6 +1612,11 @@ mod tests {
             CREATE TABLE "ConfigElement" (
                 "Key" TEXT PRIMARY KEY,
                 "Value" TEXT NOT NULL
+            );
+            CREATE TABLE "AddonMediaListAutoPublication" (
+                "AddonMediaListId" INTEGER PRIMARY KEY,
+                "State" TEXT NOT NULL,
+                "RecordedAt" TEXT NOT NULL
             );
             INSERT INTO "AddonInstallation" ("AddonId", "Enabled") VALUES ('org.example.list', 1);
             "#,
@@ -2478,6 +2516,57 @@ mod tests {
             .expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Warning);
         assert!(result.message.contains("metadata field conflict"));
+    }
+
+    #[tokio::test]
+    async fn automatic_publication_hold_links_to_review_and_clears_when_resolved() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+            "Id", "AddonId", "Name", "RefreshPublicationPolicy", "ProviderMetadataJson"
+        ) VALUES (42, 'org.example.list', 'Fixture', 1, '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListAutoPublication"
+            ("AddonMediaListId", "State", "RecordedAt")
+            VALUES (42, 'held', '2026-09-04T00:00:00Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("held assessment");
+        let check = AddonMediaListHealthCheck::new(pool.clone());
+        let result = check.check().await.expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert_eq!(result.message, "Automatic publication needs review");
+        assert_eq!(
+            result.link.as_ref().map(|link| link.link.as_str()),
+            Some("/media/addon-lists/42#addon-list-publication-activity")
+        );
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy" = 0 WHERE "Id" = 42"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("disable automatic publication");
+        assert_eq!(
+            check.check().await.expect("disabled policy").status,
+            HealthCheckStatus::Pass
+        );
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy" = 1 WHERE "Id" = 42"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("enable automatic publication");
+        sqlx::query(r#"UPDATE "AddonMediaListAutoPublication" SET "State" = 'done' WHERE "AddonMediaListId" = 42"#)
+            .execute(&pool).await.expect("resolve assessment");
+        assert_eq!(
+            check.check().await.expect("resolved assessment").status,
+            HealthCheckStatus::Pass
+        );
     }
 
     #[tokio::test]

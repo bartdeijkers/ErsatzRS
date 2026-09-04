@@ -1,14 +1,15 @@
 use ersatzrs_domain::{
-    AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
-    AddonMediaListDetailState, AddonMediaListImportMode, AddonMediaListImportPurpose,
-    AddonMediaListImportState, AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability,
-    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
+    AddonMediaListAutoPublicationHoldReason, AddonMediaListAvailabilityReason,
+    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
+    AddonMediaListImportMode, AddonMediaListImportPurpose, AddonMediaListImportState,
+    AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListItemRole, AddonMediaListPresentationKind,
     AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
     AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
     AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
     AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
-    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence, AddonMediaListReviewState,
-    RemoteStreamLiveness,
+    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
+    AddonMediaListRefreshPublicationPolicy, AddonMediaListReviewState, RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -585,12 +586,16 @@ pub struct AddonMediaListRow {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListForm {
+    #[serde(default)]
+    pub auto_publication_hold: Option<AddonMediaListAutoPublicationHoldRow>,
     pub id: i64,
     pub name: String,
     pub addon_id: String,
     pub source_url: String,
     pub folder_name: String,
     pub refresh_cadence: AddonMediaListRefreshCadence,
+    #[serde(default)]
+    pub refresh_publication_policy: AddonMediaListRefreshPublicationPolicy,
     pub last_refresh_succeeded_at: Option<String>,
     pub next_refresh_at: Option<String>,
     pub refresh_retry_at: Option<String>,
@@ -606,6 +611,28 @@ pub struct AddonMediaListForm {
     pub legacy_chapter_input: String,
     pub detail_import_policy: AddonMediaListDetailPolicy,
     pub import_progress: Option<AddonMediaListImportProgressRow>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListAutoPublicationHoldRow {
+    pub reason: AddonMediaListAutoPublicationHoldReason,
+    pub draft_revision: i32,
+    pub published_revision: i32,
+    pub recorded_at: String,
+}
+
+#[cfg(feature = "ssr")]
+impl From<ersatzrs_core::repositories::AddonMediaListAutoPublicationHold>
+    for AddonMediaListAutoPublicationHoldRow
+{
+    fn from(value: ersatzrs_core::repositories::AddonMediaListAutoPublicationHold) -> Self {
+        Self {
+            reason: value.reason,
+            draft_revision: value.draft_revision,
+            published_revision: value.published_revision,
+            recorded_at: value.recorded_at.to_rfc3339(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -1267,12 +1294,14 @@ pub async fn get_addon_media_list_form(
         .map_err(ServerFnError::new)
         .map(|form| {
             form.map(|form| AddonMediaListForm {
+                auto_publication_hold: form.auto_publication_hold.map(Into::into),
                 id: form.id,
                 name: form.name,
                 addon_id: form.addon_id,
                 source_url: form.source_url,
                 folder_name: form.folder_name,
                 refresh_cadence: form.refresh_cadence,
+                refresh_publication_policy: form.refresh_publication_policy,
                 last_refresh_succeeded_at: form.last_refresh_succeeded_at,
                 next_refresh_at: form.next_refresh_at,
                 refresh_retry_at: form.refresh_retry_at,
@@ -1992,6 +2021,7 @@ pub async fn add_addon_media_list(
         .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
             id,
             refresh_cadence: form.refresh_cadence,
+            refresh_publication_policy: form.refresh_publication_policy,
             generate_playlist: form.generate_playlist,
             content_kind_override: form.content_kind_override,
             chapter_input: form.legacy_chapter_input,
@@ -2416,6 +2446,7 @@ pub async fn update_addon_media_list_with_state(
         .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
             id: form.id,
             refresh_cadence: form.refresh_cadence,
+            refresh_publication_policy: form.refresh_publication_policy,
             generate_playlist: form.generate_playlist,
             content_kind_override: form.content_kind_override,
             chapter_input: form.legacy_chapter_input,

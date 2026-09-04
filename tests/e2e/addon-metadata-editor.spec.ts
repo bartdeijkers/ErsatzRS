@@ -780,6 +780,31 @@ WHERE "AddonMediaListId" = ${seed.listId};
     expect(runtimeErrors).toEqual([]);
   });
 
+  test('saves the automatic publication policy and shows held refreshes', async ({ page }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+    const policy = page.getByRole('combobox', { name: 'Refresh publication', exact: true });
+    await expect(policy).toHaveValue('review');
+    await policy.selectOption('auto_publish_additions');
+    await expect(page.getByText('Applies only to scheduled refreshes after your first Publish.', { exact: false })).toBeVisible();
+    await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    await expect.poll(() => sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('1');
+    sqlite(`INSERT INTO "AddonMediaListAutoPublication" (
+      "AddonMediaListId", "DraftRevision", "PublishedRevision", "State", "Reason", "RecordedAt"
+    ) SELECT "Id", "DraftRevision", "PublishedRevision", 'held', '"existing_changes"', '2026-09-04T12:00:00Z'
+      FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`);
+    try {
+      await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+      await expect(policy).toHaveValue('auto_publish_additions');
+      await expect(page.getByTestId('automatic-publication-hold')).toContainText('Automatic publication needs review');
+      expect(runtimeErrors).toEqual([]);
+    } finally {
+      sqlite(`DELETE FROM "AddonMediaListAutoPublication" WHERE "AddonMediaListId" = ${seed.listId};`);
+    }
+  });
+
   test('requires the persisted list name before reset and reload', async ({
     page,
   }, testInfo) => {
@@ -944,8 +969,11 @@ WHERE "AddonMediaListId" = ${seed.listId};
       ).toBeVisible();
       await noJsPage.getByLabel('Title', { exact: true }).fill('No-JS collection title');
       await noJsPage.getByLabel('Poster', { exact: true }).fill('https://example.invalid/poster.jpg');
+      await noJsPage.getByRole('combobox', { name: 'Refresh publication', exact: true }).selectOption('auto_publish_additions');
       await noJsPage.getByRole('button', { name: 'Save Changes', exact: true }).click();
       await expect(noJsPage).toHaveURL(/\?status=saved$/);
+      await expect(noJsPage.getByRole('combobox', { name: 'Refresh publication', exact: true })).toHaveValue('auto_publish_additions');
+      expect(sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('1');
       expect(
         sqlite(`
 SELECT json_extract("MetadataOverrideJson", '$.title') || ',' ||

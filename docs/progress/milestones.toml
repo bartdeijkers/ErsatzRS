@@ -2648,7 +2648,7 @@ Automatic refresh publication remains in AMM-L-05.
 id         = 'amm-l-05'
 phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Make refresh publication policy explicit and safe'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-04']
@@ -2664,17 +2664,31 @@ tests cover duplicate ticks, concurrent manual work, failure, and notification
 deduplication.
 '''
 evidence = '''
-Implementation planning reserved for Codex on 2026-09-04 after AMM-L-04.
-Cadence without an explicit refresh-to-publication policy leaves
-operators unable to tell whether new items reach channels automatically, while
-unrestricted auto-publication would bypass the existing review contract.
+Implemented on 2026-09-04. Localized hydrated/native settings persist the policy
+with cadence; Review remains the default. Only new scheduler-owned refreshes
+after an explicit first Publish may admit a bounded automatic assessment.
+Digest-valid retained snapshots reject existing changes, prior pending additions,
+conflicts, tombstones, restrictions, unavailable data, and schema/options changes;
+new-item rank displacement preserves the retained relative order. Exact import
+revision accounting and manual-refresh revocation fence concurrent work. Required
+details retain provider retry cooldowns, and eligible work uses the existing
+publication lease with an AutomaticRefresh causal trigger and transactional
+staging recheck. Typed Activity/Health holds are bounded and deduplicated.
+Focused classification, admission, duplicate-tick, file-backed restart, manual
+work, preparation failure/backoff, notice, policy-save, and staging regressions
+pass. Native web check, hydration/architecture lint and progress validation pass.
+Review found and fixed first-pass cooldown reset; rereview found no P1/P2.
+Browser policy/notice and no-JavaScript scenarios are authored and discoverable;
+their execution and full CI/closeout remain AMM-N-03, per the requested slice loop.
+Scoped Clippy was attempted but remains blocked by inherited core/infra lint
+debt from earlier AMM slices; this is not reported as a passed lint gate.
 '''
 
 [[milestone]]
 id         = 'amm-m-01'
 phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
 title      = 'Add per-item browser cookies and checked SponsorBlock removal'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-04', 'amm-l-05']
@@ -2691,7 +2705,8 @@ cancellation/restart/invalidation and real channel proof; live items show the
 exact unsupported reason and remain playable.
 '''
 evidence = '''
-Not started. Current official yt-dlp operations have no item option input and
+Planning reserved for Codex on 2026-09-04 after AMM-L-05. No AMM-M code changes
+yet. Current official yt-dlp operations have no item option input and
 stream directly to stdout; official yt-dlp documents SponsorBlock removal as
 video-file post-processing, requiring an explicit preparation lifecycle.
 '''
@@ -2815,6 +2830,10 @@ SponsorBlock-processed video and default/fallback human subtitles.
 evidence = '''
 Not started. This milestone is the only completion boundary for the combined
 AMM-J through AMM-N contract; individual argv or UI tests are insufficient.
+AMM-L-05 scoped lint exposed earlier-slice Clippy debt, including the independent
+AddonMediaListReferencePins Boolean fields and source-probe/lifecycle/test lints.
+Retain this cleanup for the requested integrated CI-green stage; do not treat
+the focused slice test results as full closeout evidence.
 '''
 
 [[milestone]]

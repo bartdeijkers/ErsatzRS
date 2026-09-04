@@ -495,6 +495,7 @@ impl AddonMediaListSynchronizer {
         &self,
         list_id: EntityId,
         refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence,
+        refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
         next_refresh_at: Option<&str>,
         cadence_changed: bool,
         generate_playlist: bool,
@@ -507,7 +508,7 @@ impl AddonMediaListSynchronizer {
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaList"
-               SET "AutoRefresh" = ?, "RefreshCadence" = ?,
+               SET "AutoRefresh" = ?, "RefreshCadence" = ?, "RefreshPublicationPolicy" = ?,
                    "NextRefreshAt" = ?,
                    "RefreshRetryAt" = CASE WHEN ? THEN NULL ELSE "RefreshRetryAt" END,
                    "GeneratePlaylist" = ?, "ContentKindOverride" = ?,
@@ -530,6 +531,7 @@ impl AddonMediaListSynchronizer {
         )
         .bind(refresh_cadence == ersatzrs_domain::AddonMediaListRefreshCadence::Daily)
         .bind(encode_enum(refresh_cadence))
+        .bind(encode_enum(refresh_publication_policy))
         .bind(next_refresh_at)
         .bind(cadence_changed)
         .bind(generate_playlist)
@@ -1106,6 +1108,12 @@ impl AddonMediaListSynchronizer {
         };
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         begin_import_finalization_phase(&mut tx, fence).await?;
+        let previous_revision: i32 =
+            sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(list.id)
+                .fetch_one(&mut *tx)
+                .await
+                .repository()?;
         if incremental {
             update_incremental_import_list_header(&mut tx, list, metadata, bump_revision).await?;
         } else {
@@ -1195,6 +1203,19 @@ impl AddonMediaListSynchronizer {
                 return Err(publication_in_progress());
             }
         }
+        let current_revision: i32 =
+            sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#)
+                .bind(list.id)
+                .fetch_one(&mut *tx)
+                .await
+                .repository()?;
+        crate::addon_media_list_auto_publication::advance_import_revision_in_tx(
+            &mut tx,
+            list.id,
+            job_id,
+            current_revision - previous_revision,
+        )
+        .await?;
         complete_import_finalization_phase(&mut tx, fence).await?;
         tx.commit().await.repository()
     }
@@ -1541,6 +1562,13 @@ impl AddonMediaListSynchronizer {
         .await
         .repository()?;
         if let Some(fence) = finalization {
+            crate::addon_media_list_auto_publication::advance_import_revision_in_tx(
+                &mut tx,
+                list_id,
+                fence.job_id,
+                i32::from(draft_changed),
+            )
+            .await?;
             complete_import_finalization_phase(&mut tx, fence).await?;
         }
         tx.commit().await.repository()?;

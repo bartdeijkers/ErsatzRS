@@ -53,6 +53,7 @@ const MAX_UNVERSIONED_VERIFICATION_PASS: i32 = 2;
 pub struct AddonMediaListImportCoordinator {
     pool: DbPool,
     provider: InstalledAddonMediaListProvider,
+    scheduled_refresh: bool,
 }
 
 impl AddonMediaListImportCoordinator {
@@ -61,6 +62,14 @@ impl AddonMediaListImportCoordinator {
         Self {
             provider: InstalledAddonMediaListProvider::new(pool.clone()),
             pool,
+            scheduled_refresh: false,
+        }
+    }
+
+    pub(crate) fn for_scheduled_refresh(pool: DbPool) -> Self {
+        Self {
+            scheduled_refresh: true,
+            ..Self::new(pool)
         }
     }
 
@@ -169,6 +178,18 @@ impl AddonMediaListImportCoordinator {
         // behavior predates import v1. Keep that explicit compatibility path
         // until a future contract versions chapter editing independently.
         let Some(context) = context.filter(|_| chapter_input.trim().is_empty()) else {
+            let automatic = if self.scheduled_refresh {
+                crate::addon_media_list_auto_publication::legacy_baseline(
+                    &self.pool, addon_id, source_url,
+                )
+                .await?
+            } else {
+                crate::addon_media_list_auto_publication::manual_refresh(
+                    &self.pool, addon_id, source_url,
+                )
+                .await?;
+                None
+            };
             let provider = InstalledAddonMediaListProvider::new(self.pool.clone());
             let id = AddonMediaListRemoteSynchronizer::new(self.pool.clone(), provider)
                 .add_or_refresh(
@@ -180,6 +201,10 @@ impl AddonMediaListImportCoordinator {
                 )
                 .await?;
             self.set_detail_policy(id, detail_policy).await?;
+            if let Some(baseline) = automatic {
+                crate::addon_media_list_auto_publication::legacy_ready(&self.pool, id, baseline)
+                    .await?;
+            }
             return Ok(id);
         };
 
@@ -666,6 +691,10 @@ impl AddonMediaListImportCoordinator {
             (inserted_id(&mut tx, result).await.repository()?, false)
         };
 
+        if !self.scheduled_refresh {
+            crate::addon_media_list_auto_publication::manual_refresh_in_tx(&mut tx, list_id)
+                .await?;
+        }
         if same_addon && context.import_capability == CAPABILITY_MEDIA_LIST_IMPORT_V2 {
             let active_v2: bool = sqlx::query_scalar(
                 r#"SELECT EXISTS (
@@ -756,7 +785,7 @@ impl AddonMediaListImportCoordinator {
         .execute(&mut *tx)
         .await
         .repository()?;
-        sqlx::query(
+        let inserted = sqlx::query(
             r#"INSERT INTO "AddonMediaListImportJob" (
                 "AddonMediaListId", "Generation", "State", "RecordCapability",
                 "ImportCapability", "Purpose", "Mode", "IncrementalStrategy",
@@ -778,6 +807,15 @@ impl AddonMediaListImportCoordinator {
         .execute(&mut *tx)
         .await
         .repository()?;
+        let import_id = inserted_id(&mut tx, inserted).await.repository()?;
+        if self.scheduled_refresh {
+            crate::addon_media_list_auto_publication::admit_in_tx(
+                &mut tx,
+                list_id,
+                Some(import_id),
+            )
+            .await?;
+        }
         tx.commit().await.repository()?;
         let _ = self
             .cleanup_unreferenced_import_archives_for_list(list_id)
@@ -1979,6 +2017,7 @@ impl AddonMediaListImportCoordinator {
                 "the import lease changed before finalization".to_owned(),
             ));
         }
+        crate::addon_media_list_auto_publication::ready_in_tx(&mut tx, job.id).await?;
         tx.commit().await.repository()?;
         Ok(())
     }
@@ -4691,6 +4730,13 @@ mod tests {
             .await
             .expect("load full draft revision");
 
+            sqlx::query(
+                r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy" = 1 WHERE "Id" = ?"#,
+            )
+            .bind(list_id)
+            .execute(&pool)
+            .await
+            .unwrap();
             queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
             let unchanged_job = coordinator
                 .claim_import_job()
@@ -4733,6 +4779,17 @@ mod tests {
             assert_eq!(unchanged_progress.archived_skipped_count, 2);
             assert_eq!(unchanged_progress.emitted_count, 0);
 
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    r#"SELECT COUNT(*) FROM "AddonMediaListAutoPublication""#
+                )
+                .fetch_one(&pool)
+                .await
+                .unwrap(),
+                0,
+                "manual refresh never authorizes publication"
+            );
+            let coordinator = AddonMediaListImportCoordinator::for_scheduled_refresh(pool.clone());
             queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
             let addition_job = coordinator
                 .claim_import_job()
@@ -4781,6 +4838,25 @@ mod tests {
             assert_eq!(addition_progress.examined_count, 4);
             assert_eq!(addition_progress.archived_skipped_count, 2);
             assert_eq!(addition_progress.emitted_count, 2);
+            let automatic: (i64, i32, String) = sqlx::query_as(
+                r#"SELECT "ImportJobId", "DraftRevision", "State" FROM "AddonMediaListAutoPublication" WHERE "AddonMediaListId" = ?"#,
+            ).bind(list_id).fetch_one(&pool).await.unwrap();
+            assert_eq!(
+                automatic,
+                (
+                    addition_job.id,
+                    draft_after_unchanged + 1,
+                    "ready".to_owned()
+                )
+            );
+            // Even a manual Refresh that coalesces with a scheduled generation
+            // revokes its automatic authorization without needing a draft edit.
+            queue_v2(&coordinator, source_url, &data_dir, Some(list_id)).await;
+            let manual = AddonMediaListImportCoordinator::new(pool.clone());
+            queue_v2(&manual, source_url, &data_dir, Some(list_id)).await;
+            let state: String = sqlx::query_scalar(r#"SELECT "State" FROM "AddonMediaListAutoPublication" WHERE "AddonMediaListId" = ?"#)
+                .bind(list_id).fetch_one(&pool).await.unwrap();
+            assert_eq!(state, "held");
         }
 
         #[tokio::test]

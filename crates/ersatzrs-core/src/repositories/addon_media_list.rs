@@ -89,6 +89,8 @@ pub enum AddonMediaListAdminSortDirection {
 /// Editable settings for one persisted add-on media list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListAdminForm {
+    /// Current scheduled-refresh assessment that still requires review.
+    pub auto_publication_hold: Option<AddonMediaListAutoPublicationHold>,
     /// Persisted host identity.
     pub id: EntityId,
     /// Current authoritative provider-list name used by destructive confirmations.
@@ -101,6 +103,8 @@ pub struct AddonMediaListAdminForm {
     pub folder_name: String,
     /// Provider refresh policy selected by the operator.
     pub refresh_cadence: AddonMediaListRefreshCadence,
+    /// Publication behavior for scheduled refresh additions.
+    pub refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
     /// Persisted cadence anchor advanced only by a successful source refresh.
     pub last_refresh_succeeded_at: Option<String>,
     /// Next fixed refresh or adaptive source check.
@@ -126,6 +130,15 @@ pub struct AddonMediaListAdminForm {
     pub import_progress: Option<AddonMediaListImportProgress>,
     /// Legacy list-wide chapter input retained only for ambiguous migrations.
     pub legacy_chapter_input: String,
+}
+
+/// One bounded notice retained across refresh ticks and host restarts.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListAutoPublicationHold {
+    pub reason: ersatzrs_domain::AddonMediaListAutoPublicationHoldReason,
+    pub draft_revision: i32,
+    pub published_revision: i32,
+    pub recorded_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// One persisted provider item and its optional local replacement.
@@ -906,6 +919,7 @@ pub trait AddonMediaListRepository: Send + Sync {
         &self,
         id: EntityId,
         refresh_cadence: AddonMediaListRefreshCadence,
+        refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
         generate_playlist: bool,
         content_kind_override: AddonMediaListContentKind,
         chapter_input: &str,

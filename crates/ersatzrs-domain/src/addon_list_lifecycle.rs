@@ -44,6 +44,21 @@ pub enum AddonMediaListRefreshPublicationPolicy {
     AutoPublishAdditions,
 }
 
+/// Redacted reason a scheduled refresh requires explicit publication review.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListAutoPublicationHoldReason {
+    BaselineUnavailable,
+    ExistingChanges,
+    Conflicts,
+    Removals,
+    Restricted,
+    Unavailable,
+    OptionsChanged,
+    PreparationFailed,
+    ConcurrentChange,
+}
+
 /// Provider-neutral option primitives supported by the first option contract.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]

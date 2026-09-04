@@ -4,16 +4,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
-    AddonMediaListImportMode, AddonMediaListImportPurpose, AddonMediaListImportState,
-    AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, AddonMediaListPresentationKind,
+    AddonMediaListAutoPublicationHoldReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
+    AddonMediaListDetailState, AddonMediaListImportMode, AddonMediaListImportPurpose,
+    AddonMediaListImportState, AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability,
+    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
     AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
     AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
     AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
     AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
-    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence, AddonMediaListReviewState,
-    RemoteStreamLiveness,
+    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
+    AddonMediaListRefreshPublicationPolicy, AddonMediaListReviewState, RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
@@ -41,11 +41,11 @@ use crate::admin::server_fns::addon_media_lists::{
     set_addon_media_list_item_role, test_addon_media_list_source, update_addon_media_list,
     update_addon_media_list_item_chapters, validate_addon_media_list_item_chapters,
     AddonMediaListAdminSortDirection, AddonMediaListAdminSortField, AddonMediaListArtwork,
-    AddonMediaListArtworkRole, AddonMediaListDraftDiffRow, AddonMediaListForm,
-    AddonMediaListImportAction, AddonMediaListImportProgressRow, AddonMediaListItemDetail,
-    AddonMediaListItemReviewEdit, AddonMediaListItemRow, AddonMediaListMetadataConflict,
-    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
-    AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
+    AddonMediaListArtworkRole, AddonMediaListAutoPublicationHoldRow, AddonMediaListDraftDiffRow,
+    AddonMediaListForm, AddonMediaListImportAction, AddonMediaListImportProgressRow,
+    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListItemRow,
+    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
+    AddonMediaListNfoPerson, AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationEventRow,
     AddonMediaListPublicationHistoryJobRow, AddonMediaListPublicationHistoryRow,
     AddonMediaListPublicationReadiness, AddonMediaListPublicationStatus,
@@ -3425,6 +3425,9 @@ const fn publication_trigger_text_key(trigger: AddonMediaListPublicationEnqueueT
     match trigger {
         AddonMediaListPublicationEnqueueTrigger::Operator => TextKey::TriggerOperator,
         AddonMediaListPublicationEnqueueTrigger::RestoreRevision => TextKey::TriggerRestoreRevision,
+        AddonMediaListPublicationEnqueueTrigger::AutomaticRefresh => {
+            TextKey::TriggerAutomaticRefresh
+        }
     }
 }
 
@@ -3505,10 +3508,37 @@ async fn copy_redacted_publication_diagnostics(
     Ok(())
 }
 
+const fn auto_publication_hold_text_key(
+    reason: AddonMediaListAutoPublicationHoldReason,
+) -> TextKey {
+    match reason {
+        AddonMediaListAutoPublicationHoldReason::BaselineUnavailable => {
+            TextKey::AutoPublicationBaselineUnavailable
+        }
+        AddonMediaListAutoPublicationHoldReason::ExistingChanges => {
+            TextKey::AutoPublicationExistingChanges
+        }
+        AddonMediaListAutoPublicationHoldReason::Conflicts => TextKey::AutoPublicationConflicts,
+        AddonMediaListAutoPublicationHoldReason::Removals => TextKey::AutoPublicationRemovals,
+        AddonMediaListAutoPublicationHoldReason::Restricted => TextKey::AutoPublicationRestricted,
+        AddonMediaListAutoPublicationHoldReason::Unavailable => TextKey::AutoPublicationUnavailable,
+        AddonMediaListAutoPublicationHoldReason::OptionsChanged => {
+            TextKey::AutoPublicationOptionsChanged
+        }
+        AddonMediaListAutoPublicationHoldReason::PreparationFailed => {
+            TextKey::AutoPublicationPreparationFailed
+        }
+        AddonMediaListAutoPublicationHoldReason::ConcurrentChange => {
+            TextKey::AutoPublicationConcurrentChange
+        }
+    }
+}
+
 #[component]
 fn PublicationActivity(
     list_id: i64,
     history: RwSignal<AddonMediaListPublicationHistoryRow>,
+    hold: RwSignal<Option<AddonMediaListAutoPublicationHoldRow>>,
 ) -> impl IntoView {
     let toast = use_toast();
     let copy_action = Action::new_local(|history: &AddonMediaListPublicationHistoryRow| {
@@ -3573,6 +3603,17 @@ fn PublicationActivity(
                     </noscript>
                 </div>
             </header>
+            <p
+                class=style::review_error
+                role="status"
+                data-testid="automatic-publication-hold"
+                style:display=move || if hold.with(Option::is_some) { "block" } else { "none" }
+            >
+                {move || hold.with(|hold| hold.as_ref().map(|hold| format!(
+                    "{}: {} ({})", tr(TextKey::AutoPublicationHeld),
+                    tr(auto_publication_hold_text_key(hold.reason)), hold.recorded_at,
+                )).unwrap_or_default())}
+            </p>
             <p
                 class=style::empty
                 style:display=move || if history.with(|history| history.jobs.is_empty()) { "block" } else { "none" }
@@ -3943,10 +3984,13 @@ fn AddonMediaListEditorIsland(
     let submit_addon_id = addon_id.clone();
     let submit_source_url = source_url.clone();
     let refresh_cadence = RwSignal::new(form.refresh_cadence);
+    let refresh_publication_policy = RwSignal::new(form.refresh_publication_policy);
+    let saved_refresh_publication_policy = form.refresh_publication_policy;
     let generate_playlist = RwSignal::new(form.generate_playlist);
     let detail_import_policy = RwSignal::new(form.detail_import_policy);
     let publication_readiness = RwSignal::new(initial_readiness);
     let publication_history = RwSignal::new(initial_history);
+    let auto_publication_hold = RwSignal::new(form.auto_publication_hold.clone());
     let source_probe = RwSignal::new(initial_source_probe);
     let draft_diff = RwSignal::new(initial_draft_diff);
     let active_draft_category = draft_review_category(&initial_review_category);
@@ -4159,6 +4203,7 @@ fn AddonMediaListEditorIsland(
     });
     let settings_dirty = Memo::new(move |_| {
         refresh_cadence.get() != saved_refresh_cadence
+            || refresh_publication_policy.get() != saved_refresh_publication_policy
             || generate_playlist.get() != saved_generate_playlist
             || detail_import_policy.get() != saved_detail_import_policy
             || content_kind_override.get() != saved_content_kind_override
@@ -4676,6 +4721,7 @@ fn AddonMediaListEditorIsland(
                     gloo_timers::future::TimeoutFuture::new(delay_ms).await;
                     match get_addon_media_list_form(id).await {
                         Ok(Some(next_form)) => {
+                            auto_publication_hold.set(next_form.auto_publication_hold.clone());
                             error_delay_ms = 0;
                             let next_marker = next_form.import_progress.as_ref().map(|progress| {
                                 (
@@ -5345,12 +5391,14 @@ fn AddonMediaListEditorIsland(
                             ],
                         );
                         save_action.dispatch((AddonMediaListForm {
+                            auto_publication_hold: auto_publication_hold.get_untracked(),
                             id: form_id.get_untracked(),
                             name: list_name.get_value(),
                             addon_id: submit_addon_id.clone(),
                             source_url: submit_source_url.clone(),
                             folder_name: form.folder_name.clone(),
                             refresh_cadence: refresh_cadence.get_untracked(),
+                            refresh_publication_policy: refresh_publication_policy.get_untracked(),
                             last_refresh_succeeded_at: form.last_refresh_succeeded_at.clone(),
                             next_refresh_at: form.next_refresh_at.clone(),
                             refresh_retry_at: form.refresh_retry_at.clone(),
@@ -5649,7 +5697,7 @@ fn AddonMediaListEditorIsland(
                 }
             })}
 
-            <PublicationActivity list_id=id history=publication_history />
+            <PublicationActivity list_id=id history=publication_history hold=auto_publication_hold />
 
             <section class=style::operator_panel aria-labelledby="addon-list-source-test-heading">
                 <header class=style::operator_panel_header>
@@ -6055,6 +6103,26 @@ fn AddonMediaListEditorIsland(
                                         <div><dt>{tr(TextKey::NextScheduledRefresh)}</dt><dd>{next_refresh_at}</dd></div>
                                         <div><dt>{tr(TextKey::RefreshRetryAt)}</dt><dd>{refresh_retry_at}</dd></div>
                                     </dl>
+                                    <label class=style::source_field>
+                                        <span class=style::field_title>{tr(TextKey::RefreshPublicationPolicy)}</span>
+                                        <select
+                                            name="refresh_publication_policy"
+                                            class=style::boxed_input
+                                            aria-describedby="refresh-publication-policy-help"
+                                            prop:value=move || match refresh_publication_policy.get() {
+                                                AddonMediaListRefreshPublicationPolicy::Review => "review",
+                                                AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions => "auto_publish_additions",
+                                            }
+                                            on:change=move |event| refresh_publication_policy.set(match event_target_value(&event).as_str() {
+                                                "auto_publish_additions" => AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions,
+                                                _ => AddonMediaListRefreshPublicationPolicy::Review,
+                                            })
+                                        >
+                                            <option value="review" selected=saved_refresh_publication_policy == AddonMediaListRefreshPublicationPolicy::Review>{tr(TextKey::RefreshPublicationReview)}</option>
+                                            <option value="auto_publish_additions" selected=saved_refresh_publication_policy == AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions>{tr(TextKey::RefreshPublicationAutomatic)}</option>
+                                        </select>
+                                    </label>
+                                    <p id="refresh-publication-policy-help">{tr(TextKey::RefreshPublicationPolicyHelp)}</p>
                                 </div>
                                 <p class=style::type_change_note data-testid="addon-media-type-change-help">
                                     <span style=icon_style(IconName::Edit, "1rem") aria-hidden="true"></span>
