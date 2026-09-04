@@ -1,13 +1,15 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
-    AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
-    AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
-    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
-    AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
-    AddonMediaListRecoveryAction, EntityId, ManagedLibraryOperationKind,
-    ManagedLibraryOperationState, MediaSourceKind,
+    AddonMediaListLifecyclePhase, AddonMediaListPublicationEnqueueTrigger,
+    AddonMediaListPublicationErrorCategory, AddonMediaListPublicationEventKind,
+    AddonMediaListPublicationFilesystemTransition, AddonMediaListPublicationOutcome,
+    AddonMediaListPublicationPhase, AddonMediaListPublicationRetryClass,
+    AddonMediaListPublicationState, AddonMediaListRecoveryAction, EntityId,
+    ManagedLibraryOperationKind, ManagedLibraryOperationState, MediaSourceKind,
 };
+
+use super::AddonMediaListLifecycleJob;
 
 use super::Result;
 use serde::{Deserialize, Serialize};
@@ -62,6 +64,14 @@ pub struct AddonMediaListPublicationJob {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddonMediaListPublicationEnqueue {
     pub job: AddonMediaListPublicationJob,
+    pub operation: ManagedLibraryOperation,
+    pub existing: bool,
+}
+
+/// Result of atomically deduplicating a destructive reset/reload request.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddonMediaListResetEnqueue {
+    pub job: AddonMediaListLifecycleJob,
     pub operation: ManagedLibraryOperation,
     pub existing: bool,
 }
@@ -153,6 +163,19 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         target_published_revision: i32,
     ) -> Result<AddonMediaListPublicationEnqueue>;
 
+    /// Atomically validate confirmation and create or coalesce one reset generation.
+    async fn enqueue_reset_reload(
+        &self,
+        list_id: EntityId,
+        confirmed_name: &str,
+    ) -> Result<AddonMediaListResetEnqueue> {
+        let _ = (list_id, confirmed_name);
+        Err(super::RepositoryError::unavailable(
+            "enqueue add-on media-list reset",
+            "not implemented",
+        ))
+    }
+
     async fn operation(&self, operation_id: EntityId) -> Result<Option<ManagedLibraryOperation>>;
 
     /// Return the oldest active root scan that would coalesce a new scan for
@@ -182,6 +205,76 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         &self,
         operation_id: EntityId,
     ) -> Result<Option<AddonMediaListPublicationJob>>;
+
+    /// Load the reset/reload job owned by one managed-library operation.
+    async fn reset_reload_job(
+        &self,
+        operation_id: EntityId,
+    ) -> Result<Option<AddonMediaListLifecycleJob>> {
+        let _ = operation_id;
+        Ok(None)
+    }
+
+    /// Advance one reset phase only while the caller still owns the library lease.
+    async fn transition_reset_reload(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        expected: AddonMediaListLifecyclePhase,
+        next: AddonMediaListLifecyclePhase,
+    ) -> Result<bool> {
+        let _ = (claim, expected, next);
+        Ok(false)
+    }
+
+    /// Apply the idempotent storage effect associated with one persisted reset phase.
+    async fn apply_reset_reload_phase(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        job: &AddonMediaListLifecycleJob,
+        phase: AddonMediaListLifecyclePhase,
+    ) -> Result<()> {
+        let _ = (claim, job, phase);
+        Err(super::RepositoryError::unavailable(
+            "apply add-on media-list reset phase",
+            "not implemented",
+        ))
+    }
+
+    /// Create or resume the reset's empty-library verification scan.
+    async fn ensure_reset_reload_child_scan(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        list_id: EntityId,
+    ) -> Result<ManagedLibraryOperation> {
+        let _ = (claim, list_id);
+        Err(super::RepositoryError::unavailable(
+            "create add-on media-list reset child scan",
+            "not implemented",
+        ))
+    }
+
+    /// Queue the distinct generation-one Full/ResetReload import after empty verification.
+    async fn queue_reset_reload_import(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        job: &AddonMediaListLifecycleJob,
+    ) -> Result<EntityId> {
+        let _ = (claim, job);
+        Err(super::RepositoryError::unavailable(
+            "queue add-on media-list reset import",
+            "not implemented",
+        ))
+    }
+
+    /// Atomically link the candidate import and finish the reset operation.
+    async fn complete_reset_reload(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        candidate_import_job_id: EntityId,
+    ) -> Result<bool> {
+        let _ = (claim, candidate_import_job_id);
+        Ok(false)
+    }
 
     /// Return the newest generation with lease liveness classified at `now`.
     async fn publication_status(

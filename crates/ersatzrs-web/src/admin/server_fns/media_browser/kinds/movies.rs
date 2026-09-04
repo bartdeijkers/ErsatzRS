@@ -1,10 +1,10 @@
 #[cfg(feature = "ssr")]
 use super::super::{
-    expect_context, list_media_cards_from_application, media_card_from_admin, season_name,
-    short_date, ActorCardRow, AudioTrackRow, CommentarySubtitleRow, EpisodeCardRow, MediaCardRow,
-    MediaItemInfoChapterJson, MediaItemInfoJson, MediaItemInfoStreamJson, MovieDetailRow,
-    MoviePlaybackSourceRow, MoviePlaybackStreamRow, SeasonCardRow, SeasonDetailRow, ServerFnError,
-    ShowDetailRow,
+    expect_context, list_media_cards_from_application, localize_episode_display_text,
+    media_card_from_admin, season_name, short_date, ActorCardRow, AudioTrackRow,
+    CommentarySubtitleRow, EpisodeCardRow, MediaCardRow, MediaItemInfoChapterJson,
+    MediaItemInfoJson, MediaItemInfoStreamJson, MovieDetailRow, MoviePlaybackSourceRow,
+    MoviePlaybackStreamRow, SeasonCardRow, SeasonDetailRow, ServerFnError, ShowDetailRow,
 };
 #[cfg(all(test, feature = "ssr"))]
 use super::super::{
@@ -663,15 +663,32 @@ pub(in crate::admin::server_fns::media_browser) async fn get_media_item_info_jso
     let Some(info) = state.application.get_media_item_info(id).await? else {
         return Err(ServerFnError::new("Unable to locate media item"));
     };
-    media_item_info_json_from_admin(info)
+    let language = crate::admin::server_fns::settings::load_ui_language_for_api(
+        state.application.ports().admin_settings(),
+    )
+    .await?;
+    media_item_info_json_from_admin_with_language(info, language)
 }
 
 #[cfg(feature = "ssr")]
 pub fn media_item_info_json_from_admin(
     info: ersatzrs_core::repositories::AdminMediaItemInfo,
 ) -> Result<String, ServerFnError> {
+    media_item_info_json_from_admin_with_language(info, crate::admin::i18n::use_i18n())
+}
+
+#[cfg(feature = "ssr")]
+fn media_item_info_json_from_admin_with_language(
+    info: ersatzrs_core::repositories::AdminMediaItemInfo,
+    language: crate::admin::i18n::UiLanguage,
+) -> Result<String, ServerFnError> {
     use ersatzrs_core::repositories::AdminMediaInfoKind;
 
+    let title = if info.kind == AdminMediaInfoKind::Episode {
+        localize_episode_display_text(language, &info.title).unwrap_or(info.title)
+    } else {
+        info.title
+    };
     let kind = match info.kind {
         AdminMediaInfoKind::Movie => "Movie",
         AdminMediaInfoKind::OtherVideo => "OtherVideo",
@@ -682,7 +699,7 @@ pub fn media_item_info_json_from_admin(
     };
     let json = MediaItemInfoJson {
         id: info.id,
-        title: info.title,
+        title,
         kind: kind.to_owned(),
         library_kind: info.library_kind,
         server_name: info.server_name,
@@ -961,10 +978,13 @@ pub async fn get_media_item_info_json_with_pool(
         } else {
             Vec::new()
         };
-        let title = format!(
+        let raw_title = format!(
             "{} - s{:02}e{:02} - {}",
             episode.show_title, episode.season_number, episode.episode_number, episode.title
         );
+        let title =
+            localize_episode_display_text(crate::admin::i18n::UiLanguage::English, &raw_title)
+                .unwrap_or(raw_title);
         let info = MediaItemInfoJson {
             id: episode.id,
             title,

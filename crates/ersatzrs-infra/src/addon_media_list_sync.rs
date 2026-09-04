@@ -402,10 +402,33 @@ impl AddonMediaListSynchronizer {
     /// return the list to review while the published playback snapshot stays
     /// intact.
     #[allow(clippy::too_many_lines)] // Ownership comparison and the guarded merge are one unit.
+    #[cfg(test)]
     pub(crate) async fn merge_detail_item(
         &self,
         list_id: EntityId,
         item: &EnumeratedAddonMediaListItem,
+    ) -> Result<DetailMergeOutcome> {
+        self.merge_detail_item_inner(list_id, item, None).await
+    }
+
+    /// Merge only while the detail worker still owns the exact persisted lease.
+    pub(crate) async fn merge_detail_item_with_lease(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+        lease_owner: &str,
+        item: &EnumeratedAddonMediaListItem,
+    ) -> Result<DetailMergeOutcome> {
+        self.merge_detail_item_inner(list_id, item, Some((item_id, lease_owner)))
+            .await
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn merge_detail_item_inner(
+        &self,
+        list_id: EntityId,
+        item: &EnumeratedAddonMediaListItem,
+        detail_fence: Option<(EntityId, &str)>,
     ) -> Result<DetailMergeOutcome> {
         let row = sqlx::query(
             r#"SELECT "item".*, "list"."PublishedRevision"
@@ -473,6 +496,36 @@ impl AddonMediaListSynchronizer {
         let image_urls = encode_image_urls(&item.additional_image_urls)?;
         let now = encode_datetime(Utc::now());
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        if let Some((expected_item_id, lease_owner)) = detail_fence {
+            if expected_item_id != item_id {
+                return Err(RepositoryError::Conflict(
+                    "the detail item identity changed before merge".to_owned(),
+                ));
+            }
+            let current: bool = sqlx::query_scalar(
+                r#"SELECT EXISTS (
+                       SELECT 1 FROM "AddonMediaListDetailJob"
+                       WHERE "AddonMediaListItemId" = ? AND "AddonMediaListId" = ?
+                         AND "State" = ? AND "LeaseOwner" = ?
+                         AND "LeaseExpiresAt" IS NOT NULL AND "LeaseExpiresAt" > ?
+                   )"#,
+            )
+            .bind(item_id)
+            .bind(list_id)
+            .bind(encode_enum(
+                ersatzrs_domain::AddonMediaListDetailState::Running,
+            ))
+            .bind(lease_owner)
+            .bind(&now)
+            .fetch_one(&mut *tx)
+            .await
+            .repository()?;
+            if !current {
+                return Err(RepositoryError::Conflict(
+                    "the detail lease changed before merge".to_owned(),
+                ));
+            }
+        }
         let publication_checkpoint = sqlx::query_as::<_, (i32, Option<String>)>(
             r#"SELECT "ReviewState", "PublicationJournalJson"
                FROM "AddonMediaList"
@@ -1506,6 +1559,29 @@ impl AddonMediaListSynchronizer {
                 playout_ids,
             },
         }))
+    }
+
+    /// Remove only list membership for a reset, retaining the generated
+    /// playlist identity and every schedule/filler/deco/anchor reference to it.
+    pub(crate) async fn empty_generated_playlist_for_reset(&self, list_id: EntityId) -> Result<()> {
+        let list = self.load_list(list_id).await?;
+        let Some(playlist_id) = list.playlist_id else {
+            return Ok(());
+        };
+        let refresh = self
+            .prepare_generated_playlist_refresh(
+                list_id,
+                Some(playlist_id),
+                ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved,
+            )
+            .await?;
+        let result = self
+            .commit_generated_playlist_match(list_id, playlist_id, &[], &refresh, true)
+            .await;
+        if let Err(error) = &result {
+            self.fail_generated_playlist_refresh(&refresh, error).await;
+        }
+        result.map(|_| ())
     }
 
     pub(crate) async fn commit_generated_playlist_removal_in_tx(
@@ -3435,6 +3511,103 @@ mod generated_playlist_refresh_tests {
             intent_owner(&pool, RELATED_PLAYOUT_ID).await,
             Some(LIBRARY_ID)
         );
+        assert_eq!(
+            intent_reason(&pool, RELATED_PLAYOUT_ID).await,
+            ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved.as_str()
+        );
+    }
+
+    #[tokio::test]
+    async fn reset_empties_generated_playlist_and_preserves_scheduling_identity() {
+        let pool = pool().await;
+        seed_generated_list(&pool).await;
+        seed_classic_playlist_playout(&pool, RELATED_PLAYOUT_ID, PLAYLIST_ID).await;
+        sqlx::query(
+            r#"INSERT INTO "FillerPreset" (
+                   "Id", "Name", "FillerMode", "FillerKind", "CollectionType", "PlaylistId",
+                   "AllowWatermarks", "UseChaptersAsMediaItems"
+               ) VALUES (9001, 'Playlist filler', 0, 0, 70, ?, 0, 0)"#,
+        )
+        .bind(PLAYLIST_ID)
+        .execute(&pool)
+        .await
+        .expect("seed playlist filler");
+        sqlx::query(
+            r#"INSERT INTO "PlayoutProgramScheduleAnchor" (
+                   "Id", "PlayoutId", "CollectionType", "PlaylistId"
+               ) VALUES (9002, ?, 70, ?)"#,
+        )
+        .bind(RELATED_PLAYOUT_ID)
+        .bind(PLAYLIST_ID)
+        .execute(&pool)
+        .await
+        .expect("seed playlist anchor");
+        sqlx::query(r#"INSERT INTO "DecoGroup" ("Id", "Name") VALUES (9003, 'Reset')"#)
+            .execute(&pool)
+            .await
+            .expect("seed deco group");
+        sqlx::query(
+            r#"INSERT INTO "Deco" (
+                   "Id", "BreakContentMode", "DeadAirFallbackCollectionType",
+                   "DeadAirFallbackMode", "DecoGroupId", "DefaultFillerCollectionType",
+                   "DefaultFillerMode", "DefaultFillerTrimToFit", "GraphicsElementsMode",
+                   "Name", "UseGraphicsElementsDuringFiller", "UseWatermarkDuringFiller",
+                   "WatermarkMode"
+               ) VALUES (9004, 0, 0, 0, 9003, 0, 0, 0, 0, 'Reset deco', 0, 0, 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed deco");
+        sqlx::query(
+            r#"INSERT INTO "DecoBreakContent" (
+                   "Id", "DecoId", "CollectionType", "PlaylistId", "Placement"
+               ) VALUES (9005, 9004, 70, ?, 0)"#,
+        )
+        .bind(PLAYLIST_ID)
+        .execute(&pool)
+        .await
+        .expect("seed playlist deco content");
+        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
+
+        synchronizer
+            .empty_generated_playlist_for_reset(LIST_ID)
+            .await
+            .expect("empty generated playlist");
+        synchronizer
+            .empty_generated_playlist_for_reset(LIST_ID)
+            .await
+            .expect("repeat empty generated playlist");
+
+        assert!(playlist_exists(&pool, PLAYLIST_ID).await);
+        let playlist_items: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
+                .bind(PLAYLIST_ID)
+                .fetch_one(&pool)
+                .await
+                .expect("count playlist items");
+        let schedule_references: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "ProgramScheduleItem" WHERE "PlaylistId" = ?"#,
+        )
+        .bind(PLAYLIST_ID)
+        .fetch_one(&pool)
+        .await
+        .expect("count retained schedule references");
+        assert_eq!(playlist_items, 0);
+        assert_eq!(schedule_references, 1);
+        for table in [
+            "FillerPreset",
+            "DecoBreakContent",
+            "PlayoutProgramScheduleAnchor",
+        ] {
+            let sql = format!(r#"SELECT COUNT(*) FROM "{table}" WHERE "PlaylistId" = ?"#);
+            let count: i64 = sqlx::query_scalar(crate::db::assert_sql_safe(&sql))
+                .bind(PLAYLIST_ID)
+                .fetch_one(&pool)
+                .await
+                .expect("count retained playlist reference");
+            assert_eq!(count, 1, "{table} reference must survive reset");
+        }
+        assert_eq!(intent_playout_ids(&pool).await, [RELATED_PLAYOUT_ID]);
         assert_eq!(
             intent_reason(&pool, RELATED_PLAYOUT_ID).await,
             ScanPlayoutRefreshReason::RemoteStreamMembershipRemoved.as_str()

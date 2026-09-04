@@ -25,6 +25,15 @@ pub enum AddonMediaListPublishResult {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AddonMediaListResetResult {
+    Queued {
+        operation_id: i64,
+        generation: i32,
+        existing: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AddonMediaListPublicationBlockerKind {
     OverviewIncomplete,
@@ -290,6 +299,7 @@ pub struct AddonMediaListRow {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListForm {
     pub id: i64,
+    pub name: String,
     pub addon_id: String,
     pub source_url: String,
     pub folder_name: String,
@@ -940,6 +950,7 @@ pub async fn get_addon_media_list_form(
         .map(|form| {
             form.map(|form| AddonMediaListForm {
                 id: form.id,
+                name: form.name,
                 addon_id: form.addon_id,
                 source_url: form.source_url,
                 folder_name: form.folder_name,
@@ -1532,6 +1543,44 @@ pub async fn publish_addon_media_list(
     publish_addon_media_list_with_state(&state, id, saved_revision)
         .await
         .map_err(ServerFnError::new)
+}
+
+/// Remove all derived state for one list and queue a full import while
+/// retaining the list's operator-owned identity and settings.
+#[server]
+pub async fn reset_addon_media_list(
+    id: i64,
+    confirmed_name: String,
+) -> Result<AddonMediaListResetResult, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    reset_addon_media_list_with_state(&state, id, confirmed_name)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+pub async fn reset_addon_media_list_with_state(
+    state: &crate::host::state::AppState,
+    id: i64,
+    confirmed_name: String,
+) -> ersatzrs_app::Result<AddonMediaListResetResult> {
+    state
+        .application
+        .reset_addon_media_list(ersatzrs_app::commands::ResetAddonMediaList { id, confirmed_name })
+        .await
+        .map(|outcome| match outcome {
+            ersatzrs_app::commands::ResetAddonMediaListOutcome::Queued {
+                operation_id,
+                generation,
+                existing,
+            } => AddonMediaListResetResult::Queued {
+                operation_id,
+                generation,
+                existing,
+            },
+        })
 }
 
 #[cfg(feature = "ssr")]

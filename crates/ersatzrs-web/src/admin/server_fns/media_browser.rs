@@ -31,6 +31,97 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::admin::i18n::{episode_display_subtitle_text, UiLanguage};
+
+/// Localize an episode identity embedded in an existing admin display string.
+///
+/// Repository projections predate localized episode labels and expose either
+/// `Show - S1 E2` or `Show - s01e02 - Title`. Keep those storage/application
+/// contracts stable while ensuring invalid zero sentinels are presented as the
+/// localized `Unnumbered` label at the web boundary.
+pub(crate) fn localize_episode_display_text(language: UiLanguage, value: &str) -> Option<String> {
+    parse_spaced_episode_display(value)
+        .or_else(|| parse_compact_episode_display(value))
+        .and_then(|(show, season, episode, title)| {
+            let identity =
+                episode_display_subtitle_text(language, show, Some(season), Some(episode))?;
+            Some(match title.filter(|title| !title.trim().is_empty()) {
+                Some(title) => format!("{identity} - {title}"),
+                None => identity,
+            })
+        })
+}
+
+fn parse_spaced_episode_display(value: &str) -> Option<(Option<&str>, i64, i64, Option<&str>)> {
+    let (show, numbered) = value.rsplit_once(" - S").map_or_else(
+        || Some((None, value.strip_prefix('S')?)),
+        |(show, numbered)| Some((Some(show), numbered)),
+    )?;
+    let (season, episode_and_title) = numbered.split_once(" E")?;
+    let (episode, title) = episode_and_title
+        .split_once(" - ")
+        .map_or((episode_and_title, None), |(episode, title)| {
+            (episode, Some(title))
+        });
+    Some((show, season.parse().ok()?, episode.parse().ok()?, title))
+}
+
+fn parse_compact_episode_display(value: &str) -> Option<(Option<&str>, i64, i64, Option<&str>)> {
+    let (show, numbered) = value.rsplit_once(" - s").map_or_else(
+        || Some((None, value.strip_prefix('s')?)),
+        |(show, numbered)| Some((Some(show), numbered)),
+    )?;
+    let (season, episode_and_title) = numbered.split_once('e')?;
+    let (episode, title) = episode_and_title
+        .split_once(" - ")
+        .map_or((episode_and_title, None), |(episode, title)| {
+            (episode, Some(title))
+        });
+    Some((show, season.parse().ok()?, episode.parse().ok()?, title))
+}
+
+#[cfg(test)]
+mod episode_display_tests {
+    use super::localize_episode_display_text;
+    use crate::admin::i18n::UiLanguage;
+
+    #[test]
+    fn zero_sentinels_are_localized_without_losing_title_context() {
+        assert_eq!(
+            localize_episode_display_text(UiLanguage::English, "Show - S0 E0").as_deref(),
+            Some("Show - Unnumbered")
+        );
+        assert_eq!(
+            localize_episode_display_text(
+                UiLanguage::Dutch,
+                "Serie - s00e00 - Aflevering zonder nummer",
+            )
+            .as_deref(),
+            Some("Serie - Ongenummerd - Aflevering zonder nummer")
+        );
+    }
+
+    #[test]
+    fn season_zero_with_a_positive_episode_remains_a_numbered_special() {
+        assert_eq!(
+            localize_episode_display_text(UiLanguage::English, "Show - S0 E3").as_deref(),
+            Some("Show - S0 E3")
+        );
+        assert_eq!(
+            localize_episode_display_text(UiLanguage::Dutch, "Serie - s00e03 - Special").as_deref(),
+            Some("Serie - seizoen 0, aflevering 3 - Special")
+        );
+    }
+
+    #[test]
+    fn unrelated_display_text_is_not_reinterpreted_as_an_episode() {
+        assert_eq!(
+            localize_episode_display_text(UiLanguage::English, "A movie called S0 E0"),
+            None
+        );
+    }
+}
+
 /// Row for a media-card grid (movies/shows/images share this shape).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct MediaCardRow {
@@ -247,6 +338,16 @@ async fn list_media_cards_from_application_filtered(
 ) -> Result<(Vec<MediaCardRow>, u64), ServerFnError> {
     use ersatzrs_domain::ContentKind;
 
+    let episode_language = if kind == ersatzrs_core::repositories::AdminSearchKind::Episode {
+        Some(
+            crate::admin::server_fns::settings::load_ui_language_for_api(
+                state.application.ports().admin_settings(),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     let query = media_card_search_query(media_kind, search, show_variants);
     let snapshot = state.application.admin_search_snapshot(&query).await?;
     let enrichment = snapshot.enrichment.get(&kind).cloned().unwrap_or_default();
@@ -296,16 +397,12 @@ async fn list_media_cards_from_application_filtered(
                     (season_name(number), document.show_title, Some(number))
                 }
                 ersatzrs_core::repositories::AdminSearchKind::Episode => {
-                    let subtitle = match (
+                    let subtitle = episode_display_subtitle_text(
+                        episode_language.unwrap_or(UiLanguage::English),
                         document.show_title.as_deref(),
-                        document.season_number,
-                        document.episode_number,
-                    ) {
-                        (Some(show), Some(season), Some(episode)) if !show.trim().is_empty() => {
-                            Some(format!("{show} - S{season} E{episode}"))
-                        }
-                        _ => document.show_title,
-                    };
+                        document.season_number.map(i64::from),
+                        document.episode_number.map(i64::from),
+                    );
                     (title, subtitle, None)
                 }
                 ersatzrs_core::repositories::AdminSearchKind::Artist => (
@@ -1088,6 +1185,7 @@ pub(crate) fn playlist_editor_into_admin(
 #[cfg(feature = "ssr")]
 fn playlist_options_from_admin(
     options: ersatzrs_core::repositories::PlaylistEditorOptions,
+    language: UiLanguage,
 ) -> PlaylistEditorOptions {
     fn map(rows: Vec<ersatzrs_core::repositories::PlaylistItemOption>) -> Vec<PlaylistItemOption> {
         rows.into_iter()
@@ -1098,6 +1196,15 @@ fn playlist_options_from_admin(
             .collect()
     }
 
+    let episodes = options
+        .episodes
+        .into_iter()
+        .map(|row| PlaylistItemOption {
+            id: row.id,
+            name: localize_episode_display_text(language, &row.name).unwrap_or(row.name),
+        })
+        .collect();
+
     PlaylistEditorOptions {
         collections: map(options.collections),
         multi_collections: map(options.multi_collections),
@@ -1106,7 +1213,7 @@ fn playlist_options_from_admin(
         seasons: map(options.seasons),
         artists: map(options.artists),
         movies: map(options.movies),
-        episodes: map(options.episodes),
+        episodes,
         music_videos: map(options.music_videos),
         other_videos: map(options.other_videos),
         songs: map(options.songs),

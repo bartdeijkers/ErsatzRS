@@ -12,7 +12,9 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{season_display_name, tr, TextKey};
+use crate::admin::i18n::{
+    episode_display_subtitle_text, season_display_name, text, tr, use_i18n, TextKey, UiLanguage,
+};
 use crate::admin::pages::media::add_to_schedule_modal::AddToScheduleModal;
 use crate::admin::pages::media::multi_select_browser::{
     AddToCollectionModal, AddToPlaylistModal, MediaInfoModal,
@@ -201,13 +203,7 @@ fn SeasonDetailView(season: SeasonDetailRow) -> impl IntoView {
                 <div class=style::episode_stack>
                     {episodes.into_iter().map(|episode| {
                         let episode_id = episode.episode_id;
-                        let title_for_info = format!(
-                            "{} - s{:02}e{:02} - {}",
-                            episode.show_title,
-                            episode.season_number,
-                            episode.episode_number,
-                            episode.title
-                        );
+                        let title_for_info = episode_information_title(use_i18n(), &episode);
                         view! {
                             <EpisodeRow
                                 episode=episode
@@ -292,6 +288,7 @@ fn EpisodeRow(
 ) -> impl IntoView {
     let episode_id = episode.episode_id;
     let title = episode.title.clone();
+    let display_title = episode_row_title(use_i18n(), episode.episode_number, &title);
     let thumbnail_alt = format!("{} {}", episode.title, tr(TextKey::Thumbnail));
     let troubleshoot_href = format!("/system/troubleshooting/playback?mediaItem={episode_id}");
     let status = file_status(&episode);
@@ -311,7 +308,7 @@ fn EpisodeRow(
                 </div>
                 <div class=style::episode_body>
                     <h2 class=style::episode_title>
-                        {format!("{}. {title}", episode.episode_number)}
+                        {display_title}
                     </h2>
                     {episode.plot.filter(|p| !p.trim().is_empty()).map(|plot| view! {
                         <p class=style::plot>{plot}</p>
@@ -351,6 +348,25 @@ fn EpisodeRow(
                 {people_row(tr(TextKey::Writers), "writer", writers)}
             </div>
         </article>
+    }
+}
+
+fn episode_information_title(language: UiLanguage, episode: &EpisodeCardRow) -> String {
+    let identity = episode_display_subtitle_text(
+        language,
+        Some(&episode.show_title),
+        Some(episode.season_number),
+        Some(episode.episode_number),
+    )
+    .unwrap_or_else(|| text(language, TextKey::Unnumbered).to_owned());
+    format!("{identity} - {}", episode.title)
+}
+
+fn episode_row_title(language: UiLanguage, episode_number: i64, title: &str) -> String {
+    if episode_number > 0 {
+        format!("{episode_number}. {title}")
+    } else {
+        format!("{}. {title}", text(language, TextKey::Unnumbered))
     }
 }
 
@@ -408,4 +424,45 @@ fn people_row(label: &'static str, field: &'static str, people: Vec<String>) -> 
         }
         .into_any(),
     )
+}
+
+#[cfg(test)]
+mod episode_title_tests {
+    use super::{episode_information_title, episode_row_title};
+    use crate::admin::i18n::UiLanguage;
+    use crate::admin::server_fns::media_browser::EpisodeCardRow;
+
+    fn episode(season_number: i64, episode_number: i64) -> EpisodeCardRow {
+        EpisodeCardRow {
+            show_title: "Serie".to_owned(),
+            season_number,
+            episode_number,
+            title: "Titel".to_owned(),
+            ..EpisodeCardRow::default()
+        }
+    }
+
+    #[test]
+    fn unnumbered_episode_titles_do_not_render_zero_sentinels() {
+        assert_eq!(
+            episode_row_title(UiLanguage::Dutch, 0, "Titel"),
+            "Ongenummerd. Titel"
+        );
+        assert_eq!(
+            episode_information_title(UiLanguage::Dutch, &episode(0, 0)),
+            "Serie - Ongenummerd - Titel"
+        );
+    }
+
+    #[test]
+    fn positive_special_episode_numbers_remain_visible() {
+        assert_eq!(
+            episode_row_title(UiLanguage::English, 3, "Special"),
+            "3. Special"
+        );
+        assert_eq!(
+            episode_information_title(UiLanguage::English, &episode(0, 3)),
+            "Serie - S0 E3 - Titel"
+        );
+    }
 }

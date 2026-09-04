@@ -4466,6 +4466,24 @@ pub struct PublishAddonMediaList {
     pub saved_revision: i32,
 }
 
+/// Request a destructive reset followed by a fresh provider import.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResetAddonMediaList {
+    pub id: EntityId,
+    /// Must match the list's current persisted name; only this input is trimmed.
+    pub confirmed_name: String,
+}
+
+/// Durable reset admission result returned without owning execution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResetAddonMediaListOutcome {
+    Queued {
+        operation_id: EntityId,
+        generation: i32,
+        existing: bool,
+    },
+}
+
 /// Durable publication admission result returned without owning execution.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PublishAddonMediaListOutcome {
@@ -4763,6 +4781,26 @@ pub async fn publish_addon_media_list(
         generation: queued.job.generation,
         saved_revision: queued.job.saved_revision,
         existing: queued.existing,
+    })
+}
+
+/// Validate and durably admit one reset/reload generation.
+pub async fn reset_addon_media_list(
+    command: ResetAddonMediaList,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
+) -> crate::Result<ResetAddonMediaListOutcome> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    let confirmed_name = command.confirmed_name.trim();
+    if confirmed_name.is_empty() {
+        return validation_error("confirmed_name", "The current list name is required");
+    }
+    let enqueue = managed_operations
+        .enqueue_reset_reload(command.id, confirmed_name)
+        .await?;
+    Ok(ResetAddonMediaListOutcome::Queued {
+        operation_id: enqueue.operation.id,
+        generation: enqueue.job.generation,
+        existing: enqueue.existing,
     })
 }
 

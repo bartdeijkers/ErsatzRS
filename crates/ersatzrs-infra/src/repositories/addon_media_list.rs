@@ -460,7 +460,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
 
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>> {
         let row = sqlx::query(
-            r#"SELECT "list"."Id", "list"."AddonId", "list"."SourceUrl",
+            r#"SELECT "list"."Id", "list"."Name", "list"."AddonId", "list"."SourceUrl",
                       "list"."AutoRefresh", "list"."GeneratePlaylist",
                       "list"."ContentKindOverride", "list"."PresentationKind",
                       "list"."RequestedPresentationKind", "list"."PresentationError",
@@ -481,6 +481,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             .map(|row| {
                 Ok(AddonMediaListAdminForm {
                     id: row.try_get("Id").repository()?,
+                    name: row.try_get("Name").repository()?,
                     addon_id: row.try_get("AddonId").repository()?,
                     source_url: row.try_get("SourceUrl").repository()?,
                     folder_name: row.try_get("FolderName").repository()?,
@@ -4717,9 +4718,7 @@ async fn addon_media_list_publication_readiness(
             detail_states.get(&item.id).copied().flatten(),
             &mut item_classification,
         );
-        item_classification
-            .blockers
-            .extend(item_metadata_blockers(pool, list_id, presentation, item).await?);
+        classify_item_metadata(pool, list_id, presentation, item, &mut item_classification).await?;
     }
     blockers.extend(item_classification.blockers);
     let progress = form.import_progress.as_ref();
@@ -4971,36 +4970,40 @@ fn classify_required_playback_detail(
     }
 }
 
-async fn item_metadata_blockers(
+async fn classify_item_metadata(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
     presentation: AddonMediaListPresentationKind,
     item: &AddonMediaListItemAdminRow,
-) -> Result<Vec<AddonMediaListPublicationBlocker>> {
+    classification: &mut PublicationItemClassification,
+) -> Result<()> {
     let metadata = load_item_metadata_form(pool, list_id, item.id)
         .await?
         .metadata;
-    let mut blockers = Vec::new();
     if metadata.title.trim().is_empty() {
-        blockers.push(publication_item_blocker(
+        classification.blockers.push(publication_item_blocker(
             AddonMediaListPublicationBlockerKind::ItemTitleMissing,
             item,
         ));
     }
     if invalid_artwork_message(&item.display_title, &metadata).is_some() {
-        blockers.push(publication_item_blocker(
+        classification.blockers.push(publication_item_blocker(
             AddonMediaListPublicationBlockerKind::InvalidArtwork,
             item,
         ));
     }
-    if presentation == AddonMediaListPresentationKind::TelevisionShow
-        && (metadata.season.is_none_or(|season| season < 0)
-            || metadata.episode.is_none_or(|episode| episode < 1))
-    {
-        blockers.push(publication_item_blocker(
-            AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing,
-            item,
-        ));
+    if presentation == AddonMediaListPresentationKind::TelevisionShow {
+        match (metadata.season, metadata.episode) {
+            (None, None) | (Some(0), Some(0)) => {
+                classification.recommendation_count =
+                    classification.recommendation_count.saturating_add(1);
+            }
+            (Some(season), Some(episode)) if season >= 0 && episode >= 1 => {}
+            _ => classification.blockers.push(publication_item_blocker(
+                AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing,
+                item,
+            )),
+        }
     }
     if matches!(
         presentation,
@@ -5010,12 +5013,12 @@ async fn item_metadata_blockers(
         .iter()
         .all(|artist| artist.trim().is_empty())
     {
-        blockers.push(publication_item_blocker(
+        classification.blockers.push(publication_item_blocker(
             AddonMediaListPublicationBlockerKind::ArtistMissing,
             item,
         ));
     }
-    Ok(blockers)
+    Ok(())
 }
 
 fn publication_blocker(
@@ -7213,18 +7216,8 @@ async fn apply_tv_projection(pool: &Pool<crate::db::Db>, list_id: EntityId) -> R
             metadata.title = row.try_get("Title").repository()?;
         }
         metadata.show_title = Some(show_title.clone());
-        metadata.season = Some(
-            metadata
-                .season
-                .or(row.try_get("Season").repository()?)
-                .unwrap_or(0),
-        );
-        metadata.episode = Some(
-            metadata
-                .episode
-                .or(row.try_get("Episode").repository()?)
-                .unwrap_or(0),
-        );
+        metadata.season = metadata.season.or(row.try_get("Season").repository()?);
+        metadata.episode = metadata.episode.or(row.try_get("Episode").repository()?);
         metadata.year = metadata.year.or(row.try_get("Year").repository()?);
         crate::addon_media_nfo::save_user(&path, "episodedetails", &metadata, &form.etag)
             .map_err(map_nfo_error)?;

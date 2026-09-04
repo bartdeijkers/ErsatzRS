@@ -750,6 +750,12 @@ WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
 
     await gotoHydrated(page, '/media/addon-lists');
     const editorRow = page.locator('tr').filter({ hasText: seed.editorListName });
+    const listTable = editorRow.locator('xpath=ancestor::table');
+    await expect(listTable.locator('thead th').nth(0)).toHaveText('Name');
+    await expect(listTable.locator('thead th').nth(1)).toHaveText('Id');
+    await expect(
+      editorRow.getByRole('link', { name: seed.editorListName, exact: true }),
+    ).toHaveAttribute('href', `/media/addon-lists/${seed.editorListId}`);
     await expect(editorRow.getByRole('link', { name: /^search add-on list$/i })).toHaveAttribute(
       'href',
       `/search?query=addon_list%3a${seed.editorListId}`,

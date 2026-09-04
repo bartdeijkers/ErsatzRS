@@ -22,8 +22,8 @@ use crate::{
         get_addon_media_list_publication_history_with_state,
         get_addon_media_list_publication_readiness_with_state, match_addon_media_list_with_state,
         publish_addon_media_list_with_state, recover_addon_media_list_publication_with_state,
-        redacted_publication_diagnostics_json, update_addon_media_list_with_state,
-        AddonMediaListForm, AddonMediaListPublishResult,
+        redacted_publication_diagnostics_json, reset_addon_media_list_with_state,
+        update_addon_media_list_with_state, AddonMediaListForm, AddonMediaListPublishResult,
     },
     host::state::AppState,
 };
@@ -67,13 +67,25 @@ pub struct AddonMediaListRecoveryForm {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct AddonMediaListResetForm {
+    id: i64,
+    confirmed_name: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct AddonMediaListItemReviewForm {
     list_id: i64,
     item_id: i64,
     etag: String,
     title: String,
     #[serde(default)]
+    original_title: String,
+    #[serde(default)]
     plot: String,
+    #[serde(default)]
+    year: String,
+    #[serde(default)]
+    release_date: String,
     #[serde(default)]
     season: String,
     #[serde(default)]
@@ -82,6 +94,24 @@ pub struct AddonMediaListItemReviewForm {
     genres: String,
     #[serde(default)]
     tags: String,
+    #[serde(default)]
+    artists: String,
+    #[serde(default)]
+    studios: String,
+    #[serde(default)]
+    directors: String,
+    #[serde(default)]
+    writers: String,
+    #[serde(default)]
+    languages: String,
+    #[serde(default)]
+    people: String,
+    #[serde(default)]
+    metadata_poster: String,
+    #[serde(default)]
+    metadata_fanart: String,
+    #[serde(default)]
+    metadata_thumbnail: String,
     #[serde(default)]
     chapter_input: String,
 }
@@ -169,6 +199,51 @@ fn metadata_from_save_form(
     metadata.artists = comma_form_values(&input.metadata_artists);
     metadata.languages = comma_form_values(&input.metadata_languages);
     metadata.people = people_form_values(&input.metadata_people);
+    metadata.artwork.retain(|artwork| {
+        !matches!(
+            artwork.role,
+            AddonMediaListArtworkRole::Poster
+                | AddonMediaListArtworkRole::Fanart
+                | AddonMediaListArtworkRole::Thumb
+        )
+    });
+    for (value, role) in [
+        (&input.metadata_poster, AddonMediaListArtworkRole::Poster),
+        (&input.metadata_fanart, AddonMediaListArtworkRole::Fanart),
+        (&input.metadata_thumbnail, AddonMediaListArtworkRole::Thumb),
+    ] {
+        if let Some(url) = non_empty_form_value(value) {
+            metadata.artwork.push(AddonMediaListArtwork {
+                url,
+                role,
+                width: None,
+                height: None,
+                language: None,
+            });
+        }
+    }
+    metadata
+}
+
+fn item_metadata_from_review_form(
+    input: &AddonMediaListItemReviewForm,
+    mut metadata: AddonMediaListNfoMetadata,
+) -> AddonMediaListNfoMetadata {
+    input.title.trim().clone_into(&mut metadata.title);
+    metadata.original_title = non_empty_form_value(&input.original_title);
+    metadata.plot = non_empty_form_value(&input.plot);
+    metadata.year = input.year.trim().parse().ok();
+    metadata.release_date = non_empty_form_value(&input.release_date);
+    metadata.season = input.season.trim().parse().ok();
+    metadata.episode = input.episode.trim().parse().ok();
+    metadata.genres = comma_form_values(&input.genres);
+    metadata.tags = line_form_values(&input.tags);
+    metadata.artists = comma_form_values(&input.artists);
+    metadata.studios = comma_form_values(&input.studios);
+    metadata.directors = comma_form_values(&input.directors);
+    metadata.writers = comma_form_values(&input.writers);
+    metadata.languages = comma_form_values(&input.languages);
+    metadata.people = people_form_values(&input.people);
     metadata.artwork.retain(|artwork| {
         !matches!(
             artwork.role,
@@ -297,6 +372,7 @@ pub async fn save_addon_media_list_form(
     };
     let form = AddonMediaListForm {
         id,
+        name: current.name,
         addon_id: current.addon_id,
         source_url: current.source_url,
         folder_name: current.folder_name,
@@ -472,6 +548,26 @@ pub async fn recover_addon_media_list_publication_form(
     }
 }
 
+pub async fn reset_addon_media_list_form(
+    State(state): State<AppState>,
+    Form(input): Form<AddonMediaListResetForm>,
+) -> Redirect {
+    match reset_addon_media_list_with_state(&state, input.id, input.confirmed_name).await {
+        Ok(_) => Redirect::to(&format!(
+            "/media/addon-lists/{}?status=reset-queued",
+            input.id
+        )),
+        Err(error) => {
+            tracing::warn!(
+                addon_media_list_id = input.id,
+                error = %error,
+                "failed to reset and reload add-on media list from HTML form"
+            );
+            Redirect::to(&format!("/media/addon-lists/{}?error=reset", input.id))
+        }
+    }
+}
+
 /// Download the same typed, redacted publication history used by the hydrated
 /// clipboard action. The fixed filename prevents list data from reaching the
 /// response headers.
@@ -530,13 +626,20 @@ pub async fn save_addon_media_list_item_review_form(
             return Redirect::to(&format!("{path}?error=save"));
         }
     };
-    let mut metadata = detail.nfo.metadata;
-    metadata.title = input.title;
-    metadata.plot = non_empty_form_value(&input.plot);
-    metadata.season = input.season.trim().parse().ok();
-    metadata.episode = input.episode.trim().parse().ok();
-    metadata.genres = comma_form_values(&input.genres);
-    metadata.tags = line_form_values(&input.tags);
+    let chapter_update = changed_item_chapter_input(
+        detail.item.parent_provider_id.is_some(),
+        &detail.item.chapter_input,
+        &detail.item.provider_chapter_input,
+        &input.chapter_input,
+    );
+    if let Some(chapter_input) = chapter_update.as_deref() {
+        if let Err(error) = ersatzrs_core::media_chapters::parse_chapter_input(chapter_input, None)
+        {
+            tracing::warn!(%error, list_id = input.list_id, item_id = input.item_id, "rejected invalid chapter input from HTML review form");
+            return Redirect::to(&format!("{path}?error=save"));
+        }
+    }
+    let metadata = item_metadata_from_review_form(&input, detail.nfo.metadata);
     let save = state
         .application
         .save_addon_media_list_item_nfo(ersatzrs_app::commands::SaveAddonMediaListNfo {
@@ -546,19 +649,20 @@ pub async fn save_addon_media_list_item_review_form(
             etag: input.etag,
         })
         .await;
-    let result = match save {
-        Ok(()) => {
+    let result = match (save, chapter_update) {
+        (Ok(()), Some(chapter_input)) => {
             state
                 .application
                 .update_addon_media_list_item_chapters(
                     ersatzrs_app::commands::UpdateAddonMediaListItemChapters {
                         id: input.item_id,
-                        chapter_input: input.chapter_input,
+                        chapter_input,
                     },
                 )
                 .await
         }
-        Err(error) => Err(error),
+        (Ok(()), None) => Ok(()),
+        (Err(error), _) => Err(error),
     };
     match result {
         Ok(()) => Redirect::to(&format!("{path}?status=saved")),
@@ -579,6 +683,21 @@ fn comma_form_values(value: &str) -> Vec<String> {
 
 fn line_form_values(value: &str) -> Vec<String> {
     value.lines().filter_map(non_empty_form_value).collect()
+}
+
+fn changed_item_chapter_input(
+    is_fragment: bool,
+    saved: &str,
+    provider: &str,
+    submitted: &str,
+) -> Option<String> {
+    let saved = saved.trim();
+    let provider = provider.trim();
+    let submitted_trimmed = submitted.trim();
+    (!is_fragment
+        && submitted_trimmed != saved
+        && !(saved.is_empty() && submitted_trimmed == provider))
+        .then(|| submitted.to_owned())
 }
 
 const fn presentation_content_kind(
@@ -791,13 +910,77 @@ mod tests {
     }
 
     #[test]
-    fn item_review_form_preserves_multiline_values() {
+    fn item_review_form_rebuilds_every_visible_metadata_field() {
         let body = Bytes::from_static(
-            b"list_id=42&item_id=7&etag=revision&title=Episode&tags=archive%0Afeatured&chapter_input=0%3A00+Intro%0A1%3A35+First+topic",
+            b"list_id=42&item_id=7&etag=revision&title=Episode&original_title=Original&plot=Summary&year=2026&release_date=2026-09-04&season=2&episode=3&genres=Archive%2C+News&tags=archive%0Afeatured&artists=Artist&studios=Studio&directors=Director&writers=Writer&languages=nl%2C+en&people=Presenter+%7C+Host&metadata_poster=https%3A%2F%2Fexample.invalid%2Fposter.jpg&metadata_fanart=https%3A%2F%2Fexample.invalid%2Ffanart.jpg&metadata_thumbnail=https%3A%2F%2Fexample.invalid%2Fthumb.jpg&chapter_input=0%3A00+Intro%0A1%3A35+First+topic",
         );
         let parsed: AddonMediaListItemReviewForm = serde_urlencoded::from_bytes(&body).unwrap();
-        assert_eq!(parsed.tags, "archive\nfeatured");
+        let original = AddonMediaListNfoMetadata {
+            tagline: Some("preserved".to_owned()),
+            artwork: vec![AddonMediaListArtwork {
+                url: "https://example.invalid/other.jpg".to_owned(),
+                role: AddonMediaListArtworkRole::Other,
+                ..AddonMediaListArtwork::default()
+            }],
+            ..AddonMediaListNfoMetadata::default()
+        };
+
+        let metadata = item_metadata_from_review_form(&parsed, original);
+
+        assert_eq!(metadata.title, "Episode");
+        assert_eq!(metadata.original_title.as_deref(), Some("Original"));
+        assert_eq!(metadata.plot.as_deref(), Some("Summary"));
+        assert_eq!(metadata.year, Some(2026));
+        assert_eq!(metadata.release_date.as_deref(), Some("2026-09-04"));
+        assert_eq!((metadata.season, metadata.episode), (Some(2), Some(3)));
+        assert_eq!(metadata.genres, ["Archive", "News"]);
+        assert_eq!(metadata.tags, ["archive", "featured"]);
+        assert_eq!(metadata.artists, ["Artist"]);
+        assert_eq!(metadata.studios, ["Studio"]);
+        assert_eq!(metadata.directors, ["Director"]);
+        assert_eq!(metadata.writers, ["Writer"]);
+        assert_eq!(metadata.languages, ["nl", "en"]);
+        assert_eq!(metadata.people[0].name, "Presenter");
+        assert_eq!(metadata.people[0].role.as_deref(), Some("Host"));
+        assert_eq!(metadata.tagline.as_deref(), Some("preserved"));
+        assert!(metadata.artwork.iter().any(|artwork| {
+            artwork.role == AddonMediaListArtworkRole::Poster
+                && artwork.url == "https://example.invalid/poster.jpg"
+        }));
+        assert!(metadata.artwork.iter().any(|artwork| {
+            artwork.role == AddonMediaListArtworkRole::Fanart
+                && artwork.url == "https://example.invalid/fanart.jpg"
+        }));
+        assert!(metadata.artwork.iter().any(|artwork| {
+            artwork.role == AddonMediaListArtworkRole::Thumb
+                && artwork.url == "https://example.invalid/thumb.jpg"
+        }));
+        assert!(metadata
+            .artwork
+            .iter()
+            .any(|artwork| artwork.role == AddonMediaListArtworkRole::Other));
         assert_eq!(parsed.chapter_input, "0:00 Intro\n1:35 First topic");
+    }
+
+    #[test]
+    fn item_review_chapters_change_only_for_an_explicit_full_item_edit() {
+        let provider = "0:00 Intro\n1:35 First topic";
+        assert_eq!(
+            changed_item_chapter_input(false, "", provider, provider),
+            None
+        );
+        assert_eq!(
+            changed_item_chapter_input(false, "0:00 Saved", provider, "0:00 Saved"),
+            None
+        );
+        assert_eq!(
+            changed_item_chapter_input(false, "", provider, "0:00 Replacement"),
+            Some("0:00 Replacement".to_owned())
+        );
+        assert_eq!(
+            changed_item_chapter_input(true, "", provider, "0:00 Replacement"),
+            None
+        );
     }
 
     #[test]

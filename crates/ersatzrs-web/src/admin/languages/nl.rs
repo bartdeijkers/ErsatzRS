@@ -2105,6 +2105,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchSmartCollection => "Slimme collectie zoeken",
         TextKey::Season => "Seizoen",
         TextKey::SeasonEpisode => "Seizoen, aflevering",
+        TextKey::Unnumbered => "Ongenummerd",
         TextKey::SeasonNotFound => "Seizoen niet gevonden",
         TextKey::Select => "Selecteren",
         TextKey::SelectCollection => "Collectie selecteren",
@@ -2265,6 +2266,20 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListUrl => "URL van add-on-lijst",
         TextKey::AddonMediaListFolder => "Opslagmap",
         TextKey::AddonMediaListFolderHelp => "Optioneel; anders afgeleid van de lijstnaam",
+        TextKey::DestructiveActions => "Destructieve acties",
+        TextKey::ResetAndReload => "Opnieuw instellen en laden",
+        TextKey::ResetAddonMediaListHelp => "Verwijder alle gegenereerde resultaten voor deze lijst en zet daarna een volledige import in de wachtrij.",
+        TextKey::SourceHost => "Bronhost",
+        TextKey::ResetRemoves => "Deze reset verwijdert",
+        TextKey::ResetRemovesItems => "Geïmporteerde items, providermetadata, aanpassingen van de beheerder, afleveringsnummering en vervangingen.",
+        TextKey::ResetRemovesArtifacts => "Gegenereerde media, NFO-bestanden, illustraties, ondertitels, caches en archieven.",
+        TextKey::ResetRemovesRuntime => "Taken, controlepunten, revisieartefacten, items in de gegenereerde afspeellijst en geprojecteerde media.",
+        TextKey::ResetRetains => "Deze reset behoudt",
+        TextKey::ResetRetainsSettings => "De lijstnaam, koppelingen met add-on, bron en bibliotheek, identiteit van de gegenereerde afspeellijst, vernieuwings- en publicatiebeleid, artefactquotum en overige beheerdersinstellingen.",
+        TextKey::ResetReloadFailureWarning => "Als het opnieuw laden mislukt, blijven kanalen en de gegenereerde afspeellijst leeg.",
+        TextKey::TypeListNameToConfirm => "Typ de huidige lijstnaam om te bevestigen",
+        TextKey::ResetQueued => "Opnieuw instellen en laden staat in de wachtrij.",
+        TextKey::ResetAddonMediaListFailed => "Opnieuw instellen en laden is mislukt.",
         TextKey::ChapterInput => "Hoofdstukken",
         TextKey::ChapterInputHelp => "Optioneel, één per regel: 0:00 Introductie",
         TextKey::RestoreProviderChapters => "Hoofdstukken van provider herstellen",
@@ -2905,7 +2920,7 @@ mod tests {
         );
         assert_eq!(
             episode_display_subtitle_text(UiLanguage::Dutch, Some("Serie"), None, None).as_deref(),
-            Some("Serie")
+            Some("Serie - Ongenummerd")
         );
     }
 

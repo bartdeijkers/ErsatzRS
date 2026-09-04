@@ -13,7 +13,6 @@ use ersatzrs_domain::{
     AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
     AddonMediaListRecoveryAction, AddonMediaListReviewState, RemoteStreamLiveness,
 };
-use leptos::html;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
@@ -30,21 +29,23 @@ use crate::admin::server_fns::addon_media_lists::{
     list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
     match_addon_media_list, publish_addon_media_list, recover_addon_media_list_publication,
     redacted_publication_diagnostics_json, request_addon_media_list_item_details,
-    request_addon_media_list_presentation, resolve_addon_media_list_provider,
-    save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
-    search_addon_media_list_replacements, set_addon_media_list_item_replacement,
-    set_addon_media_list_item_role, update_addon_media_list, update_addon_media_list_item_chapters,
-    AddonMediaListArtwork, AddonMediaListArtworkRole, AddonMediaListForm,
-    AddonMediaListImportAction, AddonMediaListImportProgressRow, AddonMediaListItemDetail,
-    AddonMediaListItemReviewEdit, AddonMediaListItemRow, AddonMediaListMetadataConflict,
-    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
-    AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
+    request_addon_media_list_presentation, reset_addon_media_list,
+    resolve_addon_media_list_provider, save_addon_media_list_item_nfo,
+    save_addon_media_list_show_nfo, search_addon_media_list_replacements,
+    set_addon_media_list_item_replacement, set_addon_media_list_item_role, update_addon_media_list,
+    update_addon_media_list_item_chapters, AddonMediaListArtwork, AddonMediaListArtworkRole,
+    AddonMediaListForm, AddonMediaListImportAction, AddonMediaListImportProgressRow,
+    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListItemRow,
+    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
+    AddonMediaListNfoPerson, AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationEventRow,
     AddonMediaListPublicationHistoryJobRow, AddonMediaListPublicationHistoryRow,
     AddonMediaListPublicationReadiness, AddonMediaListPublicationStatus,
-    AddonMediaListPublishResult, AddonMediaListReplacementRow, AddonMediaListRow,
+    AddonMediaListPublishResult, AddonMediaListReplacementRow, AddonMediaListResetResult,
+    AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
+    button::{Button, ButtonVariant},
     dialog::{DeleteDialog, Modal},
     icon::{icon_style, IconName},
     pagination::PaginationControls,
@@ -63,6 +64,62 @@ fn set_browser_location(path: &str) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn set_browser_location(_path: &str) {}
+
+/// Return only a URL's host for destructive-action context. This intentionally
+/// rejects malformed authorities rather than risking disclosure of user-info,
+/// query, fragment, or path data.
+fn redacted_source_host(source_url: &str) -> Option<String> {
+    let (_, remainder) = source_url.trim().split_once("://")?;
+    let authority = remainder
+        .split(['/', '\\', '?', '#'])
+        .next()?
+        .rsplit('@')
+        .next()?;
+    let host = if let Some(ipv6) = authority.strip_prefix('[') {
+        ipv6.split_once(']')?.0
+    } else {
+        authority.split(':').next()?
+    };
+    (!host.is_empty() && !host.chars().any(char::is_whitespace)).then(|| host.to_ascii_lowercase())
+}
+
+fn reset_confirmation_matches(confirmed_name: &str, list_name: &str) -> bool {
+    confirmed_name.trim() == list_name
+}
+
+#[component]
+fn AddonMediaListResetConsequences(list_name: String, source_host: String) -> impl IntoView {
+    view! {
+        <dl class=style::reset_identity>
+            <div>
+                <dt>{tr(TextKey::Name)}</dt>
+                <dd>{list_name}</dd>
+            </div>
+            <div>
+                <dt>{tr(TextKey::SourceHost)}</dt>
+                <dd>{source_host}</dd>
+            </div>
+        </dl>
+        <div class=style::reset_consequences>
+            <div>
+                <strong>{tr(TextKey::ResetRemoves)}</strong>
+                <ul>
+                    <li>{tr(TextKey::ResetRemovesItems)}</li>
+                    <li>{tr(TextKey::ResetRemovesArtifacts)}</li>
+                    <li>{tr(TextKey::ResetRemovesRuntime)}</li>
+                </ul>
+            </div>
+            <div>
+                <strong>{tr(TextKey::ResetRetains)}</strong>
+                <p>{tr(TextKey::ResetRetainsSettings)}</p>
+            </div>
+        </div>
+        <p class=style::reset_warning role="note">
+            <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
+            <span>{tr(TextKey::ResetReloadFailureWarning)}</span>
+        </p>
+    }
+}
 
 #[cfg(target_arch = "wasm32")]
 async fn upload_metadata_artwork(
@@ -153,15 +210,11 @@ fn ArtworkRoleInput(
         item_id.unwrap_or(0),
         role_name,
     );
-    let native_field_name = if item_id.is_none() {
-        match role {
-            AddonMediaListArtworkRole::Poster => Some("metadata_poster"),
-            AddonMediaListArtworkRole::Fanart => Some("metadata_fanart"),
-            AddonMediaListArtworkRole::Thumb => Some("metadata_thumbnail"),
-            AddonMediaListArtworkRole::Other => None,
-        }
-    } else {
-        None
+    let native_field_name = match role {
+        AddonMediaListArtworkRole::Poster => Some("metadata_poster"),
+        AddonMediaListArtworkRole::Fanart => Some("metadata_fanart"),
+        AddonMediaListArtworkRole::Thumb => Some("metadata_thumbnail"),
+        AddonMediaListArtworkRole::Other => None,
     };
     let initial_url = url.get_untracked();
     view! {
@@ -288,7 +341,6 @@ const DEFAULT_ITEM_PAGE_SIZE: u32 = 25;
 /// Setting or clearing the local replacement of one entry.
 type ReplacementAction = Action<(i64, Option<(i64, i64)>), Result<(), ServerFnError>>;
 type ItemRoleAction = Action<(i64, i64, AddonMediaListItemRole), Result<(), ServerFnError>>;
-type ItemDetailAction = Action<i64, Result<Option<AddonMediaListItemDetail>, ServerFnError>>;
 type DetailRequestAction = Action<(i64, i64), Result<(), ServerFnError>>;
 type PublicationRecoveryAction = Action<
     (i64, i64, i32, AddonMediaListRecoveryAction),
@@ -309,6 +361,38 @@ enum RowSaveState {
     Saving,
     Saved,
     Error,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EpisodeNumberPair {
+    Unnumbered,
+    Numbered(i32, i32),
+    Invalid,
+}
+
+fn episode_number_pair(season: Option<i32>, episode: Option<i32>) -> EpisodeNumberPair {
+    match (season, episode) {
+        (None, None) | (Some(0), Some(0)) => EpisodeNumberPair::Unnumbered,
+        (Some(season), Some(episode)) if season >= 0 && episode >= 1 => {
+            EpisodeNumberPair::Numbered(season, episode)
+        }
+        _ => EpisodeNumberPair::Invalid,
+    }
+}
+
+fn parse_episode_number_pair(season: &str, episode: &str) -> EpisodeNumberPair {
+    let season = season.trim();
+    let episode = episode.trim();
+    if season.is_empty() && episode.is_empty() {
+        return EpisodeNumberPair::Unnumbered;
+    }
+    match (season.parse::<i32>(), episode.parse::<i32>()) {
+        (Ok(0), Ok(0)) => EpisodeNumberPair::Unnumbered,
+        (Ok(season), Ok(episode)) if season >= 0 && episode >= 1 => {
+            EpisodeNumberPair::Numbered(season, episode)
+        }
+        _ => EpisodeNumberPair::Invalid,
+    }
 }
 
 type ReviewEditAction = Action<
@@ -518,9 +602,6 @@ fn item_row_view(
     episode_numbering_open: RwSignal<bool>,
     episode_numbering_start_item_id: RwSignal<Option<i64>>,
     presentation: RwSignal<AddonMediaListPresentationKind>,
-    open_item: RwSignal<Option<i64>>,
-    loaded_detail: RwSignal<Option<AddonMediaListItemDetail>>,
-    detail_action: ItemDetailAction,
     request_detail_action: DetailRequestAction,
     detail_request_item: RwSignal<Option<i64>>,
 ) -> AnyView {
@@ -547,11 +628,13 @@ fn item_row_view(
     let review_state = review_snapshot(&item);
     let collection_role = item.collection_role;
     let included = item.included;
-    let current_episode_number = item
-        .season
-        .zip(item.episode)
-        .map(|(season, episode)| format!("S{season:02}E{episode:02}"));
-    let current_episode_number = current_episode_number.unwrap_or_default();
+    let stored_episode_number = episode_number_pair(item.season, item.episode);
+    let current_episode_number = match stored_episode_number {
+        EpisodeNumberPair::Numbered(season, episode) => {
+            format!("S{season:02}E{episode:02}")
+        }
+        EpisodeNumberPair::Unnumbered | EpisodeNumberPair::Invalid => String::new(),
+    };
     let first_aired = item
         .first_aired
         .clone()
@@ -599,12 +682,14 @@ fn item_row_view(
         || (item.replacement_media_version_id.is_some() && !item.replacement_valid)
         || item.title.trim().is_empty()
         || (is_remote_stream
-            && (effective_liveness == RemoteStreamLiveness::Unknown || liveness_conflict))
-        || ((item_is_episode
-            || presentation.get_untracked() == AddonMediaListPresentationKind::TelevisionShow)
-            && (item.season.is_none() || item.episode.is_none()));
-    let season_episode_missing = item.season.is_none_or(|season| season < 0)
-        || item.episode.is_none_or(|episode| episode < 1);
+            && (effective_liveness == RemoteStreamLiveness::Unknown || liveness_conflict));
+    let is_episode_context = item_is_episode
+        || presentation.get_untracked() == AddonMediaListPresentationKind::TelevisionShow;
+    let season_episode_unnumbered =
+        is_episode_context && stored_episode_number == EpisodeNumberPair::Unnumbered;
+    let season_episode_invalid =
+        is_episode_context && stored_episode_number == EpisodeNumberPair::Invalid;
+    let season_episode_needs_attention = season_episode_unnumbered || season_episode_invalid;
     let season_episode_warning_id = format!("addon-list-item-numbering-warning-{item_id}");
     let availability_reason = item.availability_reason.unwrap_or_default();
     let has_reason = !availability_reason.is_empty();
@@ -616,18 +701,10 @@ fn item_row_view(
         item.episode
             .map_or_else(String::new, |value| value.to_string()),
     );
-    let toggle_editor = move || {
-        if open_item.get_untracked() == Some(item_id) {
-            open_item.set(None);
-            loaded_detail.set(None);
-        } else {
-            open_item.set(Some(item_id));
-            loaded_detail.set(None);
-            detail_action.dispatch(item_id);
-        }
-    };
-    let detail_region_id = format!("addon-list-item-detail-{item_id}");
+    let episode_input_pair =
+        Memo::new(move |_| parse_episode_number_pair(&season_input.get(), &episode_input.get()));
     let review_href = format!("/media/addon-lists/{list_id}/items/{item_id}");
+    let title_href = review_href.clone();
     view! {
         <li
             class=move || if episode_preview.with(|preview| preview.contains_key(&item_id)) {
@@ -647,10 +724,11 @@ fn item_row_view(
                         </span>
                     </span>
                     <div class=style::item_identity>
-                        <span
+                        <a
                             id=format!("addon-list-item-title-{item_id}")
                             class=style::row_title
-                        >{title}</span>
+                            href=title_href
+                        >{title}</a>
                         <small class=style::row_note style:display=if has_reason { "block" } else { "none" }>{availability_reason}</small>
                         <small class=style::row_note style:display=if has_metadata_summary { "block" } else { "none" }>
                             {if !people_summary.is_empty() && !tags_summary.is_empty() {
@@ -722,7 +800,7 @@ fn item_row_view(
                                             step="1"
                                             inputmode="numeric"
                                             aria-label=tr(TextKey::Season)
-                                            aria-invalid=move || if season_episode_missing { "true" } else { "false" }
+                                            aria-invalid=move || if episode_input_pair.get() == EpisodeNumberPair::Invalid { "true" } else { "false" }
                                             aria-describedby=season_episode_warning_id.clone()
                                             placeholder="S"
                                             prop:value=move || season_input.get()
@@ -734,7 +812,7 @@ fn item_row_view(
                                             step="1"
                                             inputmode="numeric"
                                             aria-label=tr(TextKey::Episode)
-                                            aria-invalid=move || if season_episode_missing { "true" } else { "false" }
+                                            aria-invalid=move || if episode_input_pair.get() == EpisodeNumberPair::Invalid { "true" } else { "false" }
                                             aria-describedby=season_episode_warning_id.clone()
                                             placeholder="E"
                                             prop:value=move || episode_input.get()
@@ -748,34 +826,48 @@ fn item_row_view(
                                             disabled=move || {
                                                 review_edit_action.pending().get()
                                                     || role_action.pending().get()
-                                                    || !matches!(season_input.get().trim().parse::<i32>(), Ok(value) if value >= 0)
-                                                    || !matches!(episode_input.get().trim().parse::<i32>(), Ok(value) if value >= 1)
+                                                    || episode_input_pair.get() == EpisodeNumberPair::Invalid
                                             }
                                             on:click=move |_| {
-                                                let season = season_input.get_untracked().trim().parse::<i32>();
-                                                let episode = episode_input.get_untracked().trim().parse::<i32>();
-                                                if let (Ok(season), Ok(episode)) = (season, episode) {
-                                                    let mut desired = review_state;
-                                                    desired.season = Some(season);
-                                                    desired.episode = Some(episode);
-                                                    dispatch_review_edit(
-                                                        review_edit_action,
-                                                        row_save_states,
-                                                        readiness_refresh_pending,
-                                                        list_id,
-                                                        review_state,
-                                                        desired,
-                                                        TextKey::SeasonEpisode,
-                                                    );
-                                                }
+                                                let pair = parse_episode_number_pair(
+                                                    &season_input.get_untracked(),
+                                                    &episode_input.get_untracked(),
+                                                );
+                                                let (season, episode) = match pair {
+                                                    EpisodeNumberPair::Unnumbered => (None, None),
+                                                    EpisodeNumberPair::Numbered(season, episode) => {
+                                                        (Some(season), Some(episode))
+                                                    }
+                                                    EpisodeNumberPair::Invalid => return,
+                                                };
+                                                let mut desired = review_state;
+                                                desired.season = season;
+                                                desired.episode = episode;
+                                                dispatch_review_edit(
+                                                    review_edit_action,
+                                                    row_save_states,
+                                                    readiness_refresh_pending,
+                                                    list_id,
+                                                    review_state,
+                                                    desired,
+                                                    TextKey::SeasonEpisode,
+                                                );
                                             }
                                         >"✓"</button>
                                     </div>
                                     <small
                                         id=season_episode_warning_id.clone()
-                                        class=style::item_field_warning
-                                        style:display=move || if season_episode_missing { "block" } else { "none" }
-                                    >{tr(TextKey::BlockerSeasonEpisodeMissing)}</small>
+                                        class=move || if episode_input_pair.get() == EpisodeNumberPair::Invalid {
+                                            style::item_field_warning
+                                        } else {
+                                            style::item_field_recommendation
+                                        }
+                                        style:display=move || if matches!(episode_input_pair.get(), EpisodeNumberPair::Numbered(_, _)) { "none" } else { "block" }
+                                    >{move || match episode_input_pair.get() {
+                                        EpisodeNumberPair::Invalid => tr(TextKey::BlockerSeasonEpisodeMissing),
+                                        EpisodeNumberPair::Unnumbered => tr(TextKey::Unnumbered),
+                                        EpisodeNumberPair::Numbered(_, _) => "",
+                                    }}</small>
                                     <small class=style::episode_preview>
                                         {move || episode_preview.with(|preview| {
                                             preview.get(&item_id).map_or_else(String::new, |(season, episode)| {
@@ -907,7 +999,7 @@ fn item_row_view(
                         <dd>
                             <span class=move || if ((item_is_episode
                                 || presentation.get() == AddonMediaListPresentationKind::TelevisionShow)
-                                && season_episode_missing)
+                                && season_episode_needs_attention)
                                 || base_needs_review
                                 || (presentation.get() == AddonMediaListPresentationKind::Movies
                                     && collection_role == AddonMediaListItemRole::Auto)
@@ -919,7 +1011,7 @@ fn item_row_view(
                                 <span style=move || icon_style(
                                     if ((item_is_episode
                                         || presentation.get() == AddonMediaListPresentationKind::TelevisionShow)
-                                        && season_episode_missing)
+                                        && season_episode_needs_attention)
                                         || base_needs_review
                                         || (presentation.get() == AddonMediaListPresentationKind::Movies
                                             && collection_role == AddonMediaListItemRole::Auto)
@@ -932,10 +1024,11 @@ fn item_row_view(
                                 ) aria-hidden="true"></span>
                                 {move || if (item_is_episode
                                     || presentation.get() == AddonMediaListPresentationKind::TelevisionShow)
-                                    && season_episode_missing
+                                    && season_episode_invalid
                                 {
                                     tr(TextKey::BlockerSeasonEpisodeMissing)
-                                } else if base_needs_review
+                                } else if season_episode_unnumbered
+                                    || base_needs_review
                                     || (presentation.get() == AddonMediaListPresentationKind::Movies
                                         && collection_role == AddonMediaListItemRole::Auto)
                                 {
@@ -1004,12 +1097,6 @@ fn item_row_view(
                         href=review_href
                         title=tr(TextKey::ReviewItem)
                         aria-label=tr(TextKey::ReviewItem)
-                        aria-expanded=move || if open_item.get() == Some(item_id) { "true" } else { "false" }
-                        aria-controls=detail_region_id.clone()
-                        on:click=move |event| {
-                            event.prevent_default();
-                            toggle_editor();
-                        }
                     >
                         <span style=icon_style(IconName::Edit, "1.2rem") aria-hidden="true"></span>
                         <span>{tr(TextKey::ReviewItem)}</span>
@@ -1027,24 +1114,6 @@ fn item_row_view(
                         <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
                     </button>
                 </footer>
-                <div
-                    id=detail_region_id
-                    class=style::metadata_accordion
-                    style:display=move || if open_item.get() == Some(item_id) { "block" } else { "none" }
-                >
-                {move || loaded_detail.get().map_or_else(
-                    || view! { <p class=style::inline_loading>{tr(TextKey::Loading)}</p> }.into_any(),
-                    |detail| view! {
-                        <InlineItemMetadataForm
-                            list_id=list_id
-                            detail=detail
-                            on_saved=Callback::new(move |saved_item_id| {
-                                detail_action.dispatch(saved_item_id);
-                            })
-                        />
-                    }.into_any(),
-                )}
-                </div>
             </article>
         </li>
     }
@@ -1101,212 +1170,6 @@ fn MetadataConflictSummary(
                     </tbody>
                 </table>
             </div>
-        </section>
-    }
-}
-
-#[component]
-fn InlineItemMetadataForm(
-    list_id: i64,
-    detail: AddonMediaListItemDetail,
-    on_saved: Callback<i64>,
-) -> impl IntoView {
-    let item_id = detail.item.id;
-    let original = detail.nfo.metadata.clone();
-    let metadata_conflicts = detail.nfo.conflicts.clone();
-    let etag = RwSignal::new(detail.nfo.etag.clone());
-    let title = RwSignal::new(original.title.clone());
-    let original_title = RwSignal::new(original.original_title.clone().unwrap_or_default());
-    let plot = RwSignal::new(original.plot.clone().unwrap_or_default());
-    let year = RwSignal::new(
-        original
-            .year
-            .map_or_else(String::new, |value| value.to_string()),
-    );
-    let release_date = RwSignal::new(original.release_date.clone().unwrap_or_default());
-    let season = RwSignal::new(
-        original
-            .season
-            .map_or_else(String::new, |value| value.to_string()),
-    );
-    let episode = RwSignal::new(
-        original
-            .episode
-            .map_or_else(String::new, |value| value.to_string()),
-    );
-    let genres = RwSignal::new(original.genres.join(", "));
-    let tags = RwSignal::new(original.tags.join("\n"));
-    let artists = RwSignal::new(original.artists.join(", "));
-    let studios = RwSignal::new(original.studios.join(", "));
-    let directors = RwSignal::new(original.directors.join(", "));
-    let writers = RwSignal::new(original.writers.join(", "));
-    let languages = RwSignal::new(original.languages.join(", "));
-    let people = RwSignal::new(people_lines(&original.people));
-    let poster_url = RwSignal::new(artwork_value(
-        &original.artwork,
-        AddonMediaListArtworkRole::Poster,
-    ));
-    let fanart_url = RwSignal::new(artwork_value(
-        &original.artwork,
-        AddonMediaListArtworkRole::Fanart,
-    ));
-    let thumbnail_url = RwSignal::new(artwork_value(
-        &original.artwork,
-        AddonMediaListArtworkRole::Thumb,
-    ));
-    let legacy_artwork = original.artwork_urls.first().cloned().unwrap_or_default();
-    let artwork_open = RwSignal::new(false);
-    let preview_artwork = Memo::new(move |_| {
-        let value = [thumbnail_url.get(), poster_url.get(), fanart_url.get()]
-            .into_iter()
-            .find(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| legacy_artwork.clone());
-        artwork_preview_url(&value)
-    });
-    let toast = use_toast();
-    let save_action = Action::new(move |metadata: &AddonMediaListNfoMetadata| {
-        let metadata = metadata.clone();
-        let expected_etag = etag.get_untracked();
-        async move { save_addon_media_list_item_nfo(list_id, item_id, metadata, expected_etag).await }
-    });
-    Effect::new(move |_| {
-        if let Some(result) = save_action.value().get() {
-            match result {
-                Ok(()) => {
-                    toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
-                    on_saved.run(item_id);
-                }
-                Err(error) => toast.push(
-                    save_failed(addon_media_list_error_message(error)),
-                    ToastSeverity::Error,
-                ),
-            }
-        }
-    });
-    let is_episode = detail.item.content_kind == AddonMediaListContentKind::TelevisionEpisode;
-    let is_music = matches!(
-        detail.item.content_kind,
-        AddonMediaListContentKind::MusicVideo | AddonMediaListContentKind::Song
-    );
-    view! {
-        <section class=style::inline_editor>
-            <MetadataConflictSummary conflicts=metadata_conflicts/>
-            <div class=style::inline_edit_grid>
-                <label class=style::metadata_field>
-                    <span>{tr(TextKey::Title)}</span>
-                    <input class=style::boxed_input prop:value=move || title.get() on:input=move |event| title.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field>
-                    <span>{tr(TextKey::OriginalTitle)}</span>
-                    <input class=style::boxed_input prop:value=move || original_title.get() on:input=move |event| original_title.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field>
-                    <span>{tr(TextKey::Year)}</span>
-                    <input class=style::boxed_input inputmode="numeric" prop:value=move || year.get() on:input=move |event| year.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field style:display=if is_episode { "grid" } else { "none" }>
-                    <span>{tr(TextKey::ReleaseDate)}</span>
-                    <input class=style::boxed_input type="date" prop:value=move || release_date.get() on:input=move |event| release_date.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field style:display=if is_episode { "grid" } else { "none" }>
-                    <span>{tr(TextKey::Season)}</span>
-                    <input class=style::boxed_input inputmode="numeric" prop:value=move || season.get() on:input=move |event| season.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field style:display=if is_episode { "grid" } else { "none" }>
-                    <span>{tr(TextKey::Episode)}</span>
-                    <input class=style::boxed_input inputmode="numeric" prop:value=move || episode.get() on:input=move |event| episode.set(event_target_value(&event))/>
-                </label>
-                <label class=format!("{} {}", style::metadata_field, style::metadata_wide)>
-                    <span>{tr(TextKey::Summary)}</span>
-                    <textarea class=style::boxed_textarea rows="3" prop:value=move || plot.get() on:input=move |event| plot.set(event_target_value(&event))/>
-                </label>
-                <label class=format!("{} {}", style::metadata_field, style::tag_field)>
-                    <span>{tr(TextKey::Tags)}</span>
-                    <textarea class=style::tag_input rows="4" spellcheck="false" prop:value=move || tags.get() on:input=move |event| tags.set(event_target_value(&event))/>
-                    <small>{move || format!("{} · {}", line_values(&tags.get()).len(), tr(TextKey::OneTagPerLine))}</small>
-                </label>
-                <label class=style::metadata_field style:display=if is_episode { "none" } else { "grid" }>
-                    <span>{tr(TextKey::ReleaseDate)}</span>
-                    <input class=style::boxed_input type="date" prop:value=move || release_date.get() on:input=move |event| release_date.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field>
-                    <span>{tr(TextKey::Genres)}</span>
-                    <input class=style::boxed_input prop:value=move || genres.get() on:input=move |event| genres.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field style:display=if is_music { "grid" } else { "none" }>
-                    <span>{tr(TextKey::Artist)}</span>
-                    <input class=style::boxed_input prop:value=move || artists.get() on:input=move |event| artists.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field>
-                    <span>{tr(TextKey::Studios)}</span>
-                    <input class=style::boxed_input prop:value=move || studios.get() on:input=move |event| studios.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field>
-                    <span>{tr(TextKey::Directors)}</span>
-                    <input class=style::boxed_input prop:value=move || directors.get() on:input=move |event| directors.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field>
-                    <span>{tr(TextKey::Writers)}</span>
-                    <input class=style::boxed_input prop:value=move || writers.get() on:input=move |event| writers.set(event_target_value(&event))/>
-                </label>
-                <label class=style::metadata_field>
-                    <span>{tr(TextKey::Languages)}</span>
-                    <input class=style::boxed_input prop:value=move || languages.get() on:input=move |event| languages.set(event_target_value(&event))/>
-                </label>
-                <label class=format!("{} {}", style::metadata_field, style::metadata_wide)>
-                    <span>{tr(TextKey::CastAndCredits)}</span>
-                    <textarea class=style::boxed_textarea rows="2" spellcheck="false" prop:value=move || people.get() on:input=move |event| people.set(event_target_value(&event))/>
-                    <small>{tr(TextKey::OneCreditPerLine)}</small>
-                </label>
-            </div>
-            <aside class=style::inline_artwork>
-                <div class=style::artwork_preview>
-                    <img src=move || preview_artwork.get() alt="" style:display=move || if preview_artwork.with(String::is_empty) { "none" } else { "block" }/>
-                    <span style:display=move || if preview_artwork.with(String::is_empty) { "inline-flex" } else { "none" }>
-                        <span style=icon_style(IconName::Image, "1.75rem") aria-hidden="true"></span>
-                    </span>
-                    <button type="button" class=style::artwork_edit title=tr(TextKey::EditMetadata) aria-label=tr(TextKey::EditMetadata) on:click=move |_| artwork_open.update(|open| *open = !*open)>
-                        <span style=icon_style(IconName::Edit, "1rem") aria-hidden="true"></span>
-                    </button>
-                </div>
-                <div class=style::artwork_fields style:display=move || if artwork_open.get() { "grid" } else { "none" }>
-                    <ArtworkRoleInput list_id item_id=Some(item_id) role=AddonMediaListArtworkRole::Poster label=TextKey::Poster url=poster_url etag candidates=artwork_candidates(&original.artwork, AddonMediaListArtworkRole::Poster)/>
-                    <ArtworkRoleInput list_id item_id=Some(item_id) role=AddonMediaListArtworkRole::Fanart label=TextKey::FanArt url=fanart_url etag candidates=artwork_candidates(&original.artwork, AddonMediaListArtworkRole::Fanart)/>
-                    <ArtworkRoleInput list_id item_id=Some(item_id) role=AddonMediaListArtworkRole::Thumb label=TextKey::Thumbnail url=thumbnail_url etag candidates=artwork_candidates(&original.artwork, AddonMediaListArtworkRole::Thumb)/>
-                </div>
-            </aside>
-            <footer class=style::inline_actions>
-                <button type="button" class=style::btn_add disabled=move || save_action.pending().get() on:click=move |_| {
-                    let mut metadata = original.clone();
-                    metadata.title = title.get_untracked();
-                    metadata.original_title = non_empty_value(&original_title.get_untracked());
-                    metadata.plot = non_empty_value(&plot.get_untracked());
-                    metadata.year = year.get_untracked().trim().parse().ok();
-                    metadata.release_date = non_empty_value(&release_date.get_untracked());
-                    metadata.season = season.get_untracked().trim().parse().ok();
-                    metadata.episode = episode.get_untracked().trim().parse().ok();
-                    metadata.genres = comma_values(&genres.get_untracked());
-                    metadata.tags = line_values(&tags.get_untracked());
-                    metadata.artists = comma_values(&artists.get_untracked());
-                    metadata.studios = comma_values(&studios.get_untracked());
-                    metadata.directors = comma_values(&directors.get_untracked());
-                    metadata.writers = comma_values(&writers.get_untracked());
-                    metadata.languages = comma_values(&languages.get_untracked());
-                    metadata.people = people_values(&people.get_untracked());
-                    metadata.artwork = artwork_values(
-                        &original.artwork,
-                        [
-                            (&poster_url.get_untracked(), AddonMediaListArtworkRole::Poster),
-                            (&fanart_url.get_untracked(), AddonMediaListArtworkRole::Fanart),
-                            (&thumbnail_url.get_untracked(), AddonMediaListArtworkRole::Thumb),
-                        ],
-                    );
-                    save_action.dispatch(metadata);
-                }>
-                    <span style=icon_style(IconName::Save, "1rem") aria-hidden="true"></span>
-                    <span>{tr(TextKey::Save)}</span>
-                </button>
-            </footer>
         </section>
     }
 }
@@ -1521,8 +1384,8 @@ fn AddonMediaListsIsland(
                                         </colgroup>
                                         <thead>
                                             <tr>
-                                                <th>{tr(TextKey::Id)}</th>
                                                 <th>{tr(TextKey::Name)}</th>
+                                                <th>{tr(TextKey::Id)}</th>
                                                 <th>{tr(TextKey::MatchStatus)}</th>
                                                 <th/>
                                             </tr>
@@ -1558,11 +1421,14 @@ fn AddonMediaListsIsland(
                                                     let row_for_delete = row.clone();
                                                     view! {
                                                         <tr>
-                                                            <td>{format!("{addon_id} / {provider_id}")}</td>
                                                             <td>
-                                                                <span>{name}</span>
+                                                                <a
+                                                                    class=style::row_title
+                                                                    href=format!("/media/addon-lists/{id}")
+                                                                >{name}</a>
                                                                 <small class=style::row_note style:display=if has_import_summary { "block" } else { "none" }>{import_summary}</small>
                                                             </td>
+                                                            <td>{format!("{addon_id} / {provider_id}")}</td>
                                                             <td>{match_status}</td>
                                                             <td>
                                                                 <div class=style::row_actions>
@@ -2363,9 +2229,18 @@ fn AddonMediaListItemIsland(
 ) -> impl IntoView {
     let item_id = detail.item.id;
     let original = detail.nfo.metadata.clone();
-    let etag = detail.nfo.etag.clone();
+    let metadata_conflicts = detail.nfo.conflicts.clone();
+    let saved_metadata = RwSignal::new(original.clone());
+    let etag = RwSignal::new(detail.nfo.etag.clone());
     let title = RwSignal::new(original.title.clone());
+    let original_title = RwSignal::new(original.original_title.clone().unwrap_or_default());
     let plot = RwSignal::new(original.plot.clone().unwrap_or_default());
+    let year = RwSignal::new(
+        original
+            .year
+            .map_or_else(String::new, |value| value.to_string()),
+    );
+    let release_date = RwSignal::new(original.release_date.clone().unwrap_or_default());
     let season = RwSignal::new(
         original
             .season
@@ -2378,7 +2253,32 @@ fn AddonMediaListItemIsland(
     );
     let genres = RwSignal::new(original.genres.join(", "));
     let tags = RwSignal::new(original.tags.join("\n"));
+    let artists = RwSignal::new(original.artists.join(", "));
+    let studios = RwSignal::new(original.studios.join(", "));
+    let directors = RwSignal::new(original.directors.join(", "));
+    let writers = RwSignal::new(original.writers.join(", "));
+    let languages = RwSignal::new(original.languages.join(", "));
+    let people = RwSignal::new(people_lines(&original.people));
+    let poster_url = RwSignal::new(artwork_value(
+        &original.artwork,
+        AddonMediaListArtworkRole::Poster,
+    ));
+    let fanart_url = RwSignal::new(artwork_value(
+        &original.artwork,
+        AddonMediaListArtworkRole::Fanart,
+    ));
+    let thumbnail_url = RwSignal::new(artwork_value(
+        &original.artwork,
+        AddonMediaListArtworkRole::Thumb,
+    ));
+    let poster_candidates =
+        artwork_candidates(&original.artwork, AddonMediaListArtworkRole::Poster);
+    let fanart_candidates =
+        artwork_candidates(&original.artwork, AddonMediaListArtworkRole::Fanart);
+    let thumbnail_candidates =
+        artwork_candidates(&original.artwork, AddonMediaListArtworkRole::Thumb);
     let provider_chapters = detail.item.provider_chapter_input.clone();
+    let chapters_editable = detail.item.parent_provider_id.is_none();
     let saved_operator_chapters = RwSignal::new(detail.item.chapter_input.clone());
     let chapters_dirty = RwSignal::new(false);
     let submitted_chapters = RwSignal::new(detail.item.chapter_input.clone());
@@ -2388,21 +2288,69 @@ fn AddonMediaListItemIsland(
         detail.item.chapter_input.clone()
     });
     let toast = use_toast();
-    let save_action = Action::new(move |value: &(AddonMediaListNfoMetadata, String, String)| {
-        let (metadata, etag, chapters) = value.clone();
-        async move {
-            save_addon_media_list_item_nfo(list_id, item_id, metadata, etag).await?;
-            update_addon_media_list_item_chapters(item_id, chapters).await
-        }
-    });
+    let save_action = Action::new(
+        move |value: &(AddonMediaListNfoMetadata, String, Option<String>)| {
+            let (metadata, etag, chapters) = value.clone();
+            async move {
+                let save_result = async {
+                    if let Some(chapters) = chapters.as_deref() {
+                        ersatzrs_core::media_chapters::parse_chapter_input(chapters, None)
+                            .map_err(|error| ServerFnError::new(error.to_string()))?;
+                    }
+                    save_addon_media_list_item_nfo(list_id, item_id, metadata, etag).await?;
+                    if let Some(chapters) = chapters {
+                        update_addon_media_list_item_chapters(item_id, chapters).await?;
+                    }
+                    Ok::<(), ServerFnError>(())
+                }
+                .await;
+                let refreshed = get_addon_media_list_item(list_id, item_id).await;
+                (save_result, refreshed)
+            }
+        },
+    );
     let restore_action = Action::new(move |(): &()| async move {
         update_addon_media_list_item_chapters(item_id, String::new()).await
     });
     Effect::new(move |_| {
-        if let Some(result) = save_action.value().get() {
+        if let Some((save_result, refreshed)) = save_action.value().get() {
+            match (save_result, refreshed) {
+                (Ok(()), Ok(Some(refreshed))) => {
+                    saved_metadata.set(refreshed.nfo.metadata);
+                    etag.set(refreshed.nfo.etag);
+                    saved_operator_chapters.set(refreshed.item.chapter_input);
+                    if chapters.get_untracked() == submitted_chapters.get_untracked() {
+                        chapters_dirty.set(false);
+                    }
+                    toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
+                }
+                (Err(error), Ok(Some(refreshed))) => {
+                    saved_metadata.set(refreshed.nfo.metadata);
+                    etag.set(refreshed.nfo.etag);
+                    saved_operator_chapters.set(refreshed.item.chapter_input);
+                    toast.push(
+                        save_failed(addon_media_list_error_message(error)),
+                        ToastSeverity::Error,
+                    );
+                }
+                (_, Ok(None)) => toast.push(
+                    tr(TextKey::AddonMediaListNotFound).to_string(),
+                    ToastSeverity::Error,
+                ),
+                (save_result, Err(refresh_error)) => toast.push(
+                    save_failed(addon_media_list_error_message(
+                        save_result.err().unwrap_or(refresh_error),
+                    )),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = restore_action.value().get() {
             match result {
                 Ok(()) => {
-                    saved_operator_chapters.set(submitted_chapters.get_untracked());
+                    saved_operator_chapters.set(String::new());
                     chapters_dirty.set(false);
                     toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success);
                 }
@@ -2413,42 +2361,54 @@ fn AddonMediaListItemIsland(
             }
         }
     });
-    Effect::new(move |_| {
-        if let Some(result) = restore_action.value().get() {
-            match result {
-                Ok(()) => toast.push(tr(TextKey::Saved).to_string(), ToastSeverity::Success),
-                Err(error) => toast.push(
-                    save_failed(addon_media_list_error_message(error)),
-                    ToastSeverity::Error,
-                ),
-            }
-        }
-    });
     let build_metadata = move || {
-        let mut metadata = original.clone();
+        let mut metadata = saved_metadata.get_untracked();
         metadata.title = title.get_untracked();
+        metadata.original_title = non_empty_value(&original_title.get_untracked());
         metadata.plot = non_empty_value(&plot.get_untracked());
+        metadata.year = year.get_untracked().trim().parse().ok();
+        metadata.release_date = non_empty_value(&release_date.get_untracked());
         metadata.season = season.get_untracked().trim().parse().ok();
         metadata.episode = episode.get_untracked().trim().parse().ok();
         metadata.genres = comma_values(&genres.get_untracked());
         metadata.tags = line_values(&tags.get_untracked());
+        metadata.artists = comma_values(&artists.get_untracked());
+        metadata.studios = comma_values(&studios.get_untracked());
+        metadata.directors = comma_values(&directors.get_untracked());
+        metadata.writers = comma_values(&writers.get_untracked());
+        metadata.languages = comma_values(&languages.get_untracked());
+        metadata.people = people_values(&people.get_untracked());
+        metadata.artwork = artwork_values(
+            &metadata.artwork,
+            [
+                (
+                    &poster_url.get_untracked(),
+                    AddonMediaListArtworkRole::Poster,
+                ),
+                (
+                    &fanart_url.get_untracked(),
+                    AddonMediaListArtworkRole::Fanart,
+                ),
+                (
+                    &thumbnail_url.get_untracked(),
+                    AddonMediaListArtworkRole::Thumb,
+                ),
+            ],
+        );
         metadata
     };
-    let native_etag = etag.clone();
+    let native_etag = etag.get_untracked();
     view! {
         <div class=style::page>
             <div class=style::action_bar>
                 <a class=style::icon_button href=format!("/media/addon-lists/{list_id}")>{tr(TextKey::Back)}</a>
-                <button form="addon-list-item-review-form" type="submit" class=style::btn_add on:click=move |event| {
+                <button form="addon-list-item-review-form" type="submit" class=style::btn_add disabled=move || save_action.pending().get() on:click=move |event| {
                     event.prevent_default();
-                    let chapter_input = if chapters_dirty.get_untracked() {
-                        chapters.get_untracked()
-                    } else {
-                        saved_operator_chapters.get_untracked()
-                    };
-                    submitted_chapters.set(chapter_input.clone());
-                    save_action.dispatch((build_metadata(), etag.clone(), chapter_input));
-                }>{tr(TextKey::Save)}</button>
+                    let chapter_update = (chapters_editable && chapters_dirty.get_untracked())
+                        .then(|| chapters.get_untracked());
+                    submitted_chapters.set(chapter_update.clone().unwrap_or_else(|| saved_operator_chapters.get_untracked()));
+                    save_action.dispatch((build_metadata(), etag.get_untracked(), chapter_update));
+                }>{tr(TextKey::SaveChanges)}</button>
             </div>
             <form
                 id="addon-list-item-review-form"
@@ -2461,25 +2421,38 @@ fn AddonMediaListItemIsland(
                 <p class=style::review_error role="alert" style:display=if initial_error.is_empty() { "none" } else { "flex" }>{tr(TextKey::AddonMediaListSaveFailed)}</p>
                 <input type="hidden" name="list_id" value=list_id.to_string()/>
                 <input type="hidden" name="item_id" value=item_id.to_string()/>
-                <input type="hidden" name="etag" value=native_etag/>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Title)}</span><input class=style::text_input name="title" value=title.get_untracked() prop:value=move || title.get() on:input=move |event| title.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Summary)}</span><textarea class=style::text_input name="plot" rows="8" prop:value=move || plot.get() on:input=move |event| plot.set(event_target_value(&event))>{plot.get_untracked()}</textarea></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Season)}</span><input class=style::text_input name="season" inputmode="numeric" value=season.get_untracked() prop:value=move || season.get() on:input=move |event| season.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Episode)}</span><input class=style::text_input name="episode" inputmode="numeric" value=episode.get_untracked() prop:value=move || episode.get() on:input=move |event| episode.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Genres)}</span><input class=style::text_input name="genres" value=genres.get_untracked() prop:value=move || genres.get() on:input=move |event| genres.set(event_target_value(&event))/></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::Tags)}</span><textarea class=style::tag_input name="tags" rows="4" spellcheck="false" prop:value=move || tags.get() on:input=move |event| tags.set(event_target_value(&event))>{tags.get_untracked()}</textarea></label>
-                <label class=style::field_row><span class=style::field_label>{tr(TextKey::ChapterInput)}</span><textarea class=style::text_input name="chapter_input" rows="8" prop:value=move || chapters.get() on:input=move |event| {
-                    chapters.set(event_target_value(&event));
-                    chapters_dirty.set(true);
-                }>{chapters.get_untracked()}</textarea></label>
-                {(!provider_chapters.is_empty()).then(|| view! {
-                    <button type="button" class=style::btn_cancel on:click=move |_| {
+                <input type="hidden" name="etag" value=native_etag prop:value=move || etag.get()/>
+                <MetadataConflictSummary conflicts=metadata_conflicts/>
+                <section class=style::general_metadata_panel data-testid="addon-item-metadata">
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Title)}</span><input class=style::text_input name="title" value=title.get_untracked() prop:value=move || title.get() on:input=move |event| title.set(event_target_value(&event))/></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::OriginalTitle)}</span><input class=style::text_input name="original_title" value=original_title.get_untracked() prop:value=move || original_title.get() on:input=move |event| original_title.set(event_target_value(&event))/></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Year)}</span><input class=style::text_input name="year" inputmode="numeric" value=year.get_untracked() prop:value=move || year.get() on:input=move |event| year.set(event_target_value(&event))/></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::ReleaseDate)}</span><input class=style::text_input name="release_date" type="date" value=release_date.get_untracked() prop:value=move || release_date.get() on:input=move |event| release_date.set(event_target_value(&event))/></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Season)}</span><input class=style::text_input name="season" inputmode="numeric" value=season.get_untracked() prop:value=move || season.get() on:input=move |event| season.set(event_target_value(&event))/></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Episode)}</span><input class=style::text_input name="episode" inputmode="numeric" value=episode.get_untracked() prop:value=move || episode.get() on:input=move |event| episode.set(event_target_value(&event))/></label>
+                    <label class=format!("{} {}", style::field_row, style::metadata_wide_row)><span class=style::field_label>{tr(TextKey::Summary)}</span><textarea class=style::text_input name="plot" rows="8" prop:value=move || plot.get() on:input=move |event| plot.set(event_target_value(&event))>{plot.get_untracked()}</textarea></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Genres)}</span><input class=style::text_input name="genres" value=genres.get_untracked() prop:value=move || genres.get() on:input=move |event| genres.set(event_target_value(&event))/></label>
+                    <label class=format!("{} {}", style::field_row, style::general_tag_row)><span class=style::field_label>{tr(TextKey::Tags)}</span><textarea class=style::tag_input name="tags" rows="4" spellcheck="false" prop:value=move || tags.get() on:input=move |event| tags.set(event_target_value(&event))>{tags.get_untracked()}</textarea></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Artists)}</span><input class=style::text_input name="artists" value=artists.get_untracked() prop:value=move || artists.get() on:input=move |event| artists.set(event_target_value(&event))/></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Studios)}</span><input class=style::text_input name="studios" value=studios.get_untracked() prop:value=move || studios.get() on:input=move |event| studios.set(event_target_value(&event))/></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Directors)}</span><input class=style::text_input name="directors" value=directors.get_untracked() prop:value=move || directors.get() on:input=move |event| directors.set(event_target_value(&event))/></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Writers)}</span><input class=style::text_input name="writers" value=writers.get_untracked() prop:value=move || writers.get() on:input=move |event| writers.set(event_target_value(&event))/></label>
+                    <label class=style::field_row><span class=style::field_label>{tr(TextKey::Languages)}</span><input class=style::text_input name="languages" value=languages.get_untracked() prop:value=move || languages.get() on:input=move |event| languages.set(event_target_value(&event))/></label>
+                    <label class=format!("{} {}", style::field_row, style::metadata_wide_row)><span class=style::field_label>{tr(TextKey::CastAndCredits)}</span><span><textarea class=style::text_input name="people" rows="3" spellcheck="false" prop:value=move || people.get() on:input=move |event| people.set(event_target_value(&event))>{people.get_untracked()}</textarea><small class=style::field_hint>{tr(TextKey::OneCreditPerLine)}</small></span></label>
+                    <div class=format!("{} {}", style::field_row, style::general_artwork_row)><div class=style::field_label>{tr(TextKey::Artwork)}</div><div class=style::general_artwork_fields>
+                        <ArtworkRoleInput list_id=list_id item_id=Some(item_id) role=AddonMediaListArtworkRole::Poster label=TextKey::Poster url=poster_url etag=etag candidates=poster_candidates/>
+                        <ArtworkRoleInput list_id=list_id item_id=Some(item_id) role=AddonMediaListArtworkRole::Fanart label=TextKey::FanArt url=fanart_url etag=etag candidates=fanart_candidates/>
+                        <ArtworkRoleInput list_id=list_id item_id=Some(item_id) role=AddonMediaListArtworkRole::Thumb label=TextKey::Thumbnail url=thumbnail_url etag=etag candidates=thumbnail_candidates/>
+                    </div></div>
+                    <label class=format!("{} {}", style::field_row, style::metadata_wide_row)><span class=style::field_label>{tr(TextKey::ChapterInput)}</span><textarea class=style::text_input name="chapter_input" rows="8" disabled=!chapters_editable prop:value=move || chapters.get() on:input=move |event| {
+                        chapters.set(event_target_value(&event));
+                        chapters_dirty.set(true);
+                    }>{chapters.get_untracked()}</textarea></label>
+                    <button type="button" class=style::btn_cancel style:display=if provider_chapters.is_empty() || !chapters_editable { "none" } else { "inline-flex" } on:click=move |_| {
                         chapters.set(provider_chapters.clone());
-                        saved_operator_chapters.set(String::new());
-                        chapters_dirty.set(false);
                         restore_action.dispatch(());
                     }>{tr(TextKey::RestoreProviderChapters)}</button>
-                })}
+                </section>
             </form>
         </div>
     }
@@ -2545,13 +2518,6 @@ fn artwork_candidates(
         .collect()
 }
 
-fn artwork_preview_url(value: &str) -> String {
-    value.strip_prefix("ersatzrs-upload://").map_or_else(
-        || value.to_owned(),
-        |id| format!("/api/addon-media-lists/artwork/{id}"),
-    )
-}
-
 fn artwork_values(
     original: &[AddonMediaListArtwork],
     values: [(&str, AddonMediaListArtworkRole); 3],
@@ -2589,7 +2555,10 @@ fn item_needs_review(
             && (item.effective_liveness == RemoteStreamLiveness::Unknown || item.liveness_conflict))
         || ((item.content_kind == AddonMediaListContentKind::TelevisionEpisode
             || presentation == AddonMediaListPresentationKind::TelevisionShow)
-            && (item.season.is_none() || item.episode.is_none()))
+            && !matches!(
+                episode_number_pair(item.season, item.episode),
+                EpisodeNumberPair::Numbered(_, _)
+            ))
         || (presentation == AddonMediaListPresentationKind::Movies
             && item.collection_role == AddonMediaListItemRole::Auto)
 }
@@ -2950,7 +2919,7 @@ const fn publication_error_category_text_key(
     }
 }
 
-#[allow(unused_variables)]
+#[allow(clippy::unused_async, unused_variables)] // Clipboard I/O awaits only in the WASM build.
 async fn copy_redacted_publication_diagnostics(
     history: AddonMediaListPublicationHistoryRow,
 ) -> Result<(), String> {
@@ -3350,14 +3319,6 @@ const fn publication_blocker_href(kind: AddonMediaListPublicationBlockerKind) ->
     }
 }
 
-const fn publication_blocker_targets_metadata(kind: AddonMediaListPublicationBlockerKind) -> bool {
-    matches!(
-        kind,
-        AddonMediaListPublicationBlockerKind::CollectionTitleMissing
-            | AddonMediaListPublicationBlockerKind::InvalidArtwork
-    )
-}
-
 #[island]
 fn AddonMediaListEditorIsland(
     id: i64,
@@ -3374,6 +3335,7 @@ fn AddonMediaListEditorIsland(
         "unsaved" => Some(TextKey::PublishUnsavedChanges),
         "blocked" => Some(TextKey::PublicationBlocked),
         "recovery" => Some(TextKey::RecoveryFailed),
+        "reset" => Some(TextKey::ResetAddonMediaListFailed),
         "" => None,
         _ => Some(TextKey::AddonMediaListSaveFailed),
     };
@@ -3383,13 +3345,18 @@ fn AddonMediaListEditorIsland(
         "publishing" => Some(TextKey::Publishing),
         "preparing" => Some(TextKey::PreparingPublication),
         "recovery-queued" => Some(TextKey::RecoveryQueued),
+        "reset-queued" => Some(TextKey::ResetQueued),
         _ => None,
     };
     let form = initial_form.unwrap_or_default();
     let form_found = form.id != 0 || id == 0;
     let form_id = RwSignal::new(form.id);
+    let list_name = StoredValue::new(form.name.clone());
     let addon_id = form.addon_id.clone();
     let source_url = form.source_url.clone();
+    let source_host = StoredValue::new(
+        redacted_source_host(&source_url).unwrap_or_else(|| tr(TextKey::Unavailable).to_owned()),
+    );
     let submit_addon_id = addon_id.clone();
     let submit_source_url = source_url.clone();
     let auto_refresh = RwSignal::new(form.auto_refresh);
@@ -3423,8 +3390,6 @@ fn AddonMediaListEditorIsland(
     let presentation_kind = RwSignal::new(form.requested_presentation_kind);
     let published_presentation_kind = form.presentation_kind;
     let has_published_projection = form.published_revision > 0;
-    let general_metadata_open = RwSignal::new(false);
-    let general_metadata_panel_ref = NodeRef::<html::Div>::new();
     let description_expanded = RwSignal::new(false);
     let is_draft = form.review_state != AddonMediaListReviewState::Published;
     let show_metadata = initial_show_nfo.metadata.clone();
@@ -3488,6 +3453,12 @@ fn AddonMediaListEditorIsland(
     let selected_addon_id = RwSignal::new(form.addon_id.clone());
     let change_addon_open = RwSignal::new(false);
     let apply_content_kind_open = RwSignal::new(false);
+    let reset_open = RwSignal::new(false);
+    let reset_confirmed_name = RwSignal::new(String::new());
+    let reset_confirmation_valid = Memo::new(move |_| {
+        reset_confirmed_name
+            .with(|confirmed| reset_confirmation_matches(confirmed, &list_name.get_value()))
+    });
     let change_addon_action =
         Action::new(move |addon_id: &String| change_addon_media_list_addon(id, addon_id.clone()));
     // The list value is a bulk default rather than the per-item truth, so it is
@@ -3495,6 +3466,10 @@ fn AddonMediaListEditorIsland(
     let apply_content_kind_action = Action::new(|value: &(i64, AddonMediaListContentKind)| {
         let (id, content_kind) = *value;
         async move { apply_addon_media_list_content_kind(id, content_kind).await }
+    });
+    let reset_action = Action::new(|value: &(i64, String)| {
+        let (id, confirmed_name) = value.clone();
+        async move { reset_addon_media_list(id, confirmed_name).await }
     });
     let episode_numbering_open = RwSignal::new(false);
     let episode_numbering_season = RwSignal::new("1".to_owned());
@@ -3567,17 +3542,6 @@ fn AddonMediaListEditorIsland(
     let published_step_complete = Memo::new(move |_| {
         publication_readiness
             .with(|readiness| readiness.review_state == AddonMediaListReviewState::Published)
-    });
-
-    #[cfg(target_arch = "wasm32")]
-    Effect::new(move |_| {
-        if general_metadata_open.get() {
-            if let Some(panel) = general_metadata_panel_ref.get() {
-                leptos::leptos_dom::helpers::request_animation_frame(move || {
-                    let _ = panel.focus();
-                });
-            }
-        }
     });
 
     let save_action = Action::new(
@@ -3843,12 +3807,6 @@ fn AddonMediaListEditorIsland(
         let (list_id, item_id, role) = *value;
         async move { set_addon_media_list_item_role(list_id, item_id, role).await }
     });
-    let open_item = RwSignal::new(None::<i64>);
-    let loaded_detail = RwSignal::new(None::<AddonMediaListItemDetail>);
-    let item_detail_action = Action::new(move |item_id: &i64| {
-        let item_id = *item_id;
-        async move { get_addon_media_list_item(id, item_id).await }
-    });
     let request_detail_action = Action::new(|value: &(i64, i64)| {
         let (list_id, item_id) = *value;
         async move { request_addon_media_list_item_details(list_id, item_id).await }
@@ -3961,26 +3919,6 @@ fn AddonMediaListEditorIsland(
                 Ok(_) => {
                     // Preserve in-progress operator edits when a background
                     // refresh returns newer server metadata.
-                }
-                Err(error) => {
-                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
-                }
-            }
-        }
-    });
-    Effect::new(move |_| {
-        if let Some(result) = item_detail_action.value().get() {
-            match result {
-                Ok(detail) => {
-                    if let Some(detail) = &detail {
-                        items.update(|items| {
-                            if let Some(row) = items.iter_mut().find(|row| row.id == detail.item.id)
-                            {
-                                *row = detail.item.clone();
-                            }
-                        });
-                    }
-                    loaded_detail.set(detail);
                 }
                 Err(error) => {
                     toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
@@ -4341,6 +4279,20 @@ fn AddonMediaListEditorIsland(
         }
     });
     Effect::new(move |_| {
+        if let Some(result) = reset_action.value().get() {
+            match result {
+                Ok(AddonMediaListResetResult::Queued { .. }) => {
+                    toast.push(tr(TextKey::ResetQueued).to_owned(), ToastSeverity::Info);
+                    set_browser_location(&format!("/media/addon-lists/{id}?status=reset-queued"));
+                }
+                Err(_) => toast.push(
+                    tr(TextKey::ResetAddonMediaListFailed).to_owned(),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
         if let Some(result) = search_action.value().get() {
             match result {
                 Ok(rows) => replacement_results.set(rows),
@@ -4373,7 +4325,21 @@ fn AddonMediaListEditorIsland(
             >
                 <span class=style::metadata_hero_icon style=move || icon_style(presentation_icon(presentation_kind.get()), "1.6rem") aria-hidden="true"></span>
                 <div>
-                    <h1>{move || show_title.get()}</h1>
+                    <h1 class=style::metadata_title_heading>
+                        <label class=style::metadata_title_editor for="addon-list-title">
+                            <span>{tr(TextKey::Title)}</span>
+                            <input
+                                id="addon-list-title"
+                                class=style::metadata_title_input
+                                form="addon_media_lists-list-editor-form"
+                                name="metadata_title"
+                                required
+                                value=show_title.get_untracked()
+                                prop:value=move || show_title.get()
+                                on:input=move |event| show_title.set(event_target_value(&event))
+                            />
+                        </label>
+                    </h1>
                     <p class=style::metadata_type>{move || tr(presentation_text_key(presentation_kind.get()))}</p>
                     <p
                         id="addon-list-description"
@@ -4401,28 +4367,7 @@ fn AddonMediaListEditorIsland(
                         <span style=icon_style(IconName::Warning, "1rem") aria-hidden="true"></span>
                         <span>{format!("{} {}", show_metadata_conflict_count, tr(TextKey::MetadataConflicts))}</span>
                     </p>
-                    <a
-                        class=style::metadata_review_link
-                        href="#addon-list-general-metadata"
-                        data-metadata-toggle
-                        on:click=move |_| general_metadata_open.set(true)
-                    >{tr(TextKey::EditMetadata)}</a>
                 </div>
-                <button
-                    type="button"
-                    class=style::metadata_hero_edit
-                    data-metadata-toggle
-                    title=tr(TextKey::EditMetadata)
-                    aria-label=tr(TextKey::EditMetadata)
-                    aria-expanded=move || if general_metadata_open.get() { "true" } else { "false" }
-                    aria-controls="addon-list-general-metadata"
-                    on:click=move |event| {
-                        event.stop_propagation();
-                        general_metadata_open.update(|open| *open = !*open);
-                    }
-                >
-                    <span style=icon_style(IconName::Edit, "1.2rem") aria-hidden="true"></span>
-                </button>
             </header>
             <div
                 class=style::review_workspace
@@ -4580,6 +4525,7 @@ fn AddonMediaListEditorIsland(
                         );
                         save_action.dispatch((AddonMediaListForm {
                             id: form_id.get_untracked(),
+                            name: list_name.get_value(),
                             addon_id: submit_addon_id.clone(),
                             source_url: submit_source_url.clone(),
                             folder_name: form.folder_name.clone(),
@@ -4715,8 +4661,6 @@ fn AddonMediaListEditorIsland(
                                                 episode_numbering_open.set(true);
                                                 need_review_filter.set(false);
                                                 item_page.set(0);
-                                            } else if publication_blocker_targets_metadata(kind) {
-                                                general_metadata_open.set(true);
                                             } else if publication_blocker_href(kind) == "#addon-list-items-heading" {
                                                 need_review_filter.set(true);
                                                 item_page.set(0);
@@ -4880,9 +4824,6 @@ fn AddonMediaListEditorIsland(
                 class=style::editor
                 style:display=move || if form_found { "" } else { "none" }
             >
-                            <noscript>
-                                <style>"#addon-list-general-metadata { display: grid !important; } [data-metadata-toggle] { display: none !important; }"</style>
-                            </noscript>
                             <p class=style::draft_note style:display=if is_draft { "" } else { "none" }>
                                 <span style=icon_style(IconName::Info, "1rem") aria-hidden="true"></span>
                                 <span>{tr(TextKey::MetadataDraftNotice)}</span>
@@ -5018,17 +4959,8 @@ fn AddonMediaListEditorIsland(
                                 id="addon-list-general-metadata"
                                 class=style::general_metadata_panel
                                 data-testid="addon-general-metadata"
-                                node_ref=general_metadata_panel_ref
-                                tabindex="-1"
-                                aria-labelledby="addon-list-general-metadata-heading"
-                                style:display=move || if general_metadata_open.get() { "grid" } else { "none" }
                             >
-                            <h2 id="addon-list-general-metadata-heading" class=style::metadata_panel_heading>{tr(TextKey::EditMetadata)}</h2>
                             <MetadataConflictSummary conflicts=show_metadata_conflicts.clone()/>
-                            <div class=style::field_row>
-                                <div class=style::field_label>{tr(TextKey::Title)}</div>
-                                <input class=style::text_input name="metadata_title" aria-label=tr(TextKey::Title) required value=show_title.get_untracked() prop:value=move || show_title.get() on:input=move |event| show_title.set(event_target_value(&event))/>
-                            </div>
                             <div class=style::field_row>
                                 <div class=style::field_label>{tr(TextKey::OriginalTitle)}</div>
                                 <input class=style::text_input name="metadata_original_title" aria-label=tr(TextKey::OriginalTitle) value=show_original_title.get_untracked() prop:value=move || show_original_title.get() on:input=move |event| show_original_title.set(event_target_value(&event))/>
@@ -5517,9 +5449,6 @@ fn AddonMediaListEditorIsland(
                                         episode_numbering_open,
                                         episode_numbering_start_item_id,
                                         presentation_kind,
-                                        open_item,
-                                        loaded_detail,
-                                        item_detail_action,
                                         request_detail_action,
                                         detail_request_item,
                                     )
@@ -5549,6 +5478,61 @@ fn AddonMediaListEditorIsland(
                         })
                     />
                 </section>
+                <section
+                    class=style::destructive_actions
+                    aria-labelledby="addon-list-destructive-actions-heading"
+                    data-testid="addon-list-destructive-actions"
+                >
+                    <header>
+                        <div>
+                            <h2 id="addon-list-destructive-actions-heading">
+                                {tr(TextKey::DestructiveActions)}
+                            </h2>
+                            <p>{tr(TextKey::ResetAddonMediaListHelp)}</p>
+                        </div>
+                        <div class=style::js_only>
+                            <Button
+                                variant=ButtonVariant::Danger
+                                disabled=Signal::derive(move || reset_action.pending().get())
+                                on_click=Some(Callback::new(move |()| {
+                                    reset_confirmed_name.set(String::new());
+                                    reset_open.set(true);
+                                }))
+                            >
+                                <span style=icon_style(IconName::Refresh, "1rem") aria-hidden="true"></span>
+                                <span>{tr(TextKey::ResetAndReload)}</span>
+                            </Button>
+                        </div>
+                    </header>
+                    <AddonMediaListResetConsequences
+                        list_name=list_name.get_value()
+                        source_host=source_host.get_value()
+                    />
+                    <noscript>
+                        <form
+                            class=style::reset_fallback_form
+                            method="post"
+                            action="/api/addon-lists/reset"
+                        >
+                            <input type="hidden" name="id" value=id />
+                            <label for="addon-list-reset-confirmation-nojs">
+                                <span>{tr(TextKey::TypeListNameToConfirm)}</span>
+                                <input
+                                    id="addon-list-reset-confirmation-nojs"
+                                    type="text"
+                                    name="confirmed_name"
+                                    required
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                />
+                            </label>
+                            <button type="submit" class=style::reset_button>
+                                <span style=icon_style(IconName::Refresh, "1rem") aria-hidden="true"></span>
+                                <span>{tr(TextKey::ResetAndReload)}</span>
+                            </button>
+                        </form>
+                    </noscript>
+                </section>
                 <Modal
                     open=apply_content_kind_open
                     title=tr(TextKey::ApplyToAllItems).to_owned()
@@ -5571,6 +5555,46 @@ fn AddonMediaListEditorIsland(
                     })
                 >
                     <p>{tr(TextKey::ChangeAddonPrompt)}</p>
+                </Modal>
+                <Modal
+                    open=reset_open
+                    title=tr(TextKey::ResetAndReload).to_owned()
+                    on_close=Callback::new(move |confirmed: bool| {
+                        let confirmed_name = reset_confirmed_name.get_untracked();
+                        if confirmed
+                            && reset_confirmation_matches(&confirmed_name, &list_name.get_value())
+                        {
+                            reset_action.dispatch((id, confirmed_name.trim().to_owned()));
+                        }
+                        reset_confirmed_name.set(String::new());
+                    })
+                    confirm_label=Some(tr(TextKey::ResetAndReload))
+                    confirm_disabled=Signal::derive(move || {
+                        !reset_confirmation_valid.get() || reset_action.pending().get()
+                    })
+                    destructive=true
+                    wide=true
+                >
+                    <div class=style::reset_dialog_body>
+                        <p>{tr(TextKey::ResetAddonMediaListHelp)}</p>
+                        <AddonMediaListResetConsequences
+                            list_name=list_name.get_value()
+                            source_host=source_host.get_value()
+                        />
+                        <label class=style::reset_confirmation for="addon-list-reset-confirmation">
+                            <span>{tr(TextKey::TypeListNameToConfirm)}</span>
+                            <input
+                                id="addon-list-reset-confirmation"
+                                type="text"
+                                autocomplete="off"
+                                spellcheck="false"
+                                prop:value=move || reset_confirmed_name.get()
+                                on:input=move |event| {
+                                    reset_confirmed_name.set(event_target_value(&event));
+                                }
+                            />
+                        </label>
+                    </div>
                 </Modal>
                 <div
                     class=style::backdrop
@@ -5700,6 +5724,45 @@ fn AddonMediaListEditorIsland(
 mod tests {
     use super::*;
 
+    #[test]
+    fn reset_source_context_never_includes_credentials_or_url_details() {
+        assert_eq!(
+            redacted_source_host(
+                "https://operator:secret@Media.Example:8443/private/list?token=hidden#part"
+            ),
+            Some("media.example".to_owned())
+        );
+        assert_eq!(
+            redacted_source_host("https://[2001:db8::1]:8443/private"),
+            Some("2001:db8::1".to_owned())
+        );
+        assert_eq!(
+            redacted_source_host("not a URL with /private?token=hidden"),
+            None
+        );
+        assert_eq!(
+            redacted_source_host("https://media.example\\private?token=hidden"),
+            Some("media.example".to_owned())
+        );
+    }
+
+    #[test]
+    fn reset_confirmation_is_trimmed_and_case_sensitive() {
+        assert!(reset_confirmation_matches(
+            "  Current List  ",
+            "Current List"
+        ));
+        assert!(!reset_confirmation_matches("current list", "Current List"));
+        assert!(!reset_confirmation_matches(
+            "Current List",
+            " Current List "
+        ));
+        assert!(!reset_confirmation_matches(
+            "Current List copy",
+            "Current List"
+        ));
+    }
+
     /// A value string that does not survive the round trip silently resets the
     /// operator's choice: the select renders nothing selected, and the next
     /// save stores `Auto`. Both enums grew, so every variant is checked.
@@ -5773,6 +5836,47 @@ mod tests {
             &item,
             AddonMediaListPresentationKind::Auto
         ));
+    }
+
+    #[test]
+    fn episode_numbering_accepts_blank_or_complete_pairs_only() {
+        assert_eq!(
+            episode_number_pair(None, None),
+            EpisodeNumberPair::Unnumbered
+        );
+        assert_eq!(
+            episode_number_pair(Some(0), Some(1)),
+            EpisodeNumberPair::Numbered(0, 1)
+        );
+        assert_eq!(
+            episode_number_pair(Some(0), Some(0)),
+            EpisodeNumberPair::Unnumbered
+        );
+        assert_eq!(
+            episode_number_pair(Some(1), None),
+            EpisodeNumberPair::Invalid
+        );
+        assert_eq!(
+            episode_number_pair(Some(1), Some(0)),
+            EpisodeNumberPair::Invalid
+        );
+
+        assert_eq!(
+            parse_episode_number_pair("", ""),
+            EpisodeNumberPair::Unnumbered
+        );
+        assert_eq!(
+            parse_episode_number_pair("2", "7"),
+            EpisodeNumberPair::Numbered(2, 7)
+        );
+        assert_eq!(
+            parse_episode_number_pair("0", "0"),
+            EpisodeNumberPair::Unnumbered
+        );
+        assert_eq!(
+            parse_episode_number_pair("2", ""),
+            EpisodeNumberPair::Invalid
+        );
     }
 
     #[test]

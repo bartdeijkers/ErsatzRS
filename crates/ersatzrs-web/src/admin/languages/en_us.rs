@@ -1401,6 +1401,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchSmartCollection => "Search Smart Collection",
         TextKey::Season => "Season",
         TextKey::SeasonEpisode => "Season, Episode",
+        TextKey::Unnumbered => "Unnumbered",
         TextKey::SeasonNotFound => "Season not found",
         TextKey::Select => "Select",
         TextKey::SelectCollection => "Select collection",
@@ -1563,6 +1564,20 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListUrl => "Add-on list URL",
         TextKey::AddonMediaListFolder => "Storage folder",
         TextKey::AddonMediaListFolderHelp => "Optional; derived from the list name",
+        TextKey::DestructiveActions => "Destructive actions",
+        TextKey::ResetAndReload => "Reset and reload",
+        TextKey::ResetAddonMediaListHelp => "Remove every generated result for this list, then queue a complete import.",
+        TextKey::SourceHost => "Source host",
+        TextKey::ResetRemoves => "This reset removes",
+        TextKey::ResetRemovesItems => "Imported items, provider metadata, operator overrides, episode numbering, and replacements.",
+        TextKey::ResetRemovesArtifacts => "Generated media, NFO files, artwork, subtitles, caches, and archives.",
+        TextKey::ResetRemovesRuntime => "Jobs, checkpoints, revision artifacts, generated Playlist membership, and projected media.",
+        TextKey::ResetRetains => "This reset retains",
+        TextKey::ResetRetainsSettings => "The list name, add-on/source/library binding, generated Playlist identity, refresh and publication policies, artifact quota, and other operator settings.",
+        TextKey::ResetReloadFailureWarning => "If the reload fails, channels and the generated Playlist remain empty.",
+        TextKey::TypeListNameToConfirm => "Type the current list name to confirm",
+        TextKey::ResetQueued => "Reset and reload queued.",
+        TextKey::ResetAddonMediaListFailed => "Reset and reload failed.",
         TextKey::ChapterInput => "Chapters",
         TextKey::ChapterInputHelp => "Optional, one per line: 0:00 Introduction",
         TextKey::RestoreProviderChapters => "Restore provider chapters",
@@ -2890,8 +2905,8 @@ mod tests {
             Some("Show - S2 E5")
         );
         assert_eq!(
-            episode_display_subtitle_text(UiLanguage::English, None, None, None),
-            None
+            episode_display_subtitle_text(UiLanguage::English, None, None, None).as_deref(),
+            Some("Unnumbered")
         );
     }
 

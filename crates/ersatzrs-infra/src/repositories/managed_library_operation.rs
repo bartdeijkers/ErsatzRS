@@ -1,13 +1,15 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
-    AddonMediaListPublicationEnqueue, AddonMediaListPublicationEvent,
+    AddonMediaListLifecycleJob, AddonMediaListPublicationEnqueue, AddonMediaListPublicationEvent,
     AddonMediaListPublicationFailureCause, AddonMediaListPublicationHistory,
     AddonMediaListPublicationHistoryJob, AddonMediaListPublicationJob,
-    AddonMediaListPublicationStatus, ManagedLibraryOperation, ManagedLibraryOperationClaim,
-    ManagedLibraryOperationRepository, ManagedLibraryScanSpec, RepositoryError, Result,
+    AddonMediaListPublicationStatus, AddonMediaListResetEnqueue, ManagedLibraryOperation,
+    ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
+    RepositoryError, Result,
 };
 use ersatzrs_domain::{
+    AddonMediaListLifecycleJobKind, AddonMediaListLifecyclePhase,
     AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
     AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
     AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
@@ -260,6 +262,111 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
             },
             existing: false,
         })
+    }
+
+    async fn enqueue_reset_reload(
+        &self,
+        list_id: EntityId,
+        confirmed_name: &str,
+    ) -> Result<AddonMediaListResetEnqueue> {
+        let now = encode_datetime(Utc::now());
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let list = sqlx::query(
+            r#"SELECT "list"."Name", "list"."DraftRevision", "list"."PublishedRevision",
+                      "binding"."LibraryId"
+               FROM "AddonMediaList" AS "list"
+               JOIN "AddonMediaListLibrary" AS "binding"
+                 ON "binding"."AddonMediaListId" = "list"."Id"
+               WHERE "list"."Id" = ?"#,
+        )
+        .bind(list_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .repository()?
+        .ok_or(RepositoryError::NotFound {
+            kind: "add-on media list",
+            id: list_id,
+        })?;
+        let name: String = list.try_get("Name").repository()?;
+        if name != confirmed_name {
+            return Err(RepositoryError::Conflict(
+                "the confirmation does not match the current add-on media-list name".to_owned(),
+            ));
+        }
+        let library_id: EntityId = list.try_get("LibraryId").repository()?;
+        if let Some(row) = active_reset_row(&mut tx, list_id).await? {
+            let enqueue = decode_reset_row(&row, true)?;
+            tx.commit().await.repository()?;
+            return Ok(enqueue);
+        }
+        let competing_operation: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS (
+                   SELECT 1 FROM "ManagedLibraryOperation"
+                   WHERE "LibraryId" = ? AND "ParentOperationId" IS NULL
+                     AND "State" IN (?, ?, ?)
+               )"#,
+        )
+        .bind(library_id)
+        .bind(encode_enum(ManagedLibraryOperationState::Queued))
+        .bind(encode_enum(ManagedLibraryOperationState::Running))
+        .bind(encode_enum(ManagedLibraryOperationState::WaitingToRetry))
+        .fetch_one(&mut *tx)
+        .await
+        .repository()?;
+        if competing_operation {
+            return Err(RepositoryError::Conflict(
+                "the managed add-on media-list already has an active operation".to_owned(),
+            ));
+        }
+        let generation: i32 = sqlx::query_scalar(
+            r#"SELECT COALESCE(MAX("Generation"), 0) + 1
+               FROM "AddonMediaListLifecycleJob" WHERE "AddonMediaListId" = ?"#,
+        )
+        .bind(list_id)
+        .fetch_one(&mut *tx)
+        .await
+        .repository()?;
+        let owner_token = Uuid::new_v4().to_string();
+        let operation_result = sqlx::query(
+            r#"INSERT INTO "ManagedLibraryOperation" (
+                   "LibraryId", "OwnerToken", "Kind", "State", "CreatedAt", "UpdatedAt"
+               ) VALUES (?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(library_id)
+        .bind(&owner_token)
+        .bind(encode_enum(ManagedLibraryOperationKind::Reset))
+        .bind(encode_enum(ManagedLibraryOperationState::Queued))
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        let operation_id = inserted_id(&mut tx, operation_result).await.repository()?;
+        let lifecycle_result = sqlx::query(
+            r#"INSERT INTO "AddonMediaListLifecycleJob" (
+                   "OperationId", "AddonMediaListId", "Generation", "Kind", "Phase",
+                   "SavedDraftRevision", "SavedPublishedRevision", "CreatedAt", "UpdatedAt"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(operation_id)
+        .bind(list_id)
+        .bind(generation)
+        .bind(encode_enum(AddonMediaListLifecycleJobKind::ResetReload))
+        .bind(encode_enum(AddonMediaListLifecyclePhase::AwaitingLease))
+        .bind(list.try_get::<i32, _>("DraftRevision").repository()?)
+        .bind(list.try_get::<i32, _>("PublishedRevision").repository()?)
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        let job_id = inserted_id(&mut tx, lifecycle_result).await.repository()?;
+        let row = reset_row_by_job_id(&mut tx, job_id).await?.ok_or_else(|| {
+            RepositoryError::Conflict("the reset admission disappeared".to_owned())
+        })?;
+        let enqueue = decode_reset_row(&row, false)?;
+        tx.commit().await.repository()?;
+        Ok(enqueue)
     }
 
     async fn operation(&self, operation_id: EntityId) -> Result<Option<ManagedLibraryOperation>> {
@@ -583,6 +690,124 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
             .repository()?;
         row.map(|row| decode_publication_row(&row).map(|(job, _)| job))
             .transpose()
+    }
+
+    async fn reset_reload_job(
+        &self,
+        operation_id: EntityId,
+    ) -> Result<Option<AddonMediaListLifecycleJob>> {
+        let row =
+            sqlx::query(r#"SELECT * FROM "AddonMediaListLifecycleJob" WHERE "OperationId" = ?"#)
+                .bind(operation_id)
+                .fetch_optional(&self.0)
+                .await
+                .repository()?;
+        row.as_ref().map(decode_reset_job_row).transpose()
+    }
+
+    async fn transition_reset_reload(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        expected: AddonMediaListLifecyclePhase,
+        next: AddonMediaListLifecyclePhase,
+    ) -> Result<bool> {
+        let now = encode_datetime(Utc::now());
+        let result = sqlx::query(
+            r#"UPDATE "AddonMediaListLifecycleJob" SET "Phase" = ?, "UpdatedAt" = ?
+               WHERE "OperationId" = ? AND "Kind" = ? AND "Phase" = ?
+                 AND EXISTS (
+                   SELECT 1 FROM "ManagedLibraryLease"
+                   WHERE "OperationId" = ? AND "OwnerToken" = ? AND "LeaseOwner" = ?
+                     AND "LeaseExpiresAt" > ?
+                 )"#,
+        )
+        .bind(encode_enum(next))
+        .bind(&now)
+        .bind(claim.operation.id)
+        .bind(encode_enum(AddonMediaListLifecycleJobKind::ResetReload))
+        .bind(encode_enum(expected))
+        .bind(claim.operation.id)
+        .bind(&claim.operation.owner_token)
+        .bind(&claim.lease_owner)
+        .bind(&now)
+        .execute(&self.0)
+        .await
+        .repository()?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    async fn apply_reset_reload_phase(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        job: &AddonMediaListLifecycleJob,
+        phase: AddonMediaListLifecyclePhase,
+    ) -> Result<()> {
+        crate::repositories::addon_media_list_reset::apply_phase(&self.0, claim, job, phase).await
+    }
+
+    async fn ensure_reset_reload_child_scan(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        list_id: EntityId,
+    ) -> Result<ManagedLibraryOperation> {
+        ensure_reset_child_scan(&self.0, claim, list_id).await
+    }
+
+    async fn queue_reset_reload_import(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        job: &AddonMediaListLifecycleJob,
+    ) -> Result<EntityId> {
+        crate::repositories::addon_media_list_reset::queue_initial_import(&self.0, claim, job).await
+    }
+
+    async fn complete_reset_reload(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        candidate_import_job_id: EntityId,
+    ) -> Result<bool> {
+        let now = encode_datetime(Utc::now());
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        if !claim_is_current(&mut tx, claim).await? {
+            return Ok(false);
+        }
+        let updated = sqlx::query(
+            r#"UPDATE "AddonMediaListLifecycleJob"
+               SET "CandidateImportJobId" = ?, "Phase" = ?, "UpdatedAt" = ?, "CompletedAt" = ?
+               WHERE "OperationId" = ? AND "Kind" = ? AND "Phase" = ?
+                 AND EXISTS (
+                   SELECT 1 FROM "AddonMediaListImportJob"
+                   WHERE "Id" = ? AND "AddonMediaListId" = "AddonMediaListLifecycleJob"."AddonMediaListId"
+                     AND "Generation" = 1 AND "Purpose" = ? AND "Mode" = ?
+                 )"#,
+        )
+        .bind(candidate_import_job_id)
+        .bind(encode_enum(AddonMediaListLifecyclePhase::Complete))
+        .bind(&now)
+        .bind(&now)
+        .bind(claim.operation.id)
+        .bind(encode_enum(AddonMediaListLifecycleJobKind::ResetReload))
+        .bind(encode_enum(AddonMediaListLifecyclePhase::QueueingInitialImport))
+        .bind(candidate_import_job_id)
+        .bind(encode_enum(ersatzrs_domain::AddonMediaListImportPurpose::ResetReload))
+        .bind(encode_enum(ersatzrs_domain::AddonMediaListImportMode::Full))
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        if updated.rows_affected() != 1 {
+            tx.rollback().await.repository()?;
+            return Ok(false);
+        }
+        finish_operation_tx(
+            &mut tx,
+            claim,
+            ManagedLibraryOperationState::Completed,
+            None,
+            &now,
+        )
+        .await?;
+        tx.commit().await.repository()?;
+        Ok(true)
     }
 
     async fn publication_status(
@@ -2123,6 +2348,122 @@ fn redacted_diagnostic_code(value: &str) -> String {
     }
 }
 
+async fn active_reset_row(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+) -> Result<Option<crate::db::DbRow>> {
+    sqlx::query(
+        r#"SELECT "job".*, "operation".*,
+                  "job"."Id" AS "LifecycleJobId",
+                  "job"."Kind" AS "LifecycleKind", "job"."Phase" AS "LifecyclePhase",
+                  "job"."CreatedAt" AS "LifecycleCreatedAt",
+                  "job"."UpdatedAt" AS "LifecycleUpdatedAt",
+                  "job"."CompletedAt" AS "LifecycleCompletedAt",
+                  "operation"."Id" AS "ManagedOperationId"
+           FROM "AddonMediaListLifecycleJob" AS "job"
+           JOIN "ManagedLibraryOperation" AS "operation"
+             ON "operation"."Id" = "job"."OperationId"
+           WHERE "job"."AddonMediaListId" = ? AND "job"."Kind" = ?
+             AND "operation"."Kind" = ? AND "operation"."State" IN (?, ?, ?)
+           ORDER BY "job"."Generation" DESC LIMIT 1"#,
+    )
+    .bind(list_id)
+    .bind(encode_enum(AddonMediaListLifecycleJobKind::ResetReload))
+    .bind(encode_enum(ManagedLibraryOperationKind::Reset))
+    .bind(encode_enum(ManagedLibraryOperationState::Queued))
+    .bind(encode_enum(ManagedLibraryOperationState::Running))
+    .bind(encode_enum(ManagedLibraryOperationState::WaitingToRetry))
+    .fetch_optional(&mut **tx)
+    .await
+    .repository()
+}
+
+async fn reset_row_by_job_id(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    job_id: EntityId,
+) -> Result<Option<crate::db::DbRow>> {
+    sqlx::query(
+        r#"SELECT "job".*, "operation".*,
+                  "job"."Id" AS "LifecycleJobId",
+                  "job"."Kind" AS "LifecycleKind", "job"."Phase" AS "LifecyclePhase",
+                  "job"."CreatedAt" AS "LifecycleCreatedAt",
+                  "job"."UpdatedAt" AS "LifecycleUpdatedAt",
+                  "job"."CompletedAt" AS "LifecycleCompletedAt",
+                  "operation"."Id" AS "ManagedOperationId"
+           FROM "AddonMediaListLifecycleJob" AS "job"
+           JOIN "ManagedLibraryOperation" AS "operation"
+             ON "operation"."Id" = "job"."OperationId"
+           WHERE "job"."Id" = ?"#,
+    )
+    .bind(job_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .repository()
+}
+
+fn decode_reset_row(row: &crate::db::DbRow, existing: bool) -> Result<AddonMediaListResetEnqueue> {
+    Ok(AddonMediaListResetEnqueue {
+        job: decode_reset_job_row_with_id(row, "LifecycleJobId")?,
+        operation: decode_operation_row_with_id(row, "ManagedOperationId")?,
+        existing,
+    })
+}
+
+fn decode_reset_job_row(row: &crate::db::DbRow) -> Result<AddonMediaListLifecycleJob> {
+    decode_reset_job_row_with_id(row, "Id")
+}
+
+fn decode_reset_job_row_with_id(
+    row: &crate::db::DbRow,
+    id_column: &'static str,
+) -> Result<AddonMediaListLifecycleJob> {
+    let joined = id_column == "LifecycleJobId";
+    let kind_column = if joined { "LifecycleKind" } else { "Kind" };
+    let phase_column = if joined { "LifecyclePhase" } else { "Phase" };
+    let created_column = if joined {
+        "LifecycleCreatedAt"
+    } else {
+        "CreatedAt"
+    };
+    let updated_column = if joined {
+        "LifecycleUpdatedAt"
+    } else {
+        "UpdatedAt"
+    };
+    let completed_column = if joined {
+        "LifecycleCompletedAt"
+    } else {
+        "CompletedAt"
+    };
+    Ok(AddonMediaListLifecycleJob {
+        id: row.try_get(id_column).repository()?,
+        operation_id: row.try_get("OperationId").repository()?,
+        list_id: row.try_get("AddonMediaListId").repository()?,
+        generation: row.try_get("Generation").repository()?,
+        kind: decode_enum_column("AddonMediaListLifecycleJobKind", row, kind_column)?,
+        phase: decode_enum_column("AddonMediaListLifecyclePhase", row, phase_column)?,
+        saved_draft_revision: row.try_get("SavedDraftRevision").repository()?,
+        saved_published_revision: row.try_get("SavedPublishedRevision").repository()?,
+        candidate_import_job_id: row.try_get("CandidateImportJobId").repository()?,
+        created_at: decode_datetime(
+            "add-on media-list lifecycle creation",
+            row.try_get::<String, _>(created_column)
+                .repository()?
+                .as_str(),
+        )?,
+        updated_at: decode_datetime(
+            "add-on media-list lifecycle update",
+            row.try_get::<String, _>(updated_column)
+                .repository()?
+                .as_str(),
+        )?,
+        completed_at: decode_optional_datetime(
+            "add-on media-list lifecycle completion",
+            row.try_get(completed_column).repository()?,
+        )?,
+    })
+}
+
 async fn active_publication_row(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -2303,6 +2644,130 @@ async fn finish_operation(
     finish_operation_tx(&mut tx, claim, state, diagnostic, &now).await?;
     tx.commit().await.repository()?;
     Ok(true)
+}
+
+#[allow(clippy::too_many_lines)] // Admission and restart recovery share one transaction.
+async fn ensure_reset_child_scan(
+    pool: &DbPool,
+    claim: &ManagedLibraryOperationClaim,
+    list_id: EntityId,
+) -> Result<ManagedLibraryOperation> {
+    let now = encode_datetime(Utc::now());
+    let mut tx = crate::db::begin_write(pool).await.repository()?;
+    if !claim_is_current(&mut tx, claim).await? {
+        return Err(RepositoryError::Conflict(
+            "the managed-library lease changed before the reset child scan".to_owned(),
+        ));
+    }
+    let owns_job: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (
+               SELECT 1 FROM "AddonMediaListLifecycleJob"
+               WHERE "OperationId" = ? AND "AddonMediaListId" = ? AND "Kind" = ?
+                 AND "Phase" = ?
+           )"#,
+    )
+    .bind(claim.operation.id)
+    .bind(list_id)
+    .bind(encode_enum(AddonMediaListLifecycleJobKind::ResetReload))
+    .bind(encode_enum(
+        AddonMediaListLifecyclePhase::UnpublishingProjection,
+    ))
+    .fetch_one(&mut *tx)
+    .await
+    .repository()?;
+    if !owns_job {
+        return Err(RepositoryError::Conflict(
+            "the reset phase changed before its child scan".to_owned(),
+        ));
+    }
+    let existing = sqlx::query(
+        r#"SELECT * FROM "ManagedLibraryOperation"
+           WHERE "ParentOperationId" = ? AND "Kind" = ? ORDER BY "Id" LIMIT 1"#,
+    )
+    .bind(claim.operation.id)
+    .bind(encode_enum(
+        ManagedLibraryOperationKind::PublicationChildScan,
+    ))
+    .fetch_optional(&mut *tx)
+    .await
+    .repository()?;
+    if let Some(row) = existing {
+        let mut operation = decode_operation_row(&row)?;
+        if operation.state != ManagedLibraryOperationState::Completed {
+            let updated = sqlx::query(
+                r#"UPDATE "ManagedLibraryOperation"
+                   SET "State" = ?, "AttemptCount" = "AttemptCount" + 1,
+                       "LeaseOwner" = ?,
+                       "LeaseExpiresAt" = (SELECT "LeaseExpiresAt" FROM "ManagedLibraryLease"
+                                            WHERE "OperationId" = ?),
+                       "HeartbeatAt" = ?, "DiagnosticCode" = NULL, "Diagnostic" = NULL,
+                       "CompletedAt" = NULL, "UpdatedAt" = ?
+                   WHERE "Id" = ? AND "ParentOperationId" = ? AND "OwnerToken" = ?"#,
+            )
+            .bind(encode_enum(ManagedLibraryOperationState::Running))
+            .bind(&claim.lease_owner)
+            .bind(claim.operation.id)
+            .bind(&now)
+            .bind(&now)
+            .bind(operation.id)
+            .bind(claim.operation.id)
+            .bind(&claim.operation.owner_token)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(RepositoryError::Conflict(
+                    "the reset child scan changed before recovery".to_owned(),
+                ));
+            }
+            operation.state = ManagedLibraryOperationState::Running;
+            operation.attempt_count = operation.attempt_count.saturating_add(1);
+        }
+        tx.commit().await.repository()?;
+        return Ok(operation);
+    }
+    let result = sqlx::query(
+        r#"INSERT INTO "ManagedLibraryOperation" (
+               "LibraryId", "ParentOperationId", "OwnerToken", "Kind", "State",
+               "Provider", "DeepScan", "AttemptCount", "LeaseOwner", "LeaseExpiresAt",
+               "HeartbeatAt", "CreatedAt", "UpdatedAt"
+           ) VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?,
+                     (SELECT "LeaseExpiresAt" FROM "ManagedLibraryLease" WHERE "OperationId" = ?),
+                     ?, ?, ?)"#,
+    )
+    .bind(claim.operation.library_id)
+    .bind(claim.operation.id)
+    .bind(&claim.operation.owner_token)
+    .bind(encode_enum(
+        ManagedLibraryOperationKind::PublicationChildScan,
+    ))
+    .bind(encode_enum(ManagedLibraryOperationState::Running))
+    .bind(encode_enum(MediaSourceKind::Local))
+    .bind(&claim.lease_owner)
+    .bind(claim.operation.id)
+    .bind(&now)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut *tx)
+    .await
+    .repository()?;
+    let id = inserted_id(&mut tx, result).await.repository()?;
+    tx.commit().await.repository()?;
+    Ok(ManagedLibraryOperation {
+        id,
+        library_id: claim.operation.library_id,
+        parent_operation_id: Some(claim.operation.id),
+        owner_token: claim.operation.owner_token.clone(),
+        kind: ManagedLibraryOperationKind::PublicationChildScan,
+        state: ManagedLibraryOperationState::Running,
+        scan: Some(ManagedLibraryScanSpec {
+            provider: MediaSourceKind::Local,
+            show_id: None,
+            deep_scan: true,
+        }),
+        attempt_count: 1,
+        next_eligible_at: None,
+    })
 }
 
 async fn finish_operation_tx(
@@ -3347,6 +3812,100 @@ mod tests {
         .execute(pool)
         .await
         .expect("seed list");
+    }
+
+    #[tokio::test]
+    async fn reset_admission_validates_name_and_atomically_coalesces_one_generation() {
+        let pool = pool_with_library().await;
+        seed_publication_list(&pool, "org.example.reset").await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLibrary" (
+                   "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+               ) VALUES (1, 1, 'list', 'managed/list/playlist.json')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed list binding");
+        let repository = SqliteManagedLibraryOperationRepository(pool.clone());
+
+        let mismatch = repository.enqueue_reset_reload(1, "list").await;
+        assert!(matches!(mismatch, Err(RepositoryError::Conflict(_))));
+        let first = repository
+            .enqueue_reset_reload(1, "List")
+            .await
+            .expect("enqueue reset");
+        let duplicate = repository
+            .enqueue_reset_reload(1, "List")
+            .await
+            .expect("coalesce reset");
+        assert!(!first.existing);
+        assert!(duplicate.existing);
+        assert_eq!(duplicate.operation.id, first.operation.id);
+        assert_eq!(duplicate.job.id, first.job.id);
+        assert_eq!(first.job.generation, 1);
+        assert_eq!(first.job.phase, AddonMediaListLifecyclePhase::AwaitingLease);
+        assert!(first.operation.scan.is_none());
+
+        let operation_count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "ManagedLibraryOperation" WHERE "Kind" = ?"#,
+        )
+        .bind(encode_enum(ManagedLibraryOperationKind::Reset))
+        .fetch_one(&pool)
+        .await
+        .expect("count reset operations");
+        let job_count: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaListLifecycleJob""#)
+                .fetch_one(&pool)
+                .await
+                .expect("count reset jobs");
+        assert_eq!(operation_count, 1);
+        assert_eq!(job_count, 1);
+    }
+
+    #[tokio::test]
+    async fn reset_admission_rejects_another_active_list_operation() {
+        let pool = pool_with_library().await;
+        seed_publication_list(&pool, "org.example.reset-busy").await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLibrary" (
+                   "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+               ) VALUES (1, 1, 'list', 'managed/list/playlist.json')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed list binding");
+        let repository = SqliteManagedLibraryOperationRepository(pool.clone());
+        let publication = repository
+            .enqueue_publication(1, 1, 3, 2)
+            .await
+            .expect("enqueue competing publication");
+
+        let rejected = repository.enqueue_reset_reload(1, "List").await;
+        assert!(matches!(rejected, Err(RepositoryError::Conflict(_))));
+        let reset_jobs: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaListLifecycleJob""#)
+                .fetch_one(&pool)
+                .await
+                .expect("count rejected reset jobs");
+        assert_eq!(reset_jobs, 0);
+
+        sqlx::query(r#"UPDATE "ManagedLibraryOperation" SET "State" = ? WHERE "Id" = ?"#)
+            .bind(encode_enum(ManagedLibraryOperationState::Completed))
+            .bind(publication.operation.id)
+            .execute(&pool)
+            .await
+            .expect("complete publication operation");
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision" = 2 WHERE "Id" = 1"#)
+            .execute(&pool)
+            .await
+            .expect("commit publication revision");
+
+        let reset = repository
+            .enqueue_reset_reload(1, "List")
+            .await
+            .expect("enqueue reset after publication completed");
+        assert_eq!(reset.job.saved_draft_revision, 3);
+        assert_eq!(reset.job.saved_published_revision, 2);
     }
 
     #[tokio::test]

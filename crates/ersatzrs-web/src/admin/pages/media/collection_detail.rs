@@ -27,10 +27,11 @@ use std::collections::HashSet;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
-use crate::admin::i18n::{media_browser_error_message, tr, TextKey};
+use crate::admin::i18n::{media_browser_error_message, text, tr, use_i18n, TextKey, UiLanguage};
 use crate::admin::server_fns::media_browser::{
-    get_collection_detail, remove_items_from_collection, set_collection_use_custom_order,
-    update_collection_custom_order, CollectionDetail, CollectionItemCard,
+    get_collection_detail, localize_episode_display_text, remove_items_from_collection,
+    set_collection_use_custom_order, update_collection_custom_order, CollectionDetail,
+    CollectionItemCard,
 };
 use crate::admin::ui::primitives::{
     icon::{icon_style, IconName},
@@ -580,7 +581,7 @@ fn SelectableCollectionCard(
     let item_id = card.collection_item_id;
     let title = card.title.clone();
     let title_for_alt = card.title.clone();
-    let subtitle = card.subtitle.clone();
+    let subtitle = collection_item_subtitle(use_i18n(), &card.kind, card.subtitle.as_deref());
     let artwork = card.artwork_path.clone();
     let href = card.href.clone();
     let playback_summary = collection_item_playback_summary(&card);
@@ -746,6 +747,22 @@ fn SelectableCollectionCard(
     }
 }
 
+fn collection_item_subtitle(
+    language: UiLanguage,
+    kind: &str,
+    subtitle: Option<&str>,
+) -> Option<String> {
+    if kind != "episode" {
+        return subtitle.map(str::to_owned);
+    }
+
+    subtitle
+        .and_then(|value| {
+            localize_episode_display_text(language, value).or_else(|| Some(value.to_owned()))
+        })
+        .or_else(|| Some(text(language, TextKey::Unnumbered).to_owned()))
+}
+
 fn collection_item_playback_summary(card: &CollectionItemCard) -> Option<String> {
     let mut parts = Vec::new();
     let audio = card
@@ -784,5 +801,37 @@ fn subtitle_mode_label(mode: i32) -> Option<&'static str> {
         2 => Some(tr(TextKey::DefaultOption)),
         3 => Some(tr(TextKey::Any)),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod episode_subtitle_tests {
+    use super::collection_item_subtitle;
+    use crate::admin::i18n::UiLanguage;
+
+    #[test]
+    fn collection_episode_zero_sentinel_uses_the_active_language() {
+        assert_eq!(
+            collection_item_subtitle(UiLanguage::Dutch, "episode", Some("Serie - S0 E0"),)
+                .as_deref(),
+            Some("Serie - Ongenummerd")
+        );
+        assert_eq!(
+            collection_item_subtitle(UiLanguage::English, "episode", None).as_deref(),
+            Some("Unnumbered")
+        );
+    }
+
+    #[test]
+    fn collection_episode_special_and_non_episode_subtitles_are_preserved() {
+        assert_eq!(
+            collection_item_subtitle(UiLanguage::English, "episode", Some("Show - S0 E3"),)
+                .as_deref(),
+            Some("Show - S0 E3")
+        );
+        assert_eq!(
+            collection_item_subtitle(UiLanguage::English, "movie", Some("2026")).as_deref(),
+            Some("2026")
+        );
     }
 }

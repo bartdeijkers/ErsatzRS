@@ -1398,6 +1398,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchSmartCollection => "Rechercher une collection intelligente",
         TextKey::Season => "Saison",
         TextKey::SeasonEpisode => "Saison, épisode",
+        TextKey::Unnumbered => "Non numéroté",
         TextKey::SeasonNotFound => "Saison introuvable",
         TextKey::Select => "Sélectionner",
         TextKey::SelectCollection => "Sélectionner une collection",
@@ -1568,6 +1569,20 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListUrl => "URL de la liste add-on",
         TextKey::AddonMediaListFolder => "Dossier de stockage",
         TextKey::AddonMediaListFolderHelp => "Facultatif ; sinon dérivé du nom de la liste",
+        TextKey::DestructiveActions => "Actions destructives",
+        TextKey::ResetAndReload => "Réinitialiser et recharger",
+        TextKey::ResetAddonMediaListHelp => "Supprime tous les résultats générés pour cette liste, puis met en file d’attente une importation complète.",
+        TextKey::SourceHost => "Hôte source",
+        TextKey::ResetRemoves => "Cette réinitialisation supprime",
+        TextKey::ResetRemovesItems => "Les éléments importés, les métadonnées du fournisseur, les remplacements de l’opérateur, la numérotation des épisodes et les substitutions.",
+        TextKey::ResetRemovesArtifacts => "Les médias générés, les fichiers NFO, les illustrations, les sous-titres, les caches et les archives.",
+        TextKey::ResetRemovesRuntime => "Les tâches, les points de contrôle, les artefacts de révision, les éléments de la liste de lecture générée et les médias projetés.",
+        TextKey::ResetRetains => "Cette réinitialisation conserve",
+        TextKey::ResetRetainsSettings => "Le nom de la liste, les liaisons avec l’add-on, la source et la médiathèque, l’identité de la liste de lecture générée, les politiques d’actualisation et de publication, le quota d’artefacts et les autres réglages de l’opérateur.",
+        TextKey::ResetReloadFailureWarning => "Si le rechargement échoue, les chaînes et la liste de lecture générée restent vides.",
+        TextKey::TypeListNameToConfirm => "Saisissez le nom actuel de la liste pour confirmer",
+        TextKey::ResetQueued => "Réinitialisation et rechargement mis en file d’attente.",
+        TextKey::ResetAddonMediaListFailed => "Échec de la réinitialisation et du rechargement.",
         TextKey::ChapterInput => "Chapitres",
         TextKey::ChapterInputHelp => "Facultatif, un par ligne : 0:00 Introduction",
         TextKey::RestoreProviderChapters => "Restaurer les chapitres du fournisseur",
@@ -3023,7 +3038,7 @@ mod tests {
         );
         assert_eq!(
             episode_display_subtitle_text(UiLanguage::French, Some("Série"), None, None).as_deref(),
-            Some("Série")
+            Some("Série - Non numéroté")
         );
     }
 

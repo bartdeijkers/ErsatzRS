@@ -190,6 +190,13 @@ pub(crate) fn create_backup(
     paths: &PublicationFsPaths,
     identity: PublicationFsIdentity,
 ) -> Result<(), PublicationFsError> {
+    with_managed_tree_lock(paths, || create_backup_unlocked(paths, identity))
+}
+
+fn create_backup_unlocked(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+) -> Result<(), PublicationFsError> {
     validate_sibling_paths(paths)?;
     if !paths.managed.is_dir() {
         return Err(PublicationFsError::UnsafeState(
@@ -234,6 +241,96 @@ pub(crate) fn create_backup(
     fs::rename(&initializing, &paths.backup)
         .map_err(|source| io_error("publish initialized publication backup", source))?;
     write_candidate_marker(&paths.managed, identity)
+}
+
+/// Prepare a reset-owned candidate without deleting managed content. Callers
+/// must re-check their database lease before entering the destructive step.
+pub(crate) fn prepare_empty_managed_candidate(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+) -> Result<(), PublicationFsError> {
+    with_managed_tree_lock(paths, || {
+        validate_sibling_paths(paths)?;
+        let marker_path = paths.managed.join(PUBLICATION_MARKER_FILE);
+        if marker_path.is_file() {
+            let marker = read_marker(&paths.managed)?;
+            if marker_matches(
+                &marker,
+                identity,
+                PublicationTreeRole::Candidate,
+                identity.target_revision,
+            ) {
+                if marker.state == PublicationTreeState::Complete {
+                    return verify_empty_reset_candidate_unlocked(paths, identity);
+                }
+                return Ok(());
+            }
+            ensure_reset_may_replace_marker(paths, identity, &marker)?;
+        }
+        create_backup_unlocked(paths, identity)?;
+        Ok(())
+    })
+}
+
+/// Empty only a candidate prepared for this exact operation and generation.
+/// The stable tree lock serializes uncancellable deletion with a reclaimed
+/// reset or a new publication backup.
+pub(crate) fn empty_prepared_managed_candidate(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+) -> Result<(), PublicationFsError> {
+    with_managed_tree_lock(paths, || {
+        validate_sibling_paths(paths)?;
+        let marker = read_marker(&paths.managed)?;
+        ensure_reset_marker_current(&marker, identity)?;
+        if marker.state == PublicationTreeState::Complete {
+            verify_empty_reset_candidate_unlocked(paths, identity)?;
+            return Ok(());
+        }
+
+        empty_prepared_managed_candidate_unlocked(paths, identity)
+    })
+}
+
+fn empty_prepared_managed_candidate_unlocked(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+) -> Result<(), PublicationFsError> {
+    let marker = read_marker(&paths.managed)?;
+    ensure_reset_marker_current(&marker, identity)?;
+    if marker.state != PublicationTreeState::Building {
+        return Err(PublicationFsError::UnsafeState(
+            "the managed reset candidate is not ready to be emptied",
+        ));
+    }
+    let mut entries = fs::read_dir(&paths.managed)
+        .map_err(|source| io_error("read managed reset candidate", source))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|source| io_error("read managed reset entry", source))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        if entry.file_name() == PUBLICATION_MARKER_FILE {
+            continue;
+        }
+        let file_type = entry
+            .file_type()
+            .map_err(|source| io_error("inspect managed reset entry", source))?;
+        if file_type.is_symlink() {
+            return Err(PublicationFsError::UnsafeState(
+                "managed reset candidates may not contain symbolic links",
+            ));
+        }
+        if file_type.is_dir() {
+            fs::remove_dir_all(entry.path())
+                .map_err(|source| io_error("remove managed reset directory", source))?;
+        } else {
+            fs::remove_file(entry.path())
+                .map_err(|source| io_error("remove managed reset file", source))?;
+        }
+    }
+    let prepared = prepare_managed_candidate_seal(paths, identity)?;
+    persist_prepared_candidate_seal_unlocked(paths, identity, &prepared)?;
+    verify_empty_reset_candidate_unlocked(paths, identity)
 }
 
 fn resume_existing_backup(
@@ -681,6 +778,16 @@ pub(crate) fn persist_prepared_candidate_seal(
     identity: PublicationFsIdentity,
     prepared: &PreparedCandidateSeal,
 ) -> Result<(), PublicationFsError> {
+    with_managed_tree_lock(paths, || {
+        persist_prepared_candidate_seal_unlocked(paths, identity, prepared)
+    })
+}
+
+fn persist_prepared_candidate_seal_unlocked(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+    prepared: &PreparedCandidateSeal,
+) -> Result<(), PublicationFsError> {
     validate_sibling_paths(paths)?;
     let current = read_marker(&paths.managed)?;
     if !marker_matches(
@@ -751,6 +858,16 @@ pub(crate) fn cleanup_after_verification(
     identity: PublicationFsIdentity,
     outcome: PublicationTreeRole,
 ) -> Result<(), PublicationFsError> {
+    with_managed_tree_lock(paths, || {
+        cleanup_after_verification_unlocked(paths, identity, outcome)
+    })
+}
+
+fn cleanup_after_verification_unlocked(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+    outcome: PublicationTreeRole,
+) -> Result<(), PublicationFsError> {
     verify_managed_complete(paths, identity, outcome)?;
 
     cleanup_owned_tree_if_present(
@@ -766,6 +883,32 @@ pub(crate) fn cleanup_after_verification(
         identity.target_revision,
     )?;
     Ok(())
+}
+
+pub(crate) fn cleanup_reset_scratch(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+) -> Result<(), PublicationFsError> {
+    with_managed_tree_lock(paths, || {
+        cleanup_owned_tree_if_present(
+            &paths.backup,
+            identity,
+            PublicationTreeRole::Previous,
+            identity.previous_revision,
+        )?;
+        cleanup_owned_tree_if_present(
+            &backup_initializing_path(&paths.backup)?,
+            identity,
+            PublicationTreeRole::Previous,
+            identity.previous_revision,
+        )?;
+        cleanup_owned_tree_if_present(
+            &paths.failed,
+            identity,
+            PublicationTreeRole::Candidate,
+            identity.target_revision,
+        )
+    })
 }
 
 pub(crate) fn abort_staging(
@@ -827,6 +970,98 @@ fn validate_sibling_paths(paths: &PublicationFsPaths) -> Result<(), PublicationF
     {
         return Err(PublicationFsError::UnsafeState(
             "publication recovery paths failed their ownership boundary",
+        ));
+    }
+    Ok(())
+}
+
+fn with_managed_tree_lock<T>(
+    paths: &PublicationFsPaths,
+    action: impl FnOnce() -> Result<T, PublicationFsError>,
+) -> Result<T, PublicationFsError> {
+    validate_sibling_paths(paths)?;
+    let lock_path = managed_tree_lock_path(&paths.managed)?;
+    let lock = File::options()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(lock_path)
+        .map_err(|source| io_error("open managed publication lock", source))?;
+    lock.lock()
+        .map_err(|source| io_error("lock managed publication tree", source))?;
+    action()
+}
+
+fn managed_tree_lock_path(managed: &Path) -> Result<PathBuf, PublicationFsError> {
+    let parent = managed.parent().ok_or(PublicationFsError::UnsafeState(
+        "the managed publication folder has no parent",
+    ))?;
+    let hash = Sha256::digest(managed.as_os_str().to_string_lossy().as_bytes());
+    let mut key = String::with_capacity(24);
+    for byte in &hash[..12] {
+        write!(&mut key, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    Ok(parent.join(format!(".ersatzrs-managed-tree-{key}.lock")))
+}
+
+fn ensure_reset_may_replace_marker(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+    marker: &PublicationTreeMarker,
+) -> Result<(), PublicationFsError> {
+    if marker.state != PublicationTreeState::Complete {
+        return Err(PublicationFsError::UnsafeState(
+            "the managed tree is being changed by another operation",
+        ));
+    }
+    verify_fingerprint(&paths.managed, marker)?;
+    if marker.revision != identity.previous_revision
+        && (marker.file_count != 0 || marker.byte_count != 0)
+    {
+        return Err(PublicationFsError::UnsafeState(
+            "the managed tree belongs to a newer published revision",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_reset_marker_current(
+    marker: &PublicationTreeMarker,
+    identity: PublicationFsIdentity,
+) -> Result<(), PublicationFsError> {
+    if !marker_matches(
+        marker,
+        identity,
+        PublicationTreeRole::Candidate,
+        identity.target_revision,
+    ) {
+        return Err(PublicationFsError::UnsafeState(
+            "the managed reset candidate operation or generation changed",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn verify_empty_reset_candidate(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+) -> Result<(), PublicationFsError> {
+    with_managed_tree_lock(paths, || {
+        verify_empty_reset_candidate_unlocked(paths, identity)
+    })
+}
+
+fn verify_empty_reset_candidate_unlocked(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+) -> Result<(), PublicationFsError> {
+    let marker = read_marker(&paths.managed)?;
+    ensure_reset_marker_current(&marker, identity)?;
+    verify_fingerprint(&paths.managed, &marker)?;
+    if marker.file_count != 0 || marker.byte_count != 0 {
+        return Err(PublicationFsError::Integrity(
+            "the reset candidate is not empty",
         ));
     }
     Ok(())
@@ -1363,6 +1598,48 @@ mod tests {
     }
 
     #[test]
+    fn stale_reset_generation_cannot_empty_a_new_generation_tree() {
+        let (_temp, old_paths, old_identity) = fixture();
+        prepare_empty_managed_candidate(&old_paths, old_identity)
+            .expect("prepare first reset generation");
+        empty_prepared_managed_candidate(&old_paths, old_identity)
+            .expect("complete first reset generation");
+
+        let new_identity = PublicationFsIdentity {
+            operation_id: Some(12),
+            generation: Some(3),
+            ..old_identity
+        };
+        let new_paths = publication_paths(
+            old_paths.managed.clone(),
+            new_identity.list_id,
+            new_identity.operation_id,
+            new_identity.generation,
+        )
+        .expect("new reset paths");
+        prepare_empty_managed_candidate(&new_paths, new_identity)
+            .expect("prepare new reset generation");
+        fs::write(new_paths.managed.join("new.yml"), b"new generation")
+            .expect("seed new-generation file");
+
+        let stale_generation = empty_prepared_managed_candidate(&old_paths, old_identity)
+            .expect_err("older generation must not empty new candidate");
+        assert!(stale_generation
+            .to_string()
+            .contains("operation or generation"));
+        assert_eq!(
+            fs::read(new_paths.managed.join("new.yml")).expect("new-generation item survives"),
+            b"new generation"
+        );
+
+        empty_prepared_managed_candidate(&new_paths, new_identity)
+            .expect("current generation empties its candidate");
+        assert!(!new_paths.managed.join("new.yml").exists());
+        verify_empty_reset_candidate(&new_paths, new_identity)
+            .expect("current generation retains empty sealed ownership");
+    }
+
+    #[test]
     fn sealed_candidate_tampering_cannot_be_reblessed() {
         let (_temp, paths, identity) = fixture();
         create_backup(&paths, identity).expect("create backup");
@@ -1457,6 +1734,47 @@ mod tests {
         assert!(paths.managed.join(PUBLICATION_MARKER_FILE).is_file());
         assert!(!paths.backup.exists());
         assert!(!paths.failed.exists());
+    }
+
+    #[test]
+    fn cleanup_verification_and_scratch_removal_share_the_tree_lock() {
+        let (_temp, paths, identity) = fixture();
+        create_backup(&paths, identity).expect("create backup");
+        seal_candidate(&paths, identity);
+        let lock = File::options()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(managed_tree_lock_path(&paths.managed).expect("tree lock path"))
+            .expect("open tree lock");
+        lock.lock().expect("hold tree lock");
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let cleanup_paths = paths.clone();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).expect("signal cleanup start");
+            let result = cleanup_after_verification(
+                &cleanup_paths,
+                identity,
+                PublicationTreeRole::Candidate,
+            );
+            done_tx.send(result).expect("return cleanup result");
+        });
+        started_rx.recv().expect("cleanup worker started");
+
+        assert!(done_rx
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .is_err());
+        assert!(paths.backup.exists());
+        drop(lock);
+
+        done_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("cleanup completes after lock release")
+            .expect("cleanup publication");
+        worker.join().expect("join cleanup worker");
+        assert!(!paths.backup.exists());
     }
 
     #[test]

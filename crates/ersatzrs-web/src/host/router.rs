@@ -334,6 +334,10 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::addon_media_lists::recover_addon_media_list_publication_form),
         )
         .route(
+            "/api/addon-lists/reset",
+            post(api::addon_media_lists::reset_addon_media_list_form),
+        )
+        .route(
             "/api/addon-lists/{id}/publication-diagnostics",
             get(api::addon_media_lists::download_addon_media_list_publication_diagnostics),
         )

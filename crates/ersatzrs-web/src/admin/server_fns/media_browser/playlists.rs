@@ -202,12 +202,16 @@ pub(in crate::admin::server_fns::media_browser) async fn get_playlist_editor_opt
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    state
+    let language = crate::admin::server_fns::settings::load_ui_language_for_api(
+        state.application.ports().admin_settings(),
+    )
+    .await?;
+    let options = state
         .application
         .get_playlist_editor_options()
         .await
-        .map(playlist_options_from_admin)
-        .map_err(ServerFnError::new)
+        .map_err(ServerFnError::new)?;
+    Ok(playlist_options_from_admin(options, language))
 }
 
 #[cfg(feature = "ssr")]

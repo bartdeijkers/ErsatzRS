@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Add a durable typed-confirmation Reset and reload action for add-on media
+  lists. It removes derived state before a first-generation full import while
+  retaining approved configuration and the empty generated-playlist identity;
+  list and item metadata stay visible and editable with hydrated/no-JavaScript
+  parity, and absent episode numbering is non-blocking and shown as Unnumbered.
+
 - Add a provider-neutral add-on-list lifecycle persistence foundation for
   versioned declarative options, explicit refresh cadence and publication
   policy, durable reset/reconcile and incremental checkpoint state, retained

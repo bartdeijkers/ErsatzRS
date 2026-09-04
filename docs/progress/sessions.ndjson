@@ -1,3 +1,4 @@
+{"agent":"Codex","date":"2026-09-04","summary":"Completed AMM-K-02 durable clean reset/reload, always-visible metadata, Name-first list layout, and non-blocking Unnumbered handling; focused checks and final P1/P2 review pass, with integrated browser/CI deferred to AMM-N-03."}
 {"agent":"Codex","date":"2026-09-04","summary":"Completed AMM-K-01 provider-neutral add-on-list lifecycle persistence foundation."}
 {"agent":"Codex","date":"2026-09-04","summary":"Completed AMM-J-04 bounded redacted publication and recovery history."}
 {"agent":"Codex","date":"2026-09-04","summary":"Closed AMM-J-03 from its completed contract, health, localization, Chromium, Firefox, hydrated, and no-JavaScript evidence; deferred the non-duplicated packaged Windows restart repetition to the existing AMM-N-03 integrated closeout."}

@@ -120,14 +120,18 @@ or “recovery required” are not sufficient.
 ### Define reset and reload as a complete unload
 
 **Reset and reload source URL** is a durable destructive operation. It retains
-only the list identity, selected add-on, source URL, managed-folder binding,
-refresh cadence, detail policy, and list-level option defaults. It removes the
-current and draft provider snapshots, list and item metadata overrides,
-conflicts, inclusion and numbering choices, replacements, published
-projection, generated playlist and membership, managed definitions and NFOs,
-artwork, subtitles, processed-media cache, import/detail/publication jobs,
-cursors, and archive checkpoint. It then starts a first-generation full import
-from the retained URL.
+the list identity and name, selected add-on, provider identity, source URL,
+managed-folder binding, refresh cadence and publication policy, detail policy,
+processed-artifact quota, generated-playlist intent, and list-level option
+defaults. It removes the current and draft provider snapshots, list and item
+metadata overrides, conflicts, inclusion and numbering choices, replacements,
+published projection, generated-playlist membership, managed definitions and
+NFOs, artwork, subtitles, processed-media cache, import/detail/publication jobs,
+cursors, and archive checkpoint. The generated `Playlist` identity remains as
+an empty shell because deleting it would cascade into operator-owned schedules,
+filler/deco references, and playout anchors. Draft and published revision
+counters remain monotonic so stale work cannot regain authority. Reset then
+starts a first-generation full import from the retained URL.
 
 Unload commits before reload begins. Therefore channels and playlists have no
 items until the new draft is reviewed and published, and a failed reload leaves

@@ -56,8 +56,10 @@ provider-neutral access restrictions, item-scoped publication exclusion,
 redacted durable status, and guarded localized Retry/Restore actions for the
 hydrated and no-JavaScript editor. Focused acceptance is complete; AMM-N-03
 retains the integrated packaged Windows restart proof.
-AMM-J-04 adds bounded redacted causal history. AMM-K-01 adds fail-closed,
-provider-neutral option and lifecycle persistence; later behavior remains open.
+AMM-J-04 adds bounded redacted causal history. AMM-K-01 adds fail-closed
+lifecycle persistence. AMM-K-02 adds safe reset/reload, visible metadata,
+Name-first lists, and non-blocking Unnumbered presentation; later behavior is
+open.
 '''
 
 [[debt]]
@@ -74,7 +76,7 @@ id          = 'addon-list-lifecycle-actions-and-navigation-are-incomplete'
 description = 'Provide truthful Publish blocked remediation, a complete reset-and-reload operation, source/publication/downstream impact preview, bounded revision comparison/restore, always-visible inline list/item metadata, optional episode numbering, Name-before-Id list layout, accessible dialog/table behavior, and a real Remote Stream details route from add-on-list search results.'
 discovered  = '2026-09-01'
 adr         = '0085'
-evidence    = 'The current action model hides Publish when validation blockers exist and reports Publishing from the review-state flag even for an unclaimable recovery journal; blocker copy has no clearing command. No reset/reload, source preflight, general published-to-draft diff, downstream impact, or routine revision comparison/restore exists. General metadata is gated by both an Edit metadata link and icon, the hero title is display-only, SeasonEpisodeMissing is a hard blocker, the list table orders Id before Name, and search_href deliberately returns an empty Remote Stream href. The shared dialog lacks focus containment/aria-labelledby and shared sortable headings are pointer-only without aria-sort. AMM-K-01 now persists fenced reset/reconcile job and retained-revision foundations without enabling those commands or UI prematurely. Tracked by AMM-K and plans/addon-list-lifecycle-broadening.md.'
+evidence    = 'The current action model hides Publish when validation blockers exist and reports Publishing from the review-state flag even for an unclaimable recovery journal; blocker copy has no clearing command. No source preflight, general published-to-draft diff, downstream impact, or routine revision comparison/restore exists, and search_href deliberately returns an empty Remote Stream href. The shared dialog lacks focus containment/aria-labelledby and shared sortable headings are pointer-only without aria-sort. AMM-K-01 persists the provider-neutral foundations. AMM-K-02 completes fenced clean reset/reload, always-visible list/item metadata with hydrated/no-JavaScript parity, Name-before-Id layout, and non-blocking Unnumbered handling while retaining the generated Playlist identity and operator-owned references. AMM-K-03 and AMM-K-04 still own Remote Stream navigation, preview/revision restore, and shared accessibility closure. Tracked by AMM-K and plans/addon-list-lifecycle-broadening.md.'
 resolved    = false
 
 [[debt]]

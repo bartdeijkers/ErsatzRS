@@ -605,6 +605,68 @@ async fn television_projection_creates_show_seasons_and_episodes() {
 }
 
 #[tokio::test]
+async fn television_projection_keeps_unnumbered_nfo_absent_and_uses_relational_sentinel() {
+    let pool = common::test_db().await;
+    let directory = seed_managed_list_items(&pool, &[(10, 1, 1, "Unnumbered".to_owned())]).await;
+    let repositories = make_repositories(pool.clone());
+    let metadata = AddonMediaListNfoMetadata {
+        title: "Unnumbered".to_owned(),
+        ..AddonMediaListNfoMetadata::default()
+    };
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Season" = NULL, "Episode" = NULL, "ProviderMetadataJson" = ?
+           WHERE "Id" = 10"#,
+    )
+    .bind(serde_json::to_string(&metadata).expect("serialize unnumbered metadata"))
+    .execute(&pool)
+    .await
+    .expect("clear provider numbering");
+    let nfo_path = directory.path().join("S01E01.nfo");
+    fs::write(
+        &nfo_path,
+        ersatzrs_infra::addon_media_nfo::serialize("episodedetails", &metadata)
+            .expect("serialize unnumbered NFO"),
+    )
+    .expect("write unnumbered NFO");
+
+    request_and_publish(
+        &repositories,
+        AddonMediaListPresentationKind::TelevisionShow,
+    )
+    .await
+    .expect("project the unnumbered episode");
+
+    let projected_nfo = fs::read_to_string(nfo_path).expect("read projected NFO");
+    assert!(!projected_nfo.contains("<season>"), "{projected_nfo}");
+    assert!(!projected_nfo.contains("<episode>"), "{projected_nfo}");
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "season"."SeasonNumber"
+               FROM "AddonMediaListItemEpisode" AS "projection"
+               JOIN "Episode" AS "episode" ON "episode"."Id" = "projection"."EpisodeId"
+               JOIN "Season" AS "season" ON "season"."Id" = "episode"."SeasonId"
+               WHERE "projection"."AddonMediaListItemId" = 10"#,
+        )
+        .await,
+        0,
+    );
+    assert_eq!(
+        scalar::<i32>(
+            &pool,
+            r#"SELECT "metadata"."EpisodeNumber"
+               FROM "AddonMediaListItemEpisode" AS "projection"
+               JOIN "EpisodeMetadata" AS "metadata"
+                 ON "metadata"."EpisodeId" = "projection"."EpisodeId"
+               WHERE "projection"."AddonMediaListItemId" = 10"#,
+        )
+        .await,
+        0,
+    );
+}
+
+#[tokio::test]
 async fn television_projection_is_idempotent() {
     let pool = common::test_db().await;
     let _directory = seed_managed_list(&pool).await;

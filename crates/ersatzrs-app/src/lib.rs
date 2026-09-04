@@ -482,6 +482,14 @@ impl ApplicationServices {
         .await
     }
 
+    /// Atomically enqueue or coalesce a destructive add-on-list reset/reload.
+    pub async fn reset_addon_media_list(
+        &self,
+        command: commands::ResetAddonMediaList,
+    ) -> Result<commands::ResetAddonMediaListOutcome> {
+        commands::reset_addon_media_list(command, self.ports.managed_library_operations()).await
+    }
+
     /// Retry or restore one exact add-on media-list publication generation.
     pub async fn recover_addon_media_list_publication(
         &self,
@@ -3052,14 +3060,17 @@ async fn execute_managed_library_operation(
     use ersatzrs_core::repositories::AddonMediaListPublicationContinuation;
     use ersatzrs_domain::{
         AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
-        ManagedLibraryOperationKind, ManagedLibraryOperationState,
+        ManagedLibraryOperationState,
     };
 
-    if !matches!(
-        claim.operation.kind,
-        ManagedLibraryOperationKind::Publication | ManagedLibraryOperationKind::Recovery
-    ) {
-        return execute_durable_scan(application, claim).await;
+    match managed_operation_execution_path(claim.operation.kind) {
+        ManagedOperationExecutionPath::ResetReload => {
+            return execute_addon_media_list_reset_reload(application, claim).await;
+        }
+        ManagedOperationExecutionPath::Scan => {
+            return execute_durable_scan(application, claim).await
+        }
+        ManagedOperationExecutionPath::Publication => {}
     }
 
     for _ in 0..24 {
@@ -3568,6 +3579,28 @@ async fn execute_managed_library_operation(
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ManagedOperationExecutionPath {
+    Scan,
+    Publication,
+    ResetReload,
+}
+
+const fn managed_operation_execution_path(
+    kind: ersatzrs_domain::ManagedLibraryOperationKind,
+) -> ManagedOperationExecutionPath {
+    match kind {
+        ersatzrs_domain::ManagedLibraryOperationKind::Reset => {
+            ManagedOperationExecutionPath::ResetReload
+        }
+        ersatzrs_domain::ManagedLibraryOperationKind::Publication
+        | ersatzrs_domain::ManagedLibraryOperationKind::Recovery => {
+            ManagedOperationExecutionPath::Publication
+        }
+        _ => ManagedOperationExecutionPath::Scan,
+    }
+}
+
 async fn complete_publication_operation(
     application: &ApplicationServices,
     claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
@@ -3648,6 +3681,169 @@ async fn schedule_publication_retry(
             message: error.to_string(),
         },
     }
+}
+
+#[allow(clippy::too_many_lines)] // Keep the durable phase transitions visible as one state machine.
+async fn execute_addon_media_list_reset_reload(
+    application: &ApplicationServices,
+    claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+) -> commands::ExecuteManagedLibraryOperationOutcome {
+    use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
+    use ersatzrs_domain::{AddonMediaListLifecyclePhase as Phase, ManagedLibraryOperationState};
+
+    for _ in 0..16 {
+        let job = match application
+            .ports
+            .managed_library_operations()
+            .reset_reload_job(claim.operation.id)
+            .await
+        {
+            Ok(Some(job)) => job,
+            Ok(None) => {
+                let message = "reset/reload lifecycle job is missing".to_owned();
+                let _ = application
+                    .ports
+                    .managed_library_operations()
+                    .fail_operation(claim, "reset_job_missing", &message)
+                    .await;
+                return Outcome::Failed { message };
+            }
+            Err(error) => {
+                return Outcome::Failed {
+                    message: error.to_string(),
+                }
+            }
+        };
+        let next = match job.phase {
+            Phase::AwaitingLease => Some(Phase::Quiescing),
+            Phase::Quiescing => Some(Phase::UnpublishingFiles),
+            Phase::UnpublishingFiles => Some(Phase::UnpublishingProjection),
+            Phase::UnpublishingProjection => {
+                if let Err(error) = application
+                    .ports
+                    .managed_library_operations()
+                    .apply_reset_reload_phase(claim, &job, job.phase)
+                    .await
+                {
+                    return fail_reset_operation(application, claim, error.to_string()).await;
+                }
+                let child = match application
+                    .ports
+                    .managed_library_operations()
+                    .ensure_reset_reload_child_scan(claim, job.list_id)
+                    .await
+                {
+                    Ok(child) => child,
+                    Err(error) => {
+                        return fail_reset_operation(application, claim, error.to_string()).await;
+                    }
+                };
+                if child.state != ManagedLibraryOperationState::Completed {
+                    let child_claim = ersatzrs_core::repositories::ManagedLibraryOperationClaim {
+                        operation: child,
+                        lease_owner: claim.lease_owner.clone(),
+                    };
+                    match execute_durable_scan(application, &child_claim).await {
+                        Outcome::Completed => {}
+                        Outcome::Deferred | Outcome::LeaseLost => return Outcome::LeaseLost,
+                        Outcome::Failed { message } => {
+                            return fail_reset_operation(application, claim, message).await;
+                        }
+                    }
+                }
+                Some(Phase::ClearingProviderState)
+            }
+            Phase::ClearingProviderState => Some(Phase::ClearingCheckpoint),
+            Phase::ClearingCheckpoint => Some(Phase::VerifyingEmpty),
+            Phase::VerifyingEmpty => Some(Phase::QueueingInitialImport),
+            Phase::QueueingInitialImport => {
+                let import_job_id = match application
+                    .ports
+                    .managed_library_operations()
+                    .queue_reset_reload_import(claim, &job)
+                    .await
+                {
+                    Ok(id) => id,
+                    Err(error) => {
+                        return fail_reset_operation(application, claim, error.to_string()).await;
+                    }
+                };
+                return match application
+                    .ports
+                    .managed_library_operations()
+                    .complete_reset_reload(claim, import_job_id)
+                    .await
+                {
+                    Ok(true) => Outcome::Completed,
+                    Ok(false) => Outcome::LeaseLost,
+                    Err(error) => Outcome::Failed {
+                        message: error.to_string(),
+                    },
+                };
+            }
+            Phase::Complete => {
+                return match application
+                    .ports
+                    .managed_library_operations()
+                    .complete_operation(claim)
+                    .await
+                {
+                    Ok(true) => Outcome::Completed,
+                    Ok(false) => Outcome::LeaseLost,
+                    Err(error) => Outcome::Failed {
+                        message: error.to_string(),
+                    },
+                };
+            }
+            Phase::EnumeratingSource | Phase::ComparingCandidate => {
+                return fail_reset_operation(
+                    application,
+                    claim,
+                    "reset/reload entered a reconcile-only phase".to_owned(),
+                )
+                .await;
+            }
+        };
+        let Some(next) = next else { continue };
+        if job.phase != Phase::AwaitingLease && job.phase != Phase::UnpublishingProjection {
+            if let Err(error) = application
+                .ports
+                .managed_library_operations()
+                .apply_reset_reload_phase(claim, &job, job.phase)
+                .await
+            {
+                return fail_reset_operation(application, claim, error.to_string()).await;
+            }
+        }
+        match application
+            .ports
+            .managed_library_operations()
+            .transition_reset_reload(claim, job.phase, next)
+            .await
+        {
+            Ok(true) => {}
+            Ok(false) => return Outcome::LeaseLost,
+            Err(error) => {
+                return Outcome::Failed {
+                    message: error.to_string(),
+                }
+            }
+        }
+    }
+    Outcome::Deferred
+}
+
+async fn fail_reset_operation(
+    application: &ApplicationServices,
+    claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
+    message: String,
+) -> commands::ExecuteManagedLibraryOperationOutcome {
+    let _ = application
+        .ports
+        .managed_library_operations()
+        .fail_operation(claim, "reset_reload_failed", "reset/reload failed")
+        .await;
+    commands::ExecuteManagedLibraryOperationOutcome::Failed { message }
 }
 
 async fn execute_durable_scan(
@@ -3851,11 +4047,20 @@ mod scan_execution_tests {
     };
 
     use super::{
-        execute_scan_work_with_runtime, OperationCoordinator, PlayoutBuildQueue,
+        execute_scan_work_with_runtime, managed_operation_execution_path,
+        ManagedOperationExecutionPath, OperationCoordinator, PlayoutBuildQueue,
         PlayoutBuildQueueError, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
     };
     use crate::commands::{ExecuteScanOutcome, ScanRequest, ScanWorkRequest};
     use crate::queries::{GetLibraryScanStatus, LibraryScanStatus, ScanOperationState};
+
+    #[test]
+    fn reset_operations_use_the_lifecycle_worker_instead_of_generic_scan() {
+        assert_eq!(
+            managed_operation_execution_path(ersatzrs_domain::ManagedLibraryOperationKind::Reset),
+            ManagedOperationExecutionPath::ResetReload
+        );
+    }
 
     #[derive(Default)]
     struct FakeRuntime {

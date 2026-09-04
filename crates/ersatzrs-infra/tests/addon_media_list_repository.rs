@@ -156,6 +156,99 @@ async fn publication_readiness_distinguishes_blockers_from_optional_review_work(
 }
 
 #[tokio::test]
+async fn television_readiness_recommends_absent_numbering_but_blocks_partial_numbering() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount",
+              "ProviderMetadataJson", "RequestedPresentationKind"
+           ) VALUES (
+              1, 'org.example.lists', 'fixture/unnumbered',
+              'https://example.invalid/unnumbered', 'Unnumbered fixture', 1,
+              '{"title":"Unnumbered fixture"}', 1
+           )"#,
+    )
+    .await
+    .unwrap();
+    seed_numbering_item(&pool, 10, 0, None, None, true, None, "First").await;
+    pool.execute(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Availability" = 0, "ProviderLiveness" = 2,
+               "EffectiveLiveness" = 2
+           WHERE "Id" = 10"#,
+    )
+    .await
+    .unwrap();
+
+    let unnumbered = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert!(unnumbered.blockers.is_empty(), "{:#?}", unnumbered.blockers);
+    assert_eq!(unnumbered.recommendation_count, 1);
+    assert!(unnumbered.can_start_publication());
+
+    let sentinel = AddonMediaListNfoMetadata {
+        title: "First".to_owned(),
+        season: Some(0),
+        episode: Some(0),
+        ..AddonMediaListNfoMetadata::default()
+    };
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Season" = 0, "Episode" = 0, "ProviderMetadataJson" = ?
+           WHERE "Id" = 10"#,
+    )
+    .bind(serde_json::to_string(&sentinel).unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let sentinel_unnumbered = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert!(
+        sentinel_unnumbered.blockers.is_empty(),
+        "{:#?}",
+        sentinel_unnumbered.blockers
+    );
+    assert_eq!(sentinel_unnumbered.recommendation_count, 1);
+    assert!(sentinel_unnumbered.can_start_publication());
+
+    let partial = AddonMediaListNfoMetadata {
+        title: "First".to_owned(),
+        season: Some(1),
+        episode: None,
+        ..AddonMediaListNfoMetadata::default()
+    };
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Season" = 1, "Episode" = NULL, "ProviderMetadataJson" = ?
+           WHERE "Id" = 10"#,
+    )
+    .bind(serde_json::to_string(&partial).unwrap())
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let inconsistent = repositories
+        .addon_media_lists
+        .publication_readiness(1)
+        .await
+        .unwrap();
+    assert!(inconsistent.blockers.iter().any(|blocker| {
+        blocker.kind == AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing
+    }));
+    assert_eq!(inconsistent.recommendation_count, 0);
+    assert!(!inconsistent.can_start_publication());
+}
+
+#[tokio::test]
 async fn publication_readiness_excludes_only_typed_access_restrictions() {
     let pool = common::test_db().await;
     let repositories = make_repositories(pool.clone());

@@ -194,12 +194,17 @@ Its confirmation dialog:
 - requires typing the current list name; and
 - submits the same application command with and without JavaScript.
 
-The retained state is list ID, selected add-on, canonical source URL, managed
-folder binding, cadence, detail policy, and list-level option defaults. The
-removed state is every draft/published item, list/item metadata snapshot and
-override, conflict, numbering, inclusion, replacement, generated definition,
-NFO, artwork, subtitle, processed artifact, playlist/membership, projection,
-job, cursor, retry, and archive entry.
+The retained state is list ID and name, selected add-on, provider identity,
+canonical source URL, managed folder binding, cadence, refresh-publication
+policy, detail policy, processed-artifact quota, generated-playlist intent,
+list-level option defaults, monotonic draft/published revision counters, and
+the generated `Playlist` identity as an empty shell. The removed state is every
+draft/published item, list/item metadata snapshot and override, conflict,
+numbering, inclusion, replacement, generated definition, NFO, artwork,
+subtitle, processed artifact, playlist membership, projection, job, cursor,
+retry, and archive entry. Retaining the empty playlist identity prevents reset
+from cascade-deleting operator-owned schedule, filler/deco, and playout-anchor
+configuration.
 
 The resulting durable phases are `quiescing`, `unpublishing_files`,
 `unpublishing_projection`, `clearing_provider_state`, `clearing_checkpoint`,

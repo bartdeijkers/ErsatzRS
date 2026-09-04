@@ -901,6 +901,7 @@ pub enum TextKey {
     SearchSmartCollection,
     Season,
     SeasonEpisode,
+    Unnumbered,
     SeasonNotFound,
     Select,
     SelectCollection,
@@ -1066,6 +1067,20 @@ pub enum TextKey {
     AddonMediaListUrl,
     AddonMediaListFolder,
     AddonMediaListFolderHelp,
+    DestructiveActions,
+    ResetAndReload,
+    ResetAddonMediaListHelp,
+    SourceHost,
+    ResetRemoves,
+    ResetRemovesItems,
+    ResetRemovesArtifacts,
+    ResetRemovesRuntime,
+    ResetRetains,
+    ResetRetainsSettings,
+    ResetReloadFailureWarning,
+    TypeListNameToConfirm,
+    ResetQueued,
+    ResetAddonMediaListFailed,
     ChapterInput,
     ChapterInputHelp,
     RestoreProviderChapters,
@@ -2557,6 +2572,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::SearchSmartCollection,
     TextKey::Season,
     TextKey::SeasonEpisode,
+    TextKey::Unnumbered,
     TextKey::SeasonNotFound,
     TextKey::Select,
     TextKey::SelectCollection,
@@ -2721,6 +2737,20 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonMediaListUrl,
     TextKey::AddonMediaListFolder,
     TextKey::AddonMediaListFolderHelp,
+    TextKey::DestructiveActions,
+    TextKey::ResetAndReload,
+    TextKey::ResetAddonMediaListHelp,
+    TextKey::SourceHost,
+    TextKey::ResetRemoves,
+    TextKey::ResetRemovesItems,
+    TextKey::ResetRemovesArtifacts,
+    TextKey::ResetRemovesRuntime,
+    TextKey::ResetRetains,
+    TextKey::ResetRetainsSettings,
+    TextKey::ResetReloadFailureWarning,
+    TextKey::TypeListNameToConfirm,
+    TextKey::ResetQueued,
+    TextKey::ResetAddonMediaListFailed,
     TextKey::ChapterInput,
     TextKey::ChapterInputHelp,
     TextKey::RestoreProviderChapters,
@@ -3466,6 +3496,18 @@ pub fn episode_display_subtitle_text(
     season_number: Option<i64>,
     episode_number: Option<i64>,
 ) -> Option<String> {
+    if !matches!(
+        (season_number, episode_number),
+        (Some(season), Some(episode)) if season >= 0 && episode > 0
+    ) {
+        let unnumbered = text(language, TextKey::Unnumbered);
+        let show = show_title.unwrap_or_default().trim();
+        return Some(if show.is_empty() {
+            unnumbered.to_owned()
+        } else {
+            format!("{show} - {unnumbered}")
+        });
+    }
     languages_for(language).episode_display_subtitle(show_title, season_number, episode_number)
 }
 
@@ -4244,6 +4286,51 @@ mod tests {
                     definition.code
                 );
             }
+        }
+    }
+
+    #[test]
+    fn invalid_or_missing_episode_numbers_are_localized_as_unnumbered() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let unnumbered = definition.strings.text(TextKey::Unnumbered);
+
+            assert_eq!(
+                episode_display_subtitle_text(language, None, Some(0), Some(0)).as_deref(),
+                Some(unnumbered),
+                "{} rendered a zero-number sentinel",
+                definition.code
+            );
+            assert_eq!(
+                episode_display_subtitle_text(language, None, Some(-1), Some(3)).as_deref(),
+                Some(unnumbered),
+                "{} rendered an invalid season",
+                definition.code
+            );
+            assert_eq!(
+                episode_display_subtitle_text(language, None, Some(2), Some(0)).as_deref(),
+                Some(unnumbered),
+                "{} rendered a zero-episode sentinel",
+                definition.code
+            );
+            assert_eq!(
+                episode_display_subtitle_text(language, None, None, None).as_deref(),
+                Some(unnumbered),
+                "{} omitted the unnumbered identity",
+                definition.code
+            );
+            assert!(
+                episode_display_subtitle_text(language, Some("Show"), Some(2), None)
+                    .is_some_and(|value| value.contains(unnumbered)),
+                "{} rendered a partial episode number",
+                definition.code
+            );
+            assert!(
+                episode_display_subtitle_text(language, Some("Show"), Some(0), Some(3))
+                    .is_some_and(|value| !value.contains(unnumbered)),
+                "{} hid a valid season-zero special",
+                definition.code
+            );
         }
     }
 

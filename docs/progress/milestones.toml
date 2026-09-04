@@ -2362,7 +2362,7 @@ their owning AMM-K through AMM-N milestones; no full closeout or CI was run.
 id         = 'amm-k-02'
 phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Add clean reset, always-visible metadata, and optional numbering'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-01']
@@ -2378,10 +2378,33 @@ The list table presents Name before Id. Localized hydrated/no-JS, keyboard,
 320-pixel, 200%-zoom, Chromium, and Firefox acceptance passes.
 '''
 evidence = '''
-Implementation planning started 2026-09-04. This slice is reserved for the
-existing editor/readiness surfaces plus one durable reset-and-reload command;
-preview, revision comparison, refresh, provider options, and tool maintenance
-remain in their later owning milestones.
+Completed 2026-09-04. One typed-confirmation application command durably
+coalesces reset/reload work, rejects competing library operations, fences every
+database and filesystem phase, removes provider, projection, checkpoint,
+artifact, revision, job, cursor, archive, and managed-file state, verifies the
+empty result, then queues one first-generation Full ResetReload import. The
+generated Playlist remains as an empty shell so schedules, filler/deco
+references, and playout anchors survive; one coalesced Refresh intent rebuilds
+affected playouts. List identity, canonical source/provider binding, approved
+policies/options, playlist intent, artifact quota, and monotonic revisions are
+retained. Stable tree locking and exact marker ownership prevent stale workers
+from deleting newer files and remove marker-owned scratch archives from failed
+earlier resets without scanning unrelated siblings.
+
+The localized editor keeps the hero title and supported list/item metadata
+visible without Edit metadata controls, persists the same complete item form
+with and without hydration, refetches authoritative ETags after saves, presents
+Name before Id, and treats absent or internal `(0, 0)` television numbering as
+a non-blocking Unnumbered recommendation across readiness, XMLTV, channel
+guide, browser, playlist, trash, season, collection, and playout surfaces.
+Focused app/core/infra/web checks, reset/restart/lease/scratch/playlist/import
+tests, readiness/XMLTV/zero-sentinel tests, item-form tests, hydration lint,
+formatting, and progress validation pass. Two independent P1/P2 review rounds
+were fixed and the final review found no actionable P1/P2. Per the requested
+slice loop, Playwright/browser, full closeout, CI, and push are deferred to the
+integrated AMM-N-03 acceptance instead of being run here. Preview, revision
+comparison, refresh behavior, provider options, and tool maintenance remain in
+their later owning milestones.
 '''
 
 [[milestone]]

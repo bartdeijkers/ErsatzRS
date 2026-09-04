@@ -295,6 +295,10 @@ pub fn render_programme(
         has_custom_title: custom_title.is_some_and(|value| !value.trim().is_empty()),
         custom_title,
     };
+    let episode_numbering = content
+        .season_number
+        .zip(content.episode_number)
+        .filter(|(season, episode)| *season >= 0 && *episode >= 1);
 
     match content.kind {
         XmltvItemKind::Movie => render(
@@ -333,10 +337,13 @@ pub fn render_programme(
                 episode_artwork_url: icon_url,
                 episode_has_thumbnail: thumbnail_url.is_some(),
                 episode_thumbnail_url: thumbnail_url,
-                season_number: content.season_number.unwrap_or(0),
-                episode_number: content.episode_number.unwrap_or(0),
-                season_number_padded: format!("{:02}", content.season_number.unwrap_or(0)),
-                episode_number_padded: format!("{:02}", content.episode_number.unwrap_or(0)),
+                episode_has_numbering: episode_numbering.is_some(),
+                season_number: episode_numbering.map_or(0, |(season, _)| season),
+                episode_number: episode_numbering.map_or(0, |(_, episode)| episode),
+                season_number_padded: episode_numbering
+                    .map_or_else(String::new, |(season, _)| format!("{season:02}")),
+                episode_number_padded: episode_numbering
+                    .map_or_else(String::new, |(_, episode)| format!("{episode:02}")),
                 show_has_content_rating: content.content_rating.is_some(),
                 show_content_rating: content.content_rating.as_deref(),
                 show_ratings: split_ratings(content.content_rating.as_deref(), "VCHIP", true),
@@ -564,6 +571,7 @@ struct EpisodeContext<'a> {
     episode_artwork_url: Option<&'a str>,
     episode_has_thumbnail: bool,
     episode_thumbnail_url: Option<&'a str>,
+    episode_has_numbering: bool,
     season_number: i32,
     episode_number: i32,
     season_number_padded: String,
@@ -902,6 +910,40 @@ mod tests {
         assert!(xml.contains("<episode-num system=\"onscreen\">S01E03</episode-num>"));
         assert!(xml.contains("<episode-num system=\"xmltv_ns\">0.2.0/1</episode-num>"));
         assert!(xml.contains("<rating system=\"VCHIP\"><value>TV-14</value></rating>"));
+    }
+
+    #[tokio::test]
+    async fn render_episode_labels_absent_and_internal_zero_sentinel_as_unnumbered() {
+        let templates = load_templates_from_empty_temp_folder().await;
+
+        for (season_number, episode_number) in [(None, None), (Some(0), Some(0))] {
+            let episode_content = XmltvProgrammeContent {
+                sub_title: Some("Unnumbered".to_owned()),
+                season_number,
+                episode_number,
+                ..content(XmltvItemKind::Episode)
+            };
+            let input = RenderProgrammeInput {
+                programme_start: "20260417200000 +0000",
+                programme_stop: "20260417203000 +0000",
+                channel_id: "C1.145.ersatztv.org",
+                channel_number: "1",
+                custom_title: None,
+                title: "Some Show",
+                content: &episode_content,
+                icon_url: None,
+                thumbnail_url: None,
+            };
+
+            let xml = render_programme(&templates, &input).expect("render unnumbered episode");
+
+            assert!(
+                xml.contains("<episode-num system=\"onscreen\">Unnumbered</episode-num>"),
+                "{xml}"
+            );
+            assert!(!xml.contains("system=\"xmltv_ns\""), "{xml}");
+            assert!(!xml.contains("S00E00"), "{xml}");
+        }
     }
 
     #[tokio::test]

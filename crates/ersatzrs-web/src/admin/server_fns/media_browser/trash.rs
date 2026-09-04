@@ -253,8 +253,12 @@ pub(in crate::admin::server_fns::media_browser) async fn load_trash_episodes(
             let show_title: String = r.try_get("ShowTitle").unwrap_or_default();
             let season_number: i64 = r.try_get("SeasonNumber").unwrap_or(0);
             let episode_number: i64 = r.try_get("EpisodeNumber").unwrap_or(0);
-            let subtitle = (!show_title.is_empty())
-                .then(|| format!("{show_title} - S{season_number} E{episode_number}"));
+            let subtitle = crate::admin::i18n::episode_display_subtitle_text(
+                crate::admin::i18n::UiLanguage::English,
+                (!show_title.is_empty()).then_some(show_title.as_str()),
+                Some(season_number),
+                Some(episode_number),
+            );
             MediaCardRow {
                 id: r.try_get("Id").unwrap_or(0),
                 title: r.try_get("Title").unwrap_or_default(),

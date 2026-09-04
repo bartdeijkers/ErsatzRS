@@ -673,11 +673,92 @@ WHERE "AddonMediaListId" = ${seed.listId};
     await expect(workflowSteps.locator('[aria-current="step"]')).toContainText('Ready to review');
     await expect(collection.getByText(seed.firstTitle)).toBeVisible();
     await expect(collection.getByText(seed.secondTitle)).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Glamourland', exact: true })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
+      'Glamourland',
+    );
     const ids = await collection
       .locator('li[data-item-id]')
       .evaluateAll((items) => items.map((item) => item.getAttribute('data-item-id')));
     expect(ids).toEqual([String(seed.firstItemId), String(seed.secondItemId)]);
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('requires the persisted list name before reset and reload', async ({
+    page,
+  }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+
+    const section = page.getByTestId('addon-list-destructive-actions');
+    await expect(section.getByRole('heading', { name: 'Destructive actions' })).toBeVisible();
+    await expect(section.getByText('Operator draft', { exact: true })).toBeVisible();
+    await expect(section.getByText('example.invalid', { exact: true })).toBeVisible();
+    await expect(section).not.toContainText('/e2e/');
+
+    const trigger = section.getByRole('button', { name: 'Reset and reload', exact: true });
+    await trigger.focus();
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'Reset and reload' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('[data-modal-panel]')).toBeFocused();
+    await expect(dialog.getByText('Operator draft', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('example.invalid', { exact: true })).toBeVisible();
+    await expect(dialog).not.toContainText('/e2e/');
+    await expect(dialog.getByText('This reset removes', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('This reset retains', { exact: true })).toBeVisible();
+    await expect(dialog).toContainText('generated Playlist identity');
+    await expect(dialog).toContainText('channels and the generated Playlist remain empty');
+
+    const confirmation = dialog.getByLabel('Type the current list name to confirm');
+    const confirm = dialog.getByRole('button', { name: 'Reset and reload', exact: true });
+    await expect(confirm).toBeDisabled();
+    await confirmation.fill('operator draft');
+    await expect(confirm).toBeDisabled();
+    await confirmation.fill('  Operator draft  ');
+    await expect(confirm).toBeEnabled();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+
+    await trigger.click();
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+
+    await page.setViewportSize({ width: 320, height: 800 });
+    await trigger.click();
+    await expect(dialog).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+      ),
+    ).toBe(true);
+    await page.setViewportSize({ width: 640, height: 900 });
+    await page.evaluate(() => {
+      document.body.style.zoom = '2';
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+      ),
+    ).toBe(true);
+    await page.evaluate(() => {
+      document.body.style.zoom = '';
+    });
+
+    await confirmation.fill('Operator draft');
+    const navigation = page.waitForURL(/\?status=reset-queued$/);
+    await confirm.click();
+    await navigation;
+    await waitUntilHydrated(page);
+    await expect
+      .poll(() => sqlite(`
+SELECT COUNT(*) FROM "AddonMediaListLifecycleJob"
+WHERE "AddonMediaListId" = ${seed.listId};
+`))
+      .toBe('1');
     expect(runtimeErrors).toEqual([]);
   });
 
@@ -738,13 +819,13 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
       const firstItem = noJsPage
         .getByTestId('addon-metadata-items')
         .locator(`li[data-item-id="${seed.firstItemId}"]`);
-      await firstItem.getByRole('link', { name: 'Review item' }).click();
+      await firstItem.getByRole('link', { name: seed.firstTitle, exact: true }).click();
       await expect(noJsPage).toHaveURL(
         new RegExp(`/media/addon-lists/${seed.listId}/items/${seed.firstItemId}$`),
       );
       await noJsPage.getByLabel('Title', { exact: true }).fill('No-JS reviewed item');
       await noJsPage.getByLabel('Tags', { exact: true }).fill('native\nreviewed');
-      await noJsPage.getByRole('button', { name: 'Save', exact: true }).click();
+      await noJsPage.getByRole('button', { name: 'Save Changes', exact: true }).click();
       await expect(noJsPage).toHaveURL(/\?status=saved$/);
       expect(
         sqlite(`
@@ -800,6 +881,18 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
           { timeout: 30_000 },
         )
         .toBe('2,1,3');
+
+      await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
+      const resetSection = noJsPage.getByTestId('addon-list-destructive-actions');
+      await resetSection.getByLabel('Type the current list name to confirm').fill('Operator draft');
+      await resetSection.getByRole('button', { name: 'Reset and reload', exact: true }).click();
+      await expect(noJsPage).toHaveURL(/\?status=reset-queued$/);
+      await expect
+        .poll(() => sqlite(`
+SELECT COUNT(*) FROM "AddonMediaListLifecycleJob"
+WHERE "AddonMediaListId" = ${seed.listId};
+`))
+        .toBe('1');
     } finally {
       await context.close();
     }
@@ -871,7 +964,7 @@ FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ${seed.listId};`)
     }
   });
 
-  test('keeps grouped blockers in a non-sticky responsive readiness rail', async ({
+  test('keeps optional numbering in a non-sticky responsive readiness rail', async ({
     page,
   }, testInfo) => {
     const runtimeErrors = watchRuntimeErrors(page);
@@ -900,15 +993,29 @@ FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ${seed.listId};`)
     expect(shellBox?.x ?? 0).toBeGreaterThan(itemHeadingBox?.x ?? Number.POSITIVE_INFINITY);
 
     const blockerPanel = page.locator('#addon-list-publication-blockers');
-    const groupedBlockers = blockerPanel.getByRole('list', { name: 'Blockers' }).locator(':scope > li');
-    await expect(groupedBlockers).toHaveCount(1);
-    const numberingBlocker = groupedBlockers.getByRole('link', {
-      name: /48 items.*valid season and episode number/i,
-    });
-    await expect(numberingBlocker).toBeVisible();
+    await expect(blockerPanel).toBeHidden();
 
     const firstItem = page.getByTestId('addon-metadata-items').locator('li[data-item-id]').first();
-    await expect(firstItem.getByText('Enter a valid season and episode number.', { exact: true })).toHaveCount(2);
+    await expect(firstItem.getByText('Unnumbered', { exact: true })).toBeVisible();
+    await expect(firstItem.getByText('Review recommended', { exact: true })).toBeVisible();
+    await expect(firstItem.getByRole('spinbutton', { name: 'Season', exact: true })).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
+    await expect(firstItem.getByRole('spinbutton', { name: 'Episode', exact: true })).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    );
+    const seasonInput = firstItem.getByRole('spinbutton', { name: 'Season', exact: true });
+    const episodeInput = firstItem.getByRole('spinbutton', { name: 'Episode', exact: true });
+    await seasonInput.fill('1');
+    await expect(seasonInput).toHaveAttribute('aria-invalid', 'true');
+    await expect(episodeInput).toHaveAttribute('aria-invalid', 'true');
+    await expect(
+      firstItem.getByText('Enter a valid season and episode number.', { exact: true }),
+    ).toBeVisible();
+    await seasonInput.fill('');
+    await expect(firstItem.getByText('Unnumbered', { exact: true })).toBeVisible();
 
     await page.setViewportSize({ width: 1180, height: 900 });
     const [stackedShellBox, stackedItemHeadingBox] = await Promise.all([
@@ -924,7 +1031,7 @@ FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ${seed.listId};`)
       ),
     ).toBe(true);
 
-    await numberingBlocker.click();
+    await page.getByRole('button', { name: /^number episodes$/i }).click();
     await expect(page.locator('#episode-numbering-panel')).toBeVisible();
     await expect(page.getByRole('button', { name: /^number episodes$/i })).toHaveAttribute(
       'aria-expanded',
@@ -1043,17 +1150,25 @@ WHERE "Id" = ${seed.listId};
     const wideFirstItem = page.getByTestId('addon-metadata-items').locator('li[data-item-id]').first();
     expect((await wideFirstItem.boundingBox())?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(58);
     await expect(wideFirstItem.getByRole('link', { name: 'Review item' })).toHaveCount(1);
+    await expect(wideFirstItem.getByRole('link', { name: seed.firstTitle, exact: true })).toHaveAttribute(
+      'href',
+      `/media/addon-lists/${seed.listId}/items/${seed.firstItemId}`,
+    );
     await expect(page.getByTestId('addon-item-column-header')).toBeVisible();
-    await page.getByRole('link', { name: 'Edit metadata' }).click();
     await expect(page.getByTestId('addon-general-metadata')).toBeVisible();
-    await expect(page.getByTestId('addon-general-metadata')).toBeFocused();
+    await expect(page.getByRole('link', { name: 'Edit metadata' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Edit metadata' })).toHaveCount(0);
+    const heroTitle = page.getByRole('textbox', { name: 'Title', exact: true });
+    await expect(heroTitle).toBeVisible();
+    expect(
+      await heroTitle.evaluate((input) => Number.parseFloat(getComputedStyle(input).fontSize)),
+    ).toBeGreaterThanOrEqual(24);
     expect(await contrastAgainstPageBackground(page, '#addon-list-description')).toBeGreaterThanOrEqual(4.5);
     expect(await contrastAgainstPageBackground(page, '[data-testid="addon-metadata-conflict-summary"]')).toBeGreaterThanOrEqual(4.5);
     await page.screenshot({
       path: testInfo.outputPath('addon-metadata-editor-wide-review.png'),
       fullPage: false,
     });
-    await page.getByRole('button', { name: 'Edit metadata' }).click();
     await page.getByTestId('addon-metadata-items').scrollIntoViewIfNeeded();
     await page.screenshot({
       path: testInfo.outputPath('addon-metadata-items-wide-review.png'),
@@ -1582,9 +1697,10 @@ FROM (SELECT * FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listI
 
     const editorForm = page.locator('#addon_media_lists-list-editor-form');
     const hero = page.locator('#addon-list-description').locator('xpath=ancestor::header');
-    await expect(hero.getByRole('heading', { name: 'Operator draft' })).toBeVisible();
+    await expect(hero.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(
+      'Operator draft',
+    );
     await expect(hero.getByText(/1 metadata conflicts/i)).toBeVisible();
-    await hero.getByRole('button', { name: /^edit metadata$/i }).click();
     await expect(
       editorForm.getByRole('heading', { name: /^metadata conflicts$/i }),
     ).toBeVisible();
@@ -1598,27 +1714,88 @@ FROM (SELECT * FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listI
     await expect(itemsTable.getByText(seed.secondTitle)).toBeVisible();
     await expect(itemsTable.getByText(seed.firstTitle)).toHaveCount(0);
 
-    let reviewRow = itemsTable
+    const reviewRow = itemsTable
       .locator('li[data-item-id]')
       .filter({ hasText: seed.secondTitle })
       .first();
-    await reviewRow.getByRole('link', { name: 'Review item', exact: true }).click();
-    const inlineEditor = itemsTable
-      .locator('li[data-item-id]')
-      .filter({ has: page.getByLabel(/^tags/i) })
-      .first();
-    await expect(inlineEditor).toBeVisible();
+    const itemConflict = JSON.stringify({
+      title: {
+        provider_before: 'Review item original',
+        provider_after: 'Review item refreshed',
+        operator_value: seed.secondTitle,
+      },
+    });
+    sqlite(`
+UPDATE "AddonMediaListItem"
+SET "MetadataConflictJson" = '${sqlEscape(itemConflict)}'
+WHERE "Id" = ${seed.secondItemId};
+`);
+    await reviewRow.getByRole('link', { name: seed.secondTitle, exact: true }).click();
+    await expect(page).toHaveURL(
+      new RegExp(`/media/addon-lists/${seed.listId}/items/${seed.secondItemId}$`),
+    );
+    const itemEditor = page.locator('#addon-list-item-review-form');
+    await expect(itemEditor).toBeVisible();
+    const itemMetadata = itemEditor.getByTestId('addon-item-metadata');
+    for (const label of [
+      'Original title',
+      'Year',
+      'Release date',
+      'Artists',
+      'Studios',
+      'Directors',
+      'Writers',
+      'Languages',
+      'Cast and credits',
+      'Poster',
+      'fan art',
+      'Thumbnail',
+    ]) {
+      await expect(itemMetadata.getByLabel(label, { exact: true })).toBeVisible();
+    }
+    await expect(
+      itemEditor.getByRole('heading', { name: /^metadata conflicts$/i }),
+    ).toBeVisible();
+    await expect(itemEditor.getByText('Review item original')).toBeVisible();
+    await expect(itemEditor.getByText('Review item refreshed')).toBeVisible();
+
     const manyTags = Array.from({ length: 120 }, (_, index) => `tag-${index + 1}`).join('\n');
-    await inlineEditor.getByLabel(/^tags/i).fill(manyTags);
-    await inlineEditor.getByRole('button', { name: /^save$/i }).click();
+    await itemMetadata.getByLabel('Original title', { exact: true }).fill('Original review title');
+    await itemMetadata.getByLabel('Year', { exact: true }).fill('2025');
+    await itemMetadata.getByLabel('Release date', { exact: true }).fill('2025-08-21');
+    await itemMetadata.getByLabel('Artists', { exact: true }).fill('Artist One, Artist Two');
+    await itemMetadata.getByLabel('Studios', { exact: true }).fill('Review Studio');
+    await itemMetadata.getByLabel('Directors', { exact: true }).fill('Review Director');
+    await itemMetadata.getByLabel('Writers', { exact: true }).fill('Review Writer');
+    await itemMetadata.getByLabel('Languages', { exact: true }).fill('en, nl');
+    await itemMetadata.getByLabel('Cast and credits', { exact: true }).fill('Presenter | Host');
+    await itemEditor.getByLabel(/^tags/i).fill(manyTags);
+    await page.getByRole('button', { name: /^save changes$/i }).click();
     await expect
       .poll(() =>
         sqlite(`
-SELECT json_extract("MetadataOverrideJson", '$.tags[119]')
+SELECT json_extract("MetadataOverrideJson", '$.tags[119]') || ',' ||
+       json_extract("MetadataOverrideJson", '$.original_title') || ',' ||
+       json_extract("MetadataOverrideJson", '$.year') || ',' ||
+       json_extract("MetadataOverrideJson", '$.people[0].role')
 FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
 `),
       )
-      .toBe('tag-120');
+      .toBe('tag-120,Original review title,2025,Host');
+
+    // A second save from the same hydrated editor exercises the refreshed ETag.
+    await itemMetadata.getByLabel('Original title', { exact: true }).fill('Second saved title');
+    await page.getByRole('button', { name: /^save changes$/i }).click();
+    await expect
+      .poll(() =>
+        sqlite(`
+SELECT json_extract("MetadataOverrideJson", '$.original_title')
+FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
+`),
+      )
+      .toBe('Second saved title');
+
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
     sqlite(`
 UPDATE "AddonMediaListItem"
@@ -1658,12 +1835,7 @@ WHERE "Id" = ${seed.listId};
 
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     const refreshedForm = page.locator('#addon_media_lists-list-editor-form');
-    const refreshedHero = page
-      .locator('#addon-list-description')
-      .locator('xpath=ancestor::header');
-    await refreshedHero.getByRole('button', { name: /^edit metadata$/i }).click();
-    const refreshedPanel = refreshedForm.getByTestId('addon-general-metadata');
-    await refreshedPanel.getByRole('textbox', { name: /^title$/i }).fill('Reviewed collection');
+    await page.getByRole('textbox', { name: /^title$/i }).fill('Reviewed collection');
     const saveNavigation = page.waitForEvent('framenavigated');
     await page.getByRole('button', { name: /^save changes$/i }).click();
     await saveNavigation;

@@ -62,6 +62,8 @@ pub struct AddonMediaListAdminRow {
 pub struct AddonMediaListAdminForm {
     /// Persisted host identity.
     pub id: EntityId,
+    /// Current authoritative provider-list name used by destructive confirmations.
+    pub name: String,
     /// Installed provider add-on identity.
     pub addon_id: String,
     /// Provider source hyperlink.

@@ -518,6 +518,10 @@ pub async fn list_playout_detail_items(
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
+    let language = crate::admin::server_fns::settings::load_ui_language_for_api(
+        state.application.ports().admin_settings(),
+    )
+    .await?;
     state
         .application
         .list_playout_detail_items(playout_id, show_filler, page, page_size)
@@ -525,13 +529,21 @@ pub async fn list_playout_detail_items(
         .map(|items| {
             items
                 .into_iter()
-                .map(|item| PlayoutDetailItem {
-                    title: item.title,
-                    start: item.start,
-                    finish: item.finish,
-                    duration: item.duration,
-                    scheduling_context: item.scheduling_context,
-                    filler_kind: item.filler_kind,
+                .map(|item| {
+                    let title =
+                        crate::admin::server_fns::media_browser::localize_episode_display_text(
+                            language,
+                            &item.title,
+                        )
+                        .unwrap_or(item.title);
+                    PlayoutDetailItem {
+                        title,
+                        start: item.start,
+                        finish: item.finish,
+                        duration: item.duration,
+                        scheduling_context: item.scheduling_context,
+                        filler_kind: item.filler_kind,
+                    }
                 })
                 .collect()
         })
@@ -2215,10 +2227,14 @@ mod legacy_sql_regressions {
                     let season = season_number.unwrap_or(0);
                     let episode = episode_number.unwrap_or(0);
                     let ep_title = episode_title.unwrap_or_default();
-                    with_chapter(
-                        format!("{show}s{season:02}e{episode:02} - {ep_title}"),
-                        chapter.as_deref(),
-                    )
+                    let raw_title = format!("{show}s{season:02}e{episode:02} - {ep_title}");
+                    let title =
+                        crate::admin::server_fns::media_browser::localize_episode_display_text(
+                            crate::admin::i18n::UiLanguage::English,
+                            &raw_title,
+                        )
+                        .unwrap_or(raw_title);
+                    with_chapter(title, chapter.as_deref())
                 }
             } else if is_movie {
                 movie_title.unwrap_or_else(|| "[unknown movie]".to_owned())
