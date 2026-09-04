@@ -218,10 +218,11 @@ failure or process interruption.
 - Chromium and Firefox cover active publication, expired recovery, Retry,
   Restore, no-JavaScript submission, restart, and a list that publishes usable
   items while one restricted item is excluded.
-- Windows dogfood repeats the exact failure shape with redacted evidence: stop
-  or fault publication after scan, restart, recover in the UI, publish, and
-  verify the archive's packaged binary, health, item count, playlist count,
-  revision, and absence of a recovery journal.
+- The integrated AMM-N-03 Windows dogfood gate repeats the exact failure shape
+  with redacted evidence: stop or fault publication after scan, restart,
+  recover in the UI, publish, and verify the archive's packaged binary, health,
+  item count, playlist count, revision, and absence of a recovery journal. It
+  is not a prerequisite for the focused AMM-J-03 milestone.
 - Final closeout runs affected Rust checks, hydration lint, web parity,
   progress validation, runtime smoke, and the playback gates required by any
   changed scan/refresh behavior.

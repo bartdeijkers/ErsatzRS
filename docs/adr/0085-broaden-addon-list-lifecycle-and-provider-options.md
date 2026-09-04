@@ -6,8 +6,8 @@ Accepted (2026-09-01)
 
 ## Implementation
 
-Partial — AMM-J-01 and AMM-J-02 are implemented; the remaining milestones are
-tracked in structured progress.
+Partial — AMM-J-01 through AMM-J-03 are implemented; the remaining milestones
+are tracked in structured progress.
 
 ## Context
 

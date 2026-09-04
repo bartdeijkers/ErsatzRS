@@ -26,7 +26,9 @@ shared managed-library lease, including upgrade adoption of stranded journals.
 AMM-J-02 completes marker-owned byte-isolated backups, resumable swaps,
 bounded Windows sharing retry, post-swap scan/integrity verification, and
 journal-last cleanup, including native Windows held-handle proof at exact
-commit `9196c4f`.
+commit `9196c4f`. AMM-J-03 completes typed restricted-item continuation,
+truthful publication state, and generation-fenced Retry/Restore actions; its
+integrated packaged Windows restart repetition remains owned by AMM-N-03.
 ADR 0085 broadens the remaining corrective program through AMM-K operator
 lifecycle/navigation, AMM-L cadenced incremental
 refresh/reconciliation, AMM-M inherited yt-dlp access/SponsorBlock/subtitles
@@ -37,8 +39,8 @@ early stop, additions-only automatic publication, and updater rollback.
 '''
 
 next_steps = '''
-Complete AMM-J-03 and AMM-J-04 before delivering ADR 0085 in dependency order
-through AMM-K, AMM-L, AMM-M, and AMM-N. Resume Phase 9A at p9a-01 after that
+Complete AMM-J-04 before delivering ADR 0085 in dependency order through
+AMM-K, AMM-L, AMM-M, and AMM-N. Resume Phase 9A at p9a-01 after that
 corrective program by accepting the teletext product and standards contract
 before implementation.
 '''

@@ -2248,7 +2248,7 @@ seconds with 830 tests skipped. This closes the real Windows held-handle gate.
 id         = 'amm-j-03'
 phase      = 'AMM-J — Crash-safe publication recovery'
 title      = 'Expose recovery and keep restricted items item-scoped'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-publication-recovery.md'
 depends_on = ['amm-j-02']
@@ -2263,10 +2263,10 @@ specific clearing action. Official add-ons return structured provider-neutral
 authentication/restriction outcomes; optional failures remain non-blocking,
 and an inaccessible item is retained for review but excluded from the attempted
 revision so usable items still publish. Credentials use SecretReference only.
-Chromium, Firefox, Windows dogfood, and packaged restart acceptance pass.
+Chromium and Firefox acceptance pass.
 '''
 evidence = '''
-Implemented but not yet closed: `media-list.list.v6` carries typed
+Completed 2026-09-04: `media-list.list.v6` carries typed
 authentication/restriction outcomes from the official yt-dlp add-on without
 provider-text parsing or cookie material in the host. Restricted selected
 items remain reviewable, preserve the prior published snapshot until explicit
@@ -2277,8 +2277,8 @@ forms, and only an owner-matched live lease locks edits or renders Publishing.
 Focused repository, application, contract, health, migration, publication,
 hydration, and official-add-on tests pass. Six focused Playwright cases pass in
 Chromium and Firefox, covering Retry, no-JavaScript Restore, and publication
-with one restricted item. Packaged Windows restart dogfood remains open, so the
-milestone stays unclosed.
+with one restricted item. The integrated packaged Windows restart repetition
+remains owned by `amm-n-03` and does not block this focused milestone.
 '''
 
 [[milestone]]

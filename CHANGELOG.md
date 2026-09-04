@@ -31,7 +31,9 @@ release section when tagging a release.
   showed that a failed post-scan directory rollback can leave an otherwise
   valid recovery journal permanently blocked. AMM-J now owns durable restart
   recovery, Windows/POSIX filesystem retry, localized operator actions, and
-  item-scoped continuation for provider-restricted entries.
+  item-scoped continuation for provider-restricted entries. Its integrated
+  packaged Windows restart repetition remains part of the AMM-N closeout
+  instead of blocking the focused recovery-UI milestone.
 
 - Accept ADR 0085 and broaden the open Add-on Metadata Management roadmap
   through AMM-N: coordinate publication with every scan origin, make blocked
