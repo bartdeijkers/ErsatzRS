@@ -2446,7 +2446,7 @@ milestones.
 id         = 'amm-k-04'
 phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Preview list impact and retain bounded publication revisions'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-03']
@@ -2463,9 +2463,11 @@ Localized hydrated/no-JS, 320-pixel, 200%-zoom, Chromium, and Firefox proof
 covers source/diff/impact/history and safe restore.
 '''
 evidence = '''
-Not started. The current editor has no source preflight, general published-to-
-draft diff, downstream reset impact, routine revision comparison/restore, or
-complete shared-dialog and sortable-table accessibility behavior.
+Implementation planning claimed by Codex on 2026-09-04. This slice is reserved
+for source/diff/reset-impact preview, bounded revision comparison and restore,
+artifact/playout pin safety, and the named shared accessibility dependencies;
+refresh, provider options, tool maintenance, and integrated closeout remain in
+their later owning milestones.
 '''
 
 [[milestone]]
