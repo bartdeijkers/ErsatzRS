@@ -1951,6 +1951,299 @@ async fn durable_publication_fences_stale_workers_at_stage_and_commit() {
         2,
         "successful cleanup publishes atomically with journal removal"
     );
+    assert_eq!(
+        scalar::<String>(
+            &pool,
+            r#"SELECT "revision"."CompletedAt"
+               FROM "AddonMediaListRevision" AS "revision"
+               WHERE "revision"."AddonMediaListId" = 1
+                 AND "revision"."Revision" = 2"#,
+        )
+        .await,
+        scalar::<String>(
+            &pool,
+            r#"SELECT "event"."OccurredAt"
+               FROM "AddonMediaListPublicationEvent" AS "event"
+               JOIN "AddonMediaListPublicationJob" AS "job"
+                 ON "job"."Id" = "event"."PublicationJobId"
+               WHERE "job"."AddonMediaListId" = 1
+                 AND "job"."TargetPublishedRevision" = 2
+                 AND "event"."FilesystemTransition" = 4"#,
+        )
+        .await,
+        "the retained revision uses the stable verification event timestamp"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn cleanup_failure_restore_does_not_reuse_the_retained_revision_number() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let fixture = prepare_verifiable_tv_publication().await;
+    verify_publication_candidate(&fixture)
+        .await
+        .expect("verify first candidate");
+    assert!(fixture
+        .repositories
+        .managed_library_operations
+        .transition_publication(
+            &fixture.claim,
+            AddonMediaListPublicationPhase::Verifying,
+            AddonMediaListPublicationPhase::CleaningUp,
+        )
+        .await
+        .expect("enter first cleanup"));
+    let journal_json = scalar::<String>(
+        &fixture.pool,
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .await;
+    let journal: serde_json::Value =
+        serde_json::from_str(&journal_json).expect("decode first publication journal");
+    let backup = PathBuf::from(journal["backup_folder"].as_str().expect("backup path"));
+    let original_permissions = fs::metadata(&backup)
+        .expect("backup metadata")
+        .permissions();
+    let mut blocked_permissions = original_permissions.clone();
+    blocked_permissions.set_mode(0);
+    fs::set_permissions(&backup, blocked_permissions).expect("block backup cleanup");
+    let cleanup_error = fixture
+        .repositories
+        .addon_media_lists
+        .finalize_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::Published,
+            fixture.enqueued.operation.id,
+            fixture.enqueued.job.generation,
+            &fixture.claim.operation.owner_token,
+            &fixture.claim.lease_owner,
+        )
+        .await
+        .expect_err("inaccessible backup must interrupt cleanup after retention");
+    fs::set_permissions(&backup, original_permissions).expect("unblock backup recovery");
+    assert!(cleanup_error.to_string().contains("publication"));
+    assert_eq!(
+        scalar::<i64>(
+            &fixture.pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaListRevision"
+               WHERE "AddonMediaListId" = 1 AND "Revision" = 2"#,
+        )
+        .await,
+        1,
+        "the rolled-back candidate snapshot remains immutable history; cleanup error: {cleanup_error}"
+    );
+
+    fixture
+        .repositories
+        .addon_media_lists
+        .restore_staged_publication_revision(
+            LIST_ID,
+            "injected cleanup failure",
+            fixture.enqueued.operation.id,
+            fixture.enqueued.job.generation,
+            &fixture.claim.operation.owner_token,
+            &fixture.claim.lease_owner,
+        )
+        .await
+        .expect("restore previous files");
+    fixture
+        .repositories
+        .addon_media_lists
+        .reconcile_restored_publication_revision(
+            LIST_ID,
+            fixture.enqueued.operation.id,
+            fixture.enqueued.job.generation,
+            &fixture.claim.operation.owner_token,
+            &fixture.claim.lease_owner,
+        )
+        .await
+        .expect("restore previous projection");
+    assert!(fixture
+        .repositories
+        .managed_library_operations
+        .begin_publication_verification(
+            &fixture.claim,
+            AddonMediaListPublicationPhase::CleaningUp,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+        )
+        .await
+        .expect("enter restored verification"));
+    fixture
+        .repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+            fixture.enqueued.operation.id,
+            fixture.enqueued.job.generation,
+            &fixture.claim.operation.owner_token,
+            &fixture.claim.lease_owner,
+        )
+        .await
+        .expect("verify restored publication");
+    assert!(fixture
+        .repositories
+        .managed_library_operations
+        .transition_publication(
+            &fixture.claim,
+            AddonMediaListPublicationPhase::Verifying,
+            AddonMediaListPublicationPhase::CleaningUp,
+        )
+        .await
+        .expect("enter restored cleanup"));
+    fixture
+        .repositories
+        .addon_media_lists
+        .finalize_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+            fixture.enqueued.operation.id,
+            fixture.enqueued.job.generation,
+            &fixture.claim.operation.owner_token,
+            &fixture.claim.lease_owner,
+        )
+        .await
+        .expect("finalize restored publication");
+    assert!(fixture
+        .repositories
+        .managed_library_operations
+        .complete_publication(
+            &fixture.claim,
+            AddonMediaListPublicationOutcome::RestoredAfterFailure,
+        )
+        .await
+        .expect("complete restored publication"));
+
+    save_collection_title(&fixture.repositories, "Different publication").await;
+    let form = fixture
+        .repositories
+        .addon_media_lists
+        .get_admin_form(LIST_ID)
+        .await
+        .expect("load different draft")
+        .expect("list exists");
+    let next = fixture
+        .repositories
+        .managed_library_operations
+        .enqueue_publication(LIST_ID, 1, form.draft_revision, form.published_revision + 1)
+        .await
+        .expect("enqueue different publication");
+    assert_eq!(form.published_revision, 1);
+    assert_eq!(next.job.target_published_revision, 3);
+    let next_claim = fixture
+        .repositories
+        .managed_library_operations
+        .claim_operation(next.operation.id, Utc::now())
+        .await
+        .expect("claim different publication")
+        .expect("different publication is claimable");
+    assert!(fixture
+        .repositories
+        .managed_library_operations
+        .transition_publication(
+            &next_claim,
+            AddonMediaListPublicationPhase::AwaitingLease,
+            AddonMediaListPublicationPhase::Staging,
+        )
+        .await
+        .expect("enter different staging"));
+    fixture
+        .repositories
+        .addon_media_lists
+        .stage_publication_revision(
+            LIST_ID,
+            next.job.saved_revision,
+            next.operation.id,
+            next.job.generation,
+            &next_claim.operation.owner_token,
+            &next_claim.lease_owner,
+        )
+        .await
+        .expect("stage different publication at queued target");
+    fixture
+        .repositories
+        .addon_media_lists
+        .commit_staged_publication_revision(
+            LIST_ID,
+            next.job.target_published_revision,
+            next.operation.id,
+            next.job.generation,
+            &next_claim.operation.owner_token,
+            &next_claim.lease_owner,
+        )
+        .await
+        .expect("commit different monotonic revision");
+    assert!(fixture
+        .repositories
+        .managed_library_operations
+        .begin_publication_verification(
+            &next_claim,
+            AddonMediaListPublicationPhase::Staging,
+            AddonMediaListPublicationOutcome::Published,
+        )
+        .await
+        .expect("enter different verification"));
+    fixture
+        .repositories
+        .addon_media_lists
+        .verify_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::Published,
+            next.operation.id,
+            next.job.generation,
+            &next_claim.operation.owner_token,
+            &next_claim.lease_owner,
+        )
+        .await
+        .expect("verify different publication");
+    assert!(fixture
+        .repositories
+        .managed_library_operations
+        .transition_publication(
+            &next_claim,
+            AddonMediaListPublicationPhase::Verifying,
+            AddonMediaListPublicationPhase::CleaningUp,
+        )
+        .await
+        .expect("enter different cleanup"));
+    fixture
+        .repositories
+        .addon_media_lists
+        .finalize_staged_publication_revision(
+            LIST_ID,
+            AddonMediaListPublicationOutcome::Published,
+            next.operation.id,
+            next.job.generation,
+            &next_claim.operation.owner_token,
+            &next_claim.lease_owner,
+        )
+        .await
+        .expect("finalize different publication");
+    assert!(fixture
+        .repositories
+        .managed_library_operations
+        .complete_publication(&next_claim, AddonMediaListPublicationOutcome::Published)
+        .await
+        .expect("complete different publication"));
+    assert_eq!(
+        scalar::<i32>(
+            &fixture.pool,
+            r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .await,
+        3
+    );
+    assert_eq!(
+        scalar::<i64>(
+            &fixture.pool,
+            r#"SELECT COUNT(*) FROM "AddonMediaListRevision"
+               WHERE "AddonMediaListId" = 1 AND "Revision" IN (2, 3)"#,
+        )
+        .await,
+        2,
+        "the restored-away revision and later success retain distinct identities"
+    );
 }
 
 #[tokio::test]

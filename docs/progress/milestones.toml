@@ -2446,7 +2446,7 @@ milestones.
 id         = 'amm-k-04'
 phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Preview list impact and retain bounded publication revisions'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-03']
@@ -2463,11 +2463,22 @@ Localized hydrated/no-JS, 320-pixel, 200%-zoom, Chromium, and Firefox proof
 covers source/diff/impact/history and safe restore.
 '''
 evidence = '''
-Implementation planning claimed by Codex on 2026-09-04. This slice is reserved
-for source/diff/reset-impact preview, bounded revision comparison and restore,
-artifact/playout pin safety, and the named shared accessibility dependencies;
-refresh, provider options, tool maintenance, and integrated closeout remain in
-their later owning milestones.
+Completed 2026-09-04. A durable bounded first-page source probe retains only
+redacted summary data and becomes stale when its exact saved inputs change. The
+detail page links exact saved-draft categories to filtered review rows, reports
+the actual reset deletion and downstream dependency scope, and exposes
+digest-validated retained revision history, comparison, and old-only restore.
+Restore materializes the selected snapshot under the normal publication lease,
+publishes it at the next unused monotonic revision, and retains current plus two
+preceding complete revisions while honoring active and downstream pins. Shared
+dialogs now use aria-labelledby, contain Tab focus, and restore focus according
+to the completed action; Name and Id sorting is keyboard operable with honest
+aria-sort and case-insensitive deterministic paging. Focused repository,
+migration, health, native SSR, WASM hydration, and fault-injection checks pass.
+The localized Chromium/Firefox hydrated and no-JavaScript scenarios are
+authored and discovered for both projects; their packaged execution remains in
+AMM-N-03 by maintainer decision. Refresh, provider playback options, artifact
+production, and tool maintenance remain in their later owning milestones.
 '''
 
 [[milestone]]

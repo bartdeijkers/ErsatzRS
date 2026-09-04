@@ -278,6 +278,7 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
             }}
 
             <DeleteDialog
+                dialog_id="trash-item-delete-dialog"
                 open=single_delete_open
                 entity_name=Signal::derive(move || {
                     single_delete_target.get().map(|(_, title)| title).unwrap_or_default()
@@ -295,6 +296,7 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
                 })
             />
             <DeleteDialog
+                dialog_id="trash-selection-delete-dialog"
                 open=bulk_delete_open
                 entity_name=Signal::derive(move || {
                     selected_items_count(selected_count.get())
@@ -310,6 +312,7 @@ fn TrashIsland(initial_data: TrashPageData) -> impl IntoView {
             />
 
             <Modal
+                dialog_id="trash-empty-dialog"
                 open=empty_trash_open
                 title=tr(TextKey::EmptyTrash).to_owned()
                 on_close=Callback::new(move |confirmed: bool| {

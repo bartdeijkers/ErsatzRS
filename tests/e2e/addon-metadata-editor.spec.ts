@@ -67,6 +67,42 @@ function sqlite(sql: string): string {
   }
 }
 
+function revisionLogicalContent(listId: number, revision: number): string {
+  return sqlite(`
+SELECT COALESCE("revision"."Name", '') || char(30) ||
+       COALESCE("revision"."Description", '') || char(30) ||
+       COALESCE("revision"."GeneratePlaylist", 0) || char(30) ||
+       COALESCE("revision"."ContentKindOverride", 0) || char(30) ||
+       COALESCE("revision"."PresentationKind", 0) || char(30) ||
+       COALESCE("revision"."RequestedPresentationKind", 0) || char(30) ||
+       COALESCE("revision"."MetadataJson", '') || char(30) ||
+       COALESCE((
+         SELECT group_concat("item", char(29)) FROM (
+           SELECT "ProviderId" || char(31) || "GuidsJson" || char(31) || "Rank" ||
+                  char(31) || "Kind" || char(31) || "ContentKind" || char(31) ||
+                  "Included" || char(31) || "Published" || char(31) || "DisplayTitle" ||
+                  char(31) || "MetadataDigest" AS "item"
+           FROM "AddonMediaListRevisionItem"
+           WHERE "AddonMediaListRevisionId" = "revision"."Id"
+           ORDER BY "ProviderId"
+         )
+       ), '') || char(30) ||
+       COALESCE((
+         SELECT group_concat("file", char(29)) FROM (
+           SELECT "file"."PublishedRelativePath" || char(31) || "blob"."Sha256" AS "file"
+           FROM "AddonMediaListRevisionFile" AS "file"
+           JOIN "AddonMediaListRevisionFileBlob" AS "blob"
+             ON "blob"."Id" = "file"."AddonMediaListRevisionFileBlobId"
+           WHERE "file"."AddonMediaListRevisionId" = "revision"."Id"
+           ORDER BY "file"."PublishedRelativePath"
+         )
+       ), '')
+FROM "AddonMediaListRevision" AS "revision"
+WHERE "revision"."AddonMediaListId" = ${listId}
+  AND "revision"."Revision" = ${revision};
+`);
+}
+
 function addonContentHash(root: string): string {
   const files: string[] = [];
   const visit = (directory: string): void => {
@@ -609,6 +645,67 @@ test.describe('shared add-on metadata editor', () => {
     expect(runtimeErrors).toEqual([]);
   });
 
+  test('keeps source tests non-mutating and marks changed inputs stale', async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    const runtimeErrors = watchRuntimeErrors(page);
+    const seed = seedMetadataEditor(testInfo);
+    const before = sqlite(`
+SELECT "DraftRevision" || ',' || "PublishedRevision" || ',' ||
+       (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listId})
+FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
+`);
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+
+    const sourcePanel = page
+      .getByRole('heading', { name: 'Test source' })
+      .locator('xpath=ancestor::section');
+    await sourcePanel.getByRole('button', { name: 'Test source' }).click();
+    await expect(sourcePanel.getByText('Source is available')).toBeVisible({ timeout: 60_000 });
+    await expect(sourcePanel.getByText('Provider identity', { exact: true })).toBeVisible();
+    await expect(sourcePanel.getByText('Title', { exact: true })).toBeVisible();
+    await expect(
+      sourcePanel.getByText('Items returned on the first page', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      sourcePanel.getByText('Provider total item count', { exact: true }),
+    ).toBeVisible();
+    await expect(sourcePanel.getByText('First page complete', { exact: true })).toBeVisible();
+    await expect(sourcePanel.getByText('Yes', { exact: true })).toBeVisible();
+    expect(sqlite(`
+SELECT "DraftRevision" || ',' || "PublishedRevision" || ',' ||
+       (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${seed.listId})
+FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
+`)).toBe(before);
+
+    sqlite(`UPDATE "AddonMediaList" SET "DraftRevision" = "DraftRevision" + 1 WHERE "Id" = ${seed.listId};`);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+    await expect(page.getByText(/saved inputs no longer match the current list/i)).toBeVisible();
+    expect(runtimeErrors).toEqual([]);
+  });
+
+  test('sorts the overview by honest Name and displayed Id headers', async ({ page }, testInfo) => {
+    const runtimeErrors = watchRuntimeErrors(page);
+    seedMetadataEditor(testInfo);
+    await forceEnglish(page);
+    await gotoHydrated(page, '/media/addon-lists');
+
+    const nameHeader = page.getByRole('columnheader').filter({
+      has: page.getByRole('button', { name: 'Sort by Name' }),
+    });
+    const idHeader = page.getByRole('columnheader').filter({
+      has: page.getByRole('button', { name: 'Sort by Id' }),
+    });
+    await expect(nameHeader).toHaveAttribute('aria-sort', 'ascending');
+    await expect(idHeader).toHaveAttribute('aria-sort', 'none');
+    await idHeader.getByRole('button').click();
+    await expect(idHeader).toHaveAttribute('aria-sort', 'ascending');
+    await expect(nameHeader).toHaveAttribute('aria-sort', 'none');
+    await idHeader.getByRole('button').click();
+    await expect(idHeader).toHaveAttribute('aria-sort', 'descending');
+    expect(runtimeErrors).toEqual([]);
+  });
+
   test('materializes the exact committed overview when discovery becomes ready', async ({
     page,
   }, testInfo) => {
@@ -691,10 +788,22 @@ WHERE "AddonMediaListId" = ${seed.listId};
     await forceEnglish(page);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
+    await expect(page.getByRole('heading', { name: 'Test source' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Test source' })).toBeEnabled();
+    await expect(page.getByRole('heading', { name: 'Saved draft changes' })).toBeVisible();
+    await expect(
+      page.getByText('An exact draft comparison is unavailable until a complete revision is published.'),
+    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Revision history' })).toBeVisible();
+    await expect(page.getByText('No published revisions are retained yet.')).toBeVisible();
+
     const section = page.getByTestId('addon-list-destructive-actions');
     await expect(section.getByRole('heading', { name: 'Destructive actions' })).toBeVisible();
     await expect(section.getByText('Operator draft', { exact: true })).toBeVisible();
     await expect(section.getByText('example.invalid', { exact: true })).toBeVisible();
+    await expect(section.getByText('Published items', { exact: true })).toBeVisible();
+    await expect(section.getByText('Generated playlists', { exact: true })).toBeVisible();
+    await expect(section.getByText('Active or future playouts', { exact: true })).toBeVisible();
     await expect(section).not.toContainText('/e2e/');
 
     const trigger = section.getByRole('button', { name: 'Reset and reload', exact: true });
@@ -718,6 +827,11 @@ WHERE "AddonMediaListId" = ${seed.listId};
     await expect(confirm).toBeDisabled();
     await confirmation.fill('  Operator draft  ');
     await expect(confirm).toBeEnabled();
+    await confirm.focus();
+    await page.keyboard.press('Tab');
+    await expect(confirmation).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(confirm).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
@@ -749,10 +863,11 @@ WHERE "AddonMediaListId" = ${seed.listId};
     });
 
     await confirmation.fill('Operator draft');
-    const navigation = page.waitForURL(/\?status=reset-queued$/);
     await confirm.click();
-    await navigation;
-    await waitUntilHydrated(page);
+    await expect(dialog).toBeHidden();
+    const resetStatus = page.locator('#addon-list-reset-status');
+    await expect(resetStatus).toHaveText('Reset and reload queued.');
+    await expect(resetStatus).toBeFocused();
     await expect
       .poll(() => sqlite(`
 SELECT COUNT(*) FROM "AddonMediaListLifecycleJob"
@@ -799,6 +914,23 @@ WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
 `), { timeout: 60_000 })
         .toBe('1');
 
+      await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
+      await noJsPage.getByRole('button', { name: 'Test source' }).click();
+      await expect(noJsPage).toHaveURL(/\?status=source-test-queued$/);
+      await expect
+        .poll(() => sqlite(`
+SELECT COUNT(*) FROM "AddonMediaListSourceProbeJob"
+WHERE "AddonMediaListId" = ${seed.listId};
+`))
+        .toBe('1');
+      await noJsPage.goto('/media/addon-lists');
+      await noJsPage.getByRole('button', { name: 'Sort by Id' }).click();
+      await expect(noJsPage).toHaveURL(/sort=id&direction=ascending$/);
+      await expect(
+        noJsPage.getByRole('columnheader').filter({
+          has: noJsPage.getByRole('button', { name: 'Sort by Id' }),
+        }),
+      ).toHaveAttribute('aria-sort', 'ascending');
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       await expect(noJsPage.getByRole('link', { name: /collection needs a title/i })).toBeVisible();
       await expect(
@@ -881,6 +1013,86 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
           { timeout: 30_000 },
         )
         .toBe('2,1,3');
+
+      const revisionOneContent = revisionLogicalContent(seed.listId, 1);
+      expect(revisionOneContent).not.toBe('');
+      sqlite(`
+UPDATE "AddonMediaListItem"
+SET "MetadataOverrideJson" = json_set(
+      "MetadataOverrideJson",
+      '$.title',
+      'No-JS revision two item'
+    )
+WHERE "Id" = ${seed.firstItemId};
+UPDATE "AddonMediaList"
+SET "ReviewState" = 1, "DraftRevision" = "DraftRevision" + 1
+WHERE "Id" = ${seed.listId};
+`);
+
+      await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
+      await noJsPage.getByRole('button', { name: 'Publish list', exact: true }).click();
+      await expect(noJsPage).toHaveURL(/\?status=publishing$/);
+      await expect
+        .poll(
+          () =>
+            sqlite(`
+SELECT "PublishedRevision" || ',' || (
+  SELECT "operation"."State"
+  FROM "AddonMediaListPublicationJob" AS "job"
+  JOIN "ManagedLibraryOperation" AS "operation" ON "operation"."Id" = "job"."OperationId"
+  WHERE "job"."AddonMediaListId" = ${seed.listId}
+  ORDER BY "job"."Generation" DESC
+  LIMIT 1
+)
+FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
+`),
+          { timeout: 30_000 },
+        )
+        .toBe('2,3');
+
+      await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
+      const revisionPanel = noJsPage
+        .getByRole('heading', { name: 'Revision history' })
+        .locator('xpath=ancestor::section');
+      const revisionTwo = revisionPanel.locator('article').filter({ hasText: 'Revision 2' });
+      const revisionOne = revisionPanel.locator('article').filter({ hasText: 'Revision 1' });
+      await expect(revisionTwo.getByRole('button', { name: 'Restore revision' })).toBeDisabled();
+      await expect(revisionOne.getByRole('button', { name: 'Restore revision' })).toBeEnabled();
+      await expect(revisionPanel.locator('select[name="compare_left"]')).toHaveValue('2');
+      await expect(revisionPanel.locator('select[name="compare_right"]')).toHaveValue('1');
+      await revisionPanel.getByRole('button', { name: 'Compare revisions' }).click();
+      await expect(noJsPage).toHaveURL(/\?compare_left=2&compare_right=1$/);
+      await expect(noJsPage.getByTestId('revision-diff')).toBeVisible();
+
+      const revisionOneAfterCompare = noJsPage
+        .getByRole('heading', { name: 'Revision history' })
+        .locator('xpath=ancestor::section')
+        .locator('article')
+        .filter({ hasText: 'Revision 1' });
+      await revisionOneAfterCompare.getByRole('checkbox').check();
+      await revisionOneAfterCompare
+        .getByRole('button', { name: 'Restore revision' })
+        .click();
+      await expect(noJsPage).toHaveURL(/\?status=revision-restore-queued$/);
+      await expect
+        .poll(
+          () =>
+            sqlite(`
+SELECT "list"."PublishedRevision" || ',' || "job"."TargetPublishedRevision" || ',' ||
+       "job"."SourcePublishedRevision" || ',' || "operation"."State"
+FROM "AddonMediaList" AS "list"
+JOIN "AddonMediaListPublicationJob" AS "job"
+  ON "job"."AddonMediaListId" = "list"."Id"
+JOIN "ManagedLibraryOperation" AS "operation"
+  ON "operation"."Id" = "job"."OperationId"
+WHERE "list"."Id" = ${seed.listId}
+ORDER BY "job"."Generation" DESC
+LIMIT 1;
+`),
+          { timeout: 30_000 },
+        )
+        .toBe('3,3,1,3');
+      expect(revisionLogicalContent(seed.listId, 3)).toBe(revisionOneContent);
 
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       const resetSection = noJsPage.getByTestId('addon-list-destructive-actions');
@@ -1897,6 +2109,14 @@ WHERE "Id" = ${seed.listId};
     await expect(
       reincludeRow.getByRole('checkbox', { name: 'Include in publication' }),
     ).toBeChecked();
+    const addedDiff = page.getByTestId('draft-diff-added');
+    await expect(addedDiff).toHaveText('1');
+    await addedDiff.click();
+    await expect(page).toHaveURL(/review_category=added#addon-list-items-heading$/);
+    await expect(page.getByTestId('draft-review-filter')).toContainText('Added');
+    await expect(page.getByTestId('addon-metadata-items').locator('li[data-item-id]')).toHaveCount(1);
+    await expect(page.getByTestId('addon-metadata-items')).toContainText(seed.secondTitle);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     const secondPublishNavigation = page.waitForEvent('framenavigated');
     await page.getByRole('button', { name: /^publish list$/i }).click();
     await secondPublishNavigation;
@@ -1920,6 +2140,33 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
         { timeout: 30_000 },
       )
       .toBe('2,1,3');
+
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+    const revisionPanel = page
+      .getByRole('heading', { name: 'Revision history' })
+      .locator('xpath=ancestor::section');
+    const revisionTwo = revisionPanel.locator('article').filter({ hasText: 'Revision 2' });
+    const revisionOne = revisionPanel.locator('article').filter({ hasText: 'Revision 1' });
+    await expect(revisionTwo.getByRole('button', { name: 'Restore revision' })).toBeDisabled();
+    await expect(revisionOne.getByRole('button', { name: 'Restore revision' })).toBeEnabled();
+    await revisionPanel.getByRole('button', { name: 'Compare revisions' }).click();
+    await expect(revisionPanel.getByTestId('revision-diff')).toBeVisible();
+    const staleRestore = await page.request.post('/api/addon-lists/restore-revision', {
+      form: {
+        id: String(seed.listId),
+        source_published_revision: '1',
+        expected_draft_revision: '0',
+        expected_published_revision: '1',
+      },
+      maxRedirects: 0,
+    });
+    expect(staleRestore.status()).toBe(303);
+    expect(staleRestore.headers().location).toContain('?error=revision-restore');
+
+    const resetImpact = page.getByTestId('addon-list-destructive-actions');
+    await expect(
+      resetImpact.locator('div').filter({ hasText: /^Published items2$/ }),
+    ).toHaveCount(1);
 
     const providerStateBeforeReclassification = sqlite(`
 SELECT group_concat(
@@ -2005,6 +2252,48 @@ FROM (
 );
 `),
     ).toBe(providerStateBeforeReclassification);
+
+    const revisionOneContent = revisionLogicalContent(seed.listId, 1);
+    expect(revisionOneContent).not.toBe('');
+    const restoreRevisionOne = page
+      .getByRole('heading', { name: 'Revision history' })
+      .locator('xpath=ancestor::section')
+      .locator('article')
+      .filter({ hasText: 'Revision 1' })
+      .getByRole('button', { name: 'Restore revision' });
+    await restoreRevisionOne.click();
+    const restoreDialog = page.getByRole('dialog', { name: 'Restore revision' });
+    await expect(restoreDialog).toContainText(
+      'This replaces the current draft and publishes revision 1',
+    );
+    const restoreNavigation = page.waitForURL(/\?status=revision-restore-queued$/);
+    await restoreDialog.getByRole('button', { name: 'Restore revision' }).click();
+    await restoreNavigation;
+    await expect
+      .poll(
+        () => sqlite(`
+SELECT "list"."PublishedRevision" || ',' || "job"."TargetPublishedRevision" || ',' ||
+       "job"."SourcePublishedRevision" || ',' || "operation"."State"
+FROM "AddonMediaList" AS "list"
+JOIN "AddonMediaListPublicationJob" AS "job"
+  ON "job"."AddonMediaListId" = "list"."Id"
+JOIN "ManagedLibraryOperation" AS "operation"
+  ON "operation"."Id" = "job"."OperationId"
+WHERE "list"."Id" = ${seed.listId}
+ORDER BY "job"."Generation" DESC
+LIMIT 1;
+`),
+        { timeout: 30_000 },
+      )
+      .toBe('4,4,1,3');
+    expect(revisionLogicalContent(seed.listId, 4)).toBe(revisionOneContent);
+    expect(sqlite(`
+SELECT group_concat("Revision", ',') FROM (
+  SELECT "Revision" FROM "AddonMediaListRevision"
+  WHERE "AddonMediaListId" = ${seed.listId}
+  ORDER BY "Revision" DESC
+);
+`)).toBe('4,3,2');
 
     expect(runtimeErrors).toEqual([]);
   });

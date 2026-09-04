@@ -321,6 +321,11 @@ struct LifecycleFoundationHealth {
     lifecycle_failed: i64,
     checkpoints: i64,
     retained_revisions: i64,
+    complete_revision_snapshots: i64,
+    invalid_revision_snapshots: i64,
+    revision_file_references: i64,
+    revision_file_blobs: i64,
+    invalid_revision_files: i64,
     tombstones: i64,
     artifacts: i64,
     artifact_ready: i64,
@@ -370,6 +375,8 @@ impl LifecycleFoundationHealth {
             || self.lifecycle_failed > 0
             || self.checkpoints > 0
             || self.retained_revisions > 0
+            || self.revision_file_references > 0
+            || self.revision_file_blobs > 0
             || self.tombstones > 0
             || self.artifacts > 0
             || self.tool_active > 0
@@ -399,18 +406,40 @@ impl LifecycleFoundationHealth {
                 self.tool_expired, self.tool_actionable_failed
             ));
         }
+        if self.invalid_revision_snapshots > 0 {
+            failures.push(format!(
+                "{} retained revision snapshot(s) are structurally incomplete or invalid",
+                self.invalid_revision_snapshots
+            ));
+        }
+        if self.invalid_revision_files > 0 {
+            failures.push(format!(
+                "{} retained revision file record(s) have invalid metadata or references",
+                self.invalid_revision_files
+            ));
+        }
         failures
     }
 
     fn summary(self) -> String {
+        let legacy_revisions = self
+            .retained_revisions
+            .saturating_sub(self.complete_revision_snapshots)
+            .saturating_sub(self.invalid_revision_snapshots);
         format!(
-            "lifecycle active={} waiting={} expired={} failed={}; checkpoints={}; retained revisions={}; tombstones={}; artifacts total={} ready={} failed={} bytes={} reserved_bytes={}; tool maintenance active={} waiting={} expired={} failed={}; outcomes updated={} already_current={} manual_update_required={} rolled_back={} failed={}",
+            "lifecycle active={} waiting={} expired={} failed={}; checkpoints={}; retained revisions total={} structurally_complete={} legacy={} structurally_invalid={}; retained files references={} blobs={} invalid={}; tombstones={}; artifacts total={} ready={} failed={} bytes={} reserved_bytes={}; tool maintenance active={} waiting={} expired={} failed={}; outcomes updated={} already_current={} manual_update_required={} rolled_back={} failed={}",
             self.lifecycle_active,
             self.lifecycle_waiting,
             self.lifecycle_expired,
             self.lifecycle_failed,
             self.checkpoints,
             self.retained_revisions,
+            self.complete_revision_snapshots,
+            legacy_revisions,
+            self.invalid_revision_snapshots,
+            self.revision_file_references,
+            self.revision_file_blobs,
+            self.invalid_revision_files,
             self.tombstones,
             self.artifacts,
             self.artifact_ready,
@@ -430,7 +459,22 @@ impl LifecycleFoundationHealth {
     }
 }
 
-const LIFECYCLE_FOUNDATION_HEALTH_SQL: &str = r#"SELECT
+const LIFECYCLE_FOUNDATION_HEALTH_SQL: &str = r#"WITH "CompleteRevisionSnapshot" AS (
+               SELECT "Id"
+                 FROM "AddonMediaListRevision"
+                WHERE "SnapshotVersion" = 1
+                  AND LENGTH(TRIM("SnapshotDigest")) = 64
+                  AND "SourceDraftRevision" IS NOT NULL
+                  AND "CompletedAt" IS NOT NULL
+                  AND JSON_VALID("OptionValuesJson")
+                  AND "Name" IS NOT NULL
+                  AND "GeneratePlaylist" IN (0, 1)
+                  AND "ContentKindOverride" IS NOT NULL
+                  AND "PresentationKind" IS NOT NULL
+                  AND "RequestedPresentationKind" IS NOT NULL
+                  AND JSON_VALID("MetadataJson")
+           )
+           SELECT
                (SELECT COUNT(*)
                   FROM "AddonMediaListLifecycleJob" AS "job"
                   JOIN "ManagedLibraryOperation" AS "operation"
@@ -465,6 +509,39 @@ const LIFECYCLE_FOUNDATION_HEALTH_SQL: &str = r#"SELECT
                  WHERE "operation"."State" = 4) AS "LifecycleFailed",
                (SELECT COUNT(*) FROM "AddonMediaListImportCheckpoint") AS "Checkpoints",
                (SELECT COUNT(*) FROM "AddonMediaListRevision") AS "RetainedRevisions",
+               (SELECT COUNT(*) FROM "CompleteRevisionSnapshot") AS "CompleteRevisionSnapshots",
+               (SELECT COUNT(*)
+                  FROM "AddonMediaListRevision" AS "revision"
+                 WHERE NOT (
+                       "revision"."SnapshotVersion" IS NULL
+                   AND "revision"."SnapshotDigest" IS NULL
+                 )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM "CompleteRevisionSnapshot" AS "complete"
+                        WHERE "complete"."Id" = "revision"."Id"
+                   )) AS "InvalidRevisionSnapshots",
+               (SELECT COUNT(*) FROM "AddonMediaListRevisionFile") AS "RevisionFileReferences",
+               (SELECT COUNT(*) FROM "AddonMediaListRevisionFileBlob") AS "RevisionFileBlobs",
+               ((SELECT COUNT(*)
+                   FROM "AddonMediaListRevisionFileBlob" AS "blob"
+                  WHERE TRIM("blob"."StorageRelativePath") = ''
+                     OR TRIM("blob"."Sha256") = ''
+                     OR "blob"."ByteLength" < 0
+                     OR NOT EXISTS (
+                         SELECT 1 FROM "AddonMediaList" AS "list"
+                          WHERE "list"."Id" = "blob"."AddonMediaListId"
+                     ))
+                +
+                (SELECT COUNT(*)
+                   FROM "AddonMediaListRevisionFile" AS "file"
+                   LEFT JOIN "AddonMediaListRevisionFileBlob" AS "blob"
+                     ON "blob"."Id" = "file"."AddonMediaListRevisionFileBlobId"
+                  WHERE TRIM("file"."PublishedRelativePath") = ''
+                     OR "blob"."Id" IS NULL
+                     OR NOT EXISTS (
+                         SELECT 1 FROM "CompleteRevisionSnapshot" AS "complete"
+                          WHERE "complete"."Id" = "file"."AddonMediaListRevisionId"
+                     ))) AS "InvalidRevisionFiles",
                (SELECT COUNT(*) FROM "AddonMediaListItemTombstone") AS "Tombstones",
                (SELECT COUNT(*) FROM "AddonMediaListArtifact") AS "Artifacts",
                (SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "State" = 2)
@@ -533,6 +610,15 @@ fn decode_lifecycle_foundation_health(row: &crate::db::DbRow) -> Result<Lifecycl
         lifecycle_failed: row.try_get("LifecycleFailed").map_err(sqlx_error)?,
         checkpoints: row.try_get("Checkpoints").map_err(sqlx_error)?,
         retained_revisions: row.try_get("RetainedRevisions").map_err(sqlx_error)?,
+        complete_revision_snapshots: row
+            .try_get("CompleteRevisionSnapshots")
+            .map_err(sqlx_error)?,
+        invalid_revision_snapshots: row
+            .try_get("InvalidRevisionSnapshots")
+            .map_err(sqlx_error)?,
+        revision_file_references: row.try_get("RevisionFileReferences").map_err(sqlx_error)?,
+        revision_file_blobs: row.try_get("RevisionFileBlobs").map_err(sqlx_error)?,
+        invalid_revision_files: row.try_get("InvalidRevisionFiles").map_err(sqlx_error)?,
         tombstones: row.try_get("Tombstones").map_err(sqlx_error)?,
         artifacts: row.try_get("Artifacts").map_err(sqlx_error)?,
         artifact_ready: row.try_get("ArtifactReady").map_err(sqlx_error)?,
@@ -1291,7 +1377,30 @@ mod tests {
                 "Id" INTEGER PRIMARY KEY
             );
             CREATE TABLE "AddonMediaListRevision" (
-                "Id" INTEGER PRIMARY KEY
+                "Id" INTEGER PRIMARY KEY,
+                "SourceDraftRevision" INTEGER NULL,
+                "OptionValuesJson" TEXT NOT NULL DEFAULT '{}',
+                "CompletedAt" TEXT NULL,
+                "SnapshotVersion" INTEGER NULL,
+                "SnapshotDigest" TEXT NULL,
+                "Name" TEXT NULL,
+                "GeneratePlaylist" INTEGER NULL,
+                "ContentKindOverride" INTEGER NULL,
+                "PresentationKind" INTEGER NULL,
+                "RequestedPresentationKind" INTEGER NULL,
+                "MetadataJson" TEXT NULL
+            );
+            CREATE TABLE "AddonMediaListRevisionFileBlob" (
+                "Id" INTEGER PRIMARY KEY,
+                "AddonMediaListId" INTEGER NOT NULL,
+                "StorageRelativePath" TEXT NOT NULL,
+                "Sha256" TEXT NOT NULL,
+                "ByteLength" INTEGER NOT NULL
+            );
+            CREATE TABLE "AddonMediaListRevisionFile" (
+                "AddonMediaListRevisionId" INTEGER NOT NULL,
+                "AddonMediaListRevisionFileBlobId" INTEGER NOT NULL,
+                "PublishedRelativePath" TEXT NOT NULL
             );
             CREATE TABLE "AddonMediaListItemTombstone" (
                 "AddonMediaListItemId" INTEGER PRIMARY KEY
@@ -1466,10 +1575,41 @@ mod tests {
             .execute(&pool)
             .await
             .expect("checkpoint");
-        sqlx::query(r#"INSERT INTO "AddonMediaListRevision" VALUES (1)"#)
+        sqlx::query(r#"INSERT INTO "AddonMediaListRevision" ("Id") VALUES (1)"#)
             .execute(&pool)
             .await
-            .expect("revision");
+            .expect("legacy revision");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRevision" (
+                    "Id", "SourceDraftRevision", "CompletedAt", "SnapshotVersion",
+                    "SnapshotDigest", "Name", "GeneratePlaylist", "ContentKindOverride",
+                    "PresentationKind", "RequestedPresentationKind", "MetadataJson"
+               ) VALUES (
+                    2, 1, '2026-09-04T00:00:00Z', 1,
+                    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+                    'Fixture', 1, 0, 1, 1, '{}'
+               )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("complete revision snapshot");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRevisionFileBlob" (
+                    "Id", "AddonMediaListId", "StorageRelativePath", "Sha256", "ByteLength"
+               ) VALUES (1, 1, 'revisions/blob.bin', 'blob-digest', 123)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("revision file blob");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRevisionFile" (
+                    "AddonMediaListRevisionId", "AddonMediaListRevisionFileBlobId",
+                    "PublishedRelativePath"
+               ) VALUES (2, 1, 'items/file.bin')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("revision file reference");
         sqlx::query(r#"INSERT INTO "AddonMediaListItemTombstone" VALUES (1)"#)
             .execute(&pool)
             .await
@@ -1506,7 +1646,12 @@ mod tests {
             .expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Pass);
         assert!(result.message.contains("checkpoints=1"));
-        assert!(result.message.contains("retained revisions=1"));
+        assert!(result.message.contains(
+            "retained revisions total=2 structurally_complete=1 legacy=1 structurally_invalid=0"
+        ));
+        assert!(result
+            .message
+            .contains("retained files references=1 blobs=1 invalid=0"));
         assert!(result.message.contains("tombstones=1"));
         assert!(result
             .message
@@ -1521,6 +1666,71 @@ mod tests {
         ] {
             assert!(!result.message.contains(forbidden));
         }
+    }
+
+    #[tokio::test]
+    async fn reports_structurally_invalid_revision_snapshot_and_file_metadata() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                    "Id", "AddonId", "Name", "ProviderMetadataJson"
+               ) VALUES (1, 'org.example.list', 'Fixture', '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRevision" (
+                    "Id", "CompletedAt", "SnapshotVersion", "SnapshotDigest", "Name",
+                    "GeneratePlaylist", "PresentationKind", "RequestedPresentationKind",
+                    "MetadataJson"
+               ) VALUES (
+                    1, '2026-09-04T00:00:00Z', 1,
+                    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+                    'Fixture', 1, 1, 1, '{}'
+               )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("partial revision snapshot");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRevisionFileBlob" (
+                    "Id", "AddonMediaListId", "StorageRelativePath", "Sha256", "ByteLength"
+               ) VALUES (1, 1, '', '', 0)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("invalid revision file blob");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListRevisionFile" (
+                    "AddonMediaListRevisionId", "AddonMediaListRevisionFileBlobId",
+                    "PublishedRelativePath"
+               ) VALUES (1, 1, 'private-item-path')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("invalid revision file reference");
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result
+            .message
+            .contains("1 retained revision snapshot(s) are structurally incomplete or invalid"));
+        assert!(result
+            .message
+            .contains("2 retained revision file record(s) have invalid metadata or references"));
+        assert!(result.message.contains(
+            "retained revisions total=1 structurally_complete=0 legacy=0 structurally_invalid=1"
+        ));
+        assert!(result
+            .message
+            .contains("retained files references=1 blobs=1 invalid=2"));
+        assert!(!result.message.contains("partial-private-digest"));
+        assert!(!result.message.contains("private-item-path"));
     }
 
     #[tokio::test]

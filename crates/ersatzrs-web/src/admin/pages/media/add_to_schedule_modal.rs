@@ -107,6 +107,7 @@ pub(crate) fn AddToScheduleModal(
 
     view! {
         <Modal
+            dialog_id="media-add-to-schedule-dialog"
             open=open
             title=tr(TextKey::AddToSchedule).to_string()
             on_close=Callback::new(move |confirmed: bool| {

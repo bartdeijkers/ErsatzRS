@@ -504,6 +504,7 @@ fn PlayoutsIsland(
 
             // ---- dialogs ----
             <DeleteDialog
+                dialog_id="playout-delete-dialog"
                 open=delete_open
                 entity_name=delete_name
                 on_confirm=Callback::new(move |confirmed: bool| {
@@ -521,6 +522,7 @@ fn PlayoutsIsland(
             />
 
             <Modal
+                dialog_id="playout-reset-schedule-dialog"
                 open=schedule_open
                 title=tr(TextKey::SchedulePlayoutReset).to_string()
                 confirm_label=Some(tr(TextKey::SaveChanges))
@@ -556,6 +558,7 @@ fn PlayoutsIsland(
             </Modal>
 
             <Modal
+                dialog_id="playout-external-json-dialog"
                 open=json_open
                 title=tr(TextKey::EditExternalJsonFile).to_string()
                 confirm_label=Some(tr(TextKey::SaveChanges))

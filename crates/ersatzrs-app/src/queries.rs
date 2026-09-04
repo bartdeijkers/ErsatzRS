@@ -4,14 +4,15 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Duration, NaiveTime, Utc};
 use ersatzrs_core::repositories::{
-    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListRepository, AdminSearchKind,
-    AdminSearchRepository, AdminSearchSnapshot, AdminSettingsRepository, BlockAdminRow,
-    BlockEditorOptionAdmin, BlockEditorOptionsAdmin, BlockGroupAdminRow, BlockRepository,
-    ChannelAdminListRow, ChannelEditorState, ChannelNumberRow, ChannelRepository,
-    ChannelSelectOption, CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin,
-    CollectionRepository, DecoAdminRecord, DecoAdminRow, DecoEditorOptionsAdmin, DecoGroupAdminRow,
-    DecoRepository, DecoTemplateAdminRow, DecoTemplateGroupAdminRow, DecoTemplateItemAdmin,
-    EpgPreviewChannelState, FfmpegProfileRepository, FillerRepository, LibraryRepository,
+    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListLifecycleRepository,
+    AddonMediaListRepository, AdminSearchKind, AdminSearchRepository, AdminSearchSnapshot,
+    AdminSettingsRepository, BlockAdminRow, BlockEditorOptionAdmin, BlockEditorOptionsAdmin,
+    BlockGroupAdminRow, BlockRepository, ChannelAdminListRow, ChannelEditorState, ChannelNumberRow,
+    ChannelRepository, ChannelSelectOption, CollectionAdminRow, CollectionDetailAdmin,
+    CollectionMemberAdmin, CollectionRepository, DecoAdminRecord, DecoAdminRow,
+    DecoEditorOptionsAdmin, DecoGroupAdminRow, DecoRepository, DecoTemplateAdminRow,
+    DecoTemplateGroupAdminRow, DecoTemplateItemAdmin, EpgPreviewChannelState,
+    FfmpegProfileRepository, FillerRepository, LibraryRepository,
     ManagedLibraryOperationRepository, MediaItemSuggestionAdmin, MultiCollectionAdmin,
     MultiCollectionAdminRow, MultiCollectionEditorOptions, PlaylistEditorAdmin,
     PlaylistEditorOptions, PlaylistGroupAdminRow, PlayoutAlternateSchedulesAdmin,
@@ -1876,6 +1877,10 @@ pub struct ListAddonMediaLists {
     pub page: u32,
     /// Page size persisted for the next visit.
     pub page_size: u32,
+    /// Column used by the repository's stable database ordering.
+    pub sort_field: ersatzrs_core::repositories::AddonMediaListAdminSortField,
+    /// Direction used by the repository's stable database ordering.
+    pub sort_direction: ersatzrs_core::repositories::AddonMediaListAdminSortDirection,
 }
 
 /// List add-on media-list rows and preserve the existing page-size preference.
@@ -1886,7 +1891,12 @@ pub async fn list_addon_media_lists(
     let page_size = query.page_size.max(1);
     repository.set_page_size(page_size).await?;
     repository
-        .list_admin(query.page, page_size)
+        .list_admin(
+            query.page,
+            page_size,
+            query.sort_field,
+            query.sort_direction,
+        )
         .await
         .map_err(Into::into)
 }
@@ -1957,6 +1967,66 @@ pub async fn addon_media_list_publication_history(
         .publication_history(id, Utc::now())
         .await
         .map_err(Into::into)
+}
+
+/// Compare the saved draft with the exact current complete publication snapshot.
+pub async fn addon_media_list_saved_draft_diff(
+    id: EntityId,
+    repository: &dyn AddonMediaListLifecycleRepository,
+) -> Result<ersatzrs_core::repositories::AddonMediaListDraftDiff> {
+    validate_addon_media_list_id(id)?;
+    repository.saved_draft_diff(id).await.map_err(Into::into)
+}
+
+/// Load current dependency counts for the destructive reset confirmation.
+pub async fn addon_media_list_reset_impact(
+    id: EntityId,
+    repository: &dyn AddonMediaListLifecycleRepository,
+) -> Result<ersatzrs_core::repositories::AddonMediaListResetImpact> {
+    validate_addon_media_list_id(id)?;
+    repository
+        .reset_impact(id, Utc::now())
+        .await
+        .map_err(Into::into)
+}
+
+/// Load bounded publication revision history, including truthful legacy rows.
+pub async fn addon_media_list_revision_history(
+    id: EntityId,
+    repository: &dyn AddonMediaListLifecycleRepository,
+) -> Result<Vec<ersatzrs_core::repositories::AddonMediaListRevisionSummary>> {
+    validate_addon_media_list_id(id)?;
+    repository.revision_history(id).await.map_err(Into::into)
+}
+
+/// Compare two exact retained publication revisions.
+pub async fn compare_addon_media_list_revisions(
+    id: EntityId,
+    left_revision: i32,
+    right_revision: i32,
+    repository: &dyn AddonMediaListLifecycleRepository,
+) -> Result<ersatzrs_core::repositories::AddonMediaListRevisionDiff> {
+    validate_addon_media_list_id(id)?;
+    if left_revision <= 0 || right_revision <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "published_revision",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    repository
+        .compare_revisions(id, left_revision, right_revision)
+        .await
+        .map_err(Into::into)
+}
+
+fn validate_addon_media_list_id(id: EntityId) -> Result<()> {
+    if id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "addon_media_list_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 /// Load one page of provider items in one availability group.

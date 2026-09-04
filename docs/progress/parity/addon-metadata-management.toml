@@ -56,9 +56,10 @@ provider-neutral access restrictions, item-scoped publication exclusion,
 redacted durable status, and guarded localized Retry/Restore actions for the
 hydrated and no-JavaScript editor. Focused acceptance is complete; AMM-N-03
 retains the integrated packaged Windows restart proof.
-AMM-J-04 adds causal history. AMM-K-01 adds lifecycle persistence. AMM-K-02
-closes reset/reload, metadata, Name-first layout, and Unnumbered handling;
-AMM-K-03 adds Remote Stream search/details. Later work remains open.
+AMM-J-04 adds causal history. AMM-K completes lifecycle, reset, metadata,
+stream details, previews, safe restore, and shared accessibility. Refresh,
+options, artifacts, and tool maintenance remain
+under AMM-L through AMM-N.
 '''
 
 [[debt]]
@@ -75,8 +76,9 @@ id          = 'addon-list-lifecycle-actions-and-navigation-are-incomplete'
 description = 'Provide truthful Publish blocked remediation, a complete reset-and-reload operation, source/publication/downstream impact preview, bounded revision comparison/restore, always-visible inline list/item metadata, optional episode numbering, Name-before-Id list layout, accessible dialog/table behavior, and a real Remote Stream details route from add-on-list search results.'
 discovered  = '2026-09-01'
 adr         = '0085'
-evidence    = 'The current action model hides Publish when validation blockers exist and reports Publishing from the review-state flag even for an unclaimable recovery journal; blocker copy has no clearing command. No source preflight, general published-to-draft diff, downstream impact, or routine revision comparison/restore exists. The shared dialog lacks focus containment/aria-labelledby and shared sortable headings are pointer-only without aria-sort. AMM-K-01 persists the provider-neutral foundations. AMM-K-02 completes fenced clean reset/reload, always-visible list/item metadata with hydrated/no-JavaScript parity, Name-before-Id layout, and non-blocking Unnumbered handling while retaining the generated Playlist identity and operator-owned references. AMM-K-03 completes the canonical Remote Stream search href and localized detail surface with effective metadata, ownership, published options, media facts, playback health, and replacement-aware channel actions. AMM-K-04 still owns preview/revision restore and shared accessibility closure. Tracked by AMM-K and plans/addon-list-lifecycle-broadening.md.'
-resolved    = false
+evidence    = 'AMM-K-01 persists the provider-neutral foundations. AMM-K-02 completes fenced clean reset/reload, always-visible list/item metadata with hydrated/no-JavaScript parity, Name-before-Id layout, and non-blocking Unnumbered handling while retaining the generated Playlist identity and operator-owned references. AMM-K-03 completes the canonical Remote Stream search href and localized detail surface with effective metadata, ownership, published options, media facts, playback health, and replacement-aware channel actions. AMM-K-04 adds a durable redacted source probe, exact linked saved-draft categories, actual reset and downstream impact counts, digest-validated bounded revision comparison and old-only restore through the normal lease at a new monotonic revision, retained file/artifact/playout pins, focus-contained labelled destructive dialogs, and keyboard/aria-sort Name and Id ordering. Focused repository, migration, health, SSR, hydration, and fault-injection checks pass; localized hydrated/no-JavaScript Chromium and Firefox scenarios are authored, with packaged execution retained by AMM-N-03. Tracked by AMM-K and plans/addon-list-lifecycle-broadening.md.'
+resolved    = true
+resolution  = 'AMM-K-01 through AMM-K-04 now provide the persisted lifecycle foundation, truthful reset and metadata editing, canonical Remote Stream navigation, exact source/change/impact previews, bounded safe revision restore, and the required shared dialog/table accessibility behavior.'
 
 [[debt]]
 id          = 'addon-list-refresh-has-no-cadence-or-incremental-checkpoint'

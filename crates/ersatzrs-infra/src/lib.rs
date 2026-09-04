@@ -4,6 +4,7 @@ pub mod addon_artwork;
 pub mod addon_chapters;
 pub mod addon_media_list;
 pub mod addon_media_list_import;
+pub mod addon_media_list_source_probe;
 pub mod addon_media_list_sync;
 pub mod addon_media_nfo;
 pub mod addon_media_storage;

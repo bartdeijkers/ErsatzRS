@@ -9,6 +9,63 @@ use super::button::{Button, ButtonVariant};
 
 stylance::import_crate_style!(style, "src/admin/ui/primitives/dialog.module.css");
 
+#[cfg(target_arch = "wasm32")]
+fn focusable_elements(panel: &web_sys::HtmlElement) -> Vec<web_sys::HtmlElement> {
+    const SELECTOR: &str = "a[href]:not([tabindex='-1']), button:not([disabled]):not([tabindex='-1']), input:not([disabled]):not([type='hidden']):not([tabindex='-1']), select:not([disabled]):not([tabindex='-1']), textarea:not([disabled]):not([tabindex='-1']), [tabindex]:not([tabindex='-1'])";
+
+    let Ok(nodes) = panel.query_selector_all(SELECTOR) else {
+        return Vec::new();
+    };
+    (0..nodes.length())
+        .filter_map(|index| nodes.item(index))
+        .filter_map(|node| node.dyn_into::<web_sys::HtmlElement>().ok())
+        .filter(|element| element.offset_width() > 0 || element.offset_height() > 0)
+        .collect()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn same_element(left: &web_sys::Element, right: &web_sys::HtmlElement) -> bool {
+    js_sys::Object::is(left.as_ref(), right.as_ref())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn contain_tab_focus(event: &web_sys::KeyboardEvent, panel_ref: NodeRef<html::Div>) {
+    if event.key() != "Tab" {
+        return;
+    }
+    let Some(panel) = panel_ref.get() else {
+        return;
+    };
+    let focusable = focusable_elements(&panel);
+    let Some(first) = focusable.first() else {
+        event.prevent_default();
+        let _ = panel.focus();
+        return;
+    };
+    let Some(last) = focusable.last() else {
+        return;
+    };
+    let active = web_sys::window()
+        .and_then(|window| window.document())
+        .and_then(|document| document.active_element());
+
+    if event.shift_key()
+        && active
+            .as_ref()
+            .is_none_or(|element| same_element(element, first) || same_element(element, &panel))
+    {
+        event.prevent_default();
+        let _ = last.focus();
+    } else if !event.shift_key()
+        && active
+            .as_ref()
+            .is_some_and(|element| same_element(element, last))
+    {
+        event.prevent_default();
+        let _ = first.focus();
+    }
+}
+
 /// A modal dialog with a stable DOM shape (no `<Show>` — uses `style:display`).
 ///
 /// The backdrop and panel are always present in the DOM; `open` controls
@@ -17,6 +74,8 @@ stylance::import_crate_style!(style, "src/admin/ui/primitives/dialog.module.css"
 #[allow(clippy::needless_pass_by_value)]
 #[component]
 pub fn Modal(
+    /// Page-scoped stable dialog id, also used to associate the title.
+    dialog_id: &'static str,
     /// Signal controlling visibility.
     open: RwSignal<bool>,
     /// Dialog title shown in the header. Reactive, so one dialog can serve an
@@ -36,6 +95,8 @@ pub fn Modal(
     #[prop(default = false)] wide: bool,
 ) -> impl IntoView {
     let panel_ref = NodeRef::<html::Div>::new();
+    let title_id = format!("{dialog_id}-title");
+    let labelled_by = title_id.clone();
     let confirm_variant = if destructive {
         ButtonVariant::Danger
     } else {
@@ -89,10 +150,11 @@ pub fn Modal(
             style:display=move || if open.get() { "" } else { "none" }
         />
         <div
+            id=dialog_id
             class=style::overlay
             role="dialog"
             aria-modal="true"
-            aria-label=move || title.get()
+            aria-labelledby=labelled_by
             style:display=move || if open.get() { "" } else { "none" }
             on:click=move |_| do_cancel()
             on:keydown=move |event| {
@@ -100,6 +162,8 @@ pub fn Modal(
                     event.prevent_default();
                     do_cancel();
                 }
+                #[cfg(target_arch = "wasm32")]
+                contain_tab_focus(&event, panel_ref);
             }
         >
             <div
@@ -109,7 +173,7 @@ pub fn Modal(
                 class=if wide { format!("{} {}", style::panel, style::panel_wide) } else { style::panel.to_owned() }
                 on:click=|e| e.stop_propagation()
             >
-                <h2 class=style::title>{move || title.get()}</h2>
+                <h2 id=title_id class=style::title>{move || title.get()}</h2>
                 <div class=style::body>{children()}</div>
                 <div class=style::footer>
                     <Button variant=ButtonVariant::Text
@@ -134,12 +198,14 @@ pub fn Modal(
 /// delete target changes without altering the DOM shape.
 #[component]
 pub fn DeleteDialog(
+    dialog_id: &'static str,
     open: RwSignal<bool>,
     entity_name: Signal<String>,
     on_confirm: Callback<bool>,
 ) -> impl IntoView {
     view! {
         <Modal
+            dialog_id=dialog_id
             open=open
             title=tr(TextKey::ConfirmDelete).to_string()
             on_close=on_confirm

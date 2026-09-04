@@ -245,6 +245,7 @@ fn SmartCollectionsIsland(
             </section>
 
             <DeleteDialog
+                dialog_id="smart-collection-delete-dialog"
                 open=delete_open
                 entity_name=Signal::derive(move || {
                     delete_target.get().map(|row| row.name.clone()).unwrap_or_default()
@@ -930,6 +931,7 @@ fn SmartCollectionComposer(
             </fieldset>
 
             <Modal
+                dialog_id="smart-collection-rule-dialog"
                 open=rule_editor_open
                 title=Signal::derive(move || {
                     if rule_editor_target.get().and_then(|target| target.index).is_some() {

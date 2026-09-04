@@ -12,6 +12,46 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListAdminSortField {
+    #[default]
+    Name,
+    Id,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListAdminSortDirection {
+    #[default]
+    Ascending,
+    Descending,
+}
+
+#[cfg(feature = "ssr")]
+impl From<AddonMediaListAdminSortField>
+    for ersatzrs_core::repositories::AddonMediaListAdminSortField
+{
+    fn from(value: AddonMediaListAdminSortField) -> Self {
+        match value {
+            AddonMediaListAdminSortField::Name => Self::Name,
+            AddonMediaListAdminSortField::Id => Self::Id,
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
+impl From<AddonMediaListAdminSortDirection>
+    for ersatzrs_core::repositories::AddonMediaListAdminSortDirection
+{
+    fn from(value: AddonMediaListAdminSortDirection) -> Self {
+        match value {
+            AddonMediaListAdminSortDirection::Ascending => Self::Ascending,
+            AddonMediaListAdminSortDirection::Descending => Self::Descending,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AddonMediaListPublishResult {
     Queued {
@@ -31,6 +71,229 @@ pub enum AddonMediaListResetResult {
         generation: i32,
         existing: bool,
     },
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListRestoreResult {
+    pub operation_id: i64,
+    pub generation: i32,
+    pub saved_revision: i32,
+    pub target_published_revision: i32,
+    pub existing: bool,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListSourceProbeState {
+    Queued,
+    Running,
+    Complete,
+    Stale,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListSourceProbeOutcome {
+    Available,
+    Unsupported,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListSourceProbeRow {
+    pub state: AddonMediaListSourceProbeState,
+    pub saved_draft_revision: i32,
+    pub source_revision: Option<String>,
+    pub capabilities: Vec<String>,
+    pub outcome: Option<AddonMediaListSourceProbeOutcome>,
+    pub provider_id: Option<String>,
+    pub list_title: Option<String>,
+    pub count_hint: Option<u32>,
+    pub returned_item_count: Option<u32>,
+    pub page_complete: Option<bool>,
+    pub duration_milliseconds: Option<u64>,
+    pub diagnostic_code: Option<String>,
+    pub diagnostic: Option<String>,
+    pub attempt_count: u32,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListDraftDiffRow {
+    pub draft_revision: i32,
+    pub published_revision: Option<i32>,
+    pub exact: bool,
+    pub added: u64,
+    pub metadata_changed: u64,
+    pub excluded: u64,
+    pub unavailable: u64,
+    pub conflicted: u64,
+    pub removal_candidates: u64,
+    pub added_item_ids: Vec<i64>,
+    pub metadata_changed_item_ids: Vec<i64>,
+    pub excluded_item_ids: Vec<i64>,
+    pub unavailable_item_ids: Vec<i64>,
+    pub conflicted_item_ids: Vec<i64>,
+    pub removal_candidate_item_ids: Vec<i64>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListResetImpactRow {
+    pub draft_revision: i32,
+    pub published_revision: i32,
+    pub published_items: u64,
+    pub generated_playlists: u64,
+    pub channels: u64,
+    pub schedules: u64,
+    pub active_or_future_playouts: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListRevisionSummaryRow {
+    pub revision: i32,
+    pub source_draft_revision: Option<i32>,
+    pub completed_at: Option<String>,
+    pub restorable: bool,
+    pub published_item_count: u64,
+    pub file_count: u64,
+    pub artifact_count: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListRevisionDiffRow {
+    pub list_metadata_changed: bool,
+    pub effective_options_changed: bool,
+    pub items_added: u64,
+    pub items_removed: u64,
+    pub items_changed: u64,
+    pub files_added: u64,
+    pub files_removed: u64,
+    pub files_changed: u64,
+    pub artifacts_added: u64,
+    pub artifacts_removed: u64,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+mod lifecycle_transport {
+    use super::*;
+    use ersatzrs_core::repositories::{
+        AddonMediaListDraftDiff, AddonMediaListResetImpact, AddonMediaListRevisionDiff,
+        AddonMediaListRevisionSummary, AddonMediaListSourceProbe,
+    };
+
+    impl From<AddonMediaListSourceProbe> for AddonMediaListSourceProbeRow {
+        fn from(value: AddonMediaListSourceProbe) -> Self {
+            Self {
+                state: match value.state {
+                    ersatzrs_core::repositories::AddonMediaListSourceProbeState::Queued => {
+                        AddonMediaListSourceProbeState::Queued
+                    }
+                    ersatzrs_core::repositories::AddonMediaListSourceProbeState::Running => {
+                        AddonMediaListSourceProbeState::Running
+                    }
+                    ersatzrs_core::repositories::AddonMediaListSourceProbeState::Complete => {
+                        AddonMediaListSourceProbeState::Complete
+                    }
+                    ersatzrs_core::repositories::AddonMediaListSourceProbeState::Stale => {
+                        AddonMediaListSourceProbeState::Stale
+                    }
+                },
+                saved_draft_revision: value.saved_draft_revision,
+                source_revision: value.source_revision,
+                capabilities: value.capabilities,
+                outcome: value.outcome.map(|outcome| match outcome {
+                    ersatzrs_core::repositories::AddonMediaListSourceProbeOutcome::Available => {
+                        AddonMediaListSourceProbeOutcome::Available
+                    }
+                    ersatzrs_core::repositories::AddonMediaListSourceProbeOutcome::Unsupported => {
+                        AddonMediaListSourceProbeOutcome::Unsupported
+                    }
+                    ersatzrs_core::repositories::AddonMediaListSourceProbeOutcome::Failed => {
+                        AddonMediaListSourceProbeOutcome::Failed
+                    }
+                }),
+                provider_id: value.provider_id,
+                list_title: value.list_title,
+                count_hint: value.count_hint,
+                returned_item_count: value.returned_item_count,
+                page_complete: value.page_complete,
+                duration_milliseconds: value.duration_milliseconds,
+                diagnostic_code: value.diagnostic_code,
+                diagnostic: value.diagnostic,
+                attempt_count: value.attempt_count,
+                updated_at: value.updated_at.to_rfc3339(),
+                completed_at: value.completed_at.map(|date| date.to_rfc3339()),
+            }
+        }
+    }
+
+    impl From<AddonMediaListDraftDiff> for AddonMediaListDraftDiffRow {
+        fn from(value: AddonMediaListDraftDiff) -> Self {
+            Self {
+                draft_revision: value.draft_revision,
+                published_revision: value.published_revision,
+                exact: value.exact,
+                added: value.added,
+                metadata_changed: value.metadata_changed,
+                excluded: value.excluded,
+                unavailable: value.unavailable,
+                conflicted: value.conflicted,
+                removal_candidates: value.removal_candidates,
+                added_item_ids: value.added_item_ids,
+                metadata_changed_item_ids: value.metadata_changed_item_ids,
+                excluded_item_ids: value.excluded_item_ids,
+                unavailable_item_ids: value.unavailable_item_ids,
+                conflicted_item_ids: value.conflicted_item_ids,
+                removal_candidate_item_ids: value.removal_candidate_item_ids,
+            }
+        }
+    }
+
+    impl From<AddonMediaListResetImpact> for AddonMediaListResetImpactRow {
+        fn from(value: AddonMediaListResetImpact) -> Self {
+            Self {
+                draft_revision: value.draft_revision,
+                published_revision: value.published_revision,
+                published_items: value.published_items,
+                generated_playlists: value.generated_playlists,
+                channels: value.channels,
+                schedules: value.schedules,
+                active_or_future_playouts: value.active_or_future_playouts,
+            }
+        }
+    }
+
+    impl From<AddonMediaListRevisionSummary> for AddonMediaListRevisionSummaryRow {
+        fn from(value: AddonMediaListRevisionSummary) -> Self {
+            Self {
+                revision: value.revision,
+                source_draft_revision: value.source_draft_revision,
+                completed_at: value.completed_at.map(|date| date.to_rfc3339()),
+                restorable: value.restorable,
+                published_item_count: value.published_item_count,
+                file_count: value.file_count,
+                artifact_count: value.artifact_count,
+            }
+        }
+    }
+
+    impl From<AddonMediaListRevisionDiff> for AddonMediaListRevisionDiffRow {
+        fn from(value: AddonMediaListRevisionDiff) -> Self {
+            Self {
+                list_metadata_changed: value.list_metadata_changed,
+                effective_options_changed: value.effective_options_changed,
+                items_added: value.items_added,
+                items_removed: value.items_removed,
+                items_changed: value.items_changed,
+                files_added: value.files_added,
+                files_removed: value.files_removed,
+                files_changed: value.files_changed,
+                artifacts_added: value.artifacts_added,
+                artifacts_removed: value.artifacts_removed,
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -877,11 +1140,13 @@ pub async fn resolve_addon_media_list_provider(
 pub async fn list_addon_media_lists(
     page: u32,
     page_size: u32,
+    sort_field: AddonMediaListAdminSortField,
+    sort_direction: AddonMediaListAdminSortDirection,
 ) -> Result<(Vec<AddonMediaListRow>, u64), ServerFnError> {
     use crate::host::state::AppState;
 
     let state = expect_context::<AppState>();
-    list_addon_media_lists_with_state(&state, page, page_size)
+    list_addon_media_lists_with_state(&state, page, page_size, sort_field, sort_direction)
         .await
         .map_err(ServerFnError::new)
 }
@@ -891,10 +1156,17 @@ pub async fn list_addon_media_lists_with_state(
     state: &crate::host::state::AppState,
     page: u32,
     page_size: u32,
+    sort_field: AddonMediaListAdminSortField,
+    sort_direction: AddonMediaListAdminSortDirection,
 ) -> ersatzrs_app::Result<(Vec<AddonMediaListRow>, u64)> {
     let (rows, total) = state
         .application
-        .list_addon_media_lists(ersatzrs_app::queries::ListAddonMediaLists { page, page_size })
+        .list_addon_media_lists(ersatzrs_app::queries::ListAddonMediaLists {
+            page,
+            page_size,
+            sort_field: sort_field.into(),
+            sort_direction: sort_direction.into(),
+        })
         .await?;
     Ok((
         rows.into_iter()
@@ -1017,6 +1289,130 @@ pub async fn get_addon_media_list_publication_history_with_state(
         .addon_media_list_publication_history(id)
         .await
         .map(Into::into)
+}
+
+#[server]
+pub async fn get_addon_media_list_source_probe(
+    id: i64,
+) -> Result<Option<AddonMediaListSourceProbeRow>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .addon_media_list_source_probe(id)
+        .await
+        .map(|probe| probe.map(Into::into))
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn test_addon_media_list_source(
+    id: i64,
+    saved_revision: i32,
+) -> Result<i64, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .test_addon_media_list_source(ersatzrs_app::commands::TestAddonMediaListSource {
+            id,
+            saved_revision,
+        })
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn get_addon_media_list_saved_draft_diff(
+    id: i64,
+) -> Result<AddonMediaListDraftDiffRow, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .addon_media_list_saved_draft_diff(id)
+        .await
+        .map(Into::into)
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn get_addon_media_list_reset_impact(
+    id: i64,
+) -> Result<AddonMediaListResetImpactRow, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .addon_media_list_reset_impact(id)
+        .await
+        .map(Into::into)
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn get_addon_media_list_revision_history(
+    id: i64,
+) -> Result<Vec<AddonMediaListRevisionSummaryRow>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .addon_media_list_revision_history(id)
+        .await
+        .map(|history| history.into_iter().map(Into::into).collect())
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn compare_addon_media_list_revisions(
+    id: i64,
+    left_revision: i32,
+    right_revision: i32,
+) -> Result<AddonMediaListRevisionDiffRow, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .compare_addon_media_list_revisions(id, left_revision, right_revision)
+        .await
+        .map(Into::into)
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn restore_addon_media_list_revision(
+    id: i64,
+    source_published_revision: i32,
+    expected_draft_revision: i32,
+    expected_published_revision: i32,
+) -> Result<AddonMediaListRestoreResult, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .restore_addon_media_list_revision(ersatzrs_app::commands::RestoreAddonMediaListRevision {
+            id,
+            source_published_revision,
+            expected_draft_revision,
+            expected_published_revision,
+        })
+        .await
+        .map(|outcome| AddonMediaListRestoreResult {
+            operation_id: outcome.operation_id,
+            generation: outcome.generation,
+            saved_revision: outcome.saved_revision,
+            target_published_revision: outcome.target_published_revision,
+            existing: outcome.existing,
+        })
+        .map_err(ServerFnError::new)
 }
 
 /// Retry or restore one exact failed/expired publication generation.
@@ -1490,6 +1886,20 @@ pub async fn update_addon_media_list_item_chapters(
         )
         .await
         .map_err(ServerFnError::new)
+}
+
+/// Validate chapter text before a combined metadata/chapter save begins.
+///
+/// The application command validates again at the write boundary. This
+/// read-only preflight prevents a valid NFO update from committing before an
+/// invalid chapter edit is rejected by the second command.
+#[server]
+pub async fn validate_addon_media_list_item_chapters(
+    chapter_input: String,
+) -> Result<(), ServerFnError> {
+    ersatzrs_core::media_chapters::parse_chapter_input(&chapter_input, None)
+        .map(|_| ())
+        .map_err(|error| ServerFnError::new(error.to_string()))
 }
 
 #[server]

@@ -31,22 +31,36 @@
     height: 3.5rem;
     padding: 0 1rem;
     font-weight: 700;
-    cursor: pointer;
-    user-select: none;
     transition: color 150ms;
     white-space: nowrap;
 }
-.th:hover { color: var(--color-gray-200); }
 
 .th-actions {
     width: 18.75rem;
     padding: 0 1rem;
 }
 
-.sort-label {
+.sort-button {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
+    min-height: 2.75rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.sort-button:hover {
+    color: var(--color-gray-200);
+}
+
+.sort-button:focus-visible {
+    border-radius: var(--radius);
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
 }
 
 .td {

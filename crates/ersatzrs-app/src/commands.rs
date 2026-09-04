@@ -4458,12 +4458,39 @@ pub struct MatchAddonMediaList {
     pub id: EntityId,
 }
 
+/// Queue one durable, non-mutating source header/first-page probe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TestAddonMediaListSource {
+    pub id: EntityId,
+    /// Exact saved draft revision displayed with the Test source action.
+    pub saved_revision: i32,
+}
+
 /// Publish one reviewed Add-on media list snapshot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PublishAddonMediaList {
     pub id: EntityId,
     /// Exact saved draft revision shown by the editor.
     pub saved_revision: i32,
+}
+
+/// Republish one retained complete revision as a new monotonic revision.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RestoreAddonMediaListRevision {
+    pub id: EntityId,
+    pub source_published_revision: i32,
+    pub expected_draft_revision: i32,
+    pub expected_published_revision: i32,
+}
+
+/// Durable retained-revision restore admission result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RestoreAddonMediaListRevisionOutcome {
+    pub operation_id: EntityId,
+    pub generation: i32,
+    pub saved_revision: i32,
+    pub target_published_revision: i32,
+    pub existing: bool,
 }
 
 /// Request a destructive reset followed by a fresh provider import.
@@ -4705,6 +4732,21 @@ pub async fn match_addon_media_list(
     repository.match_items(command.id).await.map_err(Into::into)
 }
 
+/// Validate and enqueue one exact saved-revision source probe.
+pub async fn test_addon_media_list_source(
+    command: TestAddonMediaListSource,
+    repository: &dyn ersatzrs_core::repositories::AddonMediaListSourceProbeRepository,
+) -> crate::Result<EntityId> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    if command.saved_revision < 0 {
+        return validation_error("saved_revision", "must not be negative");
+    }
+    repository
+        .enqueue_source_probe(command.id, command.saved_revision)
+        .await
+        .map_err(Into::into)
+}
+
 /// Persist one exact reviewed snapshot for background publication.
 pub async fn publish_addon_media_list(
     command: PublishAddonMediaList,
@@ -4780,6 +4822,45 @@ pub async fn publish_addon_media_list(
         operation_id: queued.operation.id,
         generation: queued.job.generation,
         saved_revision: queued.job.saved_revision,
+        existing: queued.existing,
+    })
+}
+
+/// Validate and queue a retained revision through the publication coordinator.
+pub async fn restore_addon_media_list_revision(
+    command: RestoreAddonMediaListRevision,
+    repository: &dyn AddonMediaListRepository,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
+) -> crate::Result<RestoreAddonMediaListRevisionOutcome> {
+    validate_positive_id(command.id, "addon_media_list_id")?;
+    if command.source_published_revision <= 0 {
+        return validation_error("source_published_revision", "must be greater than zero");
+    }
+    if command.expected_draft_revision < 0 || command.expected_published_revision < 0 {
+        return validation_error("expected_revision", "must not be negative");
+    }
+    let library_id =
+        repository
+            .managed_library_id(command.id)
+            .await?
+            .ok_or(ApplicationError::Unavailable {
+                operation: "queue add-on media-list revision restore",
+                message: "managed list storage is unavailable".to_owned(),
+            })?;
+    let queued = managed_operations
+        .enqueue_revision_restore(
+            command.id,
+            library_id,
+            command.source_published_revision,
+            command.expected_draft_revision,
+            command.expected_published_revision,
+        )
+        .await?;
+    Ok(RestoreAddonMediaListRevisionOutcome {
+        operation_id: queued.operation.id,
+        generation: queued.job.generation,
+        saved_revision: queued.job.saved_revision,
+        target_published_revision: queued.job.target_published_revision,
         existing: queued.existing,
     })
 }
@@ -6666,6 +6747,8 @@ mod tests {
             &self,
             _page: u32,
             _page_size: u32,
+            _sort_field: ersatzrs_core::repositories::AddonMediaListAdminSortField,
+            _sort_direction: ersatzrs_core::repositories::AddonMediaListAdminSortDirection,
         ) -> ersatzrs_core::repositories::Result<(Vec<AddonMediaListAdminRow>, u64)> {
             Ok((Vec::new(), 0))
         }
@@ -6999,6 +7082,8 @@ mod tests {
                     generation: 1,
                     saved_revision,
                     target_published_revision,
+                    source_published_revision: None,
+                    restore_materialized_at: None,
                     phase: AddonMediaListPublicationPhase::AwaitingLease,
                     child_scan_operation_id: None,
                     original_failure_code: None,

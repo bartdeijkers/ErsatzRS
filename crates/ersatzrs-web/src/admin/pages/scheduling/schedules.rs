@@ -436,6 +436,7 @@ fn SchedulesIsland(
                 </div>
             </section>
             <Modal
+                dialog_id="schedule-copy-dialog"
                 open=copy_open
                 title=tr(TextKey::CopySchedule).to_string()
                 on_close=Callback::new(move |confirmed| {
@@ -473,6 +474,7 @@ fn SchedulesIsland(
                 </div>
             </Modal>
             <DeleteDialog
+                dialog_id="schedule-delete-dialog"
                 open=delete_open
                 entity_name=Signal::derive(move || {
                     delete_target.get().map_or_else(

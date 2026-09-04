@@ -1099,6 +1099,7 @@ fn AddToCollectionModal(
 
     view! {
         <Modal
+            dialog_id="search-add-to-collection-dialog"
             open=open
             title=tr(TextKey::AddToCollection).to_string()
             on_close=Callback::new(move |confirmed: bool| {
@@ -1243,6 +1244,7 @@ fn AddToPlaylistModal(
 
     view! {
         <Modal
+            dialog_id="search-add-to-playlist-dialog"
             open=open
             title=tr(TextKey::AddToPlaylist).to_string()
             on_close=Callback::new(move |confirmed: bool| {

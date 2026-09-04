@@ -10,6 +10,7 @@ use ersatzrs_domain::{AddonMediaListPublicationErrorCategory, EntityId};
 pub(crate) const PUBLICATION_MARKER_FILE: &str = ".ersatzrs-publication.json";
 const MARKER_SCHEMA_VERSION: u32 = 1;
 const CLEANUP_TOMBSTONE_SUFFIX: &str = ".cleanup-marker";
+pub(crate) const REVISION_BLOB_STORE_DIRECTORY: &str = ".ersatzrs-revision-blobs";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -56,6 +57,14 @@ pub(crate) struct PublicationFsPaths {
     pub(crate) managed: PathBuf,
     pub(crate) backup: PathBuf,
     pub(crate) failed: PathBuf,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ArchivedRevisionFile {
+    pub(crate) published_relative_path: String,
+    pub(crate) storage_relative_path: String,
+    pub(crate) sha256: String,
+    pub(crate) byte_length: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -843,6 +852,121 @@ pub(crate) fn verify_managed_complete(
     verify_fingerprint(&paths.managed, &marker)
 }
 
+/// Copy every published file into immutable, list-scoped content storage.
+///
+/// The blob store is host-owned beside the SQLite database, so managed-root
+/// relocation and publication scratch cleanup cannot remove it. The tree lock
+/// and final marker verification make the returned file set one sealed revision.
+pub(crate) fn archive_managed_revision(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+    storage_parent: &Path,
+    storage_owner: &str,
+) -> Result<Vec<ArchivedRevisionFile>, PublicationFsError> {
+    with_managed_tree_lock(paths, || {
+        verify_managed_complete(paths, identity, PublicationTreeRole::Candidate)?;
+        validate_storage_owner(storage_owner)?;
+        let mut files = Vec::new();
+        archive_revision_directory(
+            &paths.managed,
+            &paths.managed,
+            storage_parent,
+            storage_owner,
+            identity.list_id,
+            &mut files,
+        )?;
+        // Detect an out-of-band writer even if it did not honor the tree lock.
+        verify_managed_complete(paths, identity, PublicationTreeRole::Candidate)?;
+        Ok(files)
+    })
+}
+
+pub(crate) fn revision_blob_path(
+    storage_parent: &Path,
+    storage_owner: &str,
+    storage_relative_path: &str,
+) -> Result<PathBuf, PublicationFsError> {
+    validate_storage_owner(storage_owner)?;
+    let relative = Path::new(storage_relative_path);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+        || relative.components().next().is_none_or(|component| {
+            component.as_os_str() != std::ffi::OsStr::new(REVISION_BLOB_STORE_DIRECTORY)
+        })
+    {
+        return Err(PublicationFsError::UnsafeState(
+            "the retained revision blob path escaped host-owned storage",
+        ));
+    }
+    let mut components = relative.components();
+    let _store_directory = components.next();
+    if components
+        .next()
+        .is_none_or(|component| component.as_os_str() != std::ffi::OsStr::new(storage_owner))
+    {
+        return Err(PublicationFsError::UnsafeState(
+            "the retained revision blob belongs to another storage owner",
+        ));
+    }
+    let mut resolved = storage_parent.to_path_buf();
+    for component in relative.components() {
+        resolved.push(component.as_os_str());
+        match fs::symlink_metadata(&resolved) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(PublicationFsError::UnsafeState(
+                    "retained revision storage may not contain symbolic links",
+                ));
+            }
+            Ok(_) => {}
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => {}
+            Err(source) => return Err(io_error("inspect retained revision storage", source)),
+        }
+    }
+    Ok(resolved)
+}
+
+/// Replace a building publication candidate with one retained file snapshot.
+///
+/// All blob identities are checked before the managed tree is touched. A
+/// partial copy remains recoverable through the existing publication backup,
+/// and repeating the call recreates the same candidate from scratch.
+pub(crate) fn materialize_archived_revision(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+    storage_parent: &Path,
+    storage_owner: &str,
+    files: &[ArchivedRevisionFile],
+) -> Result<(), PublicationFsError> {
+    with_managed_tree_lock(paths, || {
+        let marker = read_marker(&paths.managed)?;
+        if marker.state != PublicationTreeState::Building
+            || !marker_matches(
+                &marker,
+                identity,
+                PublicationTreeRole::Candidate,
+                identity.target_revision,
+            )
+        {
+            return Err(PublicationFsError::UnsafeState(
+                "a retained revision requires the current building publication candidate",
+            ));
+        }
+        let sources = validate_revision_materialization(
+            storage_parent,
+            storage_owner,
+            identity.list_id,
+            files,
+        )?;
+        clear_managed_revision_contents(&paths.managed, &paths.managed)?;
+        for (file, source) in files.iter().zip(sources) {
+            copy_revision_blob_into_candidate(&source, &paths.managed, file)?;
+        }
+        Ok(())
+    })
+}
+
 pub(crate) fn atomic_write_temporary_directory(path: &Path) -> PathBuf {
     let ordinary_parent = path.parent().unwrap_or_else(|| Path::new("."));
     ordinary_parent
@@ -997,12 +1121,19 @@ fn managed_tree_lock_path(managed: &Path) -> Result<PathBuf, PublicationFsError>
     let parent = managed.parent().ok_or(PublicationFsError::UnsafeState(
         "the managed publication folder has no parent",
     ))?;
+    Ok(parent.join(format!(
+        ".ersatzrs-managed-tree-{}.lock",
+        managed_path_key(managed)
+    )))
+}
+
+fn managed_path_key(managed: &Path) -> String {
     let hash = Sha256::digest(managed.as_os_str().to_string_lossy().as_bytes());
     let mut key = String::with_capacity(24);
     for byte in &hash[..12] {
         write!(&mut key, "{byte:02x}").expect("writing to a String cannot fail");
     }
-    Ok(parent.join(format!(".ersatzrs-managed-tree-{key}.lock")))
+    key
 }
 
 fn ensure_reset_may_replace_marker(
@@ -1097,6 +1228,408 @@ fn copy_tree(source: &Path, destination: &Path, relative: &Path) -> Result<(), P
         }
     }
     Ok(())
+}
+
+fn archive_revision_directory(
+    root: &Path,
+    directory: &Path,
+    storage_parent: &Path,
+    storage_owner: &str,
+    list_id: EntityId,
+    files: &mut Vec<ArchivedRevisionFile>,
+) -> Result<(), PublicationFsError> {
+    let mut entries = fs::read_dir(directory)
+        .map_err(|source| io_error("read retained revision source", source))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|source| io_error("read retained revision source entry", source))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        let entry_path = entry.path();
+        let relative = entry_path.strip_prefix(root).map_err(|_| {
+            PublicationFsError::UnsafeState("a retained revision entry escaped its managed root")
+        })?;
+        if is_publication_internal_path(relative) {
+            continue;
+        }
+        let file_type = entry
+            .file_type()
+            .map_err(|source| io_error("inspect retained revision source", source))?;
+        if file_type.is_symlink() {
+            return Err(PublicationFsError::UnsafeState(
+                "retained revision sources may not contain symbolic links",
+            ));
+        }
+        if file_type.is_dir() {
+            archive_revision_directory(
+                root,
+                &entry_path,
+                storage_parent,
+                storage_owner,
+                list_id,
+                files,
+            )?;
+        } else if file_type.is_file() {
+            let published_relative_path = normalized_relative_path(relative)?;
+            let (storage_relative_path, sha256, byte_length) =
+                archive_revision_file(&entry_path, storage_parent, storage_owner, list_id)?;
+            files.push(ArchivedRevisionFile {
+                published_relative_path,
+                storage_relative_path,
+                sha256,
+                byte_length,
+            });
+        } else {
+            return Err(PublicationFsError::UnsafeState(
+                "retained revision sources may contain only files and directories",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn is_publication_internal_path(relative: &Path) -> bool {
+    relative.components().count() == 1
+        && relative
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(".ersatzrs-"))
+}
+
+fn normalized_relative_path(relative: &Path) -> Result<String, PublicationFsError> {
+    if relative.is_absolute()
+        || relative.components().next().is_none()
+        || relative
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(PublicationFsError::UnsafeState(
+            "a retained revision path is not a safe relative path",
+        ));
+    }
+    relative
+        .to_str()
+        .map(|value| value.replace('\\', "/"))
+        .ok_or(PublicationFsError::UnsafeState(
+            "retained revision paths must be valid UTF-8",
+        ))
+}
+
+fn validate_storage_owner(storage_owner: &str) -> Result<(), PublicationFsError> {
+    if storage_owner.len() != 32
+        || !storage_owner
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err(PublicationFsError::UnsafeState(
+            "the retained revision storage owner is invalid",
+        ));
+    }
+    Ok(())
+}
+
+fn archive_revision_file(
+    source: &Path,
+    storage_parent: &Path,
+    storage_owner: &str,
+    list_id: EntityId,
+) -> Result<(String, String, u64), PublicationFsError> {
+    let store = storage_parent.join(REVISION_BLOB_STORE_DIRECTORY);
+    ensure_plain_directory(&store)?;
+    let owner_store = store.join(storage_owner);
+    ensure_plain_directory(&owner_store)?;
+    let list_store = owner_store.join(list_id.to_string());
+    ensure_plain_directory(&list_store)?;
+
+    let mut temporary = tempfile::NamedTempFile::new_in(&list_store)
+        .map_err(|source| io_error("create retained revision blob", source))?;
+    let mut input = File::open(source)
+        .map_err(|source| io_error("open retained revision source file", source))?;
+    let mut hasher = Sha256::new();
+    let mut byte_length = 0_u64;
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        let read = input
+            .read(&mut buffer)
+            .map_err(|source| io_error("read retained revision source file", source))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        temporary
+            .write_all(&buffer[..read])
+            .map_err(|source| io_error("write retained revision blob", source))?;
+        byte_length = byte_length
+            .checked_add(u64::try_from(read).unwrap_or(u64::MAX))
+            .ok_or(PublicationFsError::Integrity(
+                "a retained revision file is too large",
+            ))?;
+    }
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|source| io_error("flush retained revision blob", source))?;
+    let digest = hasher.finalize();
+    let sha256 = hex_digest(&digest);
+    let prefix_store = list_store.join(&sha256[..2]);
+    ensure_plain_directory(&prefix_store)?;
+    let final_path = prefix_store.join(&sha256);
+    if final_path.exists() {
+        verify_revision_blob(&final_path, &sha256, byte_length)?;
+    } else {
+        match temporary.persist_noclobber(&final_path) {
+            Ok(_) => verify_revision_blob(&final_path, &sha256, byte_length)?,
+            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+                verify_revision_blob(&final_path, &sha256, byte_length)?;
+            }
+            Err(error) => return Err(io_error("publish retained revision blob", error.error)),
+        }
+    }
+    let storage_relative_path = format!(
+        "{REVISION_BLOB_STORE_DIRECTORY}/{storage_owner}/{list_id}/{}/{}",
+        &sha256[..2],
+        sha256
+    );
+    Ok((storage_relative_path, sha256, byte_length))
+}
+
+fn validate_revision_materialization(
+    storage_parent: &Path,
+    storage_owner: &str,
+    list_id: EntityId,
+    files: &[ArchivedRevisionFile],
+) -> Result<Vec<PathBuf>, PublicationFsError> {
+    validate_storage_owner(storage_owner)?;
+    let mut published_paths = std::collections::BTreeSet::new();
+    let mut sources = Vec::with_capacity(files.len());
+    for file in files {
+        let relative = Path::new(&file.published_relative_path);
+        if normalized_relative_path(relative)? != file.published_relative_path {
+            return Err(PublicationFsError::UnsafeState(
+                "retained revision published paths must use canonical separators",
+            ));
+        }
+        if !published_paths.insert(relative.to_path_buf())
+            || relative
+                .ancestors()
+                .skip(1)
+                .take_while(|ancestor| !ancestor.as_os_str().is_empty())
+                .any(|ancestor| published_paths.contains(ancestor))
+            || published_paths
+                .iter()
+                .any(|candidate| candidate != relative && candidate.starts_with(relative))
+        {
+            return Err(PublicationFsError::UnsafeState(
+                "retained revision published paths overlap",
+            ));
+        }
+        if file.sha256.len() != 64
+            || !file.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || file.sha256.bytes().any(|byte| byte.is_ascii_uppercase())
+        {
+            return Err(PublicationFsError::Integrity(
+                "a retained revision blob has an invalid content digest",
+            ));
+        }
+        let expected_storage_path = format!(
+            "{REVISION_BLOB_STORE_DIRECTORY}/{}/{list_id}/{}/{}",
+            storage_owner,
+            &file.sha256[..2],
+            file.sha256
+        );
+        if file.storage_relative_path != expected_storage_path {
+            return Err(PublicationFsError::UnsafeState(
+                "a retained revision blob has the wrong storage identity",
+            ));
+        }
+        let source =
+            revision_blob_path(storage_parent, storage_owner, &file.storage_relative_path)?;
+        verify_revision_blob(&source, &file.sha256, file.byte_length)?;
+        sources.push(source);
+    }
+    Ok(sources)
+}
+
+fn clear_managed_revision_contents(
+    root: &Path,
+    directory: &Path,
+) -> Result<(), PublicationFsError> {
+    let mut entries = fs::read_dir(directory)
+        .map_err(|source| io_error("read retained revision candidate", source))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|source| io_error("read retained revision candidate entry", source))?;
+    entries.sort_by_key(std::fs::DirEntry::file_name);
+    for entry in entries {
+        let entry_path = entry.path();
+        let relative = entry_path.strip_prefix(root).map_err(|_| {
+            PublicationFsError::UnsafeState("a retained revision candidate escaped its root")
+        })?;
+        if is_publication_internal_path(relative) {
+            continue;
+        }
+        let file_type = entry
+            .file_type()
+            .map_err(|source| io_error("inspect retained revision candidate", source))?;
+        if file_type.is_symlink() {
+            return Err(PublicationFsError::UnsafeState(
+                "retained revision candidates may not contain symbolic links",
+            ));
+        }
+        if file_type.is_dir() {
+            fs::remove_dir_all(&entry_path).map_err(|source| {
+                io_error("remove retained revision candidate directory", source)
+            })?;
+        } else if file_type.is_file() {
+            fs::remove_file(&entry_path)
+                .map_err(|source| io_error("remove retained revision candidate file", source))?;
+        } else {
+            return Err(PublicationFsError::UnsafeState(
+                "retained revision candidates may contain only files and directories",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn copy_revision_blob_into_candidate(
+    source: &Path,
+    managed: &Path,
+    file: &ArchivedRevisionFile,
+) -> Result<(), PublicationFsError> {
+    let relative = Path::new(&file.published_relative_path);
+    let destination = managed.join(relative);
+    let parent = destination.parent().ok_or(PublicationFsError::UnsafeState(
+        "a retained revision target has no parent",
+    ))?;
+    ensure_managed_subdirectories(managed, parent)?;
+
+    let mut input =
+        File::open(source).map_err(|source| io_error("open retained revision blob", source))?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|source| io_error("create retained revision candidate file", source))?;
+    let mut hasher = Sha256::new();
+    let mut byte_length = 0_u64;
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        let read = input
+            .read(&mut buffer)
+            .map_err(|source| io_error("read retained revision blob", source))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        temporary
+            .write_all(&buffer[..read])
+            .map_err(|source| io_error("write retained revision candidate file", source))?;
+        byte_length = byte_length
+            .checked_add(u64::try_from(read).unwrap_or(u64::MAX))
+            .ok_or(PublicationFsError::Integrity(
+                "a retained revision file is too large",
+            ))?;
+    }
+    let digest = hasher.finalize();
+    if byte_length != file.byte_length || hex_digest(&digest) != file.sha256 {
+        return Err(PublicationFsError::Integrity(
+            "a retained revision blob changed while it was materialized",
+        ));
+    }
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|source| io_error("flush retained revision candidate file", source))?;
+    temporary
+        .persist(&destination)
+        .map_err(|error| io_error("publish retained revision candidate file", error.error))?;
+    verify_revision_blob(&destination, &file.sha256, file.byte_length)
+}
+
+fn ensure_managed_subdirectories(root: &Path, directory: &Path) -> Result<(), PublicationFsError> {
+    let relative = directory.strip_prefix(root).map_err(|_| {
+        PublicationFsError::UnsafeState("a retained revision target escaped its managed root")
+    })?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        if !matches!(component, std::path::Component::Normal(_)) {
+            return Err(PublicationFsError::UnsafeState(
+                "a retained revision target is not a safe relative path",
+            ));
+        }
+        current.push(component.as_os_str());
+        ensure_plain_directory(&current)?;
+    }
+    Ok(())
+}
+
+fn ensure_plain_directory(path: &Path) -> Result<(), PublicationFsError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(PublicationFsError::UnsafeState(
+            "retained revision storage may not contain symbolic links",
+        )),
+        Ok(metadata) if metadata.is_dir() => Ok(()),
+        Ok(_) => Err(PublicationFsError::UnsafeState(
+            "a retained revision storage path is not a directory",
+        )),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+            fs::create_dir(path)
+                .map_err(|source| io_error("create retained revision storage directory", source))?;
+            let metadata = fs::symlink_metadata(path)
+                .map_err(|source| io_error("inspect retained revision storage", source))?;
+            if metadata.is_dir() && !metadata.file_type().is_symlink() {
+                Ok(())
+            } else {
+                Err(PublicationFsError::UnsafeState(
+                    "retained revision storage must be a real directory",
+                ))
+            }
+        }
+        Err(source) => Err(io_error("inspect retained revision storage", source)),
+    }
+}
+
+fn verify_revision_blob(
+    path: &Path,
+    expected_sha256: &str,
+    expected_byte_length: u64,
+) -> Result<(), PublicationFsError> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|source| io_error("inspect retained revision blob", source))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(PublicationFsError::UnsafeState(
+            "a retained revision blob is not a regular file",
+        ));
+    }
+    if metadata.len() != expected_byte_length {
+        return Err(PublicationFsError::Integrity(
+            "a retained revision blob has the wrong length",
+        ));
+    }
+    let mut file =
+        File::open(path).map_err(|source| io_error("open retained revision blob", source))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|source| io_error("read retained revision blob", source))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    let digest = hasher.finalize();
+    if hex_digest(&digest) != expected_sha256 {
+        return Err(PublicationFsError::Integrity(
+            "a retained revision blob failed its content digest",
+        ));
+    }
+    Ok(())
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    let mut value = String::with_capacity(bytes.len().saturating_mul(2));
+    for byte in bytes {
+        write!(&mut value, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    value
 }
 
 fn fingerprint_tree(root: &Path) -> Result<TreeFingerprint, PublicationFsError> {
@@ -1493,6 +2026,9 @@ fn io_error(action: &'static str, source: std::io::Error) -> PublicationFsError 
 mod tests {
     use super::*;
 
+    const STORAGE_OWNER: &str = "0123456789abcdef0123456789abcdef";
+    const OTHER_STORAGE_OWNER: &str = "abcdef0123456789abcdef0123456789";
+
     fn fixture() -> (tempfile::TempDir, PublicationFsPaths, PublicationFsIdentity) {
         let temp = tempfile::tempdir().expect("temp directory");
         let managed = temp.path().join("managed");
@@ -1734,6 +2270,322 @@ mod tests {
         assert!(paths.managed.join(PUBLICATION_MARKER_FILE).is_file());
         assert!(!paths.backup.exists());
         assert!(!paths.failed.exists());
+    }
+
+    #[test]
+    fn revision_archive_is_content_addressed_idempotent_and_cleanup_safe() {
+        let (temp, paths, identity) = fixture();
+        create_backup(&paths, identity).expect("create backup");
+        fs::write(paths.managed.join("item.yml"), b"candidate").expect("candidate item");
+        fs::create_dir(paths.managed.join("nested")).expect("nested directory");
+        fs::write(paths.managed.join("nested/copy.yml"), b"candidate")
+            .expect("duplicate candidate bytes");
+        fs::write(paths.managed.join(".ersatzrs-internal.tmp"), b"host state")
+            .expect("host-owned internal file");
+        seal_candidate(&paths, identity);
+
+        let archived = archive_managed_revision(&paths, identity, temp.path(), STORAGE_OWNER)
+            .expect("archive revision");
+        assert_eq!(
+            archived
+                .iter()
+                .map(|file| file.published_relative_path.as_str())
+                .collect::<Vec<_>>(),
+            ["item.yml", "nested/copy.yml"]
+        );
+        assert_eq!(
+            archived[0].storage_relative_path,
+            archived[1].storage_relative_path
+        );
+        assert_eq!(archived[0].sha256, archived[1].sha256);
+        assert_eq!(archived[0].byte_length, 9);
+        let blob = revision_blob_path(
+            temp.path(),
+            STORAGE_OWNER,
+            &archived[0].storage_relative_path,
+        )
+        .expect("resolve blob path");
+        assert_eq!(fs::read(&blob).expect("read retained bytes"), b"candidate");
+        assert_eq!(
+            archive_managed_revision(&paths, identity, temp.path(), STORAGE_OWNER)
+                .expect("repeat archive"),
+            archived
+        );
+
+        cleanup_after_verification(&paths, identity, PublicationTreeRole::Candidate)
+            .expect("clean publication scratch");
+        assert!(
+            blob.is_file(),
+            "publication cleanup must preserve revision blobs"
+        );
+    }
+
+    #[test]
+    fn revision_archive_rejects_a_corrupt_existing_blob() {
+        let (temp, paths, identity) = fixture();
+        create_backup(&paths, identity).expect("create backup");
+        fs::write(paths.managed.join("item.yml"), b"candidate").expect("candidate item");
+        seal_candidate(&paths, identity);
+        let archived = archive_managed_revision(&paths, identity, temp.path(), STORAGE_OWNER)
+            .expect("archive revision");
+        let blob = revision_blob_path(
+            temp.path(),
+            STORAGE_OWNER,
+            &archived[0].storage_relative_path,
+        )
+        .expect("resolve blob path");
+        fs::write(blob, b"corrupted").expect("corrupt retained blob");
+
+        let error = archive_managed_revision(&paths, identity, temp.path(), STORAGE_OWNER)
+            .expect_err("an existing content address must be verified");
+        assert!(error.to_string().contains("content digest"));
+    }
+
+    #[test]
+    fn retained_revision_survives_managed_root_relocation_and_repeated_content() {
+        let (temp, source_paths, source_identity) = fixture();
+        fs::write(source_paths.managed.join("item.yml"), b"retained").expect("retained source");
+        create_backup(&source_paths, source_identity).expect("source backup");
+        seal_candidate(&source_paths, source_identity);
+        let archived =
+            archive_managed_revision(&source_paths, source_identity, temp.path(), STORAGE_OWNER)
+                .expect("archive source revision");
+        cleanup_after_verification(
+            &source_paths,
+            source_identity,
+            PublicationTreeRole::Candidate,
+        )
+        .expect("finish source publication");
+
+        let moved_root = temp.path().join("moved-root");
+        fs::create_dir(&moved_root).expect("moved storage root");
+        let moved_managed = moved_root.join("managed");
+        fs::rename(&source_paths.managed, &moved_managed).expect("relocate managed library");
+        let moved_paths = publication_paths(
+            moved_managed,
+            source_identity.list_id,
+            source_identity.operation_id,
+            source_identity.generation,
+        )
+        .expect("moved publication paths");
+        let repeated =
+            archive_managed_revision(&moved_paths, source_identity, temp.path(), STORAGE_OWNER)
+                .expect("archive repeated content after relocation");
+        assert_eq!(repeated, archived);
+        let independently_owned = archive_managed_revision(
+            &moved_paths,
+            source_identity,
+            temp.path(),
+            OTHER_STORAGE_OWNER,
+        )
+        .expect("archive identical list identity for another database owner");
+        assert_ne!(
+            independently_owned[0].storage_relative_path, archived[0].storage_relative_path,
+            "independent databases must not share list-scoped storage ownership"
+        );
+
+        let restore_identity = PublicationFsIdentity {
+            operation_id: Some(12),
+            generation: Some(3),
+            previous_revision: source_identity.target_revision,
+            target_revision: source_identity.target_revision + 1,
+            ..source_identity
+        };
+        let restore_paths = publication_paths(
+            moved_paths.managed,
+            restore_identity.list_id,
+            restore_identity.operation_id,
+            restore_identity.generation,
+        )
+        .expect("restore publication paths");
+        create_backup(&restore_paths, restore_identity).expect("restore backup");
+        materialize_archived_revision(
+            &restore_paths,
+            restore_identity,
+            temp.path(),
+            STORAGE_OWNER,
+            &archived,
+        )
+        .expect("materialize revision after relocation");
+        assert_eq!(
+            fs::read(restore_paths.managed.join("item.yml")).expect("restored item"),
+            b"retained"
+        );
+    }
+
+    #[test]
+    fn retained_revision_materialization_is_exact_and_idempotent() {
+        let (temp, source_paths, source_identity) = fixture();
+        fs::write(source_paths.managed.join("item.yml"), b"retained").expect("retained source");
+        create_backup(&source_paths, source_identity).expect("source backup");
+        seal_candidate(&source_paths, source_identity);
+        let archived =
+            archive_managed_revision(&source_paths, source_identity, temp.path(), STORAGE_OWNER)
+                .expect("archive retained revision");
+        cleanup_after_verification(
+            &source_paths,
+            source_identity,
+            PublicationTreeRole::Candidate,
+        )
+        .expect("finish retained source publication");
+
+        let current_identity = PublicationFsIdentity {
+            operation_id: Some(12),
+            generation: Some(3),
+            previous_revision: source_identity.target_revision,
+            target_revision: 9,
+            ..source_identity
+        };
+        let current_paths = publication_paths(
+            source_paths.managed.clone(),
+            current_identity.list_id,
+            current_identity.operation_id,
+            current_identity.generation,
+        )
+        .expect("current paths");
+        create_backup(&current_paths, current_identity).expect("current backup");
+        fs::write(current_paths.managed.join("item.yml"), b"current").expect("current publication");
+        fs::write(current_paths.managed.join("stale.yml"), b"stale")
+            .expect("stale publication file");
+        seal_candidate(&current_paths, current_identity);
+        cleanup_after_verification(
+            &current_paths,
+            current_identity,
+            PublicationTreeRole::Candidate,
+        )
+        .expect("finish current publication");
+
+        let target_identity = PublicationFsIdentity {
+            operation_id: Some(13),
+            generation: Some(4),
+            previous_revision: current_identity.target_revision,
+            target_revision: 10,
+            ..current_identity
+        };
+        let target_paths = publication_paths(
+            current_paths.managed.clone(),
+            target_identity.list_id,
+            target_identity.operation_id,
+            target_identity.generation,
+        )
+        .expect("target paths");
+        create_backup(&target_paths, target_identity).expect("target backup");
+
+        materialize_archived_revision(
+            &target_paths,
+            target_identity,
+            temp.path(),
+            STORAGE_OWNER,
+            &archived,
+        )
+        .expect("materialize retained revision");
+        assert_eq!(
+            fs::read(target_paths.managed.join("item.yml")).expect("materialized item"),
+            b"retained"
+        );
+        assert!(!target_paths.managed.join("stale.yml").exists());
+        assert_eq!(
+            fs::read(target_paths.backup.join("item.yml")).expect("current backup item"),
+            b"current",
+            "restore staging must preserve the current publication for recovery"
+        );
+        assert_eq!(
+            read_marker(&target_paths.managed)
+                .expect("candidate marker")
+                .state,
+            PublicationTreeState::Building
+        );
+        materialize_archived_revision(
+            &target_paths,
+            target_identity,
+            temp.path(),
+            STORAGE_OWNER,
+            &archived,
+        )
+        .expect("repeat materialization");
+        assert_eq!(
+            fs::read(target_paths.managed.join("item.yml")).expect("repeated item"),
+            b"retained"
+        );
+    }
+
+    #[test]
+    fn retained_revision_validates_all_blobs_before_replacing_the_candidate() {
+        let (temp, paths, identity) = fixture();
+        create_backup(&paths, identity).expect("create backup");
+        fs::write(paths.managed.join("item.yml"), b"candidate").expect("candidate item");
+        seal_candidate(&paths, identity);
+        let archived = archive_managed_revision(&paths, identity, temp.path(), STORAGE_OWNER)
+            .expect("archive revision");
+        let blob = revision_blob_path(
+            temp.path(),
+            STORAGE_OWNER,
+            &archived[0].storage_relative_path,
+        )
+        .expect("resolve blob path");
+        fs::write(blob, b"corrupted").expect("corrupt retained blob");
+
+        let next_identity = PublicationFsIdentity {
+            operation_id: Some(12),
+            generation: Some(3),
+            previous_revision: identity.target_revision,
+            target_revision: identity.target_revision + 1,
+            ..identity
+        };
+        let next_paths = publication_paths(
+            paths.managed.clone(),
+            next_identity.list_id,
+            next_identity.operation_id,
+            next_identity.generation,
+        )
+        .expect("next publication paths");
+        cleanup_after_verification(&paths, identity, PublicationTreeRole::Candidate)
+            .expect("clean first publication scratch");
+        create_backup(&next_paths, next_identity).expect("create next backup");
+        let before = fs::read(next_paths.managed.join("item.yml")).expect("candidate before error");
+
+        let error = materialize_archived_revision(
+            &next_paths,
+            next_identity,
+            temp.path(),
+            STORAGE_OWNER,
+            &archived,
+        )
+        .expect_err("corrupt source must stop before replacement");
+        assert!(error.to_string().contains("content digest"));
+        assert_eq!(
+            fs::read(next_paths.managed.join("item.yml")).expect("candidate after error"),
+            before
+        );
+    }
+
+    #[test]
+    fn revision_blob_paths_cannot_escape_host_owned_storage() {
+        let (temp, _paths, _identity) = fixture();
+        let valid = format!(".ersatzrs-revision-blobs/{STORAGE_OWNER}/7/ab/abcdef");
+        assert!(revision_blob_path(temp.path(), STORAGE_OWNER, &valid).is_ok());
+        assert!(revision_blob_path(temp.path(), STORAGE_OWNER, "../outside").is_err());
+        assert!(revision_blob_path(temp.path(), STORAGE_OWNER, "other/7/ab/abcdef").is_err());
+        let foreign = valid.replace(STORAGE_OWNER, OTHER_STORAGE_OWNER);
+        assert!(revision_blob_path(temp.path(), STORAGE_OWNER, &foreign).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn revision_archive_rejects_a_symlinked_blob_store() {
+        use std::os::unix::fs::symlink;
+
+        let (temp, paths, identity) = fixture();
+        create_backup(&paths, identity).expect("create backup");
+        seal_candidate(&paths, identity);
+        let outside = temp.path().join("outside");
+        fs::create_dir(&outside).expect("outside directory");
+        symlink(&outside, temp.path().join(REVISION_BLOB_STORE_DIRECTORY))
+            .expect("symlink blob store");
+
+        let error = archive_managed_revision(&paths, identity, temp.path(), STORAGE_OWNER)
+            .expect_err("retained storage must not follow symlinks");
+        assert!(error.to_string().contains("symbolic links"));
     }
 
     #[test]

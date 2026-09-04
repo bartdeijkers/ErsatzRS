@@ -211,6 +211,7 @@ pub fn ComponentsPage() -> impl IntoView {
                     >{tr(TextKey::DeleteDialog)}</Button>
                 </div>
                 <Modal
+                    dialog_id="dev-example-dialog"
                     open=modal_open
                     title=tr(TextKey::ExampleModal).to_string()
                     on_close=Callback::new(move |confirmed| {
@@ -221,6 +222,7 @@ pub fn ComponentsPage() -> impl IntoView {
                     <p>{tr(TextKey::ExampleModalBody)}</p>
                 </Modal>
                 <DeleteDialog
+                    dialog_id="dev-delete-dialog"
                     open=delete_open
                     entity_name=Signal::derive(move || format!("{channel_label} 101"))
                     on_confirm=Callback::new(move |confirmed| {

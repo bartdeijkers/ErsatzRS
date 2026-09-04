@@ -283,6 +283,7 @@ fn PlaylistsIsland(initial_page: PlaylistPageData) -> impl IntoView {
                 }}
             </section>
             <DeleteDialog
+                dialog_id="playlist-delete-dialog"
                 open=delete_open
                 entity_name=Signal::derive(move || {
                     delete_target.get().map(|(_, _, name)| name).unwrap_or_default()

@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Added
 
+- Add durable non-mutating source tests, exact saved-draft and reset-impact
+  previews, and digest-validated publication history for add-on media lists.
+  Operators can compare retained revisions and restore an older snapshot through
+  the normal publication lease as a new monotonic revision; revision-owned files
+  remain pinned, list sorting is keyboard accessible, and destructive dialogs
+  now contain and restore focus for hydrated and no-JavaScript workflows.
+
 - Give Remote Stream search results canonical detail links and an SSR-first,
   localized detail page showing effective metadata, artwork, tracks, liveness,
   duration, availability, owning add-on lists and their published options,

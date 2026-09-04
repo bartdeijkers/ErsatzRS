@@ -143,6 +143,8 @@ impl AppState {
                     Arc::clone(&preview_hls_sessions),
                 )),
                 Arc::new(repositories.addon_media_lists.clone()),
+                Arc::new(repositories.addon_media_lists.clone()),
+                Arc::new(ersatzrs_infra::addon_media_list_source_probe::AddonMediaListSourceProbeCoordinator::new(pool.clone())),
                 Arc::new(repositories.admin_settings.clone()),
                 Arc::new(NativeSettingsRuntime::new(
                     pool.clone(),

@@ -118,6 +118,7 @@ fn FfmpegProfilesListIsland() -> impl IntoView {
             />
 
             <DeleteDialog
+                dialog_id="ffmpeg-profile-delete-dialog"
                 open=delete_open
                 entity_name=delete_name
                 on_confirm=Callback::new(move |confirmed: bool| {

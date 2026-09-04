@@ -186,6 +186,7 @@ fn WatermarksListIsland() -> impl IntoView {
             </section>
 
             <DeleteDialog
+                dialog_id="watermark-delete-dialog"
                 open=delete_open
                 entity_name=delete_name
                 on_confirm=Callback::new(move |confirmed: bool| {
@@ -200,6 +201,7 @@ fn WatermarksListIsland() -> impl IntoView {
             />
 
             <Modal
+                dialog_id="watermark-copy-dialog"
                 open=copy_open
                 title=tr(TextKey::CopyWatermark).to_string()
                 on_close=Callback::new(move |confirmed: bool| {

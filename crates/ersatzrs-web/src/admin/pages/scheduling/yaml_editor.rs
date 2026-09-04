@@ -207,6 +207,7 @@ fn YamlEditorForm(initial_form: SequentialPlayoutForm) -> impl IntoView {
 
             // ── Erase confirm dialog ───────────────────────────────────
             <Modal
+                dialog_id="yaml-schedule-erase-dialog"
                 open=pending_erase
                 title=tr(TextKey::EraseItemsAndHistory).to_string()
                 on_close=Callback::new(move |confirmed: bool| {

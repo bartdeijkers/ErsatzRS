@@ -1,10 +1,13 @@
 use async_trait::async_trait;
 use ersatzrs_app::commands::ExecuteManagedLibraryOperationOutcome;
 use ersatzrs_core::hls::HlsSessionRegistry;
-use ersatzrs_core::repositories::{ManagedLibraryOperation, ManagedLibraryOperationClaim};
+use ersatzrs_core::repositories::{
+    AddonMediaListSourceProbeRepository as _, ManagedLibraryOperation, ManagedLibraryOperationClaim,
+};
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_domain::{EntityId, ManagedLibraryOperationState};
 use ersatzrs_infra::addon_media_list_import::AddonMediaListImportCoordinator;
+use ersatzrs_infra::addon_media_list_source_probe::AddonMediaListSourceProbeCoordinator;
 use ersatzrs_infra::addon_media_list_sync::{
     AddonMediaListMatchReport, AddonMediaListSynchronizer,
 };
@@ -232,6 +235,7 @@ async fn run_addon_media_list_imports(
     shutdown: CancellationToken,
 ) {
     let coordinator = AddonMediaListImportCoordinator::new(pool.clone());
+    let source_probes = AddonMediaListSourceProbeCoordinator::new(pool.clone());
     let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
     loop {
         tokio::select! {
@@ -239,6 +243,9 @@ async fn run_addon_media_list_imports(
             _ = interval.tick() => {}
         }
         let work = async {
+            let probed = source_probes
+                .process_one_source_probe(chrono::Utc::now())
+                .await?;
             let imported = coordinator.process_one_import_page().await?;
             let detailed = coordinator.process_one_detail().await?;
             let projected =
@@ -262,7 +269,7 @@ async fn run_addon_media_list_imports(
                 }
             }
             Ok::<_, ersatzrs_core::repositories::RepositoryError>(
-                imported || detailed || projected.is_some(),
+                probed || imported || detailed || projected.is_some(),
             )
         };
         tokio::select! {
@@ -330,6 +337,10 @@ async fn run_addon_media_list_maintenance(
             .await
         {
             tracing::warn!(error = %error, "failed to prune add-on publication history");
+        }
+
+        if let Err(error) = application.prune_addon_media_list_revisions().await {
+            tracing::warn!(error = %error, "failed to prune add-on publication revisions");
         }
 
         let coordinator = AddonMediaListImportCoordinator::new(pool.clone());

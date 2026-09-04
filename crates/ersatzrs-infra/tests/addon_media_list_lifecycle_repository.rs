@@ -7,7 +7,8 @@ use chrono::{TimeZone, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListDraftOptions, AddonMediaListItemOptionValues, AddonMediaListItemTombstone,
     AddonMediaListLifecycleRepository, AddonMediaListLifecycleSettings, AddonMediaListOptionSchema,
-    AddonMediaListOptionSchemaRef, AddonProcessedArtifactPolicy, CreateAddonMediaListLifecycleJob,
+    AddonMediaListOptionSchemaRef, AddonMediaListRevisionFile, AddonMediaListRevisionRestoreFence,
+    AddonProcessedArtifactPolicy, CreateAddonMediaListLifecycleJob, PlayoutRepository,
     RepositoryError,
 };
 use ersatzrs_domain::{
@@ -19,7 +20,7 @@ use ersatzrs_domain::{
 use ersatzrs_infra::addon_media_list_sync::AddonMediaListSynchronizer;
 use ersatzrs_infra::repositories::make_repositories;
 use sha2::{Digest as _, Sha256};
-use sqlx::Executor;
+use sqlx::{Executor, Row};
 
 async fn register_option_schema_fixture(pool: &sqlx::SqlitePool) -> AddonMediaListOptionSchemaRef {
     let definition = schema_definition("Enable fixture behavior.");
@@ -407,13 +408,26 @@ async fn lifecycle_and_global_artifact_policy_round_trip_without_enabling_behavi
 }
 
 #[tokio::test]
-async fn normal_list_delete_unlinks_retained_artifacts_before_owned_rows_cascade() {
+async fn normal_list_delete_cascades_retained_files_and_unlinks_artifacts() {
     let pool = common::test_db().await;
     let repositories = make_repositories(pool.clone());
     seed_list(&pool).await;
-    repositories
+    sqlx::query(
+        r#"UPDATE "AddonMediaList" SET "DraftRevision" = 1, "PublishedRevision" = 1
+           WHERE "Id" = 1"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let blob = repositories
         .addon_media_lists
-        .retain_published_options(1, 1, 0, fixed_time())
+        .register_revision_file_blob(
+            1,
+            "revision-blobs/delete-list.nfo",
+            "delete-list-file-digest",
+            24,
+            fixed_time(),
+        )
         .await
         .unwrap();
     let artifact = repositories
@@ -430,7 +444,21 @@ async fn normal_list_delete_unlinks_retained_artifacts_before_owned_rows_cascade
         .unwrap();
     repositories
         .addon_media_lists
-        .link_revision_artifact(1, 1, artifact.id)
+        .retain_published_revision(
+            1,
+            1,
+            1,
+            fixed_time(),
+            &[AddonMediaListRevisionFile {
+                blob_id: blob.id,
+                published_relative_path: "delete-list.nfo".into(),
+                provider_id: Some("item-10".into()),
+                storage_relative_path: blob.storage_relative_path.clone(),
+                sha256: blob.sha256.clone(),
+                byte_length: blob.byte_length,
+            }],
+            &[artifact.id],
+        )
         .await
         .unwrap();
 
@@ -443,9 +471,12 @@ async fn normal_list_delete_unlinks_retained_artifacts_before_owned_rows_cascade
         r#"SELECT
                (SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = 1) +
                (SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "Id" = ?) +
-               (SELECT COUNT(*) FROM "AddonMediaListRevisionArtifact")"#,
+               (SELECT COUNT(*) FROM "AddonMediaListRevisionArtifact") +
+               (SELECT COUNT(*) FROM "AddonMediaListRevisionFile") +
+               (SELECT COUNT(*) FROM "AddonMediaListRevisionFileBlob" WHERE "Id" = ?)"#,
     )
     .bind(artifact.id)
+    .bind(blob.id)
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -1106,6 +1137,469 @@ async fn assert_tool_maintenance_storage(pool: &sqlx::SqlitePool) {
     assert_eq!(history[0].trigger, AddonToolMaintenanceTrigger::Manual);
     assert_eq!(history[1].trigger, AddonToolMaintenanceTrigger::Startup);
     assert_eq!(history[2].state, AddonToolMaintenanceState::WaitingToRetry);
+}
+
+#[tokio::test]
+async fn complete_revision_snapshot_drives_exact_diff_and_fenced_restore() {
+    let pool = common::test_db().await;
+    seed_list(&pool).await;
+    sqlx::raw_sql(
+        r#"UPDATE "AddonMediaList"
+           SET "DraftRevision" = 1, "PublishedRevision" = 1,
+               "GeneratePlaylist" = 1,
+               "ProviderMetadataJson" = '{"title":"Fixture list"}'
+           WHERE "Id" = 1;
+           UPDATE "AddonMediaListItem"
+           SET "Published" = 1, "ProviderMetadataJson" = '{"title":"Item 10"}'
+           WHERE "Id" = 10;
+           INSERT INTO "AddonMediaListItem" (
+               "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
+               "Rank", "Title", "Published", "ProviderMetadataJson"
+           ) VALUES (
+               12, 1, 'item-12', 'Item 12', 4, 1, 'Item 12', 1,
+               '{"title":"Item 12"}'
+           );
+           INSERT INTO "AddonMediaListItemGuid" ("AddonMediaListItemId", "Guid")
+           VALUES (10, 'guid://item-10');"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let repositories = make_repositories(pool.clone());
+    let blob = repositories
+        .addon_media_lists
+        .register_revision_file_blob(
+            1,
+            "revision-blobs/item-10.nfo",
+            "file-digest",
+            42,
+            fixed_time(),
+        )
+        .await
+        .unwrap();
+    let artifact = repositories
+        .addon_media_lists
+        .create_artifact(
+            1,
+            Some(10),
+            "revision-artifact",
+            AddonMediaListArtifactKind::ProcessedMedia,
+            64,
+            fixed_time(),
+        )
+        .await
+        .unwrap();
+    let snapshot = repositories
+        .addon_media_lists
+        .retain_published_revision(
+            1,
+            1,
+            1,
+            precise_time(),
+            &[AddonMediaListRevisionFile {
+                blob_id: blob.id,
+                published_relative_path: "item-10.nfo".into(),
+                provider_id: Some("item-10".into()),
+                storage_relative_path: blob.storage_relative_path.clone(),
+                sha256: blob.sha256.clone(),
+                byte_length: blob.byte_length,
+            }],
+            &[artifact.id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(snapshot.items.len(), 2);
+    assert_eq!(snapshot.items[0].guids, vec!["guid://item-10"]);
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .revision_snapshot(1, 1)
+            .await
+            .unwrap(),
+        Some(snapshot.clone())
+    );
+    let history = repositories
+        .addon_media_lists
+        .revision_history(1)
+        .await
+        .unwrap();
+    assert_eq!(history.len(), 1);
+    assert!(history[0].restorable);
+    assert_eq!(history[0].published_item_count, 2);
+    assert!(
+        repositories
+            .addon_media_lists
+            .artifact_reference_pins(artifact.id, fixed_time())
+            .await
+            .unwrap()
+            .retained_revision
+    );
+    assert!(
+        repositories
+            .addon_media_lists
+            .revision_file_blob_reference_pins(blob.id, fixed_time())
+            .await
+            .unwrap()
+            .retained_revision
+    );
+    let impact = repositories
+        .addon_media_lists
+        .reset_impact(1, fixed_time())
+        .await
+        .unwrap();
+    assert_eq!(impact.published_items, 0);
+    assert_eq!(impact.generated_playlists, 0);
+
+    sqlx::raw_sql(
+        r#"UPDATE "AddonMediaList"
+           SET "DraftRevision" = 2,
+               "ProviderMetadataJson" = '{"title":"New provider title","newer":"must not survive"}'
+           WHERE "Id" = 1;
+           UPDATE "AddonMediaListItem"
+           SET "ProviderMetadataJson" = '{"title":"New item title","newer":"must not survive"}',
+               "MetadataOverrideJson" = '{"title":"Changed"}',
+               "Availability" = 1,
+               "MetadataConflictJson" = '{"title":{"provider_before":null,"provider_after":null,"operator_value":null}}'
+           WHERE "Id" = 10;
+           UPDATE "AddonMediaListItem" SET "Included" = 0 WHERE "Id" = 12;
+           INSERT INTO "AddonMediaListItem" (
+               "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank", "Title"
+           ) VALUES (11, 1, 'item-11', 'Item 11', 4, 2, 'Item 11');
+           INSERT INTO "AddonMediaListItemTombstone" (
+               "AddonMediaListItemId", "MissingSince", "LastObservedAt",
+               "ObservationCount", "LastReconcileGeneration", "ConfirmedAt"
+           ) VALUES (
+               10, '2026-09-01T00:00:00Z', '2026-09-04T00:00:00Z', 2, 2,
+               '2026-09-04T00:00:00Z'
+           );"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let diff = repositories
+        .addon_media_lists
+        .saved_draft_diff(1)
+        .await
+        .unwrap();
+    assert!(diff.exact);
+    assert_eq!(diff.added, 1);
+    assert_eq!(diff.metadata_changed, 1);
+    assert_eq!(diff.excluded, 1);
+    assert_eq!(diff.unavailable, 1);
+    assert_eq!(diff.conflicted, 1);
+    assert_eq!(diff.removal_candidates, 1);
+    assert_eq!(diff.added_item_ids, vec![11]);
+    assert_eq!(diff.metadata_changed_item_ids, vec![10]);
+    assert_eq!(diff.excluded_item_ids, vec![12]);
+    assert_eq!(diff.unavailable_item_ids, vec![10]);
+    assert_eq!(diff.conflicted_item_ids, vec![10]);
+    assert_eq!(diff.removal_candidate_item_ids, vec![10]);
+
+    // Publication-significant item state is part of the exact comparison even
+    // when the canonical metadata JSON itself matches the retained revision.
+    sqlx::raw_sql(
+        r#"UPDATE "AddonMediaListItem"
+           SET "Rank" = 9, "Kind" = 3, "ContentKind" = 2,
+               "FragmentStartSeconds" = 4, "FragmentEndSeconds" = 8,
+               "ChapterInput" = '00:00:04.000',
+               "ProviderChapterInput" = '00:00:02.000',
+               "LivenessOverride" = 2, "EffectiveLiveness" = 2,
+               "ProviderMetadataJson" = '{"title":"Item 10"}',
+               "MetadataOverrideJson" = '{}', "MetadataConflictJson" = NULL,
+               "Availability" = 0,
+               "DraftOptionOverridesJson" = '{"profile":"changed"}'
+           WHERE "Id" = 10;
+           DELETE FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" = 10;
+           INSERT INTO "AddonMediaListItemGuid" ("AddonMediaListItemId", "Guid")
+           VALUES (10, 'guid://item-10-changed');
+           INSERT INTO "AddonMediaListItemReplacement" (
+               "AddonMediaListItemId", "MediaItemId", "MediaVersionId",
+               "CreatedAt", "UpdatedAt"
+           ) VALUES (
+               10, 900, 901, '2026-09-04T12:00:00Z', '2026-09-04T12:00:00Z'
+           );"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let publication_significant_diff = repositories
+        .addon_media_lists
+        .saved_draft_diff(1)
+        .await
+        .unwrap();
+    assert_eq!(publication_significant_diff.metadata_changed, 1);
+    assert_eq!(
+        publication_significant_diff.metadata_changed_item_ids,
+        vec![10]
+    );
+
+    sqlx::raw_sql(
+        r#"INSERT INTO "MediaSource" ("Id") VALUES (30);
+           INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name")
+           VALUES (30, 0, 30, 'Restore library');
+           INSERT INTO "AddonMediaListLibrary" (
+               "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+           ) VALUES (1, 30, 'Restore list', 'managed/restore-list');
+           INSERT INTO "ManagedLibraryOperation" (
+               "Id", "LibraryId", "OwnerToken", "Kind", "State", "LeaseOwner",
+               "LeaseExpiresAt", "HeartbeatAt", "CreatedAt", "UpdatedAt"
+           ) VALUES (
+               100, 30, 'restore-owner', 3, 1, 'restore-worker',
+               '2026-09-04T14:00:00Z', '2026-09-04T12:05:00Z',
+               '2026-09-04T12:00:00Z', '2026-09-04T12:05:00Z'
+           );
+           INSERT INTO "ManagedLibraryLease" (
+               "LibraryId", "OperationId", "OwnerToken", "LeaseOwner",
+               "LeaseExpiresAt", "HeartbeatAt", "UpdatedAt"
+           ) VALUES (
+               30, 100, 'restore-owner', 'restore-worker',
+               '2026-09-04T14:00:00Z', '2026-09-04T12:05:00Z', '2026-09-04T12:05:00Z'
+           );
+           INSERT INTO "AddonMediaListPublicationJob" (
+               "OperationId", "AddonMediaListId", "Generation", "SavedRevision",
+               "TargetPublishedRevision", "Phase", "SourcePublishedRevision",
+               "CreatedAt", "UpdatedAt"
+           ) VALUES (100, 1, 1, 3, 2, 0, 1,
+                     '2026-09-04T12:00:00Z', '2026-09-04T12:05:00Z');"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let fence = AddonMediaListRevisionRestoreFence {
+        list_id: 1,
+        source_revision: 1,
+        target_draft_revision: 3,
+        operation_id: 100,
+        generation: 1,
+        owner_token: "restore-owner".into(),
+        lease_owner: "restore-worker".into(),
+        active_at: fixed_time() + chrono::Duration::minutes(10),
+    };
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .materialize_revision_as_draft(&fence)
+            .await
+            .unwrap(),
+        3
+    );
+    // Marker plus exact target revision makes a worker retry idempotent.
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .materialize_revision_as_draft(&fence)
+            .await
+            .unwrap(),
+        3
+    );
+    let restored = sqlx::query(
+        r#"SELECT "DraftRevision", "GeneratePlaylist", "ProviderMetadataJson",
+                  "MetadataOverrideJson"
+           FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(restored.get::<i32, _>("DraftRevision"), 3);
+    assert!(restored.get::<bool, _>("GeneratePlaylist"));
+    assert_eq!(restored.get::<String, _>("ProviderMetadataJson"), "{}");
+    assert_eq!(
+        restored.get::<String, _>("MetadataOverrideJson"),
+        snapshot.metadata_json
+    );
+    let restored_rows = sqlx::query_as::<_, (String, bool, bool)>(
+        r#"SELECT "ProviderId", "Included", "Published" FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = 1 ORDER BY "ProviderId""#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        restored_rows,
+        vec![
+            ("item-10".into(), true, true),
+            ("item-11".into(), false, false),
+            ("item-12".into(), true, true),
+        ]
+    );
+    let restored_guids = sqlx::query_scalar::<_, String>(
+        r#"SELECT "Guid" FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" = 10"#,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(restored_guids, vec!["guid://item-10"]);
+    let restored_item_metadata = sqlx::query_as::<_, (String, String)>(
+        r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson"
+           FROM "AddonMediaListItem" WHERE "Id" = 10"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(restored_item_metadata.0, "{}");
+    assert_eq!(restored_item_metadata.1, snapshot.items[0].metadata_json);
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "DraftRevision" = 4 WHERE "Id" = 1"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(matches!(
+        repositories
+            .addon_media_lists
+            .materialize_revision_as_draft(&fence)
+            .await,
+        Err(RepositoryError::Conflict(_))
+    ));
+    sqlx::query(
+        r#"UPDATE "AddonMediaListRevisionItem" SET "MetadataDigest" = 'tampered'
+           WHERE "AddonMediaListRevisionId" = (
+               SELECT "Id" FROM "AddonMediaListRevision"
+               WHERE "AddonMediaListId" = 1 AND "Revision" = 1
+           ) AND "ProviderId" = 'item-10'"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(matches!(
+        repositories.addon_media_lists.revision_snapshot(1, 1).await,
+        Err(RepositoryError::Decode { .. })
+    ));
+    let history = repositories
+        .addon_media_lists
+        .revision_history(1)
+        .await
+        .unwrap();
+    assert_eq!(history.len(), 1);
+    assert!(!history[0].restorable);
+}
+
+#[tokio::test]
+async fn reset_impact_uses_managed_library_media_for_every_playout_kind() {
+    let pool = common::test_db().await;
+    seed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    common::seed_profile_and_channel(&repositories, 50).await;
+    common::seed_profile_and_channel(&repositories, 51).await;
+    sqlx::raw_sql(
+        r#"INSERT INTO "MediaSource" ("Id") VALUES (30), (40);
+           INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name")
+           VALUES (30, 0, 30, 'Managed'), (40, 0, 40, 'Unrelated');
+           INSERT INTO "LibraryPath" ("Id", "LibraryId", "Path")
+           VALUES (31, 30, 'managed/path'), (41, 40, 'unrelated/path');
+           INSERT INTO "AddonMediaListLibrary" (
+               "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+           ) VALUES (1, 30, 'Managed list', 'managed/list');
+           INSERT INTO "MediaItem" ("Id", "LibraryPathId", "State")
+           VALUES (301, 31, 0), (401, 41, 0);
+           INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+           VALUES (50, 50, 3, 0), (51, 51, 3, 0);"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut managed_item = common::playout_item(501, 50, 301);
+    managed_item.start = fixed_time();
+    managed_item.finish = fixed_time() + chrono::Duration::minutes(30);
+    repositories
+        .playout
+        .upsert_item(&managed_item)
+        .await
+        .unwrap();
+    let mut unrelated_item = common::playout_item(502, 51, 401);
+    unrelated_item.start = fixed_time();
+    unrelated_item.finish = fixed_time() + chrono::Duration::minutes(30);
+    repositories
+        .playout
+        .upsert_item(&unrelated_item)
+        .await
+        .unwrap();
+
+    let impact = repositories
+        .addon_media_lists
+        .reset_impact(1, fixed_time())
+        .await
+        .unwrap();
+
+    // Media 301 has no AddonMediaListItem publication flag. It is still in
+    // reset scope because reset deletes its managed LibraryPath, and its
+    // Sequential playout must be reported without including media 401.
+    assert_eq!(impact.published_items, 1);
+    assert_eq!(impact.channels, 1);
+    assert_eq!(impact.schedules, 0);
+    assert_eq!(impact.active_or_future_playouts, 1);
+}
+
+#[tokio::test]
+async fn revision_retention_prunes_only_after_active_work_releases_its_pin() {
+    let pool = common::test_db().await;
+    seed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    for revision in 1..=4 {
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "DraftRevision" = ?, "PublishedRevision" = ?
+               WHERE "Id" = 1"#,
+        )
+        .bind(revision)
+        .bind(revision)
+        .execute(&pool)
+        .await
+        .unwrap();
+        repositories
+            .addon_media_lists
+            .retain_published_revision(
+                1,
+                revision,
+                revision,
+                fixed_time() + chrono::Duration::minutes(i64::from(revision)),
+                &[],
+                &[],
+            )
+            .await
+            .unwrap();
+    }
+    sqlx::raw_sql(
+        r#"INSERT INTO "MediaSource" ("Id") VALUES (40);
+           INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name")
+           VALUES (40, 0, 40, 'Retention library');
+           INSERT INTO "AddonMediaListLibrary" (
+               "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+           ) VALUES (1, 40, 'Retention list', 'managed/retention-list');
+           INSERT INTO "ManagedLibraryOperation" (
+               "Id", "LibraryId", "OwnerToken", "Kind", "State", "CreatedAt", "UpdatedAt"
+           ) VALUES (140, 40, 'retention-owner', 0, 0,
+                     '2026-09-04T12:00:00Z', '2026-09-04T12:00:00Z');"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .prune_all_unpinned_revisions(fixed_time())
+            .await
+            .unwrap(),
+        0
+    );
+    sqlx::query(r#"UPDATE "ManagedLibraryOperation" SET "State" = 3 WHERE "Id" = 140"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .prune_all_unpinned_revisions(fixed_time())
+            .await
+            .unwrap(),
+        1
+    );
+    let revisions = repositories
+        .addon_media_lists
+        .revision_history(1)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|revision| revision.revision)
+        .collect::<Vec<_>>();
+    assert_eq!(revisions, vec![4, 3, 2]);
 }
 
 #[tokio::test]

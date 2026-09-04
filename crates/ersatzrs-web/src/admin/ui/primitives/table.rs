@@ -9,6 +9,7 @@ stylance::import_crate_style!(style, "src/admin/ui/primitives/table.module.css")
 /// A column definition for `PagedTable`.
 pub struct Column<T: 'static> {
     pub header: &'static str,
+    pub sort_key: Option<&'static str>,
     pub render: Box<dyn Fn(&T) -> AnyView + Send + Sync>,
 }
 
@@ -19,6 +20,20 @@ impl<T: 'static> Column<T> {
     ) -> Self {
         Self {
             header,
+            sort_key: None,
+            render: Box::new(render),
+        }
+    }
+
+    /// Define a column whose parent resource implements the given sort key.
+    pub fn sortable(
+        header: &'static str,
+        sort_key: &'static str,
+        render: impl Fn(&T) -> AnyView + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            header,
+            sort_key: Some(sort_key),
             render: Box::new(render),
         }
     }
@@ -115,24 +130,46 @@ where
                         <tr>
                             {columns.iter().map(|col| {
                                 let header = col.header;
-                                view! {
-                                    <th
-                                        scope="col"
-                                        class=style::th
-                                        on:click=move |_| {
-                                            params.update(|p| p.sort.toggle(header));
-                                        }
-                                    >
-                                        <span class=style::sort_label>
-                                            {header}
-                                            {move || {
-                                                let p = params.get();
-                                                if p.sort.column == Some(header) {
-                                                    if p.sort.ascending { "▲" } else { "▼" }
-                                                } else { "" }
-                                            }}
-                                        </span>
-                                    </th>
+                                if let Some(sort_key) = col.sort_key {
+                                    view! {
+                                        <th
+                                            scope="col"
+                                            class=style::th
+                                            aria-sort=move || {
+                                                let sort = params.get().sort;
+                                                if sort.column == Some(sort_key) {
+                                                    if sort.ascending { "ascending" } else { "descending" }
+                                                } else {
+                                                    "none"
+                                                }
+                                            }
+                                        >
+                                            <button
+                                                type="button"
+                                                class=style::sort_button
+                                                on:click=move |_| {
+                                                    params.update(|p| {
+                                                        p.sort.toggle(sort_key);
+                                                        p.page = 0;
+                                                    });
+                                                }
+                                            >
+                                                {header}
+                                                <span aria-hidden="true">
+                                                    {move || {
+                                                        let p = params.get();
+                                                        if p.sort.column == Some(sort_key) {
+                                                            if p.sort.ascending { "▲" } else { "▼" }
+                                                        } else { "" }
+                                                    }}
+                                                </span>
+                                            </button>
+                                        </th>
+                                    }.into_any()
+                                } else {
+                                    view! {
+                                        <th scope="col" class=style::th>{header}</th>
+                                    }.into_any()
                                 }
                             }).collect_view()}
                             {row_actions.as_ref().map(|_| view! { <th class=style::th_actions/> })}

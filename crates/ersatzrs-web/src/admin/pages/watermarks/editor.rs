@@ -892,6 +892,7 @@ fn WatermarkEditorForm(initial_data: WatermarkEditorData) -> impl IntoView {
             </div>
 
             <Modal
+                dialog_id="watermark-discard-dialog"
                 open=discard_open
                 title=tr(TextKey::UnsavedChanges).to_owned()
                 on_close=Callback::new(move |confirmed| {

@@ -265,6 +265,7 @@ fn AddonsSettingsIsland(
             ))}
 
             <Modal
+                dialog_id="addon-unknown-sources-dialog"
                 open=unknown_sources_confirm_open
                 title=tr(TextKey::UnknownSources).to_owned()
                 on_close=Callback::new(move |confirmed| {
@@ -277,6 +278,7 @@ fn AddonsSettingsIsland(
             </Modal>
 
             <DeleteDialog
+                dialog_id="addon-repository-delete-dialog"
                 open=repository_delete_open
                 entity_name=Signal::derive(move || {
                     repository_delete_target
@@ -1126,7 +1128,7 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
 
             {panels.into_iter().map(panel_view).collect_view()}
 
-            <Modal open=install_confirm title=format!("{} · {} {}", tr(TextKey::Install), modal_name, modal_version) on_close=Callback::new(move |confirmed| {
+            <Modal dialog_id="addon-install-dialog" open=install_confirm title=format!("{} · {} {}", tr(TextKey::Install), modal_name, modal_version) on_close=Callback::new(move |confirmed| {
                 if confirmed {
                     if let Some(target) = install_target.clone() { install_action.dispatch(target); }
                 }
@@ -1137,7 +1139,7 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
                 <p>{tr(TextKey::ThirdPartyRepositoryWarning)}</p>
                 {permissions_view(&install_permissions.0, &install_permissions.1)}
             </Modal>
-            <Modal open=toggle_confirm title=if is_enabled { tr(TextKey::Disable).to_owned() } else { tr(TextKey::Enable).to_owned() } on_close=Callback::new(move |confirmed| {
+            <Modal dialog_id="addon-toggle-dialog" open=toggle_confirm title=if is_enabled { tr(TextKey::Disable).to_owned() } else { tr(TextKey::Enable).to_owned() } on_close=Callback::new(move |confirmed| {
                 if confirmed {
                     if is_enabled { disable_action.dispatch(addon_id_for_toggle.clone()); } else { enable_action.dispatch(addon_id_for_toggle.clone()); }
                 }
@@ -1146,7 +1148,7 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
                 <p style:display=if is_enabled { "none" } else { "block" }>{tr(TextKey::EnableActivatesPermissions)}</p>
                 {permissions_view(&toggle_permissions.0, &toggle_permissions.1)}
             </Modal>
-            <Modal open=uninstall_confirm title=tr(TextKey::Uninstall).to_owned() destructive=true on_close=Callback::new(move |confirmed| {
+            <Modal dialog_id="addon-uninstall-dialog" open=uninstall_confirm title=tr(TextKey::Uninstall).to_owned() destructive=true on_close=Callback::new(move |confirmed| {
                 if confirmed { uninstall_action.dispatch(addon_id_for_uninstall.clone()); }
             })><p>{tr(TextKey::ThisActionCannotBeUndone)}</p></Modal>
             </main>

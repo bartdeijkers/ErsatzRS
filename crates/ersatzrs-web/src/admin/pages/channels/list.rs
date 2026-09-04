@@ -290,6 +290,7 @@ fn ChannelsListIsland() -> impl IntoView {
             // DeleteDialog is always rendered; visibility is controlled via `open`.
             // A stable DOM shape is required to avoid failed_to_cast_marker_node on hydration.
             <DeleteDialog
+                dialog_id="channel-delete-dialog"
                 open=delete_open
                 entity_name=Signal::derive(move || {
                     delete_target.get().map(|ch| ch.name.clone()).unwrap_or_default()
@@ -307,6 +308,7 @@ fn ChannelsListIsland() -> impl IntoView {
                 })
             />
             <Modal
+                dialog_id="channel-preview-dialog"
                 open=preview_open
                 title=tr(TextKey::ChannelPreview).to_owned()
                 on_close=Callback::new(move |open_full: bool| {

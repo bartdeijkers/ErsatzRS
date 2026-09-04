@@ -21,11 +21,13 @@ use sqlx::Row as _;
 use uuid::Uuid;
 
 use crate::db::{inserted_id, DbPool};
+use crate::repositories::SqlxResultExt as _;
+
+use super::addon_media_list_lifecycle::load_valid_revision_snapshot_in_tx;
 use crate::repositories::common::{
     decode_bool_column, decode_datetime, decode_enum_column, decode_optional_datetime,
     decode_optional_enum_column, encode_datetime, encode_enum,
 };
-use crate::repositories::SqlxResultExt as _;
 
 const LEASE_SECONDS: i64 = 90;
 const PUBLICATION_HISTORY_LIMIT: i32 = 256;
@@ -109,7 +111,7 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
         list_id: EntityId,
         library_id: EntityId,
         saved_revision: i32,
-        target_published_revision: i32,
+        expected_next_published_revision: i32,
     ) -> Result<AddonMediaListPublicationEnqueue> {
         let now = encode_datetime(Utc::now());
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
@@ -153,12 +155,14 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
                 existing: true,
             });
         }
-        if current_published.saturating_add(1) != target_published_revision {
+        if current_published.checked_add(1) != Some(expected_next_published_revision) {
             return Err(RepositoryError::Conflict(
                 "the published add-on media-list revision changed before publication was queued"
                     .to_owned(),
             ));
         }
+        let target_published_revision =
+            next_publication_revision_tx(&mut tx, list_id, current_published).await?;
         let generation = sqlx::query_scalar::<_, i32>(
             r#"SELECT COALESCE(MAX("Generation"), 0) + 1
                FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ?"#,
@@ -242,6 +246,206 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
                 generation,
                 saved_revision,
                 target_published_revision,
+                source_published_revision: None,
+                restore_materialized_at: None,
+                phase: AddonMediaListPublicationPhase::AwaitingLease,
+                child_scan_operation_id: None,
+                original_failure_code: None,
+                original_failure_diagnostic: None,
+                recovery_diagnostic: None,
+                outcome: None,
+            },
+            operation: ManagedLibraryOperation {
+                id: operation_id,
+                library_id,
+                parent_operation_id: None,
+                owner_token,
+                kind: ManagedLibraryOperationKind::Publication,
+                state: ManagedLibraryOperationState::Queued,
+                scan: None,
+                attempt_count: 0,
+                next_eligible_at: None,
+            },
+            existing: false,
+        })
+    }
+
+    async fn enqueue_revision_restore(
+        &self,
+        list_id: EntityId,
+        library_id: EntityId,
+        source_published_revision: i32,
+        expected_draft_revision: i32,
+        expected_published_revision: i32,
+    ) -> Result<AddonMediaListPublicationEnqueue> {
+        let now = encode_datetime(Utc::now());
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        if let Some(row) = active_publication_row(&mut tx, list_id).await? {
+            let (job, operation) = decode_publication_row(&row)?;
+            if job.source_published_revision == Some(source_published_revision)
+                && expected_draft_revision.checked_add(1) == Some(job.saved_revision)
+            {
+                tx.commit().await.repository()?;
+                return Ok(AddonMediaListPublicationEnqueue {
+                    job,
+                    operation,
+                    existing: true,
+                });
+            }
+            return Err(RepositoryError::Conflict(
+                "another add-on media-list publication is already active".to_owned(),
+            ));
+        }
+
+        let row = sqlx::query(
+            r#"SELECT "list"."DraftRevision", "list"."PublishedRevision",
+                      "binding"."LibraryId"
+               FROM "AddonMediaList" AS "list"
+               JOIN "AddonMediaListLibrary" AS "binding"
+                 ON "binding"."AddonMediaListId" = "list"."Id"
+               WHERE "list"."Id" = ?"#,
+        )
+        .bind(list_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .repository()?
+        .ok_or(RepositoryError::NotFound {
+            kind: "add-on media list",
+            id: list_id,
+        })?;
+        let current_draft: i32 = row.try_get("DraftRevision").repository()?;
+        let current_published: i32 = row.try_get("PublishedRevision").repository()?;
+        let current_library: EntityId = row.try_get("LibraryId").repository()?;
+        if current_library != library_id {
+            return Err(RepositoryError::Conflict(
+                "the managed add-on media-list library changed before restore was queued"
+                    .to_owned(),
+            ));
+        }
+        if current_draft != expected_draft_revision {
+            return Err(RepositoryError::Conflict(
+                "the saved add-on media-list revision changed before restore was queued".to_owned(),
+            ));
+        }
+        if current_published != expected_published_revision {
+            return Err(RepositoryError::Conflict(
+                "the published add-on media-list revision changed before restore was queued"
+                    .to_owned(),
+            ));
+        }
+        if source_published_revision >= current_published {
+            return Err(RepositoryError::Conflict(
+                "only an older add-on media-list revision can be restored".to_owned(),
+            ));
+        }
+
+        let retained =
+            match load_valid_revision_snapshot_in_tx(&mut tx, list_id, source_published_revision)
+                .await
+            {
+                Ok(Some(_)) => true,
+                Ok(None) | Err(RepositoryError::Decode { .. }) => false,
+                Err(error) => return Err(error),
+            };
+        if !retained {
+            return Err(RepositoryError::Conflict(
+                "the selected add-on media-list revision is not a valid retained snapshot"
+                    .to_owned(),
+            ));
+        }
+
+        let generation = sqlx::query_scalar::<_, i32>(
+            r#"SELECT COALESCE(MAX("Generation"), 0) + 1
+               FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ?"#,
+        )
+        .bind(list_id)
+        .fetch_one(&mut *tx)
+        .await
+        .repository()?;
+        let owner_token = Uuid::new_v4().to_string();
+        let operation_result = sqlx::query(
+            r#"INSERT INTO "ManagedLibraryOperation" (
+                   "LibraryId", "OwnerToken", "Kind", "State", "CreatedAt", "UpdatedAt"
+               ) VALUES (?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(library_id)
+        .bind(&owner_token)
+        .bind(encode_enum(ManagedLibraryOperationKind::Publication))
+        .bind(encode_enum(ManagedLibraryOperationState::Queued))
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        let operation_id = inserted_id(&mut tx, operation_result).await.repository()?;
+        let saved_revision = expected_draft_revision.checked_add(1).ok_or_else(|| {
+            RepositoryError::Conflict("the saved add-on media-list revision is exhausted".into())
+        })?;
+        let target_published_revision =
+            next_publication_revision_tx(&mut tx, list_id, current_published).await?;
+        let job_result = sqlx::query(
+            r#"INSERT INTO "AddonMediaListPublicationJob" (
+                   "OperationId", "AddonMediaListId", "Generation", "SavedRevision",
+                   "TargetPublishedRevision", "SourcePublishedRevision", "Phase",
+                   "CreatedAt", "UpdatedAt"
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(operation_id)
+        .bind(list_id)
+        .bind(generation)
+        .bind(saved_revision)
+        .bind(target_published_revision)
+        .bind(source_published_revision)
+        .bind(encode_enum(AddonMediaListPublicationPhase::AwaitingLease))
+        .bind(&now)
+        .bind(&now)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        let job_id = inserted_id(&mut tx, job_result).await.repository()?;
+        append_publication_event_for_job_tx(
+            &mut tx,
+            job_id,
+            "enqueued",
+            PublicationEventWrite {
+                kind: AddonMediaListPublicationEventKind::Enqueued,
+                enqueue_trigger: Some(AddonMediaListPublicationEnqueueTrigger::RestoreRevision),
+                phase: Some(AddonMediaListPublicationPhase::AwaitingLease),
+                occurred_at: &now,
+                ..PublicationEventWrite::default()
+            },
+        )
+        .await?;
+        if let Some(owner_operation_id) =
+            competing_lease_operation_tx(&mut tx, library_id, operation_id, &now).await?
+        {
+            append_publication_event_for_job_tx(
+                &mut tx,
+                job_id,
+                "lease_wait:0",
+                PublicationEventWrite {
+                    kind: AddonMediaListPublicationEventKind::LeaseWaitStarted,
+                    phase: Some(AddonMediaListPublicationPhase::AwaitingLease),
+                    attempt: Some(0),
+                    related_operation_id: Some(owner_operation_id),
+                    occurred_at: &now,
+                    ..PublicationEventWrite::default()
+                },
+            )
+            .await?;
+        }
+        prune_publication_history_tx(&mut tx, &now).await?;
+        tx.commit().await.repository()?;
+        Ok(AddonMediaListPublicationEnqueue {
+            job: AddonMediaListPublicationJob {
+                id: job_id,
+                operation_id,
+                list_id,
+                generation,
+                saved_revision,
+                target_published_revision,
+                source_published_revision: Some(source_published_revision),
+                restore_materialized_at: None,
                 phase: AddonMediaListPublicationPhase::AwaitingLease,
                 child_scan_operation_id: None,
                 original_failure_code: None,
@@ -2464,6 +2668,29 @@ fn decode_reset_job_row_with_id(
     })
 }
 
+async fn next_publication_revision_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    current_published_revision: i32,
+) -> Result<i32> {
+    let retained_revision: Option<i32> = sqlx::query_scalar(
+        r#"SELECT MAX("Revision") FROM "AddonMediaListRevision"
+           WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    current_published_revision
+        .max(retained_revision.unwrap_or(current_published_revision))
+        .checked_add(1)
+        .ok_or_else(|| {
+            RepositoryError::Conflict(
+                "the published add-on media-list revision is exhausted".into(),
+            )
+        })
+}
+
 async fn active_publication_row(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -2555,6 +2782,11 @@ fn decode_publication_row(
             generation: row.try_get("Generation").repository()?,
             saved_revision: row.try_get("SavedRevision").repository()?,
             target_published_revision: row.try_get("TargetPublishedRevision").repository()?,
+            source_published_revision: row.try_get("SourcePublishedRevision").repository()?,
+            restore_materialized_at: decode_optional_datetime(
+                "AddonMediaListPublicationJob.RestoreMaterializedAt",
+                row.try_get("RestoreMaterializedAt").repository()?,
+            )?,
             phase: decode_enum_column("AddonMediaListPublicationPhase", row, "Phase")?,
             child_scan_operation_id: row.try_get("ChildScanOperationId").repository()?,
             original_failure_code: row.try_get("OriginalFailureCode").repository()?,
@@ -2846,6 +3078,7 @@ fn bounded_diagnostic(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ersatzrs_core::repositories::AddonMediaListLifecycleRepository as _;
 
     async fn pool_with_library() -> DbPool {
         pool_with_library_at("sqlite::memory:").await
@@ -3013,6 +3246,86 @@ mod tests {
         .await
         .expect("count jobs");
         assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn revision_restore_accepts_any_valid_retained_snapshot_without_replacing_the_draft() {
+        let pool = pool_with_library().await;
+        seed_publication_list(&pool, "org.example.restore-revision").await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLibrary" (
+                   "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+               ) VALUES (1, 1, 'list', 'managed/list/playlist.json')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed managed list binding");
+        let lifecycle = crate::repositories::SqliteAddonMediaListRepository(pool.clone());
+        for revision in 1..=4 {
+            sqlx::query(
+                r#"UPDATE "AddonMediaList" SET "DraftRevision" = ?, "PublishedRevision" = ?
+                   WHERE "Id" = 1"#,
+            )
+            .bind(revision)
+            .bind(revision)
+            .execute(&pool)
+            .await
+            .expect("advance retained revision");
+            lifecycle
+                .retain_published_revision(
+                    1,
+                    revision,
+                    revision,
+                    Utc::now() + Duration::minutes(i64::from(revision)),
+                    &[],
+                    &[],
+                )
+                .await
+                .expect("retain valid revision snapshot");
+        }
+        sqlx::query(
+            r#"UPDATE "AddonMediaListRevision" SET "SnapshotDigest" = 'tampered'
+               WHERE "AddonMediaListId" = 1 AND "Revision" = 2"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("corrupt one retained revision");
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision" = 3 WHERE "Id" = 1"#)
+            .execute(&pool)
+            .await
+            .expect("retain a future immutable revision after recovery");
+
+        let repository = SqliteManagedLibraryOperationRepository(pool);
+        assert!(matches!(
+            repository.enqueue_revision_restore(1, 1, 3, 4, 3).await,
+            Err(RepositoryError::Conflict(_))
+        ));
+        assert!(matches!(
+            repository.enqueue_revision_restore(1, 1, 2, 4, 3).await,
+            Err(RepositoryError::Conflict(_))
+        ));
+        let queued = repository
+            .enqueue_revision_restore(1, 1, 1, 4, 3)
+            .await
+            .expect("queue revision restore");
+        let duplicate = repository
+            .enqueue_revision_restore(1, 1, 1, 4, 3)
+            .await
+            .expect("coalesce revision restore");
+
+        assert!(!queued.existing);
+        assert!(duplicate.existing);
+        assert_eq!(duplicate.operation.id, queued.operation.id);
+        assert_eq!(queued.job.saved_revision, 5);
+        assert_eq!(queued.job.target_published_revision, 5);
+        assert_eq!(queued.job.source_published_revision, Some(1));
+        assert_eq!(queued.job.restore_materialized_at, None);
+        let draft_revision: i32 =
+            sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = 1"#)
+                .fetch_one(&repository.0)
+                .await
+                .expect("load unchanged draft revision");
+        assert_eq!(draft_revision, 4);
     }
 
     #[tokio::test]

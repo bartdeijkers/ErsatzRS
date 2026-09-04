@@ -178,6 +178,7 @@ fn LocalLibrariesIsland() -> impl IntoView {
 
             // DeleteDialog is always rendered; visibility is controlled via `open`.
             <DeleteDialog
+                dialog_id="local-source-delete-dialog"
                 open=delete_open
                 entity_name=Signal::derive(move || {
                     delete_target.get().map(|r| r.name.clone()).unwrap_or_default()

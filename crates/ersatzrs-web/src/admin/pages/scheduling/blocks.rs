@@ -412,6 +412,7 @@ fn BlocksIsland(
 
             // ── Delete dialogs — always rendered; visibility via `open` signal ──
             <DeleteDialog
+                dialog_id="block-group-delete-dialog"
                 open=del_group_open
                 entity_name=Signal::derive(move || {
                     del_group_target.get().map(|grp| grp.name.clone()).unwrap_or_default()
@@ -426,6 +427,7 @@ fn BlocksIsland(
                 })
             />
             <DeleteDialog
+                dialog_id="block-delete-dialog"
                 open=del_block_open
                 entity_name=Signal::derive(move || {
                     del_block_target.get().map(|b| b.name.clone()).unwrap_or_default()

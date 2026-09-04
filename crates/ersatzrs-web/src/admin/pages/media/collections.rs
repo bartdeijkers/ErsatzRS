@@ -207,6 +207,7 @@ fn CollectionsIsland(initial_rows: Vec<CollectionListRow>, initial_total: u64) -
             </section>
 
             <DeleteDialog
+                dialog_id="collection-delete-dialog"
                 open=delete_open
                 entity_name=Signal::derive(move || {
                     delete_target.get().map(|row| row.name.clone()).unwrap_or_default()

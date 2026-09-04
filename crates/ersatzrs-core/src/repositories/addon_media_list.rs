@@ -57,6 +57,28 @@ pub struct AddonMediaListAdminRow {
     pub import_progress: Option<AddonMediaListImportProgress>,
 }
 
+/// Sortable columns supported by the add-on media-list overview.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListAdminSortField {
+    /// Sort by the human-readable list name.
+    #[default]
+    Name,
+    /// Sort by the displayed add-on/provider identity.
+    Id,
+}
+
+/// Direction for an add-on media-list overview sort.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListAdminSortDirection {
+    /// Sort from the lowest value to the highest.
+    #[default]
+    Ascending,
+    /// Sort from the highest value to the lowest.
+    Descending,
+}
+
 /// Editable settings for one persisted add-on media list.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListAdminForm {
@@ -432,6 +454,8 @@ pub trait AddonMediaListRepository: Send + Sync {
         &self,
         page: u32,
         page_size: u32,
+        sort_field: AddonMediaListAdminSortField,
+        sort_direction: AddonMediaListAdminSortDirection,
     ) -> Result<(Vec<AddonMediaListAdminRow>, u64)>;
     /// Load the editable settings for one list.
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>>;

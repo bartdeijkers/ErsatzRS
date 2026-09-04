@@ -963,6 +963,7 @@ fn FfmpegProfileEditorForm(
 
             // ── Copy Profile modal ────────────────────────────────────
             <Modal
+                dialog_id="ffmpeg-profile-copy-dialog"
                 open=copy_open
                 title=tr(TextKey::CopyProfile).to_string()
                 on_close=Callback::new(move |confirmed: bool| {

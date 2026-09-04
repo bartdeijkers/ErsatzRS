@@ -313,6 +313,7 @@ fn DecosIsland(initial_groups: Vec<DecoGroupRow>, initial_decos: Vec<DecoRow>) -
             </div>
 
             <DeleteDialog
+                dialog_id="deco-list-group-delete-dialog"
                 open=delete_group_open
                 entity_name=Signal::derive(move || {
                     delete_group_target.get().map(|(_, name)| name).unwrap_or_default()
@@ -330,6 +331,7 @@ fn DecosIsland(initial_groups: Vec<DecoGroupRow>, initial_decos: Vec<DecoRow>) -
                 })
             />
             <DeleteDialog
+                dialog_id="deco-list-delete-dialog"
                 open=delete_deco_open
                 entity_name=Signal::derive(move || {
                     delete_deco_target.get().map(|(_, name)| name).unwrap_or_default()
@@ -1064,6 +1066,7 @@ fn DecoTemplatesIsland(
             </div>
 
             <DeleteDialog
+                dialog_id="deco-editor-group-delete-dialog"
                 open=delete_group_open
                 entity_name=Signal::derive(move || {
                     delete_group_target.get().map(|(_, name)| name).unwrap_or_default()
@@ -1081,6 +1084,7 @@ fn DecoTemplatesIsland(
                 })
             />
             <DeleteDialog
+                dialog_id="deco-editor-template-delete-dialog"
                 open=delete_template_open
                 entity_name=Signal::derive(move || {
                     delete_template_target.get().map(|(_, name)| name).unwrap_or_default()

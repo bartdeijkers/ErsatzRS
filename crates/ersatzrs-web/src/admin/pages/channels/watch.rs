@@ -231,6 +231,7 @@ fn ChannelWatchContent(data: RwSignal<ChannelWatchData>) -> impl IntoView {
             </main>
 
             <Modal
+                dialog_id="channel-stop-transcode-dialog"
                 open=stop_confirm_open
                 title=tr(TextKey::StopTranscodeSession).to_owned()
                 on_close=Callback::new(move |confirmed: bool| {

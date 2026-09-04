@@ -399,6 +399,7 @@ fn TemplatesIsland(
             </div>
 
             <DeleteDialog
+                dialog_id="template-group-delete-dialog"
                 open=delete_group_open
                 entity_name=Signal::derive(move || {
                     delete_group_target
@@ -419,6 +420,7 @@ fn TemplatesIsland(
                 })
             />
             <DeleteDialog
+                dialog_id="template-delete-dialog"
                 open=delete_template_open
                 entity_name=Signal::derive(move || {
                     delete_template_target

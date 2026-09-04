@@ -155,6 +155,7 @@ fn PlexSourcesIsland() -> impl IntoView {
             }}
 
             <DeleteDialog
+                dialog_id="plex-sign-out-dialog"
                 open=sign_out_open
                 entity_name=Signal::derive(|| "Plex".to_string())
                 on_confirm=Callback::new(move |confirmed: bool| {

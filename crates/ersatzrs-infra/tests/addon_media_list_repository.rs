@@ -1,8 +1,9 @@
 mod common;
 
 use ersatzrs_core::repositories::{
-    AddonMediaListItemReviewEdit, AddonMediaListNfoMetadata, AddonMediaListPublicationBlockerKind,
-    AddonMediaListRepository, RepositoryError,
+    AddonMediaListAdminSortDirection, AddonMediaListAdminSortField, AddonMediaListItemReviewEdit,
+    AddonMediaListNfoMetadata, AddonMediaListPublicationBlockerKind, AddonMediaListRepository,
+    RepositoryError,
 };
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListPresentationKind, RemoteStreamLiveness,
@@ -52,7 +53,12 @@ async fn addon_media_list_repository_lists_strict_rows_and_persists_page_size() 
 
     let (rows, total) = repositories
         .addon_media_lists
-        .list_admin(0, 25)
+        .list_admin(
+            0,
+            25,
+            AddonMediaListAdminSortField::Name,
+            AddonMediaListAdminSortDirection::Ascending,
+        )
         .await
         .unwrap();
     assert_eq!(total, 1);
@@ -79,6 +85,101 @@ async fn addon_media_list_repository_lists_strict_rows_and_persists_page_size() 
         form.requested_presentation_kind,
         AddonMediaListPresentationKind::RemoteStreams
     );
+}
+
+#[tokio::test]
+async fn addon_media_list_repository_sorts_before_paging_by_name_or_displayed_id() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_addon(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonInstallation" (
+              "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+              "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+           ) VALUES
+              ('a.addon', '1.0.0', 1, 'package-a', 'content-a', '{}',
+               'addons/a.addon', '2026-08-14T00:00:00Z', '2026-08-14T00:00:00Z'),
+              ('b.addon', '1.0.0', 1, 'package-b', 'content-b', '{}',
+               'addons/b.addon', '2026-08-14T00:00:00Z', '2026-08-14T00:00:00Z'),
+              ('z.addon', '1.0.0', 1, 'package-z', 'content-z', '{}',
+               'addons/z.addon', '2026-08-14T00:00:00Z', '2026-08-14T00:00:00Z')"#,
+    )
+    .await
+    .unwrap();
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" (
+              "Id", "AddonId", "ProviderId", "SourceUrl", "Name"
+           ) VALUES
+              (1, 'z.addon', 'a-provider', 'https://example.invalid/1', 'Beta'),
+              (2, 'a.addon', 'z-provider', 'https://example.invalid/2', 'alpha'),
+              (3, 'a.addon', 'a-provider', 'https://example.invalid/3', 'Alpha'),
+              (4, 'b.addon', 'a-provider', 'https://example.invalid/4', 'aardvark')"#,
+    )
+    .await
+    .unwrap();
+
+    let list_ids = |rows: Vec<ersatzrs_core::repositories::AddonMediaListAdminRow>| {
+        rows.into_iter().map(|row| row.id).collect::<Vec<_>>()
+    };
+    let (name_ascending, _) = repositories
+        .addon_media_lists
+        .list_admin(
+            0,
+            2,
+            AddonMediaListAdminSortField::Name,
+            AddonMediaListAdminSortDirection::Ascending,
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_ids(name_ascending), [4, 2]);
+
+    let (name_ascending_second_page, _) = repositories
+        .addon_media_lists
+        .list_admin(
+            1,
+            2,
+            AddonMediaListAdminSortField::Name,
+            AddonMediaListAdminSortDirection::Ascending,
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_ids(name_ascending_second_page), [3, 1]);
+
+    let (name_descending, _) = repositories
+        .addon_media_lists
+        .list_admin(
+            0,
+            4,
+            AddonMediaListAdminSortField::Name,
+            AddonMediaListAdminSortDirection::Descending,
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_ids(name_descending), [1, 3, 2, 4]);
+
+    let (id_ascending, _) = repositories
+        .addon_media_lists
+        .list_admin(
+            0,
+            4,
+            AddonMediaListAdminSortField::Id,
+            AddonMediaListAdminSortDirection::Ascending,
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_ids(id_ascending), [3, 2, 4, 1]);
+
+    let (id_descending, _) = repositories
+        .addon_media_lists
+        .list_admin(
+            0,
+            4,
+            AddonMediaListAdminSortField::Id,
+            AddonMediaListAdminSortDirection::Descending,
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_ids(id_descending), [1, 4, 2, 3]);
 }
 
 #[tokio::test]
@@ -320,7 +421,15 @@ async fn addon_media_list_repository_propagates_closed_pool_failures() {
     pool.close().await;
 
     assert!(matches!(
-        repositories.addon_media_lists.list_admin(0, 10).await,
+        repositories
+            .addon_media_lists
+            .list_admin(
+                0,
+                10,
+                AddonMediaListAdminSortField::Name,
+                AddonMediaListAdminSortDirection::Ascending,
+            )
+            .await,
         Err(RepositoryError::Unavailable { .. })
     ));
 }

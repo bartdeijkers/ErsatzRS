@@ -3,12 +3,14 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
-    AddonMediaListArtifactKind, AddonMediaListArtifactState, AddonMediaListImportMode,
-    AddonMediaListImportPurpose, AddonMediaListIncrementalStrategy, AddonMediaListLifecycleJobKind,
-    AddonMediaListLifecyclePhase, AddonMediaListOptionValue, AddonMediaListRefreshCadence,
+    AddonMediaListArtifactKind, AddonMediaListArtifactState, AddonMediaListAvailabilityReason,
+    AddonMediaListContentKind, AddonMediaListImportMode, AddonMediaListImportPurpose,
+    AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability, AddonMediaListItemKind,
+    AddonMediaListItemRole, AddonMediaListLifecycleJobKind, AddonMediaListLifecyclePhase,
+    AddonMediaListOptionValue, AddonMediaListPresentationKind, AddonMediaListRefreshCadence,
     AddonMediaListRefreshPublicationPolicy, AddonToolMaintenanceOutcome,
     AddonToolMaintenanceRollback, AddonToolMaintenanceState, AddonToolMaintenanceTrigger,
-    AddonToolMaintenanceValidation, EntityId,
+    AddonToolMaintenanceValidation, EntityId, RemoteStreamLiveness,
 };
 use serde::{Deserialize, Serialize};
 
@@ -90,6 +92,183 @@ pub struct AddonMediaListPublishedOptions {
     pub list_values: AddonMediaListOptionValues,
     pub item_values: Vec<AddonMediaListItemOptionValues>,
     pub completed_at: Option<DateTime<Utc>>,
+}
+
+/// Host-owned immutable content blob shared by retained revisions.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListRevisionFileBlob {
+    pub id: EntityId,
+    pub list_id: EntityId,
+    pub storage_relative_path: String,
+    pub sha256: String,
+    pub byte_length: u64,
+    pub created_at: DateTime<Utc>,
+}
+
+/// One immutable file identity retained by a complete publication revision.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListRevisionFile {
+    pub blob_id: EntityId,
+    pub published_relative_path: String,
+    pub provider_id: Option<String>,
+    pub storage_relative_path: String,
+    pub sha256: String,
+    pub byte_length: u64,
+}
+
+/// Provider-keyed saved-draft state captured by a completed publication.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListRevisionItem {
+    pub provider_id: String,
+    pub guids: Vec<String>,
+    pub rank: i32,
+    pub kind: AddonMediaListItemKind,
+    pub content_kind: AddonMediaListContentKind,
+    pub included: bool,
+    /// Actual membership after publication validation and restricted-item filtering.
+    pub published: bool,
+    pub display_title: String,
+    pub title: String,
+    pub year: Option<i32>,
+    pub season: Option<i32>,
+    pub episode: Option<i32>,
+    pub source_url: Option<String>,
+    pub additional_image_urls: Option<String>,
+    pub duration_seconds: Option<u64>,
+    pub parent_provider_id: Option<String>,
+    pub fragment_start_seconds: Option<u64>,
+    pub fragment_end_seconds: Option<u64>,
+    pub chapter_input: String,
+    pub provider_chapter_input: String,
+    pub collection_role: AddonMediaListItemRole,
+    pub availability: AddonMediaListItemAvailability,
+    pub availability_reason: Option<String>,
+    pub availability_reason_code: Option<AddonMediaListAvailabilityReason>,
+    pub provider_liveness: RemoteStreamLiveness,
+    pub liveness_override: Option<RemoteStreamLiveness>,
+    pub effective_liveness: RemoteStreamLiveness,
+    /// Canonical effective provider-plus-operator metadata JSON.
+    pub metadata_json: String,
+    pub metadata_digest: String,
+    pub replacement_media_item_id: Option<EntityId>,
+    pub replacement_media_version_id: Option<EntityId>,
+    /// Media identity actually used by the published projection.
+    pub published_media_item_id: Option<EntityId>,
+}
+
+/// Digest-covered, restorable publication snapshot.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListRevisionSnapshot {
+    pub list_id: EntityId,
+    pub revision: i32,
+    pub source_draft_revision: i32,
+    pub completed_at: DateTime<Utc>,
+    pub name: String,
+    pub description: Option<String>,
+    pub generate_playlist: bool,
+    pub content_kind_override: AddonMediaListContentKind,
+    pub presentation_kind: AddonMediaListPresentationKind,
+    pub requested_presentation_kind: AddonMediaListPresentationKind,
+    /// Canonical effective provider-plus-operator metadata JSON.
+    pub metadata_json: String,
+    pub options: AddonMediaListPublishedOptions,
+    pub items: Vec<AddonMediaListRevisionItem>,
+    pub files: Vec<AddonMediaListRevisionFile>,
+    pub artifact_ids: Vec<EntityId>,
+    pub snapshot_digest: String,
+}
+
+/// Bounded history row. A legacy row is visible but cannot be restored.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListRevisionSummary {
+    pub revision: i32,
+    pub source_draft_revision: Option<i32>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub snapshot_digest: Option<String>,
+    /// The required snapshot content and digest validated successfully.
+    pub restorable: bool,
+    pub published_item_count: u64,
+    pub file_count: u64,
+    pub artifact_count: u64,
+}
+
+/// Exact comparison between two digest-validated retained snapshots.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListRevisionDiff {
+    pub list_metadata_changed: bool,
+    pub effective_options_changed: bool,
+    pub items_added: u64,
+    pub items_removed: u64,
+    pub items_changed: u64,
+    pub files_added: u64,
+    pub files_removed: u64,
+    pub files_changed: u64,
+    pub artifacts_added: u64,
+    pub artifacts_removed: u64,
+}
+
+/// Saved draft compared with the exact current complete publication snapshot.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListDraftDiff {
+    pub draft_revision: i32,
+    pub published_revision: Option<i32>,
+    pub exact: bool,
+    pub added: u64,
+    pub metadata_changed: u64,
+    pub excluded: u64,
+    pub unavailable: u64,
+    pub conflicted: u64,
+    pub removal_candidates: u64,
+    pub added_item_ids: Vec<EntityId>,
+    pub metadata_changed_item_ids: Vec<EntityId>,
+    pub excluded_item_ids: Vec<EntityId>,
+    pub unavailable_item_ids: Vec<EntityId>,
+    pub conflicted_item_ids: Vec<EntityId>,
+    pub removal_candidate_item_ids: Vec<EntityId>,
+}
+
+/// Current dependency counts shown before a destructive reset.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListResetImpact {
+    pub draft_revision: i32,
+    pub published_revision: i32,
+    pub published_items: u64,
+    pub generated_playlists: u64,
+    pub channels: u64,
+    pub schedules: u64,
+    pub active_or_future_playouts: u64,
+}
+
+/// Why a physical artifact or generated file must not be reclaimed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListReferencePins {
+    pub retained_revision: bool,
+    pub active_work: bool,
+    pub published_projection: bool,
+    pub active_or_future_playout: bool,
+}
+
+/// Exact durable publication claim used to materialize a retained revision as a new draft.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListRevisionRestoreFence {
+    pub list_id: EntityId,
+    pub source_revision: i32,
+    pub target_draft_revision: i32,
+    pub operation_id: EntityId,
+    pub generation: i32,
+    pub owner_token: String,
+    pub lease_owner: String,
+    pub active_at: DateTime<Utc>,
+}
+
+impl AddonMediaListReferencePins {
+    #[must_use]
+    pub const fn is_reclaimable(self) -> bool {
+        !self.retained_revision
+            && !self.active_work
+            && !self.published_projection
+            && !self.active_or_future_playout
+    }
 }
 
 /// Persisted refresh and per-list processed-artifact policy.
@@ -275,6 +454,83 @@ pub trait AddonMediaListLifecycleRepository: Send + Sync {
         revision: i32,
         expected_schema: Option<&AddonMediaListOptionSchemaRef>,
     ) -> Result<Option<AddonMediaListPublishedOptions>>;
+
+    /// Register host-owned immutable bytes before linking them to a revision.
+    async fn register_revision_file_blob(
+        &self,
+        list_id: EntityId,
+        storage_relative_path: &str,
+        sha256: &str,
+        byte_length: u64,
+        created_at: DateTime<Utc>,
+    ) -> Result<AddonMediaListRevisionFileBlob>;
+
+    /// Atomically capture the complete current saved draft and publication state.
+    async fn retain_published_revision(
+        &self,
+        list_id: EntityId,
+        revision: i32,
+        source_draft_revision: i32,
+        completed_at: DateTime<Utc>,
+        files: &[AddonMediaListRevisionFile],
+        artifact_ids: &[EntityId],
+    ) -> Result<AddonMediaListRevisionSnapshot>;
+
+    /// List all completed history rows, including truthful non-restorable legacy rows.
+    async fn revision_history(
+        &self,
+        list_id: EntityId,
+    ) -> Result<Vec<AddonMediaListRevisionSummary>>;
+
+    /// Load and digest-validate one complete restorable snapshot.
+    async fn revision_snapshot(
+        &self,
+        list_id: EntityId,
+        revision: i32,
+    ) -> Result<Option<AddonMediaListRevisionSnapshot>>;
+
+    /// Replace the saved draft from a retained snapshot under the normal live publication lease.
+    async fn materialize_revision_as_draft(
+        &self,
+        fence: &AddonMediaListRevisionRestoreFence,
+    ) -> Result<i32>;
+
+    async fn compare_revisions(
+        &self,
+        list_id: EntityId,
+        left_revision: i32,
+        right_revision: i32,
+    ) -> Result<AddonMediaListRevisionDiff>;
+
+    async fn saved_draft_diff(&self, list_id: EntityId) -> Result<AddonMediaListDraftDiff>;
+
+    async fn reset_impact(
+        &self,
+        list_id: EntityId,
+        as_of: DateTime<Utc>,
+    ) -> Result<AddonMediaListResetImpact>;
+
+    /// Prune old revision/reference rows only when neither work nor playout pins them.
+    async fn prune_unpinned_revisions(
+        &self,
+        list_id: EntityId,
+        as_of: DateTime<Utc>,
+    ) -> Result<Vec<i32>>;
+
+    /// Hourly post-operation retention pass across every list.
+    async fn prune_all_unpinned_revisions(&self, as_of: DateTime<Utc>) -> Result<u64>;
+
+    async fn artifact_reference_pins(
+        &self,
+        artifact_id: EntityId,
+        as_of: DateTime<Utc>,
+    ) -> Result<AddonMediaListReferencePins>;
+
+    async fn revision_file_blob_reference_pins(
+        &self,
+        blob_id: EntityId,
+        as_of: DateTime<Utc>,
+    ) -> Result<AddonMediaListReferencePins>;
 
     async fn import_checkpoint(
         &self,

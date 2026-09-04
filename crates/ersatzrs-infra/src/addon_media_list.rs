@@ -1061,7 +1061,15 @@ printf '%s\n' '{"record_type":"item","provider_id":"movie:1","rank":0,"display_t
             )
             .await
             .expect_err("new validation must reject saved URL");
-        let (rows, total) = repository.list_admin(0, 10).await.expect("admin rows");
+        let (rows, total) = repository
+            .list_admin(
+                0,
+                10,
+                ersatzrs_core::repositories::AddonMediaListAdminSortField::Name,
+                ersatzrs_core::repositories::AddonMediaListAdminSortDirection::Ascending,
+            )
+            .await
+            .expect("admin rows");
         assert_eq!(total, 1);
         assert_eq!(rows[0].id, list_id);
         let last_error = rows[0].last_error.as_deref().expect("saved failure");

@@ -219,6 +219,7 @@ pub enum AddonMediaListPublicationEventKind {
 #[serde(rename_all = "snake_case")]
 pub enum AddonMediaListPublicationEnqueueTrigger {
     Operator,
+    RestoreRevision,
 }
 
 /// Filesystem boundary represented by a publication phase event.

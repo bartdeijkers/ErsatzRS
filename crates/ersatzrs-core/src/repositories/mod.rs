@@ -1,5 +1,6 @@
 mod addon_media_list;
 mod addon_media_list_lifecycle;
+mod addon_media_list_source_probe;
 mod admin_media;
 mod admin_search;
 mod admin_settings;
@@ -29,25 +30,33 @@ mod troubleshooting;
 mod watermark;
 
 pub use addon_media_list::{
-    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListArtwork,
-    AddonMediaListArtworkRole, AddonMediaListArtworkUpload, AddonMediaListImportAction,
-    AddonMediaListImportProgress, AddonMediaListItemAdminRow, AddonMediaListItemCounts,
-    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict,
-    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoOwnership,
-    AddonMediaListNfoPerson, AddonMediaListPublication, AddonMediaListPublicationBlocker,
+    AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListAdminSortDirection,
+    AddonMediaListAdminSortField, AddonMediaListArtwork, AddonMediaListArtworkRole,
+    AddonMediaListArtworkUpload, AddonMediaListImportAction, AddonMediaListImportProgress,
+    AddonMediaListItemAdminRow, AddonMediaListItemCounts, AddonMediaListItemDetail,
+    AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict, AddonMediaListNfoForm,
+    AddonMediaListNfoMetadata, AddonMediaListNfoOwnership, AddonMediaListNfoPerson,
+    AddonMediaListPublication, AddonMediaListPublicationBlocker,
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationContinuation,
     AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
     AddonMediaListRepository,
 };
 pub use addon_media_list_lifecycle::{
-    AddonMediaListArtifact, AddonMediaListDraftOptions, AddonMediaListImportCheckpoint,
-    AddonMediaListImportLifecycle, AddonMediaListItemOptionValues, AddonMediaListItemTombstone,
-    AddonMediaListLifecycleJob, AddonMediaListLifecycleRepository, AddonMediaListLifecycleSettings,
-    AddonMediaListOptionSchema, AddonMediaListOptionSchemaRef, AddonMediaListOptionValues,
-    AddonMediaListPublishedOptions, AddonProcessedArtifactPolicy, AddonToolMaintenanceAttempt,
-    CreateAddonMediaListLifecycleJob, PROCESSED_ARTIFACT_GLOBAL_BYTE_LIMIT_KEY,
-    PROCESSED_ARTIFACT_MAX_CONCURRENCY_KEY, PROCESSED_ARTIFACT_MINIMUM_FREE_BYTES_KEY,
-    PROCESSED_ARTIFACT_RETENTION_SECONDS_KEY,
+    AddonMediaListArtifact, AddonMediaListDraftDiff, AddonMediaListDraftOptions,
+    AddonMediaListImportCheckpoint, AddonMediaListImportLifecycle, AddonMediaListItemOptionValues,
+    AddonMediaListItemTombstone, AddonMediaListLifecycleJob, AddonMediaListLifecycleRepository,
+    AddonMediaListLifecycleSettings, AddonMediaListOptionSchema, AddonMediaListOptionSchemaRef,
+    AddonMediaListOptionValues, AddonMediaListPublishedOptions, AddonMediaListReferencePins,
+    AddonMediaListResetImpact, AddonMediaListRevisionDiff, AddonMediaListRevisionFile,
+    AddonMediaListRevisionFileBlob, AddonMediaListRevisionItem, AddonMediaListRevisionRestoreFence,
+    AddonMediaListRevisionSnapshot, AddonMediaListRevisionSummary, AddonProcessedArtifactPolicy,
+    AddonToolMaintenanceAttempt, CreateAddonMediaListLifecycleJob,
+    PROCESSED_ARTIFACT_GLOBAL_BYTE_LIMIT_KEY, PROCESSED_ARTIFACT_MAX_CONCURRENCY_KEY,
+    PROCESSED_ARTIFACT_MINIMUM_FREE_BYTES_KEY, PROCESSED_ARTIFACT_RETENTION_SECONDS_KEY,
+};
+pub use addon_media_list_source_probe::{
+    AddonMediaListSourceProbe, AddonMediaListSourceProbeOutcome,
+    AddonMediaListSourceProbeRepository, AddonMediaListSourceProbeState,
 };
 pub use admin_media::{
     AdminActorCard, AdminArtistDetail, AdminArtistMusicVideo, AdminAudioTrack,

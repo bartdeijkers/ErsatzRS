@@ -52,6 +52,11 @@ pub struct AddonMediaListPublicationJob {
     pub generation: i32,
     pub saved_revision: i32,
     pub target_published_revision: i32,
+    /// Retained complete revision used to replace the draft before staging.
+    pub source_published_revision: Option<i32>,
+    /// Set atomically with the restored draft so restart cannot confuse a
+    /// coincidental draft revision with completed restore materialization.
+    pub restore_materialized_at: Option<DateTime<Utc>>,
     pub phase: AddonMediaListPublicationPhase,
     pub child_scan_operation_id: Option<EntityId>,
     pub original_failure_code: Option<String>,
@@ -162,6 +167,29 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         saved_revision: i32,
         target_published_revision: i32,
     ) -> Result<AddonMediaListPublicationEnqueue>;
+
+    /// Atomically admit a retained-revision restore through the normal
+    /// managed-library publication lease.
+    async fn enqueue_revision_restore(
+        &self,
+        list_id: EntityId,
+        library_id: EntityId,
+        source_published_revision: i32,
+        expected_draft_revision: i32,
+        expected_published_revision: i32,
+    ) -> Result<AddonMediaListPublicationEnqueue> {
+        let _ = (
+            list_id,
+            library_id,
+            source_published_revision,
+            expected_draft_revision,
+            expected_published_revision,
+        );
+        Err(super::RepositoryError::unavailable(
+            "enqueue add-on media-list revision restore",
+            "not implemented",
+        ))
+    }
 
     /// Atomically validate confirmation and create or coalesce one reset generation.
     async fn enqueue_reset_reload(

@@ -5,12 +5,14 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{
-    AddonMediaListRepository, AdminMediaRepository, AdminSearchRepository, AdminSettingsRepository,
-    BlockRepository, ChannelRepository, CollectionRepository, DecoRepository,
-    FfmpegProfileRepository, FillerRepository, GraphicsRepository, LibraryRepository,
-    ManagedLibraryOperationRepository, MediaItemRepository, MediaSourceRepository,
-    PlayoutRepository, ProgramScheduleRepository, SavedSearchRepository, SettingsMutation,
-    TelevisionRepository, TemplateRepository, TroubleshootingRepository, WatermarkRepository,
+    AddonMediaListLifecycleRepository, AddonMediaListRepository,
+    AddonMediaListSourceProbeRepository, AdminMediaRepository, AdminSearchRepository,
+    AdminSettingsRepository, BlockRepository, ChannelRepository, CollectionRepository,
+    DecoRepository, FfmpegProfileRepository, FillerRepository, GraphicsRepository,
+    LibraryRepository, ManagedLibraryOperationRepository, MediaItemRepository,
+    MediaSourceRepository, PlayoutRepository, ProgramScheduleRepository, SavedSearchRepository,
+    SettingsMutation, TelevisionRepository, TemplateRepository, TroubleshootingRepository,
+    WatermarkRepository,
 };
 use ersatzrs_core::scheduling::{
     BlockPreviewRepository, PlayoutBuildRequest, SchedulingError, SchedulingRequest,
@@ -707,6 +709,8 @@ pub struct ApplicationPorts {
     channels: Arc<dyn ChannelRepository>,
     channel_runtime: Arc<dyn ChannelRuntime>,
     addon_media_lists: Arc<dyn AddonMediaListRepository>,
+    addon_media_list_lifecycle: Arc<dyn AddonMediaListLifecycleRepository>,
+    addon_media_list_source_probes: Arc<dyn AddonMediaListSourceProbeRepository>,
     admin_settings: Arc<dyn AdminSettingsRepository>,
     settings_runtime: Arc<dyn SettingsRuntime>,
     collections: Arc<dyn CollectionRepository>,
@@ -748,6 +752,8 @@ impl ApplicationPorts {
         channels: Arc<dyn ChannelRepository>,
         channel_runtime: Arc<dyn ChannelRuntime>,
         addon_media_lists: Arc<dyn AddonMediaListRepository>,
+        addon_media_list_lifecycle: Arc<dyn AddonMediaListLifecycleRepository>,
+        addon_media_list_source_probes: Arc<dyn AddonMediaListSourceProbeRepository>,
         admin_settings: Arc<dyn AdminSettingsRepository>,
         settings_runtime: Arc<dyn SettingsRuntime>,
         collections: Arc<dyn CollectionRepository>,
@@ -784,6 +790,8 @@ impl ApplicationPorts {
             channels,
             channel_runtime,
             addon_media_lists,
+            addon_media_list_lifecycle,
+            addon_media_list_source_probes,
             admin_settings,
             settings_runtime,
             collections,
@@ -834,6 +842,20 @@ impl ApplicationPorts {
     #[must_use]
     pub fn addon_media_lists(&self) -> &(dyn AddonMediaListRepository + 'static) {
         self.addon_media_lists.as_ref()
+    }
+
+    /// Add-on media-list revision, impact, and lifecycle persistence.
+    #[must_use]
+    pub fn addon_media_list_lifecycle(&self) -> &(dyn AddonMediaListLifecycleRepository + 'static) {
+        self.addon_media_list_lifecycle.as_ref()
+    }
+
+    /// Durable, non-mutating add-on media-list source probes.
+    #[must_use]
+    pub fn addon_media_list_source_probes(
+        &self,
+    ) -> &(dyn AddonMediaListSourceProbeRepository + 'static) {
+        self.addon_media_list_source_probes.as_ref()
     }
 
     /// Settings persistence used by typed settings commands and queries.

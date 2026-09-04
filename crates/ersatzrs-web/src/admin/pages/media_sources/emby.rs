@@ -145,6 +145,7 @@ fn EmbySourcesIsland(initial_rows: Vec<RemoteSourceRow>) -> impl IntoView {
             </Suspense>
 
             <DeleteDialog
+                dialog_id="emby-source-delete-dialog"
                 open=delete_open
                 entity_name=Signal::derive(move || {
                     delete_target.get().map(|r| r.name.clone()).unwrap_or_default()

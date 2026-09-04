@@ -23,26 +23,33 @@ use crate::admin::server_fns::addon_media_lists::get_addon_media_list_show_nfo;
 use crate::admin::server_fns::addon_media_lists::{
     add_addon_media_list, apply_addon_media_list_content_kind,
     apply_addon_media_list_item_review_edits, change_addon_media_list_addon,
-    control_addon_media_list_import, delete_addon_media_list, get_addon_media_list_form,
-    get_addon_media_list_item, get_addon_media_list_publication_history,
-    get_addon_media_list_publication_readiness, get_addon_media_lists_page_size,
+    compare_addon_media_list_revisions, control_addon_media_list_import, delete_addon_media_list,
+    get_addon_media_list_form, get_addon_media_list_item, get_addon_media_list_publication_history,
+    get_addon_media_list_publication_readiness, get_addon_media_list_reset_impact,
+    get_addon_media_list_revision_history, get_addon_media_list_saved_draft_diff,
+    get_addon_media_list_source_probe, get_addon_media_lists_page_size,
     list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
     match_addon_media_list, publish_addon_media_list, recover_addon_media_list_publication,
     redacted_publication_diagnostics_json, request_addon_media_list_item_details,
     request_addon_media_list_presentation, reset_addon_media_list,
-    resolve_addon_media_list_provider, save_addon_media_list_item_nfo,
-    save_addon_media_list_show_nfo, search_addon_media_list_replacements,
-    set_addon_media_list_item_replacement, set_addon_media_list_item_role, update_addon_media_list,
-    update_addon_media_list_item_chapters, AddonMediaListArtwork, AddonMediaListArtworkRole,
-    AddonMediaListForm, AddonMediaListImportAction, AddonMediaListImportProgressRow,
-    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListItemRow,
-    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
-    AddonMediaListNfoPerson, AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
+    resolve_addon_media_list_provider, restore_addon_media_list_revision,
+    save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
+    search_addon_media_list_replacements, set_addon_media_list_item_replacement,
+    set_addon_media_list_item_role, test_addon_media_list_source, update_addon_media_list,
+    update_addon_media_list_item_chapters, validate_addon_media_list_item_chapters,
+    AddonMediaListAdminSortDirection, AddonMediaListAdminSortField, AddonMediaListArtwork,
+    AddonMediaListArtworkRole, AddonMediaListDraftDiffRow, AddonMediaListForm,
+    AddonMediaListImportAction, AddonMediaListImportProgressRow, AddonMediaListItemDetail,
+    AddonMediaListItemReviewEdit, AddonMediaListItemRow, AddonMediaListMetadataConflict,
+    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
+    AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationEventRow,
     AddonMediaListPublicationHistoryJobRow, AddonMediaListPublicationHistoryRow,
     AddonMediaListPublicationReadiness, AddonMediaListPublicationStatus,
-    AddonMediaListPublishResult, AddonMediaListReplacementRow, AddonMediaListResetResult,
-    AddonMediaListRow,
+    AddonMediaListPublishResult, AddonMediaListReplacementRow, AddonMediaListResetImpactRow,
+    AddonMediaListResetResult, AddonMediaListRestoreResult, AddonMediaListRevisionDiffRow,
+    AddonMediaListRevisionSummaryRow, AddonMediaListRow, AddonMediaListSourceProbeOutcome,
+    AddonMediaListSourceProbeRow, AddonMediaListSourceProbeState,
 };
 use crate::admin::ui::primitives::{
     button::{Button, ButtonVariant},
@@ -64,6 +71,25 @@ fn set_browser_location(path: &str) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn set_browser_location(_path: &str) {}
+
+#[cfg(target_arch = "wasm32")]
+fn focus_browser_element_after_render(id: &'static str) {
+    use wasm_bindgen::JsCast;
+
+    leptos::task::spawn_local(async move {
+        gloo_timers::future::TimeoutFuture::new(0).await;
+        if let Some(element) = web_sys::window()
+            .and_then(|window| window.document())
+            .and_then(|document| document.get_element_by_id(id))
+            .and_then(|element| element.dyn_into::<web_sys::HtmlElement>().ok())
+        {
+            let _ = element.focus();
+        }
+    });
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn focus_browser_element_after_render(_id: &'static str) {}
 
 /// Return only a URL's host for destructive-action context. This intentionally
 /// rejects malformed authorities rather than risking disclosure of user-info,
@@ -87,8 +113,182 @@ fn reset_confirmation_matches(confirmed_name: &str, list_name: &str) -> bool {
     confirmed_name.trim() == list_name
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DraftReviewCategory {
+    Added,
+    MetadataChanged,
+    Excluded,
+    Unavailable,
+    Conflicted,
+    RemovalCandidate,
+}
+
+fn draft_review_category(value: &str) -> Option<DraftReviewCategory> {
+    match value {
+        "added" => Some(DraftReviewCategory::Added),
+        "metadata_changed" => Some(DraftReviewCategory::MetadataChanged),
+        "excluded" => Some(DraftReviewCategory::Excluded),
+        "unavailable" => Some(DraftReviewCategory::Unavailable),
+        "conflicted" => Some(DraftReviewCategory::Conflicted),
+        "removal_candidate" => Some(DraftReviewCategory::RemovalCandidate),
+        _ => None,
+    }
+}
+
+const fn draft_review_category_value(category: DraftReviewCategory) -> &'static str {
+    match category {
+        DraftReviewCategory::Added => "added",
+        DraftReviewCategory::MetadataChanged => "metadata_changed",
+        DraftReviewCategory::Excluded => "excluded",
+        DraftReviewCategory::Unavailable => "unavailable",
+        DraftReviewCategory::Conflicted => "conflicted",
+        DraftReviewCategory::RemovalCandidate => "removal_candidate",
+    }
+}
+
+const fn draft_review_category_text_key(category: DraftReviewCategory) -> TextKey {
+    match category {
+        DraftReviewCategory::Added => TextKey::Added,
+        DraftReviewCategory::MetadataChanged => TextKey::MetadataChanges,
+        DraftReviewCategory::Excluded => TextKey::ExcludedItems,
+        DraftReviewCategory::Unavailable => TextKey::Unavailable,
+        DraftReviewCategory::Conflicted => TextKey::Conflicts,
+        DraftReviewCategory::RemovalCandidate => TextKey::RemovalCandidates,
+    }
+}
+
+fn draft_review_item_ids(
+    diff: &AddonMediaListDraftDiffRow,
+    category: DraftReviewCategory,
+) -> &[i64] {
+    match category {
+        DraftReviewCategory::Added => &diff.added_item_ids,
+        DraftReviewCategory::MetadataChanged => &diff.metadata_changed_item_ids,
+        DraftReviewCategory::Excluded => &diff.excluded_item_ids,
+        DraftReviewCategory::Unavailable => &diff.unavailable_item_ids,
+        DraftReviewCategory::Conflicted => &diff.conflicted_item_ids,
+        DraftReviewCategory::RemovalCandidate => &diff.removal_candidate_item_ids,
+    }
+}
+
+fn item_matches_draft_category(
+    item_id: i64,
+    category: Option<DraftReviewCategory>,
+    diff: &AddonMediaListDraftDiffRow,
+) -> bool {
+    category.is_none_or(|category| draft_review_item_ids(diff, category).contains(&item_id))
+}
+
+const fn revision_can_restore(restorable: bool, revision: i32, current_revision: i32) -> bool {
+    restorable && revision < current_revision
+}
+
+fn addon_list_sort_field(value: &str) -> AddonMediaListAdminSortField {
+    match value {
+        "id" => AddonMediaListAdminSortField::Id,
+        _ => AddonMediaListAdminSortField::Name,
+    }
+}
+
+fn addon_list_sort_direction(value: &str) -> AddonMediaListAdminSortDirection {
+    match value {
+        "descending" => AddonMediaListAdminSortDirection::Descending,
+        _ => AddonMediaListAdminSortDirection::Ascending,
+    }
+}
+
+const fn addon_list_sort_direction_value(
+    direction: AddonMediaListAdminSortDirection,
+) -> &'static str {
+    match direction {
+        AddonMediaListAdminSortDirection::Ascending => "ascending",
+        AddonMediaListAdminSortDirection::Descending => "descending",
+    }
+}
+
+const fn addon_list_sort_aria(
+    current_field: AddonMediaListAdminSortField,
+    current_direction: AddonMediaListAdminSortDirection,
+    column: AddonMediaListAdminSortField,
+) -> &'static str {
+    if !matches!(
+        (current_field, column),
+        (
+            AddonMediaListAdminSortField::Name,
+            AddonMediaListAdminSortField::Name
+        ) | (
+            AddonMediaListAdminSortField::Id,
+            AddonMediaListAdminSortField::Id
+        )
+    ) {
+        return "none";
+    }
+    addon_list_sort_direction_value(current_direction)
+}
+
+const fn next_addon_list_sort(
+    current_field: AddonMediaListAdminSortField,
+    current_direction: AddonMediaListAdminSortDirection,
+    column: AddonMediaListAdminSortField,
+) -> (
+    AddonMediaListAdminSortField,
+    AddonMediaListAdminSortDirection,
+) {
+    let same_column = matches!(
+        (current_field, column),
+        (
+            AddonMediaListAdminSortField::Name,
+            AddonMediaListAdminSortField::Name
+        ) | (
+            AddonMediaListAdminSortField::Id,
+            AddonMediaListAdminSortField::Id
+        )
+    );
+    let direction = if same_column {
+        match current_direction {
+            AddonMediaListAdminSortDirection::Ascending => {
+                AddonMediaListAdminSortDirection::Descending
+            }
+            AddonMediaListAdminSortDirection::Descending => {
+                AddonMediaListAdminSortDirection::Ascending
+            }
+        }
+    } else {
+        AddonMediaListAdminSortDirection::Ascending
+    };
+    (column, direction)
+}
+
+const fn addon_list_sort_indicator(
+    current_field: AddonMediaListAdminSortField,
+    current_direction: AddonMediaListAdminSortDirection,
+    column: AddonMediaListAdminSortField,
+) -> &'static str {
+    let same_column = matches!(
+        (current_field, column),
+        (
+            AddonMediaListAdminSortField::Name,
+            AddonMediaListAdminSortField::Name
+        ) | (
+            AddonMediaListAdminSortField::Id,
+            AddonMediaListAdminSortField::Id
+        )
+    );
+    if !same_column {
+        return "";
+    }
+    match current_direction {
+        AddonMediaListAdminSortDirection::Ascending => "▲",
+        AddonMediaListAdminSortDirection::Descending => "▼",
+    }
+}
+
 #[component]
-fn AddonMediaListResetConsequences(list_name: String, source_host: String) -> impl IntoView {
+fn AddonMediaListResetConsequences(
+    list_name: String,
+    source_host: String,
+    impact: RwSignal<AddonMediaListResetImpactRow>,
+) -> impl IntoView {
     view! {
         <dl class=style::reset_identity>
             <div>
@@ -99,6 +299,13 @@ fn AddonMediaListResetConsequences(list_name: String, source_host: String) -> im
                 <dt>{tr(TextKey::SourceHost)}</dt>
                 <dd>{source_host}</dd>
             </div>
+        </dl>
+        <dl class=style::operator_metrics>
+            <div><dt>{tr(TextKey::PublishedItems)}</dt><dd>{move || impact.with(|value| value.published_items)}</dd></div>
+            <div><dt>{tr(TextKey::GeneratedPlaylists)}</dt><dd>{move || impact.with(|value| value.generated_playlists)}</dd></div>
+            <div><dt>{tr(TextKey::Channels)}</dt><dd>{move || impact.with(|value| value.channels)}</dd></div>
+            <div><dt>{tr(TextKey::Schedules)}</dt><dd>{move || impact.with(|value| value.schedules)}</dd></div>
+            <div><dt>{tr(TextKey::ActiveOrFuturePlayouts)}</dt><dd>{move || impact.with(|value| value.active_or_future_playouts)}</dd></div>
         </dl>
         <div class=style::reset_consequences>
             <div>
@@ -1178,11 +1385,18 @@ fn MetadataConflictSummary(
 pub fn AddonMediaListsPage() -> impl IntoView {
     let query = use_query_map();
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
+    let initial_sort_field = query
+        .with_untracked(|params| addon_list_sort_field(&params.get("sort").unwrap_or_default()));
+    let initial_sort_direction = query.with_untracked(|params| {
+        addon_list_sort_direction(&params.get("direction").unwrap_or_default())
+    });
     let initial = Resource::new_blocking(
         || (),
-        |()| async {
+        move |()| async move {
             let page_size = get_addon_media_lists_page_size().await?;
-            let rows = list_addon_media_lists(0, page_size).await?;
+            let rows =
+                list_addon_media_lists(0, page_size, initial_sort_field, initial_sort_direction)
+                    .await?;
             let providers = list_addon_media_list_providers().await?;
             Ok::<_, ServerFnError>((page_size, rows, providers))
         },
@@ -1199,6 +1413,8 @@ pub fn AddonMediaListsPage() -> impl IntoView {
                             initial_page_size=initial_page_size
                             initial_rows=initial_rows
                             initial_total=initial_total
+                            initial_sort_field=initial_sort_field
+                            initial_sort_direction=initial_sort_direction
                             providers=providers
                         />
                     }
@@ -1215,10 +1431,14 @@ fn AddonMediaListsIsland(
     initial_page_size: u32,
     initial_rows: Vec<AddonMediaListRow>,
     initial_total: u64,
+    initial_sort_field: AddonMediaListAdminSortField,
+    initial_sort_direction: AddonMediaListAdminSortDirection,
     providers: Vec<AddonMediaListProviderRow>,
 ) -> impl IntoView {
     let page = RwSignal::new(0u32);
     let page_size = RwSignal::new(initial_page_size);
+    let sort_field = RwSignal::new(initial_sort_field);
+    let sort_direction = RwSignal::new(initial_sort_direction);
     let current_data = RwSignal::new((initial_rows, initial_total));
     // The add-on is resolved from the URL, so the dialog opens with no
     // provider preselected instead of whichever one happens to sort first.
@@ -1242,7 +1462,14 @@ fn AddonMediaListsIsland(
     let data: LocalResource<(Vec<AddonMediaListRow>, u64)> = LocalResource::new(move || {
         let p = page.get();
         let size = page_size.get();
-        async move { load_or_notify(list_addon_media_lists(p, size).await, toast) }
+        let field = sort_field.get();
+        let direction = sort_direction.get();
+        async move {
+            load_or_notify(
+                list_addon_media_lists(p, size, field, direction).await,
+                toast,
+            )
+        }
     });
     Effect::new(move |_| {
         if let Some(next_data) = data.get() {
@@ -1372,6 +1599,18 @@ fn AddonMediaListsIsland(
                 {move || {
                     let (rows, total) = current_data.get();
                     let has_rows = !rows.is_empty();
+                    let current_sort_field = sort_field.get();
+                    let current_sort_direction = sort_direction.get();
+                    let (_, next_name_direction) = next_addon_list_sort(
+                        current_sort_field,
+                        current_sort_direction,
+                        AddonMediaListAdminSortField::Name,
+                    );
+                    let (_, next_id_direction) = next_addon_list_sort(
+                        current_sort_field,
+                        current_sort_direction,
+                        AddonMediaListAdminSortField::Id,
+                    );
 
                     view! {
                                 <div class=style::table_wrap style:display=if has_rows { "block" } else { "none" }>
@@ -1384,9 +1623,91 @@ fn AddonMediaListsIsland(
                                         </colgroup>
                                         <thead>
                                             <tr>
-                                                <th>{tr(TextKey::Name)}</th>
-                                                <th>{tr(TextKey::Id)}</th>
-                                                <th>{tr(TextKey::MatchStatus)}</th>
+                                                <th
+                                                    scope="col"
+                                                    aria-sort=addon_list_sort_aria(
+                                                        current_sort_field,
+                                                        current_sort_direction,
+                                                        AddonMediaListAdminSortField::Name,
+                                                    )
+                                                >
+                                                    <form method="get" action="/media/addon-lists">
+                                                        <input type="hidden" name="sort" value="name"/>
+                                                        <input
+                                                            type="hidden"
+                                                            name="direction"
+                                                            value=addon_list_sort_direction_value(next_name_direction)
+                                                        />
+                                                        <button
+                                                            type="submit"
+                                                            class=style::sort_button
+                                                            aria-label=tr(TextKey::SortByName)
+                                                            on:click=move |event| {
+                                                                event.prevent_default();
+                                                                let (field, direction) = next_addon_list_sort(
+                                                                    sort_field.get_untracked(),
+                                                                    sort_direction.get_untracked(),
+                                                                    AddonMediaListAdminSortField::Name,
+                                                                );
+                                                                sort_field.set(field);
+                                                                sort_direction.set(direction);
+                                                                page.set(0);
+                                                            }
+                                                        >
+                                                            {tr(TextKey::Name)}
+                                                            <span aria-hidden="true">
+                                                                {addon_list_sort_indicator(
+                                                                    current_sort_field,
+                                                                    current_sort_direction,
+                                                                    AddonMediaListAdminSortField::Name,
+                                                                )}
+                                                            </span>
+                                                        </button>
+                                                    </form>
+                                                </th>
+                                                <th
+                                                    scope="col"
+                                                    aria-sort=addon_list_sort_aria(
+                                                        current_sort_field,
+                                                        current_sort_direction,
+                                                        AddonMediaListAdminSortField::Id,
+                                                    )
+                                                >
+                                                    <form method="get" action="/media/addon-lists">
+                                                        <input type="hidden" name="sort" value="id"/>
+                                                        <input
+                                                            type="hidden"
+                                                            name="direction"
+                                                            value=addon_list_sort_direction_value(next_id_direction)
+                                                        />
+                                                        <button
+                                                            type="submit"
+                                                            class=style::sort_button
+                                                            aria-label=tr(TextKey::SortById)
+                                                            on:click=move |event| {
+                                                                event.prevent_default();
+                                                                let (field, direction) = next_addon_list_sort(
+                                                                    sort_field.get_untracked(),
+                                                                    sort_direction.get_untracked(),
+                                                                    AddonMediaListAdminSortField::Id,
+                                                                );
+                                                                sort_field.set(field);
+                                                                sort_direction.set(direction);
+                                                                page.set(0);
+                                                            }
+                                                        >
+                                                            {tr(TextKey::Id)}
+                                                            <span aria-hidden="true">
+                                                                {addon_list_sort_indicator(
+                                                                    current_sort_field,
+                                                                    current_sort_direction,
+                                                                    AddonMediaListAdminSortField::Id,
+                                                                )}
+                                                            </span>
+                                                        </button>
+                                                    </form>
+                                                </th>
+                                                <th scope="col">{tr(TextKey::MatchStatus)}</th>
                                                 <th/>
                                             </tr>
                                         </thead>
@@ -1525,6 +1846,7 @@ fn AddonMediaListsIsland(
                 })
             />
             <DeleteDialog
+                dialog_id="addon-media-list-delete-dialog"
                 open=delete_open
                 entity_name=Signal::derive(move || {
                     delete_target.get().map(|row| row.name).unwrap_or_default()
@@ -2089,8 +2411,20 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
     });
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
     let status = query.with_untracked(|params| params.get("status").unwrap_or_default());
+    let compare_left = query.with_untracked(|params| {
+        params
+            .get("compare_left")
+            .and_then(|value| value.parse::<i32>().ok())
+    });
+    let compare_right = query.with_untracked(|params| {
+        params
+            .get("compare_right")
+            .and_then(|value| value.parse::<i32>().ok())
+    });
+    let review_category =
+        query.with_untracked(|params| params.get("review_category").unwrap_or_default());
     admin_result_view(
-        load_addon_media_list_editor_initial(id),
+        load_addon_media_list_editor_initial(id, compare_left.zip(compare_right)),
         move |(
             initial_form,
             initial_items,
@@ -2098,6 +2432,11 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
             initial_history,
             initial_show_nfo,
             providers,
+            initial_source_probe,
+            initial_draft_diff,
+            initial_reset_impact,
+            initial_revisions,
+            initial_revision_diff,
         )| {
             view! {
                 <AddonMediaListEditorIsland
@@ -2110,6 +2449,13 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
                     initial_history=initial_history
                     initial_show_nfo=initial_show_nfo
                     providers=providers
+                    initial_source_probe=initial_source_probe
+                    initial_draft_diff=initial_draft_diff
+                    initial_reset_impact=initial_reset_impact
+                    initial_revisions=initial_revisions
+                    initial_revision_diff=initial_revision_diff
+                    initial_compare_revisions=compare_left.zip(compare_right)
+                    initial_review_category=review_category
                 />
             }
             .into_any()
@@ -2124,10 +2470,18 @@ type AddonMediaListEditorInitial = (
     AddonMediaListPublicationHistoryRow,
     AddonMediaListNfoForm,
     Vec<AddonMediaListProviderRow>,
+    Option<AddonMediaListSourceProbeRow>,
+    AddonMediaListDraftDiffRow,
+    AddonMediaListResetImpactRow,
+    Vec<AddonMediaListRevisionSummaryRow>,
+    Option<AddonMediaListRevisionDiffRow>,
 );
 
 #[cfg(feature = "ssr")]
-fn load_addon_media_list_editor_initial(id: i64) -> Result<AddonMediaListEditorInitial, String> {
+fn load_addon_media_list_editor_initial(
+    id: i64,
+    compare_revisions: Option<(i32, i32)>,
+) -> Result<AddonMediaListEditorInitial, String> {
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(async move {
             let form = get_addon_media_list_form(id)
@@ -2148,13 +2502,49 @@ fn load_addon_media_list_editor_initial(id: i64) -> Result<AddonMediaListEditorI
             let providers = list_addon_media_list_providers()
                 .await
                 .map_err(|error| error.to_string())?;
-            Ok((form, items, readiness, history, show_nfo, providers))
+            let source_probe = get_addon_media_list_source_probe(id)
+                .await
+                .map_err(|error| error.to_string())?;
+            let draft_diff = get_addon_media_list_saved_draft_diff(id)
+                .await
+                .map_err(|error| error.to_string())?;
+            let reset_impact = get_addon_media_list_reset_impact(id)
+                .await
+                .map_err(|error| error.to_string())?;
+            let revisions = get_addon_media_list_revision_history(id)
+                .await
+                .map_err(|error| error.to_string())?;
+            let revision_diff = if let Some((left, right)) = compare_revisions {
+                Some(
+                    compare_addon_media_list_revisions(id, left, right)
+                        .await
+                        .map_err(|error| error.to_string())?,
+                )
+            } else {
+                None
+            };
+            Ok((
+                form,
+                items,
+                readiness,
+                history,
+                show_nfo,
+                providers,
+                source_probe,
+                draft_diff,
+                reset_impact,
+                revisions,
+                revision_diff,
+            ))
         })
     })
 }
 
 #[cfg(not(feature = "ssr"))]
-fn load_addon_media_list_editor_initial(_id: i64) -> Result<AddonMediaListEditorInitial, String> {
+fn load_addon_media_list_editor_initial(
+    _id: i64,
+    _compare_revisions: Option<(i32, i32)>,
+) -> Result<AddonMediaListEditorInitial, String> {
     Err("the add-on list editor is loaded by server-side rendering".to_owned())
 }
 
@@ -2294,8 +2684,7 @@ fn AddonMediaListItemIsland(
             async move {
                 let save_result = async {
                     if let Some(chapters) = chapters.as_deref() {
-                        ersatzrs_core::media_chapters::parse_chapter_input(chapters, None)
-                            .map_err(|error| ServerFnError::new(error.to_string()))?;
+                        validate_addon_media_list_item_chapters(chapters.to_owned()).await?;
                     }
                     save_addon_media_list_item_nfo(list_id, item_id, metadata, etag).await?;
                     if let Some(chapters) = chapters {
@@ -2857,6 +3246,7 @@ const fn publication_event_text_key(kind: AddonMediaListPublicationEventKind) ->
 const fn publication_trigger_text_key(trigger: AddonMediaListPublicationEnqueueTrigger) -> TextKey {
     match trigger {
         AddonMediaListPublicationEnqueueTrigger::Operator => TextKey::TriggerOperator,
+        AddonMediaListPublicationEnqueueTrigger::RestoreRevision => TextKey::TriggerRestoreRevision,
     }
 }
 
@@ -2943,7 +3333,7 @@ fn PublicationActivity(
     history: RwSignal<AddonMediaListPublicationHistoryRow>,
 ) -> impl IntoView {
     let toast = use_toast();
-    let copy_action = Action::new(|history: &AddonMediaListPublicationHistoryRow| {
+    let copy_action = Action::new_local(|history: &AddonMediaListPublicationHistoryRow| {
         copy_redacted_publication_diagnostics(history.clone())
     });
     Effect::new(move |_| {
@@ -3330,12 +3720,21 @@ fn AddonMediaListEditorIsland(
     initial_history: AddonMediaListPublicationHistoryRow,
     initial_show_nfo: AddonMediaListNfoForm,
     providers: Vec<AddonMediaListProviderRow>,
+    initial_source_probe: Option<AddonMediaListSourceProbeRow>,
+    initial_draft_diff: AddonMediaListDraftDiffRow,
+    initial_reset_impact: AddonMediaListResetImpactRow,
+    initial_revisions: Vec<AddonMediaListRevisionSummaryRow>,
+    initial_revision_diff: Option<AddonMediaListRevisionDiffRow>,
+    initial_compare_revisions: Option<(i32, i32)>,
+    initial_review_category: String,
 ) -> impl IntoView {
     let initial_error_key = match initial_error.as_str() {
         "unsaved" => Some(TextKey::PublishUnsavedChanges),
         "blocked" => Some(TextKey::PublicationBlocked),
         "recovery" => Some(TextKey::RecoveryFailed),
         "reset" => Some(TextKey::ResetAddonMediaListFailed),
+        "source-test" => Some(TextKey::SourceTestFailed),
+        "revision-restore" => Some(TextKey::RestoreRevisionFailed),
         "" => None,
         _ => Some(TextKey::AddonMediaListSaveFailed),
     };
@@ -3346,6 +3745,8 @@ fn AddonMediaListEditorIsland(
         "preparing" => Some(TextKey::PreparingPublication),
         "recovery-queued" => Some(TextKey::RecoveryQueued),
         "reset-queued" => Some(TextKey::ResetQueued),
+        "source-test-queued" => Some(TextKey::SourceTestQueued),
+        "revision-restore-queued" => Some(TextKey::RestoreRevisionQueued),
         _ => None,
     };
     let form = initial_form.unwrap_or_default();
@@ -3364,6 +3765,20 @@ fn AddonMediaListEditorIsland(
     let detail_import_policy = RwSignal::new(form.detail_import_policy);
     let publication_readiness = RwSignal::new(initial_readiness);
     let publication_history = RwSignal::new(initial_history);
+    let source_probe = RwSignal::new(initial_source_probe);
+    let draft_diff = RwSignal::new(initial_draft_diff);
+    let active_draft_category = draft_review_category(&initial_review_category);
+    let default_compare_revisions = initial_compare_revisions.or_else(|| {
+        initial_revisions
+            .first()
+            .zip(initial_revisions.get(1))
+            .map(|(left, right)| (left.revision, right.revision))
+    });
+    let revision_history = RwSignal::new(initial_revisions);
+    let revision_diff = RwSignal::new(initial_revision_diff);
+    let compare_left = RwSignal::new(default_compare_revisions.map(|value| value.0));
+    let compare_right = RwSignal::new(default_compare_revisions.map(|value| value.1));
+    let reset_impact = RwSignal::new(initial_reset_impact);
     let import_progress = RwSignal::new(form.import_progress.clone());
     let published_revision = RwSignal::new(form.published_revision);
     let poll_epoch = RwSignal::new(0_u64);
@@ -3454,6 +3869,9 @@ fn AddonMediaListEditorIsland(
     let change_addon_open = RwSignal::new(false);
     let apply_content_kind_open = RwSignal::new(false);
     let reset_open = RwSignal::new(false);
+    let reset_status_visible = RwSignal::new(initial_status == "reset-queued");
+    let restore_open = RwSignal::new(false);
+    let restore_revision = RwSignal::new(None::<i32>);
     let reset_confirmed_name = RwSignal::new(String::new());
     let reset_confirmation_valid = Memo::new(move |_| {
         reset_confirmed_name
@@ -3470,6 +3888,26 @@ fn AddonMediaListEditorIsland(
     let reset_action = Action::new(|value: &(i64, String)| {
         let (id, confirmed_name) = value.clone();
         async move { reset_addon_media_list(id, confirmed_name).await }
+    });
+    let source_test_action = Action::new(|value: &(i64, i32)| {
+        let (id, saved_revision) = *value;
+        async move { test_addon_media_list_source(id, saved_revision).await }
+    });
+    let restore_revision_action = Action::new(|value: &(i64, i32, i32, i32)| {
+        let (id, source_revision, draft_revision, published_revision) = *value;
+        async move {
+            restore_addon_media_list_revision(
+                id,
+                source_revision,
+                draft_revision,
+                published_revision,
+            )
+            .await
+        }
+    });
+    let compare_revision_action = Action::new(|value: &(i64, i32, i32)| {
+        let (id, left_revision, right_revision) = *value;
+        async move { compare_addon_media_list_revisions(id, left_revision, right_revision).await }
     });
     let episode_numbering_open = RwSignal::new(false);
     let episode_numbering_season = RwSignal::new("1".to_owned());
@@ -3603,12 +4041,16 @@ fn AddonMediaListEditorIsland(
     });
     let filtered_item_count = Memo::new(move |_| {
         items.with(|items| {
-            items
-                .iter()
-                .filter(|item| {
-                    !need_review_filter.get() || item_needs_review(item, presentation_kind.get())
-                })
-                .count()
+            draft_diff.with(|diff| {
+                items
+                    .iter()
+                    .filter(|item| {
+                        item_matches_draft_category(item.id, active_draft_category, diff)
+                            && (!need_review_filter.get()
+                                || item_needs_review(item, presentation_kind.get()))
+                    })
+                    .count()
+            })
         })
     });
     let episode_numbering_candidate_count = Memo::new(move |_| {
@@ -3740,15 +4182,24 @@ fn AddonMediaListEditorIsland(
     let bulk_scope_count = Memo::new(move |_| {
         let (start, end, _, _, _) = item_page_range.get();
         items.with(|items| {
-            bulk_scope_items(
-                items,
-                &bulk_scope_value.get(),
-                presentation_kind.get(),
-                need_review_filter.get(),
-                start,
-                end,
-            )
-            .len()
+            draft_diff.with(|diff| {
+                let category_items = items
+                    .iter()
+                    .filter(|item| {
+                        item_matches_draft_category(item.id, active_draft_category, diff)
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+                bulk_scope_items(
+                    &category_items,
+                    &bulk_scope_value.get(),
+                    presentation_kind.get(),
+                    need_review_filter.get(),
+                    start,
+                    end,
+                )
+                .len()
+            })
         })
     });
     let episode_numbering_off_page_count = Memo::new(move |_| {
@@ -3758,15 +4209,19 @@ fn AddonMediaListEditorIsland(
         }
         let (start, end, _, _, _) = item_page_range.get();
         let visible_ids = items.with(|items| {
-            items
-                .iter()
-                .filter(|item| {
-                    !need_review_filter.get() || item_needs_review(item, presentation_kind.get())
-                })
-                .skip(start)
-                .take(end.saturating_sub(start))
-                .map(|item| item.id)
-                .collect::<BTreeSet<_>>()
+            draft_diff.with(|diff| {
+                items
+                    .iter()
+                    .filter(|item| {
+                        item_matches_draft_category(item.id, active_draft_category, diff)
+                            && (!need_review_filter.get()
+                                || item_needs_review(item, presentation_kind.get()))
+                    })
+                    .skip(start)
+                    .take(end.saturating_sub(start))
+                    .map(|item| item.id)
+                    .collect::<BTreeSet<_>>()
+            })
         });
         preview
             .keys()
@@ -3787,6 +4242,16 @@ fn AddonMediaListEditorIsland(
         Action::new(|id: &i64| get_addon_media_list_publication_readiness(*id));
     let reload_history_action =
         Action::new(|id: &i64| get_addon_media_list_publication_history(*id));
+    let reload_draft_diff_action =
+        Action::new(|id: &i64| get_addon_media_list_saved_draft_diff(*id));
+    let reload_lifecycle_action = Action::new(|id: &i64| {
+        let id = *id;
+        async move {
+            let revisions = get_addon_media_list_revision_history(id).await?;
+            let impact = get_addon_media_list_reset_impact(id).await?;
+            Ok::<_, ServerFnError>((revisions, impact))
+        }
+    });
     let readiness_refresh_pending = RwSignal::new(false);
     let reload_show_nfo_action = Action::new(|id: &i64| get_addon_media_list_show_nfo(*id));
     let review_edit_action = Action::new(
@@ -3861,8 +4326,10 @@ fn AddonMediaListEditorIsland(
                         publication_readiness_marker(current) != publication_readiness_marker(&next)
                     });
                     publication_readiness.set(next);
+                    reload_draft_diff_action.dispatch(id);
                     if marker_changed {
                         reload_history_action.dispatch(id);
+                        reload_lifecycle_action.dispatch(id);
                     }
                 }
                 Err(error) => {
@@ -3880,6 +4347,17 @@ fn AddonMediaListEditorIsland(
                     toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
                 }
             }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(Ok(next)) = reload_draft_diff_action.value().get() {
+            draft_diff.set(next);
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(Ok((revisions, impact))) = reload_lifecycle_action.value().get() {
+            revision_history.set(revisions);
+            reset_impact.set(impact);
         }
     });
     Effect::new(move |_| {
@@ -3981,6 +4459,7 @@ fn AddonMediaListEditorIsland(
                 let mut error_delay_ms = 1_000_u32;
                 let mut last_announcement = None::<(TextKey, u64)>;
                 let mut readiness_error_announced = false;
+                let mut source_probe_error_announced = false;
                 loop {
                     let visibility_delay_ms = web_sys::window()
                         .and_then(|window| window.document())
@@ -4036,6 +4515,8 @@ fn AddonMediaListEditorIsland(
                                     publication_readiness.set(next_readiness);
                                     if marker_changed {
                                         reload_history_action.dispatch(id);
+                                        reload_lifecycle_action.dispatch(id);
+                                        reload_draft_diff_action.dispatch(id);
                                     }
                                     readiness_error_announced = false;
                                 }
@@ -4049,6 +4530,22 @@ fn AddonMediaListEditorIsland(
                                         readiness_error_announced = true;
                                     }
                                     continue;
+                                }
+                            }
+                            match get_addon_media_list_source_probe(id).await {
+                                Ok(next_probe) => {
+                                    source_probe.set(next_probe);
+                                    source_probe_error_announced = false;
+                                }
+                                Err(error) => {
+                                    source_probe.set(None);
+                                    if !source_probe_error_announced {
+                                        toast.push(
+                                            addon_media_list_error_message(error),
+                                            ToastSeverity::Error,
+                                        );
+                                        source_probe_error_announced = true;
+                                    }
                                 }
                             }
                             if next_marker != previous_item_marker {
@@ -4075,9 +4572,19 @@ fn AddonMediaListEditorIsland(
                                         )
                                     })
                                 });
+                            let source_probe_active = source_probe.with_untracked(|probe| {
+                                probe.as_ref().is_some_and(|probe| {
+                                    matches!(
+                                        probe.state,
+                                        AddonMediaListSourceProbeState::Queued
+                                            | AddonMediaListSourceProbeState::Running
+                                    )
+                                })
+                            });
                             let should_stop = !publication_active
+                                && !source_probe_active
                                 && import_progress.with_untracked(|progress| {
-                                    progress.as_ref().is_some_and(|progress| {
+                                    progress.as_ref().is_none_or(|progress| {
                                         matches!(
                                             progress.state,
                                             AddonMediaListImportState::Paused
@@ -4283,10 +4790,84 @@ fn AddonMediaListEditorIsland(
             match result {
                 Ok(AddonMediaListResetResult::Queued { .. }) => {
                     toast.push(tr(TextKey::ResetQueued).to_owned(), ToastSeverity::Info);
-                    set_browser_location(&format!("/media/addon-lists/{id}?status=reset-queued"));
+                    reset_status_visible.set(true);
+                    focus_browser_element_after_render("addon-list-reset-status");
+                    if !poll_running.get_untracked() {
+                        poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
+                    }
                 }
                 Err(_) => toast.push(
                     tr(TextKey::ResetAddonMediaListFailed).to_owned(),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = source_test_action.value().get() {
+            match result {
+                Ok(_) => {
+                    toast.push(
+                        tr(TextKey::SourceTestQueued).to_owned(),
+                        ToastSeverity::Info,
+                    );
+                    source_probe.update(|probe| {
+                        *probe = Some(AddonMediaListSourceProbeRow {
+                            state: AddonMediaListSourceProbeState::Queued,
+                            saved_draft_revision: publication_readiness
+                                .with_untracked(|readiness| readiness.saved_revision),
+                            source_revision: None,
+                            capabilities: Vec::new(),
+                            outcome: None,
+                            provider_id: None,
+                            list_title: None,
+                            count_hint: None,
+                            returned_item_count: None,
+                            page_complete: None,
+                            duration_milliseconds: None,
+                            diagnostic_code: None,
+                            diagnostic: None,
+                            attempt_count: 0,
+                            updated_at: String::new(),
+                            completed_at: None,
+                        });
+                    });
+                    if !poll_running.get_untracked() {
+                        poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
+                    }
+                }
+                Err(_) => toast.push(
+                    tr(TextKey::SourceTestFailed).to_owned(),
+                    ToastSeverity::Error,
+                ),
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = compare_revision_action.value().get() {
+            match result {
+                Ok(diff) => revision_diff.set(Some(diff)),
+                Err(error) => {
+                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error)
+                }
+            }
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = restore_revision_action.value().get() {
+            restore_open.set(false);
+            match result {
+                Ok(AddonMediaListRestoreResult { .. }) => {
+                    toast.push(
+                        tr(TextKey::RestoreRevisionQueued).to_owned(),
+                        ToastSeverity::Info,
+                    );
+                    set_browser_location(&format!(
+                        "/media/addon-lists/{id}?status=revision-restore-queued"
+                    ));
+                }
+                Err(_) => toast.push(
+                    tr(TextKey::RestoreRevisionFailed).to_owned(),
                     ToastSeverity::Error,
                 ),
             }
@@ -4817,6 +5398,203 @@ fn AddonMediaListEditorIsland(
 
             <PublicationActivity list_id=id history=publication_history />
 
+            <section class=style::operator_panel aria-labelledby="addon-list-source-test-heading">
+                <header class=style::operator_panel_header>
+                    <div>
+                        <h2 id="addon-list-source-test-heading">{tr(TextKey::TestSource)}</h2>
+                        <p>{tr(TextKey::TestSourceHelp)}</p>
+                    </div>
+                    <form method="post" action="/api/addon-lists/test-source">
+                        <input type="hidden" name="id" value=id />
+                        <input
+                            type="hidden"
+                            name="saved_revision"
+                            value=move || publication_readiness.with(|value| value.saved_revision)
+                        />
+                        <button
+                            type="submit"
+                            class=style::btn_cancel
+                            disabled=move || source_test_action.pending().get()
+                            on:click=move |event| {
+                                event.prevent_default();
+                                if !source_test_action.pending().get_untracked() {
+                                    source_test_action.dispatch((
+                                        id,
+                                        publication_readiness
+                                            .with_untracked(|value| value.saved_revision),
+                                    ));
+                                }
+                            }
+                        >{tr(TextKey::TestSource)}</button>
+                    </form>
+                </header>
+                {move || source_probe.get().map(|probe| {
+                    let state_key = match probe.state {
+                        AddonMediaListSourceProbeState::Queued => TextKey::SourceTestQueued,
+                        AddonMediaListSourceProbeState::Running => TextKey::SourceTestRunning,
+                        AddonMediaListSourceProbeState::Complete => match probe.outcome {
+                            Some(AddonMediaListSourceProbeOutcome::Available) => TextKey::SourceAvailable,
+                            Some(AddonMediaListSourceProbeOutcome::Unsupported) => TextKey::SourceUnsupported,
+                            Some(AddonMediaListSourceProbeOutcome::Failed) | None => TextKey::SourceTestFailed,
+                        },
+                        AddonMediaListSourceProbeState::Stale => TextKey::SourceTestStale,
+                    };
+                    let diagnostic = probe.diagnostic.or(probe.diagnostic_code).unwrap_or_default();
+                    let source_revision = probe.source_revision.unwrap_or_default();
+                    let capabilities = probe.capabilities.join(", ");
+                    let provider_id = probe.provider_id.unwrap_or_default();
+                    let list_title = probe.list_title.unwrap_or_default();
+                    let page_complete = probe.page_complete.map(|complete| {
+                        tr(if complete { TextKey::Yes } else { TextKey::No }).to_owned()
+                    }).unwrap_or_default();
+                    view! {
+                        <div class=style::source_probe role="status" aria-live="polite">
+                            <strong>{tr(state_key)}</strong>
+                            <dl class=style::operator_metrics>
+                                <div><dt>{tr(TextKey::SavedRevision)}</dt><dd>{probe.saved_draft_revision}</dd></div>
+                                <div style:display=if source_revision.is_empty() { "none" } else { "block" }><dt>{tr(TextKey::SourceRevision)}</dt><dd>{source_revision.clone()}</dd></div>
+                                <div style:display=if probe.returned_item_count.is_none() { "none" } else { "block" }><dt>{tr(TextKey::ReturnedFirstPageItems)}</dt><dd>{probe.returned_item_count.unwrap_or_default()}</dd></div>
+                                <div style:display=if probe.count_hint.is_none() { "none" } else { "block" }><dt>{tr(TextKey::ProviderTotalItemCount)}</dt><dd>{probe.count_hint.unwrap_or_default()}</dd></div>
+                                <div style:display=if probe.duration_milliseconds.is_none() { "none" } else { "block" }><dt>{tr(TextKey::Duration)}</dt><dd>{format!("{} ms", probe.duration_milliseconds.unwrap_or_default())}</dd></div>
+                                <div style:display=if capabilities.is_empty() { "none" } else { "block" }><dt>{tr(TextKey::Capabilities)}</dt><dd>{capabilities.clone()}</dd></div>
+                                <div style:display=if provider_id.is_empty() { "none" } else { "block" }><dt>{tr(TextKey::ProviderIdentity)}</dt><dd>{provider_id.clone()}</dd></div>
+                                <div style:display=if list_title.is_empty() { "none" } else { "block" }><dt>{tr(TextKey::Title)}</dt><dd>{list_title.clone()}</dd></div>
+                                <div style:display=if page_complete.is_empty() { "none" } else { "block" }><dt>{tr(TextKey::FirstPageComplete)}</dt><dd>{page_complete.clone()}</dd></div>
+                            </dl>
+                            <p class=style::review_error style:display=if diagnostic.is_empty() { "none" } else { "flex" }>{diagnostic.clone()}</p>
+                        </div>
+                    }
+                })}
+            </section>
+
+            <section class=style::operator_panel aria-labelledby="addon-list-draft-diff-heading">
+                <header class=style::operator_panel_header>
+                    <div>
+                        <h2 id="addon-list-draft-diff-heading">{tr(TextKey::DraftChanges)}</h2>
+                        <p>{tr(TextKey::ExactDraftDiffHelp)}</p>
+                    </div>
+                </header>
+                <p class=style::empty style:display=move || if draft_diff.with(|value| value.exact) { "none" } else { "block" }>{tr(TextKey::DraftDiffUnavailable)}</p>
+                <dl class=style::operator_metrics style:display=move || if draft_diff.with(|value| value.exact) { "grid" } else { "none" }>
+                    <div><dt>{format!("{} · {}", tr(TextKey::Items), tr(TextKey::Added))}</dt><dd><a data-testid="draft-diff-added" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Added))>{move || draft_diff.with(|value| value.added)}</a></dd></div>
+                    <div><dt>{tr(TextKey::MetadataChanges)}</dt><dd><a data-testid="draft-diff-metadata-changed" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::MetadataChanged))>{move || draft_diff.with(|value| value.metadata_changed)}</a></dd></div>
+                    <div><dt>{tr(TextKey::ExcludedItems)}</dt><dd><a data-testid="draft-diff-excluded" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Excluded))>{move || draft_diff.with(|value| value.excluded)}</a></dd></div>
+                    <div><dt>{tr(TextKey::Unavailable)}</dt><dd><a data-testid="draft-diff-unavailable" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Unavailable))>{move || draft_diff.with(|value| value.unavailable)}</a></dd></div>
+                    <div><dt>{tr(TextKey::Conflicts)}</dt><dd><a data-testid="draft-diff-conflicted" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Conflicted))>{move || draft_diff.with(|value| value.conflicted)}</a></dd></div>
+                    <div><dt>{tr(TextKey::RemovalCandidates)}</dt><dd><a data-testid="draft-diff-removal-candidates" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::RemovalCandidate))>{move || draft_diff.with(|value| value.removal_candidates)}</a></dd></div>
+                </dl>
+            </section>
+
+            <section class=style::operator_panel aria-labelledby="addon-list-revision-history-heading">
+                <header class=style::operator_panel_header>
+                    <div>
+                        <h2 id="addon-list-revision-history-heading">{tr(TextKey::RevisionHistory)}</h2>
+                        <p>{tr(TextKey::RevisionHistoryHelp)}</p>
+                    </div>
+                </header>
+                <p class=style::empty style:display=move || if revision_history.with(Vec::is_empty) { "block" } else { "none" }>{tr(TextKey::NoRevisionHistory)}</p>
+                <form method="get" action=format!("/media/addon-lists/{id}") class=style::revision_compare>
+                    <label>
+                        <span>{tr(TextKey::Revision)}</span>
+                        <select
+                            name="compare_left"
+                            required
+                            on:change=move |event| compare_left.set(event_target_value(&event).parse().ok())
+                        >
+                            <For each=move || revision_history.get() key=|revision| revision.revision children=move |revision| view! {
+                                <option value=revision.revision selected=move || compare_left.get() == Some(revision.revision)>{revision.revision}</option>
+                            } />
+                        </select>
+                    </label>
+                    <label>
+                        <span>{tr(TextKey::Revision)}</span>
+                        <select
+                            name="compare_right"
+                            required
+                            on:change=move |event| compare_right.set(event_target_value(&event).parse().ok())
+                        >
+                            <For each=move || revision_history.get() key=|revision| revision.revision children=move |revision| view! {
+                                <option value=revision.revision selected=move || compare_right.get() == Some(revision.revision)>{revision.revision}</option>
+                            } />
+                        </select>
+                    </label>
+                    <button
+                        type="submit"
+                        class=style::btn_cancel
+                        disabled=move || compare_left.get().is_none() || compare_right.get().is_none() || compare_left.get() == compare_right.get() || compare_revision_action.pending().get()
+                        on:click=move |event| {
+                            if let Some((left, right)) = compare_left.get_untracked().zip(compare_right.get_untracked()) {
+                                event.prevent_default();
+                                compare_revision_action.dispatch((id, left, right));
+                            }
+                        }
+                    >{tr(TextKey::CompareRevisions)}</button>
+                </form>
+                {move || revision_diff.get().map(|diff| view! {
+                    <dl class=style::operator_metrics role="status" aria-live="polite" data-testid="revision-diff">
+                        <div><dt>{format!("{} · {}", tr(TextKey::Items), tr(TextKey::Added))}</dt><dd>{diff.items_added}</dd></div>
+                        <div><dt>{format!("{} · {}", tr(TextKey::Items), tr(TextKey::Removed))}</dt><dd>{diff.items_removed}</dd></div>
+                        <div><dt>{format!("{} · {}", tr(TextKey::Items), tr(TextKey::Changed))}</dt><dd>{diff.items_changed}</dd></div>
+                        <div><dt>{tr(TextKey::MetadataChanges)}</dt><dd>{u8::from(diff.list_metadata_changed)}</dd></div>
+                        <div><dt>{tr(TextKey::EffectiveOptions)}</dt><dd>{u8::from(diff.effective_options_changed)}</dd></div>
+                        <div><dt>{tr(TextKey::Files)}</dt><dd>{format!("+{} / -{} / ~{}", diff.files_added, diff.files_removed, diff.files_changed)}</dd></div>
+                        <div><dt>{tr(TextKey::Artifacts)}</dt><dd>{format!("+{} / -{}", diff.artifacts_added, diff.artifacts_removed)}</dd></div>
+                    </dl>
+                })}
+                <div class=style::revision_rows>
+                    <For each=move || revision_history.get() key=|revision| revision.revision children=move |revision| {
+                        let revision_number = revision.revision;
+                        let restorable = revision.restorable;
+                        let native_restore_disabled = !revision_can_restore(
+                            restorable,
+                            revision_number,
+                            published_revision.get_untracked(),
+                        );
+                        view! {
+                            <article class=style::revision_row>
+                                <div>
+                                    <strong>{format!("{} {}", tr(TextKey::Revision), revision_number)}</strong>
+                                    <span>{revision.completed_at.unwrap_or_else(|| tr(TextKey::Unavailable).to_owned())}</span>
+                                </div>
+                                <dl class=style::revision_counts>
+                                    <div><dt>{tr(TextKey::Items)}</dt><dd>{revision.published_item_count}</dd></div>
+                                    <div><dt>{tr(TextKey::Files)}</dt><dd>{revision.file_count}</dd></div>
+                                    <div><dt>{tr(TextKey::Artifacts)}</dt><dd>{revision.artifact_count}</dd></div>
+                                </dl>
+                                <form method="post" action="/api/addon-lists/restore-revision">
+                                    <input type="hidden" name="id" value=id />
+                                    <input type="hidden" name="source_published_revision" value=revision_number />
+                                    <input type="hidden" name="expected_draft_revision" value=move || publication_readiness.with(|value| value.saved_revision) />
+                                    <input type="hidden" name="expected_published_revision" value=move || published_revision.get() />
+                                    <noscript>
+                                        <label class=style::restore_confirmation>
+                                            <input type="checkbox" required />
+                                            <span>{tr(TextKey::RevisionHistoryHelp)}</span>
+                                        </label>
+                                        <button type="submit" class=style::btn_cancel disabled=native_restore_disabled>{tr(TextKey::RestoreRevision)}</button>
+                                    </noscript>
+                                    <button
+                                        type="button"
+                                        class=format!("{} {}", style::btn_cancel, style::js_only)
+                                        disabled=move || {
+                                            !revision_can_restore(
+                                                restorable,
+                                                revision_number,
+                                                published_revision.get(),
+                                            )
+                                        }
+                                        on:click=move |_| {
+                                            restore_revision.set(Some(revision_number));
+                                            restore_open.set(true);
+                                        }
+                                    >{tr(TextKey::RestoreRevision)}</button>
+                                </form>
+                            </article>
+                        }
+                    } />
+                </div>
+            </section>
+
             <form
                 id="addon_media_lists-list-editor-form"
                 method="post"
@@ -5084,6 +5862,12 @@ fn AddonMediaListEditorIsland(
                             <span>{tr(TextKey::NumberEpisodes)}</span>
                         </button>
                     </header>
+                    {active_draft_category.map(|category| view! {
+                        <aside class=style::draft_filter role="status" data-testid="draft-review-filter">
+                            <strong>{tr(draft_review_category_text_key(category))}</strong>
+                            <a href=format!("/media/addon-lists/{id}#addon-list-items-heading")>{tr(TextKey::ClearFilters)}</a>
+                        </aside>
+                    })}
                     <section
                         id="episode-numbering-panel"
                         class=style::numbering_panel
@@ -5350,14 +6134,25 @@ fn AddonMediaListEditorIsland(
                             on:click=move |_| {
                                 let (start, end, _, _, _) = item_page_range.get_untracked();
                                 let scoped = items.with_untracked(|items| {
-                                    bulk_scope_items(
-                                        items,
-                                        &bulk_scope_value.get_untracked(),
-                                        presentation_kind.get_untracked(),
-                                        need_review_filter.get_untracked(),
-                                        start,
-                                        end,
-                                    )
+                                    draft_diff.with_untracked(|diff| {
+                                        let category_items = items
+                                            .iter()
+                                            .filter(|item| item_matches_draft_category(
+                                                item.id,
+                                                active_draft_category,
+                                                diff,
+                                            ))
+                                            .cloned()
+                                            .collect::<Vec<_>>();
+                                        bulk_scope_items(
+                                            &category_items,
+                                            &bulk_scope_value.get_untracked(),
+                                            presentation_kind.get_untracked(),
+                                            need_review_filter.get_untracked(),
+                                            start,
+                                            end,
+                                        )
+                                    })
                                 });
                                 let content_kind = bulk_content_kind_value.get_untracked();
                                 let liveness = bulk_liveness_value.get_untracked();
@@ -5414,8 +6209,14 @@ fn AddonMediaListEditorIsland(
                                             .get()
                                             .into_iter()
                                             .filter(|item| {
-                                                !need_review_filter.get()
-                                                    || item_needs_review(item, presentation_kind.get())
+                                                draft_diff.with(|diff| {
+                                                    item_matches_draft_category(
+                                                        item.id,
+                                                        active_draft_category,
+                                                        diff,
+                                                    )
+                                                }) && (!need_review_filter.get()
+                                                    || item_needs_review(item, presentation_kind.get()))
                                             })
                                             .skip(start)
                                             .take(end.saturating_sub(start))
@@ -5504,9 +6305,18 @@ fn AddonMediaListEditorIsland(
                             </Button>
                         </div>
                     </header>
+                    <p
+                        id="addon-list-reset-status"
+                        class=style::workflow_message
+                        role="status"
+                        aria-live="polite"
+                        tabindex="-1"
+                        style:display=move || if reset_status_visible.get() { "flex" } else { "none" }
+                    >{tr(TextKey::ResetQueued)}</p>
                     <AddonMediaListResetConsequences
                         list_name=list_name.get_value()
                         source_host=source_host.get_value()
+                        impact=reset_impact
                     />
                     <noscript>
                         <form
@@ -5534,6 +6344,7 @@ fn AddonMediaListEditorIsland(
                     </noscript>
                 </section>
                 <Modal
+                    dialog_id="addon-media-list-apply-kind-dialog"
                     open=apply_content_kind_open
                     title=tr(TextKey::ApplyToAllItems).to_owned()
                     on_close=Callback::new(move |confirmed: bool| {
@@ -5546,6 +6357,7 @@ fn AddonMediaListEditorIsland(
                     <p>{tr(TextKey::ApplyToAllItemsPrompt)}</p>
                 </Modal>
                 <Modal
+                    dialog_id="addon-media-list-change-addon-dialog"
                     open=change_addon_open
                     title=tr(TextKey::ChangeAddon).to_owned()
                     on_close=Callback::new(move |confirmed: bool| {
@@ -5557,6 +6369,7 @@ fn AddonMediaListEditorIsland(
                     <p>{tr(TextKey::ChangeAddonPrompt)}</p>
                 </Modal>
                 <Modal
+                    dialog_id="addon-media-list-reset-dialog"
                     open=reset_open
                     title=tr(TextKey::ResetAndReload).to_owned()
                     on_close=Callback::new(move |confirmed: bool| {
@@ -5580,6 +6393,7 @@ fn AddonMediaListEditorIsland(
                         <AddonMediaListResetConsequences
                             list_name=list_name.get_value()
                             source_host=source_host.get_value()
+                            impact=reset_impact
                         />
                         <label class=style::reset_confirmation for="addon-list-reset-confirmation">
                             <span>{tr(TextKey::TypeListNameToConfirm)}</span>
@@ -5595,6 +6409,36 @@ fn AddonMediaListEditorIsland(
                             />
                         </label>
                     </div>
+                </Modal>
+                <Modal
+                    dialog_id="addon-media-list-restore-revision-dialog"
+                    open=restore_open
+                    title=tr(TextKey::RestoreRevision).to_owned()
+                    on_close=Callback::new(move |confirmed: bool| {
+                        if confirmed {
+                            if let Some(source_revision) = restore_revision.get_untracked() {
+                                restore_revision_action.dispatch((
+                                    id,
+                                    source_revision,
+                                    publication_readiness
+                                        .with_untracked(|value| value.saved_revision),
+                                    published_revision.get_untracked(),
+                                ));
+                            }
+                        }
+                    })
+                    confirm_label=Some(tr(TextKey::RestoreRevision))
+                    confirm_disabled=Signal::derive(move || restore_revision_action.pending().get())
+                    destructive=true
+                    wide=true
+                >
+                    <p>{move || format!(
+                        "{} {} → {} {}",
+                        tr(TextKey::RestoreRevisionWarning),
+                        restore_revision.get().unwrap_or_default(),
+                        tr(TextKey::TargetPublishedRevision),
+                        published_revision.get().saturating_add(1),
+                    )}</p>
                 </Modal>
                 <div
                     class=style::backdrop
@@ -5761,6 +6605,41 @@ mod tests {
             "Current List copy",
             "Current List"
         ));
+    }
+
+    #[test]
+    fn revision_restore_is_only_offered_for_an_older_restorable_revision() {
+        assert!(revision_can_restore(true, 2, 3));
+        assert!(!revision_can_restore(false, 2, 3));
+        assert!(!revision_can_restore(true, 3, 3));
+        assert!(!revision_can_restore(true, 4, 3));
+    }
+
+    #[test]
+    fn draft_review_category_uses_exact_item_ids_and_rejects_unknown_values() {
+        let diff = AddonMediaListDraftDiffRow {
+            added_item_ids: vec![11],
+            metadata_changed_item_ids: vec![12],
+            excluded_item_ids: vec![13],
+            unavailable_item_ids: vec![14],
+            conflicted_item_ids: vec![15],
+            removal_candidate_item_ids: vec![16],
+            ..AddonMediaListDraftDiffRow::default()
+        };
+        for (value, item_id) in [
+            ("added", 11),
+            ("metadata_changed", 12),
+            ("excluded", 13),
+            ("unavailable", 14),
+            ("conflicted", 15),
+            ("removal_candidate", 16),
+        ] {
+            let category = draft_review_category(value).unwrap();
+            assert!(item_matches_draft_category(item_id, Some(category), &diff));
+            assert!(!item_matches_draft_category(99, Some(category), &diff));
+        }
+        assert_eq!(draft_review_category("unknown"), None);
+        assert!(item_matches_draft_category(99, None, &diff));
     }
 
     /// A value string that does not survive the round trip silently resets the
@@ -6048,6 +6927,48 @@ mod tests {
             discovered_count: 1,
             ..AddonMediaListImportProgressRow::default()
         }));
+    }
+
+    #[test]
+    fn overview_sort_parsing_and_toggle_are_stable() {
+        assert_eq!(
+            addon_list_sort_field("unexpected"),
+            AddonMediaListAdminSortField::Name
+        );
+        assert_eq!(
+            addon_list_sort_direction("unexpected"),
+            AddonMediaListAdminSortDirection::Ascending
+        );
+        assert_eq!(
+            next_addon_list_sort(
+                AddonMediaListAdminSortField::Name,
+                AddonMediaListAdminSortDirection::Ascending,
+                AddonMediaListAdminSortField::Name,
+            ),
+            (
+                AddonMediaListAdminSortField::Name,
+                AddonMediaListAdminSortDirection::Descending,
+            )
+        );
+        assert_eq!(
+            next_addon_list_sort(
+                AddonMediaListAdminSortField::Name,
+                AddonMediaListAdminSortDirection::Descending,
+                AddonMediaListAdminSortField::Id,
+            ),
+            (
+                AddonMediaListAdminSortField::Id,
+                AddonMediaListAdminSortDirection::Ascending,
+            )
+        );
+        assert_eq!(
+            addon_list_sort_aria(
+                AddonMediaListAdminSortField::Id,
+                AddonMediaListAdminSortDirection::Descending,
+                AddonMediaListAdminSortField::Name,
+            ),
+            "none"
+        );
     }
 
     #[test]

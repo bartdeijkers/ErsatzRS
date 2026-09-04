@@ -434,6 +434,57 @@ impl ApplicationServices {
             .await?)
     }
 
+    /// Apply bounded retention to complete, unpinned publication revisions.
+    pub async fn prune_addon_media_list_revisions(&self) -> Result<u64> {
+        Ok(self
+            .ports
+            .addon_media_list_lifecycle()
+            .prune_all_unpinned_revisions(chrono::Utc::now())
+            .await?)
+    }
+
+    /// Compare the saved draft with the exact current publication snapshot.
+    pub async fn addon_media_list_saved_draft_diff(
+        &self,
+        id: i64,
+    ) -> Result<ersatzrs_core::repositories::AddonMediaListDraftDiff> {
+        queries::addon_media_list_saved_draft_diff(id, self.ports.addon_media_list_lifecycle())
+            .await
+    }
+
+    /// Load the destructive-reset dependency counts shown to the operator.
+    pub async fn addon_media_list_reset_impact(
+        &self,
+        id: i64,
+    ) -> Result<ersatzrs_core::repositories::AddonMediaListResetImpact> {
+        queries::addon_media_list_reset_impact(id, self.ports.addon_media_list_lifecycle()).await
+    }
+
+    /// Load bounded publication revision history.
+    pub async fn addon_media_list_revision_history(
+        &self,
+        id: i64,
+    ) -> Result<Vec<ersatzrs_core::repositories::AddonMediaListRevisionSummary>> {
+        queries::addon_media_list_revision_history(id, self.ports.addon_media_list_lifecycle())
+            .await
+    }
+
+    /// Compare two exact retained publication revisions.
+    pub async fn compare_addon_media_list_revisions(
+        &self,
+        id: i64,
+        left_revision: i32,
+        right_revision: i32,
+    ) -> Result<ersatzrs_core::repositories::AddonMediaListRevisionDiff> {
+        queries::compare_addon_media_list_revisions(
+            id,
+            left_revision,
+            right_revision,
+            self.ports.addon_media_list_lifecycle(),
+        )
+        .await
+    }
+
     /// Search available local video versions for a replacement.
     pub async fn search_addon_media_list_replacements(
         &self,
@@ -469,12 +520,52 @@ impl ApplicationServices {
         commands::match_addon_media_list(command, self.ports.addon_media_lists()).await
     }
 
+    /// Queue a durable, non-mutating source header and first-page probe.
+    pub async fn test_addon_media_list_source(
+        &self,
+        command: commands::TestAddonMediaListSource,
+    ) -> Result<i64> {
+        commands::test_addon_media_list_source(command, self.ports.addon_media_list_source_probes())
+            .await
+    }
+
+    /// Load the latest source probe with its current saved-input freshness verdict.
+    pub async fn addon_media_list_source_probe(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::AddonMediaListSourceProbe>> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "addon_media_list_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        Ok(self
+            .ports
+            .addon_media_list_source_probes()
+            .source_probe_status(id)
+            .await?)
+    }
+
     /// Publish one reviewed add-on media-list snapshot.
     pub async fn publish_addon_media_list(
         &self,
         command: commands::PublishAddonMediaList,
     ) -> Result<commands::PublishAddonMediaListOutcome> {
         commands::publish_addon_media_list(
+            command,
+            self.ports.addon_media_lists(),
+            self.ports.managed_library_operations(),
+        )
+        .await
+    }
+
+    /// Restore one retained complete revision through the normal publication lease.
+    pub async fn restore_addon_media_list_revision(
+        &self,
+        command: commands::RestoreAddonMediaListRevision,
+    ) -> Result<commands::RestoreAddonMediaListRevisionOutcome> {
+        commands::restore_addon_media_list_revision(
             command,
             self.ports.addon_media_lists(),
             self.ports.managed_library_operations(),
@@ -3133,6 +3224,38 @@ async fn execute_managed_library_operation(
                 }
             }
             AddonMediaListPublicationPhase::Staging => {
+                if let Some(source_revision) = job.source_published_revision {
+                    let restored = application
+                        .ports
+                        .addon_media_list_lifecycle()
+                        .materialize_revision_as_draft(
+                            &ersatzrs_core::repositories::AddonMediaListRevisionRestoreFence {
+                                list_id: job.list_id,
+                                source_revision,
+                                target_draft_revision: job.saved_revision,
+                                operation_id: job.operation_id,
+                                generation: job.generation,
+                                owner_token: claim.operation.owner_token.clone(),
+                                lease_owner: claim.lease_owner.clone(),
+                                active_at: chrono::Utc::now(),
+                            },
+                        )
+                        .await;
+                    if let Err(error) = restored {
+                        let message = error.to_string();
+                        let _ = application
+                            .ports
+                            .managed_library_operations()
+                            .fail_publication(
+                                claim,
+                                "publication_restore_materialization_failed",
+                                "retained revision restore materialization failed",
+                                None,
+                            )
+                            .await;
+                        return Outcome::Failed { message };
+                    }
+                }
                 let staged = application
                     .ports
                     .addon_media_lists()
