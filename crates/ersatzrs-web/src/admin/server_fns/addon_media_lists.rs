@@ -2,8 +2,11 @@ use ersatzrs_domain::{
     AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
     AddonMediaListDetailState, AddonMediaListImportState, AddonMediaListItemAvailability,
     AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
-    AddonMediaListPublicationPhase, AddonMediaListPublicationState, AddonMediaListRecoveryAction,
-    AddonMediaListReviewState, RemoteStreamLiveness,
+    AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
+    AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
+    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
+    AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
+    AddonMediaListRecoveryAction, AddonMediaListReviewState, RemoteStreamLiveness,
 };
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -79,6 +82,113 @@ pub struct AddonMediaListPublicationStatus {
     pub recovery_diagnostic_present: bool,
     pub can_retry: bool,
     pub can_restore: bool,
+}
+
+/// Redacted, typed transport projection for all retained publication jobs.
+///
+/// Keep this shape free of provider text and filesystem or network values: it
+/// is the single payload serialized by both the hydrated Copy action and the
+/// no-JavaScript diagnostics download.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListPublicationHistoryRow {
+    pub list_id: i64,
+    pub jobs: Vec<AddonMediaListPublicationHistoryJobRow>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListPublicationHistoryJobRow {
+    pub job_id: i64,
+    pub operation_id: i64,
+    pub generation: i32,
+    pub saved_revision: i32,
+    pub target_published_revision: i32,
+    pub phase: AddonMediaListPublicationPhase,
+    pub state: AddonMediaListPublicationState,
+    pub outcome: Option<AddonMediaListPublicationOutcome>,
+    pub events: Vec<AddonMediaListPublicationEventRow>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListPublicationEventRow {
+    pub sequence: i32,
+    pub kind: AddonMediaListPublicationEventKind,
+    pub enqueue_trigger: Option<AddonMediaListPublicationEnqueueTrigger>,
+    pub phase: Option<AddonMediaListPublicationPhase>,
+    pub attempt: Option<i32>,
+    pub related_operation_id: Option<i64>,
+    pub filesystem_transition: Option<AddonMediaListPublicationFilesystemTransition>,
+    pub retry_class: Option<AddonMediaListPublicationRetryClass>,
+    pub recovery_action: Option<AddonMediaListRecoveryAction>,
+    pub error_category: Option<AddonMediaListPublicationErrorCategory>,
+    pub os_error_code: Option<i32>,
+    pub published_item_count: Option<i64>,
+    pub playlist_item_count: Option<i64>,
+    pub artwork_count: Option<i64>,
+    pub outcome: Option<AddonMediaListPublicationOutcome>,
+    pub occurred_at: String,
+}
+
+pub fn redacted_publication_diagnostics_json(
+    history: &AddonMediaListPublicationHistoryRow,
+) -> Result<String, serde_json::Error> {
+    serde_json::to_string_pretty(history)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListPublicationHistory>
+    for AddonMediaListPublicationHistoryRow
+{
+    fn from(value: ersatzrs_core::repositories::AddonMediaListPublicationHistory) -> Self {
+        Self {
+            list_id: value.list_id,
+            jobs: value.jobs.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListPublicationHistoryJob>
+    for AddonMediaListPublicationHistoryJobRow
+{
+    fn from(value: ersatzrs_core::repositories::AddonMediaListPublicationHistoryJob) -> Self {
+        Self {
+            job_id: value.job_id,
+            operation_id: value.operation_id,
+            generation: value.generation,
+            saved_revision: value.saved_revision,
+            target_published_revision: value.target_published_revision,
+            phase: value.phase,
+            state: value.state,
+            outcome: value.outcome,
+            events: value.events.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListPublicationEvent>
+    for AddonMediaListPublicationEventRow
+{
+    fn from(value: ersatzrs_core::repositories::AddonMediaListPublicationEvent) -> Self {
+        Self {
+            sequence: value.sequence,
+            kind: value.kind,
+            enqueue_trigger: value.enqueue_trigger,
+            phase: value.phase,
+            attempt: value.attempt,
+            related_operation_id: value.related_operation_id,
+            filesystem_transition: value.filesystem_transition,
+            retry_class: value.retry_class,
+            recovery_action: value.recovery_action,
+            error_category: value.error_category,
+            os_error_code: value.os_error_code,
+            published_item_count: value.published_item_count,
+            playlist_item_count: value.playlist_item_count,
+            artwork_count: value.artwork_count,
+            outcome: value.outcome,
+            occurred_at: value.occurred_at.to_rfc3339(),
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -870,6 +980,30 @@ pub async fn get_addon_media_list_publication_readiness_with_state(
     state
         .application
         .addon_media_list_publication_readiness(id)
+        .await
+        .map(Into::into)
+}
+
+#[server]
+pub async fn get_addon_media_list_publication_history(
+    id: i64,
+) -> Result<AddonMediaListPublicationHistoryRow, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    get_addon_media_list_publication_history_with_state(&state, id)
+        .await
+        .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+pub async fn get_addon_media_list_publication_history_with_state(
+    state: &crate::host::state::AppState,
+    id: i64,
+) -> ersatzrs_app::Result<AddonMediaListPublicationHistoryRow> {
+    state
+        .application
+        .addon_media_list_publication_history(id)
         .await
         .map(Into::into)
 }
@@ -1692,4 +1826,66 @@ pub async fn delete_addon_media_list_with_state(
         .delete_addon_media_list(ersatzrs_app::commands::DeleteAddonMediaList { id })
         .await
         .inspect_err(|error| log_addon_media_list_failure("delete", None, Some(id), error))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redacted_publication_diagnostics_have_only_the_typed_visible_shape() {
+        let history = AddonMediaListPublicationHistoryRow {
+            list_id: 42,
+            jobs: vec![AddonMediaListPublicationHistoryJobRow {
+                job_id: 7,
+                operation_id: 9,
+                generation: 3,
+                saved_revision: 4,
+                target_published_revision: 5,
+                phase: AddonMediaListPublicationPhase::RestoringFiles,
+                state: AddonMediaListPublicationState::Restoring,
+                outcome: None,
+                events: vec![AddonMediaListPublicationEventRow {
+                    sequence: 1,
+                    kind: AddonMediaListPublicationEventKind::RecoveryFailure,
+                    enqueue_trigger: None,
+                    phase: Some(AddonMediaListPublicationPhase::RestoringFiles),
+                    attempt: Some(2),
+                    related_operation_id: Some(11),
+                    filesystem_transition: None,
+                    retry_class: Some(AddonMediaListPublicationRetryClass::TransientRecovery),
+                    recovery_action: Some(AddonMediaListRecoveryAction::Retry),
+                    error_category: Some(AddonMediaListPublicationErrorCategory::SharingViolation),
+                    os_error_code: Some(32),
+                    published_item_count: Some(165),
+                    playlist_item_count: Some(165),
+                    artwork_count: Some(3),
+                    outcome: None,
+                    occurred_at: "2026-09-04T12:00:00Z".to_owned(),
+                }],
+            }],
+        };
+
+        let diagnostics = redacted_publication_diagnostics_json(&history).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&diagnostics).unwrap();
+        assert_eq!(value["list_id"], 42);
+        assert_eq!(value["jobs"][0]["operation_id"], 9);
+        assert_eq!(
+            value["jobs"][0]["events"][0]["error_category"],
+            "sharing_violation"
+        );
+        assert_eq!(value["jobs"][0]["events"][0]["os_error_code"], 32);
+        for forbidden in [
+            "source_url",
+            "path",
+            "title",
+            "cookie",
+            "header",
+            "stderr",
+            "diagnostic",
+            "message",
+        ] {
+            assert!(!diagnostics.contains(forbidden), "leaked key {forbidden}");
+        }
+    }
 }

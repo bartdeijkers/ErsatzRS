@@ -52,6 +52,12 @@ release section when tagging a release.
 
 ### Fixed
 
+- Retain a bounded, ordered, redacted activity history for each add-on-list
+  publication and recovery job. The localized editor, Health, and read-only
+  runtime audit now distinguish original failures from later recovery failures;
+  hydrated Copy and no-JavaScript Download actions expose only typed phases,
+  counts, outcomes, and sanitized operating-system error details.
+
 - Show durable add-on-list publication phase, attempts, last progress, and
   redacted failure codes in administration and health, with generation-fenced
   Retry recovery and Restore previous revision actions for hydrated and

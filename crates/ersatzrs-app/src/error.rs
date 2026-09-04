@@ -47,6 +47,9 @@ impl From<RepositoryError> for ApplicationError {
             RepositoryError::Unavailable { operation, message } => {
                 Self::Unavailable { operation, message }
             }
+            RepositoryError::UnavailableWithPublicationCause {
+                operation, message, ..
+            } => Self::Unavailable { operation, message },
         }
     }
 }

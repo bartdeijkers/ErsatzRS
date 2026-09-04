@@ -2,6 +2,7 @@ use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckError, HealthCheckResult,
     HealthCheckStatus, Pool, Result, Row,
 };
+use ersatzrs_domain::AddonMediaListPublicationEventKind;
 
 const STUCK_IMPORT_MINUTES: i64 = 15;
 
@@ -619,11 +620,31 @@ fn publication_failures(rows: &[crate::db::DbRow]) -> Vec<String> {
 async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCoordinatorHealth> {
     let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
     let rows = sqlx::query(
-        r#"SELECT "job"."Generation", "job"."Phase",
-                  "job"."OriginalFailureCode", "job"."RecoveryDiagnostic",
+        r#"SELECT "job"."OperationId" AS "CorrelationId",
+                  "job"."Generation", "job"."Phase", "job"."OriginalFailureCode",
                   "job"."UpdatedAt" AS "LastProgressAt",
                   "operation"."State", "operation"."AttemptCount",
                   "operation"."DiagnosticCode",
+                  COALESCE("history"."EventCount", 0) AS "EventCount",
+                  COALESCE("history"."OriginalFailureCount", 0) AS "OriginalFailureCount",
+                  COALESCE("history"."RecoveryFailureCount", 0) AS "RecoveryFailureCount",
+                  COALESCE("history"."HistoryTruncated", 0) AS "HistoryTruncated",
+                  (
+                      SELECT "recent_error"."ErrorCategory"
+                      FROM "AddonMediaListPublicationEvent" AS "recent_error"
+                      WHERE "recent_error"."PublicationJobId" = "job"."Id"
+                        AND "recent_error"."ErrorCategory" IS NOT NULL
+                      ORDER BY "recent_error"."Sequence" DESC
+                      LIMIT 1
+                  ) AS "ErrorCategory",
+                  (
+                      SELECT "recent_error"."OsErrorCode"
+                      FROM "AddonMediaListPublicationEvent" AS "recent_error"
+                      WHERE "recent_error"."PublicationJobId" = "job"."Id"
+                        AND "recent_error"."ErrorCategory" IS NOT NULL
+                      ORDER BY "recent_error"."Sequence" DESC
+                      LIMIT 1
+                  ) AS "OsErrorCode",
                   EXISTS (
                       SELECT 1 FROM "ManagedLibraryLease" AS "lease"
                       WHERE "lease"."OperationId" = "operation"."Id"
@@ -633,6 +654,17 @@ async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCo
            FROM "AddonMediaListPublicationJob" AS "job"
            JOIN "ManagedLibraryOperation" AS "operation"
              ON "operation"."Id" = "job"."OperationId"
+           LEFT JOIN (
+               SELECT "event"."PublicationJobId", COUNT(*) AS "EventCount",
+                      SUM(CASE WHEN "event"."Kind" = ? THEN 1 ELSE 0 END)
+                          AS "OriginalFailureCount",
+                      SUM(CASE WHEN "event"."Kind" = ? THEN 1 ELSE 0 END)
+                          AS "RecoveryFailureCount",
+                      MAX(CASE WHEN "event"."Kind" = ? THEN 1 ELSE 0 END)
+                          AS "HistoryTruncated"
+               FROM "AddonMediaListPublicationEvent" AS "event"
+               GROUP BY "event"."PublicationJobId"
+           ) AS "history" ON "history"."PublicationJobId" = "job"."Id"
            WHERE "job"."Generation" = (
                      SELECT MAX("latest"."Generation")
                      FROM "AddonMediaListPublicationJob" AS "latest"
@@ -642,6 +674,15 @@ async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCo
            ORDER BY "job"."UpdatedAt" DESC, "job"."Id" DESC"#,
     )
     .bind(&now)
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListPublicationEventKind::OriginalFailure,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListPublicationEventKind::RecoveryFailure,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        AddonMediaListPublicationEventKind::HistoryTruncated,
+    ))
     .fetch_all(pool)
     .await
     .map_err(sqlx_error)?;
@@ -662,6 +703,7 @@ async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCo
         let last_progress: String = row.try_get("LastProgressAt").map_err(sqlx_error)?;
         let attempts: i64 = row.try_get("AttemptCount").map_err(sqlx_error)?;
         let generation: i64 = row.try_get("Generation").map_err(sqlx_error)?;
+        let correlation_id: i64 = row.try_get("CorrelationId").map_err(sqlx_error)?;
         let original: Option<String> = row.try_get("OriginalFailureCode").map_err(sqlx_error)?;
         let operation: Option<String> = row.try_get("DiagnosticCode").map_err(sqlx_error)?;
         let reason = original.or(operation).map_or_else(
@@ -673,29 +715,50 @@ async fn publication_coordinator_health(pool: &Pool<Db>) -> Result<PublicationCo
             },
             |value| redacted_publication_code(&value),
         );
-        let recovery_diagnostic: Option<String> =
-            row.try_get("RecoveryDiagnostic").map_err(sqlx_error)?;
-        let recovery_marker = if recovery_diagnostic
-            .as_deref()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
-            ", recovery diagnostic recorded"
-        } else {
-            ""
-        };
+        let history = publication_history_health_summary(&row, correlation_id)?;
         if matches!(visible_state, "failed" | "expired" | "waiting") {
             status.failures.push(format!(
-                "publication generation {generation} {visible_state} in {} after {attempts} attempt(s); last progress {last_progress}; original reason {reason}{recovery_marker}",
+                "publication generation {generation} {visible_state} in {} after {attempts} attempt(s); last progress {last_progress}; original reason {reason}{history}",
                 publication_phase_name(phase)
             ));
         } else {
             status.active.push(format!(
-                "publication generation {generation} {visible_state} in {} after {attempts} attempt(s); last progress {last_progress}",
+                "publication generation {generation} {visible_state} in {} after {attempts} attempt(s); last progress {last_progress}{history}",
                 publication_phase_name(phase)
             ));
         }
     }
     Ok(status)
+}
+
+fn publication_history_health_summary(
+    row: &crate::db::DbRow,
+    correlation_id: i64,
+) -> Result<String> {
+    let event_count: i64 = row.try_get("EventCount").map_err(sqlx_error)?;
+    if event_count == 0 {
+        return Ok(String::new());
+    }
+    let original_failures: i64 = row.try_get("OriginalFailureCount").map_err(sqlx_error)?;
+    let recovery_failures: i64 = row.try_get("RecoveryFailureCount").map_err(sqlx_error)?;
+    let truncated: i64 = row.try_get("HistoryTruncated").map_err(sqlx_error)?;
+    let error_category: Option<i64> = row.try_get("ErrorCategory").map_err(sqlx_error)?;
+    let os_error_code: Option<i64> = row.try_get("OsErrorCode").map_err(sqlx_error)?;
+    let truncation = if truncated == 0 { "" } else { ", truncated" };
+    let last_error = error_category.map_or_else(String::new, |category| {
+        os_error_code.map_or_else(
+            || format!("; last error {}", publication_error_category_name(category)),
+            |code| {
+                format!(
+                    "; last error {} (OS code {code})",
+                    publication_error_category_name(category)
+                )
+            },
+        )
+    });
+    Ok(format!(
+        "; correlation {correlation_id} has {event_count} event(s), {original_failures} original failure(s), {recovery_failures} recovery failure(s){truncation}{last_error}"
+    ))
 }
 
 fn publication_phase_name(phase: i64) -> &'static str {
@@ -725,6 +788,18 @@ fn redacted_publication_code(value: &str) -> String {
         normalized
     } else {
         "publication_failed".to_owned()
+    }
+}
+
+const fn publication_error_category_name(category: i64) -> &'static str {
+    match category {
+        0 => "filesystem I/O",
+        1 => "permission denied",
+        2 => "sharing violation",
+        3 => "unsafe filesystem state",
+        4 => "invalid publication marker",
+        5 => "publication integrity",
+        _ => "unknown",
     }
 }
 
@@ -866,8 +941,31 @@ mod tests {
                 "Generation" INTEGER NOT NULL DEFAULT 1,
                 "Phase" INTEGER NOT NULL,
                 "OriginalFailureCode" TEXT NULL,
+                "OriginalFailureDiagnostic" TEXT NULL,
                 "RecoveryDiagnostic" TEXT NULL,
+                "Outcome" INTEGER NULL,
                 "UpdatedAt" TEXT NOT NULL DEFAULT '2026-09-03T00:00:00Z'
+            );
+            CREATE TABLE "AddonMediaListPublicationEvent" (
+                "Id" INTEGER PRIMARY KEY,
+                "PublicationJobId" INTEGER NOT NULL,
+                "Sequence" INTEGER NOT NULL,
+                "DedupeKey" TEXT NOT NULL,
+                "Kind" INTEGER NOT NULL,
+                "Phase" INTEGER NULL,
+                "Attempt" INTEGER NULL,
+                "EnqueueTrigger" INTEGER NULL,
+                "RelatedOperationId" INTEGER NULL,
+                "FilesystemTransition" INTEGER NULL,
+                "RetryClass" INTEGER NULL,
+                "RecoveryAction" INTEGER NULL,
+                "ErrorCategory" INTEGER NULL,
+                "OsErrorCode" INTEGER NULL,
+                "PublishedItemCount" INTEGER NULL,
+                "PlaylistItemCount" INTEGER NULL,
+                "ArtworkCount" INTEGER NULL,
+                "Outcome" INTEGER NULL,
+                "OccurredAt" TEXT NOT NULL
             );
             CREATE TABLE "AddonProviderHostCooldown" (
                 "ProviderHost" TEXT PRIMARY KEY,
@@ -977,6 +1075,103 @@ mod tests {
         assert!(result.message.contains("generation 4 expired"));
         assert!(result.message.contains("restoring files"));
         assert!(result.message.contains("sharing_violation"));
+    }
+
+    #[tokio::test]
+    async fn reports_redacted_publication_history_aggregates() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                    "Id", "AddonId", "Name", "ReviewState", "PublicationStartedAt"
+               ) VALUES (1, 'org.example.list', 'Fixture', 3, '2026-09-03T00:00:00Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "ManagedLibraryOperation" (
+                    "Id", "State", "AttemptCount", "DiagnosticCode"
+               ) VALUES (10, 4, 2, 'recovery_failed')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("failed operation");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListPublicationJob" (
+                    "Id", "OperationId", "Generation", "Phase", "OriginalFailureCode",
+                    "OriginalFailureDiagnostic", "RecoveryDiagnostic"
+               ) VALUES (
+                    20, 10, 4, 4, 'sharing_violation',
+                    'https://provider.invalid/list?token=secret',
+                    '/private/media/title.mkv cookie=session-secret'
+               )"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("publication job");
+        for (sequence, dedupe_key, kind, error_category, os_error_code) in [
+            (
+                1,
+                "original-failure",
+                crate::repositories::common::encode_enum(
+                    AddonMediaListPublicationEventKind::OriginalFailure,
+                ),
+                Some(2_i64),
+                Some(32_i64),
+            ),
+            (
+                2,
+                "recovery-failure",
+                crate::repositories::common::encode_enum(
+                    AddonMediaListPublicationEventKind::RecoveryFailure,
+                ),
+                Some(1_i64),
+                Some(5_i64),
+            ),
+            (
+                256,
+                "history-truncated",
+                crate::repositories::common::encode_enum(
+                    AddonMediaListPublicationEventKind::HistoryTruncated,
+                ),
+                None,
+                None,
+            ),
+        ] {
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListPublicationEvent" (
+                        "PublicationJobId", "Sequence", "DedupeKey", "Kind", "Phase",
+                        "ErrorCategory", "OsErrorCode", "OccurredAt"
+                   ) VALUES (20, ?, ?, ?, 4, ?, ?, '2026-09-03T00:00:00Z')"#,
+            )
+            .bind(sequence)
+            .bind(dedupe_key)
+            .bind(kind)
+            .bind(error_category)
+            .bind(os_error_code)
+            .execute(&pool)
+            .await
+            .expect("publication event");
+        }
+
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result.message.contains("correlation 10 has 3 event(s)"));
+        assert!(result.message.contains("1 original failure(s)"));
+        assert!(result.message.contains("1 recovery failure(s), truncated"));
+        assert!(result
+            .message
+            .contains("last error permission denied (OS code 5)"));
+        for forbidden in [
+            "https://provider.invalid/list?token=secret",
+            "/private/media/title.mkv",
+            "cookie=session-secret",
+        ] {
+            assert!(!result.message.contains(forbidden));
+        }
     }
 
     #[tokio::test]

@@ -192,6 +192,65 @@ pub enum AddonMediaListRecoveryAction {
     RestorePreviousRevision,
 }
 
+/// Typed causal boundary retained for one add-on-list publication job.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationEventKind {
+    ExistingJobAdopted,
+    Enqueued,
+    LeaseWaitStarted,
+    LeaseAcquired,
+    LeaseReclaimed,
+    PhaseAdvanced,
+    ChildScanStarted,
+    ChildScanCompleted,
+    ChildScanFailed,
+    OriginalFailure,
+    RecoveryFailure,
+    RetryScheduled,
+    RecoveryRequested,
+    Completed,
+    HistoryTruncated,
+}
+
+/// Source that admitted a publication into the durable queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationEnqueueTrigger {
+    Operator,
+}
+
+/// Filesystem boundary represented by a publication phase event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationFilesystemTransition {
+    PreviousBackedUp,
+    CandidateCommitted,
+    PreviousRestored,
+    ProjectionRestored,
+    RevisionVerified,
+    CleanupCompleted,
+}
+
+/// Bounded retry policy classification exposed without an error message.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationRetryClass {
+    TransientRecovery,
+}
+
+/// Sanitized publication failure category safe for operator diagnostics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPublicationErrorCategory {
+    FilesystemIo,
+    PermissionDenied,
+    SharingViolation,
+    UnsafeFilesystemState,
+    InvalidPublicationMarker,
+    PublicationIntegrity,
+}
+
 /// Host policy for optional item-detail enrichment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]

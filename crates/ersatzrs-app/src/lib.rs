@@ -392,6 +392,15 @@ impl ApplicationServices {
         .await
     }
 
+    /// Load retained redacted causal history for one add-on list.
+    pub async fn addon_media_list_publication_history(
+        &self,
+        id: i64,
+    ) -> Result<ersatzrs_core::repositories::AddonMediaListPublicationHistory> {
+        queries::addon_media_list_publication_history(id, self.ports.managed_library_operations())
+            .await
+    }
+
     pub async fn get_addon_media_list_item(
         &self,
         list_id: i64,
@@ -414,6 +423,15 @@ impl ApplicationServices {
     ) -> Result<Option<ersatzrs_core::repositories::AddonMediaListArtworkUpload>> {
         queries::get_addon_media_list_artwork_upload(upload_id, self.ports.addon_media_lists())
             .await
+    }
+
+    /// Apply bounded retention to completed publication event streams.
+    pub async fn prune_addon_media_list_publication_history(&self) -> Result<u64> {
+        Ok(self
+            .ports
+            .managed_library_operations()
+            .prune_publication_history(chrono::Utc::now())
+            .await?)
     }
 
     /// Search available local video versions for a replacement.
@@ -3101,13 +3119,15 @@ async fn execute_managed_library_operation(
                     .await;
                 if let Err(error) = staged {
                     let message = error.to_string();
+                    let cause = error.publication_failure_cause();
                     let _ = application
                         .ports
                         .managed_library_operations()
-                        .fail_operation(
+                        .fail_publication(
                             claim,
                             "publication_staging_failed",
                             "publication staging failed",
+                            cause,
                         )
                         .await;
                     return Outcome::Failed { message };
@@ -3153,6 +3173,7 @@ async fn execute_managed_library_operation(
                                     job.phase,
                                     "publication_scan_failed",
                                     "publication child scan failed",
+                                    None,
                                 )
                                 .await
                                 .unwrap_or(false);
@@ -3204,6 +3225,7 @@ async fn execute_managed_library_operation(
                                 job.phase,
                                 "publication_commit_failed",
                                 "publication commit failed",
+                                error.publication_failure_cause(),
                             )
                             .await
                             .unwrap_or(false);
@@ -3281,8 +3303,14 @@ async fn execute_managed_library_operation(
                     )
                     .await
                 {
-                    return schedule_publication_retry(application, claim, &error.to_string())
-                        .await;
+                    let diagnostic = error.to_string();
+                    return schedule_publication_retry(
+                        application,
+                        claim,
+                        &diagnostic,
+                        error.publication_failure_cause(),
+                    )
+                    .await;
                 }
                 if !transition_publication(
                     application,
@@ -3310,8 +3338,14 @@ async fn execute_managed_library_operation(
                 {
                     Ok(continuation) => continuation,
                     Err(error) => {
-                        return schedule_publication_retry(application, claim, &error.to_string())
-                            .await;
+                        let diagnostic = error.to_string();
+                        return schedule_publication_retry(
+                            application,
+                            claim,
+                            &diagnostic,
+                            error.publication_failure_cause(),
+                        )
+                        .await;
                     }
                 };
                 if continuation == AddonMediaListPublicationContinuation::CompletedLegacy {
@@ -3353,8 +3387,14 @@ async fn execute_managed_library_operation(
                 {
                     Ok(continuation) => continuation,
                     Err(error) => {
-                        return schedule_publication_retry(application, claim, &error.to_string())
-                            .await;
+                        let diagnostic = error.to_string();
+                        return schedule_publication_retry(
+                            application,
+                            claim,
+                            &diagnostic,
+                            error.publication_failure_cause(),
+                        )
+                        .await;
                     }
                 };
                 if continuation == AddonMediaListPublicationContinuation::CompletedLegacy {
@@ -3393,8 +3433,14 @@ async fn execute_managed_library_operation(
                 {
                     Ok(child) => child,
                     Err(error) => {
-                        return schedule_publication_retry(application, claim, &error.to_string())
-                            .await;
+                        let diagnostic = error.to_string();
+                        return schedule_publication_retry(
+                            application,
+                            claim,
+                            &diagnostic,
+                            error.publication_failure_cause(),
+                        )
+                        .await;
                     }
                 };
                 if child.state != ManagedLibraryOperationState::Completed {
@@ -3410,7 +3456,8 @@ async fn execute_managed_library_operation(
                                 error = %message,
                                 "add-on publication verification scan failed; recovery will retry"
                             );
-                            return schedule_publication_retry(application, claim, &message).await;
+                            return schedule_publication_retry(application, claim, &message, None)
+                                .await;
                         }
                         Outcome::Deferred | Outcome::LeaseLost => return Outcome::LeaseLost,
                     }
@@ -3434,8 +3481,14 @@ async fn execute_managed_library_operation(
                     )
                     .await
                 {
-                    return schedule_publication_retry(application, claim, &error.to_string())
-                        .await;
+                    let diagnostic = error.to_string();
+                    return schedule_publication_retry(
+                        application,
+                        claim,
+                        &diagnostic,
+                        error.publication_failure_cause(),
+                    )
+                    .await;
                 }
                 if !transition_publication(
                     application,
@@ -3467,8 +3520,14 @@ async fn execute_managed_library_operation(
                     )
                     .await
                 {
-                    return schedule_publication_retry(application, claim, &error.to_string())
-                        .await;
+                    let diagnostic = error.to_string();
+                    return schedule_publication_retry(
+                        application,
+                        claim,
+                        &diagnostic,
+                        error.publication_failure_cause(),
+                    )
+                    .await;
                 }
                 return match application
                     .ports
@@ -3548,6 +3607,7 @@ async fn schedule_publication_retry(
     application: &ApplicationServices,
     claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
     diagnostic: &str,
+    cause: Option<ersatzrs_core::repositories::AddonMediaListPublicationFailureCause>,
 ) -> commands::ExecuteManagedLibraryOperationOutcome {
     use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
 
@@ -3569,6 +3629,7 @@ async fn schedule_publication_retry(
         .schedule_publication_recovery_retry(
             claim,
             "publication recovery will retry after a transient failure",
+            cause,
             next,
         )
         .await

@@ -6,9 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
     AddonMediaListImportState, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, AddonMediaListPresentationKind, AddonMediaListPublicationPhase,
-    AddonMediaListPublicationState, AddonMediaListRecoveryAction, AddonMediaListReviewState,
-    RemoteStreamLiveness,
+    AddonMediaListItemRole, AddonMediaListPresentationKind,
+    AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
+    AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
+    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
+    AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
+    AddonMediaListRecoveryAction, AddonMediaListReviewState, RemoteStreamLiveness,
 };
 use leptos::html;
 use leptos::prelude::*;
@@ -22,10 +25,11 @@ use crate::admin::server_fns::addon_media_lists::{
     add_addon_media_list, apply_addon_media_list_content_kind,
     apply_addon_media_list_item_review_edits, change_addon_media_list_addon,
     control_addon_media_list_import, delete_addon_media_list, get_addon_media_list_form,
-    get_addon_media_list_item, get_addon_media_list_publication_readiness,
-    get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_providers,
-    list_addon_media_lists, match_addon_media_list, publish_addon_media_list,
-    recover_addon_media_list_publication, request_addon_media_list_item_details,
+    get_addon_media_list_item, get_addon_media_list_publication_history,
+    get_addon_media_list_publication_readiness, get_addon_media_lists_page_size,
+    list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
+    match_addon_media_list, publish_addon_media_list, recover_addon_media_list_publication,
+    redacted_publication_diagnostics_json, request_addon_media_list_item_details,
     request_addon_media_list_presentation, resolve_addon_media_list_provider,
     save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
     search_addon_media_list_replacements, set_addon_media_list_item_replacement,
@@ -35,9 +39,10 @@ use crate::admin::server_fns::addon_media_lists::{
     AddonMediaListItemReviewEdit, AddonMediaListItemRow, AddonMediaListMetadataConflict,
     AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
     AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
-    AddonMediaListPublicationBlockerKind, AddonMediaListPublicationReadiness,
-    AddonMediaListPublicationStatus, AddonMediaListPublishResult, AddonMediaListReplacementRow,
-    AddonMediaListRow,
+    AddonMediaListPublicationBlockerKind, AddonMediaListPublicationEventRow,
+    AddonMediaListPublicationHistoryJobRow, AddonMediaListPublicationHistoryRow,
+    AddonMediaListPublicationReadiness, AddonMediaListPublicationStatus,
+    AddonMediaListPublishResult, AddonMediaListReplacementRow, AddonMediaListRow,
 };
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
@@ -2220,7 +2225,14 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
     let status = query.with_untracked(|params| params.get("status").unwrap_or_default());
     admin_result_view(
         load_addon_media_list_editor_initial(id),
-        move |(initial_form, initial_items, initial_readiness, initial_show_nfo, providers)| {
+        move |(
+            initial_form,
+            initial_items,
+            initial_readiness,
+            initial_history,
+            initial_show_nfo,
+            providers,
+        )| {
             view! {
                 <AddonMediaListEditorIsland
                     id=id
@@ -2229,6 +2241,7 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
                     initial_form=initial_form
                     initial_items=initial_items
                     initial_readiness=initial_readiness
+                    initial_history=initial_history
                     initial_show_nfo=initial_show_nfo
                     providers=providers
                 />
@@ -2242,6 +2255,7 @@ type AddonMediaListEditorInitial = (
     Option<AddonMediaListForm>,
     Vec<AddonMediaListItemRow>,
     AddonMediaListPublicationReadiness,
+    AddonMediaListPublicationHistoryRow,
     AddonMediaListNfoForm,
     Vec<AddonMediaListProviderRow>,
 );
@@ -2259,13 +2273,16 @@ fn load_addon_media_list_editor_initial(id: i64) -> Result<AddonMediaListEditorI
             let readiness = get_addon_media_list_publication_readiness(id)
                 .await
                 .map_err(|error| error.to_string())?;
+            let history = get_addon_media_list_publication_history(id)
+                .await
+                .map_err(|error| error.to_string())?;
             let show_nfo = get_addon_media_list_show_nfo(id)
                 .await
                 .map_err(|error| error.to_string())?;
             let providers = list_addon_media_list_providers()
                 .await
                 .map_err(|error| error.to_string())?;
-            Ok((form, items, readiness, show_nfo, providers))
+            Ok((form, items, readiness, history, show_nfo, providers))
         })
     })
 }
@@ -2815,6 +2832,353 @@ const fn publication_phase_text_key(phase: AddonMediaListPublicationPhase) -> Te
     }
 }
 
+fn publication_readiness_marker(
+    readiness: &AddonMediaListPublicationReadiness,
+) -> Option<(i64, AddonMediaListPublicationState, String)> {
+    readiness.publication.as_ref().map(|publication| {
+        (
+            publication.job_id,
+            publication.state,
+            publication.last_progress_at.clone(),
+        )
+    })
+}
+
+const fn publication_state_text_key(state: AddonMediaListPublicationState) -> TextKey {
+    match state {
+        AddonMediaListPublicationState::Queued => TextKey::PublicationQueued,
+        AddonMediaListPublicationState::Waiting => TextKey::PhaseAwaitingLease,
+        AddonMediaListPublicationState::Publishing => TextKey::Publishing,
+        AddonMediaListPublicationState::Restoring => TextKey::RestoringPublication,
+        AddonMediaListPublicationState::Expired => TextKey::PublicationExpired,
+        AddonMediaListPublicationState::Failed => TextKey::Failed,
+        AddonMediaListPublicationState::Complete => TextKey::Completed,
+    }
+}
+
+const fn publication_outcome_text_key(outcome: AddonMediaListPublicationOutcome) -> TextKey {
+    match outcome {
+        AddonMediaListPublicationOutcome::Published => TextKey::OutcomePublished,
+        AddonMediaListPublicationOutcome::RestoredAfterFailure => {
+            TextKey::OutcomeRestoredAfterFailure
+        }
+    }
+}
+
+const fn publication_event_text_key(kind: AddonMediaListPublicationEventKind) -> TextKey {
+    match kind {
+        AddonMediaListPublicationEventKind::ExistingJobAdopted => TextKey::EventExistingJobAdopted,
+        AddonMediaListPublicationEventKind::Enqueued => TextKey::EventEnqueued,
+        AddonMediaListPublicationEventKind::LeaseWaitStarted => TextKey::EventLeaseWaitStarted,
+        AddonMediaListPublicationEventKind::LeaseAcquired => TextKey::EventLeaseAcquired,
+        AddonMediaListPublicationEventKind::LeaseReclaimed => TextKey::EventLeaseReclaimed,
+        AddonMediaListPublicationEventKind::PhaseAdvanced => TextKey::EventPhaseAdvanced,
+        AddonMediaListPublicationEventKind::ChildScanStarted => TextKey::EventChildScanStarted,
+        AddonMediaListPublicationEventKind::ChildScanCompleted => TextKey::EventChildScanCompleted,
+        AddonMediaListPublicationEventKind::ChildScanFailed => TextKey::EventChildScanFailed,
+        AddonMediaListPublicationEventKind::OriginalFailure => TextKey::EventOriginalFailure,
+        AddonMediaListPublicationEventKind::RecoveryFailure => TextKey::EventRecoveryFailure,
+        AddonMediaListPublicationEventKind::RetryScheduled => TextKey::EventRetryScheduled,
+        AddonMediaListPublicationEventKind::RecoveryRequested => TextKey::EventRecoveryRequested,
+        AddonMediaListPublicationEventKind::Completed => TextKey::EventCompleted,
+        AddonMediaListPublicationEventKind::HistoryTruncated => TextKey::EventHistoryTruncated,
+    }
+}
+
+const fn publication_trigger_text_key(trigger: AddonMediaListPublicationEnqueueTrigger) -> TextKey {
+    match trigger {
+        AddonMediaListPublicationEnqueueTrigger::Operator => TextKey::TriggerOperator,
+    }
+}
+
+const fn publication_filesystem_transition_text_key(
+    transition: AddonMediaListPublicationFilesystemTransition,
+) -> TextKey {
+    match transition {
+        AddonMediaListPublicationFilesystemTransition::PreviousBackedUp => {
+            TextKey::FilesystemPreviousBackedUp
+        }
+        AddonMediaListPublicationFilesystemTransition::CandidateCommitted => {
+            TextKey::FilesystemCandidateCommitted
+        }
+        AddonMediaListPublicationFilesystemTransition::PreviousRestored => {
+            TextKey::FilesystemPreviousRestored
+        }
+        AddonMediaListPublicationFilesystemTransition::ProjectionRestored => {
+            TextKey::FilesystemProjectionRestored
+        }
+        AddonMediaListPublicationFilesystemTransition::RevisionVerified => {
+            TextKey::FilesystemRevisionVerified
+        }
+        AddonMediaListPublicationFilesystemTransition::CleanupCompleted => {
+            TextKey::FilesystemCleanupCompleted
+        }
+    }
+}
+
+const fn publication_retry_class_text_key(
+    retry_class: AddonMediaListPublicationRetryClass,
+) -> TextKey {
+    match retry_class {
+        AddonMediaListPublicationRetryClass::TransientRecovery => TextKey::RetryTransientRecovery,
+    }
+}
+
+const fn publication_recovery_action_text_key(action: AddonMediaListRecoveryAction) -> TextKey {
+    match action {
+        AddonMediaListRecoveryAction::Retry => TextKey::RetryRecovery,
+        AddonMediaListRecoveryAction::RestorePreviousRevision => TextKey::RestorePreviousRevision,
+    }
+}
+
+const fn publication_error_category_text_key(
+    category: AddonMediaListPublicationErrorCategory,
+) -> TextKey {
+    match category {
+        AddonMediaListPublicationErrorCategory::FilesystemIo => TextKey::ErrorFilesystemIo,
+        AddonMediaListPublicationErrorCategory::PermissionDenied => TextKey::ErrorPermissionDenied,
+        AddonMediaListPublicationErrorCategory::SharingViolation => TextKey::ErrorSharingViolation,
+        AddonMediaListPublicationErrorCategory::UnsafeFilesystemState => {
+            TextKey::ErrorUnsafeFilesystemState
+        }
+        AddonMediaListPublicationErrorCategory::InvalidPublicationMarker => {
+            TextKey::ErrorInvalidPublicationMarker
+        }
+        AddonMediaListPublicationErrorCategory::PublicationIntegrity => {
+            TextKey::ErrorPublicationIntegrity
+        }
+    }
+}
+
+#[allow(unused_variables)]
+async fn copy_redacted_publication_diagnostics(
+    history: AddonMediaListPublicationHistoryRow,
+) -> Result<(), String> {
+    let diagnostics =
+        redacted_publication_diagnostics_json(&history).map_err(|error| error.to_string())?;
+    #[cfg(target_arch = "wasm32")]
+    {
+        let window = web_sys::window().ok_or_else(|| "browser window is unavailable".to_owned())?;
+        wasm_bindgen_futures::JsFuture::from(
+            window.navigator().clipboard().write_text(&diagnostics),
+        )
+        .await
+        .map_err(|_| "clipboard write was rejected".to_owned())?;
+    }
+    Ok(())
+}
+
+#[component]
+fn PublicationActivity(
+    list_id: i64,
+    history: RwSignal<AddonMediaListPublicationHistoryRow>,
+) -> impl IntoView {
+    let toast = use_toast();
+    let copy_action = Action::new(|history: &AddonMediaListPublicationHistoryRow| {
+        copy_redacted_publication_diagnostics(history.clone())
+    });
+    Effect::new(move |_| {
+        if let Some(result) = copy_action.value().get() {
+            match result {
+                Ok(()) => toast.push(
+                    tr(TextKey::RedactedDiagnosticsCopied).to_owned(),
+                    ToastSeverity::Success,
+                ),
+                Err(_) => toast.push(tr(TextKey::CopyFailed).to_owned(), ToastSeverity::Error),
+            }
+        }
+    });
+    view! {
+        <section
+            id="addon-list-publication-activity"
+            class=style::publication_activity
+            aria-labelledby="addon-list-publication-activity-heading"
+        >
+            <span class=style::sr_only role="status" aria-live="polite" aria-atomic="true">
+                {move || history.with(|history| {
+                    let event_count = history.jobs.iter().map(|job| job.events.len()).sum::<usize>();
+                    format!(
+                        "{}: {} {}, {} {}",
+                        tr(TextKey::PublicationActivity),
+                        history.jobs.len(),
+                        tr(TextKey::PublicationJobs),
+                        event_count,
+                        tr(TextKey::PublicationEvents),
+                    )
+                })}
+            </span>
+            <header class=style::publication_activity_header>
+                <h2 id="addon-list-publication-activity-heading">{tr(TextKey::PublicationActivity)}</h2>
+                <div class=style::publication_activity_actions>
+                    <button
+                        type="button"
+                        class=style::btn_cancel
+                        data-publication-diagnostics-copy
+                        disabled=move || copy_action.pending().get()
+                        on:click=move |_| {
+                            if !copy_action.pending().get_untracked() {
+                                copy_action.dispatch(history.get_untracked());
+                            }
+                        }
+                    >
+                        <span style=icon_style(IconName::Copy, "1rem") aria-hidden="true"></span>
+                        <span>{tr(TextKey::CopyRedactedDiagnostics)}</span>
+                    </button>
+                    <noscript>
+                        <style>"[data-publication-diagnostics-copy] { display: none !important; }"</style>
+                        <a
+                            class=style::btn_cancel
+                            href=format!("/api/addon-lists/{list_id}/publication-diagnostics")
+                        >
+                            <span style=icon_style(IconName::Download, "1rem") aria-hidden="true"></span>
+                            <span>{tr(TextKey::DownloadRedactedDiagnostics)}</span>
+                        </a>
+                    </noscript>
+                </div>
+            </header>
+            <p
+                class=style::empty
+                style:display=move || if history.with(|history| history.jobs.is_empty()) { "block" } else { "none" }
+            >{tr(TextKey::NoPublicationActivity)}</p>
+            <div
+                class=style::publication_activity_jobs
+                style:display=move || if history.with(|history| history.jobs.is_empty()) { "none" } else { "grid" }
+            >
+                <For
+                    each=move || history.with(|history| {
+                        history.jobs.iter().cloned().enumerate().collect::<Vec<_>>()
+                    })
+                    key=|(_, job)| job.job_id
+                    children=move |(index, job)| view! {
+                        <PublicationActivityJob job=job newest=index == 0 />
+                    }
+                />
+            </div>
+        </section>
+    }
+}
+
+#[component]
+fn PublicationActivityJob(
+    job: AddonMediaListPublicationHistoryJobRow,
+    newest: bool,
+) -> impl IntoView {
+    let state = publication_state_text_key(job.state);
+    let outcome = job.outcome.map(publication_outcome_text_key);
+    let summary_status = outcome.unwrap_or(state);
+    let has_outcome = outcome.is_some();
+    let job_events = job.events;
+    view! {
+        <details class=style::publication_activity_job open=newest>
+            <summary class=style::publication_activity_summary>
+                <strong>{format!("{} {}", tr(TextKey::PublicationGeneration), job.generation)}</strong>
+                <span>{format!("{} {}", tr(TextKey::CorrelationId), job.operation_id)}</span>
+                <span>{tr(summary_status)}</span>
+            </summary>
+            <dl class=style::publication_activity_job_meta>
+                <div>
+                    <dt>{tr(TextKey::SavedRevision)}</dt>
+                    <dd>{job.saved_revision}</dd>
+                </div>
+                <div>
+                    <dt>{tr(TextKey::TargetPublishedRevision)}</dt>
+                    <dd>{job.target_published_revision}</dd>
+                </div>
+                <div>
+                    <dt>{tr(TextKey::PublicationPhase)}</dt>
+                    <dd>{tr(publication_phase_text_key(job.phase))}</dd>
+                </div>
+                <div>
+                    <dt>{tr(TextKey::Status)}</dt>
+                    <dd>{tr(state)}</dd>
+                </div>
+                <div style:display=if has_outcome { "block" } else { "none" }>
+                    <dt>{tr(TextKey::PublicationOutcome)}</dt>
+                    <dd>{outcome.map(tr).unwrap_or_default()}</dd>
+                </div>
+            </dl>
+            <ol class=style::publication_activity_events>
+                <For
+                    each=move || job_events.clone()
+                    key=|event| event.sequence
+                    children=move |event| view! { <PublicationActivityEvent event=event /> }
+                />
+            </ol>
+        </details>
+    }
+}
+
+#[component]
+fn PublicationActivityEvent(event: AddonMediaListPublicationEventRow) -> impl IntoView {
+    let occurred_at = event.occurred_at.clone();
+    let display_time =
+        format_progress_timestamp(&occurred_at).unwrap_or_else(|| occurred_at.clone());
+    let phase = event
+        .phase
+        .map(|phase| tr(publication_phase_text_key(phase)))
+        .unwrap_or_default();
+    let trigger = event
+        .enqueue_trigger
+        .map(|trigger| tr(publication_trigger_text_key(trigger)))
+        .unwrap_or_default();
+    let filesystem_transition = event
+        .filesystem_transition
+        .map(|transition| tr(publication_filesystem_transition_text_key(transition)))
+        .unwrap_or_default();
+    let retry_class = event
+        .retry_class
+        .map(|retry_class| tr(publication_retry_class_text_key(retry_class)))
+        .unwrap_or_default();
+    let recovery_action = event
+        .recovery_action
+        .map(|action| tr(publication_recovery_action_text_key(action)))
+        .unwrap_or_default();
+    let error_category = event
+        .error_category
+        .map(|category| tr(publication_error_category_text_key(category)))
+        .unwrap_or_default();
+    let outcome = event
+        .outcome
+        .map(|outcome| tr(publication_outcome_text_key(outcome)))
+        .unwrap_or_default();
+    let has_phase = event.phase.is_some();
+    let has_trigger = event.enqueue_trigger.is_some();
+    let has_attempt = event.attempt.is_some();
+    let has_related_operation = event.related_operation_id.is_some();
+    let has_filesystem_transition = event.filesystem_transition.is_some();
+    let has_retry_class = event.retry_class.is_some();
+    let has_recovery_action = event.recovery_action.is_some();
+    let has_error_category = event.error_category.is_some();
+    let has_os_error_code = event.os_error_code.is_some();
+    let has_published_count = event.published_item_count.is_some();
+    let has_playlist_count = event.playlist_item_count.is_some();
+    let has_artwork_count = event.artwork_count.is_some();
+    let has_outcome = event.outcome.is_some();
+    view! {
+        <li class=style::publication_activity_event>
+            <time datetime=occurred_at>{display_time}</time>
+            <div>
+                <strong>{tr(publication_event_text_key(event.kind))}</strong>
+                <span class=style::publication_activity_event_details>
+                    <span style:display=if has_trigger { "inline" } else { "none" }>{trigger}</span>
+                    <span style:display=if has_phase { "inline" } else { "none" }>{format!("{}: {phase}", tr(TextKey::PublicationPhase))}</span>
+                    <span style:display=if has_attempt { "inline" } else { "none" }>{format!("{}: {}", tr(TextKey::PublicationAttempts), event.attempt.unwrap_or_default())}</span>
+                    <span style:display=if has_related_operation { "inline" } else { "none" }>{format!("{}: {}", tr(TextKey::RelatedOperation), event.related_operation_id.unwrap_or_default())}</span>
+                    <span style:display=if has_filesystem_transition { "inline" } else { "none" }>{format!("{}: {filesystem_transition}", tr(TextKey::FilesystemTransition))}</span>
+                    <span style:display=if has_retry_class { "inline" } else { "none" }>{format!("{}: {retry_class}", tr(TextKey::RetryClass))}</span>
+                    <span style:display=if has_recovery_action { "inline" } else { "none" }>{format!("{}: {recovery_action}", tr(TextKey::RecoveryAction))}</span>
+                    <span style:display=if has_error_category { "inline" } else { "none" }>{format!("{}: {error_category}", tr(TextKey::FailureReason))}</span>
+                    <span style:display=if has_os_error_code { "inline" } else { "none" }>{format!("{}: {}", tr(TextKey::OperatingSystemErrorCode), event.os_error_code.unwrap_or_default())}</span>
+                    <span style:display=if has_published_count { "inline" } else { "none" }>{format!("{}: {}", tr(TextKey::Items), event.published_item_count.unwrap_or_default())}</span>
+                    <span style:display=if has_playlist_count { "inline" } else { "none" }>{format!("{}: {}", tr(TextKey::PlaylistItems), event.playlist_item_count.unwrap_or_default())}</span>
+                    <span style:display=if has_artwork_count { "inline" } else { "none" }>{format!("{}: {}", tr(TextKey::Artwork), event.artwork_count.unwrap_or_default())}</span>
+                    <span style:display=if has_outcome { "inline" } else { "none" }>{format!("{}: {outcome}", tr(TextKey::PublicationOutcome))}</span>
+                </span>
+            </div>
+        </li>
+    }
+}
+
 fn publication_recovery_view(
     list_id: i64,
     publication: AddonMediaListPublicationStatus,
@@ -3002,6 +3366,7 @@ fn AddonMediaListEditorIsland(
     initial_form: Option<AddonMediaListForm>,
     initial_items: Vec<AddonMediaListItemRow>,
     initial_readiness: AddonMediaListPublicationReadiness,
+    initial_history: AddonMediaListPublicationHistoryRow,
     initial_show_nfo: AddonMediaListNfoForm,
     providers: Vec<AddonMediaListProviderRow>,
 ) -> impl IntoView {
@@ -3031,6 +3396,7 @@ fn AddonMediaListEditorIsland(
     let generate_playlist = RwSignal::new(form.generate_playlist);
     let detail_import_policy = RwSignal::new(form.detail_import_policy);
     let publication_readiness = RwSignal::new(initial_readiness);
+    let publication_history = RwSignal::new(initial_history);
     let import_progress = RwSignal::new(form.import_progress.clone());
     let published_revision = RwSignal::new(form.published_revision);
     let poll_epoch = RwSignal::new(0_u64);
@@ -3455,6 +3821,8 @@ fn AddonMediaListEditorIsland(
     let reload_items_action = Action::new(|id: &i64| list_addon_media_list_items(*id));
     let reload_readiness_action =
         Action::new(|id: &i64| get_addon_media_list_publication_readiness(*id));
+    let reload_history_action =
+        Action::new(|id: &i64| get_addon_media_list_publication_history(*id));
     let readiness_refresh_pending = RwSignal::new(false);
     let reload_show_nfo_action = Action::new(|id: &i64| get_addon_media_list_show_nfo(*id));
     let review_edit_action = Action::new(
@@ -3530,12 +3898,30 @@ fn AddonMediaListEditorIsland(
     Effect::new(move |_| {
         if let Some(result) = reload_readiness_action.value().get() {
             match result {
-                Ok(next) => publication_readiness.set(next),
+                Ok(next) => {
+                    let marker_changed = publication_readiness.with_untracked(|current| {
+                        publication_readiness_marker(current) != publication_readiness_marker(&next)
+                    });
+                    publication_readiness.set(next);
+                    if marker_changed {
+                        reload_history_action.dispatch(id);
+                    }
+                }
                 Err(error) => {
                     toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
                 }
             }
             readiness_refresh_pending.set(false);
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(result) = reload_history_action.value().get() {
+            match result {
+                Ok(next) => publication_history.set(next),
+                Err(error) => {
+                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
+                }
+            }
         }
     });
     Effect::new(move |_| {
@@ -3572,7 +3958,10 @@ fn AddonMediaListEditorIsland(
                     show_thumbnail.set(thumbnail);
                     saved_show_metadata.set(metadata);
                 }
-                Ok(_) => {}
+                Ok(_) => {
+                    // Preserve in-progress operator edits when a background
+                    // refresh returns newer server metadata.
+                }
                 Err(error) => {
                     toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
                 }
@@ -3701,7 +4090,15 @@ fn AddonMediaListEditorIsland(
                             import_progress.set(next_form.import_progress);
                             match get_addon_media_list_publication_readiness(id).await {
                                 Ok(next_readiness) => {
+                                    let marker_changed =
+                                        publication_readiness.with_untracked(|current| {
+                                            publication_readiness_marker(current)
+                                                != publication_readiness_marker(&next_readiness)
+                                        });
                                     publication_readiness.set(next_readiness);
+                                    if marker_changed {
+                                        reload_history_action.dispatch(id);
+                                    }
                                     readiness_error_announced = false;
                                 }
                                 Err(error) => {
@@ -3882,6 +4279,7 @@ fn AddonMediaListEditorIsland(
                 Ok(_) => {
                     toast.push(tr(TextKey::RecoveryQueued).to_string(), ToastSeverity::Info);
                     reload_readiness_action.dispatch(id);
+                    reload_history_action.dispatch(id);
                     if !poll_running.get_untracked() {
                         poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
                     }
@@ -4472,6 +4870,8 @@ fn AddonMediaListEditorIsland(
                     </section>
                 }
             })}
+
+            <PublicationActivity list_id=id history=publication_history />
 
             <form
                 id="addon_media_lists-list-editor-form"
@@ -5678,6 +6078,64 @@ mod tests {
         assert_eq!(
             publication_primary_action(false, &readiness),
             PublicationPrimaryAction::None
+        );
+    }
+
+    #[test]
+    fn activity_refresh_marker_ignores_scalar_readiness_changes() {
+        let mut readiness = AddonMediaListPublicationReadiness {
+            included_count: 10,
+            publication: Some(AddonMediaListPublicationStatus {
+                job_id: 7,
+                operation_id: 8,
+                generation: 2,
+                saved_revision: 3,
+                target_published_revision: 4,
+                phase: AddonMediaListPublicationPhase::Staging,
+                state: AddonMediaListPublicationState::Publishing,
+                attempt_count: 1,
+                last_progress_at: "2026-09-04T12:00:00Z".to_owned(),
+                diagnostic_code: None,
+                recovery_diagnostic_present: false,
+                can_retry: false,
+                can_restore: false,
+            }),
+            ..AddonMediaListPublicationReadiness::default()
+        };
+        let marker = publication_readiness_marker(&readiness);
+
+        readiness.included_count = 11;
+        readiness.recommendation_count = 5;
+        assert_eq!(publication_readiness_marker(&readiness), marker);
+
+        readiness.publication.as_mut().unwrap().last_progress_at =
+            "2026-09-04T12:00:01Z".to_owned();
+        assert_ne!(publication_readiness_marker(&readiness), marker);
+    }
+
+    #[test]
+    fn activity_keeps_original_and_recovery_failures_distinct() {
+        assert_eq!(
+            publication_event_text_key(AddonMediaListPublicationEventKind::OriginalFailure),
+            TextKey::EventOriginalFailure
+        );
+        assert_eq!(
+            publication_event_text_key(AddonMediaListPublicationEventKind::RecoveryFailure),
+            TextKey::EventRecoveryFailure
+        );
+        assert_ne!(
+            publication_event_text_key(AddonMediaListPublicationEventKind::OriginalFailure),
+            publication_event_text_key(AddonMediaListPublicationEventKind::RecoveryFailure)
+        );
+        assert_eq!(
+            publication_event_text_key(AddonMediaListPublicationEventKind::LeaseReclaimed),
+            TextKey::EventLeaseReclaimed
+        );
+        assert_eq!(
+            publication_error_category_text_key(
+                AddonMediaListPublicationErrorCategory::SharingViolation,
+            ),
+            TextKey::ErrorSharingViolation
         );
     }
 }

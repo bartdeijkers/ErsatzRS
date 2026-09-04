@@ -325,6 +325,13 @@ async fn run_addon_media_list_maintenance(
             _ = interval.tick() => {}
         }
 
+        if let Err(error) = application
+            .prune_addon_media_list_publication_history()
+            .await
+        {
+            tracing::warn!(error = %error, "failed to prune add-on publication history");
+        }
+
         let coordinator = AddonMediaListImportCoordinator::new(pool.clone());
         if let Err(error) = coordinator.refresh_due_auto_lists().await {
             tracing::warn!(error = %error, "failed to refresh due add-on media lists");

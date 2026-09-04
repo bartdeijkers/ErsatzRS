@@ -8,7 +8,13 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{params, Connection, OpenFlags};
+
+// Keep these in sync with the persisted enum mapping in
+// ersatzrs-infra::repositories::common.
+const PUBLICATION_EVENT_ORIGINAL_FAILURE: i64 = 9;
+const PUBLICATION_EVENT_RECOVERY_FAILURE: i64 = 10;
+const PUBLICATION_EVENT_HISTORY_TRUNCATED: i64 = 14;
 
 const REQUIRED_TABLES: &[&str] = &[
     "Actor",
@@ -104,6 +110,7 @@ struct AuditReport {
     timeline: TimelineAudit,
     episodes: EpisodeAudit,
     failed_build_statuses: i64,
+    publication_history: PublicationHistoryAudit,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -141,6 +148,38 @@ struct EpisodeAudit {
     duplicate_artwork_extras: i64,
     actor_referenced_duplicate_extras: i64,
     projected_season_episode_counts: Vec<i64>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct PublicationHistoryAudit {
+    available: bool,
+    streams: i64,
+    correlations: i64,
+    events: i64,
+    active: i64,
+    recovery_required: i64,
+    terminal: i64,
+    truncated: i64,
+    original_failures: i64,
+    recovery_failures: i64,
+    recent_streams: Vec<PublicationHistoryStream>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct PublicationHistoryStream {
+    correlation_id: i64,
+    state: i64,
+    live_lease: bool,
+    phase: i64,
+    outcome: Option<i64>,
+    events: i64,
+    first_sequence: i64,
+    last_sequence: i64,
+    original_failures: i64,
+    recovery_failures: i64,
+    truncated: bool,
+    error_category: Option<i64>,
+    os_error_code: Option<i64>,
 }
 
 impl AuditReport {
@@ -251,6 +290,38 @@ impl AuditReport {
                 .collect::<Vec<_>>()
                 .join(",")
         ));
+        output.push_str(&format!(
+            "runtime-audit: publication_history available={} streams={} correlations={} events={} active={} recovery_required={} terminal={} truncated={} original_failures={} recovery_failures={}\n",
+            self.publication_history.available,
+            self.publication_history.streams,
+            self.publication_history.correlations,
+            self.publication_history.events,
+            self.publication_history.active,
+            self.publication_history.recovery_required,
+            self.publication_history.terminal,
+            self.publication_history.truncated,
+            self.publication_history.original_failures,
+            self.publication_history.recovery_failures,
+        ));
+        for stream in &self.publication_history.recent_streams {
+            let identity = format!("publication_correlation={}", stream.correlation_id);
+            output.push_str(&format!(
+                "runtime-audit: {identity} events={} sequence={}..{} state={} phase={} outcome={} original_failures={} recovery_failures={} truncated={} error_category={} os_error_code={}\n",
+                stream.events,
+                stream.first_sequence,
+                stream.last_sequence,
+                publication_state_name(stream.state, stream.phase, stream.live_lease),
+                publication_phase_name(stream.phase),
+                stream.outcome.map_or("none", publication_outcome_name),
+                stream.original_failures,
+                stream.recovery_failures,
+                stream.truncated,
+                stream.error_category.map_or("none", publication_error_category_name),
+                stream
+                    .os_error_code
+                    .map_or_else(|| "none".to_owned(), |code| code.to_string()),
+            ));
+        }
         let findings = self.findings();
         for finding in &findings {
             output.push_str(&format!("runtime-audit: finding: {finding}\n"));
@@ -291,6 +362,7 @@ fn audit_database(path: &Path) -> Result<AuditReport> {
         timeline: audit_timeline(&connection)?,
         episodes: audit_episodes(&connection)?,
         failed_build_statuses: audit_failed_builds(&connection)?,
+        publication_history: audit_publication_history(&connection)?,
     })
 }
 
@@ -492,6 +564,211 @@ fn audit_failed_builds(connection: &Connection) -> Result<i64> {
         .context("auditing failed playout builds")
 }
 
+fn audit_publication_history(connection: &Connection) -> Result<PublicationHistoryAudit> {
+    if !table_exists(connection, "AddonMediaListPublicationEvent")? {
+        return Ok(PublicationHistoryAudit::default());
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let (
+        streams,
+        correlations,
+        events,
+        active,
+        recovery_required,
+        terminal,
+        truncated,
+        original_failures,
+        recovery_failures,
+    ) = connection
+        .query_row(
+            r#"SELECT COUNT(DISTINCT event."PublicationJobId"),
+                      COUNT(DISTINCT job."OperationId"),
+                      COUNT(*),
+                      COUNT(DISTINCT CASE WHEN operation."State" = 0
+                                               OR (operation."State" = 1 AND EXISTS (
+                                                   SELECT 1 FROM "ManagedLibraryLease" AS lease
+                                                   WHERE lease."OperationId" = operation."Id"
+                                                     AND lease."OwnerToken" = operation."OwnerToken"
+                                                     AND julianday(lease."LeaseExpiresAt") > julianday(?1)
+                                               ))
+                                          THEN event."PublicationJobId" END),
+                      COUNT(DISTINCT CASE WHEN operation."State" IN (2, 4)
+                                               OR (operation."State" = 1 AND NOT EXISTS (
+                                                   SELECT 1 FROM "ManagedLibraryLease" AS lease
+                                                   WHERE lease."OperationId" = operation."Id"
+                                                     AND lease."OwnerToken" = operation."OwnerToken"
+                                                     AND julianday(lease."LeaseExpiresAt") > julianday(?1)
+                                               ))
+                                          THEN event."PublicationJobId" END),
+                      COUNT(DISTINCT CASE WHEN operation."State" = 3
+                                          THEN event."PublicationJobId" END),
+                      COUNT(DISTINCT CASE WHEN event."Kind" = ?2
+                                          THEN event."PublicationJobId" END),
+                      COALESCE(SUM(CASE WHEN event."Kind" = ?3 THEN 1 ELSE 0 END), 0),
+                      COALESCE(SUM(CASE WHEN event."Kind" = ?4 THEN 1 ELSE 0 END), 0)
+               FROM "AddonMediaListPublicationEvent" AS event
+               JOIN "AddonMediaListPublicationJob" AS job
+                 ON job."Id" = event."PublicationJobId"
+               JOIN "ManagedLibraryOperation" AS operation
+                 ON operation."Id" = job."OperationId""#,
+            params![
+                now,
+                PUBLICATION_EVENT_HISTORY_TRUNCATED,
+                PUBLICATION_EVENT_ORIGINAL_FAILURE,
+                PUBLICATION_EVENT_RECOVERY_FAILURE,
+            ],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            },
+        )
+        .context("auditing add-on publication history aggregates")?;
+
+    let mut statement = connection
+        .prepare(
+            r#"SELECT job."OperationId", operation."State",
+                      EXISTS (
+                          SELECT 1 FROM "ManagedLibraryLease" AS lease
+                          WHERE lease."OperationId" = operation."Id"
+                            AND lease."OwnerToken" = operation."OwnerToken"
+                            AND julianday(lease."LeaseExpiresAt") > julianday(?1)
+                      ),
+                      job."Phase", job."Outcome",
+                      COUNT(*), MIN(event."Sequence"), MAX(event."Sequence"),
+                      COALESCE(SUM(CASE WHEN event."Kind" = ?2 THEN 1 ELSE 0 END), 0),
+                      COALESCE(SUM(CASE WHEN event."Kind" = ?3 THEN 1 ELSE 0 END), 0),
+                      MAX(CASE WHEN event."Kind" = ?4 THEN 1 ELSE 0 END),
+                      (
+                          SELECT recent_error."ErrorCategory"
+                          FROM "AddonMediaListPublicationEvent" AS recent_error
+                          WHERE recent_error."PublicationJobId" = job."Id"
+                            AND recent_error."ErrorCategory" IS NOT NULL
+                          ORDER BY recent_error."Sequence" DESC
+                          LIMIT 1
+                      ),
+                      (
+                          SELECT recent_error."OsErrorCode"
+                          FROM "AddonMediaListPublicationEvent" AS recent_error
+                          WHERE recent_error."PublicationJobId" = job."Id"
+                            AND recent_error."ErrorCategory" IS NOT NULL
+                          ORDER BY recent_error."Sequence" DESC
+                          LIMIT 1
+                      )
+               FROM "AddonMediaListPublicationEvent" AS event
+               JOIN "AddonMediaListPublicationJob" AS job
+                 ON job."Id" = event."PublicationJobId"
+               JOIN "ManagedLibraryOperation" AS operation
+                 ON operation."Id" = job."OperationId"
+               GROUP BY event."PublicationJobId", job."OperationId", operation."State",
+                        operation."Id", operation."OwnerToken", job."Phase", job."Outcome",
+                        job."Id"
+               ORDER BY MAX(event."OccurredAt") DESC, job."Id" DESC
+               LIMIT 5"#,
+        )
+        .context("preparing add-on publication history stream audit")?;
+    let recent_streams = statement
+        .query_map(
+            params![
+                now,
+                PUBLICATION_EVENT_ORIGINAL_FAILURE,
+                PUBLICATION_EVENT_RECOVERY_FAILURE,
+                PUBLICATION_EVENT_HISTORY_TRUNCATED,
+            ],
+            |row| {
+                Ok(PublicationHistoryStream {
+                    correlation_id: row.get(0)?,
+                    state: row.get(1)?,
+                    live_lease: row.get(2)?,
+                    phase: row.get(3)?,
+                    outcome: row.get(4)?,
+                    events: row.get(5)?,
+                    first_sequence: row.get(6)?,
+                    last_sequence: row.get(7)?,
+                    original_failures: row.get(8)?,
+                    recovery_failures: row.get(9)?,
+                    truncated: row.get::<_, i64>(10)? != 0,
+                    error_category: row.get(11)?,
+                    os_error_code: row.get(12)?,
+                })
+            },
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("auditing recent add-on publication history streams")?;
+
+    Ok(PublicationHistoryAudit {
+        available: true,
+        streams,
+        correlations,
+        events,
+        active,
+        recovery_required,
+        terminal,
+        truncated,
+        original_failures,
+        recovery_failures,
+        recent_streams,
+    })
+}
+
+const fn publication_state_name(state: i64, phase: i64, live_lease: bool) -> &'static str {
+    match state {
+        0 => "queued",
+        1 if !live_lease => "expired",
+        1 if matches!(phase, 4..=6) => "restoring",
+        1 => "publishing",
+        2 => "waiting",
+        3 => "complete",
+        4 => "failed",
+        _ => "unknown",
+    }
+}
+
+const fn publication_phase_name(phase: i64) -> &'static str {
+    match phase {
+        0 => "awaiting_lease",
+        1 => "staging",
+        2 => "scanning",
+        3 => "committing",
+        4 => "restoring_files",
+        5 => "restoring_projection",
+        6 => "reconciling",
+        7 => "complete",
+        8 => "verifying",
+        9 => "cleaning_up",
+        _ => "unknown",
+    }
+}
+
+const fn publication_outcome_name(outcome: i64) -> &'static str {
+    match outcome {
+        0 => "published",
+        1 => "restored_after_failure",
+        _ => "unknown",
+    }
+}
+
+const fn publication_error_category_name(category: i64) -> &'static str {
+    match category {
+        0 => "filesystem_io",
+        1 => "permission_denied",
+        2 => "sharing_violation",
+        3 => "unsafe_filesystem_state",
+        4 => "invalid_publication_marker",
+        5 => "publication_integrity",
+        _ => "unknown",
+    }
+}
+
 fn print_help() {
     eprintln!("runtime-audit — inspect an ErsatzRS SQLite database read-only");
     eprintln!();
@@ -499,7 +776,8 @@ fn print_help() {
     eprintln!("    cargo xtask runtime-audit --db <PATH> [--redact]");
     eprintln!();
     eprintln!("Reports aggregate integrity, Classic anchor, playout timeline,");
-    eprintln!("and episode/artwork cardinality evidence. It never writes rows.");
+    eprintln!("episode/artwork cardinality, and add-on publication history evidence.");
+    eprintln!("It never writes rows.");
 }
 
 #[cfg(test)]
@@ -582,12 +860,64 @@ mod tests {
         assert_eq!(report.episodes.actor_referenced_duplicate_extras, 1);
         assert_eq!(report.episodes.projected_season_episode_counts, [2]);
         assert_eq!(report.failed_build_statuses, 1);
+        assert!(!report.publication_history.available);
 
         let rendered = report.render(&database.path, true);
         assert!(rendered.contains("database=<redacted>"));
         assert!(rendered.contains("classic_playout=1"));
         assert!(!rendered.contains("playout_id=10"));
         assert!(!rendered.contains(&database.path.display().to_string()));
+        assert!(rendered.contains("publication_history available=false"));
+    }
+
+    #[test]
+    fn audits_bounded_redacted_publication_history() {
+        let database = TempDatabase::new();
+        seed_fixture(&database.path);
+        seed_publication_history(&database.path);
+
+        let report = audit_database(&database.path).expect("audit publication history");
+        assert!(report.publication_history.available);
+        assert_eq!(report.publication_history.streams, 10);
+        assert_eq!(report.publication_history.correlations, 10);
+        assert_eq!(report.publication_history.events, 12);
+        assert_eq!(report.publication_history.active, 2);
+        assert_eq!(report.publication_history.recovery_required, 3);
+        assert_eq!(report.publication_history.terminal, 5);
+        assert_eq!(report.publication_history.truncated, 1);
+        assert_eq!(report.publication_history.original_failures, 1);
+        assert_eq!(report.publication_history.recovery_failures, 1);
+        assert_eq!(report.publication_history.recent_streams.len(), 5);
+        assert_eq!(
+            report.publication_history.recent_streams[0].correlation_id,
+            110
+        );
+
+        let redacted = report.render(&database.path, true);
+        assert!(redacted.contains("publication_correlation=106"));
+        assert!(redacted.contains("error_category=sharing_violation os_error_code=32"));
+        assert!(
+            redacted.contains("publication_correlation=107 events=1 sequence=1..1 state=waiting")
+        );
+        assert!(
+            redacted.contains("publication_correlation=108 events=1 sequence=1..1 state=expired")
+        );
+        assert!(redacted
+            .contains("publication_correlation=109 events=1 sequence=1..1 state=publishing"));
+        assert!(
+            redacted.contains("publication_correlation=110 events=1 sequence=1..1 state=queued")
+        );
+
+        let unredacted = report.render(&database.path, false);
+        assert!(unredacted.contains("publication_correlation=106"));
+        for forbidden in [
+            "https://provider.invalid/list?token=secret",
+            "/private/media/title.mkv",
+            "cookie=session-secret",
+        ] {
+            assert!(!redacted.contains(forbidden));
+            assert!(!unredacted.contains(forbidden));
+        }
     }
 
     #[test]
@@ -691,5 +1021,93 @@ mod tests {
                 "#,
             )
             .expect("seed runtime audit fixture");
+    }
+
+    fn seed_publication_history(path: &Path) {
+        let connection = Connection::open(path).expect("open publication history fixture");
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE "ManagedLibraryOperation" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "OwnerToken" TEXT NOT NULL,
+                    "State" INTEGER NOT NULL
+                );
+                CREATE TABLE "ManagedLibraryLease" (
+                    "OperationId" INTEGER NOT NULL,
+                    "OwnerToken" TEXT NOT NULL,
+                    "LeaseExpiresAt" TEXT NOT NULL
+                );
+                CREATE TABLE "AddonMediaListPublicationJob" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "OperationId" INTEGER NOT NULL,
+                    "Phase" INTEGER NOT NULL,
+                    "Outcome" INTEGER NULL,
+                    "OriginalFailureDiagnostic" TEXT NULL,
+                    "RecoveryDiagnostic" TEXT NULL
+                );
+                CREATE TABLE "AddonMediaListPublicationEvent" (
+                    "Id" INTEGER PRIMARY KEY,
+                    "PublicationJobId" INTEGER NOT NULL,
+                    "Sequence" INTEGER NOT NULL,
+                    "DedupeKey" TEXT NOT NULL,
+                    "Kind" INTEGER NOT NULL,
+                    "Phase" INTEGER NULL,
+                    "Attempt" INTEGER NULL,
+                    "EnqueueTrigger" INTEGER NULL,
+                    "RelatedOperationId" INTEGER NULL,
+                    "FilesystemTransition" INTEGER NULL,
+                    "RetryClass" INTEGER NULL,
+                    "RecoveryAction" INTEGER NULL,
+                    "ErrorCategory" INTEGER NULL,
+                    "OsErrorCode" INTEGER NULL,
+                    "PublishedItemCount" INTEGER NULL,
+                    "PlaylistItemCount" INTEGER NULL,
+                    "ArtworkCount" INTEGER NULL,
+                    "Outcome" INTEGER NULL,
+                    "OccurredAt" TEXT NOT NULL
+                );
+
+                INSERT INTO "ManagedLibraryOperation" VALUES
+                    (101, 'owner-101', 3), (102, 'owner-102', 3),
+                    (103, 'owner-103', 3), (104, 'owner-104', 3),
+                    (105, 'owner-105', 3), (106, 'owner-106', 4),
+                    (107, 'owner-107', 2), (108, 'owner-108', 1),
+                    (109, 'owner-109', 1), (110, 'owner-110', 0);
+                INSERT INTO "ManagedLibraryLease" VALUES
+                    (108, 'stale-owner-108', '2999-01-01T00:00:00Z'),
+                    (109, 'owner-109', '2999-01-01T00:00:00Z');
+                INSERT INTO "AddonMediaListPublicationJob" VALUES
+                    (1, 101, 7, 0, NULL, NULL),
+                    (2, 102, 7, 0, NULL, NULL),
+                    (3, 103, 7, 0, NULL, NULL),
+                    (4, 104, 7, 0, NULL, NULL),
+                    (5, 105, 7, 0, NULL, NULL),
+                    (6, 106, 4, NULL,
+                     'https://provider.invalid/list?token=secret',
+                     '/private/media/title.mkv cookie=session-secret'),
+                    (7, 107, 4, NULL, NULL, NULL),
+                    (8, 108, 1, NULL, NULL, NULL),
+                    (9, 109, 2, NULL, NULL, NULL),
+                    (10, 110, 0, NULL, NULL, NULL);
+                INSERT INTO "AddonMediaListPublicationEvent" (
+                    "Id", "PublicationJobId", "Sequence", "DedupeKey", "Kind",
+                    "Phase", "ErrorCategory", "OsErrorCode", "OccurredAt"
+                ) VALUES
+                    (1, 1, 1, 'completed-1', 13, 7, NULL, NULL, '2026-09-01T00:00:00Z'),
+                    (2, 2, 1, 'completed-2', 13, 7, NULL, NULL, '2026-09-02T00:00:00Z'),
+                    (3, 3, 1, 'completed-3', 13, 7, NULL, NULL, '2026-09-03T00:00:00Z'),
+                    (4, 4, 1, 'completed-4', 13, 7, NULL, NULL, '2026-09-04T00:00:00Z'),
+                    (5, 5, 1, 'completed-5', 13, 7, NULL, NULL, '2026-09-05T00:00:00Z'),
+                    (6, 6, 1, 'failure-original', 9, 4, 2, 32, '2026-09-06T00:00:00Z'),
+                    (7, 6, 2, 'failure-recovery', 10, 4, 2, 32, '2026-09-06T00:01:00Z'),
+                    (8, 6, 256, 'truncated', 14, 4, NULL, NULL, '2026-09-06T00:02:00Z'),
+                    (9, 7, 1, 'waiting', 11, 4, NULL, NULL, '2026-09-07T00:00:00Z'),
+                    (10, 8, 1, 'expired', 5, 1, NULL, NULL, '2026-09-08T00:00:00Z'),
+                    (11, 9, 1, 'publishing', 5, 2, NULL, NULL, '2026-09-09T00:00:00Z'),
+                    (12, 10, 1, 'queued', 1, 0, NULL, NULL, '2026-09-10T00:00:00Z');
+                "#,
+            )
+            .expect("seed publication history fixture");
     }
 }

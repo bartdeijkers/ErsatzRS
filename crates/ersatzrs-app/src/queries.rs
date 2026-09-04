@@ -1942,6 +1942,23 @@ pub async fn addon_media_list_publication_readiness(
     Ok(readiness)
 }
 
+/// Load retained redacted causal history for one add-on-list publication.
+pub async fn addon_media_list_publication_history(
+    id: EntityId,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
+) -> Result<ersatzrs_core::repositories::AddonMediaListPublicationHistory> {
+    if id <= 0 {
+        return Err(ApplicationError::Validation {
+            field: "addon_media_list_id",
+            message: "must be greater than zero".to_owned(),
+        });
+    }
+    managed_operations
+        .publication_history(id, Utc::now())
+        .await
+        .map_err(Into::into)
+}
+
 /// Load one page of provider items in one availability group.
 pub async fn list_addon_media_list_items_page(
     id: EntityId,

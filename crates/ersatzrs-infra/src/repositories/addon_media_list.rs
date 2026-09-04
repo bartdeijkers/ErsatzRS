@@ -3389,9 +3389,14 @@ const fn publication_outcome_role(
 fn publication_fs_repository_error(
     error: addon_publication_fs::PublicationFsError,
 ) -> RepositoryError {
+    let (category, os_error_code) = error.redacted_cause();
     let message = error.to_string();
-    drop(error);
-    RepositoryError::unavailable("add-on publication filesystem", message)
+    RepositoryError::unavailable_with_publication_cause(
+        "add-on publication filesystem",
+        message,
+        category,
+        os_error_code,
+    )
 }
 
 async fn abort_publication_staging(paths: PublicationFsPaths, identity: PublicationFsIdentity) {
@@ -7688,6 +7693,18 @@ mod tests {
             .share_mode(FILE_SHARE_READ)
             .open(paths.managed.join("item.yml"))
             .expect("held item without delete sharing");
+        let boundary_error = super::publication_fs_repository_error(
+            super::addon_publication_fs::restore_step(&paths, identity)
+                .expect_err("held handle blocks the restore boundary"),
+        );
+        let boundary_cause = boundary_error
+            .publication_failure_cause()
+            .expect("held handle retains a typed publication cause");
+        assert_eq!(
+            boundary_cause.category,
+            ersatzrs_domain::AddonMediaListPublicationErrorCategory::SharingViolation
+        );
+        assert!(boundary_cause.os_error_code.is_some());
         let release = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(180));
             drop(held);

@@ -19,9 +19,11 @@ use serde_json::json;
 use crate::{
     admin::server_fns::addon_media_lists::{
         add_addon_media_list_with_state, delete_addon_media_list_with_state,
+        get_addon_media_list_publication_history_with_state,
         get_addon_media_list_publication_readiness_with_state, match_addon_media_list_with_state,
         publish_addon_media_list_with_state, recover_addon_media_list_publication_with_state,
-        update_addon_media_list_with_state, AddonMediaListForm, AddonMediaListPublishResult,
+        redacted_publication_diagnostics_json, update_addon_media_list_with_state,
+        AddonMediaListForm, AddonMediaListPublishResult,
     },
     host::state::AppState,
 };
@@ -470,6 +472,44 @@ pub async fn recover_addon_media_list_publication_form(
     }
 }
 
+/// Download the same typed, redacted publication history used by the hydrated
+/// clipboard action. The fixed filename prevents list data from reaching the
+/// response headers.
+pub async fn download_addon_media_list_publication_diagnostics(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Response {
+    let history = match get_addon_media_list_publication_history_with_state(&state, id).await {
+        Ok(history) => history,
+        Err(error) => {
+            tracing::error!(%error, addon_media_list_id = id, "failed to load redacted add-on publication diagnostics");
+            return StatusCode::UNPROCESSABLE_ENTITY.into_response();
+        }
+    };
+    match redacted_publication_diagnostics_json(&history) {
+        Ok(body) => publication_diagnostics_download_response(body),
+        Err(error) => {
+            tracing::error!(%error, addon_media_list_id = id, "failed to serialize redacted add-on publication diagnostics");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+fn publication_diagnostics_download_response(body: String) -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "application/json; charset=utf-8"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"ersatzrs-addon-publication-diagnostics.json\"",
+            ),
+            (header::CACHE_CONTROL, "private, no-store"),
+        ],
+        Body::from(body),
+    )
+        .into_response()
+}
+
 pub async fn save_addon_media_list_item_review_form(
     State(state): State<AppState>,
     Form(input): Form<AddonMediaListItemReviewForm>,
@@ -792,5 +832,22 @@ mod tests {
             Some(AddonMediaListArtworkRole::Thumb)
         );
         assert_eq!(parse_role("other"), None);
+    }
+
+    #[test]
+    fn diagnostics_download_is_private_json_with_a_fixed_filename() {
+        let response = publication_diagnostics_download_response("{}".to_owned());
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "application/json; charset=utf-8"
+        );
+        assert_eq!(
+            response.headers()[header::CONTENT_DISPOSITION],
+            "attachment; filename=\"ersatzrs-addon-publication-diagnostics.json\""
+        );
+        assert_eq!(
+            response.headers()[header::CACHE_CONTROL],
+            "private, no-store"
+        );
     }
 }

@@ -61,10 +61,13 @@ async fn durable_publication_migration_adopts_a_stranded_legacy_journal() {
     let row = sqlx::query(
         r#"SELECT "operation"."Kind", "operation"."State", "job"."Phase",
                   "job"."SavedRevision", "job"."TargetPublishedRevision",
-                  "job"."OriginalFailureCode"
+                  "job"."OriginalFailureCode", "event"."Sequence" AS "EventSequence",
+                  "event"."Kind" AS "EventKind", "event"."Phase" AS "EventPhase"
            FROM "ManagedLibraryOperation" AS "operation"
            JOIN "AddonMediaListPublicationJob" AS "job"
              ON "job"."OperationId" = "operation"."Id"
+           JOIN "AddonMediaListPublicationEvent" AS "event"
+             ON "event"."PublicationJobId" = "job"."Id"
            WHERE "job"."AddonMediaListId" = 1"#,
     )
     .fetch_one(&pool)
@@ -75,6 +78,9 @@ async fn durable_publication_migration_adopts_a_stranded_legacy_journal() {
     assert_eq!(row.get::<i32, _>("Phase"), 4);
     assert_eq!(row.get::<i32, _>("SavedRevision"), 7);
     assert_eq!(row.get::<i32, _>("TargetPublishedRevision"), 8);
+    assert_eq!(row.get::<i32, _>("EventSequence"), 1);
+    assert_eq!(row.get::<i32, _>("EventKind"), 0);
+    assert_eq!(row.get::<i32, _>("EventPhase"), 4);
     assert_eq!(
         row.get::<String, _>("OriginalFailureCode"),
         "legacy_interrupted_publication"

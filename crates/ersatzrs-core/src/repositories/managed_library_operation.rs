@@ -1,9 +1,12 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
+    AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
+    AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
     AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
-    AddonMediaListPublicationState, AddonMediaListRecoveryAction, EntityId,
-    ManagedLibraryOperationKind, ManagedLibraryOperationState, MediaSourceKind,
+    AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
+    AddonMediaListRecoveryAction, EntityId, ManagedLibraryOperationKind,
+    ManagedLibraryOperationState, MediaSourceKind,
 };
 
 use super::Result;
@@ -82,6 +85,55 @@ pub struct AddonMediaListPublicationStatus {
     pub can_restore: bool,
 }
 
+/// Sanitized error details retained at a publication boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPublicationFailureCause {
+    pub category: AddonMediaListPublicationErrorCategory,
+    pub os_error_code: Option<i32>,
+}
+
+/// One immutable, redacted event in a publication job's causal stream.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPublicationEvent {
+    pub sequence: i32,
+    pub kind: AddonMediaListPublicationEventKind,
+    pub enqueue_trigger: Option<AddonMediaListPublicationEnqueueTrigger>,
+    pub phase: Option<AddonMediaListPublicationPhase>,
+    pub attempt: Option<i32>,
+    pub related_operation_id: Option<EntityId>,
+    pub filesystem_transition: Option<AddonMediaListPublicationFilesystemTransition>,
+    pub retry_class: Option<AddonMediaListPublicationRetryClass>,
+    pub recovery_action: Option<AddonMediaListRecoveryAction>,
+    pub error_category: Option<AddonMediaListPublicationErrorCategory>,
+    pub os_error_code: Option<i32>,
+    pub published_item_count: Option<i64>,
+    pub playlist_item_count: Option<i64>,
+    pub artwork_count: Option<i64>,
+    pub outcome: Option<AddonMediaListPublicationOutcome>,
+    pub occurred_at: DateTime<Utc>,
+}
+
+/// Retained history for one publication generation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPublicationHistoryJob {
+    pub job_id: EntityId,
+    pub operation_id: EntityId,
+    pub generation: i32,
+    pub saved_revision: i32,
+    pub target_published_revision: i32,
+    pub phase: AddonMediaListPublicationPhase,
+    pub state: AddonMediaListPublicationState,
+    pub outcome: Option<AddonMediaListPublicationOutcome>,
+    pub events: Vec<AddonMediaListPublicationEvent>,
+}
+
+/// Newest-first retained publication jobs for one add-on list.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPublicationHistory {
+    pub list_id: EntityId,
+    pub jobs: Vec<AddonMediaListPublicationHistoryJob>,
+}
+
 /// Storage boundary for durable managed-library admission and publication.
 #[async_trait]
 pub trait ManagedLibraryOperationRepository: Send + Sync {
@@ -138,6 +190,16 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         now: DateTime<Utc>,
     ) -> Result<Option<AddonMediaListPublicationStatus>>;
 
+    /// Return retained jobs newest-first with each causal stream in sequence order.
+    async fn publication_history(
+        &self,
+        list_id: EntityId,
+        now: DateTime<Utc>,
+    ) -> Result<AddonMediaListPublicationHistory>;
+
+    /// Enforce the terminal-history age and per-list count limits.
+    async fn prune_publication_history(&self, now: DateTime<Utc>) -> Result<u64>;
+
     /// Requeue one exact failed or expired generation without bypassing its
     /// list, generation, or live-lease fence.
     async fn recover_publication(
@@ -183,13 +245,24 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         expected: AddonMediaListPublicationPhase,
         code: &str,
         diagnostic: &str,
+        cause: Option<AddonMediaListPublicationFailureCause>,
     ) -> Result<bool>;
 
     async fn schedule_publication_recovery_retry(
         &self,
         claim: &ManagedLibraryOperationClaim,
         diagnostic: &str,
+        cause: Option<AddonMediaListPublicationFailureCause>,
         next_eligible_at: DateTime<Utc>,
+    ) -> Result<bool>;
+
+    /// Terminate a publication before recovery state exists while retaining its cause.
+    async fn fail_publication(
+        &self,
+        claim: &ManagedLibraryOperationClaim,
+        code: &str,
+        diagnostic: &str,
+        cause: Option<AddonMediaListPublicationFailureCause>,
     ) -> Result<bool>;
 
     async fn complete_publication(

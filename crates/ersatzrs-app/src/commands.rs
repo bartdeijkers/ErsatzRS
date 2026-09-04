@@ -6515,7 +6515,10 @@ fn scan_repository_failure(
         RepositoryError::Decode { .. } | RepositoryError::Conflict(_) => {
             RequestScanOutcome::Rejected(RequestScanRejection::InvalidLibraryState)
         }
-        RepositoryError::Unavailable { message, .. } => RequestScanOutcome::Unavailable { message },
+        RepositoryError::Unavailable { message, .. }
+        | RepositoryError::UnavailableWithPublicationCause { message, .. } => {
+            RequestScanOutcome::Unavailable { message }
+        }
     }
 }
 
@@ -6528,7 +6531,8 @@ fn scheduled_scan_repository_failure(
         RepositoryError::Decode { .. } | RepositoryError::Conflict(_) => {
             RequestScheduledScanOutcome::Rejected(RequestScanRejection::InvalidLibraryState)
         }
-        RepositoryError::Unavailable { message, .. } => {
+        RepositoryError::Unavailable { message, .. }
+        | RepositoryError::UnavailableWithPublicationCause { message, .. } => {
             RequestScheduledScanOutcome::Unavailable { message }
         }
     }
@@ -6543,17 +6547,19 @@ mod tests {
     use ersatzrs_core::locking::{EntityLocker, PlayoutBuildActivity};
     use ersatzrs_core::repositories::{
         AddonMediaListAdminForm, AddonMediaListAdminRow, AddonMediaListItemAdminRow,
-        AddonMediaListPublication, AddonMediaListPublicationEnqueue, AddonMediaListPublicationJob,
-        AddonMediaListPublicationReadiness, AddonMediaListPublicationStatus,
-        AddonMediaListReplacementCandidate, AddonMediaListRepository, AdminSettingsRepository,
-        ChannelEditorForm, ChannelNumberUpdate, ChannelValidationRow, ChannelValidationState,
-        CollectionAdminRow, CollectionDetailAdmin, CollectionMemberAdmin, CollectionRepository,
-        FfmpegProfileRepository, LibraryRepository, LibraryScanTarget, ManagedLibraryOperation,
-        ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
-        MediaItemSuggestionAdmin, MultiCollectionAdmin, MultiCollectionAdminRow,
-        MultiCollectionEditorOptions, MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow,
-        PlaylistEditorAdmin, PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin,
-        PlaylistItemInsert, RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
+        AddonMediaListPublication, AddonMediaListPublicationEnqueue,
+        AddonMediaListPublicationFailureCause, AddonMediaListPublicationHistory,
+        AddonMediaListPublicationJob, AddonMediaListPublicationReadiness,
+        AddonMediaListPublicationStatus, AddonMediaListReplacementCandidate,
+        AddonMediaListRepository, AdminSettingsRepository, ChannelEditorForm, ChannelNumberUpdate,
+        ChannelValidationRow, ChannelValidationState, CollectionAdminRow, CollectionDetailAdmin,
+        CollectionMemberAdmin, CollectionRepository, FfmpegProfileRepository, LibraryRepository,
+        LibraryScanTarget, ManagedLibraryOperation, ManagedLibraryOperationClaim,
+        ManagedLibraryOperationRepository, ManagedLibraryScanSpec, MediaItemSuggestionAdmin,
+        MultiCollectionAdmin, MultiCollectionAdminRow, MultiCollectionEditorOptions,
+        MultiCollectionItem, PlaybackOverrides, PlaylistAdminRow, PlaylistEditorAdmin,
+        PlaylistEditorOptions, PlaylistGroupAdminRow, PlaylistItemAdmin, PlaylistItemInsert,
+        RepositoryError, RerunCollectionAdmin, RerunCollectionAdminRow,
         RerunCollectionEditorOptions, RerunCollectionReferenceKind, ScheduleItemAdmin,
         SettingsMutation, SettingsOptionKind, SettingsSelectOption, SmartCollectionAdminRow,
     };
@@ -7043,6 +7049,24 @@ mod tests {
             Ok(None)
         }
 
+        async fn publication_history(
+            &self,
+            list_id: EntityId,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> ersatzrs_core::repositories::Result<AddonMediaListPublicationHistory> {
+            Ok(AddonMediaListPublicationHistory {
+                list_id,
+                jobs: Vec::new(),
+            })
+        }
+
+        async fn prune_publication_history(
+            &self,
+            _now: chrono::DateTime<chrono::Utc>,
+        ) -> ersatzrs_core::repositories::Result<u64> {
+            Ok(0)
+        }
+
         async fn recover_publication(
             &self,
             _list_id: EntityId,
@@ -7094,6 +7118,7 @@ mod tests {
             _expected: AddonMediaListPublicationPhase,
             _code: &str,
             _diagnostic: &str,
+            _cause: Option<AddonMediaListPublicationFailureCause>,
         ) -> ersatzrs_core::repositories::Result<bool> {
             unreachable!("failure recovery is not used by command tests")
         }
@@ -7102,9 +7127,20 @@ mod tests {
             &self,
             _claim: &ManagedLibraryOperationClaim,
             _diagnostic: &str,
+            _cause: Option<AddonMediaListPublicationFailureCause>,
             _next_eligible_at: chrono::DateTime<chrono::Utc>,
         ) -> ersatzrs_core::repositories::Result<bool> {
             unreachable!("retry is not used by command tests")
+        }
+
+        async fn fail_publication(
+            &self,
+            _claim: &ManagedLibraryOperationClaim,
+            _code: &str,
+            _diagnostic: &str,
+            _cause: Option<AddonMediaListPublicationFailureCause>,
+        ) -> ersatzrs_core::repositories::Result<bool> {
+            unreachable!("publication failure is not used by command tests")
         }
 
         async fn complete_publication(

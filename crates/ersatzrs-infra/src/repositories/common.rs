@@ -6,7 +6,10 @@ use ersatzrs_domain::{
     AddonMediaListAvailabilityReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
     AddonMediaListDetailState, AddonMediaListImportState, AddonMediaListItemAvailability,
     AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
-    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase, AddonMediaListReviewState,
+    AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
+    AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
+    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
+    AddonMediaListPublicationRetryClass, AddonMediaListRecoveryAction, AddonMediaListReviewState,
     ArtworkKind, BlockStopScheduling, ChannelIdleBehavior, ChannelMusicVideoCreditsMode,
     ChannelPlayoutMode, ChannelPlayoutSource, ChannelSongVideoMode, ChannelStreamSelectorMode,
     ChannelSubtitleMode, ChannelTranscodeMode, ChannelWatermarkImageSource, ChannelWatermarkMode,
@@ -561,6 +564,49 @@ db_enum!(AddonMediaListPublicationPhase {
 db_enum!(AddonMediaListPublicationOutcome {
     0 => AddonMediaListPublicationOutcome::Published,
     1 => AddonMediaListPublicationOutcome::RestoredAfterFailure,
+});
+db_enum!(AddonMediaListPublicationEventKind {
+    0 => AddonMediaListPublicationEventKind::ExistingJobAdopted,
+    1 => AddonMediaListPublicationEventKind::Enqueued,
+    2 => AddonMediaListPublicationEventKind::LeaseWaitStarted,
+    3 => AddonMediaListPublicationEventKind::LeaseAcquired,
+    4 => AddonMediaListPublicationEventKind::LeaseReclaimed,
+    5 => AddonMediaListPublicationEventKind::PhaseAdvanced,
+    6 => AddonMediaListPublicationEventKind::ChildScanStarted,
+    7 => AddonMediaListPublicationEventKind::ChildScanCompleted,
+    8 => AddonMediaListPublicationEventKind::ChildScanFailed,
+    9 => AddonMediaListPublicationEventKind::OriginalFailure,
+    10 => AddonMediaListPublicationEventKind::RecoveryFailure,
+    11 => AddonMediaListPublicationEventKind::RetryScheduled,
+    12 => AddonMediaListPublicationEventKind::RecoveryRequested,
+    13 => AddonMediaListPublicationEventKind::Completed,
+    14 => AddonMediaListPublicationEventKind::HistoryTruncated,
+});
+db_enum!(AddonMediaListPublicationEnqueueTrigger {
+    0 => AddonMediaListPublicationEnqueueTrigger::Operator,
+});
+db_enum!(AddonMediaListPublicationFilesystemTransition {
+    0 => AddonMediaListPublicationFilesystemTransition::PreviousBackedUp,
+    1 => AddonMediaListPublicationFilesystemTransition::CandidateCommitted,
+    2 => AddonMediaListPublicationFilesystemTransition::PreviousRestored,
+    3 => AddonMediaListPublicationFilesystemTransition::ProjectionRestored,
+    4 => AddonMediaListPublicationFilesystemTransition::RevisionVerified,
+    5 => AddonMediaListPublicationFilesystemTransition::CleanupCompleted,
+});
+db_enum!(AddonMediaListPublicationRetryClass {
+    0 => AddonMediaListPublicationRetryClass::TransientRecovery,
+});
+db_enum!(AddonMediaListPublicationErrorCategory {
+    0 => AddonMediaListPublicationErrorCategory::FilesystemIo,
+    1 => AddonMediaListPublicationErrorCategory::PermissionDenied,
+    2 => AddonMediaListPublicationErrorCategory::SharingViolation,
+    3 => AddonMediaListPublicationErrorCategory::UnsafeFilesystemState,
+    4 => AddonMediaListPublicationErrorCategory::InvalidPublicationMarker,
+    5 => AddonMediaListPublicationErrorCategory::PublicationIntegrity,
+});
+db_enum!(AddonMediaListRecoveryAction {
+    0 => AddonMediaListRecoveryAction::Retry,
+    1 => AddonMediaListRecoveryAction::RestorePreviousRevision,
 });
 db_enum!(MediaStreamKind {
     1 => MediaStreamKind::Video,

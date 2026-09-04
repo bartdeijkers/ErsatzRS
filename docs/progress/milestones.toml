@@ -2285,7 +2285,7 @@ remains owned by `amm-n-03` and does not block this focused milestone.
 id         = 'amm-j-04'
 phase      = 'AMM-J — Crash-safe publication recovery'
 title      = 'Persist a redacted causal publication and recovery history'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-publication-recovery.md'
 depends_on = ['amm-j-03']
@@ -2304,10 +2304,24 @@ arbitrary exception text. Cancellation and held-handle sharing-violation fault
 injections retain distinct causes while both recover.
 '''
 evidence = '''
-Not started. The Windows incident retained a journal but insufficient causal
-diagnostics to distinguish request cancellation from a sharing violation;
-current progress and terminal diagnostic fields do not preserve an ordered
-cross-scan/filesystem recovery history.
+Implemented 2026-09-04. One additive SQLite event table now retains a
+transactionally ordered, deduplicated stream per publication job: 255 causal
+entries plus a terminal truncation marker, typed enqueue/lease/scan/filesystem/
+retry/recovery boundaries, aggregate counts, outcomes, and sanitized filesystem
+causes. Completed streams prune after 30 days or beyond the latest 50 per list;
+active and recovery-required jobs remain intact. Upgrade backfill records only
+an honest adoption boundary. The localized semantic Activity timeline and its
+shared hydrated Copy/no-JavaScript Download JSON projection expose the same
+redacted fields, while Health and runtime-audit report matching aggregate and
+live-lease-aware state. Focused repository tests cover transactional rollback,
+ordering/deduplication, lease-wait refresh, restart/reclaim, request cancellation,
+the 256-entry cap, retention, and migration backfill; the Windows-held-handle
+test carries its typed sharing-violation cause across the repository boundary.
+Focused app/infra/web/xtask checks, 15 managed-operation tests, 19 publication
+filesystem tests, five runtime-audit tests, Activity/diagnostic API tests,
+hydration lint, architecture lint, formatting, and progress validation pass.
+No full closeout or CI gate was run; packaged Windows restart repetition remains
+owned by `amm-n-03`.
 '''
 
 [[milestone]]

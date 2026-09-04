@@ -5,7 +5,7 @@ use std::fs::{self, File};
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 
-use ersatzrs_domain::EntityId;
+use ersatzrs_domain::{AddonMediaListPublicationErrorCategory, EntityId};
 
 pub(crate) const PUBLICATION_MARKER_FILE: &str = ".ersatzrs-publication.json";
 const MARKER_SCHEMA_VERSION: u32 = 1;
@@ -110,6 +110,44 @@ impl PublicationFsError {
             Self::UnsafeState(_) | Self::InvalidMarker(_) | Self::Integrity(_) => None,
         }
     }
+
+    pub(crate) fn redacted_cause(&self) -> (AddonMediaListPublicationErrorCategory, Option<i32>) {
+        match self {
+            Self::Io { source, .. } => {
+                let os_error_code = source.raw_os_error();
+                let category = if is_sharing_violation(os_error_code) {
+                    AddonMediaListPublicationErrorCategory::SharingViolation
+                } else if source.kind() == std::io::ErrorKind::PermissionDenied {
+                    AddonMediaListPublicationErrorCategory::PermissionDenied
+                } else {
+                    AddonMediaListPublicationErrorCategory::FilesystemIo
+                };
+                (category, os_error_code)
+            }
+            Self::UnsafeState(_) => (
+                AddonMediaListPublicationErrorCategory::UnsafeFilesystemState,
+                None,
+            ),
+            Self::InvalidMarker(_) => (
+                AddonMediaListPublicationErrorCategory::InvalidPublicationMarker,
+                None,
+            ),
+            Self::Integrity(_) => (
+                AddonMediaListPublicationErrorCategory::PublicationIntegrity,
+                None,
+            ),
+        }
+    }
+}
+
+#[cfg(windows)]
+fn is_sharing_violation(os_error_code: Option<i32>) -> bool {
+    matches!(os_error_code, Some(5 | 32 | 33))
+}
+
+#[cfg(not(windows))]
+const fn is_sharing_violation(_os_error_code: Option<i32>) -> bool {
+    false
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1695,6 +1733,10 @@ mod tests {
             .expect("held item without delete sharing");
         let error = restore_step(&paths, identity).expect_err("held handle blocks rename");
         assert!(is_retryable_windows_code(error.raw_os_error()));
+        assert_eq!(
+            error.redacted_cause().0,
+            AddonMediaListPublicationErrorCategory::SharingViolation
+        );
         drop(held);
         assert_eq!(
             restore_step(&paths, identity).expect("retry after handle release"),

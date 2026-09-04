@@ -1,4 +1,6 @@
-use ersatzrs_domain::EntityId;
+use ersatzrs_domain::{AddonMediaListPublicationErrorCategory, EntityId};
+
+use super::AddonMediaListPublicationFailureCause;
 
 /// Storage-neutral failure vocabulary shared by repository ports.
 ///
@@ -21,6 +23,13 @@ pub enum RepositoryError {
         operation: &'static str,
         message: String,
     },
+    /// A publication filesystem failure with a redacted typed cause.
+    #[error("{operation} is unavailable: {message}")]
+    UnavailableWithPublicationCause {
+        operation: &'static str,
+        message: String,
+        cause: AddonMediaListPublicationFailureCause,
+    },
 }
 
 impl RepositoryError {
@@ -31,6 +40,36 @@ impl RepositoryError {
         Self::Unavailable {
             operation,
             message: message.into(),
+        }
+    }
+
+    /// Construct an unavailable publication failure with a typed safe cause.
+    #[must_use]
+    pub fn unavailable_with_publication_cause(
+        operation: &'static str,
+        message: impl Into<String>,
+        category: AddonMediaListPublicationErrorCategory,
+        os_error_code: Option<i32>,
+    ) -> Self {
+        Self::UnavailableWithPublicationCause {
+            operation,
+            message: message.into(),
+            cause: AddonMediaListPublicationFailureCause {
+                category,
+                os_error_code,
+            },
+        }
+    }
+
+    /// Return the safe publication cause without exposing the adapter error.
+    #[must_use]
+    pub const fn publication_failure_cause(&self) -> Option<AddonMediaListPublicationFailureCause> {
+        match self {
+            Self::UnavailableWithPublicationCause { cause, .. } => Some(*cause),
+            Self::NotFound { .. }
+            | Self::Conflict(_)
+            | Self::Decode { .. }
+            | Self::Unavailable { .. } => None,
         }
     }
 }

@@ -29,6 +29,9 @@ journal-last cleanup, including native Windows held-handle proof at exact
 commit `9196c4f`. AMM-J-03 completes typed restricted-item continuation,
 truthful publication state, and generation-fenced Retry/Restore actions; its
 integrated packaged Windows restart repetition remains owned by AMM-N-03.
+AMM-J-04 closes the focused recovery program with bounded, ordered, redacted
+causal history across publication, scan, filesystem, retry, and recovery
+boundaries, plus localized Activity, Health, and runtime-audit projections.
 ADR 0085 broadens the remaining corrective program through AMM-K operator
 lifecycle/navigation, AMM-L cadenced incremental
 refresh/reconciliation, AMM-M inherited yt-dlp access/SponsorBlock/subtitles
@@ -39,10 +42,9 @@ early stop, additions-only automatic publication, and updater rollback.
 '''
 
 next_steps = '''
-Complete AMM-J-04 before delivering ADR 0085 in dependency order through
-AMM-K, AMM-L, AMM-M, and AMM-N. Resume Phase 9A at p9a-01 after that
-corrective program by accepting the teletext product and standards contract
-before implementation.
+Deliver ADR 0085 in dependency order through AMM-K, AMM-L, AMM-M, and AMM-N,
+starting with AMM-K-01. Resume Phase 9A at p9a-01 after that corrective program
+by accepting the teletext product and standards contract before implementation.
 '''
 
 [[blocking_decision]]
