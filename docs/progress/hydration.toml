@@ -75,6 +75,12 @@ routes = ['/media/remote/streams', '/media/remote/streams/page/:page']
 notes  = 'Dedicated island route with SSR/no-JS list HTML, stable modal DOM, tag-backed playlist facets, card Add To Collection and direct Add To Playlist persistence (`CollectionType = 70`), mobile action menu, and geometry screenshots; focused Chromium and Firefox facet proof rerun on 2026-08-10.'
 
 [[page]]
+name   = 'RemoteStreamDetailPage'
+status = 'TODO'
+routes = ['/media/remote/streams/:id']
+notes  = 'AMM-K-03 implements the SSR-first detail surface and authors focused keyboard, narrow-screen, Chromium, and Firefox coverage. Execution remains part of the agreed AMM-N-03 integrated browser closeout.'
+
+[[page]]
 name   = 'RemoteStreamPlaylistsPage'
 status = '✅'
 routes = ['/media/remote/streams/playlists/:library_id']

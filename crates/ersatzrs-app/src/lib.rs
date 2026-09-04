@@ -2568,6 +2568,23 @@ impl ApplicationServices {
             .map_err(Into::into)
     }
 
+    pub async fn get_remote_stream_detail(
+        &self,
+        id: i64,
+    ) -> Result<Option<ersatzrs_core::repositories::AdminRemoteStreamDetail>> {
+        if id <= 0 {
+            return Err(ApplicationError::Validation {
+                field: "remote_stream_id",
+                message: "must be greater than zero".to_owned(),
+            });
+        }
+        self.ports
+            .admin_media()
+            .get_remote_stream_detail_admin(id)
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn get_media_item_info(
         &self,
         id: i64,

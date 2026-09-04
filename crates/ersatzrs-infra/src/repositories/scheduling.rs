@@ -2242,6 +2242,7 @@ impl SqliteSchedulingContentRepository {
                JOIN "AddonMediaList" AS "list"
                  ON "list"."Id" = "item"."AddonMediaListId"
                WHERE "item"."MediaItemId" = ?
+                 AND "item"."Published" = 1
                ORDER BY "list"."Id""#,
         )
         .bind(item_id)

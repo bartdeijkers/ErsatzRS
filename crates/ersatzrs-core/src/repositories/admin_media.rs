@@ -1,5 +1,10 @@
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
-use ersatzrs_domain::{ContentKind, EntityId};
+use ersatzrs_domain::{
+    AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListOptionValue,
+    ContentKind, EntityId, RemoteStreamLiveness,
+};
 
 use crate::metadata_facets::MediaFacetSet;
 
@@ -208,6 +213,111 @@ pub struct AdminFacetedMediaDetail {
     pub facets: MediaFacetSet,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AdminRemoteStreamPlaybackHealthStatus {
+    #[default]
+    Ready,
+    NeedsReview,
+    Blocked,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AdminRemoteStreamPlaybackHealthReason {
+    MediaUnavailable,
+    AvailabilityUnavailable,
+    AvailabilityUnknown,
+    SourceMissing,
+    SourceInvalid,
+    LegacyScriptUnsupported,
+    AddonMissing,
+    AddonDisabled,
+    AddonIncompatible,
+    PublishedOptionSchemaMissing,
+    LivenessUnknown,
+    FiniteDurationMissing,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AdminRemoteStreamPlaybackHealth {
+    pub status: AdminRemoteStreamPlaybackHealthStatus,
+    pub reasons: Vec<AdminRemoteStreamPlaybackHealthReason>,
+}
+
+impl AdminRemoteStreamPlaybackHealth {
+    #[must_use]
+    pub fn from_reasons(reasons: Vec<AdminRemoteStreamPlaybackHealthReason>) -> Self {
+        let status = if reasons.iter().any(|reason| {
+            !matches!(
+                reason,
+                AdminRemoteStreamPlaybackHealthReason::AvailabilityUnknown
+                    | AdminRemoteStreamPlaybackHealthReason::LivenessUnknown
+                    | AdminRemoteStreamPlaybackHealthReason::FiniteDurationMissing
+            )
+        }) {
+            AdminRemoteStreamPlaybackHealthStatus::Blocked
+        } else if reasons.is_empty() {
+            AdminRemoteStreamPlaybackHealthStatus::Ready
+        } else {
+            AdminRemoteStreamPlaybackHealthStatus::NeedsReview
+        };
+        Self { status, reasons }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdminRemoteStreamOwner {
+    pub list_id: EntityId,
+    pub list_name: String,
+    pub addon_id: String,
+    pub published_revision: i32,
+    pub published_effective_options: BTreeMap<String, AddonMediaListOptionValue>,
+    pub option_schema: Option<super::AddonMediaListOptionSchema>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AdminRemoteStreamChannel {
+    pub channel_id: EntityId,
+    pub name: String,
+    pub number: String,
+    pub is_enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AdminRemoteStreamDetail {
+    pub id: EntityId,
+    pub title: String,
+    pub original_title: Option<String>,
+    pub sort_title: String,
+    pub year: Option<i64>,
+    pub plot: Option<String>,
+    pub outline: Option<String>,
+    pub tagline: Option<String>,
+    pub show_title: Option<String>,
+    pub season_number: Option<i64>,
+    pub episode_number: Option<i64>,
+    pub release_date: Option<String>,
+    pub collection_name: Option<String>,
+    pub original_broadcasters: Vec<String>,
+    pub broadcasters: Vec<String>,
+    pub thumbnail_path: Option<String>,
+    pub poster_path: Option<String>,
+    pub fanart_path: Option<String>,
+    pub media_item_state: i32,
+    pub content_kind: AddonMediaListContentKind,
+    pub liveness: RemoteStreamLiveness,
+    pub configured_duration: Option<String>,
+    pub probed_duration: Option<String>,
+    pub effective_duration: Option<String>,
+    pub availability: AddonMediaListItemAvailability,
+    pub availability_reason: Option<String>,
+    pub source_addon_id: Option<String>,
+    pub facets: MediaFacetSet,
+    pub media_info: AdminMediaItemInfo,
+    pub owners: Vec<AdminRemoteStreamOwner>,
+    pub channels: Vec<AdminRemoteStreamChannel>,
+    pub playback_health: AdminRemoteStreamPlaybackHealth,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct AdminMediaInfoStream {
     pub index: Option<i64>,
@@ -247,6 +357,7 @@ pub enum AdminMediaInfoKind {
     MusicVideo,
     Song,
     Image,
+    RemoteStream,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -284,6 +395,10 @@ pub trait AdminMediaRepository: Send + Sync {
         id: EntityId,
         kind: AdminFacetedMediaKind,
     ) -> Result<Option<AdminFacetedMediaDetail>>;
+    async fn get_remote_stream_detail_admin(
+        &self,
+        id: EntityId,
+    ) -> Result<Option<AdminRemoteStreamDetail>>;
     async fn list_extras_admin(&self, parent_id: EntityId) -> Result<Vec<AdminMediaCard>>;
     async fn get_media_item_info_admin(&self, id: EntityId) -> Result<Option<AdminMediaItemInfo>>;
 }

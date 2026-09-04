@@ -2411,7 +2411,7 @@ their later owning milestones.
 id         = 'amm-k-03'
 phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Open Remote Stream details from add-on-list search results'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-02']
@@ -2424,10 +2424,22 @@ search navigation behaves like movie/episode cards with SSR, hydration,
 keyboard, narrow-screen, Chromium, and Firefox proof.
 '''
 evidence = '''
-Implementation planning started 2026-09-04. This slice is reserved for the
-canonical Remote Stream search href and one localized detail surface; lifecycle
-preview, revision management, refresh, provider options, and tool maintenance
-remain in their later owning milestones.
+Completed 2026-09-04. Remote Stream search and browser cards now use the
+canonical detail href. A typed application/repository read model supplies
+effective metadata and artwork, tracks and chapters, persisted liveness,
+replacement-aware duration and availability, committed published owners and
+effective frozen options, playback health, and replacement-aware channel
+actions to one localized SSR/no-JavaScript detail page. Published search and
+owner membership deliberately follows Published rather than mutable draft
+Included state. Focused proof passed 13 infra Remote Stream tests, the
+published-membership regression, 9 web Remote Stream tests, the web type-check,
+format/diff checks, hydration lint, architecture lint, and progress validation;
+the final independent P1/P2 re-review found no remaining findings. The focused
+Playwright scenario is authored and typechecked, while its Chromium/Firefox
+execution and hydration status remain explicitly deferred to the agreed
+AMM-N-03 integrated browser closeout. Lifecycle preview, revision management,
+refresh, provider options, and tool maintenance remain in their later owning
+milestones.
 '''
 
 [[milestone]]

@@ -439,7 +439,7 @@ pub fn search_href(kind: SearchCardKind, media_item_id: i64, related_id: Option<
         SearchCardKind::OtherVideo => format!("/media/other/videos/{media_item_id}"),
         SearchCardKind::Song => format!("/media/music/songs/{media_item_id}"),
         SearchCardKind::Image => format!("/media/browser/images/{media_item_id}"),
-        SearchCardKind::RemoteStream => String::new(),
+        SearchCardKind::RemoteStream => format!("/media/remote/streams/{media_item_id}"),
     }
 }
 
@@ -1172,7 +1172,10 @@ mod tests {
             search_href(SearchCardKind::Image, 1, None),
             "/media/browser/images/1"
         );
-        assert_eq!(search_href(SearchCardKind::RemoteStream, 1, None), "");
+        assert_eq!(
+            search_href(SearchCardKind::RemoteStream, 1, None),
+            "/media/remote/streams/1"
+        );
     }
 
     #[test]

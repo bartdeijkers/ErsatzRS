@@ -222,5 +222,5 @@ routed  = true
 
 [[route]]
 nav     = '/media/remote/streams'
-backing = 'ErsatzTV `RemoteStreamList.razor` parity route: 100-card browser, search-index query filtering, `/page/{n}` route shape, letter page-map jumps, selection actions, per-card Add To Collection, Add To Playlist, and SSR/no-JS list HTML.'
+backing = 'ErsatzTV `RemoteStreamList.razor` parity route: 100-card browser, search-index query filtering, `/page/{n}` route shape, letter page-map jumps, selection actions, per-card Add To Collection, Add To Playlist, and SSR/no-JS list HTML. ADR 0085 extends search cards with canonical `/media/remote/streams/:id` navigation and an SSR-first detail surface.'
 routed  = true

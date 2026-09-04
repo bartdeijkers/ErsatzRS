@@ -12,6 +12,7 @@ pub mod multi_collections;
 pub mod multi_select_browser;
 pub mod other_videos;
 pub mod playlists;
+pub mod remote_stream_detail;
 pub mod remote_stream_playlists;
 pub mod remote_streams;
 pub mod rerun_collections;

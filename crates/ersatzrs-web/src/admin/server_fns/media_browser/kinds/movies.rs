@@ -696,6 +696,7 @@ fn media_item_info_json_from_admin_with_language(
         AdminMediaInfoKind::MusicVideo => "MusicVideo",
         AdminMediaInfoKind::Song => "Song",
         AdminMediaInfoKind::Image => "Image",
+        AdminMediaInfoKind::RemoteStream => "RemoteStream",
     };
     let json = MediaItemInfoJson {
         id: info.id,

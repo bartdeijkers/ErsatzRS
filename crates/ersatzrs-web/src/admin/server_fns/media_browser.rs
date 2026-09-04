@@ -232,7 +232,7 @@ fn browser_card_href(
         Kind::MusicVideo => Some(format!("/media/music/videos/{id}")),
         Kind::Song => Some(format!("/media/music/songs/{id}")),
         Kind::Image => Some(format!("/media/browser/images/{id}")),
-        Kind::RemoteStream => None,
+        Kind::RemoteStream => Some(format!("/media/remote/streams/{id}")),
         Kind::OtherVideo => Some(format!("/media/other/videos/{id}")),
     }
 }
@@ -297,6 +297,10 @@ mod browser_card_projection_tests {
         assert_eq!(
             browser_card_href(Kind::MusicVideo, 51, &enrichment).as_deref(),
             Some("/media/music/videos/51")
+        );
+        assert_eq!(
+            browser_card_href(Kind::RemoteStream, 61, &enrichment).as_deref(),
+            Some("/media/remote/streams/61")
         );
     }
 }
@@ -638,6 +642,97 @@ pub struct MediaFacetSetRow {
     pub languages: Vec<String>,
     pub genres: Vec<String>,
     pub tags: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteStreamPlaybackHealthStatusRow {
+    Ready,
+    NeedsReview,
+    Blocked,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteStreamPlaybackHealthRow {
+    pub status: RemoteStreamPlaybackHealthStatusRow,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteStreamOptionSchemaRow {
+    pub definitions: Vec<ersatzrs_addon_contract::AddonMediaListOptionDefinition>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteStreamOwnerRow {
+    pub list_id: i64,
+    pub list_name: String,
+    pub addon_id: String,
+    pub published_revision: i32,
+    pub published_effective_options:
+        std::collections::BTreeMap<String, ersatzrs_domain::AddonMediaListOptionValue>,
+    pub option_schema: Option<RemoteStreamOptionSchemaRow>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteStreamChannelRow {
+    pub channel_id: i64,
+    pub name: String,
+    pub number: String,
+    pub is_enabled: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RemoteStreamTrackRow {
+    pub index: Option<i64>,
+    pub kind: i32,
+    pub title: Option<String>,
+    pub codec: Option<String>,
+    pub profile: Option<String>,
+    pub language: Option<String>,
+    pub channels: Option<i64>,
+    pub is_default: Option<bool>,
+    pub is_forced: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteStreamChapterRow {
+    pub title: String,
+    pub start_time: String,
+    pub end_time: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RemoteStreamDetailRow {
+    pub id: i64,
+    pub title: String,
+    pub original_title: Option<String>,
+    pub sort_title: String,
+    pub year: Option<i64>,
+    pub plot: Option<String>,
+    pub outline: Option<String>,
+    pub tagline: Option<String>,
+    pub show_title: Option<String>,
+    pub season_number: Option<i64>,
+    pub episode_number: Option<i64>,
+    pub release_date: Option<String>,
+    pub collection_name: Option<String>,
+    pub original_broadcasters: Vec<String>,
+    pub broadcasters: Vec<String>,
+    pub thumbnail_url: Option<String>,
+    pub poster_url: Option<String>,
+    pub fanart_url: Option<String>,
+    pub content_kind: ersatzrs_domain::AddonMediaListContentKind,
+    pub liveness: ersatzrs_domain::RemoteStreamLiveness,
+    pub effective_duration: Option<String>,
+    pub availability: ersatzrs_domain::AddonMediaListItemAvailability,
+    pub availability_reason: Option<String>,
+    pub source_addon_id: Option<String>,
+    pub facets: MediaFacetSetRow,
+    pub tracks: Vec<RemoteStreamTrackRow>,
+    pub chapters: Vec<RemoteStreamChapterRow>,
+    pub owners: Vec<RemoteStreamOwnerRow>,
+    pub channels: Vec<RemoteStreamChannelRow>,
+    pub playback_health: RemoteStreamPlaybackHealthRow,
 }
 
 #[cfg(feature = "ssr")]
@@ -1718,6 +1813,13 @@ pub async fn list_remote_streams(
 }
 
 #[server]
+pub async fn get_remote_stream_details(
+    id: i64,
+) -> Result<Option<RemoteStreamDetailRow>, ServerFnError> {
+    kinds::remote_streams::get_remote_stream_details_impl(id).await
+}
+
+#[server]
 pub async fn list_remote_stream_tags() -> Result<Vec<String>, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -2580,7 +2682,7 @@ mod server_fn_path_stability {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_media_browser_server_fn_routes_remain_stable() {
-        let routes: [(&str, &str); 76] = [
+        let routes: [(&str, &str); 77] = [
             (super::ListMovies::PATH, "list_movies"),
             (super::GetMovieDetails::PATH, "get_movie_details"),
             (super::GetShowDetails::PATH, "get_show_details"),
@@ -2603,6 +2705,10 @@ mod server_fn_path_stability {
             (super::ListMusicVideos::PATH, "list_music_videos"),
             (super::RemoteStreamPageMap::PATH, "remote_stream_page_map"),
             (super::ListRemoteStreams::PATH, "list_remote_streams"),
+            (
+                super::GetRemoteStreamDetails::PATH,
+                "get_remote_stream_details",
+            ),
             (super::ListSongs::PATH, "list_songs"),
             (super::ListTrashItems::PATH, "list_trash_items"),
             (super::DeleteMediaItems::PATH, "delete_media_items"),

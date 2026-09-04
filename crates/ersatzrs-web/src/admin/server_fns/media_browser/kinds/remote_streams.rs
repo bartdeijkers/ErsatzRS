@@ -3,7 +3,9 @@ use super::super::ContentVariantInfo;
 #[cfg(feature = "ssr")]
 use super::super::{
     bucket_index, expect_context, list_media_cards_from_application, LetterPageMap, MediaCardRow,
-    ServerFnError,
+    MediaFacetSetRow, RemoteStreamChannelRow, RemoteStreamChapterRow, RemoteStreamDetailRow,
+    RemoteStreamOptionSchemaRow, RemoteStreamOwnerRow, RemoteStreamPlaybackHealthRow,
+    RemoteStreamPlaybackHealthStatusRow, RemoteStreamTrackRow, ServerFnError,
 };
 
 // ---------------------------------------------------------------------------
@@ -87,6 +89,139 @@ pub(in crate::admin::server_fns::media_browser) async fn list_remote_streams_imp
         true,
     )
     .await
+}
+
+#[cfg(feature = "ssr")]
+pub(in crate::admin::server_fns::media_browser) async fn get_remote_stream_details_impl(
+    id: i64,
+) -> Result<Option<RemoteStreamDetailRow>, ServerFnError> {
+    use crate::api::artwork::{artwork_url, ArtworkUrlKind};
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    let Some(detail) = state.application.get_remote_stream_detail(id).await? else {
+        return Ok(None);
+    };
+    let owners = detail
+        .owners
+        .into_iter()
+        .map(|owner| {
+            let option_schema = owner
+                .option_schema
+                .map(|schema| {
+                    let capability =
+                        serde_json::from_str::<ersatzrs_addon_contract::AddonCapability>(
+                            &schema.definition_json,
+                        )
+                        .map_err(ServerFnError::new)?;
+                    if capability.id != schema.schema.capability_id {
+                        return Err(ServerFnError::new(
+                            "published option schema identity does not match its definition",
+                        ));
+                    }
+                    Ok(RemoteStreamOptionSchemaRow {
+                        definitions: capability.options,
+                    })
+                })
+                .transpose()?;
+            Ok(RemoteStreamOwnerRow {
+                list_id: owner.list_id,
+                list_name: owner.list_name,
+                addon_id: owner.addon_id,
+                published_revision: owner.published_revision,
+                published_effective_options: owner.published_effective_options,
+                option_schema,
+            })
+        })
+        .collect::<Result<Vec<_>, ServerFnError>>()?;
+    let tracks = detail
+        .media_info
+        .streams
+        .into_iter()
+        .map(|stream| RemoteStreamTrackRow {
+            index: stream.index,
+            kind: stream.kind,
+            title: stream.title,
+            codec: stream.codec,
+            profile: stream.profile,
+            language: stream.language,
+            channels: stream.channels,
+            is_default: stream.is_default,
+            is_forced: stream.is_forced,
+        })
+        .collect();
+    let chapters = detail
+        .media_info
+        .chapters
+        .into_iter()
+        .map(|chapter| RemoteStreamChapterRow {
+            title: chapter.title,
+            start_time: chapter.start_time,
+            end_time: chapter.end_time,
+        })
+        .collect();
+    let channels = detail
+        .channels
+        .into_iter()
+        .map(|channel| RemoteStreamChannelRow {
+            channel_id: channel.channel_id,
+            name: channel.name,
+            number: channel.number,
+            is_enabled: channel.is_enabled,
+        })
+        .collect();
+    let playback_health = RemoteStreamPlaybackHealthRow {
+        status: match detail.playback_health.status {
+            ersatzrs_core::repositories::AdminRemoteStreamPlaybackHealthStatus::Ready => {
+                RemoteStreamPlaybackHealthStatusRow::Ready
+            }
+            ersatzrs_core::repositories::AdminRemoteStreamPlaybackHealthStatus::NeedsReview => {
+                RemoteStreamPlaybackHealthStatusRow::NeedsReview
+            }
+            ersatzrs_core::repositories::AdminRemoteStreamPlaybackHealthStatus::Blocked => {
+                RemoteStreamPlaybackHealthStatusRow::Blocked
+            }
+        },
+    };
+
+    Ok(Some(RemoteStreamDetailRow {
+        id: detail.id,
+        title: detail.title,
+        original_title: detail.original_title,
+        sort_title: detail.sort_title,
+        year: detail.year,
+        plot: detail.plot,
+        outline: detail.outline,
+        tagline: detail.tagline,
+        show_title: detail.show_title,
+        season_number: detail.season_number,
+        episode_number: detail.episode_number,
+        release_date: detail.release_date,
+        collection_name: detail.collection_name,
+        original_broadcasters: detail.original_broadcasters,
+        broadcasters: detail.broadcasters,
+        thumbnail_url: detail
+            .thumbnail_path
+            .and_then(|path| artwork_url(&path, ArtworkUrlKind::Thumbnail)),
+        poster_url: detail
+            .poster_path
+            .and_then(|path| artwork_url(&path, ArtworkUrlKind::Poster)),
+        fanart_url: detail
+            .fanart_path
+            .and_then(|path| artwork_url(&path, ArtworkUrlKind::FanArt)),
+        content_kind: detail.content_kind,
+        liveness: detail.liveness,
+        effective_duration: detail.effective_duration,
+        availability: detail.availability,
+        availability_reason: detail.availability_reason,
+        source_addon_id: detail.source_addon_id,
+        facets: MediaFacetSetRow::from(detail.facets),
+        tracks,
+        chapters,
+        owners,
+        channels,
+        playback_health,
+    }))
 }
 
 #[cfg(all(test, feature = "ssr"))]

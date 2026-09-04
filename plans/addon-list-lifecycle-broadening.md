@@ -619,6 +619,10 @@ AMM-J remains the release blocker and is specified in
 - Prove `/search?query=addon_list%3a8`-shaped results navigate like movie and
   episode cards without assuming list ID 8 exists in fixtures.
 
+Implemented 2026-09-04 with a typed, replacement-aware detail read model and a
+localized SSR route. The cross-browser scenario is checked in; its
+Chromium/Firefox execution remains part of the integrated AMM-N-03 closeout.
+
 ### AMM-K-04 — Preview impact and retain bounded revisions
 
 - Add durable Test source, saved-draft publication diff, reset downstream-

@@ -1,5 +1,6 @@
 import { expect, Locator, Page, TestInfo, test } from '@playwright/test';
 import { execFileSync } from 'child_process';
+import { createHash } from 'crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -36,6 +37,16 @@ type RemoteStreamSeed = {
   collectionId: number;
   playlistGroupId: number;
   playlistId: number;
+  addonListId: number;
+  addonListItemId: number;
+  optionSchemaId: number;
+  revisionId: number;
+  channelId: number;
+  playoutId: number;
+  playoutItemId: number;
+  mediaVersionId: number;
+  mediaStreamId: number;
+  mediaChapterId: number;
   tag: string;
 };
 
@@ -57,6 +68,16 @@ function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
     collectionId: base + 9_001,
     playlistGroupId: base + 9_002,
     playlistId: base + 9_003,
+    addonListId: base + 9_101,
+    addonListItemId: base + 9_102,
+    optionSchemaId: base + 9_103,
+    revisionId: base + 9_104,
+    channelId: base + 9_201,
+    playoutId: base + 9_202,
+    playoutItemId: base + 9_203,
+    mediaVersionId: base + 9_301,
+    mediaStreamId: base + 9_302,
+    mediaChapterId: base + 9_303,
     tag: `E2E playlist facet ${testInfo.project.name}`,
   };
 }
@@ -89,6 +110,14 @@ function seedRemoteStreams(testInfo: TestInfo): RemoteStreamSeed {
     panels: [],
   });
   sqlite(`
+DELETE FROM "AddonMediaList" WHERE "Id" = ${seed.addonListId};
+DELETE FROM "AddonMediaListOptionSchema" WHERE "Id" = ${seed.optionSchemaId};
+DELETE FROM "PlayoutItem" WHERE "Id" = ${seed.playoutItemId};
+DELETE FROM "Playout" WHERE "Id" = ${seed.playoutId};
+DELETE FROM "Channel" WHERE "Id" = ${seed.channelId};
+DELETE FROM "MediaChapter" WHERE "Id" = ${seed.mediaChapterId};
+DELETE FROM "MediaStream" WHERE "Id" = ${seed.mediaStreamId};
+DELETE FROM "MediaVersion" WHERE "Id" = ${seed.mediaVersionId};
 DELETE FROM "AddonInstallation" WHERE "AddonId" = '${addonId}';
 INSERT INTO "AddonInstallation" (
   "AddonId", "RepositoryId", "Version", "Enabled", "PackageSha256",
@@ -171,6 +200,124 @@ INSERT OR IGNORE INTO "Playlist" ("Id", "Name", "PlaylistGroupId", "IsSystem")
   return seed;
 }
 
+function seedRemoteStreamDetails(testInfo: TestInfo): RemoteStreamSeed {
+  const seed = seedRemoteStreams(testInfo);
+  const addonId = 'org.ersatzrs.addon.fixture';
+  const profileId = sqlite('SELECT "Id" FROM "FFmpegProfile" ORDER BY "Id" LIMIT 1;');
+  if (!profileId) {
+    throw new Error('E2E database has no FFmpegProfile row for Remote Stream detail seeding');
+  }
+  const capabilityId = `media-list.options.e2e${seed.optionSchemaId}.v1`;
+  const optionDefinition = JSON.stringify({
+    id: capabilityId,
+    options: [{
+      key: 'stream_quality',
+      label: { 'en-US': 'Stream quality', 'nl-NL': 'Streamkwaliteit' },
+      description: { 'en-US': 'Published playback preference.' },
+      scope: 'both',
+      operation_targets: ['playback'],
+      applicability: 'all',
+      kind: 'enum',
+      default: 'medium',
+      choices: [
+        { value: 'medium', label: { 'en-US': 'Medium' } },
+        { value: 'high', label: { 'en-US': 'High' } },
+      ],
+    }],
+  });
+  const schemaDigest = createHash('sha256').update(optionDefinition).digest('hex');
+  const channelName = `E2E Remote Stream Channel ${testInfo.project.name}`;
+  const listName = `E2E Published Remote Streams ${testInfo.project.name}`;
+
+  sqlite(`
+UPDATE "RemoteStream"
+SET "AddonId" = '${addonId}', "Liveness" = 2, "Availability" = 0,
+    "ContentKind" = 2, "Duration" = '00:30:00'
+WHERE "Id" = ${seed.mediaItemId};
+UPDATE "RemoteStreamMetadata"
+SET "Year" = 2026, "Plot" = 'A live motorsport fixture.', "CollectionName" = 'Race day',
+    "Broadcasters" = '["E2E Sports"]'
+WHERE "RemoteStreamId" = ${seed.mediaItemId};
+
+INSERT INTO "Artwork" (
+  "ArtworkKind", "DateAdded", "DateUpdated", "Path", "RemoteStreamMetadataId"
+)
+SELECT 0, '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z',
+       '/e2e/remote-stream-poster.jpg', "Id"
+FROM "RemoteStreamMetadata" WHERE "RemoteStreamId" = ${seed.mediaItemId};
+
+INSERT INTO "MediaVersion" (
+  "Id", "DateAdded", "DateUpdated", "Duration", "Height", "Name",
+  "RemoteStreamId", "VideoScanKind", "Width"
+) VALUES (
+  ${seed.mediaVersionId}, '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z',
+  '00:30:00', 1080, 'E2E Remote Stream source', ${seed.mediaItemId}, 1, 1920
+);
+INSERT INTO "MediaStream" (
+  "Id", "Index", "Codec", "Profile", "MediaStreamKind", "Language", "Channels",
+  "Title", "Default", "Forced", "MediaVersionId"
+) VALUES (
+  ${seed.mediaStreamId}, 1, 'aac', 'LC', 2, 'eng', 2,
+  'English stereo', 1, 0, ${seed.mediaVersionId}
+);
+INSERT INTO "MediaChapter" (
+  "Id", "MediaVersionId", "ChapterId", "StartTime", "EndTime", "Title"
+) VALUES (
+  ${seed.mediaChapterId}, ${seed.mediaVersionId}, 0, '00:00:00', '00:05:00', 'Opening lap'
+);
+
+INSERT INTO "AddonMediaListOptionSchema" (
+  "Id", "AddonId", "CapabilityId", "SchemaDigest", "DefinitionJson", "CreatedAt"
+) VALUES (
+  ${seed.optionSchemaId}, '${addonId}', '${capabilityId}', '${schemaDigest}',
+  '${sqlEscape(optionDefinition)}', '2026-09-04T00:00:00Z'
+);
+INSERT INTO "AddonMediaList" (
+  "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "PublishedRevision"
+) VALUES (
+  ${seed.addonListId}, '${addonId}', 'e2e-detail-${testInfo.project.name}',
+  'https://example.test/detail-list', '${sqlEscape(listName)}', 1
+);
+INSERT INTO "AddonMediaListItem" (
+  "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "MediaItemId",
+  "Rank", "Title", "Included", "Published"
+) VALUES (
+  ${seed.addonListItemId}, ${seed.addonListId}, 'e2e-detail-item',
+  'Nurburgring broadcast', 4, ${seed.mediaItemId}, 0, 'Nurburgring broadcast', 1, 1
+);
+INSERT INTO "AddonMediaListRevision" (
+  "Id", "AddonMediaListId", "Revision", "OptionSchemaId", "OptionValuesJson", "CompletedAt"
+) VALUES (
+  ${seed.revisionId}, ${seed.addonListId}, 1, ${seed.optionSchemaId},
+  '{"stream_quality":"medium"}', '2026-09-04T00:00:00Z'
+);
+INSERT INTO "AddonMediaListRevisionItemOption" (
+  "AddonMediaListRevisionId", "ProviderId", "OptionOverridesJson"
+) VALUES (${seed.revisionId}, 'e2e-detail-item', '{"stream_quality":"high"}');
+
+INSERT INTO "Channel" (
+  "Id", "UniqueId", "Number", "SortNumber", "Name", "Group",
+  "FFmpegProfileId", "StreamingMode", "StreamSelectorMode", "PlayoutSource",
+  "PlayoutMode", "TranscodeMode", "IdleBehavior", "MusicVideoCreditsMode",
+  "SongVideoMode", "SubtitleMode", "IsEnabled", "ShowInEpg"
+) VALUES (
+  ${seed.channelId}, '40000000-0000-0000-0000-${seed.channelId.toString().padStart(12, '0')}',
+  '903', -903, '${sqlEscape(channelName)}', 'ErsatzRS', ${profileId}, 5, 0, 0,
+  0, 0, 0, 0, 0, 0, 1, 1
+);
+INSERT INTO "Playout" ("Id", "ChannelId", "ScheduleKind", "Seed")
+VALUES (${seed.playoutId}, ${seed.channelId}, 1, 1);
+INSERT INTO "PlayoutItem" (
+  "Id", "DisableWatermarks", "FillerKind", "Finish", "GuideGroup", "InPoint",
+  "MediaItemId", "OutPoint", "PlayoutId", "Start"
+) VALUES (
+  ${seed.playoutItemId}, 0, 0, '2099-01-01 00:30:00', 0, '00:00:00',
+  ${seed.mediaItemId}, '00:30:00', ${seed.playoutId}, '2099-01-01 00:00:00'
+);
+`);
+  return seed;
+}
+
 function screenshotPath(testInfo: TestInfo, name: string): string {
   return `test-results/${name}-${testInfo.project.name}.png`;
 }
@@ -244,6 +391,64 @@ test.describe('remote streams browser parity', () => {
     expect(contentBox?.width).toBeLessThanOrEqual(1540);
 
     await page.screenshot({ path: screenshotPath(testInfo, 'remote-streams-list-desktop'), fullPage: true });
+  });
+
+  test('add-on-list search opens the SSR Remote Stream detail with native actions', async ({ page, browser, baseURL }, testInfo) => {
+    const seed = seedRemoteStreamDetails(testInfo);
+    const query = encodeURIComponent(`addon_list:${seed.addonListId}`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/search?query=${query}`);
+    await expect.poll(
+      () => page.evaluate(
+        () => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true,
+      ),
+      { timeout: 15_000 },
+    ).toBe(true);
+
+    const detailLink = page.getByRole('link', { name: 'Nurburgring broadcast' }).first();
+    await expect(detailLink).toHaveAttribute('href', `/media/remote/streams/${seed.mediaItemId}`);
+    await detailLink.focus();
+    await Promise.all([
+      page.waitForURL(`/media/remote/streams/${seed.mediaItemId}`),
+      detailLink.press('Enter'),
+    ]);
+
+    await expect(page.getByRole('heading', { name: 'Nurburgring broadcast' })).toBeVisible();
+    await expect(page.getByText('A live motorsport fixture.')).toBeVisible();
+    await expect(page.getByText('Live source')).toBeVisible();
+    await expect(page.getByText('00:30:00')).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Nurburgring broadcast' })).toHaveCount(1);
+    await expect(page.getByRole('heading', { name: 'Playback health' })).toBeVisible();
+    await expect(page.getByText('English stereo')).toBeVisible();
+    await expect(page.getByText('Opening lap')).toBeVisible();
+
+    const owner = page.locator(`[data-addon-list-id="${seed.addonListId}"]`);
+    await expect(owner).toContainText(`E2E Published Remote Streams ${testInfo.project.name}`);
+    await expect(owner.getByRole('heading', { name: 'Published options' })).toBeVisible();
+    await expect(owner).toContainText('Stream quality');
+    await expect(owner).toContainText('High');
+
+    const channel = page.locator(`[data-channel-id="${seed.channelId}"]`);
+    await expect(channel).toContainText(`E2E Remote Stream Channel ${testInfo.project.name}`);
+    await expect(channel.getByRole('link', { name: 'Configure' }))
+      .toHaveAttribute('href', `/channels/${seed.channelId}`);
+    await expect(channel.getByRole('link', { name: 'Watch' }))
+      .toHaveAttribute('href', `/channels/${seed.channelId}/watch`);
+    await expect(page.getByText('https://example.test/nurburgring.m3u8')).toHaveCount(0);
+    expect(await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    )).toBe(true);
+
+    const noJsContext = await browser.newContext({ javaScriptEnabled: false, baseURL });
+    const noJsPage = await noJsContext.newPage();
+    const response = await noJsPage.goto(`/media/remote/streams/${seed.mediaItemId}`);
+    const html = await response?.text();
+    expect(html).toContain('Nurburgring broadcast');
+    expect(html).toContain(`E2E Published Remote Streams ${testInfo.project.name}`);
+    expect(html).toContain(`E2E Remote Stream Channel ${testInfo.project.name}`);
+    await expect(noJsPage.getByRole('link', { name: 'Watch' }))
+      .toHaveAttribute('href', `/channels/${seed.channelId}/watch`);
+    await noJsContext.close();
   });
 
   test('playlist management hydrates and preserves hand-authored manifests', async ({ page }, testInfo) => {

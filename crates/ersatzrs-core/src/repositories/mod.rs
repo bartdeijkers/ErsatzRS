@@ -54,7 +54,9 @@ pub use admin_media::{
     AdminCommentarySubtitle, AdminFacetedMediaDetail, AdminFacetedMediaKind, AdminMediaCard,
     AdminMediaInfoChapter, AdminMediaInfoKind, AdminMediaInfoStream, AdminMediaItemInfo,
     AdminMediaRepository, AdminMovieDetail, AdminMoviePlaybackSource, AdminMoviePlaybackStream,
-    AdminOtherVideoDetail, AdminSeasonCard, AdminShowDetail,
+    AdminOtherVideoDetail, AdminRemoteStreamChannel, AdminRemoteStreamDetail,
+    AdminRemoteStreamOwner, AdminRemoteStreamPlaybackHealth, AdminRemoteStreamPlaybackHealthReason,
+    AdminRemoteStreamPlaybackHealthStatus, AdminSeasonCard, AdminShowDetail,
 };
 pub use admin_search::{
     AdminSearchEnrichment, AdminSearchKind, AdminSearchRepository, AdminSearchSnapshot,

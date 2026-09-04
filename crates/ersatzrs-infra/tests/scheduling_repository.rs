@@ -872,6 +872,82 @@ async fn scheduling_repository_search_documents_page_returns_page_map() {
 }
 
 #[tokio::test]
+async fn addon_list_search_indexes_only_published_members() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_scheduling_fixture(&pool).await;
+
+    pool.execute(
+        r#"INSERT INTO "AddonInstallation" (
+              "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+              "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+           ) VALUES (
+              'org.example.search-list', '1.0.0', 1, 'package', 'content', '{}',
+              'addons/search-list', '2026-09-04T00:00:00Z', '2026-09-04T00:00:00Z'
+           )"#,
+    )
+    .await
+    .unwrap();
+    for (list_id, name) in [
+        (501_i64, "Published list"),
+        (502_i64, "Draft list"),
+        (503_i64, "Pending exclusion"),
+    ] {
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                  "Id", "AddonId", "ProviderId", "SourceUrl", "Name"
+               ) VALUES (?, 'org.example.search-list', ?, 'https://example.invalid/list', ?)"#,
+        )
+        .bind(list_id)
+        .bind(format!("list-{list_id}"))
+        .bind(name)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    for (item_id, list_id, published, included) in [
+        (601_i64, 501_i64, true, true),
+        (602_i64, 502_i64, false, true),
+        // Included is mutable draft intent. Until the next Publish, this item
+        // remains part of the committed list snapshot and stays searchable.
+        (603_i64, 503_i64, true, false),
+    ] {
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItem" (
+                  "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind",
+                  "MediaItemId", "Rank", "Title", "Published", "Included"
+               ) VALUES (?, ?, ?, 'Feature', 0, 20, 0, 'Feature', ?, ?)"#,
+        )
+        .bind(item_id)
+        .bind(list_id)
+        .bind(format!("item-{item_id}"))
+        .bind(published)
+        .bind(included)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+
+    for (list_id, expected_ids) in [
+        (501_i64, vec![20_i64]),
+        (502_i64, Vec::new()),
+        (503_i64, vec![20_i64]),
+    ] {
+        let (hits, _, _) = repos
+            .scheduling
+            .search_documents_page(&format!("addon_list:{list_id}"), 0, 0)
+            .await
+            .unwrap();
+        assert_eq!(
+            hits.into_iter()
+                .map(|document| document.media_item_id)
+                .collect::<Vec<_>>(),
+            expected_ids
+        );
+    }
+}
+
+#[tokio::test]
 async fn admin_show_detail_uses_one_lowest_non_empty_artwork_winner_per_season() {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());

@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Give Remote Stream search results canonical detail links and an SSR-first,
+  localized detail page showing effective metadata, artwork, tracks, liveness,
+  duration, availability, owning add-on lists and their published options,
+  playback health, and applicable channel actions. Add-on-list-filtered search
+  now indexes only memberships from the committed published snapshot.
+
 - Add a durable typed-confirmation Reset and reload action for add-on media
   lists. It removes derived state before a first-generation full import while
   retaining approved configuration and the empty generated-playlist identity;
