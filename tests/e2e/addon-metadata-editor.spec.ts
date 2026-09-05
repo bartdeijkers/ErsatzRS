@@ -229,12 +229,18 @@ async function waitUntilHydrated(page: Page): Promise<void> {
     .toBe(true);
 }
 
-function seedMetadataEditor(testInfo: TestInfo): MetadataSeed {
+function seedMetadataEditor(
+  testInfo: TestInfo,
+  namespace: 'shared' | 'reset' | 'no-js' = 'shared',
+): MetadataSeed {
   if (!dbPath) {
     throw new Error('E2E database path is required');
   }
-  const base = projectBase(testInfo);
-  const suffix = testInfo.project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  // Queue-only reset scenarios keep their live work separate from later fixture seeding.
+  const namespaceOffset = { shared: 0, reset: 10_000_000, 'no-js': 20_000_000 }[namespace];
+  const base = projectBase(testInfo) + namespaceOffset;
+  const projectSuffix = testInfo.project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const suffix = namespace === 'shared' ? projectSuffix : `${projectSuffix}-${namespace}`;
   const addonId = `org.example.e2e.metadata.${suffix}`;
   const listId = base + 1;
   const firstItemId = base + 2;
@@ -823,7 +829,7 @@ WHERE "AddonMediaListId" = ${seed.listId};
     page,
   }, testInfo) => {
     const runtimeErrors = watchRuntimeErrors(page);
-    const seed = seedMetadataEditor(testInfo);
+    const seed = seedMetadataEditor(testInfo, 'reset');
     await forceEnglish(page);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
@@ -921,7 +927,7 @@ WHERE "AddonMediaListId" = ${seed.listId};
     baseURL,
   }, testInfo) => {
     test.setTimeout(120_000);
-    const seed = seedMetadataEditor(testInfo);
+    const seed = seedMetadataEditor(testInfo, 'no-js');
     const invalidCollectionMetadata = JSON.stringify({
       title: '',
       artwork: [{ url: 'http://invalid.example/poster.jpg', role: 'poster' }],

@@ -786,6 +786,12 @@ Maintainer-requested priority on 2026-09-05; AMM-M-01 remains reserved and pause
   routes, native forms, server-function signatures, repositories and stored
   projection strings stay unchanged. Proof targets are all-culture formatter
   and display-adapter tests plus the season heading/media-info browser scenario.
+- Queue-only reset browser scenarios own separate database and filesystem
+  namespaces, so their background scans/imports cannot mutate another scenario's
+  freshly seeded publication. Preserve exact completion assertions in the no-JS
+  publication test; do not hide the race with a larger timeout or production
+  changes. Prove the predecessor/reset, no-JS, and following recovery cases in
+  sequence in both browsers.
 
 ### AMM-M-01 — Per-item browser cookies and SponsorBlock
 

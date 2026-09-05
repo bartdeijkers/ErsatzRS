@@ -2816,8 +2816,21 @@ Clippy, Format, Cargo deny, and documentation checks pass. After the runner stop
 season-zero, media-info, and trash coverage. One Chromium season/media-info
 interaction regression passes against a matched SSR/WASM build and temporary
 database. Independent GPT-6 Astra review finds no P1/P2 in the numbering change.
-Exact-SHA CI for this refinement remains outstanding; these focused results do
-not mark the milestone complete.
+The refinement is committed as 535d903ddaec1135c917df22a4b821aa4fdc256e and pushed
+to main with exact remote equality verified. CI run 33976646150 passes Test,
+including 591 web unit tests, Clippy, Format, Cargo deny, and documentation checks.
+The browser job finishes with 293 passed, 22 skipped, and one Chromium no-JS
+publication convergence failure:
+the predecessor reset loses its lease when the next scenario reuses its fixture,
+then publication remains Publishing/WaitingToRetry at revision 1. Source inspection
+confirms the reset scenario ends at enqueue without awaiting its scan/import work.
+The two queue-only reset scenarios now own separate numeric, add-on/provider,
+package, and managed-directory namespaces; publication assertions and timeouts
+are unchanged. Independent GPT-6 Astra review finds no P1/P2. Focused browser
+execution starts only after the CI worker stops, reusing the unchanged matched
+SSR/WASM build. All six predecessor-reset/no-JS/following-recovery cases pass in
+Chromium and Firefox with one worker (52.6 seconds). The milestone remains in
+progress pending exact-SHA green CI for the fixture-isolation follow-up.
 Cargo-leptos uses one Cargo job per SSR/WASM build (two compilers total); browser
 execution uses one worker, without a simultaneous CI or Rust test run.
 No release has been launched. Local builds and tests remain stopped while the

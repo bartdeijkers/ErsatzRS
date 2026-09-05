@@ -121,7 +121,8 @@ release section when tagging a release.
 - Repair add-on-list CI coverage for refresh controls, source-probe fixture
   isolation, save/reload synchronization, supported option schemas, and retained
   checkpoint invalidation without changing the intended runtime behavior.
-  Isolate reset lifecycle jobs between browser scenarios and preserve the
+  Isolate reset lifecycle jobs, identities, and directories between browser
+  scenarios so queued work cannot mutate the next fixture, and preserve the
   expected draft revision after tombstone confirmation in storage fixtures.
 
 - Retain a bounded, ordered, redacted activity history for each add-on-list
