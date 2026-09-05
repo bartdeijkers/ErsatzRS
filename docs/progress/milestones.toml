@@ -2800,8 +2800,24 @@ job behind because fixture cleanup disables foreign keys while reusing list IDs.
 Explicit lifecycle-job cleanup preserves the exact one-new-job assertion. All
 four paired predecessor/no-JS Chromium/Firefox cases pass against a fresh matched
 SSR/WASM build and temporary database, with one browser worker. Independent
-GPT-6 Astra review finds no P1/P2 in either fixture correction. Follow-up remote
-CI remains outstanding; these focused results do not mark the milestone complete.
+GPT-6 Astra review finds no P1/P2 in either fixture correction. The maintainer
+approved pushing follow-up 5042f484 and using CI instead of duplicating the full
+suites locally. Remote main matches that SHA. CI run 33973314600 passes the
+previous lifecycle regression and reaches the web unit tests (589 passed,
+one failed, six ignored). Its media-info fixture still expects s01e01 instead
+of the established localized S1 E1 label. Independent review confirms a single
+stale expectation, with subtitle/chapter/state assertions left intact. The
+maintainer approved conventional zero-padded S01E01 notation throughout the admin
+UI. The nine culture formatters, season-page rows, and display-level expectations
+now implement that refinement from ADR 0085 without changing stored identities or
+filenames. Run 33973314600 is terminal: Playwright passes 294 cases with 22 skips;
+Clippy, Format, Cargo deny, and documentation checks pass. After the runner stopped,
+115 focused Rust tests pass, including all-culture numbering, localized Unnumbered,
+season-zero, media-info, and trash coverage. One Chromium season/media-info
+interaction regression passes against a matched SSR/WASM build and temporary
+database. Independent GPT-6 Astra review finds no P1/P2 in the numbering change.
+Exact-SHA CI for this refinement remains outstanding; these focused results do
+not mark the milestone complete.
 Cargo-leptos uses one Cargo job per SSR/WASM build (two compilers total); browser
 execution uses one worker, without a simultaneous CI or Rust test run.
 No release has been launched. Local builds and tests remain stopped while the

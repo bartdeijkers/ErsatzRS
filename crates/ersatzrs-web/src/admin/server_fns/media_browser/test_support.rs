@@ -527,7 +527,7 @@ mod season_detail_tests {
         let json = get_media_item_info_json(30).await.unwrap();
         let value: Value = serde_json::from_str(&json).unwrap();
         assert_eq!(value["Kind"], "Episode");
-        assert_eq!(value["Title"], "Example Show - s01e01 - Pilot");
+        assert_eq!(value["Title"], "Example Show - S01E01 - Pilot");
         assert_eq!(value["LibraryKind"], "LocalLibrary");
         assert_eq!(value["State"], "FileNotFound");
         assert_eq!(value["Duration"], "00:22:00");
@@ -574,7 +574,7 @@ mod season_detail_tests {
         assert_eq!(trash.episodes[0].title, "Pilot");
         assert_eq!(
             trash.episodes[0].subtitle.as_deref(),
-            Some("Example Show - S1 E1")
+            Some("Example Show - S01E01")
         );
 
         owner.cleanup();

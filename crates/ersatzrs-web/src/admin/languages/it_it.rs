@@ -17,9 +17,9 @@ fn episode_display_subtitle(
     let show = show_title.unwrap_or("").trim();
     match (season_number, episode_number) {
         (Some(season), Some(episode)) if !show.is_empty() => {
-            Some(format!("{show} - stagione {season}, episodio {episode}"))
+            Some(format!("{show} - S{season:02}E{episode:02}"))
         }
-        (Some(season), Some(episode)) => Some(format!("stagione {season}, episodio {episode}")),
+        (Some(season), Some(episode)) => Some(format!("S{season:02}E{episode:02}")),
         _ => (!show.is_empty()).then(|| show.to_owned()),
     }
 }
@@ -3094,7 +3094,7 @@ mod tests {
         assert_eq!(STRINGS.channel_streaming_mode_label(2), "HLS diretto");
         assert_eq!(
             STRINGS.episode_display_subtitle(Some("Serie"), Some(2), Some(5)),
-            Some("Serie - stagione 2, episodio 5".to_owned())
+            Some("Serie - S02E05".to_owned())
         );
     }
 

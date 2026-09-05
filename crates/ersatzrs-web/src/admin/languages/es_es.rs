@@ -17,9 +17,9 @@ fn episode_display_subtitle(
     let show = show_title.unwrap_or("").trim();
     match (season_number, episode_number) {
         (Some(season), Some(episode)) if !show.is_empty() => {
-            Some(format!("{show} - temporada {season}, episodio {episode}"))
+            Some(format!("{show} - S{season:02}E{episode:02}"))
         }
-        (Some(season), Some(episode)) => Some(format!("temporada {season}, episodio {episode}")),
+        (Some(season), Some(episode)) => Some(format!("S{season:02}E{episode:02}")),
         _ => (!show.is_empty()).then(|| show.to_owned()),
     }
 }
@@ -3118,11 +3118,11 @@ mod tests {
     fn episode_display_subtitles_are_localized() {
         assert_eq!(
             STRINGS.episode_display_subtitle(Some("Serie"), Some(2), Some(5)),
-            Some("Serie - temporada 2, episodio 5".to_owned())
+            Some("Serie - S02E05".to_owned())
         );
         assert_eq!(
             STRINGS.episode_display_subtitle(None, Some(2), Some(5)),
-            Some("temporada 2, episodio 5".to_owned())
+            Some("S02E05".to_owned())
         );
     }
 

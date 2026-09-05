@@ -17,9 +17,9 @@ fn episode_display_subtitle(
     let show = show_title.unwrap_or("").trim();
     match (season_number, episode_number) {
         (Some(season), Some(episode)) if !show.is_empty() => {
-            Some(format!("{show} - saison {season}, épisode {episode}"))
+            Some(format!("{show} - S{season:02}E{episode:02}"))
         }
-        (Some(season), Some(episode)) => Some(format!("Saison {season}, épisode {episode}")),
+        (Some(season), Some(episode)) => Some(format!("S{season:02}E{episode:02}")),
         _ => (!show.is_empty()).then(|| show.to_owned()),
     }
 }
@@ -3117,11 +3117,11 @@ mod tests {
         assert_eq!(
             episode_display_subtitle_text(UiLanguage::French, Some("Série"), Some(2), Some(5))
                 .as_deref(),
-            Some("Série - saison 2, épisode 5")
+            Some("Série - S02E05")
         );
         assert_eq!(
             episode_display_subtitle_text(UiLanguage::French, None, Some(2), Some(5)).as_deref(),
-            Some("Saison 2, épisode 5")
+            Some("S02E05")
         );
         assert_eq!(
             episode_display_subtitle_text(UiLanguage::French, Some("Série"), None, None).as_deref(),

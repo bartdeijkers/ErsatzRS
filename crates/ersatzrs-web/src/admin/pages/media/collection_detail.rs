@@ -827,7 +827,7 @@ mod episode_subtitle_tests {
         assert_eq!(
             collection_item_subtitle(UiLanguage::English, "episode", Some("Show - S0 E3"),)
                 .as_deref(),
-            Some("Show - S0 E3")
+            Some("Show - S00E03")
         );
         assert_eq!(
             collection_item_subtitle(UiLanguage::English, "movie", Some("2026")).as_deref(),

@@ -4457,6 +4457,35 @@ mod tests {
     }
 
     #[test]
+    fn numbered_episode_labels_use_conventional_notation_in_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for (season, episode, expected) in
+                [(1, 1, "S01E01"), (0, 3, "S00E03"), (12, 123, "S12E123")]
+            {
+                assert_eq!(
+                    episode_display_subtitle_text(language, None, Some(season), Some(episode))
+                        .as_deref(),
+                    Some(expected),
+                    "{}",
+                    definition.code
+                );
+                assert_eq!(
+                    episode_display_subtitle_text(
+                        language,
+                        Some("Show"),
+                        Some(season),
+                        Some(episode)
+                    ),
+                    Some(format!("Show - {expected}")),
+                    "{}",
+                    definition.code
+                );
+            }
+        }
+    }
+
+    #[test]
     fn invalid_or_missing_episode_numbers_are_localized_as_unnumbered() {
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);

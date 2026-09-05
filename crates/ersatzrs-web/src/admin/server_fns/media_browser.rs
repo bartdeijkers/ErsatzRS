@@ -38,7 +38,8 @@ use crate::admin::i18n::{episode_display_subtitle_text, UiLanguage};
 /// Repository projections predate localized episode labels and expose either
 /// `Show - S1 E2` or `Show - s01e02 - Title`. Keep those storage/application
 /// contracts stable while ensuring invalid zero sentinels are presented as the
-/// localized `Unnumbered` label at the web boundary.
+/// localized `Unnumbered` label and numbered episodes use `S01E01` notation at
+/// the web boundary (ADR 0085).
 pub(crate) fn localize_episode_display_text(language: UiLanguage, value: &str) -> Option<String> {
     parse_spaced_episode_display(value)
         .or_else(|| parse_compact_episode_display(value))
@@ -105,11 +106,11 @@ mod episode_display_tests {
     fn season_zero_with_a_positive_episode_remains_a_numbered_special() {
         assert_eq!(
             localize_episode_display_text(UiLanguage::English, "Show - S0 E3").as_deref(),
-            Some("Show - S0 E3")
+            Some("Show - S00E03")
         );
         assert_eq!(
             localize_episode_display_text(UiLanguage::Dutch, "Serie - s00e03 - Special").as_deref(),
-            Some("Serie - seizoen 0, aflevering 3 - Special")
+            Some("Serie - S00E03 - Special")
         );
     }
 

@@ -367,6 +367,13 @@ number. Administration, search, NFO, and guide presentation label that state
 as **Unnumbered** and do not invent or display `S00E00`. Stable add-on item
 identity, not a season/episode pair, remains the projection key.
 
+The maintainer's 2026-09-05 presentation refinement uses conventional uppercase,
+minimum-two-digit `S01E01` identities throughout the admin UI in every culture,
+including season-zero specials such as `S00E03`. This deliberately replaces the
+upstream search label `S1 E1` and localized prose identities for consistency with
+local television libraries. Localized **Unnumbered** labels remain unchanged;
+filenames, provider identities, and stored projection strings are not rewritten.
+
 The `/media/addon-lists` table shows **Name** before **Id**. Search Remote Stream
 cards link to a canonical `/media/remote/streams/:id` details route. That route
 uses the same media-detail vocabulary as movie and episode pages, includes a

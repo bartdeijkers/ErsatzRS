@@ -1303,7 +1303,7 @@ mod tests {
     fn localizes_episode_subtitle_from_ersatztv_shape() {
         assert_eq!(
             localize_episode_subtitle("Show - S2 E5").as_deref(),
-            Some("Show - S2 E5")
+            Some("Show - S02E05")
         );
     }
 

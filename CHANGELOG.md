@@ -115,6 +115,9 @@ release section when tagging a release.
   placeholder while their content remains in hidden streamed fragments.
   Keep JavaScript-only revision-restore buttons hidden when scripting is off.
 
+- Use familiar `S01E01` episode labels throughout the admin UI in every culture,
+  preserving localized Unnumbered labels, season-zero specials, and media filenames.
+
 - Repair add-on-list CI coverage for refresh controls, source-probe fixture
   isolation, save/reload synchronization, supported option schemas, and retained
   checkpoint invalidation without changing the intended runtime behavior.

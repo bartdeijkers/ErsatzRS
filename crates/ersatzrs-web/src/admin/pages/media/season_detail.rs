@@ -288,7 +288,12 @@ fn EpisodeRow(
 ) -> impl IntoView {
     let episode_id = episode.episode_id;
     let title = episode.title.clone();
-    let display_title = episode_row_title(use_i18n(), episode.episode_number, &title);
+    let display_title = episode_row_title(
+        use_i18n(),
+        episode.season_number,
+        episode.episode_number,
+        &title,
+    );
     let thumbnail_alt = format!("{} {}", episode.title, tr(TextKey::Thumbnail));
     let troubleshoot_href = format!("/system/troubleshooting/playback?mediaItem={episode_id}");
     let status = file_status(&episode);
@@ -362,9 +367,21 @@ fn episode_information_title(language: UiLanguage, episode: &EpisodeCardRow) -> 
     format!("{identity} - {}", episode.title)
 }
 
-fn episode_row_title(language: UiLanguage, episode_number: i64, title: &str) -> String {
-    if episode_number > 0 {
-        format!("{episode_number}. {title}")
+fn episode_row_title(
+    language: UiLanguage,
+    season_number: i64,
+    episode_number: i64,
+    title: &str,
+) -> String {
+    if season_number >= 0 && episode_number > 0 {
+        let identity = episode_display_subtitle_text(
+            language,
+            None,
+            Some(season_number),
+            Some(episode_number),
+        )
+        .unwrap_or_else(|| text(language, TextKey::Unnumbered).to_owned());
+        format!("{identity} - {title}")
     } else {
         format!("{}. {title}", text(language, TextKey::Unnumbered))
     }
@@ -445,7 +462,7 @@ mod episode_title_tests {
     #[test]
     fn unnumbered_episode_titles_do_not_render_zero_sentinels() {
         assert_eq!(
-            episode_row_title(UiLanguage::Dutch, 0, "Titel"),
+            episode_row_title(UiLanguage::Dutch, 0, 0, "Titel"),
             "Ongenummerd. Titel"
         );
         assert_eq!(
@@ -457,12 +474,12 @@ mod episode_title_tests {
     #[test]
     fn positive_special_episode_numbers_remain_visible() {
         assert_eq!(
-            episode_row_title(UiLanguage::English, 3, "Special"),
-            "3. Special"
+            episode_row_title(UiLanguage::English, 0, 3, "Special"),
+            "S00E03 - Special"
         );
         assert_eq!(
             episode_information_title(UiLanguage::English, &episode(0, 3)),
-            "Serie - S0 E3 - Titel"
+            "Serie - S00E03 - Titel"
         );
     }
 }

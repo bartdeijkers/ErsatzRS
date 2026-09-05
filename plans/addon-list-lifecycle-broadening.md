@@ -777,6 +777,15 @@ Maintainer-requested priority on 2026-09-05; AMM-M-01 remains reserved and pause
   P1/P2 findings before a scoped local commit, keeping unfinished M-01 work out.
 - No full closeout or automatic push. Obtain maintainer push approval and
   terminal green CI on the published repair SHA before starting AMM-M-02.
+- The 2026-09-05 approved display refinement uses `S01E01` throughout the admin
+  UI, as recorded in ADR 0085. Source map: `i18n::episode_display_subtitle_text`
+  and the nine culture formatters feed search, cards, collections/playlists,
+  playouts, season and Remote Stream details, trash and media-info JSON through
+  existing display adapters. `SeasonDetailPage`/`EpisodeRow` also use the shared
+  identity for visible row titles. SSR and island callers share this formatting;
+  routes, native forms, server-function signatures, repositories and stored
+  projection strings stay unchanged. Proof targets are all-culture formatter
+  and display-adapter tests plus the season heading/media-info browser scenario.
 
 ### AMM-M-01 — Per-item browser cookies and SponsorBlock
 
