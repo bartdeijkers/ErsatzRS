@@ -59,8 +59,9 @@ early stop, additions-only automatic publication, and updater rollback.
 
 next_steps = '''
 Deliver ADR 0085 in dependency order through AMM-K, AMM-L, AMM-M, and AMM-N,
-first repairing the current CI failures under AMM-CI-01, then resuming AMM-M-01.
-Do not start AMM-M-02 before the CI repair is green. Resume Phase 9A at p9a-01 after that corrective program
+resuming the reserved AMM-M-01 work. AMM-CI-01 is complete: exact-SHA CI run
+33978757158 is green at c75c07d3, including 294 browser cases with 22 skips.
+Do not start AMM-M-02 before M-01 is complete. Resume Phase 9A at p9a-01 after that corrective program
 by accepting the teletext product and standards contract before implementation.
 '''
 

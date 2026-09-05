@@ -751,7 +751,8 @@ Source map:
 
 ### AMM-CI-01 — Repair CI before starting AMM-M-02
 
-Maintainer-requested priority on 2026-09-05; AMM-M-01 remains reserved and paused.
+Maintainer-requested priority on 2026-09-05; completed with exact-SHA green CI
+run 33978757158 at c75c07d3. AMM-M-01 remains reserved and ready to resume.
 
 - Repair the confirmed failures in run 33957746900: narrowly allow independent
   reference-pin booleans, align browser fixtures and locators with the current

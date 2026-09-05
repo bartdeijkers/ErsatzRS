@@ -2708,8 +2708,9 @@ exact unsupported reason and remain playable.
 evidence = '''
 Reserved for Codex on 2026-09-04 after AMM-L-05. Resumed by explicit maintainer
 request after the overnight pause; the M-01 reservation remains active.
-Implementation is temporarily paused for the maintainer-requested amm-ci-01
-repair before AMM-M-02. Preserve the uncommitted M-01 work.
+Implementation was paused for the maintainer-requested amm-ci-01 repair before
+AMM-M-02. That repair now has exact-SHA green CI; resume the reserved, uncommitted
+M-01 work next.
 Resumed again on 2026-09-05 after a read-only WSL interruption audit found a
 package/service replacement immediately before the orderly shutdown, without
 recorded OOM evidence. Heavy local checks must not overlap the self-hosted CI
@@ -2750,7 +2751,7 @@ file preparation. Do not start M-02 or claim M-01 runtime acceptance yet.
 id         = 'amm-ci-01'
 phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
 title      = 'Repair current CI failures before starting AMM-M-02'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-05']
@@ -2830,13 +2831,19 @@ are unchanged. Independent GPT-6 Astra review finds no P1/P2. Focused browser
 execution starts only after the CI worker stops, reusing the unchanged matched
 SSR/WASM build. All six predecessor-reset/no-JS/following-recovery cases pass in
 Chromium and Firefox with one worker (52.6 seconds). The milestone remains in
-progress pending exact-SHA green CI for the fixture-isolation follow-up.
+progress until exact-SHA CI verifies the fixture-isolation follow-up.
+Follow-up c75c07d3f675e89a2a4487b11cc829bd0a2274db is pushed with exact remote
+equality verified. CI run 33978757158 is terminal successful at that exact SHA:
+Test (18m35s), Clippy (2m13s), Playwright (294 passed, zero failed, 22 skipped),
+Format, Cargo deny, and documentation checks all pass. Commit lint and the
+alternative matrix test job are intentionally skipped by workflow conditions.
+The repair is complete; local checks remained stopped throughout CI.
 Cargo-leptos uses one Cargo job per SSR/WASM build (two compilers total); browser
 execution uses one worker, without a simultaneous CI or Rust test run.
-No release has been launched. Local builds and tests remain stopped while the
-self-hosted runner executes a candidate. The first repair run is terminal failed;
-focused follow-up checks run only after its worker has stopped. M-01 remains
-paused for CI repair; M-02 must wait for green CI.
+No release has been launched. Focused follow-up checks ran only after preceding
+CI workers stopped. M-01 remains reserved and uncommitted, ready to resume;
+M-02 still depends on completing M-01. CI proof applies to c75c07d3, not the
+subsequent local progress-only handoff commit.
 '''
 
 [[milestone]]
