@@ -386,6 +386,12 @@ function seedMetadataEditor(testInfo: TestInfo): MetadataSeed {
 
   sqlite(`
 DELETE FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ${listId};
+DELETE FROM "AddonMediaListSourceProbeJob" WHERE "AddonMediaListId" = ${listId};
+-- Cascade retained snapshot children before reusing this fixture's list identity.
+PRAGMA foreign_keys = ON;
+DELETE FROM "AddonMediaListRevision" WHERE "AddonMediaListId" = ${listId};
+DELETE FROM "AddonMediaListRevisionFileBlob" WHERE "AddonMediaListId" = ${listId};
+PRAGMA foreign_keys = OFF;
 DELETE FROM "ManagedLibraryLease"
 WHERE "OperationId" IN (
   SELECT "Id" FROM "ManagedLibraryOperation" WHERE "LibraryId" = ${libraryId}
@@ -627,8 +633,8 @@ test.describe('shared add-on metadata editor', () => {
 
     await expect(page.getByLabel('Storage folder')).toBeVisible();
     await expect(
-      page.getByRole('checkbox', { name: 'Update list from the provider once each day' }),
-    ).toBeChecked();
+      page.getByRole('combobox', { name: 'Automatic Refresh', exact: true }),
+    ).toHaveValue('daily');
     await expect(
       page.getByRole('checkbox', { name: 'Create playlist in original order' }),
     ).not.toBeChecked();
@@ -641,7 +647,7 @@ test.describe('shared add-on metadata editor', () => {
     await expect(
       page.getByText(/request descriptive details manually.*before publication/i),
     ).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Import' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Import overview', exact: true })).toBeEnabled();
     expect(runtimeErrors).toEqual([]);
   });
 
@@ -659,7 +665,7 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
 
     const sourcePanel = page
       .getByRole('heading', { name: 'Test source' })
-      .locator('xpath=ancestor::section');
+      .locator('xpath=ancestor::section[1]');
     await sourcePanel.getByRole('button', { name: 'Test source' }).click();
     await expect(sourcePanel.getByText('Source is available')).toBeVisible({ timeout: 60_000 });
     await expect(sourcePanel.getByText('Provider identity', { exact: true })).toBeVisible();
@@ -789,7 +795,14 @@ WHERE "AddonMediaListId" = ${seed.listId};
     await expect(policy).toHaveValue('review');
     await policy.selectOption('auto_publish_additions');
     await expect(page.getByText('Applies only to scheduled refreshes after your first Publish.', { exact: false })).toBeVisible();
+    // Saving reloads this same URL; wait for the new document before another goto.
+    const savedNavigation = page.waitForEvent('framenavigated', {
+      predicate: (frame) => frame === page.mainFrame(),
+    });
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+    await savedNavigation;
+    await page.waitForLoadState('domcontentloaded');
+    await waitUntilHydrated(page);
     await expect.poll(() => sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('1');
     sqlite(`INSERT INTO "AddonMediaListAutoPublication" (
       "AddonMediaListId", "DraftRevision", "PublishedRevision", "State", "Reason", "RecordedAt"
@@ -1009,8 +1022,8 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
 
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       await noJsPage
-        .getByRole('checkbox', { name: 'Update list from the provider once each day' })
-        .check();
+        .getByRole('combobox', { name: 'Automatic Refresh', exact: true })
+        .selectOption('daily');
       expect(
         await noJsPage
           .locator('form#addon_media_lists-list-editor-form :invalid')
@@ -1087,7 +1100,7 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       const revisionPanel = noJsPage
         .getByRole('heading', { name: 'Revision history' })
-        .locator('xpath=ancestor::section');
+        .locator('xpath=ancestor::section[1]');
       const revisionTwo = revisionPanel.locator('article').filter({ hasText: 'Revision 2' });
       const revisionOne = revisionPanel.locator('article').filter({ hasText: 'Revision 1' });
       await expect(revisionTwo.getByRole('button', { name: 'Restore revision' })).toBeDisabled();
@@ -1100,7 +1113,7 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
 
       const revisionOneAfterCompare = noJsPage
         .getByRole('heading', { name: 'Revision history' })
-        .locator('xpath=ancestor::section')
+        .locator('xpath=ancestor::section[1]')
         .locator('article')
         .filter({ hasText: 'Revision 1' });
       await revisionOneAfterCompare.getByRole('checkbox').check();
@@ -1992,13 +2005,14 @@ WHERE "Id" = ${seed.secondItemId};
       'Directors',
       'Writers',
       'Languages',
-      'Cast and credits',
       'Poster',
       'fan art',
-      'Thumbnail',
+      'thumbnail',
     ]) {
       await expect(itemMetadata.getByLabel(label, { exact: true })).toBeVisible();
     }
+    const castAndCredits = itemMetadata.getByRole('textbox', { name: /^Cast and credits\b/ });
+    await expect(castAndCredits).toBeVisible();
     await expect(
       itemEditor.getByRole('heading', { name: /^metadata conflicts$/i }),
     ).toBeVisible();
@@ -2014,7 +2028,7 @@ WHERE "Id" = ${seed.secondItemId};
     await itemMetadata.getByLabel('Directors', { exact: true }).fill('Review Director');
     await itemMetadata.getByLabel('Writers', { exact: true }).fill('Review Writer');
     await itemMetadata.getByLabel('Languages', { exact: true }).fill('en, nl');
-    await itemMetadata.getByLabel('Cast and credits', { exact: true }).fill('Presenter | Host');
+    await castAndCredits.fill('Presenter | Host');
     await itemEditor.getByLabel(/^tags/i).fill(manyTags);
     await page.getByRole('button', { name: /^save changes$/i }).click();
     await expect
@@ -2178,7 +2192,7 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     const revisionPanel = page
       .getByRole('heading', { name: 'Revision history' })
-      .locator('xpath=ancestor::section');
+      .locator('xpath=ancestor::section[1]');
     const revisionTwo = revisionPanel.locator('article').filter({ hasText: 'Revision 2' });
     const revisionOne = revisionPanel.locator('article').filter({ hasText: 'Revision 1' });
     await expect(revisionTwo.getByRole('button', { name: 'Restore revision' })).toBeDisabled();
@@ -2291,7 +2305,7 @@ FROM (
     expect(revisionOneContent).not.toBe('');
     const restoreRevisionOne = page
       .getByRole('heading', { name: 'Revision history' })
-      .locator('xpath=ancestor::section')
+      .locator('xpath=ancestor::section[1]')
       .locator('article')
       .filter({ hasText: 'Revision 1' })
       .getByRole('button', { name: 'Restore revision' });
@@ -2321,11 +2335,14 @@ LIMIT 1;
       )
       .toBe('4,4,1,3');
     expect(revisionLogicalContent(seed.listId, 4)).toBe(revisionOneContent);
+    // Older unpinned revisions are pruned by hourly maintenance, not publication.
+    // Repository retention tests cover that cutoff; all three latest snapshots must exist now.
     expect(sqlite(`
 SELECT group_concat("Revision", ',') FROM (
   SELECT "Revision" FROM "AddonMediaListRevision"
   WHERE "AddonMediaListId" = ${seed.listId}
   ORDER BY "Revision" DESC
+  LIMIT 3
 );
 `)).toBe('4,3,2');
 

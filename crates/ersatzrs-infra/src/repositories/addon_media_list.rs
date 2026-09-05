@@ -3586,6 +3586,7 @@ async fn cleanup_publication_backup_async(
     .map_err(|error| publication_fs_repository_error(&error))
 }
 
+#[allow(clippy::too_many_lines)] // Keep archival validation and retention before cleanup together.
 async fn retain_published_revision_before_cleanup(
     repository: &SqliteAddonMediaListRepository,
     list_id: EntityId,
@@ -3923,6 +3924,7 @@ where
     }
 }
 
+#[allow(clippy::too_many_lines)] // Candidate acceptance and archive promotion share one transaction.
 async fn accept_reconcile_candidate_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -4005,13 +4007,10 @@ async fn accept_reconcile_candidate_in_tx(
     .fetch_one(&mut **tx)
     .await
     .repository()?;
-    if candidate.is_none() {
-        if unaccepted_reconcile_count > 0 {
-            return Err(RepositoryError::Conflict(
-                "the completed reconciliation no longer matches a promotable staged archive"
-                    .to_owned(),
-            ));
-        }
+    if candidate.is_none() && unaccepted_reconcile_count > 0 {
+        return Err(RepositoryError::Conflict(
+            "the completed reconciliation no longer matches a promotable staged archive".to_owned(),
+        ));
     }
 
     let accepted_generation = if let Some(candidate) = candidate {
@@ -8382,6 +8381,7 @@ mod tests {
     use super::{accept_reconcile_candidate_in_tx, is_safe_remote_artwork_url, FlatProjection};
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)] // Keep the competing generations and atomic promotion assertions in one scenario.
     async fn reconcile_acceptance_atomically_promotes_the_matching_import_generation() {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)

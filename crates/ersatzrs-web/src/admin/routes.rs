@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 use leptos_router::{
     components::{Route, Routes},
-    ParamSegment, StaticSegment,
+    ParamSegment, SsrMode, StaticSegment,
 };
 
 use crate::admin::home::HomePage;
@@ -472,6 +472,7 @@ pub fn AdminRoutes() -> impl IntoView {
                     ParamSegment("id"),
                 )
                 view=RemoteStreamDetailPage
+                ssr=SsrMode::InOrder
             />
 
             <Route
@@ -579,6 +580,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("media"), StaticSegment("addon-lists"))
                 view=AddonMediaListsPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(

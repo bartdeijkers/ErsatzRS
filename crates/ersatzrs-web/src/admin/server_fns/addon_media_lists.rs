@@ -193,7 +193,11 @@ pub struct AddonMediaListRevisionDiffRow {
 
 #[cfg(not(target_arch = "wasm32"))]
 mod lifecycle_transport {
-    use super::*;
+    use super::{
+        AddonMediaListDraftDiffRow, AddonMediaListResetImpactRow, AddonMediaListRevisionDiffRow,
+        AddonMediaListRevisionSummaryRow, AddonMediaListSourceProbeOutcome,
+        AddonMediaListSourceProbeRow, AddonMediaListSourceProbeState,
+    };
     use ersatzrs_core::repositories::{
         AddonMediaListDraftDiff, AddonMediaListResetImpact, AddonMediaListRevisionDiff,
         AddonMediaListRevisionSummary, AddonMediaListSourceProbe,
@@ -1972,6 +1976,7 @@ pub async fn update_addon_media_list_item_chapters(
 /// read-only preflight prevents a valid NFO update from committing before an
 /// invalid chapter edit is rejected by the second command.
 #[server]
+#[allow(clippy::unused_async)] // Leptos server-function transport requires an async signature.
 pub async fn validate_addon_media_list_item_chapters(
     chapter_input: String,
 ) -> Result<(), ServerFnError> {

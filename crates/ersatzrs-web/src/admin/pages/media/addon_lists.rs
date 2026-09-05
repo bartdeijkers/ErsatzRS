@@ -5134,7 +5134,7 @@ fn AddonMediaListEditorIsland(
             match result {
                 Ok(diff) => revision_diff.set(Some(diff)),
                 Err(error) => {
-                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error)
+                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
                 }
             }
         }
@@ -7294,6 +7294,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)] // Follow the complete overview-to-published progress transition.
     fn progress_phase_switches_from_overview_to_published_details() {
         let overview = AddonMediaListImportProgressRow {
             state: AddonMediaListImportState::Discovering,

@@ -59,7 +59,8 @@ early stop, additions-only automatic publication, and updater rollback.
 
 next_steps = '''
 Deliver ADR 0085 in dependency order through AMM-K, AMM-L, AMM-M, and AMM-N,
-continuing with AMM-M-01. Resume Phase 9A at p9a-01 after that corrective program
+first repairing the current CI failures under AMM-CI-01, then resuming AMM-M-01.
+Do not start AMM-M-02 before the CI repair is green. Resume Phase 9A at p9a-01 after that corrective program
 by accepting the teletext product and standards contract before implementation.
 '''
 

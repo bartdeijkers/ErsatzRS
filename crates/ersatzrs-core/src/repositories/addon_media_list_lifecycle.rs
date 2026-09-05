@@ -246,6 +246,7 @@ pub struct AddonMediaListResetImpact {
 
 /// Why a physical artifact or generated file must not be reclaimed.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)] // Independent pin sources can all coexist; not a state machine.
 pub struct AddonMediaListReferencePins {
     pub retained_revision: bool,
     pub active_work: bool,

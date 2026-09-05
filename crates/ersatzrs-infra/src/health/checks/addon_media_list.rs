@@ -1948,6 +1948,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)] // Keep related lifecycle fixtures and their aggregate health assertion together.
     async fn reports_safe_lifecycle_foundation_aggregates_without_warning() {
         let pool = fixture_pool().await;
         sqlx::query(

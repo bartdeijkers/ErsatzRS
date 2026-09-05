@@ -1,6 +1,6 @@
 //! Durable, non-mutating header and first-page probes for add-on media lists.
 
-use std::time::Instant;
+use std::{fmt::Write as _, time::Instant};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
@@ -52,6 +52,7 @@ impl AddonMediaListSourceProbeCoordinator {
         }
     }
 
+    #[allow(clippy::too_many_lines)] // Keep all input fields and their fingerprint together.
     async fn load_input(&self, list_id: EntityId) -> Result<SourceProbeInput> {
         let row = sqlx::query(
             r#"SELECT "list"."AddonId", "list"."SourceUrl", "list"."DraftRevision",
@@ -289,6 +290,7 @@ impl AddonMediaListSourceProbeCoordinator {
         decode_status(&row, is_current).map(Some)
     }
 
+    #[allow(clippy::too_many_lines)] // Keep claim validation and terminal outcomes in one worker step.
     async fn process_one(&self, now: DateTime<Utc>) -> Result<bool> {
         self.finish_exhausted(now).await?;
         let Some(job) = self.claim(now).await? else {
@@ -667,9 +669,7 @@ impl TerminalProbe {
 
 fn decode_status(row: &DbRow, is_current: bool) -> Result<AddonMediaListSourceProbe> {
     let stored_state: i32 = row.try_get("State").repository()?;
-    let state = if !is_current {
-        AddonMediaListSourceProbeState::Stale
-    } else {
+    let state = if is_current {
         match stored_state {
             QUEUED_STATE => AddonMediaListSourceProbeState::Queued,
             RUNNING_STATE => AddonMediaListSourceProbeState::Running,
@@ -681,6 +681,8 @@ fn decode_status(row: &DbRow, is_current: bool) -> Result<AddonMediaListSourcePr
                 });
             }
         }
+    } else {
+        AddonMediaListSourceProbeState::Stale
     };
     let outcome = match row
         .try_get::<Option<i32>, _>("AccessOutcome")
@@ -777,11 +779,12 @@ fn hash_optional_field(hasher: &mut Sha256, value: Option<&str>) {
 }
 
 fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
-    bytes
-        .as_ref()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+    let bytes = bytes.as_ref();
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(output, "{byte:02x}");
+    }
+    output
 }
 
 fn duration_milliseconds(duration: std::time::Duration) -> u64 {

@@ -58,7 +58,7 @@ AMM-J-04 and AMM-K close recovery and lifecycle. AMM-L completes cadences,
 transactional skip-known discovery, omission-safe rich headers, non-destructive
 reconciliation, and scheduler-only validated-additions publication with exact
 revision fences, retry-safe preparation, and localized Activity/Health holds.
-AMM-M/N options, artifacts, and tool maintenance remain.
+AMM-M-01 access/artifact work is in progress; preparation/playback and AMM-N remain.
 '''
 
 [[debt]]
@@ -199,6 +199,15 @@ discovered  = '2026-08-22'
 adr         = '0075'
 evidence    = 'Resolved by direct per-row season/episode spinbuttons, a movable provider-order cursor, configurable first-air-date gap season detection, atomic undoable override operations, bounded batches, safe preservation and collision skipping for existing identities, effective-metadata row labels, and repository, application, hydration, and Chromium regressions.'
 resolved    = true
+
+[[debt]]
+id          = 'addon-list-no-js-streaming-hides-native-actions'
+description = 'Render add-on-list index sorting and Remote Stream detail channel links visibly without JavaScript.'
+discovered  = '2026-09-05'
+adr         = '0085'
+evidence    = 'AMM-CI-01 focused Chromium and Firefox traces showed Loading in the visible main region while out-of-order SSR sent list/detail content in hidden templates. The repaired focused run passes all 17 selected cases (one intentional platform skip), including native sorting, publication/revision restore, and Remote Stream Watch links.'
+resolved    = true
+resolution  = 'The two routes use in-order SSR; JavaScript-only restore controls remain hidden without scripting. Existing hydrated and no-JS behavioral assertions pass without removing native-action coverage.'
 
 [[debt]]
 id          = 'addon-list-review-actions-are-ambiguous-and-not-undoable'

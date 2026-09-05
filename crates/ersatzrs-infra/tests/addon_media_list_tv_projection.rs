@@ -1903,6 +1903,7 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)] // Follow one stale worker through both publication boundaries.
 async fn durable_publication_fences_stale_workers_at_stage_and_commit() {
     let pool = common::test_db().await;
     let _directory = seed_managed_list(&pool).await;
@@ -2030,6 +2031,7 @@ async fn durable_publication_fences_stale_workers_at_stage_and_commit() {
 
 #[cfg(unix)]
 #[tokio::test]
+#[allow(clippy::too_many_lines)] // Keep failure injection and the subsequent monotonic restore together.
 async fn cleanup_failure_restore_does_not_reuse_the_retained_revision_number() {
     use std::os::unix::fs::PermissionsExt as _;
 
@@ -2059,7 +2061,7 @@ async fn cleanup_failure_restore_does_not_reuse_the_retained_revision_number() {
         .expect("backup metadata")
         .permissions();
     let mut blocked_permissions = original_permissions.clone();
-    blocked_permissions.set_mode(0);
+    blocked_permissions.set_mode(0o0);
     fs::set_permissions(&backup, blocked_permissions).expect("block backup cleanup");
     let cleanup_error = fixture
         .repositories

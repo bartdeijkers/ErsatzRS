@@ -92,6 +92,7 @@ pub(in crate::admin::server_fns::media_browser) async fn list_remote_streams_imp
 }
 
 #[cfg(feature = "ssr")]
+#[allow(clippy::too_many_lines)] // Keep the application-to-admin detail projection together.
 pub(in crate::admin::server_fns::media_browser) async fn get_remote_stream_details_impl(
     id: i64,
 ) -> Result<Option<RemoteStreamDetailRow>, ServerFnError> {

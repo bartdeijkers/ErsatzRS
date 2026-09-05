@@ -1583,13 +1583,13 @@ impl AdminMediaRepository for SqliteAdminMediaRepository {
             health_reasons.push(AdminRemoteStreamPlaybackHealthReason::MediaUnavailable);
         }
         match availability {
-            AddonMediaListItemAvailability::Available => {}
             AddonMediaListItemAvailability::Unavailable if replacement_duration.is_none() => {
-                health_reasons.push(AdminRemoteStreamPlaybackHealthReason::AvailabilityUnavailable)
+                health_reasons.push(AdminRemoteStreamPlaybackHealthReason::AvailabilityUnavailable);
             }
-            AddonMediaListItemAvailability::Unavailable => {}
+            AddonMediaListItemAvailability::Available
+            | AddonMediaListItemAvailability::Unavailable => {}
             AddonMediaListItemAvailability::Unknown => {
-                health_reasons.push(AdminRemoteStreamPlaybackHealthReason::AvailabilityUnknown)
+                health_reasons.push(AdminRemoteStreamPlaybackHealthReason::AvailabilityUnknown);
             }
         }
         if script.is_some() {

@@ -749,7 +749,111 @@ Source map:
 
 ## AMM-M — yt-dlp item access, SponsorBlock, and subtitles
 
+### AMM-CI-01 — Repair CI before starting AMM-M-02
+
+Maintainer-requested priority on 2026-09-05; AMM-M-01 remains reserved and paused.
+
+- Repair the confirmed failures in run 33957746900: narrowly allow independent
+  reference-pin booleans, align browser fixtures and locators with the current
+  controls/contracts, and make the legacy namespace test verify retained but
+  invalidated checkpoints while preserving successful-refresh assertions.
+- Preserve runtime behavior and meaningful assertions. Do not add production
+  compatibility code for obsolete test fixtures or restructure independent pins
+  into a state machine merely to satisfy a lint.
+- Browser traces additionally prove that the add-on-list index and Remote Stream
+  detail remain on Loading without JavaScript. Set only these routes to in-order
+  SSR so their existing blocking resources render visibly without script-driven
+  fragment insertion. Keep the existing islands, data boundaries and native forms;
+  no app-wide rendering-mode or loader rewrite. Verify hydrated and no-JS flows.
+  Source map: `/media/addon-lists` uses `AddonMediaListsPage` and
+  `AddonMediaListsIsland`, with page-size, list and provider server functions;
+  `/media/remote/streams/:id` uses `RemoteStreamDetailPage`/`RemoteStreamDetailView`
+  and `get_remote_stream_details`. Existing native GET sorting forms and channel
+  links are the fallback paths. Only route SSR mode changes; no shared primitive
+  or API changes. The metadata-editor and remote-streams specs own browser proof.
+- Run focused Rust and affected browser checks serially, checking for active
+  self-hosted CI first; cap Cargo jobs and nextest threads at two. Cargo-leptos
+  runs SSR/WASM builds concurrently, so use one Cargo job per build. Review and fix
+  P1/P2 findings before a scoped local commit, keeping unfinished M-01 work out.
+- No full closeout or automatic push. Obtain maintainer push approval and
+  terminal green CI on the published repair SHA before starting AMM-M-02.
+
 ### AMM-M-01 — Per-item browser cookies and SponsorBlock
+
+Implementation plan (approved choices, 2026-09-04; delivery remains in progress):
+
+- Source map: ADR 0085 owns this extension; there is no ErsatzTV browser-option
+  or SponsorBlock editor to port. Reuse the existing option schema contract,
+  lifecycle repository's sparse defaults/overrides and immutable publication
+  snapshots, managed publication coordinator, and Remote Stream input path.
+  The official yt-dlp package owns browser extraction and file post-processing;
+  the host must not branch on its add-on ID or option names.
+- Visual source map: extend the existing Add-on List settings and item review
+  controls, shared fields/dialogs, and native POST fallbacks. Show localized
+  effective/inherited values and finite-only unavailability in all cultures;
+  do not redesign the list or unrelated review bulk actions.
+- Activate validated installed schemas on an explicit mutation, never a GET.
+  Render legacy lists with provisional draft defaults, but preserve their
+  existing published behavior until an explicit save and successful Publish.
+  Reuse the complete option-snapshot save with draft-revision and publication
+  fences. Bulk preview captures explicit item IDs, schema identity and draft
+  revision; apply is atomic and one-step session-local undo rejects intervening
+  edits. Undo also reverses first-time schema activation. Reset removes the
+  sparse override rather than storing null. Provisional defaults are display
+  state only until an explicit save binds the draft schema.
+- Use the saved draft options for Test access and pre-publication enrichment
+  and preparation. Channel playback and published metadata use the immutable
+  published options until Publish succeeds. Option changes invalidate draft
+  results without mutating the last complete publication. This distinction was
+  explicitly approved by the maintainer.
+- Add versioned options-aware item enrichment, access-check, preparation and
+  playback contracts; leave frozen import v1/v2 and playback v1/v2 unchanged.
+  Discovery stays unchanged. Declare finite preparation requirements in the
+  generic Boolean option schema, rather than introducing a provider-specific
+  host branch or an expression language. Preserve old schema serialization and
+  digests when the new optional declaration is absent.
+- Queue access checks and preparation as bounded durable per-item work, outside
+  the publication lease. Reuse provider admission/backoff and process ownership;
+  freeze source, schema/options, package/tool and selected-format identity for
+  each attempt. Generation-fence completion and invalidate stale results. Return
+  only typed redacted access outcomes, never provider stderr, profile paths,
+  cookie bytes, headers or temporary signed URLs. Tests use synthetic profiles;
+  real browser profile handling remains a human-assisted boundary.
+  Keep access/preparation lease and retry state in one item-operation job table;
+  access-only work must not masquerade as an artifact. Existing artifact rows
+  continue to own admitted files and revision pins. Waiting for shared provider
+  admission does not consume an execution attempt. Access-evidence reads check
+  saved context and expiry without rewriting historical results; the worker/UI
+  consumer must additionally compare the newly observed local tool version.
+- Both official package transports pass only the validated lowercase browser
+  enum. Finite preparation uses yt-dlp's standard
+  `--sponsorblock-remove default` file post-processing, not stdout playback or
+  a separate SponsorBlock client/cutter. Distinguish no matching segments from
+  failed preparation; probe the final duration and use it for scheduling.
+  The audited yt-dlp 2026.08.19 postprocessor treats a SponsorBlock HTTP 404 as
+  no segments and raises on exhausted API retries; do not use `--ignore-errors`
+  to turn that failure into an apparently prepared uncut file. Keep the standard
+  cut behavior, without adding custom cutting or mandatory full re-encoding.
+  Live/unknown items retain direct playback and the explicit finite-only reason.
+- Use the existing artifact rows and reference pins. Reserve capacity before
+  launch, bound child output/runtime and staging disk use (including temporary
+  files), validate the completed file, and atomically promote it under host
+  ownership. Cancellation/restart must not expose partial media. Bind runtime
+  resolution to the owning list/item and published revision, not a URL lookup;
+  prepared files remain Remote Stream artifacts, never permanent Local media.
+- Approved initial admission limits: one preparation at a time, 20 GiB global,
+  10 GiB per list, 2 GiB maximum prepared file, 2 GiB free-space floor, and
+  seven-day retention for unpinned files. Oversized/full-cache work remains
+  blocked with a useful reason. Keep the policy foundation reusable by M-03;
+  storage administration, usage breakdowns, explicit cleanup and full LRU
+  management remain M-03 work. Never evict revision/playout-pinned files.
+- Verify schema compatibility and inheritance; revision-fenced preview/apply/
+  undo; draft/published isolation; typed access expiry/redaction; finite/live
+  behavior; quota refusal; cancellation/restart and stale completion; and a
+  focused publication-to-channel fixture that actually plays processed media.
+  Review and fix P1/P2 before the slice's local commit. Subtitles acquisition,
+  updater lifecycle, integrated six-RID/browser/TSDuck closeout and CI remain
+  their named later slices. Do not mark M-01 complete with runtime wiring absent.
 
 - Render list defaults plus nullable item overrides for the exact browser enum
   and checked-by-default SponsorBlock option, with effective/inherited state,
@@ -806,6 +910,16 @@ Source map:
   lease, Retry-After, backoff, and next-eligibility state as automatic attempts.
 
 ### AMM-N-03 — Cross-platform and release acceptance
+
+Release follow-through requested by the maintainer: after M-01 through N-03
+are complete and N-03 review feedback is fixed, retain the approval checkpoint
+before making CI green and pushing. Once authorized and CI is green for the
+exact final commit, create a new beta release containing only the Windows
+package (`win-x64`). Verify the published Windows archive and its build identity;
+do not publish Linux or macOS packages for this beta. This limited release asset
+selection does not weaken N-03's six-platform verification requirement.
+The maintainer has explicitly pre-approved creating and publishing this beta
+once those conditions hold; no second release-approval prompt is required.
 
 - Run contract fixtures for every new capability in the host and official
   add-ons repositories.

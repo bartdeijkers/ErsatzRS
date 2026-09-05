@@ -6518,7 +6518,7 @@ mod tests {
         let output = br#"{"record_type":"list","name":"private staging/archive.txt"}"#;
         assert!(output_contains_sensitive_value(
             output,
-            &[private_path.clone()]
+            std::slice::from_ref(&private_path)
         ));
 
         let windows_path = r"C:\private staging\archive.txt".to_owned();

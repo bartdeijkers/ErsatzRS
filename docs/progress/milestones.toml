@@ -2699,16 +2699,98 @@ by default. It shows effective/inherited state, Reset to list default, and
 previewed atomic bulk changes with one-step undo. Only the lowercase effective
 browser enum crosses IPC; cookie bytes never reach storage, logs, health, or
 diagnostics. Durable Test access returns a typed redacted result and expires on
-URL, package/tool, or option change. Enrich, subtitle, preparation, and playback
-use the published choice. Finite items use --sponsorblock-remove default with
+URL, package/tool, or option change. Test access and pre-publication work use
+the explicitly saved draft choice; channel playback and published metadata
+retain the published choice until Publish succeeds. Finite items use --sponsorblock-remove default with
 cancellation/restart/invalidation and real channel proof; live items show the
 exact unsupported reason and remain playable.
 '''
 evidence = '''
-Planning reserved for Codex on 2026-09-04 after AMM-L-05. No AMM-M code changes
-yet. Current official yt-dlp operations have no item option input and
-stream directly to stdout; official yt-dlp documents SponsorBlock removal as
-video-file post-processing, requiring an explicit preparation lifecycle.
+Reserved for Codex on 2026-09-04 after AMM-L-05. Resumed by explicit maintainer
+request after the overnight pause; the M-01 reservation remains active.
+Implementation is temporarily paused for the maintainer-requested amm-ci-01
+repair before AMM-M-02. Preserve the uncommitted M-01 work.
+Resumed again on 2026-09-05 after a read-only WSL interruption audit found a
+package/service replacement immediately before the orderly shutdown, without
+recorded OOM evidence. Heavy local checks must not overlap the self-hosted CI
+runner; one parent agent owns builds with two Cargo jobs and two test threads.
+The M-01-only implementation
+plan is recorded in the active plan; the maintainer approved draft options for
+access/preparation, immutable published playback options, and initial bounded
+cache admission defaults. The following M-01 implementation remains uncommitted
+in the working tree. Native list/item option editors and explicit bulk
+preview/apply/undo preserve publication/CAS guards and sparse inheritance in all
+nine cultures. Versioned item contracts, frozen draft/published resolution,
+bounded runtime invocation and a durable generation-fenced item queue are added.
+Focused verification passes: 64 contract tests, 7 native option-editor tests,
+6 application option tests, 12 lifecycle repository tests plus exact two-list
+published-option ownership coverage, 3 option resolver tests, 6 durable queue
+tests and a synthetic runtime process test. Native web check, hydration lint
+and architecture validation pass. Review fixes cover first-activation undo,
+culture casing, URL provider-ID echoes, package completion fences, and admission
+deferrals that must not consume operation retries, and read-only invalidation
+of expired or changed access evidence. Access worker/UI wiring and bounded
+artifact admission are now added. The synthetic shared-cooldown access worker
+test passes; five artifact integration tests and one artifact unit test passed
+before the interruption. A read-only access coordinator/runtime/queue review
+found no actionable P1/P2; the new failed-completion ownership regression and
+updated native web tests still need serial verification. Artifact review found
+and fixed a P2 in cache reuse after confirmed
+item removal/reappearance: exact matching unowned artifacts now reattach to the
+new item inside the claim transaction, while conflicting owners are rejected.
+The reviewer confirmed the fix by source inspection; all six artifact integration
+tests, including ready/failed reuse, passed serially after outage recovery.
+This is not runtime acceptance: preparation orchestration, provider execution and published-file
+playback remain unfinished in this same slice. The official
+yt-dlp package still streams directly to stdout; SponsorBlock requires explicit
+file preparation. Do not start M-02 or claim M-01 runtime acceptance yet.
+'''
+
+[[milestone]]
+id         = 'amm-ci-01'
+phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
+title      = 'Repair current CI failures before starting AMM-M-02'
+status     = 'In progress'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-l-05']
+acceptance = '''
+Repair every actionable failure in CI run 33957746900 at a5959357, including
+Clippy, the 15 failed Chromium/Firefox scenarios, and the Test job's failures.
+Preserve intended UI behavior and meaningful assertions.
+Run focused verification serially without overlapping the self-hosted runner,
+review/fix P1/P2, and obtain terminal green CI on the approved published fix SHA
+before starting AMM-M-02. Push remains subject to maintainer approval.
+'''
+evidence = '''
+Reserved for Codex on 2026-09-05 at the maintainer's explicit reprioritization.
+Clippy reports independent reference-pin booleans; browser diagnostics show
+obsolete controls/title expectations, broad section locators, a same-URL save
+navigation race, retained source-probe fixture rows, disabled-option locator
+retargeting and an unsupported fixture option schema. Focused browser execution
+also exposed no-JS streaming placeholders on two routes and a CSS specificity
+collision exposing script-only restore controls. Both are fixed without changing
+other routes or shared primitives. Test completed with one infrastructure unit
+failure (666 passed, 10 ignored): the legacy option-namespace test expects an
+obsolete checkpoint deletion instead of retained-but-uncommitted cleanup state.
+Its fixture restores the retained row instead of inserting a duplicate key;
+the legacy successful-refresh timestamp assertions remain unchanged.
+Focused checkpoint and pinned-retention regressions pass (one test each), and
+core Clippy with all targets passes. Independent GPT-6 Astra source review found
+no actionable P1/P2 in the repair diff. Focused browser verification passes all
+17 selected cases with one intentional platform skip against a temporary database.
+This includes all 15 original failures and both playlist-management fixture cases.
+Formatting and hydration lint pass with no new findings. Core all-targets Clippy
+and scoped infra/web all-targets Clippy pass with warnings denied. Narrow
+lifecycle/source-probe/test lint repairs preserve behavior and cohesive scenarios;
+five focused source-probe tests also pass. M-01-only compiler/lint repairs remain
+with its uncommitted implementation, outside the CI repair commit. These local
+checks used the working tree, not an isolated committed-only candidate. Full
+closeout and exact-SHA remote CI remain unrun; push approval is still required.
+Cargo-leptos uses one Cargo job per SSR/WASM build (two compilers total); browser
+execution uses one worker, without a simultaneous CI or Rust test run.
+No new CI, push or release has been launched. No independent build or test run
+overlaps the active verification command.
 '''
 
 [[milestone]]
@@ -2718,7 +2800,7 @@ title      = 'Publish human-authored yt-dlp subtitles into channel playback'
 status     = 'Not started'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
-depends_on = ['amm-m-01']
+depends_on = ['amm-m-01', 'amm-ci-01']
 acceptance = '''
 The official package requests only configured global default/fallback subtitle
 languages with --write-subs and explicit --no-write-auto-subs, writes bounded
@@ -2834,6 +2916,13 @@ AMM-L-05 scoped lint exposed earlier-slice Clippy debt, including the independen
 AddonMediaListReferencePins Boolean fields and source-probe/lifecycle/test lints.
 Retain this cleanup for the requested integrated CI-green stage; do not treat
 the focused slice test results as full closeout evidence.
+After N-03 completion and review fixes, ask for the previously required approval
+to make CI green and push. The maintainer additionally requested a new beta
+release once CI is green for the final commit, publishing only the Windows
+win-x64 package, and explicitly pre-approved that conditional beta publication.
+No second release-approval prompt is required. This follow-through is recorded
+in the live plan and does not
+reduce the six-RID verification acceptance above.
 '''
 
 [[milestone]]

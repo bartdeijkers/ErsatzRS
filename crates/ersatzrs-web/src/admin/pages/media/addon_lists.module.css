@@ -276,7 +276,7 @@
     width: 100%;
 }
 
-.js-only {
+:global(html) .js-only {
     display: none;
 }
 

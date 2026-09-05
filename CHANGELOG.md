@@ -110,6 +110,15 @@ release section when tagging a release.
 
 ### Fixed
 
+- Render the add-on-list index and Remote Stream details without JavaScript,
+  including native sorting and channel links, instead of leaving a loading
+  placeholder while their content remains in hidden streamed fragments.
+  Keep JavaScript-only revision-restore buttons hidden when scripting is off.
+
+- Repair add-on-list CI coverage for refresh controls, source-probe fixture
+  isolation, save/reload synchronization, supported option schemas, and retained
+  checkpoint invalidation without changing the intended runtime behavior.
+
 - Retain a bounded, ordered, redacted activity history for each add-on-list
   publication and recovery job. The localized editor, Health, and read-only
   runtime audit now distinguish original failures from later recovery failures;

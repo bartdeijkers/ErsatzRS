@@ -76,9 +76,9 @@ notes  = 'Dedicated island route with SSR/no-JS list HTML, stable modal DOM, tag
 
 [[page]]
 name   = 'RemoteStreamDetailPage'
-status = 'TODO'
+status = '✅'
 routes = ['/media/remote/streams/:id']
-notes  = 'AMM-K-03 implements the SSR-first detail surface and authors focused keyboard, narrow-screen, Chromium, and Firefox coverage. Execution remains part of the agreed AMM-N-03 integrated browser closeout.'
+notes  = '2026-09-05 AMM-CI-01: focused Chromium/Firefox search-to-detail proof passes for keyboard navigation, narrow-screen layout, published options, track/chapter metadata, channel actions, and visible no-JS Watch links. Route-local in-order SSR prevents hidden streamed content.'
 
 [[page]]
 name   = 'RemoteStreamPlaylistsPage'
@@ -216,7 +216,7 @@ notes  = 'List island; hydrated copy/delete smoke clean.'
 name   = 'AddonMediaListsPage'
 status = '✅'
 routes = ['/media/addon-lists']
-notes  = '2026-08-15: `tests/e2e/hydration-pending-routes.spec.ts` proves a real v2 add-on import with content override plus Search/Match/Delete actions in Chromium and Firefox without hydration errors. 2026-08-22: creation moved from the legacy dialog to the dedicated `/media/addon-lists/add` import page; its route-specific proof is recorded separately below.'
+notes  = '2026-09-05 AMM-CI-01: focused Chromium/Firefox proof passes for hydrated import, overrides, replacement and recovery, plus native no-JS sorting and publication/revision restore. Route-local in-order SSR exposes native controls, and JavaScript-only restore buttons stay hidden without scripting. Creation remains on the dedicated add page.'
 
 [[page]]
 name   = 'AddAddonMediaListPage'

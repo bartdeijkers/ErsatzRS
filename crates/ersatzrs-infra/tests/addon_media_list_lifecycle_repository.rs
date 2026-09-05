@@ -1151,6 +1151,7 @@ async fn assert_tool_maintenance_storage(pool: &sqlx::SqlitePool) {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)] // Exercise snapshot capture, exact diff, and fenced restore as one lifecycle.
 async fn complete_revision_snapshot_drives_exact_diff_and_fenced_restore() {
     let pool = common::test_db().await;
     seed_list(&pool).await;

@@ -4447,6 +4447,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)] // Keep admission, execution, and idempotent import assertions together.
     async fn reconcile_admission_and_execution_queue_one_full_scratch_import() {
         let pool = pool_with_library().await;
         seed_publication_list(&pool, "org.example.reconcile").await;

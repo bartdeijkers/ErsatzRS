@@ -214,7 +214,7 @@ fn RemoteStreamDetailView(detail: RemoteStreamDetailRow) -> impl IntoView {
                 <section class=style::actors_section style=channels_style>
                     <h2 class=style::section_title>{tr(TextKey::Channels)}</h2>
                     <div class=style::commentary_grid>
-                        {detail.channels.into_iter().map(channel_card).collect_view()}
+                        {detail.channels.iter().map(channel_card).collect_view()}
                     </div>
                 </section>
             </div>
@@ -353,7 +353,7 @@ fn owner_card(owner: RemoteStreamOwnerRow, language: UiLanguage) -> AnyView {
     .into_any()
 }
 
-fn channel_card(channel: RemoteStreamChannelRow) -> AnyView {
+fn channel_card(channel: &RemoteStreamChannelRow) -> AnyView {
     let label = if channel.number.trim().is_empty() {
         channel.name.clone()
     } else {

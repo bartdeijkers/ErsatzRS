@@ -737,7 +737,8 @@ SELECT COUNT(*) FROM "MediaItem" WHERE "Id" = ${seed.trashMovieId};
     await page.getByLabel('Collection Type', { exact: true }).selectOption('movies');
     const addRefreshCadence = page.getByRole('combobox', { name: 'Automatic Refresh' });
     await expect(addRefreshCadence).toHaveValue('daily');
-    await expect(addRefreshCadence.locator('option[value="adaptive"]')).toBeDisabled();
+    // toBeDisabled follows this option's enclosing label to the enabled select.
+    await expect(addRefreshCadence.locator('option[value="adaptive"]')).toHaveJSProperty('disabled', true);
     await page.getByLabel('Storage folder').fill(`E2E Import ${testInfo.project.name}`);
     await page.getByRole('button', { name: 'Import overview' }).click();
     await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
@@ -749,12 +750,13 @@ WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
 `)).toBe('2,0');
     await page.reload();
     await waitForHydration(page);
-    await expect(page.getByText(seed.importListName)).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(seed.importListName);
 
     await gotoHydrated(page, '/media/addon-lists');
     const editorRow = page.locator('tr').filter({ hasText: seed.editorListName });
     const listTable = editorRow.locator('xpath=ancestor::table');
-    await expect(listTable.locator('thead th').nth(0)).toHaveText('Name');
+    await expect(listTable.locator('thead th').nth(0).getByRole('button', { name: 'Sort by Name', exact: true })).toBeVisible();
+    await expect(listTable.locator('thead th').nth(0)).toHaveAttribute('aria-sort', 'ascending');
     await expect(listTable.locator('thead th').nth(1)).toHaveText('Id');
     await expect(
       editorRow.getByRole('link', { name: seed.editorListName, exact: true }),
@@ -892,12 +894,13 @@ WHERE "AddonMediaListItemId" = ${seed.editorItemId};
     await expect(page.getByText('Empty import needs retry', { exact: true })).toBeVisible();
     await expect(page.getByText(/completed import contains no items/i)).toBeVisible();
     await page.getByRole('button', { name: /^retry import now$/i }).click();
+    // Manual retry still respects the shared provider cooldown.
     await expect.poll(() => sqlite(`
 SELECT "State" || ',' || "DiscoveredCount"
 FROM "AddonMediaListImportJob"
 WHERE "AddonMediaListId" = ${seed.editorListId}
 ORDER BY "Generation" DESC LIMIT 1;
-`)).toBe('3,1');
+`), { timeout: 30_000 }).toBe('3,1');
     await expect.poll(() => sqlite(`
 SELECT "Availability" FROM "AddonMediaListItem"
 WHERE "Id" = ${seed.editorItemId};

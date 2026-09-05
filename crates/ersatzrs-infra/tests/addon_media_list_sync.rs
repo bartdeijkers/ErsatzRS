@@ -963,6 +963,7 @@ async fn omitted_provider_item_retains_replacement_tombstone_and_recovers_identi
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)] // Keep local matching and generated playlist lifecycle in one scenario.
 async fn local_matching_requires_no_remote_capability_and_maintains_playlist_lifecycle() {
     let pool = common::test_db().await;
     seed_system_playlist_group(&pool).await;

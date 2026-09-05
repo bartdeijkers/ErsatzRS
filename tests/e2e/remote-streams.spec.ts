@@ -84,7 +84,7 @@ function seedForProject(testInfo: TestInfo): RemoteStreamSeed {
 
 function seedRemoteStreams(testInfo: TestInfo): RemoteStreamSeed {
   const seed = seedForProject(testInfo);
-  const addonId = 'org.ersatzrs.addon.fixture';
+  const addonId = `org.ersatzrs.addon.remote-fixture.${testInfo.project.name}`;
   const addonManifest = JSON.stringify({
     manifest_version: 1,
     id: addonId,
@@ -202,12 +202,12 @@ INSERT OR IGNORE INTO "Playlist" ("Id", "Name", "PlaylistGroupId", "IsSystem")
 
 function seedRemoteStreamDetails(testInfo: TestInfo): RemoteStreamSeed {
   const seed = seedRemoteStreams(testInfo);
-  const addonId = 'org.ersatzrs.addon.fixture';
+  const addonId = `org.ersatzrs.addon.remote-fixture.${testInfo.project.name}`;
   const profileId = sqlite('SELECT "Id" FROM "FFmpegProfile" ORDER BY "Id" LIMIT 1;');
   if (!profileId) {
     throw new Error('E2E database has no FFmpegProfile row for Remote Stream detail seeding');
   }
-  const capabilityId = `media-list.options.e2e${seed.optionSchemaId}.v1`;
+  const capabilityId = 'media-list.options.v1';
   const optionDefinition = JSON.stringify({
     id: capabilityId,
     options: [{
@@ -459,7 +459,7 @@ test.describe('remote streams browser parity', () => {
       writeFileSync(join(root, 'Hand.playlist.yml'), [
         'name: Hand-authored E2E',
         'url: https://example.test/hand',
-        'addon: org.ersatzrs.addon.fixture',
+        `addon: org.ersatzrs.addon.remote-fixture.${testInfo.project.name}`,
         'folder: Hand',
         'create_playlist: true',
         '',
@@ -487,7 +487,7 @@ test.describe('remote streams browser parity', () => {
       await expect(page.getByTestId('remote-playlist-editor')).toBeVisible();
       await page.locator('#remote-playlist-name').fill('Managed E2E');
       await page.locator('#remote-playlist-url').fill('https://example.test/managed');
-      await page.locator('#remote-playlist-addon').selectOption('org.ersatzrs.addon.fixture');
+      await page.locator('#remote-playlist-addon').selectOption(`org.ersatzrs.addon.remote-fixture.${testInfo.project.name}`);
       await page.locator('#remote-playlist-folder').fill('Managed E2E');
       await page.getByTestId('remote-playlist-save').click();
       await expect(page.getByTestId('remote-playlist-row').filter({ hasText: 'Managed E2E' })).toBeVisible();

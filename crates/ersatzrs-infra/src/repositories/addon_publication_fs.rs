@@ -854,7 +854,7 @@ pub(crate) fn verify_managed_complete(
 
 /// Copy every published file into immutable, list-scoped content storage.
 ///
-/// The blob store is host-owned beside the SQLite database, so managed-root
+/// The blob store is host-owned beside the `SQLite` database, so managed-root
 /// relocation and publication scratch cleanup cannot remove it. The tree lock
 /// and final marker verification make the returned file set one sealed revision.
 pub(crate) fn archive_managed_revision(

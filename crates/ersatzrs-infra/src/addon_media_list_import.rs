@@ -306,6 +306,7 @@ pub(crate) async fn persist_reset_reload_import(
 }
 
 #[allow(clippy::too_many_arguments)] // The durable lease and frozen contract are one fence.
+#[allow(clippy::too_many_lines)] // Keep lease validation and candidate creation in one transaction.
 async fn persist_reconcile_import(
     pool: &DbPool,
     list_id: EntityId,
@@ -1664,9 +1665,10 @@ impl AddonMediaListImportCoordinator {
             .commit_import_page_checkpoint(job, page.into(), None)
             .await?
         {
-            PageCommitOutcome::Cancelled => Ok(()),
             PageCommitOutcome::Committed { complete: true } => self.finalize_import_pass(job).await,
-            PageCommitOutcome::Committed { complete: false } => Ok(()),
+            PageCommitOutcome::Cancelled | PageCommitOutcome::Committed { complete: false } => {
+                Ok(())
+            }
         }
     }
 
@@ -5107,6 +5109,7 @@ mod tests {
         }
 
         #[tokio::test]
+        #[allow(clippy::too_many_lines)] // Keep the checkpoint baseline and both rejected-page assertions together.
         async fn v2_invalid_and_cancelled_pages_do_not_advance_the_live_checkpoint() {
             let (temporary, pool, coordinator) = fixture().await;
             let data_dir = temporary.path().join("private data");
@@ -5318,6 +5321,7 @@ mod tests {
         }
 
         #[tokio::test]
+        #[allow(clippy::too_many_lines)] // Follow the complete staged reconciliation failure against its saved baseline.
         async fn late_reconcile_failure_does_not_advance_existing_missing_evidence() {
             let (temporary, pool, coordinator) = fixture().await;
             let data_dir = temporary.path().join("private data");
@@ -5508,6 +5512,7 @@ mod tests {
         }
 
         #[tokio::test]
+        #[allow(clippy::too_many_lines)] // Keep cancellation and subsequent rediscovery in one lifecycle scenario.
         async fn cancelling_after_a_v2_page_keeps_unmerged_items_discoverable() {
             let (temporary, pool, coordinator) = fixture().await;
             let data_dir = temporary.path().join("private data");

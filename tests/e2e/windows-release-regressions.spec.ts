@@ -202,7 +202,7 @@ test.describe('Windows release interaction regressions', () => {
     await expect(page.getByText('E2E Windows Show')).toBeVisible();
     await page.getByRole('button', { name: 'Show Media Info' }).first().click();
     await expect(page.getByText('"Kind": "Episode"')).toBeVisible();
-    await expect(page.getByText('"Title": "E2E Windows Show - s01e01 - Pilot"')).toBeVisible();
+    await expect(page.getByText('"Title": "E2E Windows Show - S1 E1 - Pilot"')).toBeVisible();
 
     await gotoHydrated(page, `/media/tv/shows/${seed.showId}`);
     await page.getByRole('button', { name: 'Quick Scan' }).click();

@@ -3703,6 +3703,7 @@ const fn collection_type_for_kind(kind: AddonMediaListItemKind) -> i32 {
 #[cfg(test)]
 mod reconcile_tests {
     use ersatzrs_core::repositories::AddonMediaListLifecycleRepository as _;
+    use ersatzrs_core::repositories::AddonMediaListNfoMetadata;
     use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::{Executor as _, Row as _};
 
@@ -3760,7 +3761,7 @@ mod reconcile_tests {
             fragment_start_seconds: None,
             fragment_end_seconds: None,
             additional_image_urls: Vec::new(),
-            metadata: Default::default(),
+            metadata: AddonMediaListNfoMetadata::default(),
         }
     }
 
@@ -3787,7 +3788,7 @@ mod reconcile_tests {
             fragment_start_seconds: Some(0),
             fragment_end_seconds: Some(300),
             additional_image_urls: Vec::new(),
-            metadata: Default::default(),
+            metadata: AddonMediaListNfoMetadata::default(),
         }
     }
 
@@ -3871,6 +3872,7 @@ mod reconcile_tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)] // Keep successive observations and operator-state preservation in one scenario.
     async fn reconciliation_requires_two_observations_and_preserves_operator_state() {
         let pool = fixture().await;
         let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
@@ -3903,6 +3905,8 @@ mod reconcile_tests {
         assert_eq!(first_diff.pending_removal_item_ids, [20]);
         assert_eq!(first_diff.pending_removal_generations.get(&20), Some(&5));
 
+        #[allow(clippy::type_complexity)]
+        // This test-local tuple mirrors the exact persisted-state SELECT below.
         let preserved: (
             Option<i64>,
             bool,
@@ -4151,9 +4155,9 @@ mod generated_playlist_refresh_tests {
                ) VALUES (12, 10, 1, 1, '{"enabled":true}');
                INSERT INTO "AddonMediaListImportCheckpoint" (
                    "Id", "AddonMediaListId", "RelativePath", "Generation", "Sha256",
-                   "EntryCount", "PromotedAt"
+                   "EntryCount", "PromotedAt", "Committed"
                ) VALUES (13, 10, 'checkpoints/old.txt', 1, 'old-digest', 1,
-                         '2026-09-04 12:00:00');"#,
+                         '2026-09-04 12:00:00', 1);"#,
         )
         .execute(pool)
         .await
@@ -4168,11 +4172,10 @@ mod generated_playlist_refresh_tests {
                WHERE "Id" = 10;
                UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson" = '{"enabled":false}'
                WHERE "Id" = 11;
-               INSERT INTO "AddonMediaListImportCheckpoint" (
-                   "Id", "AddonMediaListId", "RelativePath", "Generation", "Sha256",
-                   "EntryCount", "PromotedAt"
-               ) VALUES (13, 10, 'checkpoints/current.txt', 1, 'current-digest', 1,
-                         '2026-09-04 12:00:00');"#,
+               UPDATE "AddonMediaListImportCheckpoint"
+               SET "RelativePath" = 'checkpoints/current.txt', "Sha256" = 'current-digest',
+                   "Committed" = 1
+               WHERE "Id" = 13;"#,
         )
         .execute(pool)
         .await
@@ -4190,14 +4193,15 @@ mod generated_playlist_refresh_tests {
         .expect("load draft option state")
     }
 
-    async fn checkpoint_count(pool: &DbPool) -> i64 {
-        sqlx::query_scalar(
-            r#"SELECT COUNT(*) FROM "AddonMediaListImportCheckpoint"
+    async fn checkpoint_state(pool: &DbPool) -> (i64, i64) {
+        sqlx::query_as(
+            r#"SELECT COUNT(*), COALESCE(SUM("Committed"), 0)
+               FROM "AddonMediaListImportCheckpoint"
                WHERE "AddonMediaListId" = 10"#,
         )
         .fetch_one(pool)
         .await
-        .expect("load checkpoint count")
+        .expect("load retained and committed checkpoint counts")
     }
 
     #[tokio::test]
@@ -4224,7 +4228,8 @@ mod generated_playlist_refresh_tests {
         .await
         .expect("load retained revision");
         assert_eq!(retained_revision, 1);
-        assert_eq!(checkpoint_count(&pool).await, 0);
+        // Retain the file record for cleanup, but never reuse another add-on's archive.
+        assert_eq!(checkpoint_state(&pool).await, (1, 0));
 
         restore_same_addon_option_namespace(&pool).await;
         synchronizer
@@ -4239,7 +4244,7 @@ mod generated_playlist_refresh_tests {
                 r#"{"enabled":false}"#.into()
             )
         );
-        assert_eq!(checkpoint_count(&pool).await, 1);
+        assert_eq!(checkpoint_state(&pool).await, (1, 1));
 
         AddonMediaListSynchronizer::new(pool.clone())
             .save_list_items(LIST_ID, &[])

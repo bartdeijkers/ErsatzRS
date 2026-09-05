@@ -1687,6 +1687,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
 const REVISION_SNAPSHOT_VERSION: i32 = 1;
 const RETAINED_COMPLETE_REVISION_COUNT: usize = 3;
 
+#[allow(clippy::too_many_lines)] // Capture the complete revision under one transaction boundary.
 pub(crate) async fn capture_current_revision_snapshot(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -2118,6 +2119,7 @@ async fn insert_revision_item_in_tx(
 /// Load and integrity-check one exact retained revision from a single database
 /// snapshot. Callers decide whether a decode failure is fatal or merely makes
 /// an operator-facing history row non-restorable.
+#[allow(clippy::too_many_lines)] // Keep reconstruction and integrity checks in one database snapshot.
 pub(crate) async fn load_valid_revision_snapshot_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -2449,6 +2451,7 @@ fn compare_revision_snapshots(
     }
 }
 
+#[allow(clippy::too_many_lines)] // Restore fencing, draft replacement, and marker commit are atomic.
 async fn materialize_revision_as_draft(
     pool: &sqlx::Pool<crate::db::Db>,
     fence: &AddonMediaListRevisionRestoreFence,
@@ -2678,6 +2681,7 @@ async fn materialize_revision_as_draft(
     Ok(fence.target_draft_revision)
 }
 
+#[allow(clippy::too_many_lines)] // Keep the restored item and its owned metadata writes together.
 async fn upsert_restored_draft_item_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -2835,6 +2839,7 @@ async fn replace_restored_item_guids_in_tx(
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)] // Keep the related review counters in one pass over the draft.
 async fn calculate_saved_draft_diff_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -3016,6 +3021,7 @@ fn draft_publication_item_changed(
     current != published
 }
 
+#[allow(clippy::too_many_lines)] // Keep impact projections with their final revision consistency check.
 async fn calculate_reset_impact(
     pool: &sqlx::Pool<crate::db::Db>,
     list_id: EntityId,
