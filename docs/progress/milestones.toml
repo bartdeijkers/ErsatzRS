@@ -2760,7 +2760,7 @@ Clippy, the 15 failed Chromium/Firefox scenarios, and the Test job's failures.
 Preserve intended UI behavior and meaningful assertions.
 Run focused verification serially without overlapping the self-hosted runner,
 review/fix P1/P2, and obtain terminal green CI on the approved published fix SHA
-before starting AMM-M-02. Push remains subject to maintainer approval.
+before starting AMM-M-02. The maintainer approved pushing the repair on 2026-09-05.
 '''
 evidence = '''
 Reserved for Codex on 2026-09-05 at the maintainer's explicit reprioritization.
@@ -2786,11 +2786,28 @@ lifecycle/source-probe/test lint repairs preserve behavior and cohesive scenario
 five focused source-probe tests also pass. M-01-only compiler/lint repairs remain
 with its uncommitted implementation, outside the CI repair commit. These local
 checks used the working tree, not an isolated committed-only candidate. Full
-closeout and exact-SHA remote CI remain unrun; push approval is still required.
+local closeout remains unrun. The approved repair commit 2fd9f143 was pushed to
+main; remote equality was verified. Exact-SHA CI run 33970695691 passes Clippy,
+Format, Cargo deny, and documentation checks. Test passes all 667 infrastructure
+unit tests but exposes a later lifecycle storage fixture retaining draft revision
+0 after tombstone confirmation advanced it to 1. The already-present working-tree
+fixture correction was mistakenly excluded with M-01; independent review confirms
+that only the expected revision argument and explanatory comment belong in the
+follow-up CI repair. The focused storage regression passes after CI finishes.
+The same CI run completes Playwright with 292 passed, 22 skipped and two failures
+in the no-JS reset scenario, one per browser. Its predecessor leaves a lifecycle
+job behind because fixture cleanup disables foreign keys while reusing list IDs.
+Explicit lifecycle-job cleanup preserves the exact one-new-job assertion. All
+four paired predecessor/no-JS Chromium/Firefox cases pass against a fresh matched
+SSR/WASM build and temporary database, with one browser worker. Independent
+GPT-6 Astra review finds no P1/P2 in either fixture correction. Follow-up remote
+CI remains outstanding; these focused results do not mark the milestone complete.
 Cargo-leptos uses one Cargo job per SSR/WASM build (two compilers total); browser
 execution uses one worker, without a simultaneous CI or Rust test run.
-No new CI, push or release has been launched. No independent build or test run
-overlaps the active verification command.
+No release has been launched. Local builds and tests remain stopped while the
+self-hosted runner executes a candidate. The first repair run is terminal failed;
+focused follow-up checks run only after its worker has stopped. M-01 remains
+paused for CI repair; M-02 must wait for green CI.
 '''
 
 [[milestone]]

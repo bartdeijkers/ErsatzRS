@@ -387,6 +387,7 @@ function seedMetadataEditor(testInfo: TestInfo): MetadataSeed {
   sqlite(`
 DELETE FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId" = ${listId};
 DELETE FROM "AddonMediaListSourceProbeJob" WHERE "AddonMediaListId" = ${listId};
+DELETE FROM "AddonMediaListLifecycleJob" WHERE "AddonMediaListId" = ${listId};
 -- Cascade retained snapshot children before reusing this fixture's list identity.
 PRAGMA foreign_keys = ON;
 DELETE FROM "AddonMediaListRevision" WHERE "AddonMediaListId" = ${listId};

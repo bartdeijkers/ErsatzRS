@@ -1037,9 +1037,10 @@ async fn assert_artifact_storage(pool: &sqlx::SqlitePool) {
             .await,
         Err(RepositoryError::Conflict(_))
     ));
+    // Confirming the tombstone advanced this fixture's saved draft once.
     repositories
         .addon_media_lists
-        .retain_published_options(1, 1, 0, fixed_time())
+        .retain_published_options(1, 1, 1, fixed_time())
         .await
         .unwrap();
     repositories
