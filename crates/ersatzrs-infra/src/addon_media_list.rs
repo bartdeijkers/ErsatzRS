@@ -337,6 +337,10 @@ impl InstalledAddonMediaListProvider {
         provider_id: &str,
         overview_fingerprint: &str,
         item: AddonMediaListRecord,
+        options: Option<(
+            &crate::addon_media_list_options::ResolvedAddonItemOptions,
+            ersatzrs_domain::RemoteStreamLiveness,
+        )>,
     ) -> Result<MediaListEnrichmentResult> {
         let request = MediaListEnrichRequest {
             source_url: context.source_url.clone(),
@@ -351,7 +355,60 @@ impl InstalledAddonMediaListProvider {
                 kind: "media-list enrich request",
                 value: error.to_string(),
             })?;
-        let input = serde_json::to_vec(&request).map_err(|error| RepositoryError::Decode {
+        let (input, capability, operation) = if let Some((options, liveness)) = options {
+            let installed = load_installed_addon(&self.pool, addon_id)
+                .await
+                .map_err(|_| {
+                    RepositoryError::unavailable(
+                        "media-list enrichment",
+                        "the add-on is unavailable",
+                    )
+                })?
+                .ok_or_else(|| {
+                    RepositoryError::unavailable(
+                        "media-list enrichment",
+                        "the add-on is unavailable",
+                    )
+                })?;
+            options.validate_installed_schema(&installed.manifest)?;
+            if !installed
+                .manifest
+                .has_capability(ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_ENRICH_V1)
+            {
+                return Err(RepositoryError::unavailable(
+                    "media-list enrichment",
+                    "options-aware enrichment is unsupported",
+                ));
+            }
+            let wrapped = ersatzrs_addon_contract::MediaListEnrichOptionsRequest {
+                request,
+                options: options.for_operation(
+                    ersatzrs_addon_contract::AddonMediaListOptionOperation::Enrich,
+                    liveness,
+                )?,
+            };
+            wrapped
+                .validate(
+                    &options.definition,
+                    liveness == ersatzrs_domain::RemoteStreamLiveness::Finite,
+                )
+                .map_err(|_| {
+                    RepositoryError::Conflict("the saved enrichment options are invalid".into())
+                })?;
+            (
+                serde_json::to_vec(&wrapped),
+                ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_ENRICH_V1,
+                "enrich-options",
+            )
+        } else {
+            // Preserve the frozen import v1/v2 operation and byte shape exactly.
+            (
+                serde_json::to_vec(&request),
+                context.import_capability.as_str(),
+                "enrich",
+            )
+        };
+        let input = input.map_err(|error| RepositoryError::Decode {
             kind: "media-list enrich request",
             value: error.to_string(),
         })?;
@@ -360,8 +417,8 @@ impl InstalledAddonMediaListProvider {
             &self.pool,
             addon_id,
             AddonInvocation {
-                capability: &context.import_capability,
-                operation: "enrich",
+                capability,
+                operation,
                 runtime: &runtime,
                 extra_environment: &BTreeMap::new(),
                 timeout: Duration::from_secs(45),
@@ -999,16 +1056,19 @@ const fn domain_liveness(kind: WireLiveness) -> ersatzrs_domain::RemoteStreamLiv
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{
         add_chapter_fragments, decode_media_list_output, decode_media_list_output_for_capability,
         require_chapter_capability,
     };
+    #[cfg(unix)]
     use ersatzrs_addon_contract::{
         CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_IMPORT_V2,
-        CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2,
-        CAPABILITY_MEDIA_LIST_LIST_V3, CAPABILITY_MEDIA_LIST_LIST_V5,
-        CAPABILITY_MEDIA_LIST_LIST_V6,
+        CAPABILITY_MEDIA_LIST_LIST_V1,
+    };
+    use ersatzrs_addon_contract::{
+        CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3,
+        CAPABILITY_MEDIA_LIST_LIST_V5, CAPABILITY_MEDIA_LIST_LIST_V6,
     };
 
     /// Refuses to enumerate unless the host supplied its managed `FFmpeg`
@@ -1050,7 +1110,7 @@ printf '%s\n' '{"outcome":"unchanged","validator":"next-opaque-etag","source_upd
 "#;
 
     #[cfg(unix)]
-    async fn fixture_media_list_addon_with_script(
+    pub(crate) async fn fixture_media_list_addon_with_script(
         root: &std::path::Path,
         source: &str,
         network_hosts: &[&str],
@@ -1571,5 +1631,271 @@ printf '%s\n' '{"outcome":"unchanged","validator":"next-opaque-etag","source_upd
              {{\"record_type\":\"item\",\"provider_id\":\"{provider_id}\",\"rank\":0,\"display_title\":\"Item\",\"title\":\"Item\",\"kind\":\"movie\"}}\n"
         );
         assert!(decode_media_list_output(output.as_bytes()).is_err());
+    }
+
+    #[cfg(unix)] // Synthetic shell IPC; shared runner tests cover Windows process execution.
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)] // Keep exact child-input expectations beside both invocation paths.
+    async fn enrichment_ipc_filters_saved_options_and_preserves_legacy_shape() {
+        use super::{InstalledAddonMediaListProvider, InstalledMediaListImportContext};
+        use ersatzrs_addon_contract::{AddonMediaListRecord, MediaListEnrichRequest};
+        use sha2::{Digest as _, Sha256};
+        use std::fmt::Write as _;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("package");
+        let item: AddonMediaListRecord = serde_json::from_value(serde_json::json!({
+            "record_type":"item", "provider_id":"item", "rank":0,
+            "display_title":"Item", "title":"Item", "kind":"movie"
+        }))
+        .unwrap();
+        let request = MediaListEnrichRequest {
+            source_url: "https://example.test/list".into(),
+            record_capability: CAPABILITY_MEDIA_LIST_LIST_V2.into(),
+            provider_id: "item".into(),
+            overview_fingerprint: "fixture-overview".into(),
+            item: item.clone(),
+        };
+        let legacy = serde_json::to_string(&request).unwrap();
+        let envelope: ersatzrs_addon_contract::AddonMediaListOptionValues =
+            serde_json::from_value(serde_json::json!({
+                "schema":"media-list.options.v1", "values":{"enabled":false}
+            }))
+            .unwrap();
+        let wrapped =
+            serde_json::to_string(&ersatzrs_addon_contract::MediaListEnrichOptionsRequest {
+                request,
+                options: envelope,
+            })
+            .unwrap();
+        let output = serde_json::to_string(&item).unwrap();
+        let script = format!(
+            r#"#!/bin/sh
+set -eu
+request=$(cat)
+case "$1" in
+  enrich-options)
+    test "$ERSATZRS_ADDON_CAPABILITY" = 'media-list.enrich.v1'
+    test "$request" = '{wrapped}' ;;
+  enrich)
+    test "$ERSATZRS_ADDON_CAPABILITY" = 'media-list.import.v1'
+    test "$request" = '{legacy}' ;;
+  *) exit 91 ;;
+esac
+printf '%s\n' '{{"record_type":"outcome","outcome":"complete"}}' '{output}'
+"#
+        );
+        let pool = fixture_media_list_addon_with_script(&root, &script, &["example.test"]).await;
+        let original: String =
+            sqlx::query_scalar(r#"SELECT "ManifestJson" FROM "AddonInstallation" LIMIT 1"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let mut manifest: serde_json::Value = serde_json::from_str(&original).unwrap();
+        manifest["manifest_version"] = serde_json::json!(5);
+        let declaration = serde_json::json!({"id":"media-list.options.v1", "options":[
+            {"key":"enabled", "label":{"en-US":"Enabled"}, "description":{"en-US":"Enrichment fixture"},
+             "scope":"both", "operation_targets":["enrich"], "applicability":"all", "kind":"boolean", "default":true},
+            {"key":"playback_only", "label":{"en-US":"Playback"}, "description":{"en-US":"Filtered fixture"},
+             "scope":"both", "operation_targets":["playback"], "applicability":"all", "kind":"boolean", "default":true}
+        ]});
+        manifest["capabilities"].as_array_mut().unwrap().extend([
+            serde_json::json!({"id":"media-list.import.v1"}),
+            serde_json::json!({"id":"media-list.list.v2"}),
+            serde_json::json!({"id":"media-list.enrich.v1"}),
+            declaration.clone(),
+        ]);
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson"=?"#)
+            .bind(manifest.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let definition: ersatzrs_addon_contract::AddonCapability =
+            serde_json::from_value(declaration).unwrap();
+        let mut digest = String::new();
+        for byte in Sha256::digest(serde_json::to_vec(&definition).unwrap()) {
+            write!(digest, "{byte:02x}").unwrap();
+        }
+        let options = crate::addon_media_list_options::ResolvedAddonItemOptions {
+            schema: ersatzrs_core::repositories::AddonMediaListOptionSchemaRef {
+                addon_id: "org.ersatzrs.addon.fixture".into(),
+                capability_id: definition.id.clone(),
+                schema_digest: digest,
+            },
+            definition,
+            // Saved false overrides the declared true default; playback-only must not cross IPC.
+            values: serde_json::from_value(serde_json::json!({"schema":"media-list.options.v1",
+                "values":{"enabled":false,"playback_only":true}}))
+            .unwrap(),
+        };
+        let provider = InstalledAddonMediaListProvider::new(pool.clone());
+        let context = InstalledMediaListImportContext {
+            source_url: "https://example.test/list".into(),
+            record_capability: CAPABILITY_MEDIA_LIST_LIST_V2.into(),
+            import_capability: CAPABILITY_MEDIA_LIST_IMPORT_V1.into(),
+            data_dir: temporary.path().join("data"),
+        };
+        let addon_id = "org.ersatzrs.addon.fixture";
+        provider
+            .enrich(
+                addon_id,
+                &context,
+                "item",
+                "fixture-overview",
+                item.clone(),
+                Some((&options, ersatzrs_domain::RemoteStreamLiveness::Finite)),
+            )
+            .await
+            .unwrap();
+        provider
+            .enrich(
+                addon_id,
+                &context,
+                "item",
+                "fixture-overview",
+                item.clone(),
+                None,
+            )
+            .await
+            .unwrap();
+        manifest["capabilities"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|capability| capability["id"] != "media-list.enrich.v1");
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson"=?"#)
+            .bind(manifest.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let failure = provider
+            .enrich(
+                addon_id,
+                &context,
+                "item",
+                "fixture-overview",
+                item,
+                Some((&options, ersatzrs_domain::RemoteStreamLiveness::Finite)),
+            )
+            .await
+            .unwrap_err();
+        assert!(failure
+            .to_string()
+            .contains("options-aware enrichment is unsupported"));
+    }
+
+    // Synthetic POSIX transport fixture; Windows uses the same typed adapter
+    // with the platform-specific process wrapper covered by add-on runner tests.
+    #[cfg(unix)]
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)] // Keep the synthetic package fixture and access-fence assertions together.
+    async fn item_runtime_probe_and_access_fence_the_package_and_redact_output() {
+        use crate::addon_media_list_item_runtime::{InstalledItemRuntime, ItemRuntimeError};
+        use ersatzrs_addon_contract::{MediaListAccessCheckOutcome, MediaListAccessCheckRequest};
+
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("package");
+        let script = r#"#!/bin/sh
+set -eu
+request=$(cat)
+case "$1" in
+  runtime-info)
+    test "$request" = '{}'
+    printf '%s\n' '{"tool_version":"2026.08.19"}' ;;
+  test-access)
+    test "$ERSATZRS_ADDON_CAPABILITY" = 'media-list.access-check.v1'
+    case "$request" in
+      *'"provider_id":"https://example.test/video"'*)
+        printf '%s\n' '{"provider_id":"https://example.test/video","context_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tool_version":"2026.08.19","outcome":"accessible"}'
+        exit 0 ;;
+      *'"provider_id":"unexpected-output"'*)
+        printf '%s\n' '{"provider_id":"unexpected-output","context_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tool_version":"2026.08.19","outcome":"accessible","source_url":"https://example.test/video"}'
+        exit 0 ;;
+      *'"provider_id":"restricted"'*)
+        printf '%s\n' 'private profile diagnostic must never escape' >&2
+        exit 4 ;;
+    esac
+    printf '%s\n' '{"provider_id":"video:1","context_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","tool_version":"2026.08.19","outcome":"accessible"}' ;;
+  *) exit 5 ;;
+esac
+"#;
+        let pool = fixture_media_list_addon_with_script(&root, script, &["example.test"]).await;
+        let manifest: String =
+            sqlx::query_scalar(r#"SELECT "ManifestJson" FROM "AddonInstallation" LIMIT 1"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let mut manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+        manifest["manifest_version"] = serde_json::json!(5);
+        manifest["capabilities"].as_array_mut().unwrap().extend([
+            serde_json::json!({"id":"media-list.item-runtime.v1"}),
+            serde_json::json!({"id":"media-list.access-check.v1"}),
+            serde_json::json!({"id":"media-list.options.v1","options":[{
+                "key":"enabled", "label":{"en-US":"Enabled"},
+                "description":{"en-US":"Synthetic access option"}, "scope":"both",
+                "operation_targets":["test_access"], "applicability":"all",
+                "kind":"boolean", "default":false
+            }]}),
+        ]);
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson" = ?"#)
+            .bind(manifest.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let addon_id = "org.ersatzrs.addon.fixture";
+        let runtime = InstalledItemRuntime::load(&pool, addon_id, None)
+            .await
+            .unwrap();
+        assert_eq!(
+            runtime.runtime_info().await.unwrap().tool_version,
+            "2026.08.19"
+        );
+        let mut request: MediaListAccessCheckRequest = serde_json::from_value(serde_json::json!({
+            "source_url":"https://example.test/video", "provider_id":"video:1",
+            "context_fingerprint":"a".repeat(64), "tool_version":"2026.08.19",
+            "options":{"schema":"media-list.options.v1","values":{"enabled":false}}
+        }))
+        .unwrap();
+        assert_eq!(
+            runtime.test_access(&request, true).await.unwrap().outcome,
+            MediaListAccessCheckOutcome::Accessible
+        );
+        request.provider_id = request.source_url.clone();
+        assert_eq!(
+            runtime.test_access(&request, true).await.unwrap().outcome,
+            MediaListAccessCheckOutcome::Accessible
+        );
+        request.provider_id = "unexpected-output".into();
+        assert_eq!(
+            runtime.test_access(&request, true).await.unwrap_err(),
+            ItemRuntimeError::InvalidResult
+        );
+        request.provider_id = "restricted".into();
+        let failure = runtime.test_access(&request, true).await.unwrap_err();
+        assert_eq!(failure, ItemRuntimeError::Failed);
+        assert!(!failure.to_string().contains("private"));
+        request.source_url = "https://undeclared.example/video".into();
+        assert_eq!(
+            runtime.test_access(&request, true).await.unwrap_err(),
+            ItemRuntimeError::InvalidRequest
+        );
+        request.source_url = "https://example.test/video".into();
+        request.provider_id = "video:1".into();
+        request.tool_version = "2026.08.20".into();
+        assert_eq!(
+            runtime.test_access(&request, true).await.unwrap_err(),
+            ItemRuntimeError::InvalidResult
+        );
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "StateRevision" = 'changed'"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            runtime.runtime_info().await.unwrap_err(),
+            ItemRuntimeError::PackageChanged
+        );
+        assert!(matches!(
+            InstalledItemRuntime::load(&pool, addon_id, Some(runtime.package_identity())).await,
+            Err(ItemRuntimeError::PackageChanged)
+        ));
     }
 }

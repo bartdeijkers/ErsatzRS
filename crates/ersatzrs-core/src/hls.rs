@@ -2,6 +2,19 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
+/// Runtime-only retained-media startup gate, shared by master and variant routes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HlsStartupReadiness {
+    /// Ordinary streams retain the configured segment-count readiness policy.
+    Legacy,
+    /// Intent is not classified yet, or retained media has not built its reserve.
+    Pending { deadline: std::time::Instant },
+    /// The retained media reserve was completed before the original deadline.
+    Ready,
+    /// Startup failed; a late encoder result must not reopen the gate.
+    Failed,
+}
+
 /// Admission state for an HLS segmenter session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HlsAdmissionStatus {
@@ -46,6 +59,10 @@ pub trait HlsSessionHandle: Send + Sync {
     fn touch(&self);
     fn admission_status(&self) -> HlsAdmissionStatus {
         HlsAdmissionStatus::Waiting
+    }
+
+    fn startup_readiness(&self) -> HlsStartupReadiness {
+        HlsStartupReadiness::Legacy
     }
 
     async fn trim_playlist(&self) -> Option<String>;

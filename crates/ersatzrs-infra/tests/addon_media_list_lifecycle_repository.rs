@@ -7,9 +7,9 @@ use chrono::{TimeZone, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListDraftOptions, AddonMediaListItemOptionValues, AddonMediaListItemTombstone,
     AddonMediaListLifecycleRepository, AddonMediaListLifecycleSettings, AddonMediaListOptionSchema,
-    AddonMediaListOptionSchemaRef, AddonMediaListRevisionFile, AddonMediaListRevisionRestoreFence,
-    AddonProcessedArtifactPolicy, CreateAddonMediaListLifecycleJob, PlayoutRepository,
-    RepositoryError,
+    AddonMediaListOptionSchemaRef, AddonMediaListRevisionArtifacts, AddonMediaListRevisionFile,
+    AddonMediaListRevisionRestoreFence, AddonProcessedArtifactPolicy,
+    CreateAddonMediaListLifecycleJob, PlayoutRepository, RepositoryError,
 };
 use ersatzrs_domain::{
     AddonMediaListArtifactKind, AddonMediaListArtifactState, AddonMediaListImportMode,
@@ -82,6 +82,177 @@ fn draft_option_fixture(schema: &AddonMediaListOptionSchemaRef) -> AddonMediaLis
             },
         ],
     }
+}
+
+#[tokio::test]
+async fn draft_options_reject_stale_revision_and_duplicate_identity_without_mutation() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_list(&pool).await;
+    let schema = register_option_schema_fixture(&pool).await;
+    let mut draft = draft_option_fixture(&schema);
+    draft.item_values.truncate(1);
+    repositories
+        .addon_media_lists
+        .save_draft_options(&draft)
+        .await
+        .unwrap();
+    let before = repositories
+        .addon_media_lists
+        .draft_options(1, Some(&schema))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut stale = draft;
+    stale.list_values.clear();
+    stale.item_values.clear();
+    assert!(matches!(
+        repositories
+            .addon_media_lists
+            .save_draft_options(&stale)
+            .await,
+        Err(RepositoryError::Conflict(_))
+    ));
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .draft_options(1, Some(&schema))
+            .await
+            .unwrap(),
+        Some(before.clone())
+    );
+
+    let mut duplicate = before.clone();
+    duplicate.list_values.clear();
+    let mut second = duplicate.item_values[0].clone();
+    second.values.clear();
+    duplicate.item_values.push(second);
+    assert!(matches!(
+        repositories
+            .addon_media_lists
+            .save_draft_options(&duplicate)
+            .await,
+        Err(RepositoryError::Conflict(_))
+    ));
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .draft_options(1, Some(&schema))
+            .await
+            .unwrap(),
+        Some(before)
+    );
+}
+
+#[tokio::test]
+async fn draft_options_reject_active_publication_without_mutation() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_list(&pool).await;
+    let schema = register_option_schema_fixture(&pool).await;
+    let mut draft = draft_option_fixture(&schema);
+    draft.item_values.truncate(1);
+    repositories
+        .addon_media_lists
+        .save_draft_options(&draft)
+        .await
+        .unwrap();
+    let before = repositories
+        .addon_media_lists
+        .draft_options(1, Some(&schema))
+        .await
+        .unwrap()
+        .unwrap();
+    sqlx::raw_sql(
+        r#"INSERT INTO "MediaSource" ("Id") VALUES (30);
+           INSERT INTO "Library" ("Id", "MediaKind", "MediaSourceId", "Name")
+           VALUES (30, 0, 30, 'Option fixture library');
+           INSERT INTO "ManagedLibraryOperation" (
+               "Id", "LibraryId", "OwnerToken", "Kind", "State", "LeaseOwner",
+               "LeaseExpiresAt", "HeartbeatAt", "CreatedAt", "UpdatedAt"
+           ) VALUES (100, 30, 'option-owner', 3, 1, 'option-worker',
+                     '2999-01-01T00:00:00Z', '2026-09-04T12:00:00Z',
+                     '2026-09-04T12:00:00Z', '2026-09-04T12:00:00Z');
+           INSERT INTO "ManagedLibraryLease" (
+               "LibraryId", "OperationId", "OwnerToken", "LeaseOwner",
+               "LeaseExpiresAt", "HeartbeatAt", "UpdatedAt"
+           ) VALUES (30, 100, 'option-owner', 'option-worker',
+                     '2999-01-01T00:00:00Z', '2026-09-04T12:00:00Z', '2026-09-04T12:00:00Z');
+           INSERT INTO "AddonMediaListPublicationJob" (
+               "OperationId", "AddonMediaListId", "Generation", "SavedRevision",
+               "TargetPublishedRevision", "Phase", "CreatedAt", "UpdatedAt"
+           ) VALUES (100, 1, 1, 1, 1, 0, '2026-09-04T12:00:00Z', '2026-09-04T12:00:00Z');"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut changed = before.clone();
+    changed.list_values.clear();
+    changed.item_values.clear();
+    assert!(matches!(
+        repositories
+            .addon_media_lists
+            .save_draft_options(&changed)
+            .await,
+        Err(RepositoryError::Conflict(_))
+    ));
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .draft_options(1, Some(&schema))
+            .await
+            .unwrap(),
+        Some(before)
+    );
+}
+
+#[tokio::test]
+async fn option_items_enforce_selection_identity_and_effective_liveness() {
+    let pool = common::test_db().await;
+    let repositories = make_repositories(pool.clone());
+    seed_list(&pool).await;
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "ProviderLiveness" = 1, "LivenessOverride" = 2 WHERE "Id" = 10"#).execute(&pool).await.unwrap();
+    let selected = repositories
+        .addon_media_lists
+        .option_items(1, &[10])
+        .await
+        .unwrap();
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].provider_id, "item-10");
+    assert_eq!(
+        selected[0].liveness,
+        ersatzrs_domain::RemoteStreamLiveness::Live
+    );
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "LivenessOverride" = NULL WHERE "Id" = 10"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        repositories
+            .addon_media_lists
+            .option_items(1, &[10])
+            .await
+            .unwrap()[0]
+            .liveness,
+        ersatzrs_domain::RemoteStreamLiveness::Finite
+    );
+    for ids in [vec![10, 10], vec![10, 11], vec![11], vec![10; 10_001]] {
+        assert!(matches!(
+            repositories.addon_media_lists.option_items(1, &ids).await,
+            Err(RepositoryError::Conflict(_))
+        ));
+    }
+    assert!(matches!(
+        repositories.addon_media_lists.option_items(2, &[10]).await,
+        Err(RepositoryError::Conflict(_))
+    ));
+    assert!(repositories
+        .addon_media_lists
+        .option_items(1, &[])
+        .await
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -176,6 +347,122 @@ async fn lifecycle_options_round_trip_inherit_and_retain_immutable_revision() {
             .await,
         Err(RepositoryError::Conflict(_))
     ));
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // Compare draft and both published owners within the same fixture.
+async fn executable_options_keep_draft_and_each_published_owner_separate() {
+    use ersatzrs_addon_contract::AddonMediaListOptionValue as WireValue;
+    use ersatzrs_infra::addon_media_list_options::{
+        load_draft_item_options, load_published_item_options,
+    };
+
+    let pool = common::test_db().await;
+    seed_list(&pool).await;
+    let repositories = make_repositories(pool.clone());
+    let schema = register_option_schema_fixture(&pool).await;
+    assert!(
+        load_draft_item_options(&pool, 1, 10)
+            .await
+            .unwrap()
+            .is_none(),
+        "installed schemas must not activate a legacy draft on read"
+    );
+    sqlx::raw_sql(r#"
+        INSERT INTO "AddonMediaList" ("Id", "AddonId", "ProviderId", "SourceUrl", "Name")
+        VALUES (2, 'org.example.lifecycle', 'second-list', 'https://example.invalid/list', 'Second list');
+        INSERT INTO "AddonMediaListItem" ("Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank", "Title")
+        VALUES (20, 2, 'item-10', 'Shared item', 4, 0, 'Shared item');
+        UPDATE "AddonMediaListItem" SET "Published" = 1, "ProviderLiveness" = 1,
+            "EffectiveLiveness" = 1, "SourceUrl" = 'https://example.invalid/video';
+        UPDATE "AddonMediaList" SET "PublishedRevision" = 1;
+    "#).execute(&pool).await.unwrap();
+    for (list_id, enabled) in [(1, true), (2, false)] {
+        repositories
+            .addon_media_lists
+            .save_draft_options(&AddonMediaListDraftOptions {
+                list_id,
+                draft_revision: 0,
+                schema: Some(schema.clone()),
+                list_values: BTreeMap::from([(
+                    "enabled".into(),
+                    AddonMediaListOptionValue::Boolean(enabled),
+                )]),
+                item_values: Vec::new(),
+            })
+            .await
+            .unwrap();
+        repositories
+            .addon_media_lists
+            .retain_published_revision(
+                list_id,
+                1,
+                1,
+                fixed_time(),
+                &[],
+                &AddonMediaListRevisionArtifacts::default(),
+            )
+            .await
+            .unwrap();
+    }
+    let mut draft = repositories
+        .addon_media_lists
+        .draft_options(1, None)
+        .await
+        .unwrap()
+        .unwrap();
+    draft
+        .list_values
+        .insert("enabled".into(), AddonMediaListOptionValue::Boolean(false));
+    repositories
+        .addon_media_lists
+        .save_draft_options(&draft)
+        .await
+        .unwrap();
+    assert_eq!(
+        load_draft_item_options(&pool, 1, 10)
+            .await
+            .unwrap()
+            .unwrap()
+            .values
+            .values["enabled"],
+        WireValue::Boolean(false)
+    );
+    for (list_id, expected) in [(1, true), (2, false)] {
+        let (liveness, options) = load_published_item_options(
+            &pool,
+            list_id,
+            1,
+            "item-10",
+            "https://example.invalid/video",
+        )
+        .await
+        .unwrap();
+        assert_eq!(liveness, ersatzrs_domain::RemoteStreamLiveness::Finite);
+        assert_eq!(
+            options.unwrap().values.values["enabled"],
+            WireValue::Boolean(expected)
+        );
+    }
+    assert!(load_published_item_options(
+        &pool,
+        1,
+        1,
+        "item-10",
+        "https://example.invalid/different"
+    )
+    .await
+    .is_err());
+    assert!(
+        load_published_item_options(&pool, 1, 2, "item-10", "https://example.invalid/video")
+            .await
+            .is_err()
+    );
+    assert!(
+        load_published_item_options(&pool, 2, 1, "missing", "https://example.invalid/video")
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
@@ -457,7 +744,10 @@ async fn normal_list_delete_cascades_retained_files_and_unlinks_artifacts() {
                 sha256: blob.sha256.clone(),
                 byte_length: blob.byte_length,
             }],
-            &[artifact.id],
+            &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts {
+                ids: vec![artifact.id],
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -1151,6 +1441,371 @@ async fn assert_tool_maintenance_storage(pool: &sqlx::SqlitePool) {
     assert_eq!(history[2].state, AddonToolMaintenanceState::WaitingToRetry);
 }
 
+async fn prepared_revision_fixture(pool: &sqlx::SqlitePool) -> i64 {
+    seed_list(pool).await;
+    sqlx::raw_sql(
+        r#"UPDATE "AddonMediaList" SET "DraftRevision"=1,"PublishedRevision"=1 WHERE "Id"=1;
+        UPDATE "AddonMediaListItem" SET "Published"=1,"EffectiveLiveness"=1 WHERE "Id"=10;"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    let artifact = make_repositories(pool.clone())
+        .addon_media_lists
+        .create_artifact(
+            1,
+            Some(10),
+            "prepared-revision",
+            AddonMediaListArtifactKind::ProcessedMedia,
+            64,
+            fixed_time(),
+        )
+        .await
+        .unwrap();
+    sqlx::query(
+        r#"UPDATE "AddonMediaListArtifact" SET "State"=2,"DurationMilliseconds"=12500,
+        "RelativePath"='processed/fixture.mkv',"ByteLength"=64,"Sha256"=? WHERE "Id"=?"#,
+    )
+    .bind("a".repeat(64))
+    .bind(artifact.id)
+    .execute(pool)
+    .await
+    .unwrap();
+    artifact.id
+}
+
+fn streaming_plan_fixture(
+) -> ersatzrs_core::addon_media_list_playback::AddonMediaListPlaybackTimelinePlan {
+    ersatzrs_core::addon_media_list_playback::AddonMediaListPlaybackTimelinePlan::new(
+        20_000,
+        0..20_000,
+        &[5_000..7_125, 18_500..20_000],
+        "a".repeat(64),
+    )
+    .unwrap()
+}
+
+async fn streaming_revision_fixture(pool: &sqlx::SqlitePool) {
+    seed_list(pool).await;
+    sqlx::raw_sql(
+        r#"UPDATE "AddonMediaList" SET "DraftRevision"=1,"PublishedRevision"=1 WHERE "Id"=1;
+        UPDATE "AddonMediaListItem" SET "Published"=1,"EffectiveLiveness"=1,
+        "DurationSeconds"=20,"SourceUrl"='https://example.invalid/video' WHERE "Id"=10;"#,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn streaming_revision_retains_validated_plan_without_artifacts_or_mutable_draft() {
+    let pool = common::test_db().await;
+    streaming_revision_fixture(&pool).await;
+    let repository = make_repositories(pool.clone()).addon_media_lists;
+    let plan = streaming_plan_fixture();
+    let selection = AddonMediaListRevisionArtifacts {
+        streaming_plans: BTreeMap::from([("item-10".into(), plan.clone())]),
+        ..Default::default()
+    };
+    let snapshot = repository
+        .retain_published_revision(1, 1, 1, fixed_time(), &[], &selection)
+        .await
+        .unwrap();
+    assert_eq!(snapshot.items[0].playback_timeline.as_ref(), Some(&plan));
+    assert_eq!(plan.duration_milliseconds(), 16_375);
+    assert!(snapshot.artifact_ids.is_empty());
+    assert!(snapshot.items[0].prepared_artifact_id.is_none());
+    assert_eq!(
+        repository
+            .saved_draft_diff(1)
+            .await
+            .unwrap()
+            .metadata_changed,
+        0,
+        "publication-only streaming selection is not a draft edit"
+    );
+    sqlx::query(r#"DELETE FROM "AddonMediaListItem" WHERE "Id"=10"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let restarted = make_repositories(pool.clone()).addon_media_lists;
+    assert_eq!(
+        restarted.revision_snapshot(1, 1).await.unwrap(),
+        Some(snapshot.clone())
+    );
+    assert_eq!(
+        restarted
+            .retain_published_revision(1, 1, 1, fixed_time(), &[], &selection)
+            .await
+            .unwrap(),
+        snapshot
+    );
+    assert!(
+        restarted
+            .retain_published_revision(
+                1,
+                1,
+                1,
+                fixed_time(),
+                &[],
+                &AddonMediaListRevisionArtifacts::default()
+            )
+            .await
+            .is_err(),
+        "retry cannot erase a frozen plan"
+    );
+    let mut changed = serde_json::to_value(&plan).unwrap();
+    changed["excluded_intervals_milliseconds"] = serde_json::json!([]);
+    sqlx::query(r#"UPDATE "AddonMediaListRevisionItem" SET "PlaybackTimelineJson"=?"#)
+        .bind(changed.to_string())
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        restarted.revision_snapshot(1, 1).await.is_err(),
+        "valid but changed timing fails the digest"
+    );
+}
+
+#[tokio::test]
+async fn streaming_revision_preserves_legacy_bytes_and_rejects_malformed_or_oversized_json() {
+    let pool = common::test_db().await;
+    streaming_revision_fixture(&pool).await;
+    let repository = make_repositories(pool.clone()).addon_media_lists;
+    let snapshot = repository
+        .retain_published_revision(
+            1,
+            1,
+            1,
+            fixed_time(),
+            &[],
+            &AddonMediaListRevisionArtifacts::default(),
+        )
+        .await
+        .unwrap();
+    assert!(!serde_json::to_string(&snapshot.items[0])
+        .unwrap()
+        .contains("playback_timeline"));
+    assert_eq!(
+        repository.revision_snapshot(1, 1).await.unwrap(),
+        Some(snapshot)
+    );
+    assert!(
+        sqlx::query(r#"UPDATE "AddonMediaListRevisionItem" SET "PlaybackTimelineJson"=?"#)
+            .bind(" ".repeat(65_537))
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    sqlx::query(
+        r#"UPDATE "AddonMediaListRevisionItem" SET "PlaybackTimelineJson"='{"version":1}'"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert!(repository.revision_snapshot(1, 1).await.is_err());
+}
+
+#[tokio::test]
+async fn streaming_revision_rejects_wrong_owner_nonfinite_unpublished_and_prepared_items() {
+    let pool = common::test_db().await;
+    let artifact_id = prepared_revision_fixture(&pool).await;
+    let repository = make_repositories(pool.clone()).addon_media_lists;
+    let plan = streaming_plan_fixture();
+    for selection in [
+        AddonMediaListRevisionArtifacts {
+            streaming_plans: BTreeMap::from([("missing-item".into(), plan.clone())]),
+            ..Default::default()
+        },
+        AddonMediaListRevisionArtifacts {
+            ids: vec![artifact_id],
+            prepared_media: BTreeMap::from([("item-10".into(), artifact_id)]),
+            streaming_plans: BTreeMap::from([("item-10".into(), plan.clone())]),
+        },
+    ] {
+        assert!(repository
+            .retain_published_revision(1, 1, 1, fixed_time(), &[], &selection)
+            .await
+            .is_err());
+        assert!(repository.revision_snapshot(1, 1).await.unwrap().is_none());
+    }
+    let selection = AddonMediaListRevisionArtifacts {
+        streaming_plans: BTreeMap::from([("item-10".into(), plan)]),
+        ..Default::default()
+    };
+    for (published, liveness) in [(false, 1), (true, 0), (true, 2)] {
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "Published"=?,"EffectiveLiveness"=? WHERE "Id"=10"#,
+        )
+        .bind(published)
+        .bind(liveness)
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(repository
+            .retain_published_revision(1, 1, 1, fixed_time(), &[], &selection)
+            .await
+            .is_err());
+    }
+}
+
+#[tokio::test]
+async fn prepared_revision_keeps_exact_item_binding_after_draft_owner_disappears() {
+    let pool = common::test_db().await;
+    let artifact_id = prepared_revision_fixture(&pool).await;
+    let repository = make_repositories(pool.clone()).addon_media_lists;
+    let artifacts = AddonMediaListRevisionArtifacts {
+        ids: vec![artifact_id],
+        prepared_media: BTreeMap::from([("item-10".into(), artifact_id)]),
+        ..Default::default()
+    };
+    let snapshot = repository
+        .retain_published_revision(1, 1, 1, fixed_time(), &[], &artifacts)
+        .await
+        .unwrap();
+    assert_eq!(snapshot.items[0].prepared_artifact_id, Some(artifact_id));
+    assert_eq!(
+        repository
+            .saved_draft_diff(1)
+            .await
+            .unwrap()
+            .metadata_changed,
+        0,
+        "publication-only prepared selection is not a draft edit"
+    );
+    sqlx::query(r#"DELETE FROM "AddonMediaListItem" WHERE "Id"=10"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let restarted = make_repositories(pool.clone()).addon_media_lists;
+    assert_eq!(
+        restarted.revision_snapshot(1, 1).await.unwrap(),
+        Some(snapshot.clone())
+    );
+    assert_eq!(
+        restarted
+            .retain_published_revision(1, 1, 1, fixed_time(), &[], &artifacts)
+            .await
+            .unwrap(),
+        snapshot
+    );
+    assert!(
+        restarted
+            .retain_published_revision(
+                1,
+                1,
+                1,
+                fixed_time(),
+                &[],
+                &AddonMediaListRevisionArtifacts {
+                    ids: vec![artifact_id],
+                    ..Default::default()
+                }
+            )
+            .await
+            .is_err(),
+        "an idempotent retry cannot erase the selected binding"
+    );
+    assert!(
+        sqlx::query(r#"DELETE FROM "AddonMediaListArtifact" WHERE "Id"=?"#)
+            .bind(artifact_id)
+            .execute(&pool)
+            .await
+            .is_err()
+    );
+    sqlx::query(r#"UPDATE "AddonMediaListRevisionItem" SET "PreparedArtifactId"=NULL"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(
+        restarted.revision_snapshot(1, 1).await.is_err(),
+        "artifact binding is digest-covered"
+    );
+}
+
+#[tokio::test]
+async fn prepared_revision_rejects_wrong_owner_missing_pin_and_unready_file() {
+    let pool = common::test_db().await;
+    let artifact_id = prepared_revision_fixture(&pool).await;
+    let repository = make_repositories(pool.clone()).addon_media_lists;
+    for artifacts in [
+        AddonMediaListRevisionArtifacts {
+            ids: vec![artifact_id],
+            prepared_media: BTreeMap::from([("missing-item".into(), artifact_id)]),
+            ..Default::default()
+        },
+        AddonMediaListRevisionArtifacts {
+            ids: vec![],
+            prepared_media: BTreeMap::from([("item-10".into(), artifact_id)]),
+            ..Default::default()
+        },
+    ] {
+        assert!(repository
+            .retain_published_revision(1, 1, 1, fixed_time(), &[], &artifacts)
+            .await
+            .is_err());
+        assert!(repository.revision_snapshot(1, 1).await.unwrap().is_none());
+    }
+    sqlx::query(r#"UPDATE "AddonMediaListArtifact" SET "State"=0 WHERE "Id"=?"#)
+        .bind(artifact_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let artifacts = AddonMediaListRevisionArtifacts {
+        ids: vec![artifact_id],
+        prepared_media: BTreeMap::from([("item-10".into(), artifact_id)]),
+        ..Default::default()
+    };
+    assert!(repository
+        .retain_published_revision(1, 1, 1, fixed_time(), &[], &artifacts)
+        .await
+        .is_err());
+    let legacy = repository
+        .retain_published_revision(
+            1,
+            1,
+            1,
+            fixed_time(),
+            &[],
+            &AddonMediaListRevisionArtifacts::default(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        !serde_json::to_string(&legacy.items[0])
+            .unwrap()
+            .contains("prepared_artifact_id"),
+        "legacy snapshot bytes omit the new absent field"
+    );
+}
+
+#[tokio::test]
+async fn prepared_revision_restore_can_retain_file_after_item_recreation() {
+    let pool = common::test_db().await;
+    let artifact_id = prepared_revision_fixture(&pool).await;
+    let repository = make_repositories(pool.clone()).addon_media_lists;
+    let artifacts = AddonMediaListRevisionArtifacts {
+        ids: vec![artifact_id],
+        prepared_media: BTreeMap::from([("item-10".into(), artifact_id)]),
+        ..Default::default()
+    };
+    repository
+        .retain_published_revision(1, 1, 1, fixed_time(), &[], &artifacts)
+        .await
+        .unwrap();
+    sqlx::raw_sql(r#"DELETE FROM "AddonMediaListItem" WHERE "Id"=10;
+        INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","Published","EffectiveLiveness")
+        VALUES (20,1,'item-10','Restored item',4,0,'Restored item',1,1);
+        UPDATE "AddonMediaList" SET "DraftRevision"=2,"PublishedRevision"=2 WHERE "Id"=1;"#)
+        .execute(&pool).await.unwrap();
+    let restored = repository
+        .retain_published_revision(1, 2, 2, fixed_time(), &[], &artifacts)
+        .await
+        .unwrap();
+    assert_eq!(restored.items[0].prepared_artifact_id, Some(artifact_id));
+    assert_eq!(restored.artifact_ids, vec![artifact_id]);
+}
+
 #[tokio::test]
 #[allow(clippy::too_many_lines)] // Exercise snapshot capture, exact diff, and fenced restore as one lifecycle.
 async fn complete_revision_snapshot_drives_exact_diff_and_fenced_restore() {
@@ -1217,7 +1872,10 @@ async fn complete_revision_snapshot_drives_exact_diff_and_fenced_restore() {
                 sha256: blob.sha256.clone(),
                 byte_length: blob.byte_length,
             }],
-            &[artifact.id],
+            &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts {
+                ids: vec![artifact.id],
+                ..Default::default()
+            },
         )
         .await
         .unwrap();
@@ -1564,7 +2222,7 @@ async fn revision_retention_prunes_only_after_active_work_releases_its_pin() {
                 revision,
                 fixed_time() + chrono::Duration::minutes(i64::from(revision)),
                 &[],
-                &[],
+                &AddonMediaListRevisionArtifacts::default(),
             )
             .await
             .unwrap();

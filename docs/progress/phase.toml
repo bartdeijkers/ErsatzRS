@@ -58,11 +58,39 @@ early stop, additions-only automatic publication, and updater rollback.
 '''
 
 next_steps = '''
-Deliver ADR 0085 in dependency order through AMM-K, AMM-L, AMM-M, and AMM-N,
-resuming the reserved AMM-M-01 work. AMM-CI-01 is complete: exact-SHA CI run
-33978757158 is green at c75c07d3, including 294 browser cases with 22 skips.
-Do not start AMM-M-02 before M-01 is complete. Resume Phase 9A at p9a-01 after that corrective program
-by accepting the teletext product and standards contract before implementation.
+AMM-M-01A is Complete. The maintainer approved the accumulated 122-file host
+commit scope, including preserved M-01B groundwork and excluding the separate
+workflow-maintenance edits. The official add-on is committed locally at
+72eedfb, without push.
+Its options, frozen publication, metadata-only intervals,
+real scheduled MPEG-TS/HLS cut continuity and bounded cancellation are verified
+in the owning milestone. The approved startup policy retains a ten-second
+target and twenty-second maximum; the target is not claimed achieved.
+
+Next: plan AMM-M-01B from its existing acceptance and preserved implementation.
+Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native
+yt-dlp executable capabilities; the removed custom Range adapter has no fallback.
+Keep existing HDR/subtitle refusals and ordinary playback behavior intact.
+The non-blocking static startup-stage diagnostic debt remains visible in the
+owning parity file; do not invent new infrastructure to clear speculative cases.
+Run build/media checks serially with bounded concurrency after the prior WSL
+overload. Do not run CI/full closeout or push before the agreed AMM-N-03 pause.
+
+Preserve full-download preparation groundwork for M-01B, which is Not started.
+Its generic provider-neutral native list select offers Stream (default),
+Download ahead, and Download ahead only for new videos. New means first
+imported after enabling the mode; existing videos continue streaming. Enabled
+SponsorBlock applies in every mode. Do not delete or duplicate that groundwork.
+Record the observed private-worker liveness defect for M-01B: Child::wait closes
+stdin prematurely; retain the writer separately and test survival until shutdown.
+
+Deliver M-01A, M-01B, M-02, M-03 and the remaining AMM-N work in dependency order.
+AMM-CI-01 is complete at c75c07d3 with green exact-SHA CI 33978757158; that is
+historical evidence, not CI proof for this working tree. After AMM-N-03 is done
+and exact-candidate CI is green, the maintainer authorizes a new beta release
+containing only the Windows package. Do not publish before those gates.
+Resume Phase 9A at p9a-01 after the corrective program by accepting the teletext
+product and standards contract before implementation.
 '''
 
 [[blocking_decision]]

@@ -68,6 +68,8 @@ pub struct OutputMetadata {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FfmpegState {
+    /// Preserve the already-edited common clock of the provider's NUT stream.
+    pub retained_stream_timestamps: bool,
     pub output_format: OutputFormat,
     pub start: Option<Duration>,
     pub output_start: Option<Duration>,
@@ -83,6 +85,7 @@ pub struct FfmpegState {
 impl Default for FfmpegState {
     fn default() -> Self {
         Self {
+            retained_stream_timestamps: false,
             output_format: OutputFormat::MpegTs,
             start: None,
             output_start: None,
@@ -119,6 +122,25 @@ pub struct PipelineRequest {
 }
 
 impl PipelineRequest {
+    /// Use the caller's already-edited, zero-based NUT rawvideo/PCM input.
+    ///
+    /// The caller configures pipe:0 and fresh stream indexes before opting in.
+    /// Preserve those inputs and all auxiliary inputs, including disabled audio.
+    /// The provider has consumed the source seek and owns exact interval cuts.
+    #[must_use]
+    pub fn with_retained_stream_input(mut self) -> Self {
+        self.state.retained_stream_timestamps = true;
+        self.state.start = None;
+        self.state.output_start = None;
+        if self.desired.video_format == FFmpegProfileVideoFormat::Copy {
+            self.desired.video_format = FFmpegProfileVideoFormat::H264;
+        }
+        if self.desired.audio_format == FFmpegProfileAudioFormat::Copy {
+            self.desired.audio_format = FFmpegProfileAudioFormat::Aac;
+        }
+        self
+    }
+
     #[must_use]
     pub fn new(input: InputFile, desired: DesiredVideoState) -> Self {
         let path = input.path.clone();
@@ -1163,6 +1185,15 @@ fn build_transcode_pipeline(
         steps.insert(3, progress_to_stdout());
     }
 
+    if request.state.retained_stream_timestamps {
+        // ADR 0087: a failed retained media read must not become successful,
+        // shortened EOF that advances the programme past unplayed content.
+        steps.push(PipelineStep::global(
+            "retained_stream_timestamps",
+            ["-copyts", "-xerror"],
+        ));
+    }
+
     if let Some(thread_count) = request.state.thread_count {
         steps.insert(
             0,
@@ -1699,6 +1730,11 @@ fn build_transcode_pipeline(
 }
 
 fn apply_source_stream_indexes(request: &mut PipelineRequest) {
+    // Fresh NUT indexes were explicitly selected by the caller and may differ
+    // from historical source metadata. Never override that selection.
+    if request.state.retained_stream_timestamps {
+        return;
+    }
     if let Some(source_video_stream) = &request.source_video_stream {
         if let Some(video_input) = request
             .inputs
@@ -2752,6 +2788,10 @@ fn apply_qsv_download_and_reset_pts(
         target_state.pixel_format = request.desired.pixel_format();
     }
 
+    if request.state.retained_stream_timestamps {
+        return;
+    }
+
     let frame_rate = request
         .desired
         .frame_rate
@@ -3083,12 +3123,20 @@ fn add_realtime_input_options(request: &mut PipelineRequest) {
         .is_some_and(|source| source.is_still_image);
 
     for input in &mut request.inputs {
-        match input.kind {
-            InputKind::Video if !source_is_still_image && input.allow_readrate => {
-                input.add_readrate(readrate);
+        let paced_media = match input.kind {
+            InputKind::Video => !source_is_still_image && input.allow_readrate,
+            InputKind::Audio => input.allow_readrate,
+            _ => false,
+        };
+        if paced_media {
+            if request.state.retained_stream_timestamps {
+                // ADR 0087: let both logical legs establish output reserve before
+                // normal pacing. This input burst alone does not prove readiness.
+                input
+                    .input_options
+                    .extend(["-readrate_initial_burst".to_owned(), "8".to_owned()]);
             }
-            InputKind::Audio if input.allow_readrate => input.add_readrate(readrate),
-            _ => {}
+            input.add_readrate(readrate);
         }
     }
 }
@@ -4119,6 +4167,7 @@ fn normalized_video_tune(legacy_preset: Option<&str>, tune: Option<&str>) -> Opt
     })
 }
 
+#[allow(clippy::too_many_lines)] // Keep ordered output options together across timestamp modes.
 fn add_output_options(
     steps: &mut Vec<PipelineStep>,
     state: &FfmpegState,
@@ -4147,7 +4196,15 @@ fn add_output_options(
     }
 
     if desired.video_format != FFmpegProfileVideoFormat::Copy {
-        if acceleration != HardwareAccelerationKind::Qsv {
+        if state.retained_stream_timestamps {
+            // Fractional native section boundaries can quantize to the same
+            // encoder tick. Let FFmpeg resolve video collisions without
+            // resetting the edited clock or changing audio timing (ADR 0088).
+            steps.push(PipelineStep::generic(
+                "retained_stream_frame_rate",
+                ["-fps_mode:v", "vfr"],
+            ));
+        } else if acceleration != HardwareAccelerationKind::Qsv {
             if let Some(frame_rate) = desired.frame_rate {
                 steps.push(frame_rate_output_option(frame_rate));
             }
@@ -4383,6 +4440,152 @@ fn hls_output(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn retained_stream_request() -> PipelineRequest {
+        let mut desired = DesiredVideoState::h264_1080p();
+        desired.frame_rate = Some(FrameRate::DEFAULT);
+        desired.realtime_mode = RealtimeMode::On;
+        let mut request = PipelineRequest::new(
+            InputFile::video("pipe:0").with_input_options(["-f", "nut"]),
+            desired,
+        );
+        request.inputs[1] = InputFile::audio("pipe:0").with_stream_index(1);
+        request.state.start = Some(Duration::from_secs(90));
+        request.state.output_start = Some(Duration::from_secs(90));
+        request.with_retained_stream_input()
+    }
+
+    // ADR 0087: yt-dlp owns source cuts; the host consumes one edited NUT clock.
+    #[test]
+    fn retained_stream_input_snapshot() {
+        let pipeline = build_pipeline_for_acceleration(
+            HardwareAccelerationKind::None,
+            retained_stream_request(),
+        );
+        let command = pipeline.command(&[]);
+        assert!(command.arguments.iter().any(|arg| arg == "-xerror"));
+        assert!(!command
+            .arguments
+            .iter()
+            .any(|arg| arg == "-ss" || arg == "-r"));
+        assert_eq!(
+            command.arguments.iter().filter(|arg| *arg == "-i").count(),
+            1
+        );
+        let graph = pipeline.filter_graph.as_deref().unwrap_or_default();
+        assert!(!graph.contains("setpts="), "{graph}");
+        assert!(!graph.contains("select="), "{graph}");
+        assert!(!command
+            .arguments
+            .iter()
+            .any(|arg| arg == "concat" || arg == "-segment_time_metadata"));
+        // Keep the timing/input projection in generated final argv order.
+        let mut selected = Vec::new();
+        let mut arguments = command.arguments.iter();
+        while let Some(argument) = arguments.next() {
+            if matches!(argument.as_str(), "-copyts" | "-xerror") {
+                selected.push(argument.clone());
+            } else if matches!(
+                argument.as_str(),
+                "-i" | "-fps_mode:v" | "-readrate_initial_burst" | "-readrate"
+            ) {
+                selected.push(format!(
+                    "{argument} {}",
+                    arguments.next().expect("option value")
+                ));
+            }
+        }
+        insta::assert_snapshot!(selected.join("\n"), @"
+        -copyts
+        -xerror
+        -readrate_initial_burst 8
+        -readrate_initial_burst 8
+        -readrate 1.05
+        -i pipe:0
+        -fps_mode:v vfr
+        ");
+    }
+
+    #[test]
+    fn retained_stream_error_policy_does_not_change_ordinary_inputs() {
+        let request = PipelineRequest::new(
+            InputFile::video("ordinary.mp4"),
+            DesiredVideoState::h264_1080p(),
+        );
+        let command =
+            build_pipeline_for_acceleration(HardwareAccelerationKind::None, request).command(&[]);
+        assert!(!command
+            .arguments
+            .iter()
+            .any(|arg| arg == "-xerror" || arg == "-copyts"));
+    }
+
+    #[test]
+    fn retained_stream_keeps_caller_selected_fresh_indexes() {
+        let mut request = retained_stream_request();
+        request.inputs[0] = request.inputs[0].clone().with_stream_index(2);
+        request.inputs[1] = request.inputs[1].clone().with_stream_index(3);
+        let inputs = request.inputs.clone();
+        let mut video = SourceVideoStream::new(SourceVideoCodec::H264);
+        video.index = 4;
+        request.source_video_stream = Some(video);
+        request.source_audio_streams =
+            vec![SourceAudioStream::new(SourceAudioCodec::Aac).with_index(5)];
+        apply_source_stream_indexes(&mut request);
+        assert_eq!(request.inputs, inputs);
+    }
+
+    #[test]
+    fn retained_stream_promotes_copy_preserves_other_inputs_and_disabled_audio() {
+        let mut request = retained_stream_request().without_audio();
+        request.desired.video_format = FFmpegProfileVideoFormat::Copy;
+        request.desired.audio_format = FFmpegProfileAudioFormat::Copy;
+        request.desired.bit_depth = FFmpegProfileBitDepth::TenBit;
+        let subtitle = InputFile::new(InputKind::Subtitle, "captions.srt", 0);
+        request.inputs.push(subtitle);
+        let inputs = request.inputs.clone();
+        let request = request.with_retained_stream_input();
+        assert_eq!(request.inputs, inputs);
+        assert_eq!(request.desired.video_format, FFmpegProfileVideoFormat::H264);
+        assert_eq!(request.desired.audio_format, FFmpegProfileAudioFormat::Aac);
+        assert_eq!(request.desired.bit_depth, FFmpegProfileBitDepth::TenBit);
+        assert!(!request
+            .inputs
+            .iter()
+            .any(|input| input.kind == InputKind::Audio));
+        assert_eq!(request.state.start, None);
+        assert_eq!(request.state.output_start, None);
+    }
+
+    #[test]
+    fn retained_stream_qsv_preserves_download_without_video_clock_reset() {
+        for retained in [false, true] {
+            let mut request = retained_stream_request();
+            request.state.retained_stream_timestamps = retained;
+            let mut frame = FrameState::new(FrameSize::new(1920, 1080));
+            frame.frame_data_location = crate::FrameDataLocation::Hardware;
+            let mut chain = FilterChain::default();
+            apply_qsv_download_and_reset_pts(
+                &request,
+                HardwareAccelerationKind::Qsv,
+                &mut frame,
+                &mut chain,
+            );
+            assert_eq!(
+                frame.frame_data_location,
+                crate::FrameDataLocation::Software
+            );
+            assert!(chain
+                .video
+                .iter()
+                .any(|filter| filter.contains("hwdownload")));
+            assert_eq!(
+                chain.video.iter().any(|filter| filter.contains("setpts=")),
+                !retained
+            );
+        }
+        assert!(!FfmpegState::default().retained_stream_timestamps);
+    }
 
     fn hls_options_for(
         audio_format: FFmpegProfileAudioFormat,

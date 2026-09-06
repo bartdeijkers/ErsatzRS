@@ -1,3 +1,4 @@
+pub mod addon_list_options;
 pub mod addon_media_lists;
 pub mod addons;
 pub mod artwork;

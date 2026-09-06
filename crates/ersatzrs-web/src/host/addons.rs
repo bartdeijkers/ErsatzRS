@@ -30,6 +30,154 @@ impl NativeAddonRuntime {
 
 #[async_trait]
 impl AddonRuntime for NativeAddonRuntime {
+    async fn supports_media_list_access_check(
+        &self,
+        addon_id: &str,
+    ) -> Result<bool, AddonRuntimeError> {
+        use ersatzrs_addon_contract::{
+            CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1, CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1,
+        };
+        Ok(load_installed_addon(&self.pool, addon_id)
+            .await
+            .map_err(runtime_error)?
+            .is_some_and(|addon| {
+                addon.enabled
+                    && addon
+                        .manifest
+                        .has_capability(CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1)
+                    && addon
+                        .manifest
+                        .has_capability(CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1)
+            }))
+    }
+
+    async fn queue_media_list_access_check(
+        &self,
+        list_id: i64,
+        item_id: i64,
+        expected_revision: i32,
+    ) -> Result<i64, AddonRuntimeError> {
+        ersatzrs_infra::addon_media_list_item_coordinator::AddonMediaListItemCoordinator::new(
+            self.pool.clone(),
+        )
+        .queue_access(list_id, item_id, expected_revision)
+        .await
+        .map_err(|_| AddonRuntimeError::new("the saved item access check could not be queued"))
+    }
+
+    async fn media_list_access_check(
+        &self,
+        list_id: i64,
+        item_id: i64,
+    ) -> Result<Option<ersatzrs_app::AddonItemAccessRead>, AddonRuntimeError> {
+        use ersatzrs_app::{AddonItemAccessRead, AddonItemAccessState};
+        use ersatzrs_infra::addon_media_list_item_jobs::{
+            ItemOperationCompletion, ItemOperationFailure,
+        };
+        let status =
+            ersatzrs_infra::addon_media_list_item_coordinator::AddonMediaListItemCoordinator::new(
+                self.pool.clone(),
+            )
+            .access_status(list_id, item_id)
+            .await
+            .map_err(|_| AddonRuntimeError::new("the item access check is unavailable"))?;
+        Ok(status.map(|status| {
+            let state = match status.state {
+                0 if status
+                    .next_eligible_at
+                    .is_some_and(|next| next > chrono::Utc::now()) =>
+                {
+                    AddonItemAccessState::Waiting
+                }
+                0 => AddonItemAccessState::Queued,
+                1 => AddonItemAccessState::Running,
+                2 => AddonItemAccessState::Complete,
+                4 => AddonItemAccessState::Cancelled,
+                5 => AddonItemAccessState::Stale,
+                _ if matches!(
+                    status.completion,
+                    Some(ItemOperationCompletion::Failed(
+                        ItemOperationFailure::InputChanged
+                    ))
+                ) =>
+                {
+                    AddonItemAccessState::Stale
+                }
+                _ => AddonItemAccessState::Failed,
+            };
+            let (outcome, expires_at) = match status.completion {
+                Some(ItemOperationCompletion::Access {
+                    outcome,
+                    expires_at,
+                }) => (Some(outcome), Some(expires_at)),
+                _ => (None, None),
+            };
+            AddonItemAccessRead {
+                job_id: status.id,
+                state,
+                outcome,
+                next_eligible_at: status.next_eligible_at,
+                expires_at,
+            }
+        }))
+    }
+
+    async fn cancel_media_list_access_check(
+        &self,
+        list_id: i64,
+        item_id: i64,
+        job_id: i64,
+    ) -> Result<(), AddonRuntimeError> {
+        ersatzrs_infra::addon_media_list_item_coordinator::AddonMediaListItemCoordinator::new(
+            self.pool.clone(),
+        )
+        .cancel_access(list_id, item_id, job_id)
+        .await
+        .map_err(|_| AddonRuntimeError::new("the item access check could not be cancelled"))
+    }
+
+    async fn media_list_option_schema(
+        &self,
+        addon_id: &str,
+    ) -> Result<Option<ersatzrs_core::repositories::AddonMediaListOptionSchema>, AddonRuntimeError>
+    {
+        use ersatzrs_core::repositories::{
+            AddonMediaListOptionSchema, AddonMediaListOptionSchemaRef,
+        };
+        use sha2::{Digest as _, Sha256};
+        use std::fmt::Write as _;
+
+        let Some(installed) = load_installed_addon(&self.pool, addon_id)
+            .await
+            .map_err(runtime_error)?
+        else {
+            return Ok(None);
+        };
+        if !installed.enabled {
+            return Ok(None);
+        }
+        let Some(definition_json) = installed
+            .manifest
+            .media_list_option_schema_snapshot()
+            .map_err(|_| AddonRuntimeError::new("invalid installed option schema"))?
+        else {
+            return Ok(None);
+        };
+        let mut schema_digest = String::with_capacity(64);
+        for byte in Sha256::digest(definition_json.as_bytes()) {
+            let _ = write!(schema_digest, "{byte:02x}");
+        }
+        Ok(Some(AddonMediaListOptionSchema {
+            schema: AddonMediaListOptionSchemaRef {
+                addon_id: installed.addon_id,
+                capability_id: ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_OPTIONS_V1.into(),
+                schema_digest,
+            },
+            definition_json,
+            created_at: chrono::Utc::now(),
+        }))
+    }
+
     async fn overview(&self) -> Result<AddonOverviewRead, AddonRuntimeError> {
         let repositories = list_local_addon_sources(&self.pool)
             .await

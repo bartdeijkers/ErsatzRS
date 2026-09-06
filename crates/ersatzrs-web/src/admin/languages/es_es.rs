@@ -370,7 +370,9 @@ impl LanguageStrings for SpanishStrings {
         fallbacks: u64,
         fallback_hours: u64,
     ) -> String {
-        format!("{recent} canal(es) entregaron contenido HLS en directo más lentamente que el tiempo real durante los últimos {minutes} minutos; {active} aún no se habían recuperado en la última observación; {fallbacks} canal(es) usan una alternativa verificada de codificación por software y/o menor calidad durante un máximo de {fallback_hours} horas. Revisa los registros de streaming y ejecuta la prueba de reproducción TSDuck sensible a la velocidad de entrega antes de cambiar la configuración del proveedor.")
+        format!(
+            "{recent} canal(es) entregaron contenido HLS en directo más lentamente que el tiempo real durante los últimos {minutes} minutos; {active} aún no se habían recuperado en la última observación; {fallbacks} canal(es) usan una alternativa verificada de codificación por software y/o menor calidad durante un máximo de {fallback_hours} horas. Revisa los registros de streaming y ejecuta la prueba de reproducción TSDuck sensible a la velocidad de entrega antes de cambiar la configuración del proveedor."
+        )
     }
 
     fn artwork_cardinality_message(
@@ -399,6 +401,58 @@ impl LanguageStrings for SpanishStrings {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::AddonAccessTest => "Probar acceso",
+        TextKey::AddonAccessHelp => {
+            "Comprueba este elemento con las opciones guardadas del borrador. Se excluyen los cambios sin guardar; la reproducción publicada no cambia."
+        }
+        TextKey::AddonAccessSaveFirst => {
+            "Guarda primero una opción para activar los ajustes del borrador antes de probar el acceso."
+        }
+        TextKey::AddonAccessError => {
+            "No se pudo cargar o modificar la comprobación de acceso. Actualiza el elemento e inténtalo de nuevo."
+        }
+        TextKey::AddonAccessNotChecked => "Sin comprobar",
+        TextKey::AddonAccessQueued => "Comprobación de acceso en cola",
+        TextKey::AddonAccessRunning => "Comprobando acceso",
+        TextKey::AddonAccessWaiting => "Esperando para volver a comprobar el acceso",
+        TextKey::AddonAccessCancelled => "Comprobación de acceso cancelada",
+        TextKey::AddonAccessStale => "Resultado de acceso caducado o ajustes modificados",
+        TextKey::AddonAccessAccessible => "Accesible",
+        TextKey::AddonAccessProfileUnavailable => "Perfil del navegador no disponible",
+        TextKey::AddonAccessProfileLocked => "Perfil del navegador bloqueado",
+        TextKey::AddonAccessDecryptionFailed => {
+            "No se pudieron descifrar las credenciales del navegador"
+        }
+        TextKey::AddonAccessRestricted => "Acceso restringido por el proveedor",
+        TextKey::AddonAccessNextAttempt => "Próximo intento:",
+        TextKey::AddonAccessExpires => "El resultado caduca:",
+        TextKey::AddonAccessRefresh => "Actualizar estado",
+        TextKey::AddonOptionsCurrentFilter => "Filtro actual",
+        TextKey::AddonOptions => "Opciones del proveedor",
+        TextKey::AddonOptionsDraftHelp => {
+            "Los cambios se guardan en el borrador. La reproducción publicada conserva sus opciones hasta que publiques."
+        }
+        TextKey::AddonOptionsProvisional => {
+            "Estos valores predeterminados del paquete son provisionales. Guardar una opción los activa para este borrador."
+        }
+        TextKey::AddonOptionsListDefault => "Valor predeterminado de la lista",
+        TextKey::AddonOptionsInherited => "Heredado",
+        TextKey::AddonOptionsOverride => "Personalizado",
+        TextKey::AddonOptionsFiniteOnly => {
+            "No disponible para elementos en directo o de duración desconocida: esta opción requiere contenido de duración finita. La reproducción directa sigue disponible."
+        }
+        TextKey::AddonOptionsResetPackage => "Restablecer valor del paquete",
+        TextKey::AddonOptionsResetList => "Restablecer valor de la lista",
+        TextKey::AddonOptionsMixed => "Valores diferentes — elige un valor",
+        TextKey::AddonOptionsPreviewHelp => {
+            "Revisa estos elementos concretos antes de aplicar. Un cambio intermedio en el borrador o el esquema requiere una nueva vista previa."
+        }
+        TextKey::AddonOptionsBefore => "Antes",
+        TextKey::AddonOptionsAfter => "Después",
+        TextKey::AddonOptionsConflict => {
+            "No se pudieron guardar o cargar las opciones. El borrador, la selección o el esquema del paquete pueden haber cambiado. Recarga el editor e inténtalo de nuevo."
+        }
+        TextKey::AddonOptionsNone => "Este paquete no define opciones.",
         TextKey::Addon => "Complemento",
         TextKey::PrimaryFeature => "Película principal",
         TextKey::MovieExtra => "Extra de película",
@@ -427,7 +481,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::EventEnqueued => "Publicación puesta en cola",
         TextKey::EventLeaseWaitStarted => "Esperando acceso a la biblioteca",
         TextKey::EventLeaseAcquired => "Acceso a la biblioteca obtenido",
-        TextKey::EventLeaseReclaimed => "Publicación reanudada tras una interrupción o concesión caducada",
+        TextKey::EventLeaseReclaimed => {
+            "Publicación reanudada tras una interrupción o concesión caducada"
+        }
         TextKey::EventPhaseAdvanced => "Fase de publicación avanzada",
         TextKey::EventChildScanStarted => "Análisis de verificación iniciado",
         TextKey::EventChildScanCompleted => "Análisis de verificación completado",
@@ -445,7 +501,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TestSourceHelp => "Comprueba la fuente guardada sin importar ni cambiar la lista.",
         TextKey::SourceTestQueued => "Prueba de fuente en cola",
         TextKey::SourceTestRunning => "Prueba de fuente en curso…",
-        TextKey::SourceTestStale => "La prueba está obsoleta porque sus entradas guardadas ya no coinciden con la lista, el paquete de complemento o los valores predeterminados actuales.",
+        TextKey::SourceTestStale => {
+            "La prueba está obsoleta porque sus entradas guardadas ya no coinciden con la lista, el paquete de complemento o los valores predeterminados actuales."
+        }
         TextKey::SourceAvailable => "La fuente está disponible",
         TextKey::SourceUnsupported => "La fuente no es compatible",
         TextKey::SourceTestFailed => "Falló la prueba de fuente",
@@ -455,25 +513,35 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ReturnedFirstPageItems => "Elementos devueltos en la primera página",
         TextKey::ProviderTotalItemCount => "Total de elementos indicado por el proveedor",
         TextKey::DraftChanges => "Cambios del borrador guardado",
-        TextKey::ExactDraftDiffHelp => "Diferencias exactas entre el borrador guardado y la revisión publicada actual.",
-        TextKey::DraftDiffUnavailable => "La comparación exacta estará disponible tras publicar una revisión completa.",
+        TextKey::ExactDraftDiffHelp => {
+            "Diferencias exactas entre el borrador guardado y la revisión publicada actual."
+        }
+        TextKey::DraftDiffUnavailable => {
+            "La comparación exacta estará disponible tras publicar una revisión completa."
+        }
         TextKey::MetadataChanges => "Cambios de metadatos",
         TextKey::ExcludedItems => "Elementos excluidos",
         TextKey::Conflicts => "Conflictos",
         TextKey::PendingRemovals => "Eliminaciones pendientes",
-        TextKey::PendingRemovalHelp => "No apareció una vez en una conciliación completa. Confirma la eliminación ahora o espera una segunda observación completa al menos 24 horas después.",
+        TextKey::PendingRemovalHelp => {
+            "No apareció una vez en una conciliación completa. Confirma la eliminación ahora o espera una segunda observación completa al menos 24 horas después."
+        }
         TextKey::Reappearances => "Reapariciones",
         TextKey::RemovalCandidates => "Candidatos a eliminar",
         TextKey::ConfirmRemoval => "Confirmar eliminación",
         TextKey::RemovalConfirmed => "Eliminación confirmada.",
         TextKey::RemovalConfirmationFailed => "No se pudo confirmar la eliminación.",
         TextKey::RevisionHistory => "Historial de revisiones",
-        TextKey::RevisionHistoryHelp => "Restaurar sustituye el borrador actual y publica la instantánea elegida como una nueva revisión.",
+        TextKey::RevisionHistoryHelp => {
+            "Restaurar sustituye el borrador actual y publica la instantánea elegida como una nueva revisión."
+        }
         TextKey::NoRevisionHistory => "Aún no se conservan revisiones publicadas.",
         TextKey::Revision => "Revisión",
         TextKey::CompareRevisions => "Comparar revisiones",
         TextKey::RestoreRevision => "Restaurar revisión",
-        TextKey::RestoreRevisionWarning => "Esto sustituye el borrador actual y publica la revisión",
+        TextKey::RestoreRevisionWarning => {
+            "Esto sustituye el borrador actual y publica la revisión"
+        }
         TextKey::RestoreRevisionQueued => "Restauración de revisión en cola",
         TextKey::RestoreRevisionFailed => "No se pudo restaurar la revisión.",
         TextKey::PublishedItems => "Elementos publicados",
@@ -506,13 +574,20 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SavedRevision => "Revisión guardada",
         TextKey::PublishList => "Publicar lista",
         TextKey::PreparePublication => "Preparar publicación",
+        TextKey::ProcessedMediaRequired => "Archivos multimedia por preparar",
+        TextKey::ProcessedMediaQueued => "Preparación de medios en cola",
+        TextKey::PreparingProcessedMedia => "Preparando archivos multimedia",
         TextKey::PreparingPublication => "Preparando publicación",
         TextKey::Publishing => "Publicando…",
         TextKey::PublicationQueued => "Publicación en cola",
         TextKey::RestoringPublication => "Restaurando la revisión anterior…",
         TextKey::Published => "Publicado",
-        TextKey::PublishSavedRevisionHelp => "Se publicará exactamente la revisión guardada. Guarda primero los cambios de la lista.",
-        TextKey::ChangesSavedImmediately => "Los cambios de elementos y en bloque se guardan al instante y se pueden deshacer.",
+        TextKey::PublishSavedRevisionHelp => {
+            "Se publicará exactamente la revisión guardada. Guarda primero los cambios de la lista."
+        }
+        TextKey::ChangesSavedImmediately => {
+            "Los cambios de elementos y en bloque se guardan al instante y se pueden deshacer."
+        }
         TextKey::ReviewItem => "Revisar elemento",
         TextKey::ShowFullDescription => "Mostrar descripción completa",
         TextKey::ShowLess => "Mostrar menos",
@@ -525,13 +600,23 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockerPublicationInProgress => "La publicación ya está en curso.",
         TextKey::BlockerRecoveryRequired => "Una publicación anterior aún requiere recuperación.",
         TextKey::BlockerCollectionTitleMissing => "La colección necesita un título.",
-        TextKey::BlockerInvalidArtwork => "Las imágenes deben usar una URL HTTPS válida y limitada.",
+        TextKey::BlockerInvalidArtwork => {
+            "Las imágenes deben usar una URL HTTPS válida y limitada."
+        }
         TextKey::BlockerNoIncludedItems => "Incluye al menos un elemento.",
-        TextKey::BlockerMoviePrimaryCount => "La publicación de películas requiere exactamente una película principal.",
+        TextKey::BlockerMoviePrimaryCount => {
+            "La publicación de películas requiere exactamente una película principal."
+        }
         TextKey::BlockerPlaybackDecisionRequired => "Elige reproducción finita o en directo.",
-        TextKey::BlockerPlaybackDetailsUnavailable => "Este complemento no ofrece los detalles de reproducción necesarios.",
-        TextKey::BlockerPlaybackDetailsFailed => "Los detalles del proveedor no contienen una duración positiva.",
-        TextKey::BlockerUnavailableWithoutReplacement => "El elemento no disponible necesita un reemplazo local válido.",
+        TextKey::BlockerPlaybackDetailsUnavailable => {
+            "Este complemento no ofrece los detalles de reproducción necesarios."
+        }
+        TextKey::BlockerPlaybackDetailsFailed => {
+            "Los detalles del proveedor no contienen una duración positiva."
+        }
+        TextKey::BlockerUnavailableWithoutReplacement => {
+            "El elemento no disponible necesita un reemplazo local válido."
+        }
         TextKey::BlockerItemTitleMissing => "El elemento necesita un título.",
         TextKey::BlockerSeasonEpisodeMissing => "Introduce una temporada y un episodio válidos.",
         TextKey::BlockerArtistMissing => "Introduce al menos un artista.",
@@ -557,12 +642,20 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PhaseVerifying => "Verificando revisión",
         TextKey::PhaseCleaningUp => "Limpiando archivos de publicación",
         TextKey::PhaseComplete => "Completada",
-        TextKey::InstallLeavesDisabled => "Tras instalarlo, el complemento seguirá desactivado hasta que lo habilites.",
-        TextKey::EnableActivatesPermissions => "Al habilitarlo se activan los permisos declarados del complemento.",
+        TextKey::InstallLeavesDisabled => {
+            "Tras instalarlo, el complemento seguirá desactivado hasta que lo habilites."
+        }
+        TextKey::EnableActivatesPermissions => {
+            "Al habilitarlo se activan los permisos declarados del complemento."
+        }
         TextKey::FirstAired => "Primera emisión",
         TextKey::LoadItemDetailsAfterPublishing => "Cargar detalles automáticamente",
-        TextKey::LoadItemDetailsHelp => "Importa primero el resumen. Los detalles técnicos necesarios para reproducir se cargan antes de la primera publicación; los demás metadatos ampliados siguen a un ritmo controlado.",
-        TextKey::OverviewOnlyManualDetailsHelp => "Importa solo el resumen y solicita manualmente los detalles descriptivos. Los detalles técnicos necesarios para reproducir se preparan automáticamente antes de publicar.",
+        TextKey::LoadItemDetailsHelp => {
+            "Importa primero el resumen. Los detalles técnicos necesarios para reproducir se cargan antes de la primera publicación; los demás metadatos ampliados siguen a un ritmo controlado."
+        }
+        TextKey::OverviewOnlyManualDetailsHelp => {
+            "Importa solo el resumen y solicita manualmente los detalles descriptivos. Los detalles técnicos necesarios para reproducir se preparan automáticamente antes de publicar."
+        }
         TextKey::PlaybackDetailsQueued => "Detalles de reproducción en cola",
         TextKey::PublishAgainAfterDetails => "Revisa los detalles completados y vuelve a publicar.",
         TextKey::FetchDetails => "Obtener detalles",
@@ -581,7 +674,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ResumeImport => "Reanudar importación",
         TextKey::RetryImportNow => "Reintentar importación ahora",
         TextKey::EmptyImportNeedsRetry => "La importación vacía debe reintentarse",
-        TextKey::EmptyImportRetryHelp => "Esta importación completada no contiene elementos. Actualice el complemento y vuelva a intentarlo; se conservarán los ajustes y cambios de la lista.",
+        TextKey::EmptyImportRetryHelp => {
+            "Esta importación completada no contiene elementos. Actualice el complemento y vuelva a intentarlo; se conservarán los ajustes y cambios de la lista."
+        }
         TextKey::CancelImport => "Cancelar importación",
         TextKey::OtherPageItemsAffected => "Hay más elementos afectados en otras páginas",
         TextKey::ElapsedTime => "Tiempo transcurrido",
@@ -604,7 +699,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AllRemaining => "Todos los restantes",
         TextKey::ReplaceExistingEpisodeNumbers => "Reemplazar números de episodio existentes",
         TextKey::AutoDetectSeasons => "Detectar temporadas por las fechas de emisión",
-        TextKey::AutoDetectSeasonsHelp => "Empieza una temporada nueva cuando el intervalo entre dos fechas de emisión conocidas alcanza el mínimo configurado. Los elementos sin fecha continúan en la temporada actual.",
+        TextKey::AutoDetectSeasonsHelp => {
+            "Empieza una temporada nueva cuando el intervalo entre dos fechas de emisión conocidas alcanza el mínimo configurado. Los elementos sin fecha continúan en la temporada actual."
+        }
         TextKey::MinimumSeasonGapDays => "Intervalo mínimo entre temporadas (días)",
         TextKey::NumberingStartsAt => "La numeración empieza en",
         TextKey::FirstIncludedItem => "Primer elemento incluido",
@@ -638,13 +735,27 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Year => "Año",
         TextKey::SortTitle => "Título de ordenación",
         TextKey::MovieFilesAndExtras => "Archivos de película y extras",
-        TextKey::MovieFilesAndExtrasHelp => "Asigna exactamente una película principal. El orden de origen no decide el rol, por lo que un tráiler puede aparecer primero.",
-        TextKey::EpisodesMetadataHelp => "Revisa la identidad y numeración de episodios; el orden del proveedor no cambia.",
-        TextKey::MusicVideosMetadataHelp => "Artista, álbum y pista pertenecen a cada vídeo; las listas con varios artistas siguen siendo válidas.",
-        TextKey::OtherVideosMetadataHelp => "Usa este tipo para vídeos independientes y no para una película con extras.",
-        TextKey::SongsMetadataHelp => "Pista, disco, artista y álbum se editan por canción; el orden de la lista no sustituye el número de pista.",
-        TextKey::ImagesMetadataHelp => "El pie y el creador son editables; formato, dimensiones e identidad de origen siguen siendo datos objetivos.",
-        TextKey::RemoteStreamsMetadataHelp => "Edita aquí los metadatos de presentación; conectividad y protocolo siguen siendo datos de la fuente.",
+        TextKey::MovieFilesAndExtrasHelp => {
+            "Asigna exactamente una película principal. El orden de origen no decide el rol, por lo que un tráiler puede aparecer primero."
+        }
+        TextKey::EpisodesMetadataHelp => {
+            "Revisa la identidad y numeración de episodios; el orden del proveedor no cambia."
+        }
+        TextKey::MusicVideosMetadataHelp => {
+            "Artista, álbum y pista pertenecen a cada vídeo; las listas con varios artistas siguen siendo válidas."
+        }
+        TextKey::OtherVideosMetadataHelp => {
+            "Usa este tipo para vídeos independientes y no para una película con extras."
+        }
+        TextKey::SongsMetadataHelp => {
+            "Pista, disco, artista y álbum se editan por canción; el orden de la lista no sustituye el número de pista."
+        }
+        TextKey::ImagesMetadataHelp => {
+            "El pie y el creador son editables; formato, dimensiones e identidad de origen siguen siendo datos objetivos."
+        }
+        TextKey::RemoteStreamsMetadataHelp => {
+            "Edita aquí los metadatos de presentación; conectividad y protocolo siguen siendo datos de la fuente."
+        }
         TextKey::CastAndCredits => "Reparto y créditos",
         TextKey::OneCreditPerLine => "Una persona por línea: nombre | rol",
         TextKey::Poster => "Póster",
@@ -652,29 +763,47 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PublishMetadata => "Publicar",
         TextKey::IncludeItem => "Incluir",
         TextKey::IncludeInPublication => "Incluir en la publicación",
-        TextKey::MetadataDraftNotice => "Revisa los metadatos y los elementos incluidos antes de publicar esta lista.",
-        TextKey::ApplyToAllItemsPrompt => "Cada elemento se reclasifica con el tipo de medio seleccionado y reemplaza los valores derivados por el complemento o definidos por ti.",
+        TextKey::MetadataDraftNotice => {
+            "Revisa los metadatos y los elementos incluidos antes de publicar esta lista."
+        }
+        TextKey::ApplyToAllItemsPrompt => {
+            "Cada elemento se reclasifica con el tipo de medio seleccionado y reemplaza los valores derivados por el complemento o definidos por ti."
+        }
         TextKey::TelevisionEpisode => "Episodio de televisión",
         TextKey::CollectionTypeAuto => "Determinar a partir de los elementos",
         TextKey::CurrentLibraryType => "Tipo de biblioteca actual",
-        TextKey::CollectionTypeChangeHelp => "Puedes cambiarlo después de importar. Guarda y publica para reclasificar los elementos existentes sin volver a importar el complemento; se conservan el orden, la inclusión y los cambios de metadatos.",
+        TextKey::CollectionTypeChangeHelp => {
+            "Puedes cambiarlo después de importar. Guarda y publica para reclasificar los elementos existentes sin volver a importar el complemento; se conservan el orden, la inclusión y los cambios de metadatos."
+        }
         TextKey::NonPlayableItems => "Elementos no reproducibles",
         TextKey::UnknownItems => "Elementos desconocidos",
         TextKey::PlayableItems => "Elementos reproducibles",
         TextKey::ApplyToAllItems => "Aplicar a todos los elementos",
         TextKey::ChangeAddon => "Cambiar complemento",
-        TextKey::ChangeAddonHelp => "Elige otro complemento para volver a importar la lista con él.",
-        TextKey::ChangeAddonPrompt => "La lista se vuelve a importar mediante el complemento seleccionado. Los metadatos de los elementos, los reemplazos y las correcciones de capítulos se derivan otra vez del nuevo proveedor.",
+        TextKey::ChangeAddonHelp => {
+            "Elige otro complemento para volver a importar la lista con él."
+        }
+        TextKey::ChangeAddonPrompt => {
+            "La lista se vuelve a importar mediante el complemento seleccionado. Los metadatos de los elementos, los reemplazos y las correcciones de capítulos se derivan otra vez del nuevo proveedor."
+        }
         TextKey::AddonAutoDetect => "Determinar a partir de la URL",
         TextKey::AddonAutoDetected => "Seleccionado automáticamente a partir de la URL.",
-        TextKey::AddonMediaListNoAddonForUrl => "Ningún complemento instalado procesa esta URL. Elige uno o define un procesador predeterminado de transmisiones remotas.",
+        TextKey::AddonMediaListNoAddonForUrl => {
+            "Ningún complemento instalado procesa esta URL. Elige uno o define un procesador predeterminado de transmisiones remotas."
+        }
         TextKey::DefaultRemoteStreamAddon => "Procesador predeterminado de transmisiones remotas",
-        TextKey::DefaultRemoteStreamAddonHelp => "Se usa para orígenes HTTP y HTTPS que ningún complemento instalado reclama. El complemento aún debe tener permiso para contactar al host.",
+        TextKey::DefaultRemoteStreamAddonHelp => {
+            "Se usa para orígenes HTTP y HTTPS que ningún complemento instalado reclama. El complemento aún debe tener permiso para contactar al host."
+        }
         TextKey::AddonDetailWait => "Ritmo de los detalles de elementos",
         TextKey::MinimumDetailWait => "Espera mínima para detalles",
         TextKey::MaximumDetailWait => "Espera máxima para detalles",
-        TextKey::AddonDetailWaitHelp => "Tras cada intento de cargar los detalles de un elemento, ErsatzRS espera un nuevo número aleatorio de segundos dentro de este intervalo global antes de que cualquier lista pueda volver a usar el mismo host del proveedor.",
-        TextKey::AddonDetailWaitInvalid => "Introduce segundos enteros positivos y asegúrate de que el mínimo no supere el máximo.",
+        TextKey::AddonDetailWaitHelp => {
+            "Tras cada intento de cargar los detalles de un elemento, ErsatzRS espera un nuevo número aleatorio de segundos dentro de este intervalo global antes de que cualquier lista pueda volver a usar el mismo host del proveedor."
+        }
+        TextKey::AddonDetailWaitInvalid => {
+            "Introduce segundos enteros positivos y asegúrate de que el mínimo no supere el máximo."
+        }
         TextKey::Addons => "Complementos",
         TextKey::AddonOverview => "Resumen",
         TextKey::AddonUpdates => "Actualizaciones",
@@ -688,14 +817,18 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::InstallRepositoryFromFile => "Instalar repositorio desde archivo",
         TextKey::License => "Licencia",
         TextKey::UnknownSources => "Orígenes desconocidos",
-        TextKey::UnknownSourcesHelp => "Permite complementos desde checkouts locales de Git y archivos ZIP. Los complementos se ejecutan con el acceso del usuario del servicio ErsatzRS.",
+        TextKey::UnknownSourcesHelp => {
+            "Permite complementos desde checkouts locales de Git y archivos ZIP. Los complementos se ejecutan con el acceso del usuario del servicio ErsatzRS."
+        }
         TextKey::Verified => "Verificado",
         TextKey::Unverified => "Sin verificar",
         TextKey::Sideloaded => "Instalado localmente",
         TextKey::GitCheckout => "Checkout de Git",
         TextKey::OfflineBundle => "Paquete sin conexión",
         TextKey::LegacyUnmanaged => "Catálogo anterior · sin administrar",
-        TextKey::LegacyAdoptionHelp => "Esto reemplaza la instalación de catálogo sin administrar por la fuente local seleccionada y conserva su configuración y sus datos.",
+        TextKey::LegacyAdoptionHelp => {
+            "Esto reemplaza la instalación de catálogo sin administrar por la fuente local seleccionada y conserva su configuración y sus datos."
+        }
         TextKey::Enabled => "Activado",
         TextKey::Disabled => "Desactivado",
         TextKey::Source => "Fuente",
@@ -714,7 +847,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::EditRepository => "Editar repositorio",
         TextKey::OfficialRepositoryProtected => "El repositorio oficial no se puede eliminar.",
         TextKey::UnknownSourcesRequired => "Habilita primero los orígenes desconocidos.",
-        TextKey::NoRepositories => "No se encontraron repositorios locales. Clona uno en la carpeta de checkout indicada arriba y actualiza.",
+        TextKey::NoRepositories => {
+            "No se encontraron repositorios locales. Clona uno en la carpeta de checkout indicada arriba y actualiza."
+        }
         TextKey::AddonPackage => "Paquete de complemento",
         TextKey::RepositoryPackage => "Paquete de repositorio",
         TextKey::NoSigningKeyPinned => "No hay ninguna clave de firma pública fijada.",
@@ -773,17 +908,33 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "No se ha encontrado el artista",
         TextKey::AfterDurationEnd => "Después del final de la duración",
         TextKey::AutomaticRefresh => "Actualización automática",
-        TextKey::AdaptiveRefreshUnavailable => "La actualización adaptativa no está disponible porque este complemento ya no admite comprobaciones del origen. Elija otra frecuencia para reanudar la actualización automática.",
+        TextKey::AdaptiveRefreshUnavailable => {
+            "La actualización adaptativa no está disponible porque este complemento ya no admite comprobaciones del origen. Elija otra frecuencia para reanudar la actualización automática."
+        }
         TextKey::RefreshPublicationPolicy => "Publicación tras actualizar",
         TextKey::RefreshPublicationReview => "Revisar cada actualización",
-        TextKey::RefreshPublicationAutomatic => "Publicar automáticamente las incorporaciones seguras",
-        TextKey::RefreshPublicationPolicyHelp => "Solo para actualizaciones programadas después de la primera publicación. Las actualizaciones manuales, conciliaciones y restablecimientos siempre requieren revisión. Los cambios o incorporaciones no seguras quedan pendientes de revisión.",
+        TextKey::RefreshPublicationAutomatic => {
+            "Publicar automáticamente las incorporaciones seguras"
+        }
+        TextKey::RefreshPublicationPolicyHelp => {
+            "Solo para actualizaciones programadas después de la primera publicación. Las actualizaciones manuales, conciliaciones y restablecimientos siempre requieren revisión. Los cambios o incorporaciones no seguras quedan pendientes de revisión."
+        }
         TextKey::AutoPublicationHeld => "La publicación automática requiere revisión",
+        TextKey::PreparationWorkerUnavailable => {
+            "El proceso de preparación de medios no está disponible. Reinicie el servidor antes de volver a intentar la preparación."
+        }
+        TextKey::PreparationProcessRecoveryRequired => {
+            "La preparación de medios requiere recuperar el estado de los procesos. Confirma que los procesos anteriores del proveedor se hayan detenido antes de recuperar el almacenamiento reservado y volver a intentar la preparación."
+        }
         TextKey::AutoPublicationBaselineUnavailable => "No hay una base publicada disponible.",
         TextKey::AutoPublicationExistingChanges => "Los elementos existentes han cambiado.",
-        TextKey::AutoPublicationConflicts => "Hay conflictos de metadatos o sustituciones que revisar.",
+        TextKey::AutoPublicationConflicts => {
+            "Hay conflictos de metadatos o sustituciones que revisar."
+        }
         TextKey::AutoPublicationRemovals => "Se han eliminado elementos.",
-        TextKey::AutoPublicationRestricted => "Algunas incorporaciones tienen restricciones de acceso.",
+        TextKey::AutoPublicationRestricted => {
+            "Algunas incorporaciones tienen restricciones de acceso."
+        }
         TextKey::AutoPublicationUnavailable => "Algunas incorporaciones no están disponibles.",
         TextKey::AutoPublicationOptionsChanged => "Las opciones de publicación han cambiado.",
         TextKey::AutoPublicationPreparationFailed => "La preparación de la publicación ha fallado.",
@@ -863,7 +1014,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ContentVariantRemaster => "Remasterización",
         TextKey::ContentVariantRemix => "Remezcla",
         TextKey::ContentVariantScene => "Escena",
-        TextKey::ContentVariantSearchHelp => "Tokens de variante: content_kind:extra, content_kind:alternate_version, sub_kind:featurette, sub_kind:unplugged, parent_title:«Título de película», audio_title:commentary, subtitle_title:commentary, has_commentary:true",
+        TextKey::ContentVariantSearchHelp => {
+            "Tokens de variante: content_kind:extra, content_kind:alternate_version, sub_kind:featurette, sub_kind:unplugged, parent_title:«Título de película», audio_title:commentary, subtitle_title:commentary, has_commentary:true"
+        }
         TextKey::ContentVariantShort => "Cortometraje",
         TextKey::ContentVariantSpecialFeatures => "Extras / Contenido adicional",
         TextKey::ContentVariantTrailer => "Tráiler",
@@ -893,7 +1046,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BreakContentItem => "Elemento de contenido de pausa",
         TextKey::BreakContentMode => "Modo de contenido de pausa",
         TextKey::DeadAirFallback => "Contenido alternativo para interrupciones",
-        TextKey::DeadAirFallbackBody => "Cuando no haya ningún elemento del playout para la hora actual, se elegirá uno al azar de esta colección, se repetirá y recortará para que encaje exactamente hasta el inicio del siguiente elemento. Sustituye a la imagen «El canal está desconectado» que se mostraría de otro modo.",
+        TextKey::DeadAirFallbackBody => {
+            "Cuando no haya ningún elemento del playout para la hora actual, se elegirá uno al azar de esta colección, se repetirá y recortará para que encaje exactamente hasta el inicio del siguiente elemento. Sustituye a la imagen «El canal está desconectado» que se mostraría de otro modo."
+        }
         TextKey::DeadAirFallbackCollectionType => {
             "Tipo de colección alternativa para interrupciones"
         }
@@ -986,10 +1141,14 @@ pub fn text(key: TextKey) -> &'static str {
         }
         TextKey::EmptyTrash => "Vaciar papelera",
         TextKey::ExtractEmbeddedSubtitles => "Extraer subtítulos de texto incrustados",
-        TextKey::ErasedPlayoutItemsAndHistory => "Se han borrado los elementos y el historial del playout.",
+        TextKey::ErasedPlayoutItemsAndHistory => {
+            "Se han borrado los elementos y el historial del playout."
+        }
         TextKey::EraseFailed => "No se ha podido borrar",
         TextKey::EraseItemsAndHistory => "Borrar elementos e historial",
-        TextKey::ErasePlayoutItemsAndHistoryConfirm => "Esto eliminará todos los elementos y el historial de este playout secuencial. ¿Quieres continuar?",
+        TextKey::ErasePlayoutItemsAndHistoryConfirm => {
+            "Esto eliminará todos los elementos y el historial de este playout secuencial. ¿Quieres continuar?"
+        }
         TextKey::Episode => "Episodio",
         TextKey::FanArt => "fan art",
         TextKey::Ffmpeg => "FFmpeg",
@@ -1131,7 +1290,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ExternalJsonFileLabel => "Archivo JSON externo",
         TextKey::EditExternalJsonFilePrompt => "Editar el archivo JSON externo del playout",
         TextKey::UnscheduledPlayoutItem => "NO PROGRAMADO",
-        TextKey::DisabledChannelsAlreadyHavePlayout => "Los canales deshabilitados ya tienen un playout",
+        TextKey::DisabledChannelsAlreadyHavePlayout => {
+            "Los canales deshabilitados ya tienen un playout"
+        }
         TextKey::ProgramSchedule => "Programación de programas",
         TextKey::SequentialScheduleFileHelp => {
             "La ruta completa al archivo de programación secuencial (YAML)"
@@ -1223,7 +1384,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PlaylistName => "Nombre de la lista de reproducción",
         TextKey::PlaylistNotFound => "Lista de reproducción no encontrada.",
         TextKey::PlaylistPlayoutPreview => "Vista previa del playout de la lista de reproducción",
-        TextKey::PlaylistPreviewEmpty => "La vista previa del playout de la lista de reproducción no tiene elementos",
+        TextKey::PlaylistPreviewEmpty => {
+            "La vista previa del playout de la lista de reproducción no tiene elementos"
+        }
         TextKey::Playlists => "Listas de reproducción",
         TextKey::ProbeForInterlacedFrames => "Búsqueda de tramas entrelazadas",
         TextKey::PreferredAudioLanguage => "Idioma de audio preferido",
@@ -1333,9 +1496,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DrawvgRendererOption => "Drawvg — estático/vectorial",
         TextKey::EditGraphicsElement => "Editar elemento gráfico",
         TextKey::FontFile => "Archivo de fuente",
-        TextKey::FontFileOptionalHelp => "Opcional. Déjalo vacío para usar la fuente Roboto incluida.",
+        TextKey::FontFileOptionalHelp => {
+            "Opcional. Déjalo vacío para usar la fuente Roboto incluida."
+        }
         TextKey::GraphicsElement => "Elemento gráfico",
-        TextKey::GraphicsElementConfigInvalid => "Este elemento gráfico de texto tiene una configuración no válida y no se ha modificado.",
+        TextKey::GraphicsElementConfigInvalid => {
+            "Este elemento gráfico de texto tiene una configuración no válida y no se ha modificado."
+        }
         TextKey::GraphicsElementKindImage => "Imagen",
         TextKey::GraphicsElementKindMotion => "Movimiento",
         TextKey::GraphicsElementKindScript => "Script",
@@ -1344,17 +1511,27 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::GraphicsElementNameTooLong => "El nombre debe tener 50 caracteres o menos.",
         TextKey::GraphicsElementNotEditable => "No editable aquí",
         TextKey::GraphicsElementNotFound => "No se encontró el elemento gráfico.",
-        TextKey::GraphicsElementNotText => "Aquí solo se pueden editar elementos gráficos de texto.",
+        TextKey::GraphicsElementNotText => {
+            "Aquí solo se pueden editar elementos gráficos de texto."
+        }
         TextKey::GraphicsElementSaved => "Elemento gráfico guardado.",
         TextKey::GraphicsElementSaveFailed => "No se pudo guardar el elemento gráfico.",
         TextKey::GraphicsElementType => "Tipo",
-        TextKey::GraphicsExistingDrawvgHelp => "Los elementos existentes y los nuevos usan Drawvg de forma predeterminada.",
-        TextKey::GraphicsStreamRestartHelp => "Los cambios afectan a los flujos que se inicien después y no reinician los flujos activos.",
+        TextKey::GraphicsExistingDrawvgHelp => {
+            "Los elementos existentes y los nuevos usan Drawvg de forma predeterminada."
+        }
+        TextKey::GraphicsStreamRestartHelp => {
+            "Los cambios afectan a los flujos que se inicien después y no reinician los flujos activos."
+        }
         TextKey::NoGraphicsElements => "No se encontraron elementos gráficos.",
-        TextKey::RefreshPeriodBounds => "El periodo de actualización debe estar entre 250 y 60000 milisegundos.",
+        TextKey::RefreshPeriodBounds => {
+            "El periodo de actualización debe estar entre 250 y 60000 milisegundos."
+        }
         TextKey::RefreshPeriodMilliseconds => "Periodo de actualización (milisegundos)",
         TextKey::ReloadFrameInterval => "Intervalo de fotogramas para recarga",
-        TextKey::ReloadFrameIntervalBounds => "El intervalo de fotogramas para recarga debe ser al menos 1.",
+        TextKey::ReloadFrameIntervalBounds => {
+            "El intervalo de fotogramas para recarga debe ser al menos 1."
+        }
         TextKey::Renderer => "Renderizador",
         TextKey::SaveGraphicsElement => "Guardar elemento gráfico",
         TextKey::TextTemplate => "Plantilla de texto",
@@ -1421,7 +1598,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ReorderFailed => "No se ha podido reordenar",
         TextKey::RerunFirstRun => "Reposición del primer pase",
         TextKey::RerunRerun => "Reposición repetida",
-        TextKey::ReadOnlyTwentyFourHourPlayoutView => "Vista de solo lectura de 24 horas de los elementos del playout programados.",
+        TextKey::ReadOnlyTwentyFourHourPlayoutView => {
+            "Vista de solo lectura de 24 horas de los elementos del playout programados."
+        }
         TextKey::SaveSchedule => "Guardar programación",
         TextKey::SaveScheduleItems => "Guardar elementos de programación",
         TextKey::SaveSmartCollection => "Guardar colección inteligente",
@@ -1458,7 +1637,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShuffleAfterItems => "Vídeos entre elementos similares",
         TextKey::SmartShuffleAfterDurationMinutes => "Minutos entre elementos similares",
         TextKey::SmartShuffleIncludeFiller => "Incluir relleno",
-        TextKey::SmartShuffleInheritedBlock => "Este elemento no tiene ninguna anulación de Mezcla inteligente y conserva cualquier política de playout heredada.",
+        TextKey::SmartShuffleInheritedBlock => {
+            "Este elemento no tiene ninguna anulación de Mezcla inteligente y conserva cualquier política de playout heredada."
+        }
         TextKey::SmartShuffleInactive => {
             "La Mezcla inteligente está inactiva porque este orden de reproducción no es aleatorio."
         }
@@ -1487,13 +1668,17 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Select => "Seleccionar",
         TextKey::SelectCollection => "Seleccionar colección",
         TextKey::SelectGroupForNewTemplate => "Selecciona un grupo para la nueva plantilla",
-        TextKey::SelectScheduleItemPrompt => "Selecciona un elemento de programación para editarlo o añade uno nuevo.",
+        TextKey::SelectScheduleItemPrompt => {
+            "Selecciona un elemento de programación para editarlo o añade uno nuevo."
+        }
         TextKey::SelectSchedule => "Selecciona una programación",
         TextKey::SelectSmartCollection => "Seleccionar colección inteligente",
         TextKey::Shuffle => "Mezclar",
         TextKey::ShuffleInOrder => "Mezclar en orden",
         TextKey::ShuffleScheduleItems => "Mezclar elementos de programación",
-        TextKey::ShuffleScheduleItemsHelp => "Nota: esto desactiva las horas de inicio fijas y el modo de relleno",
+        TextKey::ShuffleScheduleItemsHelp => {
+            "Nota: esto desactiva las horas de inicio fijas y el modo de relleno"
+        }
         TextKey::ShuffledGroups => "Grupos mezclados",
         TextKey::Show => "Serie",
         TextKey::ShowNotFound => "No se ha encontrado la serie",
@@ -1503,7 +1688,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::StartTimeOnOrAfter => "Hora de inicio en o después de",
         TextKey::StartType => "Tipo de inicio",
         TextKey::Strict => "Estricto",
-        TextKey::StrictAlwaysWaitExactStartTime => "Estricto: esperar siempre a la hora de inicio exacta",
+        TextKey::StrictAlwaysWaitExactStartTime => {
+            "Estricto: esperar siempre a la hora de inicio exacta"
+        }
         TextKey::StrictWaitExactStartTime => "Estricto: esperar a la hora de inicio exacta",
         TextKey::TailFiller => "Relleno de cola",
         TextKey::TailMode => "Modo de cola",
@@ -1511,7 +1698,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TelevisionSeason => "Temporada de televisión",
         TextKey::TelevisionShow => "Serie de televisión",
         TextKey::TreatCollectionsAsShows => "Tratar las colecciones como series",
-        TextKey::TreatCollectionsAsShowsHelp => "Resulta útil para episodios cruzados de varias partes",
+        TextKey::TreatCollectionsAsShowsHelp => {
+            "Resulta útil para episodios cruzados de varias partes"
+        }
         TextKey::Type => "Tipo",
         TextKey::TypeToSearch => "Escribe para buscar...",
         TextKey::Search => "Buscar",
@@ -1530,7 +1719,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MatchAny => "Cumplir alguna",
         TextKey::MatchAnyHelp => "Al menos una regla de este grupo debe coincidir.",
         TextKey::ExcludeAny => "Excluir coincidencias",
-        TextKey::ExcludeAnyHelp => "Se excluyen los elementos que coincidan con alguna regla de este grupo.",
+        TextKey::ExcludeAnyHelp => {
+            "Se excluyen los elementos que coincidan con alguna regla de este grupo."
+        }
         TextKey::AddRule => "Añadir regla",
         TextKey::EditRule => "Editar regla",
         TextKey::RemoveRule => "Eliminar regla",
@@ -1556,13 +1747,17 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::RangeStart => "Inicio del intervalo",
         TextKey::RangeEnd => "Fin del intervalo",
         TextKey::NestedGroup => "Grupo anidado",
-        TextKey::NestedGroupHelp => "Edita este grupo en modo de enfoque para mostrar un solo nivel booleano cada vez.",
+        TextKey::NestedGroupHelp => {
+            "Edita este grupo en modo de enfoque para mostrar un solo nivel booleano cada vez."
+        }
         TextKey::AddNestedGroup => "Añadir grupo anidado",
         TextKey::EditNestedGroup => "Editar grupo anidado",
         TextKey::BackToRules => "Volver a las reglas",
         TextKey::BackToSearch => "Volver a la búsqueda",
         TextKey::CanonicalQuery => "Consulta canónica",
-        TextKey::CanonicalQueryHelp => "Esta consulta se usa en la búsqueda, la programación y la colección guardada.",
+        TextKey::CanonicalQueryHelp => {
+            "Esta consulta se usa en la búsqueda, la programación y la colección guardada."
+        }
         TextKey::LivePreview => "Vista previa en directo",
         TextKey::MatchingItems => "elementos coincidentes",
         TextKey::QueryValid => "Consulta válida",
@@ -1572,7 +1767,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchWildcardRequired => "Una regla con comodín debe contener * o ?.",
         TextKey::SavedSearches => "Búsquedas guardadas",
         TextKey::SavedSearchName => "Nombre de la búsqueda guardada",
-        TextKey::SavedSearchHelp => "Guarda esta búsqueda compleja para recuperarla y modificarla más adelante.",
+        TextKey::SavedSearchHelp => {
+            "Guarda esta búsqueda compleja para recuperarla y modificarla más adelante."
+        }
         TextKey::ChooseSavedSearch => "Elegir una búsqueda guardada",
         TextKey::LoadSavedSearch => "Cargar búsqueda guardada",
         TextKey::SaveSavedSearch => "Guardar búsqueda",
@@ -1588,7 +1785,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NoSavedSearches => "Todavía no hay búsquedas guardadas.",
         TextKey::RefreshPreview => "Actualizar vista previa",
         TextKey::NoRules => "No hay reglas en este grupo.",
-        TextKey::SearchFiltersHelp => "Solo filtros habituales. Usa el editor de colecciones para la lógica anidada.",
+        TextKey::SearchFiltersHelp => {
+            "Solo filtros habituales. Usa el editor de colecciones para la lógica anidada."
+        }
         TextKey::SearchMedia => "Buscar contenido multimedia",
         TextKey::SearchMoviesOrShows => "Buscar películas o series...",
         TextKey::SearchAddonMediaList => "Buscar lista de add-on",
@@ -1598,7 +1797,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ShowMediaInfo => "Mostrar información multimedia",
         TextKey::ScriptedScheduleTimeout => "Tiempo de espera de programación mediante script",
         TextKey::SkipMissingItems => "Omitir elementos ausentes",
-        TextKey::SkipMissingItemsHelp => "Controla si los elementos cuyo archivo no se encuentra o que no están disponibles deben incluirse en los playouts",
+        TextKey::SkipMissingItemsHelp => {
+            "Controla si los elementos cuyo archivo no se encuentra o que no están disponibles deben incluirse en los playouts"
+        }
         TextKey::SmartCollections => "Colecciones inteligentes",
         TextKey::SmartCollection => "Colección inteligente",
         TextKey::SmartCollectionDeleted => "Colección inteligente eliminada.",
@@ -1635,29 +1836,47 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListActionFailed => "La acción de la lista de add-on ha fallado.",
         TextKey::AddonMediaListAdded => "Lista de add-on añadida.",
         TextKey::AddonMediaListDeleted => "Lista de add-on eliminada.",
-        TextKey::AddonMediaListMatched => "Se han encontrado coincidencias para la lista de add-on.",
+        TextKey::AddonMediaListMatched => {
+            "Se han encontrado coincidencias para la lista de add-on."
+        }
         TextKey::AddonMediaListNotFound => "No se ha encontrado la lista de add-on.",
         TextKey::AddonMediaListSaveFailed => "No se ha podido guardar la lista de add-on.",
         TextKey::AddonMediaListSaved => "Lista de add-on guardada.",
         TextKey::AddonMediaLists => "Listas de add-on",
         TextKey::AddonMediaListUrl => "URL de la lista de add-on",
         TextKey::AddonMediaListFolder => "Carpeta de almacenamiento",
-        TextKey::AddonMediaListFolderHelp => "Opcional; si se omite, se deriva del nombre de la lista",
+        TextKey::AddonMediaListFolderHelp => {
+            "Opcional; si se omite, se deriva del nombre de la lista"
+        }
         TextKey::DestructiveActions => "Acciones destructivas",
         TextKey::ReconcileEntireSource => "Conciliar toda la fuente",
-        TextKey::ReconcileEntireSourceHelp => "Compara una instantánea completa de la fuente sin cambiar la publicación actual ni los ajustes de los elementos.",
+        TextKey::ReconcileEntireSourceHelp => {
+            "Compara una instantánea completa de la fuente sin cambiar la publicación actual ni los ajustes de los elementos."
+        }
         TextKey::ReconcileQueued => "Conciliación completa de la fuente en cola.",
         TextKey::ReconcileFailed => "Falló la conciliación completa de la fuente.",
         TextKey::ResetAndReload => "Restablecer y volver a cargar",
-        TextKey::ResetAddonMediaListHelp => "Elimina todos los resultados generados para esta lista y después pone en cola una importación completa.",
+        TextKey::ResetAddonMediaListHelp => {
+            "Elimina todos los resultados generados para esta lista y después pone en cola una importación completa."
+        }
         TextKey::SourceHost => "Host de origen",
         TextKey::ResetRemoves => "Este restablecimiento elimina",
-        TextKey::ResetRemovesItems => "Elementos importados, metadatos del proveedor, cambios del operador, numeración de episodios y sustituciones.",
-        TextKey::ResetRemovesArtifacts => "Medios generados, archivos NFO, imágenes, subtítulos, cachés y archivos guardados.",
-        TextKey::ResetRemovesRuntime => "Trabajos, puntos de control, artefactos de revisión, elementos de la lista de reproducción generada y medios proyectados.",
+        TextKey::ResetRemovesItems => {
+            "Elementos importados, metadatos del proveedor, cambios del operador, numeración de episodios y sustituciones."
+        }
+        TextKey::ResetRemovesArtifacts => {
+            "Medios generados, archivos NFO, imágenes, subtítulos, cachés y archivos guardados."
+        }
+        TextKey::ResetRemovesRuntime => {
+            "Trabajos, puntos de control, artefactos de revisión, elementos de la lista de reproducción generada y medios proyectados."
+        }
         TextKey::ResetRetains => "Este restablecimiento conserva",
-        TextKey::ResetRetainsSettings => "El nombre de la lista, los vínculos con el add-on, el origen y la biblioteca, la identidad de la lista de reproducción generada, las políticas de actualización y publicación, la cuota de artefactos y otros ajustes del operador.",
-        TextKey::ResetReloadFailureWarning => "Si falla la recarga, los canales y la lista de reproducción generada permanecen vacíos.",
+        TextKey::ResetRetainsSettings => {
+            "El nombre de la lista, los vínculos con el add-on, el origen y la biblioteca, la identidad de la lista de reproducción generada, las políticas de actualización y publicación, la cuota de artefactos y otros ajustes del operador."
+        }
+        TextKey::ResetReloadFailureWarning => {
+            "Si falla la recarga, los canales y la lista de reproducción generada permanecen vacíos."
+        }
         TextKey::TypeListNameToConfirm => "Escribe el nombre actual de la lista para confirmar",
         TextKey::ResetQueued => "Restablecimiento y recarga puestos en cola.",
         TextKey::ResetAddonMediaListFailed => "Ha fallado el restablecimiento y la recarga.",
@@ -1668,7 +1887,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Trash => "Papelera",
         TextKey::TrashAlreadyEmpty => "La papelera ya está vacía.",
         TextKey::TrashEmpty => "La papelera está vacía.",
-        TextKey::TrashEmptyConfirm => "¿Eliminar de la base de datos todos los elementos cuyo archivo no se encuentra?",
+        TextKey::TrashEmptyConfirm => {
+            "¿Eliminar de la base de datos todos los elementos cuyo archivo no se encuentra?"
+        }
         TextKey::TrashEmptyConfirmHelp => {
             "Esto elimina de forma permanente los elementos multimedia que faltan actualmente y sus filas de metadatos dependientes."
         }
@@ -1851,10 +2072,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SelectSearchCollectionHelp => {
             "Selecciona la colección a la que añadir los resultados de búsqueda."
         }
-        TextKey::SelectSearchPlaylistHelp => "Selecciona la lista de reproducción a la que añadir los resultados de búsqueda.",
+        TextKey::SelectSearchPlaylistHelp => {
+            "Selecciona la lista de reproducción a la que añadir los resultados de búsqueda."
+        }
         TextKey::Selected => "Seleccionado",
-        TextKey::SelectCollectionToAddThisMovie => "Selecciona una colección a la que añadir esta película.",
-        TextKey::SelectPlaylistToAddThisMovie => "Selecciona una lista de reproducción a la que añadir esta película.",
+        TextKey::SelectCollectionToAddThisMovie => {
+            "Selecciona una colección a la que añadir esta película."
+        }
+        TextKey::SelectPlaylistToAddThisMovie => {
+            "Selecciona una lista de reproducción a la que añadir esta película."
+        }
         TextKey::Add => "Añadir",
         TextKey::AddLibrary => "Añadir biblioteca",
         TextKey::Address => "Dirección",
@@ -1864,7 +2091,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AuthorizedRedirecting => "Autorizado; redirigiendo...",
         TextKey::CheckingEveryTwoSeconds => "Comprobando cada 2 segundos...",
         TextKey::ClickAuthorizePlex => "Haz clic aquí para autorizar en Plex.tv",
-        TextKey::ClickPlayoutItemHelp => "Haz clic en un elemento del playout para consultar su título, horarios y contexto de programación.",
+        TextKey::ClickPlayoutItemHelp => {
+            "Haz clic en un elemento del playout para consultar su título, horarios y contexto de programación."
+        }
         TextKey::ConfigureConnection => "Configurar conexión",
         TextKey::Connection => "Conexión",
         TextKey::DeepScanCollections => "Analizar colecciones exhaustivamente",
@@ -1883,9 +2112,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::LocalLibraries => "Bibliotecas locales",
         TextKey::LocalPath => "Ruta local",
         TextKey::MediaKind => "Tipo de contenido multimedia",
-        TextKey::NoLibrariesConfigured => "No hay bibliotecas configuradas. Añade primero una fuente multimedia.",
+        TextKey::NoLibrariesConfigured => {
+            "No hay bibliotecas configuradas. Añade primero una fuente multimedia."
+        }
         TextKey::NoSchedulingContext => "No hay contexto de programación",
-        TextKey::NoPlayoutItemsInWindow => "No hay elementos del playout en este intervalo de 24 horas",
+        TextKey::NoPlayoutItemsInWindow => {
+            "No hay elementos del playout en este intervalo de 24 horas"
+        }
         TextKey::NoPlayoutsFound => "No se han encontrado playouts.",
         TextKey::NoPathReplacements => "No hay sustituciones de rutas.",
         TextKey::Paths => "Rutas",
@@ -1964,11 +2197,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::FfmpegRuntimeSourceUnknown => "Desconocido",
         TextKey::FfmpegRuntimeUpdateAvailable => "Actualización disponible",
         TextKey::FfmpegRuntimeUpdateCheckFailed => "La comprobación de actualizaciones ha fallado",
-        TextKey::FfmpegRuntimeUpdateFailed => "La actualización del entorno de ejecución de FFmpeg ha fallado",
+        TextKey::FfmpegRuntimeUpdateFailed => {
+            "La actualización del entorno de ejecución de FFmpeg ha fallado"
+        }
         TextKey::FfmpegRuntimeUpToDate => "Actualizado",
         TextKey::FfmpegRuntimeUpdated => "Entorno de ejecución de FFmpeg actualizado",
         TextKey::FfmpegRuntimeVersion => "Versión",
-        TextKey::HealthNoPersistedRun => "No hay comprobaciones de estado aplicables en este momento.",
+        TextKey::HealthNoPersistedRun => {
+            "No hay comprobaciones de estado aplicables en este momento."
+        }
         TextKey::HealthPersistedRunHelp => {
             "Resultados actuales de las comprobaciones de estado de paridad. Esta página se actualiza cuando los análisis multimedia cambian el estado de los elementos."
         }
@@ -1996,13 +2233,17 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Message => "Mensaje",
         TextKey::MissingMediaItemQueryParameter => "Falta el parámetro de consulta mediaItem",
         TextKey::Mirror => "Espejo",
-        TextKey::MirrorOptionsHelp => "Solo está disponible cuando el origen del playout está establecido en Espejo.",
+        TextKey::MirrorOptionsHelp => {
+            "Solo está disponible cuando el origen del playout está establecido en Espejo."
+        }
         TextKey::MirrorSourceChannel => "Canal de origen del espejo",
         TextKey::MusicVideoCreditsMode => "Modo de créditos de vídeos musicales",
         TextKey::MusicVideoCreditsTemplate => "Plantilla de créditos de vídeos musicales",
         TextKey::NoMatchingRecordsFound => "No se han encontrado registros coincidentes",
         TextKey::NoFfmpegProfiles => "No se han encontrado perfiles de FFmpeg. Crea uno primero.",
-        TextKey::NoBlockPlayoutSelected => "Selecciona un playout por bloques para inspeccionar sus bloques.",
+        TextKey::NoBlockPlayoutSelected => {
+            "Selecciona un playout por bloques para inspeccionar sus bloques."
+        }
         TextKey::NoBlocks => "No se han encontrado bloques.",
         TextKey::NoHistory => "No se ha encontrado historial.",
         TextKey::NoMessages => "No hay mensajes.",
@@ -2023,7 +2264,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PlayoutModeHelp => "Controla el avance del playout del canal",
         TextKey::PlayoutOffset => "Desplazamiento del playout",
         TextKey::PlayoutSource => "Origen del playout",
-        TextKey::PlayoutSourceHelp => "Controla el origen del contenido del canal. No puede cambiarse si el canal ya tiene un playout.",
+        TextKey::PlayoutSourceHelp => {
+            "Controla el origen del contenido del canal. No puede cambiarse si el canal ya tiene un playout."
+        }
         TextKey::Preview => "Vista previa",
         TextKey::PreviewBlockPlayout => "Vista previa del playout por bloques",
         TextKey::PreviewChannel => "Previsualizar canal",
@@ -2065,7 +2308,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PreviewDerivativeNote => {
             "La vista previa de administración usa una versión H.264/AAC compatible con el navegador; la salida configurada del canal no cambia."
         }
-        TextKey::JavascriptRequiredPlayback => "JavaScript es necesario para la reproducción interactiva.",
+        TextKey::JavascriptRequiredPlayback => {
+            "JavaScript es necesario para la reproducción interactiva."
+        }
         TextKey::ConfirmStopTranscodeSession => {
             "¿Detener la sesión de transcodificación compartida de este canal?"
         }
@@ -2086,7 +2331,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ShowDisabled => "Mostrar desactivados",
         TextKey::ShowInEpg => "Mostrar en la EPG",
         TextKey::SlugSeconds => "Segundos de separación",
-        TextKey::SlugSecondsHelp => "Segundos de vídeo negro y audio en silencio que se insertarán entre cada elemento del playout",
+        TextKey::SlugSecondsHelp => {
+            "Segundos de vídeo negro y audio en silencio que se insertarán entre cada elemento del playout"
+        }
         TextKey::Song => "Canción",
         TextKey::SongVideoMode => "Modo de vídeo de canciones",
         TextKey::SortById => "Ordenar por identificador",
@@ -2104,7 +2351,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Styles => "Estilos",
         TextKey::Subtitle => "Subtítulo",
         TextKey::SubtitleMode => "Modo de subtítulos",
-        TextKey::SubtitleModeHelp => "«Forzado» solo muestra las pistas de narrativa forzada. Para mostrar siempre los subtítulos en tu idioma preferido, elige «Cualquiera».",
+        TextKey::SubtitleModeHelp => {
+            "«Forzado» solo muestra las pistas de narrativa forzada. Para mostrar siempre los subtítulos en tu idioma preferido, elige «Cualquiera»."
+        }
         TextKey::Timestamp => "Marca de tiempo",
         TextKey::Timeline => "Cronología",
         TextKey::Target => "Objetivo",
@@ -2216,7 +2465,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::RightMiddle => "Centro derecha",
         TextKey::SaveWatermark => "Guardar marca de agua",
         TextKey::Scaled => "Escalado",
-        TextKey::SelectCustomImageToPreview => "Selecciona o carga una imagen personalizada para previsualizarla.",
+        TextKey::SelectCustomImageToPreview => {
+            "Selecciona o carga una imagen personalizada para previsualizarla."
+        }
         TextKey::Size => "Tamaño",
         TextKey::TopLeft => "Arriba a la izquierda",
         TextKey::TopMiddle => "Arriba en el centro",

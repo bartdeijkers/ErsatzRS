@@ -15,6 +15,76 @@ release section when tagging a release.
 
 ### Added
 
+- Extend provider-neutral add-on-list option contracts with finite preparation
+  requirements and an explicit access-check target while preserving existing
+  schema bytes. Add native list/item editors with inherited values, explicit
+  bulk preview/apply/undo and undo of first-time schema activation. Versioned
+  item-operation contracts, a revision-fenced access worker, and bounded
+  processed-file admission are in place. Cached files can be reused when a
+  removed item reappears without taking ownership from another item.
+  Enrichment checkpoints retain their saved option context across restarts;
+  publication journals and retained revisions bind each item to its selected
+  processed file without changing legacy snapshot digests.
+  Published playback selects that file by list and provider ownership; saved
+  options use playback v3 without silently falling back to legacy behavior.
+  Scanning preserves the prepared duration, including milliseconds and items
+  whose provider duration is missing. Preparation workers retain unfinished
+  storage until process cleanup is confirmed, with a localized recovery health
+  notice. The existing Prepare publication action queues required processing outside
+  the publication lease, shows localized progress with and without JavaScript,
+  and preserves pending attempts on repeated clicks. Managed add-on cleanup now
+  checks process-group/job membership separately from leader exit before releasing
+  preparation resources. AMM-M-01A streaming acceptance is complete;
+  preserved full-download groundwork belongs to the unfinished AMM-M-01B.
+  ADR 0087 supersedes the mandatory processed-video design with a streaming-first
+  proof requiring uninterrupted SponsorBlock cuts. The existing preparation work
+  is preserved for the planned generic list-level HTML select, independent of
+  SponsorBlock and gated by add-on delivery support: Stream (default),
+  Download ahead, or Download ahead only for new videos. The last choice applies
+  only to videos first imported after enabling it; existing videos keep streaming.
+  Enabled SponsorBlock must be honored in all three modes, including both
+  streamed and downloaded videos in the new-videos-only mode.
+  Shared timeline/input generation and immutable interval-plan storage are in
+  place. Scanning uses the frozen edited duration, including milliseconds, and
+  rejects conflicting or corrupt playback selections. The generic delivery-mode
+  selector is not implemented yet. Publication-only
+  playback selections no longer mark an unchanged saved draft as edited. A small,
+  bounded initial startup delay is permitted to establish continuity reserve,
+  targeting ten seconds with a twenty-second maximum, including source opening
+  and reserve establishment. SponsorBlock cut continuity remains mandatory.
+  Metadata-only interval jobs now use the ordinary host coordinator and existing
+  durable queue, without file storage or the download worker. They preserve
+  source/chapter context, share provider cooldowns and await child cleanup on
+  shutdown; unresolved cleanup remains blocked across restart. Normal publication
+  now admits and selects timing-bound interval metadata instead of requiring a
+  processed file. Automatic refresh waits for this evidence without resetting
+  failed attempts or cooldowns, and frozen playback selections no longer cause
+  false draft-change holds. The official yt-dlp adapter now provides bounded
+  metadata-only intervals without media downloads or an FFmpeg probe, matching
+  Download ahead's default removal categories. The unpublished custom CDN Range
+  adapter and resolve-only operation are replaced by yt-dlp-owned transfer.
+  Native yt-dlp capabilities are preferred across the remaining add-on work.
+  Retained sections are decoded to one edited-clock raw-video/PCM stream for
+  the host's final encoder; the same producer supplies startup metadata and
+  playback. Frozen publication intent, managed cancellation and bounded reserve
+  remain host-owned. Native playback metadata keeps caption and format listings
+  intact within a dedicated bounded envelope; incomplete audio codec labels do
+  not override yt-dlp's selection before the actual media probe. The required
+  real-video MPEG-TS/HLS gate passes under delay/jitter after removing repeated
+  native NUT identifiers and resolving fractional video timestamp collisions
+  with retained-only VFR. It checks decoded/player startup, cut continuity,
+  source-content correspondence and concealed host failures.
+  Both channel encoders consume owned retained inputs and restart the producer
+  for hardware retries, preserving explicit audio choices and redacting
+  private diagnostics. Retained playback now has a bounded paced MPEG-TS output
+  reserve and completed-segment HLS startup gating, with shared-deadline graphics
+  and watermark probing. Selected subtitles with an unmapped edited clock are
+  explicitly refused. Bounded buffering and actual-host cancellation are
+  verified for scheduled MPEG-TS/HLS; direct MP4 reserve support is not implemented.
+  Streaming completion now explicitly requires the maintainer-selected real
+  yt-dlp video to pass scheduled MPEG-TS and HLS SponsorBlock cut tests;
+  synthetic playback proofs alone are insufficient.
+
 - Add an opt-in automatic publication policy for scheduled add-on-list
   refreshes after the first explicit Publish. Only validated additions use
   the existing exact-revision publication lease; changes to current items,
@@ -109,6 +179,21 @@ release section when tagging a release.
   across the MiniJinja 2.23 update.
 
 ### Fixed
+
+- Add-on list publication verifies artwork in its owning media folder, including
+  nested playlist folders, while retaining managed-folder and content-hash checks.
+- Saved add-on lists with provider-supplied person ordering or thumbnails no
+  longer appear edited just by opening the metadata editor and hide publication
+  preparation. Unchanged people fields retain that metadata in both hydrated
+  and HTML-only saves.
+
+- Use the retained prepared file for add-on-list items in HLS-backed Hybrid
+  playback, matching native TS. Missing or invalid published artifacts fail
+  safely instead of invoking raw provider playback.
+
+- Keep unchanged generated playlist sidecars byte-stable during publication
+  verification, so a timestamp-only rewrite cannot strand a sealed publication
+  in recovery. Normal refreshes still update their synchronization time.
 
 - Render the add-on-list index and Remote Stream details without JavaScript,
   including native sorting and channel links, instead of leaving a loading

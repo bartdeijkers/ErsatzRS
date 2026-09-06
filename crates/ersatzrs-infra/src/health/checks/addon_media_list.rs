@@ -26,6 +26,26 @@ impl HealthCheck for AddonMediaListHealthCheck {
     }
 
     async fn check(&self) -> Result<HealthCheckResult> {
+        if let Some(result) = preparation_recovery_failure(&self.pool, self.title()).await? {
+            return Ok(result);
+        }
+        if crate::addon_preparation_worker::worker_unavailable(&self.pool)
+            .await
+            .map_err(|_| {
+                HealthCheckError::Database(
+                    "preparation worker availability could not be read".to_owned(),
+                )
+            })?
+        {
+            let message = "Media preparation worker is unavailable. Restart the server before retrying preparation.";
+            return Ok(HealthCheckResult::new(
+                self.title(),
+                HealthCheckStatus::Fail,
+                message,
+                message,
+            )
+            .with_link("/media/addon-lists"));
+        }
         let rows = addon_media_list_health_rows(&self.pool).await?;
         let lifecycle_foundation = lifecycle_foundation_health(&self.pool).await?;
         if rows.is_empty() {
@@ -50,6 +70,52 @@ impl HealthCheck for AddonMediaListHealthCheck {
         )
         .await
     }
+}
+
+async fn preparation_recovery_failure(
+    pool: &Pool<Db>,
+    title: &'static str,
+) -> Result<Option<HealthCheckResult>> {
+    // Lease expiry identifies work needing recovery, never proof that its
+    // descendants stopped. Do not expose reservation paths or provider input.
+    let blocked: bool = crate::addon_preparation_worker::recovery_required(pool)
+        .await
+        .map_err(|_| {
+            HealthCheckError::Database("preparation recovery status could not be read".to_owned())
+        })?
+        || sqlx::query_scalar(
+            r#"SELECT EXISTS(
+            SELECT 1 FROM "AddonMediaListArtifact" AS "artifact"
+            WHERE "artifact"."Kind" = 1 AND "artifact"."State" IN (0, 1)
+              AND NOT EXISTS (
+                SELECT 1 FROM "AddonMediaListItemOperationJob" AS "job"
+                WHERE "job"."Id" = "artifact"."PreparationJobId"
+                  AND "job"."Generation" = "artifact"."PreparationGeneration"
+                  AND "job"."LeaseOwner" = "artifact"."PreparationLeaseOwner"
+                  AND "job"."Kind" = 1 AND "job"."State" = 1
+                  AND "job"."LeaseExpiresAt" > ?)
+        ) OR EXISTS (
+            SELECT 1 FROM "AddonMediaListItemOperationJob" AS "job"
+            WHERE "job"."Kind" = 1 AND "job"."State" = 3
+              AND json_extract("job"."OutcomeJson", '$.Failed') = 'ProcessRecoveryRequired'
+              AND NOT EXISTS (
+                SELECT 1 FROM "AddonMediaListItemOperationJob" AS "newer"
+                WHERE "newer"."AddonMediaListId" = "job"."AddonMediaListId"
+                  AND "newer"."AddonMediaListItemId" = "job"."AddonMediaListItemId"
+                  AND "newer"."Kind" = 1 AND "newer"."Id" > "job"."Id")
+        )"#,
+        )
+        .bind(crate::repositories::common::encode_datetime(
+            chrono::Utc::now(),
+        ))
+        .fetch_one(pool)
+        .await
+        .map_err(sqlx_error)?;
+    Ok(blocked.then(|| {
+        let message = "Media preparation needs process recovery. Confirm prior provider processes have stopped before recovering retained storage and retrying preparation.";
+        HealthCheckResult::new(title, HealthCheckStatus::Fail, message, message)
+            .with_link("/media/addon-lists")
+    }))
 }
 
 async fn automatic_publication_hold_warning(
@@ -1567,6 +1633,10 @@ mod tests {
             );
             CREATE TABLE "AddonMediaListArtifact" (
                 "Id" INTEGER PRIMARY KEY,
+                "Kind" INTEGER NOT NULL DEFAULT 0,
+                "PreparationJobId" INTEGER NULL,
+                "PreparationGeneration" INTEGER NULL,
+                "PreparationLeaseOwner" TEXT NULL,
                 "State" INTEGER NOT NULL,
                 "ReservedBytes" INTEGER NOT NULL DEFAULT 0,
                 "ByteLength" INTEGER NULL,
@@ -1574,6 +1644,17 @@ mod tests {
                 "RelativePath" TEXT NULL,
                 "Sha256" TEXT NULL,
                 "DiagnosticCode" TEXT NULL
+            );
+            CREATE TABLE "AddonMediaListItemOperationJob" (
+                "Id" INTEGER PRIMARY KEY,
+                "AddonMediaListId" INTEGER NOT NULL DEFAULT 1,
+                "AddonMediaListItemId" INTEGER NOT NULL DEFAULT 1,
+                "Kind" INTEGER NOT NULL DEFAULT 1,
+                "State" INTEGER NOT NULL,
+                "Generation" INTEGER NOT NULL DEFAULT 1,
+                "LeaseOwner" TEXT NULL,
+                "LeaseExpiresAt" TEXT NULL,
+                "OutcomeJson" TEXT NULL
             );
             CREATE TABLE "AddonToolMaintenanceJob" (
                 "Id" INTEGER PRIMARY KEY,
@@ -1677,6 +1758,112 @@ mod tests {
         .execute(pool)
         .await
         .expect("fixture add-on");
+    }
+
+    #[tokio::test]
+    async fn preparation_worker_unavailable_health_is_distinct_from_process_recovery() {
+        let pool = fixture_pool().await;
+        crate::addon_preparation_worker::set_worker_unavailable(&pool, true)
+            .await
+            .unwrap();
+        let result = AddonMediaListHealthCheck::new(pool.clone())
+            .check()
+            .await
+            .unwrap();
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(result.message, "Media preparation worker is unavailable. Restart the server before retrying preparation.");
+        assert!(preparation_recovery_failure(&pool, "Add-on media lists")
+            .await
+            .unwrap()
+            .is_none());
+        crate::addon_preparation_worker::set_worker_unavailable(&pool, false)
+            .await
+            .unwrap();
+        assert!(!AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .unwrap()
+            .message
+            .contains("worker is unavailable"));
+    }
+
+    #[tokio::test]
+    async fn preparation_recovery_health_preserves_live_work_and_redacts_stale_reservations() {
+        let pool = fixture_pool().await;
+        sqlx::raw_sql(
+            r#"INSERT INTO "AddonMediaListItemOperationJob"
+               ("Id", "State", "LeaseOwner", "LeaseExpiresAt")
+               VALUES (1, 1, 'private-lease-owner', '2999-01-01T00:00:00Z');
+               INSERT INTO "AddonMediaListArtifact"
+               ("Id", "Kind", "State", "ReservedBytes", "PreparationJobId",
+                "PreparationGeneration", "PreparationLeaseOwner", "RelativePath")
+               VALUES (1, 1, 1, 4096, 1, 1, 'private-lease-owner', 'private/staging.part');"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("live reservation");
+        assert!(preparation_recovery_failure(&pool, "Add-on media lists")
+            .await
+            .expect("live health")
+            .is_none());
+
+        // An expired lease and a reclaimed generation both require recovery;
+        // neither proves that the old provider's descendants have stopped.
+        for update in [
+            r#"UPDATE "AddonMediaListItemOperationJob" SET "LeaseExpiresAt" = '2000-01-01T00:00:00Z'"#,
+            r#"UPDATE "AddonMediaListItemOperationJob" SET "LeaseExpiresAt" = '2999-01-01T00:00:00Z', "Generation" = 2"#,
+        ] {
+            sqlx::query(update)
+                .execute(&pool)
+                .await
+                .expect("stale owner");
+            let result = AddonMediaListHealthCheck::new(pool.clone())
+                .check()
+                .await
+                .expect("recovery health");
+            assert_eq!(result.status, HealthCheckStatus::Fail);
+            assert!(result
+                .message
+                .contains("Confirm prior provider processes have stopped"));
+            for private in ["private-lease-owner", "private/staging.part"] {
+                assert!(!result.message.contains(private));
+                assert!(!result.brief_message.contains(private));
+            }
+            let reserved: i64 = sqlx::query_scalar(
+                r#"SELECT "ReservedBytes" FROM "AddonMediaListArtifact" WHERE "Id" = 1"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("retained reservation");
+            assert_eq!(reserved, 4096);
+        }
+    }
+
+    #[tokio::test]
+    async fn preparation_recovery_health_reports_only_current_failure() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItemOperationJob" ("Id", "State", "OutcomeJson")
+               VALUES (1, 3, '{"Failed":"ProcessRecoveryRequired"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("recovery outcome");
+        let result = AddonMediaListHealthCheck::new(pool.clone())
+            .check()
+            .await
+            .expect("failed health without lists");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItemOperationJob" ("Id", "State") VALUES (2, 2)"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("newer completion");
+        assert!(preparation_recovery_failure(&pool, "Add-on media lists")
+            .await
+            .expect("historical failure")
+            .is_none());
     }
 
     async fn check_tool_without_lists(

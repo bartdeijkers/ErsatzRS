@@ -2,6 +2,13 @@
 
 ## Status
 
+2026-09-06 amendment: [ADR 0087](../docs/adr/0087-stream-sponsorblock-intervals-without-playback-underruns.md)
+splits former M-01 into M-01A (streaming, reserved and in progress) and M-01B
+(optional list-level Download ahead modes, not started). Streaming must not
+cause user-visible buffering at cuts. Preparation groundwork is preserved for
+M-01B, not scheduled for deletion. Delivery order is M-01A, M-01B, M-02, M-03;
+M-03 still owns storage administration, not the initial bounded admission.
+
 Execution plan registered on 2026-09-01, broadened on 2026-09-02, and amended
 on 2026-09-04 with opt-in adaptive refresh scheduling. It
 extends Add-on Metadata Management from the corrective AMM-J publication work
@@ -40,6 +47,15 @@ official yt-dlp package one complete operator workflow:
 The host remains provider-neutral. No Rust branch may compare an add-on ID to
 the official yt-dlp identifier. Exact provider commands, output mapping, and
 provider fixtures remain in the official add-ons repository.
+
+For every remaining AMM slice, prefer the shipped yt-dlp executable's native
+capabilities for the official yt-dlp add-on, including extraction, media
+transfer, section selection, download-ahead processing, subtitles, and updates.
+Keep add-on code as orchestration and contract mapping; do not duplicate a
+native capability in the Rust host or a custom downloader. An exception needs
+a demonstrated native limitation against the approved acceptance, with the
+smallest necessary integration documented before expanding infrastructure.
+This preference does not relax startup, uninterrupted-cut, or platform gates.
 
 ## Confirmed current gaps
 
@@ -455,6 +471,9 @@ subtitle mode stay unchanged.
 
 ### SponsorBlock preparation
 
+The following file-processing design now applies only to the Download ahead
+paths in M-01B, not the streaming default in M-01A (ADR 0087).
+
 The checked option emits `--sponsorblock-remove default`. Because that is a
 file post-processor, included finite items require a durable preparation job
 that produces a managed transient playback artifact before the revision is
@@ -752,7 +771,7 @@ Source map:
 ### AMM-CI-01 — Repair CI before starting AMM-M-02
 
 Maintainer-requested priority on 2026-09-05; completed with exact-SHA green CI
-run 33978757158 at c75c07d3. AMM-M-01 remains reserved and ready to resume.
+run 33978757158 at c75c07d3. AMM-M-01A remains reserved and ready to resume.
 
 - Repair the confirmed failures in run 33957746900: narrowly allow independent
   reference-pin booleans, align browser fixtures and locators with the current
@@ -794,7 +813,89 @@ run 33978757158 at c75c07d3. AMM-M-01 remains reserved and ready to resume.
   changes. Prove the predecessor/reset, no-JS, and following recovery cases in
   sequence in both browsers.
 
-### AMM-M-01 — Per-item browser cookies and SponsorBlock
+### AMM-M-01A — Streaming with SponsorBlock intervals removed
+
+Renamed from AMM-M-01 and completed on 2026-09-06. The owning milestone records
+the final options and real-streaming acceptance evidence.
+Shared browser defaults/overrides, Test access and immutable option binding
+remain in this slice. Full-file preparation is owned by M-01B below.
+
+Current execution amendment (approved 2026-09-05):
+
+2026-09-06: the maintainer also permits a small bounded initial startup delay
+to establish reserve, initially specifying 10-15 seconds. Following native
+startup measurements, the maintainer approved a twenty-second maximum while
+retaining the ten-second target and uninterrupted cuts. Acceptance and current
+evidence belong to the M-01A milestone; the proof reports actual startup and
+reserve, whose size remains experimental.
+
+The first single-encoder range experiment misses its provisional five-second
+startup cap under source-open jitter, despite positive simulated reserve after
+startup. Its measured startup fits the subsequently approved 15-second maximum.
+See M-01A's structured evidence for measurements. The isolated Chromium/HLS
+player now passes both delayed-source cases in 8.94/7.01 seconds with no
+post-start buffering or detected freezes. Keep the simple range approach;
+actual-host integration, audible continuity and cancellation remain unproven.
+Do not add prefetch machinery or proceed to cleanup from this result alone.
+
+1. Preserve all existing work and keep M-01A reserved. Inspect existing HLS/Hybrid
+   and MPEG-TS buffering; do not assume sequential range seeks are seamless.
+2. Prove metadata-only interval discovery and bounded retained-range streaming
+   with source-open delay and jitter. Require the next range to be available
+   before the cut drains playable output. Measure actual playback continuity,
+   first output before whole-source retrieval, audio/video cuts, mapped joining
+   after a skip and cancellation. Test short retained spans, not only easy long
+   spans. Do not hide starvation with frozen frames, silence or uncut playback.
+3. If the proof meets ADR 0087 without substantial new machinery, adapt existing
+   immutable published options/bindings and duration projection to interval
+   metadata. Retain browser access, fair-use and general process cleanup work.
+4. Keep preparation-only code and migrations for M-01B; do not delete or
+   duplicate them. Keep generic subtitle artifacts for M-02.
+5. Before completing M-01A, run the mandatory real yt-dlp add-on fixture through
+   import, publication and scheduled MPEG-TS and HLS playout. The structured
+   `amm-m-01a` acceptance owns the public video URL and known 15:44-17:13 source
+   interval. Record actual interval removal, startup timing and audible/visible
+   continuity in both outputs; synthetic or extracted-URL-only tests do not count.
+   Keep the slice open if this proof cannot be obtained.
+
+### AMM-M-01B — List-level Download ahead modes
+
+Not started; depends on M-01A. Delivery mode is a generic, provider-neutral list
+option, independent of SponsorBlock. Add one labeled native HTML `<select>` to the
+list settings, localized and usable with and without JavaScript. Not a checkbox
+or a per-item delivery override. Its choices are:
+
+- **Stream** (default): the M-01A retained-interval streaming path.
+- **Download ahead**: fully download included finite videos and remove requested
+  SponsorBlock intervals before publishing their prepared playback artifacts.
+- **Download ahead only for new videos**: the same preparation, but only for
+  videos first imported after this mode is enabled. Videos already in the list
+  continue streaming, as explicitly confirmed by the maintainer. Persist the
+  first-import distinction across refresh/restart; a cache miss is not newness.
+
+The selector does not replace the existing SponsorBlock removal or browser
+options. Download ahead remains useful with removal disabled or unsupported.
+When SponsorBlock is enabled, every mode must honor it: remove intervals during
+streaming for streamed items and from prepared files for downloaded items. In
+new-videos-only mode this includes existing streamed videos as well as new
+downloaded videos. Verify enabled/disabled behavior across all three modes;
+never silently ignore enabled removal on a mode change or processing failure.
+Use add-on delivery capabilities, not provider IDs or SponsorBlock availability,
+to explain unsupported modes. Start with yt-dlp integration; no speculative
+provider adapters or universal download support are required in this slice.
+Freeze effective item delivery choices at publication; saving a new
+mode leaves the current publication intact. Do not silently fall back between
+streaming and full download. Reuse preserved jobs, bounded admission, artifact
+pins, recovery and playback binding. M-03 owns broader storage administration.
+Plan implementation details when M-01A is complete; no additional service,
+second preparation state machine or speculative cache framework is requested.
+
+#### Preserved pre-split implementation plan
+
+The following 2026-09-04 plan records shared groundwork now owned by M-01A and
+file-preparation groundwork now owned by M-01B. The mode contract above overrides
+its formerly mandatory preparation requirement. Historical gates are not proof
+that the three-choice selector or new-video behavior has been implemented.
 
 Implementation plan (approved choices, 2026-09-04; delivery remains in progress):
 
@@ -960,8 +1061,9 @@ once those conditions hold; no second release-approval prompt is required.
 | Publish blocked label and exact alert | `amm-j-03` |
 | Scheduled-scan/request-cancellation/Windows recovery defect | `amm-j-01`, `amm-j-02`, `amm-j-03`, `amm-j-04`, `amm-n-03` |
 | Reset and reload URL from a completely unloaded list | `amm-k-01`, `amm-k-02` |
-| Firefox/Chrome/Chromium cookies per video | `amm-k-01`, `amm-m-01` |
-| SponsorBlock checkbox checked by default | `amm-k-01`, `amm-m-01` |
+| Firefox/Chrome/Chromium cookies per video | `amm-k-01`, `amm-m-01a` |
+| SponsorBlock checkbox checked by default | `amm-k-01`, `amm-m-01a` |
+| List-level Stream / Download ahead / new-videos-only select | `amm-m-01b` |
 | Human subtitles using default/fallback languages and channel playback | `amm-m-02`, `amm-n-03` |
 | Rich playlist summary/tags metadata | `amm-l-03` |
 | Adaptive/daily/weekly/monthly/yearly/never refresh | `amm-l-01` |
@@ -976,7 +1078,7 @@ once those conditions hold; no second release-approval prompt is required.
 | Safe yt-dlp early stop with observable enumeration counters | `amm-l-02` |
 | Non-destructive provider removal/reordering reconciliation | `amm-l-04` |
 | Review-by-default and additions-only automatic publication | `amm-l-05` |
-| Inherited/bulk item options and browser access preflight | `amm-m-01` |
+| Inherited/bulk item options and browser access preflight | `amm-m-01a` |
 | Processed-artifact disk budgets and safe reclamation | `amm-m-03` |
 | Validated yt-dlp update rollback and history | `amm-n-02`, `amm-n-03` |
 | Dialog focus containment and accessible table sorting | `amm-k-04` |

@@ -672,10 +672,11 @@ impl AddonMediaListSynchronizer {
             )? != item.availability_reason_code
             || previous_provider_liveness != item.liveness
             || previous_guids != item.guids;
-        let review_required = published && (operational_change || conflicts.is_some());
+        let mut review_required = published && (operational_change || conflicts.is_some());
         let image_urls = encode_image_urls(&item.additional_image_urls)?;
         let now = encode_datetime(Utc::now());
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let mut draft_detail = false;
         if let Some((expected_item_id, lease_owner)) = detail_fence {
             if expected_item_id != item_id {
                 return Err(RepositoryError::Conflict(
@@ -705,6 +706,25 @@ impl AddonMediaListSynchronizer {
                     "the detail lease changed before merge".to_owned(),
                 ));
             }
+            let (purpose, context): (i32, Option<String>) = sqlx::query_as(
+                r#"SELECT "OptionPurpose", "OptionContextJson" FROM "AddonMediaListDetailJob"
+                   WHERE "AddonMediaListItemId"=? AND "AddonMediaListId"=?"#,
+            )
+            .bind(item_id)
+            .bind(list_id)
+            .fetch_one(&mut *tx)
+            .await
+            .repository()?;
+            crate::addon_media_list_detail_options::validate(
+                &mut tx,
+                list_id,
+                item_id,
+                purpose,
+                context.as_deref(),
+            )
+            .await?;
+            draft_detail = purpose == 1;
+            review_required |= published && draft_detail;
         }
         let publication_checkpoint = sqlx::query_as::<_, (i32, Option<String>)>(
             r#"SELECT "ReviewState", "PublicationJournalJson"
@@ -729,7 +749,7 @@ impl AddonMediaListSynchronizer {
             tx.rollback().await.repository()?;
             return Ok(DetailMergeOutcome::DeferredForPublication);
         }
-        if published {
+        if published && !draft_detail {
             sqlx::query(
                 r#"UPDATE "AddonMediaListItem"
                    SET "DisplayTitle" = ?, "Title" = ?, "Year" = ?, "Season" = ?,
@@ -809,13 +829,15 @@ impl AddonMediaListSynchronizer {
             let updated = sqlx::query(
                 r#"UPDATE "AddonMediaList"
                    SET "ReviewState" = ?, "ReviewError" = ?,
-                       "DraftRevision" = "DraftRevision" + 1
+                       "DraftRevision" = "DraftRevision" + 1,
+                       "DetailProjectionPendingAt" = CASE WHEN ? THEN NULL ELSE "DetailProjectionPendingAt" END
                    WHERE "Id" = ? AND "ReviewState" <> ?"#,
             )
             .bind(encode_enum(
                 ersatzrs_domain::AddonMediaListReviewState::Ready,
             ))
             .bind("Provider details changed review-gated item values")
+            .bind(draft_detail)
             .bind(list_id)
             .bind(encode_enum(
                 ersatzrs_domain::AddonMediaListReviewState::Publishing,
@@ -828,7 +850,7 @@ impl AddonMediaListSynchronizer {
                     "the add-on media list changed while provider details were merged".to_owned(),
                 ));
             }
-        } else if published {
+        } else if published && !draft_detail {
             sqlx::query(
                 r#"UPDATE "AddonMediaList"
                    SET "DetailProjectionPendingAt" = ?
@@ -839,6 +861,20 @@ impl AddonMediaListSynchronizer {
             .execute(&mut *tx)
             .await
             .repository()?;
+        }
+        if detail_fence.is_some() {
+            // The merge itself can update the source and effective liveness.
+            // Record its resulting owner atomically, so later refresh
+            // reuse distinguishes that legitimate change from a subsequent edit.
+            let context = crate::addon_media_list_detail_options::capture(
+                &mut tx,
+                list_id,
+                item_id,
+                i32::from(draft_detail),
+            )
+            .await?;
+            sqlx::query(r#"UPDATE "AddonMediaListDetailJob" SET "OptionContextJson"=? WHERE "AddonMediaListItemId"=?"#)
+                .bind(context).bind(item_id).execute(&mut *tx).await.repository()?;
         }
         tx.commit().await.repository()?;
         Ok(DetailMergeOutcome::Applied)

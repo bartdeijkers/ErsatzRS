@@ -18,6 +18,14 @@ use super::Result;
 
 pub type AddonMediaListOptionValues = BTreeMap<String, AddonMediaListOptionValue>;
 
+/// Minimal current item identity and liveness needed to edit sparse options.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddonMediaListOptionItem {
+    pub item_id: EntityId,
+    pub provider_id: String,
+    pub liveness: RemoteStreamLiveness,
+}
+
 pub const PROCESSED_ARTIFACT_GLOBAL_BYTE_LIMIT_KEY: &str =
     "addons.media_lists.processed_artifacts.global_byte_limit";
 pub const PROCESSED_ARTIFACT_MINIMUM_FREE_BYTES_KEY: &str =
@@ -154,6 +162,27 @@ pub struct AddonMediaListRevisionItem {
     pub replacement_media_version_id: Option<EntityId>,
     /// Media identity actually used by the published projection.
     pub published_media_item_id: Option<EntityId>,
+    /// Exact admitted processed media selected for this immutable item revision.
+    /// Omit legacy absence from serialization to preserve existing snapshot digests.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prepared_artifact_id: Option<EntityId>,
+    /// Exact interval plan for streamed playback, never an ephemeral transport URL.
+    /// Omit absence so pre-streaming snapshot digests remain unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback_timeline:
+        Option<crate::addon_media_list_playback::AddonMediaListPlaybackTimelinePlan>,
+}
+
+/// Revision pins plus immutable prepared-file or interval-streaming selections.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AddonMediaListRevisionArtifacts {
+    pub ids: Vec<EntityId>,
+    pub prepared_media: std::collections::BTreeMap<String, EntityId>,
+    /// Context-bound plans keyed by the owning provider item, without artifact pins.
+    pub streaming_plans: std::collections::BTreeMap<
+        String,
+        crate::addon_media_list_playback::AddonMediaListPlaybackTimelinePlan,
+    >,
 }
 
 /// Digest-covered, restorable publication snapshot.
@@ -446,6 +475,19 @@ pub trait AddonMediaListLifecycleRepository: Send + Sync {
     /// Atomically replace the complete saved draft option snapshot.
     async fn save_draft_options(&self, options: &AddonMediaListDraftOptions) -> Result<i32>;
 
+    /// Load up to 10,000 distinct item identities belonging to this list.
+    /// Missing, foreign, or duplicate identities fail the complete request.
+    async fn option_items(
+        &self,
+        _list_id: EntityId,
+        _item_ids: &[EntityId],
+    ) -> Result<Vec<AddonMediaListOptionItem>> {
+        Err(super::RepositoryError::unavailable(
+            "add-on media-list option items",
+            "not implemented",
+        ))
+    }
+
     /// Retain the current option snapshot without changing publication state.
     async fn retain_published_options(
         &self,
@@ -480,7 +522,7 @@ pub trait AddonMediaListLifecycleRepository: Send + Sync {
         source_draft_revision: i32,
         completed_at: DateTime<Utc>,
         files: &[AddonMediaListRevisionFile],
-        artifact_ids: &[EntityId],
+        artifacts: &AddonMediaListRevisionArtifacts,
     ) -> Result<AddonMediaListRevisionSnapshot>;
 
     /// List all completed history rows, including truthful non-restorable legacy rows.

@@ -2034,7 +2034,7 @@ impl AddonMediaListImportCoordinator {
             r#"SELECT "staged"."ProviderId", "detail"."ResultRecordJson",
                       "item"."Id" AS "ItemId", "detail"."ProviderHost",
                       "detail"."OverviewFingerprint", "detail"."OverviewRecordJson",
-                      "detail"."AttemptCount"
+                      "detail"."AttemptCount", "detail"."OptionPurpose", "detail"."OptionContextJson"
                FROM "AddonMediaListImportItem" AS "staged"
                JOIN "AddonMediaListItem" AS "item"
                  ON "item"."AddonMediaListId" = ?
@@ -2056,6 +2056,22 @@ impl AddonMediaListImportCoordinator {
         .await
         .repository()?;
         for row in rows {
+            let item_id: EntityId = row.try_get("ItemId").repository()?;
+            let purpose: i32 = row.try_get("OptionPurpose").repository()?;
+            let context: Option<String> = row.try_get("OptionContextJson").repository()?;
+            let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+            let valid = crate::addon_media_list_detail_options::validate(
+                &mut tx,
+                job.list_id,
+                item_id,
+                purpose,
+                context.as_deref(),
+            )
+            .await;
+            tx.commit().await.repository()?;
+            if valid.is_err() {
+                continue;
+            }
             let provider_id: String = row.try_get("ProviderId").repository()?;
             let record_json: String = row.try_get("ResultRecordJson").repository()?;
             let record =
@@ -2066,6 +2082,8 @@ impl AddonMediaListImportCoordinator {
                     }
                 })?;
             let detail_job = DetailJob {
+                option_context: None,
+                option_purpose: 0,
                 item_id: row.try_get("ItemId").repository()?,
                 list_id: job.list_id,
                 addon_id: job.addon_id.clone(),
@@ -2168,7 +2186,7 @@ impl AddonMediaListImportCoordinator {
             let fingerprint: String = row.try_get("OverviewFingerprint").repository()?;
             let record_json: String = row.try_get("RecordJson").repository()?;
             let existing = sqlx::query(
-                r#"SELECT "OverviewFingerprint", "State"
+                r#"SELECT "OverviewFingerprint", "State", "OptionPurpose", "OptionContextJson"
                    FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = ?"#,
             )
             .bind(item_id)
@@ -2177,7 +2195,18 @@ impl AddonMediaListImportCoordinator {
             .repository()?;
             if let Some(existing) = existing {
                 let previous: String = existing.try_get("OverviewFingerprint").repository()?;
-                if previous == fingerprint {
+                let purpose: i32 = existing.try_get("OptionPurpose").repository()?;
+                let context: Option<String> = existing.try_get("OptionContextJson").repository()?;
+                let options_current = crate::addon_media_list_detail_options::validate(
+                    &mut tx,
+                    list_id,
+                    item_id,
+                    purpose,
+                    context.as_deref(),
+                )
+                .await
+                .is_ok();
+                if previous == fingerprint && options_current {
                     // The overview identity is unchanged. Preserve completed,
                     // queued, in-flight, and checkpointed result state exactly
                     // so a refresh cannot repeat detail requests.
@@ -2201,7 +2230,7 @@ impl AddonMediaListImportCoordinator {
                            SET "AddonMediaListId" = ?, "ProviderHost" = ?, "State" = ?,
                                "ManualPriority" = 0, "OverviewFingerprint" = ?,
                                "OverviewRecordJson" = ?, "AttemptCount" = 0,
-                               "Outcome" = NULL, "ResultRecordJson" = NULL,
+                               "Outcome" = NULL, "ResultRecordJson" = NULL, "OptionContextJson" = NULL, "OptionPurpose" = 0,
                                "Diagnostic" = NULL, "NextEligibleAt" = NULL,
                                "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL,
                                "RequestedAt" = NULL, "StartedAt" = NULL,
@@ -2439,6 +2468,70 @@ impl AddonMediaListImportCoordinator {
         Ok(())
     }
 
+    /// Queue saved-draft detail work before publication, including already published items.
+    ///
+    /// # Errors
+    /// Rejects missing item context and database failures.
+    pub async fn request_prepublication_details(
+        &self,
+        list_id: EntityId,
+        item_id: EntityId,
+    ) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let context =
+            crate::addon_media_list_detail_options::capture(&mut tx, list_id, item_id, 1).await?;
+        // An identical request preserves its checkpoint, retry delay and active lease.
+        sqlx::query(
+            r#"UPDATE "AddonMediaListDetailJob"
+            SET "OptionPurpose"=1, "OptionContextJson"=?, "State"=?, "ManualPriority"=1,
+                "ResultRecordJson"=NULL, "Outcome"=NULL, "LeaseOwner"=NULL, "LeaseExpiresAt"=NULL,
+                "AttemptCount"=0, "NextEligibleAt"=NULL, "Diagnostic"=NULL, "UpdatedAt"=?
+            WHERE "AddonMediaListId"=? AND "AddonMediaListItemId"=?
+              AND ("OptionPurpose"<>1 OR "OptionContextJson" IS NULL OR "OptionContextJson"<>?)"#,
+        )
+        .bind(&context)
+        .bind(encode_enum(AddonMediaListDetailState::Queued))
+        .bind(encode_datetime(Utc::now()))
+        .bind(list_id)
+        .bind(item_id)
+        .bind(&context)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
+        tx.commit().await.repository()?;
+        Ok(())
+    }
+
+    async fn resolve_detail_options(
+        &self,
+        job: &DetailJob,
+    ) -> Result<(
+        Option<crate::addon_media_list_options::ResolvedAddonItemOptions>,
+        ersatzrs_domain::RemoteStreamLiveness,
+    )> {
+        let context = job.option_context.as_deref().ok_or_else(|| {
+            RepositoryError::Conflict("the detail option context is missing".into())
+        })?;
+        let resolved = crate::addon_media_list_detail_options::resolve(
+            &self.pool,
+            job.list_id,
+            job.item_id,
+            context,
+        )
+        .await?;
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        crate::addon_media_list_detail_options::validate(
+            &mut tx,
+            job.list_id,
+            job.item_id,
+            job.option_purpose,
+            Some(context),
+        )
+        .await?;
+        tx.commit().await.repository()?;
+        Ok(resolved)
+    }
+
     /// Queue one manual request without bypassing the shared host cooldown.
     ///
     /// # Errors
@@ -2447,6 +2540,16 @@ impl AddonMediaListImportCoordinator {
     /// state cannot be persisted.
     pub async fn request_item_details(&self, list_id: EntityId, item_id: EntityId) -> Result<()> {
         let now = encode_datetime(Utc::now());
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let context =
+            crate::addon_media_list_detail_options::capture(&mut tx, list_id, item_id, 0).await?;
+        sqlx::query(r#"UPDATE "AddonMediaListDetailJob"
+            SET "OptionPurpose"=0, "OptionContextJson"=?, "State"=?, "ResultRecordJson"=NULL,
+                "Outcome"=NULL, "LeaseOwner"=NULL, "LeaseExpiresAt"=NULL, "AttemptCount"=0
+            WHERE "AddonMediaListId"=? AND "AddonMediaListItemId"=?
+              AND ("OptionPurpose"<>0 OR ("OptionContextJson" IS NOT NULL AND "OptionContextJson"<>?))"#)
+            .bind(&context).bind(encode_enum(AddonMediaListDetailState::Queued)).bind(list_id).bind(item_id).bind(&context)
+            .execute(&mut *tx).await.repository()?;
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaListDetailJob"
                SET "State" = CASE
@@ -2465,7 +2568,7 @@ impl AddonMediaListImportCoordinator {
         .bind(&now)
         .bind(list_id)
         .bind(item_id)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .repository()?;
         if updated.rows_affected() != 1 {
@@ -2474,6 +2577,7 @@ impl AddonMediaListImportCoordinator {
                 id: item_id,
             });
         }
+        tx.commit().await.repository()?;
         Ok(())
     }
 
@@ -2720,6 +2824,14 @@ impl AddonMediaListImportCoordinator {
                 return Ok(true);
             }
         };
+        let resolved = match self.resolve_detail_options(&job).await {
+            Ok(options) => options,
+            Err(error) => {
+                self.finish_detail_failure(&job, &error.to_string(), false, None)
+                    .await?;
+                return Ok(true);
+            }
+        };
         match self
             .provider
             .enrich(
@@ -2728,6 +2840,7 @@ impl AddonMediaListImportCoordinator {
                 &job.provider_id,
                 &job.overview_fingerprint,
                 record,
+                resolved.0.as_ref().map(|options| (options, resolved.1)),
             )
             .await
         {
@@ -2743,30 +2856,24 @@ impl AddonMediaListImportCoordinator {
                         .await?;
                         return Ok(true);
                     };
-                    self.checkpoint_detail_result(
-                        &job,
-                        result.outcome,
-                        result.code.as_deref(),
-                        &item,
-                    )
-                    .await?;
-                }
-                MediaListEnrichOutcomeKind::TransientFailure => {
-                    let diagnostic = result
-                        .message
-                        .as_deref()
-                        .or(result.code.as_deref())
-                        .unwrap_or("the provider requested a retry");
-                    self.finish_detail_failure(&job, diagnostic, true, result.retry_after_seconds)
+                    let outcome = result.outcome;
+                    self.checkpoint_detail_result(&job, outcome, result.code.as_deref(), &item)
                         .await?;
                 }
-                MediaListEnrichOutcomeKind::PermanentFailure => {
+                MediaListEnrichOutcomeKind::TransientFailure
+                | MediaListEnrichOutcomeKind::PermanentFailure => {
+                    let retryable = result.outcome == MediaListEnrichOutcomeKind::TransientFailure;
                     let diagnostic = result
                         .message
                         .as_deref()
                         .or(result.code.as_deref())
-                        .unwrap_or("the provider rejected this item");
-                    self.finish_detail_failure(&job, diagnostic, false, None)
+                        .unwrap_or(if retryable {
+                            "the provider requested a retry"
+                        } else {
+                            "the provider rejected this item"
+                        });
+                    let retry_after = retryable.then_some(result.retry_after_seconds).flatten();
+                    self.finish_detail_failure(&job, diagnostic, retryable, retry_after)
                         .await?;
                 }
             },
@@ -2793,6 +2900,7 @@ impl AddonMediaListImportCoordinator {
                       "detail"."ProviderHost", "detail"."OverviewFingerprint",
                       "detail"."OverviewRecordJson", "detail"."AttemptCount",
                       "detail"."ResultRecordJson", "detail"."Outcome",
+                      "detail"."OptionPurpose", "detail"."OptionContextJson",
                       "item"."ProviderId", "list"."AddonId",
                       "list"."SourceUrl", "import"."RecordCapability"
                FROM "AddonMediaListDetailJob" AS "detail"
@@ -2843,6 +2951,8 @@ impl AddonMediaListImportCoordinator {
             return Ok(false);
         }
         let job = DetailJob {
+            option_context: row.try_get("OptionContextJson").repository()?,
+            option_purpose: row.try_get("OptionPurpose").repository()?,
             item_id,
             list_id: row.try_get("AddonMediaListId").repository()?,
             addon_id: row.try_get("AddonId").repository()?,
@@ -2899,12 +3009,13 @@ impl AddonMediaListImportCoordinator {
                     r#"UPDATE "AddonMediaListDetailJob"
                        SET "State" = ?, "Diagnostic" = ?, "LeaseOwner" = NULL,
                            "LeaseExpiresAt" = NULL, "UpdatedAt" = ?
-                       WHERE "AddonMediaListItemId" = ?"#,
+                       WHERE "AddonMediaListItemId" = ? AND "LeaseOwner" = ?"#,
                 )
                 .bind(encode_enum(AddonMediaListDetailState::Failed))
                 .bind(bound_diagnostic(&error.to_string()))
                 .bind(encode_datetime(Utc::now()))
                 .bind(job.item_id)
+                .bind(job.lease_owner.as_deref())
                 .execute(&self.pool)
                 .await
                 .repository()?;
@@ -2939,6 +3050,10 @@ impl AddonMediaListImportCoordinator {
 
     #[allow(clippy::too_many_lines)] // Backend-portable compare-and-swap claim and host lease stay adjacent.
     async fn claim_detail_job(&self) -> Result<Option<DetailJob>> {
+        crate::addon_media_list_refresh::ensure_provider_recovery_not_required(
+            crate::addon_media_list_preparation::provider_process_recovery_required()
+                || crate::addon_preparation_worker::recovery_required(&self.pool).await?,
+        )?;
         let now = Utc::now();
         let now_text = encode_datetime(now);
         let lease_owner = Uuid::new_v4().to_string();
@@ -2962,7 +3077,7 @@ impl AddonMediaListImportCoordinator {
         let candidates = sqlx::query(
             r#"SELECT "detail"."AddonMediaListItemId", "detail"."AddonMediaListId",
                       "detail"."ProviderHost", "detail"."OverviewFingerprint",
-                      "detail"."OverviewRecordJson", "detail"."AttemptCount",
+                      "detail"."OverviewRecordJson", "detail"."AttemptCount", "detail"."OptionPurpose",
                       "item"."ProviderId", "list"."AddonId",
                       "list"."SourceUrl", "import"."RecordCapability"
                FROM "AddonMediaListDetailJob" AS "detail"
@@ -2997,6 +3112,27 @@ impl AddonMediaListImportCoordinator {
         .await
         .repository()?;
         for row in candidates {
+            let item_id: EntityId = row.try_get("AddonMediaListItemId").repository()?;
+            let option_purpose: i32 = row.try_get("OptionPurpose").repository()?;
+            let list_id: EntityId = row.try_get("AddonMediaListId").repository()?;
+            let option_context = match crate::addon_media_list_detail_options::capture(
+                &mut tx,
+                list_id,
+                item_id,
+                option_purpose,
+            )
+            .await
+            {
+                Ok(context) => context,
+                Err(RepositoryError::Conflict(diagnostic)) => {
+                    sqlx::query(r#"UPDATE "AddonMediaListDetailJob" SET "State"=?, "Diagnostic"=?, "UpdatedAt"=? WHERE "AddonMediaListItemId"=?"#)
+                        .bind(encode_enum(AddonMediaListDetailState::Failed)).bind(bound_diagnostic(&diagnostic))
+                        .bind(&now_text).bind(item_id).execute(&mut *tx).await.repository()?;
+                    update_detail_progress(&mut tx, list_id, &now_text).await?;
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             let host: String = row.try_get("ProviderHost").repository()?;
             let cooldown = sqlx::query(
                 r#"SELECT "NextEligibleAt", "LeaseExpiresAt"
@@ -3069,11 +3205,10 @@ impl AddonMediaListImportCoordinator {
                 .await
                 .repository()?;
             }
-            let item_id: EntityId = row.try_get("AddonMediaListItemId").repository()?;
             let claimed = sqlx::query(
                 r#"UPDATE "AddonMediaListDetailJob"
                    SET "State" = ?, "LeaseOwner" = ?, "LeaseExpiresAt" = ?,
-                       "StartedAt" = ?, "UpdatedAt" = ?
+                       "StartedAt" = ?, "UpdatedAt" = ?, "OptionContextJson" = ?
                    WHERE "AddonMediaListItemId" = ? AND "State" IN (?, ?, ?)"#,
             )
             .bind(encode_enum(AddonMediaListDetailState::Running))
@@ -3081,6 +3216,7 @@ impl AddonMediaListImportCoordinator {
             .bind(&lease_expires)
             .bind(&now_text)
             .bind(&now_text)
+            .bind(&option_context)
             .bind(item_id)
             .bind(encode_enum(AddonMediaListDetailState::Queued))
             .bind(encode_enum(AddonMediaListDetailState::WaitingForSlot))
@@ -3092,6 +3228,8 @@ impl AddonMediaListImportCoordinator {
                 continue;
             }
             let job = DetailJob {
+                option_context: Some(option_context),
+                option_purpose,
                 item_id,
                 list_id: row.try_get("AddonMediaListId").repository()?,
                 addon_id: row.try_get("AddonId").repository()?,
@@ -3131,6 +3269,14 @@ impl AddonMediaListImportCoordinator {
         let lease_owner = job.lease_owner.as_deref().ok_or_else(|| {
             RepositoryError::Conflict("the provider detail lease is missing".to_owned())
         })?;
+        crate::addon_media_list_detail_options::validate(
+            &mut tx,
+            job.list_id,
+            job.item_id,
+            job.option_purpose,
+            job.option_context.as_deref(),
+        )
+        .await?;
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaListDetailJob"
                SET "State" = ?, "AttemptCount" = ?, "Outcome" = ?,
@@ -3498,6 +3644,8 @@ struct ImportProviderSlot {
 
 #[derive(Debug)]
 struct DetailJob {
+    option_context: Option<String>,
+    option_purpose: i32,
     item_id: EntityId,
     list_id: EntityId,
     addon_id: String,
@@ -6390,6 +6538,228 @@ mod tests {
                 coordinator.progress(list_id).await.unwrap().unwrap().state,
                 AddonMediaListImportState::Ready
             );
+        }
+
+        async fn detail_option_fixture() -> (
+            tempfile::TempDir,
+            DbPool,
+            AddonMediaListImportCoordinator,
+            EntityId,
+            EntityId,
+        ) {
+            detail_option_fixture_for(&["episode:1"]).await
+        }
+
+        async fn detail_option_fixture_for(
+            providers: &[&str],
+        ) -> (
+            tempfile::TempDir,
+            DbPool,
+            AddonMediaListImportCoordinator,
+            EntityId,
+            EntityId,
+        ) {
+            let (temporary, pool, coordinator) = fixture().await;
+            let list_id = complete_single_page(
+                &coordinator,
+                "https://media.example.test/options",
+                AddonMediaListDetailPolicy::ManualOnly,
+                "fixture/options",
+                providers,
+            )
+            .await;
+            let item_id: EntityId = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=? ORDER BY "Id" LIMIT 1"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let (definition, schema) = option_schema_fixture();
+            sqlx::query(r#"INSERT INTO "AddonMediaListOptionSchema" ("Id","AddonId","CapabilityId","SchemaDigest","DefinitionJson","CreatedAt")
+                VALUES (101,'org.example.fixture','media-list.options.v1',?,?,?)"#)
+                .bind(schema.schema_digest).bind(definition).bind(encode_datetime(Utc::now())).execute(&pool).await.unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "DraftOptionSchemaId"=101,"DraftOptionValuesJson"='{"enabled":true}' WHERE "Id"=?"#)
+                .bind(list_id).execute(&pool).await.unwrap();
+            (temporary, pool, coordinator, list_id, item_id)
+        }
+
+        #[tokio::test]
+        async fn sibling_draft_detail_completion_preserves_completed_item_context() {
+            let (_temporary, pool, coordinator, list_id, _) =
+                detail_option_fixture_for(&["episode:1", "episode:2"]).await;
+            let item_ids: Vec<EntityId> = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=? ORDER BY "Id""#,
+            )
+            .bind(list_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision"=1 WHERE "Id"=?"#)
+                .bind(list_id)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItem" SET "Published"=1 WHERE "AddonMediaListId"=?"#,
+            )
+            .bind(list_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+            let before: i32 =
+                sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=?"#)
+                    .bind(list_id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            for item_id in &item_ids {
+                coordinator
+                    .request_prepublication_details(list_id, *item_id)
+                    .await
+                    .unwrap();
+            }
+            for expected_item_id in &item_ids {
+                // Advance persisted eligibility, never sleep or invoke a provider.
+                sqlx::query(r#"UPDATE "AddonProviderHostCooldown" SET "NextEligibleAt"=?"#)
+                    .bind(encode_datetime(Utc::now() - Duration::seconds(1)))
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+                let job = coordinator.claim_detail_job().await.unwrap().unwrap();
+                assert_eq!(job.item_id, *expected_item_id);
+                let mut record =
+                    serde_json::to_value(item_record(&job.provider_id, 0, "Enriched draft"))
+                        .unwrap();
+                // Its own discovered source/liveness must be reflected atomically
+                // in the completed context, not treated as a later operator edit.
+                record["source_url"] =
+                    serde_json::json!(format!("https://media.example.test/{}", job.provider_id));
+                record["liveness"] = serde_json::json!("finite");
+                record["duration_seconds"] = serde_json::json!(120);
+                let record = serde_json::from_value(record).unwrap();
+                coordinator
+                    .checkpoint_detail_result(
+                        &job,
+                        MediaListEnrichOutcomeKind::Complete,
+                        None,
+                        &record,
+                    )
+                    .await
+                    .unwrap();
+                assert!(coordinator.apply_one_checkpointed_detail().await.unwrap());
+                coordinator
+                    .request_prepublication_details(list_id, job.item_id)
+                    .await
+                    .unwrap();
+                let state: i32 = sqlx::query_scalar(r#"SELECT "State" FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId"=?"#)
+                    .bind(job.item_id).fetch_one(&pool).await.unwrap();
+                assert_eq!(state, encode_enum(AddonMediaListDetailState::Complete));
+            }
+            let after: i32 =
+                sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=?"#)
+                    .bind(list_id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(after, before + 2);
+            // Repeating the complete two-item preflight must preserve A even
+            // though B advanced the list-wide revision in the meantime.
+            for item_id in &item_ids {
+                coordinator
+                    .request_prepublication_details(list_id, *item_id)
+                    .await
+                    .unwrap();
+            }
+            let states: Vec<i32> = sqlx::query_scalar(r#"SELECT "State" FROM "AddonMediaListDetailJob" WHERE "AddonMediaListId"=? ORDER BY "AddonMediaListItemId""#)
+                .bind(list_id).fetch_all(&pool).await.unwrap();
+            assert_eq!(
+                states,
+                vec![encode_enum(AddonMediaListDetailState::Complete); 2]
+            );
+        }
+
+        #[tokio::test]
+        async fn draft_option_edit_rejects_detail_checkpoint_and_replay() {
+            let (_temporary, pool, coordinator, list_id, item_id) = detail_option_fixture().await;
+            coordinator
+                .request_prepublication_details(list_id, item_id)
+                .await
+                .unwrap();
+            let job = coordinator.claim_detail_job().await.unwrap().unwrap();
+            coordinator
+                .checkpoint_detail_result(
+                    &job,
+                    MediaListEnrichOutcomeKind::Complete,
+                    None,
+                    &item_record("episode:1", 0, "Stale option result"),
+                )
+                .await
+                .unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "DraftOptionValuesJson"='{"enabled":false}', "DraftRevision"="DraftRevision"+1 WHERE "Id"=?"#)
+                .bind(list_id).execute(&pool).await.unwrap();
+            assert!(coordinator
+                .checkpoint_detail_result(
+                    &job,
+                    MediaListEnrichOutcomeKind::Complete,
+                    None,
+                    &item_record("episode:1", 0, "Stale option result")
+                )
+                .await
+                .is_err());
+            assert!(coordinator.apply_one_checkpointed_detail().await.unwrap());
+            let (state, title): (i32, String) = sqlx::query_as(r#"SELECT "detail"."State", "item"."Title"
+                FROM "AddonMediaListDetailJob" AS "detail" JOIN "AddonMediaListItem" AS "item" ON "item"."Id"="detail"."AddonMediaListItemId"
+                WHERE "item"."Id"=?"#).bind(item_id).fetch_one(&pool).await.unwrap();
+            assert_eq!(state, encode_enum(AddonMediaListDetailState::Failed));
+            assert_ne!(title, "Stale option result");
+        }
+
+        #[tokio::test]
+        async fn published_detail_context_ignores_draft_edits_but_draft_purpose_does_not() {
+            let (_temporary, pool, _coordinator, list_id, item_id) = detail_option_fixture().await;
+            sqlx::query(r#"INSERT INTO "AddonMediaListRevision" ("AddonMediaListId","Revision","OptionSchemaId","OptionValuesJson","CompletedAt")
+                VALUES (?,1,101,'{"enabled":true}',?)"#).bind(list_id).bind(encode_datetime(Utc::now())).execute(&pool).await.unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision"=1 WHERE "Id"=?"#)
+                .bind(list_id)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Published"=1 WHERE "Id"=?"#)
+                .bind(item_id)
+                .execute(&pool)
+                .await
+                .unwrap();
+            let mut tx = crate::db::begin_write(&pool).await.unwrap();
+            let published =
+                crate::addon_media_list_detail_options::capture(&mut tx, list_id, item_id, 0)
+                    .await
+                    .unwrap();
+            let draft =
+                crate::addon_media_list_detail_options::capture(&mut tx, list_id, item_id, 1)
+                    .await
+                    .unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "DraftOptionValuesJson"='{"enabled":false}',"DraftRevision"="DraftRevision"+1 WHERE "Id"=?"#)
+                .bind(list_id).execute(&mut *tx).await.unwrap();
+            assert!(crate::addon_media_list_detail_options::validate(
+                &mut tx,
+                list_id,
+                item_id,
+                0,
+                Some(&published)
+            )
+            .await
+            .is_ok());
+            assert!(crate::addon_media_list_detail_options::validate(
+                &mut tx,
+                list_id,
+                item_id,
+                1,
+                Some(&draft)
+            )
+            .await
+            .is_err());
+            tx.rollback().await.unwrap();
         }
 
         #[tokio::test]

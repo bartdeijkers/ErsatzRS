@@ -154,6 +154,17 @@ struct PublicationJournal {
     previous_materializations: Vec<ArtworkMaterializationSnapshot>,
     #[serde(default)]
     target_database: Option<PublicationDatabaseSnapshot>,
+    /// None identifies a journal written before prepared-media selection existed.
+    #[serde(default)]
+    prepared_media: Option<std::collections::BTreeMap<String, EntityId>>,
+    /// Frozen selection; None is a journal created before interval streaming.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    streaming_plans: Option<
+        std::collections::BTreeMap<
+            String,
+            ersatzrs_core::addon_media_list_playback::AddonMediaListPlaybackTimelinePlan,
+        >,
+    >,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -163,6 +174,41 @@ struct PublicationFence<'a> {
     saved_revision: i32,
     owner_token: &'a str,
     lease_owner: &'a str,
+}
+
+impl SqliteAddonMediaListRepository {
+    /// Read the exact playback selections owned by an active publication.
+    /// Legacy journals without selections return empty maps.
+    ///
+    /// # Errors
+    /// Rejects missing/inactive or malformed journals; callers must not substitute
+    /// the previous publication when staging candidate files fails.
+    pub async fn publication_playback_selection(
+        &self,
+        list_id: EntityId,
+    ) -> Result<ersatzrs_core::repositories::AddonMediaListRevisionArtifacts> {
+        let journal: Option<String> = sqlx::query_scalar(
+        r#"SELECT "PublicationJournalJson" FROM "AddonMediaList" WHERE "Id"=? AND "ReviewState"=3"#,
+    )
+    .bind(list_id)
+    .fetch_optional(&self.0)
+    .await
+    .repository()?
+    .flatten();
+        let journal = journal.ok_or_else(|| {
+            RepositoryError::Conflict("the active publication journal is unavailable".into())
+        })?;
+        let journal: PublicationJournal = serde_json::from_str(&journal).map_err(|_| {
+            RepositoryError::Conflict("the active publication journal is invalid".into())
+        })?;
+        Ok(
+            ersatzrs_core::repositories::AddonMediaListRevisionArtifacts {
+                prepared_media: journal.prepared_media.unwrap_or_default(),
+                streaming_plans: journal.streaming_plans.unwrap_or_default(),
+                ..Default::default()
+            },
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1277,6 +1323,28 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
 
     async fn prepare_publication_details(&self, id: EntityId) -> Result<u64> {
         self.prepare_publication_details_impl(id, false).await
+    }
+
+    async fn prepare_publication_media(&self, id: EntityId, saved_revision: i32) -> Result<u64> {
+        let mut excluded = self
+            .list_items(id)
+            .await?
+            .into_iter()
+            .filter(|item| item.included && access_restricted_without_replacement(item))
+            .map(|item| item.id)
+            .collect::<Vec<_>>();
+        excluded.extend(sqlx::query_scalar::<_, EntityId>(
+            r#"SELECT "tombstone"."AddonMediaListItemId" FROM "AddonMediaListItemTombstone" AS "tombstone"
+               JOIN "AddonMediaListItem" AS "item" ON "item"."Id"="tombstone"."AddonMediaListItemId"
+               WHERE "item"."AddonMediaListId"=? AND "tombstone"."ConfirmedAt" IS NOT NULL"#,
+        ).bind(id).fetch_all(&self.0).await.repository()?);
+        crate::addon_media_list_publication_preparation::queue_required_media(
+            &self.0,
+            id,
+            saved_revision,
+            &excluded,
+        )
+        .await
     }
 
     async fn stage_publication(&self, id: EntityId) -> Result<AddonMediaListPublication> {
@@ -3094,6 +3162,14 @@ async fn stage_publication_impl(
     );
     publication_excluded_ids.sort_unstable();
     publication_excluded_ids.dedup();
+    let playback_selection = select_publication_playback(
+        repository,
+        id,
+        form.draft_revision,
+        fence,
+        &publication_excluded_ids,
+    )
+    .await?;
     let library_id = repository.managed_library_id(id).await?.ok_or_else(|| {
         RepositoryError::Conflict("managed list storage is unavailable".to_owned())
     })?;
@@ -3148,6 +3224,8 @@ async fn stage_publication_impl(
         target_published_revision: Some(target_published_revision),
         previous_materializations,
         target_database: None,
+        prepared_media: Some(playback_selection.prepared_media),
+        streaming_plans: Some(playback_selection.streaming_plans),
     };
     let journal_json = match serde_json::to_string(&journal) {
         Ok(value) => value,
@@ -3267,6 +3345,61 @@ async fn stage_publication_impl(
         list_id: id,
         library_id,
     })
+}
+
+async fn select_publication_playback(
+    repository: &SqliteAddonMediaListRepository,
+    list_id: EntityId,
+    saved_revision: i32,
+    fence: Option<PublicationFence<'_>>,
+    excluded_item_ids: &[EntityId],
+) -> Result<ersatzrs_core::repositories::AddonMediaListRevisionArtifacts> {
+    if let Some(fence) = fence {
+        let source_revision: Option<i32> = sqlx::query_scalar(
+            r#"SELECT "SourcePublishedRevision" FROM "AddonMediaListPublicationJob"
+               WHERE "OperationId"=? AND "AddonMediaListId"=? AND "Generation"=?"#,
+        )
+        .bind(fence.operation_id)
+        .bind(list_id)
+        .bind(fence.generation)
+        .fetch_one(&repository.0)
+        .await
+        .repository()?;
+        if let Some(revision) = source_revision {
+            let snapshot = repository
+                .revision_snapshot(list_id, revision)
+                .await?
+                .ok_or_else(|| {
+                    RepositoryError::Conflict("restore revision is not restorable".into())
+                })?;
+            let mut selection =
+                ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default();
+            for item in snapshot.items {
+                if let Some(artifact_id) = item.prepared_artifact_id {
+                    selection
+                        .prepared_media
+                        .insert(item.provider_id.clone(), artifact_id);
+                }
+                if let Some(plan) = item.playback_timeline {
+                    selection.streaming_plans.insert(item.provider_id, plan);
+                }
+            }
+            return Ok(selection);
+        }
+    }
+    let streaming_plans = crate::addon_media_list_prepared_selection::select_streaming_plans(
+        &repository.0,
+        list_id,
+        saved_revision,
+        excluded_item_ids,
+    )
+    .await?;
+    Ok(
+        ersatzrs_core::repositories::AddonMediaListRevisionArtifacts {
+            streaming_plans,
+            ..Default::default()
+        },
+    )
 }
 
 async fn materialize_retained_revision_candidate_if_needed(
@@ -3691,7 +3824,9 @@ async fn retain_published_revision_before_cleanup(
             byte_length: blob.byte_length,
         });
     }
-    let artifact_ids = current_published_artifact_ids(&repository.0, list_id).await?;
+    let artifact_ids =
+        current_published_artifact_ids(&repository.0, list_id, journal.prepared_media.as_ref())
+            .await?;
     ensure_current_publication_claim(&repository.0, list_id, fence, true).await?;
     repository
         .retain_published_revision(
@@ -3700,7 +3835,11 @@ async fn retain_published_revision_before_cleanup(
             source_draft_revision,
             completed_at,
             &files,
-            &artifact_ids,
+            &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts {
+                ids: artifact_ids,
+                prepared_media: journal.prepared_media.clone().unwrap_or_default(),
+                streaming_plans: journal.streaming_plans.clone().unwrap_or_default(),
+            },
         )
         .await?;
     Ok(())
@@ -3709,9 +3848,10 @@ async fn retain_published_revision_before_cleanup(
 async fn current_published_artifact_ids(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
+    prepared_media: Option<&std::collections::BTreeMap<String, EntityId>>,
 ) -> Result<Vec<EntityId>> {
-    sqlx::query_scalar(
-        r#"SELECT "artifact"."Id"
+    let rows = sqlx::query_as::<_, (EntityId, i32)>(
+        r#"SELECT "artifact"."Id", "artifact"."Kind"
            FROM "AddonMediaListArtifact" AS "artifact"
            WHERE "artifact"."AddonMediaListId" = ? AND "artifact"."State" = ?
              AND (
@@ -3731,7 +3871,20 @@ async fn current_published_artifact_ids(
     ))
     .fetch_all(pool)
     .await
-    .repository()
+    .repository()?;
+    Ok(rows
+        .into_iter()
+        .filter(|(id, kind)| {
+            prepared_media.is_none_or(|selected| {
+                *kind
+                    != crate::repositories::common::encode_enum(
+                        ersatzrs_domain::AddonMediaListArtifactKind::ProcessedMedia,
+                    )
+                    || selected.values().any(|selected_id| selected_id == id)
+            })
+        })
+        .map(|(id, _)| id)
+        .collect())
 }
 
 fn publication_fs_identity(
@@ -4720,11 +4873,18 @@ async fn verify_published_materialization_database(
         {
             return Ok(false);
         }
-        let path = managed_root.join(relative);
-        if !path.starts_with(managed_root)
-            || !path.is_file()
-            || !file_has_sha256(&path, &materialization.sha256)
-        {
+        let Some(path) = publication_artwork_path_for(
+            pool,
+            list_id,
+            presentation,
+            materialization,
+            managed_root,
+        )
+        .await?
+        else {
+            return Ok(false);
+        };
+        if !path.is_file() || !file_has_sha256(&path, &materialization.sha256) {
             return Ok(false);
         }
     }
@@ -4756,6 +4916,37 @@ async fn verify_published_materialization_database(
         .count();
     Ok(current_parent_roles == expected_parent_roles
         && current_parent_count == current_parent_roles.len())
+}
+
+/// Artwork is written beside its owner's NFO, which can be in a playlist's
+/// nested media folder rather than beside the manifest itself.
+async fn publication_artwork_path_for(
+    pool: &Pool<crate::db::Db>,
+    list_id: EntityId,
+    presentation: AddonMediaListPresentationKind,
+    materialization: &ArtworkMaterializationSnapshot,
+    managed_root: &Path,
+) -> Result<Option<PathBuf>> {
+    let owner_nfo = if let Some(item_id) = materialization.item_id {
+        item_nfo_path_for(pool, list_id, item_id).await?
+    } else if let Some((file_name, _)) = parent_nfo_for(presentation) {
+        parent_nfo_path_for(pool, list_id, file_name).await?
+    } else {
+        None
+    };
+    let Some(owner_directory) = owner_nfo.as_deref().and_then(Path::parent) else {
+        return Ok(None);
+    };
+    let Ok(root) = managed_root.canonicalize() else {
+        return Ok(None);
+    };
+    let Ok(path) = owner_directory
+        .join(&materialization.file_name)
+        .canonicalize()
+    else {
+        return Ok(None);
+    };
+    Ok(path.starts_with(root).then_some(path))
 }
 
 async fn verify_publication_database(
@@ -5332,6 +5523,30 @@ async fn addon_media_list_publication_readiness(
     let mut blockers = list_publication_blockers(pool, form, presentation, &attempted).await?;
     let detail_states = required_playback_detail_states(pool, list_id).await?;
     let mut item_classification = PublicationItemClassification::default();
+    let excluded = items
+        .iter()
+        .filter(|item| {
+            removal_candidate_ids.contains(&item.id) || access_restricted_without_replacement(item)
+        })
+        .map(|item| item.id)
+        .collect::<Vec<_>>();
+    let preparation = crate::addon_media_list_prepared_selection::interval_metadata_requirements(
+        pool,
+        list_id,
+        form.draft_revision,
+        &excluded,
+    )
+    .await?;
+    item_classification.preparation_required =
+        preparation.iter().map(|item| item.item_id).collect();
+    let required_prepared_media_count = preparation
+        .iter()
+        .filter(|item| item.plan.is_none())
+        .count() as u64;
+    let required_prepared_media_pending = preparation
+        .iter()
+        .filter(|item| item.plan.is_none() && item.pending)
+        .count() as u64;
     for item in &included {
         if access_restricted_without_replacement(item) {
             item_classification.restricted_excluded_count = item_classification
@@ -5359,6 +5574,8 @@ async fn addon_media_list_publication_readiness(
         recommendation_count: item_classification.recommendation_count,
         required_playback_detail_count: item_classification.required_playback_detail_count,
         required_playback_detail_pending: item_classification.required_playback_detail_pending,
+        required_prepared_media_count,
+        required_prepared_media_pending,
         optional_detail_total: progress.map_or(0, |progress| progress.detail_total),
         optional_detail_complete: progress.map_or(0, |progress| progress.detail_complete),
         optional_detail_pending: progress.map_or(0, |progress| progress.detail_pending),
@@ -5495,6 +5712,7 @@ async fn list_publication_blockers(
 
 #[derive(Default)]
 struct PublicationItemClassification {
+    preparation_required: std::collections::BTreeSet<EntityId>,
     blockers: Vec<AddonMediaListPublicationBlocker>,
     recommendation_count: u64,
     required_playback_detail_count: u64,
@@ -5531,7 +5749,7 @@ fn classify_item_advisory_and_playback(
     if advisory {
         classification.recommendation_count = classification.recommendation_count.saturating_add(1);
     }
-    if item.kind == AddonMediaListItemKind::RemoteStream {
+    if item.kind == AddonMediaListItemKind::RemoteStream && !item.replacement_valid {
         match item.effective_liveness {
             RemoteStreamLiveness::Unknown => {
                 classification.blockers.push(publication_item_blocker(
@@ -5540,7 +5758,8 @@ fn classify_item_advisory_and_playback(
                 ));
             }
             RemoteStreamLiveness::Finite
-                if item.duration_seconds.is_none_or(|duration| duration == 0) =>
+                if item.duration_seconds.is_none_or(|duration| duration == 0)
+                    && !classification.preparation_required.contains(&item.id) =>
             {
                 classify_required_playback_detail(item, detail_state, classification);
             }
@@ -6244,9 +6463,11 @@ impl SqliteAddonMediaListRepository {
                LEFT JOIN "AddonMediaListDetailJob" AS "detail"
                  ON "detail"."AddonMediaListItemId" = "item"."Id"
                WHERE "item"."AddonMediaListId" = ? AND "item"."Included" = 1
+                 AND NOT EXISTS (SELECT 1 FROM "AddonMediaListItemTombstone" AS "tombstone"
+                     WHERE "tombstone"."AddonMediaListItemId"="item"."Id" AND "tombstone"."ConfirmedAt" IS NOT NULL)
                  AND ("item"."AvailabilityReasonCode" IS NULL
                       OR "item"."AvailabilityReasonCode" NOT IN (?, ?))
-                 AND "item"."Kind" = ? AND "item"."EffectiveLiveness" = ?
+                 AND "item"."Kind" = ? AND COALESCE("item"."LivenessOverride", "item"."ProviderLiveness") = ?
                  AND ("item"."DurationSeconds" IS NULL OR "item"."DurationSeconds" <= 0)
                ORDER BY "item"."Rank", "item"."Id""#,
         )
@@ -6266,17 +6487,74 @@ impl SqliteAddonMediaListRepository {
         .fetch_all(&self.0)
         .await
         .repository()?;
+        let required_media =
+            crate::addon_media_list_prepared_selection::interval_metadata_requirements(
+                &self.0,
+                id,
+                form.draft_revision,
+                &[],
+            )
+            .await?
+            .into_iter()
+            .map(|item| item.item_id)
+            .collect::<std::collections::BTreeSet<_>>();
+        // Interval metadata supplies the positive edited duration itself, without an
+        // additional provider detail request for the same finite item.
+        let mut detail_rows = Vec::new();
+        let valid_replacements = self
+            .list_items(id)
+            .await?
+            .into_iter()
+            .filter(|item| item.replacement_valid)
+            .map(|item| item.id)
+            .collect::<std::collections::BTreeSet<_>>();
+        for row in rows {
+            let item_id: i64 = row.try_get("Id").repository()?;
+            if !required_media.contains(&item_id) && !valid_replacements.contains(&item_id) {
+                detail_rows.push(row);
+            }
+        }
+        let rows = detail_rows;
         if rows.is_empty() {
             return Ok(0);
         }
 
+        let has_saved_options: bool = sqlx::query_scalar(
+            r#"SELECT "DraftOptionSchemaId" IS NOT NULL FROM "AddonMediaList" WHERE "Id"=?"#,
+        )
+        .bind(id)
+        .fetch_one(&self.0)
+        .await
+        .repository()?;
+        let coordinator =
+            crate::addon_media_list_import::AddonMediaListImportCoordinator::new(self.0.clone());
         for row in &rows {
             let title: String = row.try_get("DisplayTitle").repository()?;
-            let state = decode_optional_enum_column::<AddonMediaListDetailState>(
+            let mut state = decode_optional_enum_column::<AddonMediaListDetailState>(
                 "AddonMediaListDetailState",
                 row,
                 "DetailState",
             )?;
+            if has_saved_options && state.is_some() {
+                let item_id: EntityId = row.try_get("Id").repository()?;
+                coordinator
+                    .request_prepublication_details(id, item_id)
+                    .await?;
+                let refreshed = sqlx::query(
+                    r#"SELECT "State" AS "DetailState" FROM "AddonMediaListDetailJob"
+                       WHERE "AddonMediaListId"=? AND "AddonMediaListItemId"=?"#,
+                )
+                .bind(id)
+                .bind(item_id)
+                .fetch_one(&self.0)
+                .await
+                .repository()?;
+                state = decode_optional_enum_column(
+                    "AddonMediaListDetailState",
+                    &refreshed,
+                    "DetailState",
+                )?;
+            }
             let Some(state) = state else {
                 return Err(RepositoryError::Conflict(format!(
                     "{title} is finite media but its add-on does not provide item-detail enrichment"
@@ -8379,6 +8657,148 @@ mod tests {
     use sqlx::Executor as _;
 
     use super::{accept_reconcile_candidate_in_tx, is_safe_remote_artwork_url, FlatProjection};
+
+    // Reuse the synthetic POSIX package fixture; Windows runner acceptance is separate.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn normal_publication_selects_interval_jobs_without_prepared_files() {
+        use crate::addon_media_list_item_jobs::{
+            AddonMediaListItemJobQueue, ItemOperationCompletion, ItemOperationKind,
+        };
+        use ersatzrs_core::{
+            addon_media_list_playback::AddonMediaListPlaybackTimelinePlan,
+            repositories::AddonMediaListRepository as _,
+        };
+
+        let temporary = tempfile::tempdir().unwrap();
+        let pool = crate::addon_media_list_publication_preparation::tests::streaming_fixture(
+            &temporary.path().join("package"),
+        )
+        .await;
+        let repository = super::SqliteAddonMediaListRepository(pool.clone());
+        assert!(
+            super::select_publication_playback(&repository, 1, 0, None, &[])
+                .await
+                .is_err()
+        );
+        assert_eq!(repository.prepare_publication_media(1, 0).await.unwrap(), 1);
+        let queue = AddonMediaListItemJobQueue::new(pool);
+        let job = queue
+            .claim_kind(chrono::Utc::now(), 90, ItemOperationKind::IntervalMetadata)
+            .await
+            .unwrap()
+            .unwrap();
+        let plan = AddonMediaListPlaybackTimelinePlan::new(
+            10_000,
+            0..10_000,
+            &[2_000..3_000, 4_000..5_000],
+            job.input.context_fingerprint.clone(),
+        )
+        .unwrap();
+        queue
+            .complete(
+                &job,
+                ItemOperationCompletion::IntervalPlan { plan: plan.clone() },
+                chrono::Utc::now(),
+            )
+            .await
+            .unwrap();
+        let selection = super::select_publication_playback(&repository, 1, 0, None, &[])
+            .await
+            .unwrap();
+        assert_eq!(selection.streaming_plans.get("item"), Some(&plan));
+        assert!(selection.prepared_media.is_empty());
+        let excluded = super::select_publication_playback(&repository, 1, 0, None, &[10])
+            .await
+            .unwrap();
+        assert!(excluded.streaming_plans.is_empty());
+        assert!(excluded.prepared_media.is_empty());
+    }
+
+    #[tokio::test]
+    async fn streaming_revision_restore_freezes_source_plan_in_publication_journal() {
+        use ersatzrs_core::{
+            addon_media_list_playback::AddonMediaListPlaybackTimelinePlan,
+            repositories::{
+                AddonMediaListLifecycleRepository as _, AddonMediaListRevisionArtifacts,
+            },
+        };
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+        pool.execute("PRAGMA foreign_keys = OFF").await.unwrap();
+        sqlx::raw_sql(r#"INSERT INTO "AddonMediaList"
+                ("Id","AddonId","ProviderId","SourceUrl","Name","DraftRevision","PublishedRevision")
+                VALUES (1,'fixture.addon','list','https://example.invalid/list','List',1,1);
+            INSERT INTO "AddonMediaListItem"
+                ("Id","AddonMediaListId","ProviderId","DisplayTitle","Title","Kind","Rank","Published","EffectiveLiveness")
+                VALUES (10,1,'item','Item','Item',4,0,1,1);"#)
+            .execute(&pool).await.unwrap();
+        let repository = super::SqliteAddonMediaListRepository(pool.clone());
+        let plan = AddonMediaListPlaybackTimelinePlan::new(
+            10_000,
+            0..10_000,
+            &[2_000..3_000, 4_000..5_000],
+            "a".repeat(64),
+        )
+        .unwrap();
+        repository
+            .retain_published_revision(
+                1,
+                1,
+                1,
+                chrono::Utc::now(),
+                &[],
+                &AddonMediaListRevisionArtifacts {
+                    streaming_plans: [("item".into(), plan.clone())].into(),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        sqlx::raw_sql(r#"DELETE FROM "AddonMediaListItem" WHERE "Id"=10;
+            INSERT INTO "AddonMediaListPublicationJob"
+                ("OperationId","AddonMediaListId","Generation","SavedRevision","TargetPublishedRevision",
+                 "Phase","SourcePublishedRevision","CreatedAt","UpdatedAt")
+                VALUES (100,1,1,2,2,0,1,'2026-09-06T07:00:00Z','2026-09-06T07:00:00Z');"#)
+            .execute(&pool).await.unwrap();
+        let selection = super::select_publication_playback(
+            &repository,
+            1,
+            2,
+            Some(super::PublicationFence {
+                operation_id: 100,
+                generation: 1,
+                saved_revision: 2,
+                owner_token: "fixture",
+                lease_owner: "fixture",
+            }),
+            &[],
+        )
+        .await
+        .unwrap();
+        assert_eq!(selection.streaming_plans.get("item"), Some(&plan));
+        assert!(selection.prepared_media.is_empty());
+        let journal: super::PublicationJournal = serde_json::from_value(serde_json::json!({
+            "previous_review_state": super::AddonMediaListReviewState::Ready,
+            "previous_presentation_kind": super::AddonMediaListPresentationKind::RemoteStreams,
+            "previous_items": [], "previous_playlist": null,
+            "streaming_plans": selection.streaming_plans,
+        }))
+        .unwrap();
+        let frozen = serde_json::to_string(&journal).unwrap();
+        let replay: super::PublicationJournal = serde_json::from_str(&frozen).unwrap();
+        assert_eq!(replay.streaming_plans.unwrap().get("item"), Some(&plan));
+        let mut legacy = serde_json::to_value(&journal).unwrap();
+        legacy.as_object_mut().unwrap().remove("streaming_plans");
+        assert!(serde_json::from_value::<super::PublicationJournal>(legacy)
+            .unwrap()
+            .streaming_plans
+            .is_none());
+    }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)] // Keep the competing generations and atomic promotion assertions in one scenario.

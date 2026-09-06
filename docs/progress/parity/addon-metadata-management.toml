@@ -2,7 +2,7 @@ feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'In progress'
-adr        = ['0068', '0073', '0075', '0078', '0079', '0085']
+adr        = ['0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088']
 
 summary = '''
 ADR 0075 implements a provider-neutral metadata draft with generated parent
@@ -22,23 +22,16 @@ contract, provider and operator snapshots, Publish, refresh, generated
 definitions, scanner persistence, editor, scheduling, health, IPTV/HLS, and the
 cross-platform yt-dlp package. Unknown is never guessed as finite and live
 items are admitted only where a deterministic live boundary is available.
-AMM-G implements ADR 0079: bounded paginated overview discovery persists and
-resumes before a complete draft may publish, retaining title, first-air date,
-thumbnail, descriptions, and provider order without item-detail calls. Details
-then use durable post-publication one-item jobs and one shared randomized
-provider-host limiter across automatic and manual requests. Its global positive
-whole-second minimum and maximum are localized settings that default to 2 and
-16, apply to later samples without restart, and never shorten a persisted
-cooldown. Manual-only imports, per-item fetch actions, durable progress, stable
-number/date/season-episode columns, and exact accessible bulk-numbering cues are
-implemented for the shared editor and both official providers. AMM-G-06 retains
-explicitly unavailable Beeld & Geluid episodes without detail requests, and
-AMM-G-07 closes the official seven-URL matrix. Direct yt-dlp objects become
-one-item lists with Live/Finite behavior intact; aggregate provider order,
-identity, and query parameters survive pagination; invalid output cannot become
-a successful empty draft. Localized Retry replaces only an incomplete provider
-generation while retaining operator state, and the NSF live browser acceptance
-proves publication, scheduling, playout, MPEG-TS, and HLS delivery.
+AMM-G implements ADR 0079: resumable paginated overview discovery precedes
+publication; optional details use durable item jobs and one randomized
+provider-host limiter for manual and automatic work. Localized delay settings
+default to 2–16 seconds, apply without restart, and preserve existing cooldowns.
+The editor supports manual imports, per-item details, durable progress and
+accessible numbering. AMM-G-06 retains unavailable Beeld & Geluid episodes
+without detail calls; AMM-G-07 proves the seven-URL matrix, provider order and
+identity, typed live/finite behavior, and invalid-output rejection. Retry keeps
+operator state while replacing only an incomplete generation. NSF live browser
+acceptance covers publication, scheduling, playout, MPEG-TS and HLS.
 AMM-H closed the Windows dogfood television-cardinality regression. Artwork
 candidates are canonicalized before replacement, television and admin reads
 select one deterministic non-empty artwork winner, and narrow restart-safe
@@ -58,8 +51,233 @@ AMM-J-04 and AMM-K close recovery and lifecycle. AMM-L completes cadences,
 transactional skip-known discovery, omission-safe rich headers, non-destructive
 reconciliation, and scheduler-only validated-additions publication with exact
 revision fences, retry-safe preparation, and localized Activity/Health holds.
-AMM-M-01 access/artifact work is in progress; preparation/playback and AMM-N remain.
+AMM-M-01A is Complete under ADRs 0087/0088; its milestone owns the options,
+real MPEG-TS/HLS cut and cancellation evidence. Native yt-dlp replaces the
+Range adapter and remains preferred in later slices. SDR/subtitle refusals
+remain explicit; static startup-stage diagnostics remain non-blocking debt.
+Preserved preparation belongs to M-01B,
+not started: a generic native list select offers Stream, Download ahead, or
+Download ahead only for new videos first imported after enabling it. Existing
+videos stream; enabled SponsorBlock applies in every mode. M-02 and AMM-N await.
 '''
+
+[[debt]]
+id          = 'preparation-worker-wait-closes-liveness'
+description = 'Keep the download-ahead preparation worker alive until host shutdown instead of closing its liveness pipe when awaiting exit.'
+discovered  = '2026-09-06'
+resolved    = false
+adr         = '0086'
+evidence    = 'A fresh isolated native-transfer host records an Idle preparation checkpoint and worker-unavailable=true immediately after startup. Astra review confirms that locked Tokio 1.53.1 Child::wait closes child.stdin; supervise_command leaves the liveness writer in that field while selecting wait, so the worker receives EOF and exits. Metadata-only interval discovery and publication still succeed in the independent host coordinator. Fix the deferred M-01B supervisor by retaining stdin separately until shutdown, and prove idle survival followed by cancellation-driven EOF and clean drain without an unavailable health flag.'
+
+[[debt]]
+id          = 'retained-ts-inner-failure-concealed-by-concat'
+description = 'Remove repeated native NUT identifiers that become bogus frame packets and reject concealed inner playback failures in acceptance.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0088'
+evidence    = 'Run 4 exposed an inner encoder exit 234 before client cutoff while the outer concat response kept decoding incorrect content. A same-parameter raw NUT reproduction isolates repeated 25-byte native file identifiers being interpreted as frame packets: unchanged concatenation fails with non-monotonic DTS, while removing only the repeated identifier restores exactly 60 frames, 384000 PCM bytes and two-second spans. The bounded package transform validates each known section prefix, preserves the first and forwards all other bytes unchanged; nine offline tests and Astra P1/P2 review pass. A fresh actual package installation in run 7 passes scheduled MPEG-TS/HLS, strict decoding, 38 transport checks and source correspondence for 90.180 seconds removed, with zero consumer diagnostics. The manual gate also rejects concealed host failures and allows only timestamped normal cancellation at/after deliberate cutoff. Historical raw stderr was not retained, so this establishes the corrected reproducible defect, not forensic certainty about every historical failure. Broader native-transfer acceptance remains separately open.'
+
+[[debt]]
+id          = 'native-retained-boundary-duplicate-dts'
+description = 'Prevent a retained video boundary from collapsing onto a duplicate encoder timestamp and terminating scheduled playback.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0088'
+evidence    = 'The owning amm-m-01a milestone records the reproduced native boundary collision, retained-only VFR correction, independent audio-reference match, five passing focused regressions and Astra review. Matched-host run 15 now passes scheduled MPEG-TS/HLS under delay/jitter, strict decoding, source-reference cut correspondence and transport continuity without host failures. This closes the boundary defect, not the full slice acceptance audit.'
+
+[[debt]]
+id          = 'native-retained-transfer-acceptance'
+description = 'Prove the yt-dlp-owned retained stream preserves selected media semantics and meets scheduled startup and cut continuity requirements.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0088'
+evidence    = 'The agreed M-01A native-transfer acceptance is verified in the owning amm-m-01a milestone: frozen publication/seek mapping, no full download, reviewed bounds, actual cancellation and run-15 scheduled MPEG-TS/HLS under delay/jitter with decoded source-cut correspondence. The approved twenty-second maximum is met; the ten-second target is not. This does not claim HDR, subtitle acquisition, direct MP4 reserve or later cross-platform release integration.'
+
+[[debt]]
+id          = 'retained-audio-frame-boundary-leak'
+description = 'Remove excluded audio samples at retained interval boundaries without relying on whole-frame selection and resampling.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Superseded by removal of the select/aselect concat implementation under ADR 0088, not repaired in that discarded implementation. Historical evidence remains: with aresample=async=1 it matched all 148 source-video hashes but emitted 284672 PCM samples versus the 284160-sample reference; final AAC retained the excluded 880 Hz marker in adjacent 10 ms seam windows. The 512 extra samples were net excess, not total leakage. The replacement native separate-video/audio experiment emits all 284160 expected PCM samples exactly, and the real run-7 captures establish lossy source correspondence. Native cut fidelity and actual-host acceptance remain owned by native-retained-transfer-acceptance; source correlation is not sample-exact or listening proof. Astra review confirms the obsolete filter debt must not duplicate the replacement acceptance gate.'
+
+[[debt]]
+id          = 'retained-input-preparation-failure-stage'
+description = 'Identify the failing retained-input startup stage without exposing provider URLs, headers or raw diagnostics.'
+discovered  = '2026-09-06'
+resolved    = false
+adr         = '0087'
+evidence    = 'Historical adapter HLS and the first native real-host probe expose only a generic item-operation failure. PublishedIntervalSource and package error mapping still collapse distinct startup stages. A bounded native-only diagnostic identifies the new native failure as the 4 MiB output limit rejecting valid 7.1 MB metadata; the focused limit/codec-label fix allows the actual native baseline to pass. That diagnosis does not establish the old adapter cause or implement safe stage reporting. Preserve a minimal static stage/outcome without raw provider fields when closing this debt.'
+
+[[debt]]
+id          = 'retained-hls-cut-upstream-failure'
+description = 'Complete real scheduled HLS playback through the retained late SponsorBlock cut and reject partial demuxer failures as successful EOF.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Superseded by removal of the custom Range endpoint and redirect handling under ADR 0088. Historical adapter HLS began in 13.872 seconds but ended at the late cut after 19.433 seconds and two HTTP 502 responses; URL-free diagnostics established CDN redirects. Native yt-dlp now owns those transfers. Fresh actual installation/publication in test-results/m01a-native-host-7 passes scheduled HLS across the same cut: first presented frame 9.865 seconds, 760 frames, maximum gap 66.7 ms, no post-start stalls, strict decode and source-reference correspondence. The log observer rejects concealed inner failures. This closes the retired adapter defect, not the replacement delay/jitter and cancellation gate, which remains open under native-retained-transfer-acceptance. Astra review confirms the distinction.'
+
+[[debt]]
+id          = 'nested-publication-artwork-convergence'
+description = 'Verify publication artwork beside its owning media and NFO instead of assuming it is beside the manifest.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'The real imported playlist stores artwork in its streams folder; bytes matched both journal and database but the verifier checked the manifest parent. Verification now reuses deterministic item and parent NFO paths and canonical managed-root containment, preserving filename and hash checks. Twenty candidate-verification regressions pass, including nested item and parent success, missing and modified bytes, and an outside-root owner. Astra review finds no P1/P2; the rebuilt actual-host publication completes normally and freezes the edited duration and interval plan.'
+
+[[debt]]
+id          = 'rich-person-metadata-false-dirty'
+description = 'Do not hide publication preparation for an untouched list whose provider people contain fields absent from the name/role editor.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'The mandatory real-video host attempt exposed an unchanged name/role input dropping provider order Some(0) and hiding preparation. The page and HTML-form fix preserves original people when the visible sequence matches; Astra review finds no P1/P2. Four focused web tests pass, including both unchanged-people regressions. The rebuilt real browser now invokes preparation, completes the interval metadata job, and invokes Publish. Publication then exposed a separate artwork-path convergence failure; no real scheduled playback acceptance yet.'
+
+[[debt]]
+id          = 'streaming-concat-required-http-headers'
+description = 'Forward every required per-format HTTP header faithfully through retained-range playback without exporting browser cookies or silently stripping authentication.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Superseded by the accepted ADR 0088 transport replacement: the unpublished custom Range adapter, resolve-only URL/header DTOs, private HTTP route and retained-range concat generator are removed. No host concat-header workaround or adapter fallback remains. Native yt-dlp and its FFmpeg downloader now own provider headers and transfer. This closes the obsolete adapter implementation task, not the replacement runtime acceptance, which remains open under native-retained-transfer-acceptance.'
+
+[[debt]]
+id          = 'retained-ts-eof-cancellation'
+description = 'Observe cancellation after encoder stdout closes instead of awaiting a stalled process indefinitely.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Astra review found the post-stdout child wait ignored cancellation, retaining the input owner and transcode reservation. It now selects cancellation and kills/reaps the child. The stdout-close-then-sleep regression passes in the 13-test web selection; independent rereview confirms the fix. Public output closes before asynchronous cleanup is awaited.'
+
+[[debt]]
+id          = 'retained-ts-pacing-drift'
+description = 'Do not accumulate timer lateness into an output rate below the encoded media rate.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Review found scheduling each packet from the actual previous write permanently added wakeup latency. Pacing now uses an accumulated clock with bounded batches and a twenty-millisecond catch-up cap. Repeated timer-jitter and stalled-client tests pass; actual channel delivery-rate and player continuity measurements remain open.'
+
+[[debt]]
+id          = 'retained-ts-short-remainder-capacity'
+description = 'Allow the validated codec tail to fit before admitting a short remainder at successful EOF.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Astra review found near-eight-second remainders could fill the reserve before EOF despite a permitted 250-millisecond codec tail. Short-remainder capacity now includes that tolerance within the same 32-MiB memory ceiling. The near-eight-second tail regression passes; independent rereview confirms the correction.'
+
+[[debt]]
+id          = 'retained-ts-failed-eof-admission'
+description = 'Require a successful encoder exit before accepting EOF as a complete short retained programme.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Astra review found the legacy Broken pipe exception could turn a nonzero exit into retained terminal success. Retained attempts now preserve the failed status while legacy disconnect behavior remains unchanged. The focused nonzero-exit and failed/unknown/premature EOF tests pass, with independent rereview.'
+
+[[debt]]
+id          = 'retained-hls-exhausted-plan-retry'
+description = 'Do not retry an exhausted retained plan without advancing the HLS cursor or ending the attempt.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Astra integration review found that an EOF preparation result continued the unchanged worker loop, potentially repeatedly reacquiring capacity after the plan ended. EOF now emits a static diagnostic and stops the worker. Independent rereview confirms the unchanged retry is removed; the 23-test HLS/audio selection passes. Actual scheduled channel EOF and cancellation proof remain part of the open M-01A runtime gate.'
+
+[[debt]]
+id          = 'retained-hls-default-audio-language'
+description = 'Label retained HLS audio with the language of the fresh default track actually selected for playback.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Astra integration review found Automatic could map the fresh default track while output metadata used the first track language. Retained Automatic now becomes the actual default or first index before both metadata and command generation, preserving Exact and Disabled. A Japanese-first, English-default regression proves matching selection and language; all 23 focused HLS/audio tests pass and independent rereview confirms the fix.'
+
+[[debt]]
+id          = 'range-body-backpressure-cancellation'
+description = 'Release upstream responses and request permits when playback is revoked even if the downstream body is not polled.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Independent review found a lazy body stream only observed revocation when polled. A playback-owned pump with one queued chunk now watches cancellation during reads and blocked sends, and body drop aborts it. Tests revoke both unpolled and backpressured bodies and verify upstream permits are released before another body poll. All five focused Range-adapter tests pass and Astra rereview confirms the P2 is fixed.'
+
+[[debt]]
+id          = 'seekable-resolution-preflight-budget'
+description = 'Observe startup deadline and cancellation while resolving an installed package, before its provider process is spawned.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'Independent M-01A review found package/database preflight awaited without timeout or cancellation, so subtracting elapsed time only prevented late spawn. Resolution now selects the original deadline and cancellation before a child exists, then passes remaining time to the managed runner. Held-pool tests prove bounded timeout and cancellation without provider dispatch; child cancellation proves process exit. Ten focused infrastructure tests pass including the existing interval coordinator; Astra rereview finds no further P1/P2.'
+
+[[debt]]
+id          = 'automatic-interval-publication-admission'
+description = 'Admit required interval metadata before automatic publication instead of entering publication with missing playback evidence.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'M-01A integration review found automatic refresh checked only ordinary duration-detail work before enqueueing publication. Required intervals now use the existing preparing state and atomic exact-input admission that never reopens terminal attempts. Tests prove crash-gap admission, pending cooldown preservation, readiness before enqueue, failed-work holds and explicit manual retry. All forty-two focused selection, admission, automatic-publication and durable-queue tests pass; independent Astra rereview finds no remaining P1/P2 in these paths.'
+
+[[debt]]
+id          = 'automatic-publication-playback-comparison'
+description = 'Do not mistake retained playback plans or prepared artifact bindings for operator edits during additions-only automatic eligibility.'
+discovered  = '2026-09-06'
+resolved    = true
+adr         = '0087'
+evidence    = 'M-01A review found retained playback fields compared directly against absent draft fields, falsely holding unchanged lists. Eligibility now ignores only publication-owned selections and preserves real metadata, timing and ordering holds. Digest-covered streaming and prepared-file revisions both pass unchanged/additions checks while title, duration and chapter edits remain held. The regression passes within forty-two focused tests; independent Astra rereview confirms the fix.'
+
+[[debt]]
+id          = 'interval-process-cleanup-quarantine'
+description = 'Keep unconfirmed metadata-process cleanup blocked across host restart instead of relying only on an in-memory quarantine.'
+discovered  = '2026-09-06'
+adr         = '0087'
+evidence    = 'AMM-M-01A review found that expired interval job/provider leases could permit retry after the process-local flag disappeared. A durable ConfigElement recovery marker now blocks kind-2 reclaim and shared provider admission/health, survives job/list deletion, and is never automatically cleared. The restart-oriented regression passes within fifteen focused infrastructure tests; independent Astra rereview confirms the P2 fix. Actual cleanup confirmation and operator recovery remain part of the unfinished slice.'
+resolved    = true
+
+[[debt]]
+id          = 'publication-playback-selection-draft-diff'
+description = 'Do not classify immutable playback selections as saved draft metadata edits when draft loaders do not populate those fields.'
+discovered  = '2026-09-06'
+adr         = '0087'
+evidence    = 'AMM-M-01A review found playback_timeline and prepared_artifact_id were compared against absent draft fields, permanently flagging unchanged items. Draft comparison now ignores both publication-owned selections while revision comparison retains them. Streaming and prepared saved-draft regressions pass in the six-test repository selection; independent Astra rereview confirms the P2 fix.'
+resolved    = true
+
+[[debt]]
+id          = 'sponsorblock-streaming-cut-continuity'
+description = 'AMM-M-01A: replace mandatory processed-video preparation with revision-bound interval streaming that does not cause user-visible playback underruns at cuts. Closure requires the milestone-owned real yt-dlp fixture in scheduled MPEG-TS and HLS, including its known 15:44-17:13 cut; synthetic tests cannot substitute.'
+discovered  = '2026-09-05'
+adr         = '0087'
+evidence    = 'Closed by the owning amm-m-01a milestone real-provider evidence, especially matched-host run 15 and the actual cancellation artifacts. Scheduled MPEG-TS and HLS cross the frozen source cut under measured delay/jitter, with decoded content correspondence, no observed post-start interruption and the approved startup maximum. Historical custom-adapter experiments are not the completion proof.'
+resolved    = true
+
+[[debt]]
+id          = 'preparation-worker-forced-host-exit-recovery'
+description = 'AMM-M-01B: preserve preparation process ownership after forced web-host exit and resume only after exact-attempt cleanup proof.'
+discovered  = '2026-09-05'
+adr         = '0086'
+evidence    = 'Preparation implementation remains preserved and incomplete. ADR 0087 scopes this worker to AMM-M-01B Download ahead, not AMM-M-01A streaming; its native crash/restart gate awaits 01B. Existing reservations or processes must not be cleared merely because the design changed. Reuse the groundwork rather than deleting or duplicating it.'
+resolved    = false
+
+[[debt]]
+id          = 'list-delivery-mode-selection'
+description = 'AMM-M-01B: implement the provider-neutral list-level native select for Stream, Download ahead, and Download ahead only for new videos, independent of SponsorBlock, with immutable published delivery choices and capability-based eligibility.'
+discovered  = '2026-09-06'
+adr         = '0087'
+evidence    = 'The maintainer confirmed that new means first imported after enabling the mode; existing videos continue streaming. No selector or durable first-import classification is implemented. Preserved full-download groundwork is not proof of these semantics. Scope includes localized hydrated/no-JavaScript save and refresh/restart persistence, not per-item delivery overrides or speculative cache infrastructure.'
+resolved    = false
+
+[[debt]]
+id          = 'publication-verification-rewrites-sealed-playlist-sidecar'
+description = 'Keep verification of an unchanged generated playlist byte-stable after sealing, without weakening publication integrity checks.'
+discovered  = '2026-09-05'
+adr         = '0085'
+evidence    = 'AMM-M-01 synthetic browser acceptance exposed a timestamp-only sidecar rewrite after sealing. Eight focused scanner tests and scanner library Clippy pass after preserving unchanged staged replays. The repeated browser now completes the retained publication, pins its prepared artifact and persists the 60-second MediaVersion; subsequent channel acceptance independently exposed an HLS loader binding gap.'
+resolved    = true
+resolution  = 'Preserve the prior synchronization timestamp only when the entire staged replay state is otherwise identical; changed output still stages normally and sealed-tree integrity validation remains unchanged.'
+
+[[debt]]
+id          = 'hls-bypasses-published-prepared-artifact'
+description = 'Resolve managed add-on Remote Streams through their retained published artifact in the HLS loader, as the native TS loader already does.'
+discovered  = '2026-09-05'
+adr         = '0085'
+evidence    = 'AMM-M-01 synthetic Hybrid-channel acceptance exposed raw provider playback despite a pinned artifact. Four focused HLS loader tests pass, including missing-artifact rejection and unmanaged URL fallback; infra library Clippy passes. A matched sequential Leptos rebuild and the repeated single-worker Chromium test pass: retained publication and its 60-second pin complete, actual Hybrid TS decodes the prepared red frame, and raw provider play is never invoked.'
+resolved    = true
+resolution  = 'The HLS loader resolves its selected RemoteStreamId through the shared published resolver before allowing unmanaged legacy fallback. Binding and artifact errors propagate without invoking raw provider playback.'
 
 [[debt]]
 id          = 'addon-list-publication-recovery-can-stall-permanently-on-windows'
@@ -90,7 +308,7 @@ resolution  = 'AMM-L-01 through AMM-L-05 complete cadence, archive-backed increm
 
 [[debt]]
 id          = 'yt-dlp-list-items-lack-access-sponsorblock-and-subtitle-options'
-description = 'Add inherited list defaults, nullable per-item overrides, bulk preview/undo, and redacted access testing for Firefox, Chrome, or Chromium without persisting cookie material; checked-by-default SponsorBlock removal for finite media under explicit storage budgets; and human-authored default/fallback subtitle artifacts that play on channels.'
+description = 'Add inherited list defaults, nullable per-item overrides, bulk preview/undo, and redacted access testing for Firefox, Chrome, or Chromium without persisting cookie material; checked-by-default finite SponsorBlock interval streaming under ADR 0087 without skip-induced underruns; and human-authored default/fallback subtitle artifacts that play on channels.'
 discovered  = '2026-09-01'
 adr         = '0085'
 evidence    = 'The official package currently has no bulk mutation, access-test, or artifact input and its playback command streams directly to stdout. yt-dlp documents browser-cookie enums, --sponsorblock-remove as video-file post-processing, and --write-subs with --no-write-auto-subs. ADR 0052 already implements global subtitle-language precedence, but generated Remote Streams receive no provider subtitle rows. AMM-K-01 adds schema-declared inherited list/item option storage plus artifact ownership and budget foundations; AMM-M still owns provider declarations, operator UX, production, cleanup, and playback projection. Tracked by AMM-M and plans/addon-list-lifecycle-broadening.md.'

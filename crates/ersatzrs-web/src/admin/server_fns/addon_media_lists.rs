@@ -65,6 +65,9 @@ pub enum AddonMediaListPublishResult {
     PreparingPlaybackDetails {
         item_count: u64,
     },
+    PreparingMedia {
+        item_count: u64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -357,6 +360,10 @@ pub struct AddonMediaListPublicationReadiness {
     pub recommendation_count: u64,
     pub required_playback_detail_count: u64,
     pub required_playback_detail_pending: u64,
+    #[serde(default)]
+    pub required_prepared_media_count: u64,
+    #[serde(default)]
+    pub required_prepared_media_pending: u64,
     pub optional_detail_total: u64,
     pub optional_detail_complete: u64,
     pub optional_detail_pending: u64,
@@ -524,6 +531,8 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationReadiness>
             recommendation_count: value.recommendation_count,
             required_playback_detail_count: value.required_playback_detail_count,
             required_playback_detail_pending: value.required_playback_detail_pending,
+            required_prepared_media_count: value.required_prepared_media_count,
+            required_prepared_media_pending: value.required_prepared_media_pending,
             optional_detail_total: value.optional_detail_total,
             optional_detail_complete: value.optional_detail_complete,
             optional_detail_pending: value.optional_detail_pending,
@@ -2169,6 +2178,11 @@ pub async fn publish_addon_media_list_with_state(
         })
         .await?;
     match outcome {
+        ersatzrs_app::commands::PublishAddonMediaListOutcome::PreparingMedia { pending_items } => {
+            Ok(AddonMediaListPublishResult::PreparingMedia {
+                item_count: pending_items,
+            })
+        }
         ersatzrs_app::commands::PublishAddonMediaListOutcome::Preparing { pending_details } => {
             Ok(AddonMediaListPublishResult::PreparingPlaybackDetails {
                 item_count: pending_details,

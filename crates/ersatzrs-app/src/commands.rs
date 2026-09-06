@@ -4540,6 +4540,8 @@ pub struct ConfirmAddonMediaListRemoval {
 pub enum PublishAddonMediaListOutcome {
     /// Required playback details were queued before the revision can publish.
     Preparing { pending_details: u64 },
+    /// Required processed media was queued before publication takes its lease.
+    PreparingMedia { pending_items: u64 },
     /// One durable generation is queued or already active.
     Queued {
         operation_id: EntityId,
@@ -4819,6 +4821,12 @@ pub async fn publish_addon_media_list(
         let pending_details = repository.prepare_publication_details(command.id).await?;
         if pending_details > 0 {
             return Ok(PublishAddonMediaListOutcome::Preparing { pending_details });
+        }
+        let pending_items = repository
+            .prepare_publication_media(command.id, command.saved_revision)
+            .await?;
+        if pending_items > 0 {
+            return Ok(PublishAddonMediaListOutcome::PreparingMedia { pending_items });
         }
     }
     let form = repository
@@ -6815,6 +6823,7 @@ mod tests {
         episode_number_assignments: Mutex<Vec<EpisodeNumberAssignment>>,
         publication_events: Arc<Mutex<Vec<String>>>,
         pending_publication_details: u64,
+        pending_publication_media: u64,
         fail_publication_commit: bool,
     }
 
@@ -6855,6 +6864,7 @@ mod tests {
         ) -> ersatzrs_core::repositories::Result<AddonMediaListPublicationReadiness> {
             Ok(AddonMediaListPublicationReadiness {
                 required_playback_detail_count: self.pending_publication_details,
+                required_prepared_media_count: self.pending_publication_media,
                 saved_revision: 5,
                 review_state: ersatzrs_domain::AddonMediaListReviewState::Ready,
                 ..AddonMediaListPublicationReadiness::default()
@@ -6916,6 +6926,15 @@ mod tests {
             _id: EntityId,
         ) -> ersatzrs_core::repositories::Result<u64> {
             Ok(self.pending_publication_details)
+        }
+
+        async fn prepare_publication_media(
+            &self,
+            _id: EntityId,
+            saved_revision: i32,
+        ) -> ersatzrs_core::repositories::Result<u64> {
+            assert_eq!(saved_revision, 5);
+            Ok(self.pending_publication_media)
         }
 
         async fn stage_publication(
@@ -8489,6 +8508,30 @@ mod tests {
             .lock()
             .expect("publication calls")
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_on_media_list_publication_prepares_media_before_taking_a_lease() {
+        let repository = RecordingAddonMediaListRepository {
+            pending_publication_media: 2,
+            ..Default::default()
+        };
+        let managed = RecordingManagedOperations::default();
+        assert_eq!(
+            publish_addon_media_list(
+                PublishAddonMediaList {
+                    id: 7,
+                    saved_revision: 5
+                },
+                &repository,
+                &managed,
+            )
+            .await
+            .expect("queue media preparation"),
+            PublishAddonMediaListOutcome::PreparingMedia { pending_items: 2 }
+        );
+        assert!(managed.publication_calls.lock().unwrap().is_empty());
+        assert!(repository.publication_events.lock().unwrap().is_empty());
     }
 
     #[tokio::test]

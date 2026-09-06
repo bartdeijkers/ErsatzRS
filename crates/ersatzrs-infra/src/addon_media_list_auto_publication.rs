@@ -399,6 +399,29 @@ pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
                     Reason::Unavailable
                 };
                 hold_in_tx(&mut tx, list_id, reason).await?;
+            } else if readiness.required_prepared_media_count > 0 {
+                sqlx::query(r#"UPDATE "AddonMediaListAutoPublication" SET "State" = 'preparing' WHERE "AddonMediaListId" = ?"#)
+                    .bind(list_id).execute(&mut *tx).await.repository()?;
+                tx.commit().await.repository()?;
+                // Admission is exact-input idempotent even across a crash after
+                // 'preparing' is saved. Pending cooldowns and failed attempts are
+                // never reset by this automatic reassessment.
+                if crate::addon_media_list_publication_preparation::queue_required_automatic_media(
+                    pool, list_id, draft,
+                )
+                .await
+                .is_err()
+                {
+                    let mut tx = crate::db::begin_write(pool).await.repository()?;
+                    let still_preparing: bool = sqlx::query_scalar(r#"SELECT EXISTS(SELECT 1 FROM "AddonMediaListAutoPublication"
+                        WHERE "AddonMediaListId"=? AND "State"='preparing' AND "DraftRevision"=? AND "PublishedRevision"=?)"#)
+                        .bind(list_id).bind(draft).bind(published).fetch_one(&mut *tx).await.repository()?;
+                    if still_preparing {
+                        hold_in_tx(&mut tx, list_id, Reason::PreparationFailed).await?;
+                    }
+                    tx.commit().await.repository()?;
+                }
+                return Ok(true);
             } else if readiness.required_playback_detail_count > 0 {
                 if row.try_get::<String, _>("State").repository()? == "preparing" {
                     // Mandatory work already belongs to the detail coordinator.
@@ -522,7 +545,14 @@ mod tests {
         "#).execute(&pool).await.unwrap();
         crate::repositories::make_repositories(pool.clone())
             .addon_media_lists
-            .retain_published_revision(1, 1, 1, Utc::now(), &[], &[])
+            .retain_published_revision(
+                1,
+                1,
+                1,
+                Utc::now(),
+                &[],
+                &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
+            )
             .await
             .unwrap();
         pool
@@ -563,6 +593,175 @@ mod tests {
         .fetch_one(pool)
         .await
         .unwrap()
+    }
+
+    // The installed-package fixture uses POSIX; native Windows execution remains separate.
+    #[cfg(unix)]
+    async fn streaming_addition() -> (tempfile::TempDir, DbPool) {
+        let temporary = tempfile::tempdir().unwrap();
+        let pool = crate::addon_media_list_publication_preparation::tests::streaming_fixture(
+            &temporary.path().join("package"),
+        )
+        .await;
+        sqlx::raw_sql(r#"INSERT INTO "MediaSource" ("Id") VALUES (1);
+            INSERT INTO "Library" ("Id","MediaKind","MediaSourceId","Name") VALUES (1,4,1,'Fixture');
+            INSERT INTO "AddonMediaListLibrary" ("AddonMediaListId","LibraryId","FolderName","ManifestPath")
+                VALUES (1,1,'fixture','fixture/list.yml');
+            UPDATE "AddonMediaList" SET "DraftRevision"=1,"PublishedRevision"=1,"ReviewState"=2,
+                "RefreshPublicationPolicy"=1,"PresentationKind"=1,"RequestedPresentationKind"=1,
+                "ProviderMetadataJson"='{"title":"Fixture"}';
+            UPDATE "AddonMediaListItem" SET "Published"=1,"EffectiveLiveness"=2,"ProviderLiveness"=2,
+                "ProviderMetadataJson"='{"title":"Fixture"}';"#)
+            .execute(&pool).await.unwrap();
+        SqliteAddonMediaListRepository(pool.clone())
+            .retain_published_revision(
+                1,
+                1,
+                1,
+                Utc::now(),
+                &[],
+                &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
+            )
+            .await
+            .unwrap();
+        let before = legacy_baseline(
+            &pool,
+            "org.ersatzrs.addon.fixture",
+            "https://example.test/list",
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        sqlx::query(r#"INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId",
+            "DisplayTitle","Title","Kind","Rank","EffectiveLiveness","ProviderLiveness","SourceUrl","ProviderMetadataJson")
+            VALUES (11,1,'new','New','New',4,1,1,1,'https://example.test/new','{"title":"New"}')"#)
+            .execute(&pool).await.unwrap();
+        finish_legacy(&pool, before).await;
+        (temporary, pool)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn automatic_streaming_waits_for_metadata_and_preserves_retry_cooldown() {
+        use crate::addon_media_list_item_jobs::{
+            AddonMediaListItemJobQueue, ItemOperationCompletion, ItemOperationKind,
+        };
+        use ersatzrs_core::addon_media_list_playback::AddonMediaListPlaybackTimelinePlan;
+
+        let (temporary, pool) = streaming_addition().await;
+        // Crash after persisting 'preparing', before admitting any item job.
+        sqlx::query(r#"UPDATE "AddonMediaListAutoPublication" SET "State"='preparing'"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(process_one(&pool, Utc::now()).await.unwrap());
+        assert_eq!(state(&pool).await, "preparing");
+        let operations: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ManagedLibraryOperation""#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(operations, 0);
+        sqlx::query(r#"UPDATE "AddonMediaListItemOperationJob" SET "NextEligibleAt"='2099-01-01T00:00:00Z'"#)
+            .execute(&pool).await.unwrap();
+        let before: (i64, i64, i32, String) = sqlx::query_as(r#"SELECT "Id","Generation","Kind","NextEligibleAt" FROM "AddonMediaListItemOperationJob""#)
+            .fetch_one(&pool).await.unwrap();
+        assert_eq!(before.2, 2);
+        assert!(process_one(&pool, Utc::now()).await.unwrap());
+        let after: (i64, i64, i32, String) = sqlx::query_as(r#"SELECT "Id","Generation","Kind","NextEligibleAt" FROM "AddonMediaListItemOperationJob""#)
+            .fetch_one(&pool).await.unwrap();
+        assert_eq!(after, before);
+        assert_eq!(state(&pool).await, "preparing");
+        assert_eq!(
+            std::fs::read_to_string(temporary.path().join("preparation-invocations")).unwrap(),
+            "runtime-info\n"
+        );
+        sqlx::query(r#"UPDATE "AddonMediaListItemOperationJob" SET "NextEligibleAt"=NULL"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let queue = AddonMediaListItemJobQueue::new(pool.clone());
+        let job = queue
+            .claim_kind(Utc::now(), 90, ItemOperationKind::IntervalMetadata)
+            .await
+            .unwrap()
+            .unwrap();
+        let plan = AddonMediaListPlaybackTimelinePlan::new(
+            20_000,
+            0..20_000,
+            &[5_000..7_125, 18_500..20_000],
+            job.input.context_fingerprint.clone(),
+        )
+        .unwrap();
+        queue
+            .complete(
+                &job,
+                ItemOperationCompletion::IntervalPlan { plan },
+                Utc::now(),
+            )
+            .await
+            .unwrap();
+        assert!(process_one(&pool, Utc::now()).await.unwrap());
+        assert_eq!(state(&pool).await, "queued");
+        assert!(!process_one(&pool, Utc::now()).await.unwrap());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn automatic_streaming_holds_failed_metadata_without_readmitting_it() {
+        use crate::addon_media_list_item_jobs::{
+            AddonMediaListItemJobQueue, ItemOperationCompletion, ItemOperationFailure,
+            ItemOperationKind,
+        };
+        let (_temporary, pool) = streaming_addition().await;
+        assert!(process_one(&pool, Utc::now()).await.unwrap());
+        let queue = AddonMediaListItemJobQueue::new(pool.clone());
+        let job = queue
+            .claim_kind(Utc::now(), 90, ItemOperationKind::IntervalMetadata)
+            .await
+            .unwrap()
+            .unwrap();
+        queue
+            .complete(
+                &job,
+                ItemOperationCompletion::Failed(ItemOperationFailure::Unsupported),
+                Utc::now(),
+            )
+            .await
+            .unwrap();
+        assert!(process_one(&pool, Utc::now()).await.unwrap());
+        assert_eq!(state(&pool).await, "held");
+        assert_eq!(
+            load_hold(&pool, 1).await.unwrap().unwrap().reason,
+            Reason::PreparationFailed
+        );
+        assert!(!process_one(&pool, Utc::now()).await.unwrap());
+        let attempts: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaListItemOperationJob""#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(attempts, 1);
+        let operations: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "ManagedLibraryOperation""#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(operations, 0);
+        // A retry is an explicit manual action, not an automatic new attempt.
+        assert_eq!(
+            SqliteAddonMediaListRepository(pool.clone())
+                .prepare_publication_media(1, 2)
+                .await
+                .unwrap(),
+            1
+        );
+        let attempts: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaListItemOperationJob""#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(attempts, 2);
     }
 
     #[tokio::test]
@@ -753,7 +952,7 @@ mod tests {
         let pool = fixture().await;
         let before = baseline(&pool).await;
         add_item(&pool).await;
-        sqlx::raw_sql(r#"UPDATE "AddonMediaListItem" SET "EffectiveLiveness" = 1 WHERE "Id" = 11;
+        sqlx::raw_sql(r#"UPDATE "AddonMediaListItem" SET "EffectiveLiveness" = 1, "ProviderLiveness" = 1 WHERE "Id" = 11;
             INSERT INTO "AddonMediaListDetailJob" ("AddonMediaListItemId", "AddonMediaListId", "ProviderHost", "State",
                 "OverviewFingerprint", "OverviewRecordJson", "UpdatedAt")
             VALUES (11, 1, 'example.invalid', 4, 'fingerprint', '{}', '2026-09-04T00:00:00Z');
@@ -791,7 +990,14 @@ mod tests {
             .execute(&pool).await.unwrap();
         crate::repositories::make_repositories(pool.clone())
             .addon_media_lists
-            .retain_published_revision(2, 1, 1, Utc::now(), &[], &[])
+            .retain_published_revision(
+                2,
+                1,
+                1,
+                Utc::now(),
+                &[],
+                &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
+            )
             .await
             .unwrap();
         let mut tx = pool.begin().await.unwrap();

@@ -292,6 +292,13 @@ pub struct AddonMediaListPublicationReadiness {
     pub recommendation_count: u64,
     pub required_playback_detail_count: u64,
     pub required_playback_detail_pending: u64,
+    /// Missing playback-processing evidence (streaming intervals or downloaded media).
+    /// The serialized name is retained for compatibility with existing admin clients.
+    #[serde(default)]
+    pub required_prepared_media_count: u64,
+    /// Required playback-processing evidence with an admitted pending attempt.
+    #[serde(default)]
+    pub required_prepared_media_pending: u64,
     pub optional_detail_total: u64,
     pub optional_detail_complete: u64,
     pub optional_detail_pending: u64,
@@ -306,12 +313,14 @@ impl AddonMediaListPublicationReadiness {
     pub fn can_start_publication(&self) -> bool {
         self.blockers.is_empty()
             && self.required_playback_detail_count == 0
+            && self.required_prepared_media_count == 0
             && self.review_state != AddonMediaListReviewState::Publishing
     }
 
     #[must_use]
     pub fn needs_playback_preparation(&self) -> bool {
-        self.blockers.is_empty() && self.required_playback_detail_count > 0
+        self.blockers.is_empty()
+            && (self.required_playback_detail_count > 0 || self.required_prepared_media_count > 0)
     }
 }
 
@@ -609,6 +618,12 @@ pub trait AddonMediaListRepository: Send + Sync {
     /// prepared. A zero count means publication can proceed immediately.
     async fn prepare_publication_details(&self, id: EntityId) -> Result<u64> {
         let _ = id;
+        Ok(0)
+    }
+    /// Queue required processed media for the exact saved draft, outside the
+    /// publication lease. Returns the number of items not yet prepared.
+    async fn prepare_publication_media(&self, id: EntityId, saved_revision: i32) -> Result<u64> {
+        let _ = (id, saved_revision);
         Ok(0)
     }
     /// Stage the included draft for managed file generation.

@@ -3549,7 +3549,7 @@ mod tests {
                     revision,
                     Utc::now() + Duration::minutes(i64::from(revision)),
                     &[],
-                    &[],
+                    &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
                 )
                 .await
                 .expect("retain valid revision snapshot");

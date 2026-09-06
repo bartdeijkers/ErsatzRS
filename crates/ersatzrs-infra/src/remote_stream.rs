@@ -26,6 +26,9 @@ use crate::addons::{
 };
 use crate::db::DbPool;
 
+mod prepared_input;
+pub use prepared_input::{spawn_ffmpeg_with_prepared_remote_input, PreparedRemoteStreamInput};
+
 const REMOTE_INPUT_TIMEOUT_MICROSECONDS: &str = "30000000";
 const REMOTE_STREAM_SEEK_PLACEHOLDER: &str = "{seek}";
 /// Add-on play v2 environment variable carrying a maximum video height.
@@ -156,6 +159,10 @@ impl RemoteStreamCommand {
 pub enum RemoteStreamSource {
     Url(String),
     Addon(RemoteStreamCommand),
+    /// A validated, revision-pinned host artifact; never a provider URL.
+    Prepared(PathBuf),
+    /// Frozen published intent, resolved afresh by each retained-range encoder attempt.
+    RetainedIntervals(Box<crate::published_interval_source::PublishedIntervalSource>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -238,6 +245,18 @@ pub enum RemoteStreamError {
     Spawn(String),
     #[error("remote stream producer did not expose stdout")]
     MissingStdout,
+    #[error("prepared remote input startup was cancelled")]
+    PreparedCancelled,
+    #[error("prepared remote input startup deadline expired")]
+    PreparedTimeout,
+    #[error("prepared remote input request exceeds its size bound")]
+    PreparedRequestTooLarge,
+    #[error("prepared remote input producer failed")]
+    PreparedProducerFailed,
+    #[error("prepared remote input descendant termination could not be confirmed")]
+    PreparedTerminationUnconfirmed,
+    #[error("published interval playback requires a prepared producer input")]
+    UnresolvedIntervals,
 }
 
 /// Consumer process paired with an optional Remote Stream producer.
@@ -272,10 +291,20 @@ impl RemoteStreamProcess {
     ///
     /// # Errors
     ///
-    /// Returns an error when waiting for the consumer fails.
+    /// Returns an error when waiting for the consumer fails, or when its prepared
+    /// producer failed even though the consumer accepted a partial input.
     pub async fn wait(&mut self) -> std::io::Result<ExitStatus> {
         let result = self.child.wait().await;
+        let prepared_result = self
+            .producer_pipe
+            .as_ref()
+            .and_then(|pipe| pipe.prepared_result.clone());
         self.shutdown_producer().await;
+        if prepared_result
+            .is_some_and(|result| result.load(std::sync::atomic::Ordering::Acquire) == 2)
+        {
+            return Err(io::Error::other("prepared media producer failed"));
+        }
         result
     }
 
@@ -308,6 +337,7 @@ impl RemoteStreamProcess {
     }
 
     async fn shutdown_producer(&mut self) {
+        self.cancel_producer();
         if let Some(mut pipe) = self.producer_pipe.take() {
             pipe.shutdown().await;
         }
@@ -332,6 +362,7 @@ impl DerefMut for RemoteStreamProcess {
 pub(crate) struct RemoteStreamProducerPipe {
     cancel: Option<oneshot::Sender<()>>,
     task: Option<JoinHandle<()>>,
+    prepared_result: Option<std::sync::Arc<std::sync::atomic::AtomicU8>>,
 }
 
 impl RemoteStreamProducerPipe {
@@ -475,6 +506,73 @@ pub async fn resolve_remote_stream_with_addons(
     resolve_remote_stream_with_addons_mode(pool, definition, runtime, false).await
 }
 
+/// Resolve direct playback using an immutable publication's effective options.
+/// Legacy callers keep the separate v1/v2 resolver; option-bound playback never
+/// falls back when its installed schema or v3 capability is unavailable.
+///
+/// # Errors
+/// Rejects invalid definitions, changed schemas and missing required preparation.
+pub async fn resolve_remote_stream_with_item_options(
+    pool: &DbPool,
+    definition: &RemoteStreamDefinition,
+    runtime: &AddonRuntimeContext,
+    options: &crate::addon_media_list_options::ResolvedAddonItemOptions,
+) -> Result<ResolvedRemoteStream, RemoteStreamError> {
+    use ersatzrs_addon_contract::{
+        AddonMediaListOptionOperation, CAPABILITY_REMOTE_STREAM_PLAY_V3, ENV_MEDIA_LIST_OPTIONS,
+    };
+
+    validate_definition(definition)?;
+    let unavailable =
+        || RemoteStreamError::Command("published item playback options are unavailable".to_owned());
+    let addon_id = trimmed(definition.addon.as_ref()).ok_or_else(unavailable)?;
+    if addon_id != options.schema.addon_id {
+        return Err(unavailable());
+    }
+    let liveness = definition.effective_liveness()?;
+    if options.requires_preparation(liveness) {
+        return Err(RemoteStreamError::Command(
+            "published item requires its prepared media artifact".to_owned(),
+        ));
+    }
+    let installation = crate::addons::load_installed_addon(pool, addon_id)
+        .await
+        .map_err(|_| unavailable())?
+        .ok_or_else(unavailable)?;
+    options
+        .validate_installed_schema(&installation.manifest)
+        .map_err(|_| unavailable())?;
+    let resolved = crate::addons::resolve_enabled_addon_command(
+        pool,
+        addon_id,
+        CAPABILITY_REMOTE_STREAM_PLAY_V3,
+        "play",
+        runtime,
+    )
+    .await
+    .map_err(|_| unavailable())?;
+    if resolved.state_revision != installation.state_revision {
+        return Err(unavailable());
+    }
+    let envelope = options
+        .for_operation(AddonMediaListOptionOperation::Playback, liveness)
+        .map_err(|_| unavailable())?;
+    let mut command = remote_stream_command_from_addon(
+        resolved,
+        trimmed(definition.url.as_ref()).unwrap_or_default(),
+        true,
+    );
+    command.environment.insert(
+        "ERSATZRS_ADDON_CAPABILITY".to_owned(),
+        CAPABILITY_REMOTE_STREAM_PLAY_V3.to_owned(),
+    );
+    command.environment.insert(
+        ENV_MEDIA_LIST_OPTIONS.to_owned(),
+        serde_json::to_string(&envelope).map_err(|_| unavailable())?,
+    );
+    resolve_remote_stream_source(definition, Some(command), false)
+}
+
 /// Resolve a source for scanner persistence without admitting unknown
 /// liveness to playback.
 ///
@@ -613,9 +711,19 @@ pub fn remote_url_input_options(url: &str, is_live: bool) -> Vec<String> {
     options
 }
 
-#[must_use]
-pub fn remote_stream_input_file(stream: &ResolvedRemoteStream) -> InputFile {
-    match &stream.source {
+/// Build an ordinary remote input. Frozen interval intent must first be resolved
+/// into playback-owned retained inputs; it cannot fall back to uncut playback.
+///
+/// # Errors
+/// Returns `UnresolvedIntervals` for a published retained-range source.
+pub fn remote_stream_input_file(
+    stream: &ResolvedRemoteStream,
+) -> Result<InputFile, RemoteStreamError> {
+    Ok(match &stream.source {
+        RemoteStreamSource::RetainedIntervals(_) => {
+            return Err(RemoteStreamError::UnresolvedIntervals);
+        }
+        RemoteStreamSource::Prepared(path) => InputFile::video(path.to_string_lossy()),
         RemoteStreamSource::Url(url) => {
             let input = InputFile::video(url.clone()).with_input_options(remote_url_input_options(
                 url,
@@ -639,14 +747,16 @@ pub fn remote_stream_input_file(stream: &ResolvedRemoteStream) -> InputFile {
                 input
             }
         }
-    }
+    })
 }
 
 #[must_use]
 pub fn remote_stream_producer(stream: &ResolvedRemoteStream) -> Option<&RemoteStreamCommand> {
     match &stream.source {
         RemoteStreamSource::Addon(command) => Some(command),
-        RemoteStreamSource::Url(_) => None,
+        RemoteStreamSource::Url(_)
+        | RemoteStreamSource::Prepared(_)
+        | RemoteStreamSource::RetainedIntervals(_) => None,
     }
 }
 
@@ -690,6 +800,8 @@ pub fn remote_stream_playback_start(
 #[must_use]
 pub fn redacted_source_label(source: &RemoteStreamSource) -> String {
     match source {
+        RemoteStreamSource::RetainedIntervals(_) => "published interval media".to_owned(),
+        RemoteStreamSource::Prepared(_) => "prepared remote media".to_owned(),
         RemoteStreamSource::Url(url) => {
             let scheme = url_scheme(url).unwrap_or("unknown");
             let authority = url
@@ -711,6 +823,14 @@ pub fn redacted_source_label(source: &RemoteStreamSource) -> String {
 #[must_use]
 pub fn redact_remote_stream_output(value: &str, stream: &ResolvedRemoteStream) -> String {
     let source_redacted = match &stream.source {
+        // Concat diagnostics may include private capabilities from file options.
+        // Keep this source's raw encoder text out of operator-visible diagnostics.
+        RemoteStreamSource::RetainedIntervals(_) => {
+            return "published interval media diagnostics redacted".to_owned();
+        }
+        RemoteStreamSource::Prepared(path) => {
+            value.replace(path.to_string_lossy().as_ref(), "[prepared media]")
+        }
         RemoteStreamSource::Url(url) => value.replace(url, &redacted_source_label(&stream.source)),
         RemoteStreamSource::Addon(command) if command_has_file_backed_secret(command) => {
             FILE_SECRET_DIAGNOSTIC.to_owned()
@@ -959,6 +1079,13 @@ fn bounded_tail(value: &str, limit: usize) -> String {
 pub(crate) fn spawn_remote_stream_producer(
     command: &RemoteStreamCommand,
 ) -> Result<ManagedAddonChild, RemoteStreamError> {
+    spawn_remote_stream_producer_with_stdin(command, false)
+}
+
+fn spawn_remote_stream_producer_with_stdin(
+    command: &RemoteStreamCommand,
+    piped_stdin: bool,
+) -> Result<ManagedAddonChild, RemoteStreamError> {
     let command = command.with_seek("0");
     let mut process = platform_script_process(&command);
     process
@@ -968,6 +1095,9 @@ pub(crate) fn spawn_remote_stream_producer(
         .envs(&command.environment)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if piped_stdin {
+        process.stdin(Stdio::piped());
+    }
     spawn_managed_addon_process(process)
         .map_err(|error| RemoteStreamError::Spawn(error.to_string()))
 }
@@ -989,35 +1119,8 @@ pub fn spawn_ffmpeg_with_remote_input(
         .as_ref()
         .map(spawn_remote_stream_producer)
         .transpose()?;
-    // ADR 0003: move an oversized graph out of argv before spawning, so a
-    // complex channel cannot become unspawnable on a platform with a tight
-    // command-line limit.
-    let (arguments, filter_graph_file) = crate::filter_graph_file::apply_filter_graph_transport(
-        &command.executable,
-        &arguments,
-        &crate::file_system_layout::filter_graph_folder(),
-        false,
-    );
-    let mut process = Command::new(&command.executable);
-    process
-        .args(&arguments)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    if producer.is_some() {
-        process.stdin(Stdio::piped());
-    } else {
-        process.stdin(Stdio::null());
-    }
-    if let Some(working_directory) = working_directory {
-        process.current_dir(working_directory);
-    }
-    for variable in &command.environment {
-        process.env(&variable.name, &variable.value);
-    }
-    let mut consumer = process
-        .spawn()
-        .map_err(|error| RemoteStreamError::Spawn(error.to_string()))?;
+    let (mut consumer, filter_graph_file) =
+        spawn_remote_stream_consumer(command, &arguments, working_directory, producer.is_some())?;
 
     let producer_pipe = if let Some(mut producer_child) = producer_child.take() {
         let Some(consumer_stdin) = consumer.stdin.take() else {
@@ -1060,6 +1163,45 @@ pub fn spawn_ffmpeg_with_remote_input(
         producer_pipe,
         filter_graph_file,
     })
+}
+
+fn spawn_remote_stream_consumer(
+    command: &FfmpegCommand,
+    arguments: &[String],
+    working_directory: Option<&Path>,
+    piped_stdin: bool,
+) -> Result<(Child, Option<crate::filter_graph_file::FilterGraphFile>), RemoteStreamError> {
+    // ADR 0003: move an oversized graph out of argv before spawning, so a
+    // complex channel cannot become unspawnable on a platform with a tight
+    // command-line limit.
+    let (arguments, filter_graph_file) = crate::filter_graph_file::apply_filter_graph_transport(
+        &command.executable,
+        arguments,
+        &crate::file_system_layout::filter_graph_folder(),
+        false,
+    );
+    let mut process = Command::new(&command.executable);
+    process
+        .args(&arguments)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    if piped_stdin {
+        process.stdin(Stdio::piped());
+    } else {
+        process.stdin(Stdio::null());
+    }
+    if let Some(working_directory) = working_directory {
+        process.current_dir(working_directory);
+    }
+    for variable in &command.environment {
+        process.env(&variable.name, &variable.value);
+    }
+    let consumer = process
+        .spawn()
+        .map_err(|error| RemoteStreamError::Spawn(error.to_string()))?;
+
+    Ok((consumer, filter_graph_file))
 }
 
 fn prepare_remote_stream_spawn(
@@ -1125,18 +1267,23 @@ pub(crate) fn pipe_remote_stream_producer(
         effective_seek,
         secrets,
         suppress_diagnostics,
+        prepared: None,
     };
-    let task = tokio::spawn(run_remote_stream_producer(
+    let producer_task = run_remote_stream_producer(
         producer,
         stdout,
         consumer_stdin,
         stderr_task,
         cancellation,
         diagnostics,
-    ));
+    );
+    let task = tokio::spawn(async move {
+        let _ = producer_task.await;
+    });
     Ok(RemoteStreamProducerPipe {
         cancel: Some(cancel),
         task: Some(task),
+        prepared_result: None,
     })
 }
 
@@ -1146,25 +1293,53 @@ struct RemoteStreamProducerDiagnostics {
     effective_seek: Option<String>,
     secrets: Vec<String>,
     suppress_diagnostics: bool,
+    prepared: Option<PreparedProducerReplay>,
 }
 
+struct PreparedProducerReplay {
+    prefix: Vec<u8>,
+    exited: Option<ExitStatus>,
+    result: std::sync::Arc<std::sync::atomic::AtomicU8>,
+}
+
+#[allow(clippy::too_many_lines)] // Keep producer status, pipe closure and diagnostics under one owner.
 async fn run_remote_stream_producer(
     mut producer: ManagedAddonChild,
-    stdout: ChildStdout,
+    mut stdout: ChildStdout,
     consumer_stdin: ChildStdin,
     stderr_task: Option<JoinHandle<String>>,
     mut cancellation: oneshot::Receiver<()>,
     diagnostics: RemoteStreamProducerDiagnostics,
-) {
+) -> bool {
     let RemoteStreamProducerDiagnostics {
         label,
         context,
         effective_seek,
         secrets,
         suppress_diagnostics,
+        prepared,
     } = diagnostics;
+    let mut held_stdin = Some(consumer_stdin);
+    let copy = async {
+        if let Some(prepared) = &prepared {
+            let stdin = held_stdin
+                .as_mut()
+                .ok_or_else(|| io::Error::other("prepared consumer stdin unavailable"))?;
+            stdin.write_all(&prepared.prefix).await?;
+            tokio::io::copy(&mut stdout, stdin).await?;
+            Ok(())
+        } else {
+            copy_remote_producer_to_stdin(
+                stdout,
+                held_stdin
+                    .take()
+                    .ok_or_else(|| io::Error::other("consumer stdin unavailable"))?,
+            )
+            .await
+        }
+    };
     let copy_result = tokio::select! {
-        result = copy_remote_producer_to_stdin(stdout, consumer_stdin) => Some(result),
+        result = copy => Some(result),
         _ = &mut cancellation => None,
     };
     let mut cancelled = copy_result.is_none();
@@ -1172,7 +1347,9 @@ async fn run_remote_stream_producer(
         let _ = producer.start_kill();
     }
 
-    let status = if cancelled {
+    let status = if let Some(status) = prepared.as_ref().and_then(|prepared| prepared.exited) {
+        Ok(status)
+    } else if cancelled {
         producer.wait().await
     } else {
         let wait_result = tokio::select! {
@@ -1187,11 +1364,21 @@ async fn run_remote_stream_producer(
             producer.wait().await
         }
     };
+    if let Some(prepared) = &prepared {
+        let failed = !status.as_ref().is_ok_and(|status| status.success()) && !cancelled;
+        prepared.result.store(
+            if failed { 2 } else { 1 },
+            std::sync::atomic::Ordering::Release,
+        );
+    }
+    // Prepared EOF reaches the consumer only after the producer status is known.
+    drop(held_stdin);
     let _ = producer.start_kill();
     let stderr = match stderr_task {
         Some(task) => finish_stderr_task(task).await,
         None => String::new(),
     };
+    let reaped = status.is_ok();
     match status {
         Ok(status)
             if status.success() && copy_result.as_ref().is_some_and(std::result::Result::is_ok) => {
@@ -1210,7 +1397,12 @@ async fn run_remote_stream_producer(
             "remote stream producer stopped after the consumer closed its input"
         ),
         Ok(status) => {
-            let diagnostic = producer_operation_diagnostic(&stderr, &secrets, suppress_diagnostics);
+            let diagnostic = producer_playback_diagnostic(
+                &stderr,
+                &secrets,
+                suppress_diagnostics,
+                prepared.is_some(),
+            );
             tracing::warn!(
                 surface = context.surface.as_str(),
                 channel_number = context.channel_number.as_deref().unwrap_or("n/a"),
@@ -1226,7 +1418,12 @@ async fn run_remote_stream_producer(
             );
         }
         Err(error) => {
-            let diagnostic = producer_operation_diagnostic(&stderr, &secrets, suppress_diagnostics);
+            let diagnostic = producer_playback_diagnostic(
+                &stderr,
+                &secrets,
+                suppress_diagnostics,
+                prepared.is_some(),
+            );
             tracing::warn!(
                 surface = context.surface.as_str(),
                 channel_number = context.channel_number.as_deref().unwrap_or("n/a"),
@@ -1241,6 +1438,7 @@ async fn run_remote_stream_producer(
             );
         }
     }
+    reaped
 }
 
 async fn finish_stderr_task(mut task: JoinHandle<String>) -> String {
@@ -1250,6 +1448,21 @@ async fn finish_stderr_task(mut task: JoinHandle<String>) -> String {
         task.abort();
         let _ = task.await;
         String::new()
+    }
+}
+
+fn producer_playback_diagnostic(
+    stderr: &str,
+    secrets: &[String],
+    suppress_diagnostics: bool,
+    prepared: bool,
+) -> AddonOperationError {
+    if prepared {
+        // Prepared request JSON can carry source identity and private values
+        // absent from the environment. Do not infer safe substrings from stderr.
+        AddonOperationError::new(OPERATION_CODE_FAILED, "prepared media producer failed")
+    } else {
+        producer_operation_diagnostic(stderr, secrets, suppress_diagnostics)
     }
 }
 
@@ -1620,6 +1833,38 @@ content_rating: PG
     }
 
     #[test]
+    fn prepared_remote_media_uses_seekable_local_input() {
+        // ADR 0085: processed files remain Remote Stream artifacts, not Local media.
+        let stream = ResolvedRemoteStream {
+            source: RemoteStreamSource::Prepared(PathBuf::from("objects/prepared.media")),
+            liveness: RemoteStreamLiveness::Finite,
+            is_live: false,
+            configured_duration: Some("00:01:30.250".to_owned()),
+            fallback_query: None,
+            uses_addon: false,
+        };
+        let input = remote_stream_input_file(&stream).unwrap();
+        assert!(!input.seek_after_input);
+        assert!(remote_stream_producer(&stream).is_none());
+        let arguments = ersatzrs_ffmpeg::CommandGenerator::generate_arguments(
+            &[input],
+            &[ersatzrs_ffmpeg::PipelineStep::StreamSeek {
+                position: std::time::Duration::from_millis(12_500),
+            }],
+            false,
+        );
+        insta::assert_snapshot!("prepared_remote_media_input", arguments.join(" "));
+        assert_eq!(
+            redacted_source_label(&stream.source),
+            "prepared remote media"
+        );
+        assert_eq!(
+            redact_remote_stream_output("failed to read objects/prepared.media", &stream),
+            "failed to read [prepared media]"
+        );
+    }
+
+    #[test]
     fn formats_windows_batch_command_as_raw_cmd_arguments() {
         let command = RemoteStreamCommand {
             program: r"C:\Program Files\ErsatzRS\Remote Producer.bat".to_owned(),
@@ -1912,7 +2157,7 @@ content_rating: PG
             uses_addon: true,
         };
 
-        let input = remote_stream_input_file(&stream);
+        let input = remote_stream_input_file(&stream).unwrap();
 
         assert_eq!(input.path, "pipe:0");
         assert!(input.input_options.is_empty());
@@ -1945,8 +2190,8 @@ content_rating: PG
             remote_stream_playback_start(Some(&finite), requested),
             requested
         );
-        assert!(!remote_stream_input_file(&live).allow_readrate);
-        assert!(remote_stream_input_file(&finite).allow_readrate);
+        assert!(!remote_stream_input_file(&live).unwrap().allow_readrate);
+        assert!(remote_stream_input_file(&finite).unwrap().allow_readrate);
     }
 
     #[test]
@@ -2072,6 +2317,19 @@ content_rating: PG
         let diagnostic = producer_operation_diagnostic("legacy failure", &[], false);
         assert_eq!(diagnostic.code, OPERATION_CODE_FAILED);
         assert_eq!(diagnostic.message, "legacy failure");
+    }
+
+    #[test]
+    fn prepared_producer_diagnostics_never_echo_json_request_values_or_codes() {
+        for stderr in [
+            r"download failed: https:\/\/fixture.example.test\/private-item?signature=request-only-placeholder",
+            r#"{"code":"private-provider-id","message":"request-only-placeholder"}"#,
+            "failed private-provider-id request-only-placeholder",
+        ] {
+            let diagnostic = producer_playback_diagnostic(stderr, &[], false, true);
+            assert_eq!(diagnostic.code, OPERATION_CODE_FAILED);
+            assert_eq!(diagnostic.message, "prepared media producer failed");
+        }
     }
 
     #[test]

@@ -3,20 +3,20 @@ use std::process::Stdio;
 use std::{
     path::PathBuf,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 
 use axum::{
     body::Body,
-    http::{header, HeaderMap, HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
-use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
+use ersatzrs_core::path_replacement::{PathPlatform, PathReplacement, replace_path};
 use ersatzrs_core::repositories::{
     ChannelRepository, ConfigRepository, MediaSourceRepository, RepositoryError,
 };
@@ -26,44 +26,48 @@ use ersatzrs_domain::{
     StreamingMode,
 };
 use ersatzrs_ffmpeg::{
-    build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command, ConcatPlaylist,
-    DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FrameRate,
-    FrameSize, GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions, OutputFormat,
-    OutputMetadata, PipelineRequest, SourceAudioCodec, SourceAudioStream, SourceVideoCodec,
-    SourceVideoStream, WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
+    ConcatPlaylist, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport,
+    FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, MPEGTS_PCR_PERIOD_MS,
+    MpegTsMuxingOptions, OutputFormat, OutputMetadata, PipelineRequest, SourceAudioCodec,
+    SourceAudioStream, SourceVideoCodec, SourceVideoStream, WatermarkOpacityClock,
+    build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command,
 };
 use ersatzrs_infra::addons::AddonRuntimeContext;
 use ersatzrs_infra::channel_playout::load_channel_playout_context;
 use ersatzrs_infra::db::DbPool;
-use ersatzrs_infra::dynamic_text::{shutdown_dynamic_text_controllers, DynamicTextController};
+use ersatzrs_infra::dynamic_text::{DynamicTextController, shutdown_dynamic_text_controllers};
 use ersatzrs_infra::ffmpeg_capabilities::{
     learned_hardware_decode_denial, persist_hardware_decode_denial_into_runtime,
 };
 use ersatzrs_infra::ffmpeg_config::playback_language_preferences;
 use ersatzrs_infra::file_system_layout;
 use ersatzrs_infra::hls_worker::{
-    build_mpeg_ts_slate_command, MpegTsSlateCommandRequest, ALL_STREAMS_IN_USE_SLATE_MESSAGE,
+    ALL_STREAMS_IN_USE_SLATE_MESSAGE, MpegTsSlateCommandRequest, build_mpeg_ts_slate_command,
 };
 use ersatzrs_infra::playback::{
+    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
+    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
     render_playback_graphics_overlays, select_channel_playback_subtitle,
     select_custom_playback_streams, select_pinned_playback_subtitle,
     select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
     subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
-    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
-    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
+};
+use ersatzrs_infra::published_interval_source::IntervalPlaybackContext;
+use ersatzrs_infra::remote_stream::{
+    PreparedRemoteStreamInput, spawn_ffmpeg_with_prepared_remote_input,
 };
 use ersatzrs_infra::remote_stream::{
-    decode_persisted_liveness, redact_remote_stream_output, remote_stream_input_file,
-    remote_stream_playback_start, remote_stream_producer, resolve_remote_stream_with_addons,
-    spawn_ffmpeg_with_remote_input, RemoteStreamCommand, RemoteStreamDefinition,
-    RemoteStreamProcess, RemoteStreamSpawnContext, ResolvedRemoteStream,
+    RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSource,
+    RemoteStreamSpawnContext, ResolvedRemoteStream, decode_persisted_liveness,
+    redact_remote_stream_output, remote_stream_input_file, remote_stream_playback_start,
+    remote_stream_producer, resolve_remote_stream_with_addons, spawn_ffmpeg_with_remote_input,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
-    load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
     ActiveTranscodeReservation, ActiveTranscodeSlot, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
+    load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
 };
 use serde::Deserialize;
 use sqlx::Row;
@@ -73,6 +77,9 @@ use tokio::process::Command;
 use tokio::sync::{Notify, RwLock};
 use tokio_util::io::ReaderStream;
 
+use super::retained_stream_buffer::{
+    ReservePolicy, TERMINAL_FAILURE, TERMINAL_SUCCESS, forward_retained_ts,
+};
 use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::{hls, hls::HlsQuery};
@@ -154,12 +161,17 @@ pub async fn serve_channel_stream(
     channel_number: &str,
     output_format: OutputFormat,
 ) -> Response {
-    let channel = match state
-        .repositories
-        .channel
-        .get_by_number(channel_number)
-        .await
-    {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    let lookup = tokio::time::timeout_at(
+        deadline,
+        state.repositories.channel.get_by_number(channel_number),
+    )
+    .await;
+    let Ok(lookup) = lookup else {
+        tracing::warn!("stream channel discovery exceeded startup deadline");
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let channel = match lookup {
         Ok(channel) if channel.is_enabled => channel,
         Ok(_) => return StatusCode::NOT_FOUND.into_response(),
         Err(error) => {
@@ -169,7 +181,14 @@ pub async fn serve_channel_stream(
     };
 
     let effective_streaming_mode = channel.streaming_mode;
-    serve_channel_stream_with_channel(state, channel, output_format, effective_streaming_mode).await
+    serve_channel_stream_with_channel(
+        state,
+        channel,
+        output_format,
+        effective_streaming_mode,
+        deadline,
+    )
+    .await
 }
 
 pub async fn serve_concat_playlist(
@@ -216,12 +235,17 @@ pub async fn serve_concat_playlist(
 }
 
 pub async fn serve_internal_legacy_stream(state: &AppState, channel_number: &str) -> Response {
-    let channel = match state
-        .repositories
-        .channel
-        .get_by_number(channel_number)
-        .await
-    {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+    let lookup = tokio::time::timeout_at(
+        deadline,
+        state.repositories.channel.get_by_number(channel_number),
+    )
+    .await;
+    let Ok(lookup) = lookup else {
+        tracing::warn!("internal stream channel discovery exceeded startup deadline");
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let channel = match lookup {
         Ok(channel) if channel.is_enabled => channel,
         Ok(_) => return StatusCode::NOT_FOUND.into_response(),
         Err(error) => {
@@ -235,6 +259,7 @@ pub async fn serve_internal_legacy_stream(state: &AppState, channel_number: &str
         channel,
         OutputFormat::MpegTs,
         StreamingMode::TransportStream,
+        deadline,
     )
     .await
 }
@@ -245,9 +270,281 @@ async fn serve_channel_stream_with_channel(
     channel: Channel,
     output_format: OutputFormat,
     effective_streaming_mode: StreamingMode,
+    deadline: tokio::time::Instant,
+) -> Response {
+    serve_channel_stream_admitted(
+        state,
+        channel,
+        output_format,
+        effective_streaming_mode,
+        deadline,
+        None,
+    )
+    .await
+}
+
+struct IntervalStreamAdmission {
+    reservation: ActiveTranscodeReservation,
+    deadline: tokio::time::Instant,
+    cancellation: tokio::sync::oneshot::Receiver<()>,
+}
+
+async fn await_retained_startup_stage<T, E>(
+    cancellation: &mut tokio::sync::oneshot::Receiver<()>,
+    sender: tokio::sync::oneshot::Sender<()>,
+    operation: impl std::future::Future<Output = Result<T, E>>,
+) -> (bool, Result<T, E>) {
+    tokio::pin!(operation);
+    tokio::select! {
+        biased;
+        _ = cancellation => {},
+        result = &mut operation => return (false, result),
+    }
+    drop(sender);
+    (true, operation.await)
+}
+
+#[derive(Clone)]
+struct RetainedTsOutput {
+    muxrate_bps: u64,
+    remaining: Option<Duration>,
+    terminal: Arc<std::sync::atomic::AtomicU8>,
+    completed: Arc<Notify>,
+}
+
+impl RetainedTsOutput {
+    fn from_command(
+        command: &FfmpegCommand,
+        remaining: Option<Duration>,
+    ) -> Result<Self, &'static str> {
+        let muxrate_bps = command
+            .arguments
+            .windows(2)
+            .find(|pair| pair[0] == "-muxrate")
+            .and_then(|pair| pair[1].parse::<u64>().ok())
+            .ok_or("retained MPEG-TS requires a known constant mux rate")?;
+        ReservePolicy::new(muxrate_bps, remaining)
+            .map_err(|_| "retained MPEG-TS profile exceeds the encoded reserve bound")?;
+        Ok(Self {
+            muxrate_bps,
+            remaining,
+            terminal: Arc::new(std::sync::atomic::AtomicU8::new(0)),
+            completed: Arc::new(Notify::new()),
+        })
+    }
+}
+
+fn serve_channel_stream_admitted(
+    state: &AppState,
+    channel: Channel,
+    output_format: OutputFormat,
+    mode: StreamingMode,
+    deadline: tokio::time::Instant,
+    admission: Option<IntervalStreamAdmission>,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send + '_>> {
+    Box::pin(serve_channel_stream_admitted_inner(
+        state,
+        channel,
+        output_format,
+        mode,
+        deadline,
+        admission,
+    ))
+}
+
+/// Source-free capacity waiting; dropping the response signals the owned task.
+// Keep admission, setup cancellation and response forwarding under one owner.
+#[allow(clippy::too_many_lines)]
+fn retained_interval_stream_response(
+    state: AppState,
+    channel: Channel,
+    output_format: OutputFormat,
+    mode: StreamingMode,
+    deadline: tokio::time::Instant,
+) -> Response {
+    if output_format != OutputFormat::MpegTs {
+        tracing::warn!(
+            channel_id = channel.id,
+            "retained interval byte reserve requires MPEG-TS output"
+        );
+        return (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "retained interval playback currently requires MPEG-TS output",
+        )
+            .into_response();
+    }
+    let (reader, mut writer) = tokio::io::duplex(STREAM_BODY_BUFFER_BYTES);
+    let cancel = Arc::new(Notify::new());
+    let body = guarded_stream_body(reader, cancel.clone());
+    tokio::spawn(async move {
+        use futures_util::StreamExt as _;
+
+        let setup = load_capacity_slate_context(&state, &channel, "retained interval capacity");
+        let context = tokio::select! {
+            biased;
+            () = cancel.notified() => return,
+            () = tokio::time::sleep_until(deadline) => return,
+            result = setup => result,
+        };
+        let Ok((profile, frame_rate, capabilities)) = context else {
+            return;
+        };
+        let slate_dir = mpeg_ts_capacity_slate_dir(channel.id);
+        let mut capacity_command = None;
+        let reservation = loop {
+            let limit = tokio::select! {
+                biased;
+                () = cancel.notified() => break None,
+                () = tokio::time::sleep_until(deadline) => break None,
+                result = load_active_transcode_limit(&state.pool) => match result {
+                    Ok(limit) => limit.unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT),
+                    Err(_) => break None,
+                },
+            };
+            if let Some(reservation) = try_reserve_active_transcode(
+                limit,
+                ActiveTranscodeSlot::new_mpeg_ts(&channel.number),
+            ) {
+                break Some(reservation);
+            }
+            request_hls_capacity_reclaim_for_mpeg_ts(&channel.number);
+            if capacity_command.is_none() {
+                capacity_command = build_mpeg_ts_slate_command(MpegTsSlateCommandRequest {
+                    working_dir: &slate_dir,
+                    duration: MPEG_TS_CAPACITY_SLATE_DURATION,
+                    playback_profile: &profile,
+                    target_frame_rate: frame_rate,
+                    metadata: OutputMetadata::default(),
+                    runtime_capabilities: capabilities.clone(),
+                    message: ALL_STREAMS_IN_USE_SLATE_MESSAGE,
+                })
+                .await;
+            }
+            let Some(command) = &capacity_command else {
+                break None;
+            };
+            let Ok(mut child) = spawn_stream_process(command, None, &channel.number) else {
+                break None;
+            };
+            let operation =
+                supervise_stream_process(&mut child, &mut writer, &cancel, &channel.number, None);
+            tokio::pin!(operation);
+            let outcome = tokio::select! {
+                result = &mut operation => result,
+                () = tokio::time::sleep_until(deadline) => {
+                    cancel.notify_one();
+                    operation.await
+                }
+            };
+            if !matches!(outcome, DirectStreamOutcome::Completed) {
+                break None;
+            }
+        };
+        if let Some(reservation) = reservation {
+            let (sender, receiver) = tokio::sync::oneshot::channel();
+            // Box this reuse of the ordinary builder: no second metadata/graphics path.
+            let operation = Box::pin(serve_channel_stream_admitted(
+                &state,
+                channel.clone(),
+                output_format,
+                mode,
+                deadline,
+                Some(IntervalStreamAdmission {
+                    reservation,
+                    deadline,
+                    cancellation: receiver,
+                }),
+            ));
+            tokio::pin!(operation);
+            let response = tokio::select! {
+                biased;
+                () = cancel.notified() => {
+                    drop(writer); drop(sender); drop(operation.await);
+                    cleanup_stream_artifact(&slate_dir).await; return;
+                },
+                () = tokio::time::sleep_until(deadline) => {
+                    tracing::warn!(channel_id = channel.id, "retained MPEG-TS startup deadline expired");
+                    drop(writer); drop(sender); drop(operation.await);
+                    cleanup_stream_artifact(&slate_dir).await; return;
+                },
+                response = &mut operation => Some(response),
+            };
+            if let Some(response) = response {
+                if response.status().is_success() {
+                    if let Some(output) = response.extensions().get::<RetainedTsOutput>().cloned() {
+                        if let Ok(policy) = ReservePolicy::new(output.muxrate_bps, output.remaining)
+                        {
+                            let stream = response
+                                .into_body()
+                                .into_data_stream()
+                                .map(|chunk| chunk.map_err(std::io::Error::other));
+                            let mut source = tokio_util::io::StreamReader::new(stream);
+                            if let Err(error) = forward_retained_ts(
+                                &mut source,
+                                &mut writer,
+                                policy,
+                                &output.terminal,
+                                deadline,
+                                &cancel,
+                            )
+                            .await
+                            {
+                                tracing::warn!(channel_id = channel.id, %error, "retained MPEG-TS reserve ended");
+                            }
+                            drop(writer); // Public output ends before asynchronous child cleanup.
+                            drop(source); // Body disposal signals the owned encoder supervisor.
+                            if output.terminal.load(Ordering::Acquire) == 0 {
+                                output.completed.notified().await;
+                            }
+                        }
+                    } else {
+                        tracing::warn!(
+                            channel_id = channel.id,
+                            "retained MPEG-TS response has no verified rate contract"
+                        );
+                    }
+                } else {
+                    tracing::warn!(channel_id = channel.id, status = %response.status(),
+                        "retained interval startup was refused");
+                }
+            }
+        }
+        cleanup_stream_artifact(&slate_dir).await;
+    });
+    let mut response = body.into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(content_type_for_output_format(output_format)),
+    );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+#[allow(clippy::too_many_lines)]
+async fn serve_channel_stream_admitted_inner(
+    state: &AppState,
+    channel: Channel,
+    output_format: OutputFormat,
+    effective_streaming_mode: StreamingMode,
+    startup_deadline: tokio::time::Instant,
+    interval_admission: Option<IntervalStreamAdmission>,
 ) -> Response {
     let now = Utc::now();
-    let active = match load_active_media_path(&state.pool, channel.id, now).await {
+    let active = tokio::time::timeout_at(
+        startup_deadline,
+        load_active_media_path(&state.pool, channel.id, now),
+    )
+    .await;
+    let Ok(active) = active else {
+        tracing::warn!(
+            channel_id = channel.id,
+            "stream source discovery exceeded startup deadline"
+        );
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let active = match active {
         Ok(Some(path)) => path,
         Ok(None) => {
             tracing::info!(
@@ -261,6 +558,23 @@ async fn serve_channel_stream_with_channel(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+
+    let interval_source = active
+        .remote_stream
+        .as_ref()
+        .and_then(|stream| match &stream.source {
+            RemoteStreamSource::RetainedIntervals(source) => Some(source.clone()),
+            _ => None,
+        });
+    if interval_source.is_some() && interval_admission.is_none() {
+        return retained_interval_stream_response(
+            state.clone(),
+            channel,
+            output_format,
+            effective_streaming_mode,
+            startup_deadline,
+        );
+    }
 
     let replacements =
         match load_required_path_replacements(state, &channel, "MPEG-TS stream").await {
@@ -293,7 +607,7 @@ async fn serve_channel_stream_with_channel(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
-    let source_audio_streams =
+    let mut source_audio_streams =
         match load_source_audio_streams(&state.pool, active.media_version_id).await {
             Ok(streams) => streams,
             Err(error) => {
@@ -340,9 +654,62 @@ async fn serve_channel_stream_with_channel(
         } else {
             playback_profile.profile.hardware_acceleration
         };
-    let source_stream =
+    let mut interval_reservation = None;
+    let mut retained_playback = None;
+    let mut retained_cancellation = None;
+    let previous_audio_streams = source_audio_streams.clone();
+    let source_stream = if let (Some(source), Some(admission)) =
+        (&interval_source, interval_admission)
+    {
+        interval_reservation = Some(admission.reservation);
+        let extractor =
+            ersatzrs_infra::ffprobe::FfprobeExtractor::new(ersatzrs_ffmpeg::ffprobe_path());
+        let Ok(programme_ms) = u64::try_from(active.content_seek_position(now).as_millis()) else {
+            return StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response();
+        };
+        let mut cancellation = admission.cancellation;
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let (cancelled, result) = await_retained_startup_stage(
+            &mut cancellation,
+            sender,
+            source.prepare_playback_cancellable(
+                IntervalPlaybackContext {
+                    pool: &state.pool,
+                    probe: &extractor,
+                    spawn_context: RemoteStreamSpawnContext::mpeg_ts(&channel.number),
+                },
+                programme_ms,
+                u32::try_from(playback_profile.resolution.height).ok(),
+                admission.deadline,
+                receiver,
+            ),
+        )
+        .await;
+        retained_cancellation = Some(cancellation);
+        if cancelled {
+            if let Ok(Some(playback)) = result {
+                let _ = playback.prepared.cancel().await;
+            }
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
+        match result {
+            Ok(Some(playback)) => {
+                source_audio_streams.clone_from(&playback.source_audio);
+                let source = Some(playback.source_video.clone());
+                retained_playback = Some(playback);
+                source
+            }
+            Ok(None) => return StatusCode::NO_CONTENT.into_response(),
+            Err(error) => {
+                tracing::warn!(channel_id = channel.id, %error,
+                    "retained interval input preparation failed");
+                return (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response();
+            }
+        }
+    } else {
         enrich_source_video_stream_for_playback(source_stream, effective_acceleration, &resolved)
-            .await;
+            .await
+    };
     let target_frame_rate = if playback_profile.profile.normalize_framerate {
         match load_channel_target_frame_rate(&state.pool, channel.id).await {
             Ok(frame_rate) => frame_rate,
@@ -353,6 +720,9 @@ async fn serve_channel_stream_with_channel(
                     channel_number = %channel.number,
                     "failed to load channel target frame rate; refusing to build FFmpeg command"
                 );
+                if let Some(playback) = retained_playback.take() {
+                    let _ = playback.prepared.cancel().await;
+                }
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
@@ -369,6 +739,9 @@ async fn serve_channel_stream_with_channel(
                 channel_number = %channel.number,
                 "failed to load playback language preferences; refusing to build FFmpeg command"
             );
+            if let Some(playback) = retained_playback.take() {
+                let _ = playback.prepared.cancel().await;
+            }
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
@@ -416,11 +789,14 @@ async fn serve_channel_stream_with_channel(
                     media_version_id = active.media_version_id,
                     "failed to execute channel stream selector; refusing fallback stream selection"
                 );
+                if let Some(playback) = retained_playback.take() {
+                    let _ = playback.prepared.cancel().await;
+                }
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
     };
-    let audio_selection = if active.has_pinned_stream_selection {
+    let explicit_audio_selection = if active.has_pinned_stream_selection {
         active
             .audio_stream_index
             .map_or(PlaybackAudioSelection::Disabled, |index| {
@@ -433,17 +809,44 @@ async fn serve_channel_stream_with_channel(
         custom_selection
             .as_ref()
             .and_then(|selection| selection.audio_stream_index)
-            .or_else(|| {
-                select_playback_audio_stream_index(
-                    &source_audio_streams,
-                    preferred_audio_language.as_deref(),
-                    preferred_audio_title,
-                )
-            })
             .map_or(
                 PlaybackAudioSelection::Automatic,
                 PlaybackAudioSelection::Exact,
             )
+    };
+    let explicit_audio_selection = if interval_source.is_some() {
+        match ersatzrs_infra::playback::remap_pinned_audio_selection(
+            explicit_audio_selection,
+            &previous_audio_streams,
+            &source_audio_streams,
+        ) {
+            Ok(selection) => selection,
+            Err(error) => {
+                if let Some(playback) = retained_playback.take() {
+                    let _ = playback.prepared.cancel().await;
+                }
+                return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
+            }
+        }
+    } else {
+        explicit_audio_selection
+    };
+    let audio_selection = match explicit_audio_selection {
+        PlaybackAudioSelection::Automatic => select_playback_audio_stream_index(
+            &source_audio_streams,
+            preferred_audio_language.as_deref(),
+            preferred_audio_title,
+        )
+        .map_or(
+            PlaybackAudioSelection::Automatic,
+            PlaybackAudioSelection::Exact,
+        ),
+        selection => selection,
+    };
+    let audio_selection = if retained_playback.is_some() {
+        retained_audio_selection(audio_selection, &source_audio_streams)
+    } else {
+        audio_selection
     };
     let subtitle = if active.has_pinned_stream_selection {
         if let Some(stream_index) = active.subtitle_stream_index {
@@ -466,6 +869,9 @@ async fn serve_channel_stream_with_channel(
                         stream_index,
                         "pinned subtitle stream is unavailable; refusing fallback selection"
                     );
+                    if let Some(playback) = retained_playback.take() {
+                        let _ = playback.prepared.cancel().await;
+                    }
                     return StatusCode::INTERNAL_SERVER_ERROR.into_response();
                 }
             }
@@ -496,10 +902,23 @@ async fn serve_channel_stream_with_channel(
                     media_item_id = active.media_item_id,
                     "failed to select playback subtitle; refusing subtitle-free fallback"
                 );
+                if let Some(playback) = retained_playback.take() {
+                    let _ = playback.prepared.cancel().await;
+                }
                 return StatusCode::INTERNAL_SERVER_ERROR.into_response();
             }
         }
     };
+    if interval_source.is_some() && subtitle.is_some() {
+        if let Some(playback) = retained_playback.take() {
+            let _ = playback.prepared.cancel().await;
+        }
+        return (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "selected source-clock subtitles are unsupported with retained intervals",
+        )
+            .into_response();
+    }
     let metadata = playback_output_metadata(
         Some("ErsatzTV"),
         Some(&channel.name),
@@ -518,6 +937,9 @@ async fn serve_channel_stream_with_channel(
             stream_index = active.subtitle_stream_index,
             "pinned subtitle cannot be mapped for this output; refusing subtitle-free playback"
         );
+        if let Some(playback) = retained_playback.take() {
+            let _ = playback.prepared.cancel().await;
+        }
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
     let subtitle_input = rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
@@ -530,7 +952,41 @@ async fn serve_channel_stream_with_channel(
     )
     .await
     {
-        Ok(watermarks) => watermark_inputs_for_stream(watermarks, active.program_duration()).await,
+        Ok(watermarks) => {
+            if let Some(cancellation) = retained_cancellation.as_mut() {
+                let (sender, receiver) = tokio::sync::oneshot::channel();
+                let (cancelled, result) = await_retained_startup_stage(
+                    cancellation,
+                    sender,
+                    ersatzrs_infra::playback::watermark_inputs_for_stream_cancellable(
+                        watermarks,
+                        active.program_duration(),
+                        startup_deadline,
+                        receiver,
+                    ),
+                )
+                .await;
+                if cancelled {
+                    if let Some(playback) = retained_playback.take() {
+                        let _ = playback.prepared.cancel().await;
+                    }
+                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                }
+                match result {
+                    Ok(inputs) => inputs,
+                    Err(error) => {
+                        tracing::warn!(channel_id = channel.id, %error,
+                            "retained interval watermark preparation failed");
+                        if let Some(playback) = retained_playback.take() {
+                            let _ = playback.prepared.cancel().await;
+                        }
+                        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                    }
+                }
+            } else {
+                watermark_inputs_for_stream(watermarks, active.program_duration()).await
+            }
+        }
         Err(error) => {
             tracing::warn!(%error, channel_number = %channel.number, "failed to select playback watermarks");
             Vec::new()
@@ -555,29 +1011,58 @@ async fn serve_channel_stream_with_channel(
             let graphics_dir = playback_graphics_dir(channel.id, active.playout_item_id);
             let graphics_cleanup_dir = graphics_dir.clone();
             let start_time = parse_sqlite_utc_timestamp(&active.playout_start).unwrap_or(now);
-            match render_playback_graphics_overlays(
-                &state.pool,
-                &graphics,
-                &PlaybackGraphicsRenderContext {
-                    channel_id: channel.id,
-                    channel_number: channel.number.clone(),
-                    media_item_id: active.media_item_id,
-                    media_path: resolved.clone(),
-                    channel_start_time: start_time,
-                    content_start_time: start_time,
-                    stream_seek_seconds: start_position.as_secs_f64(),
-                    duration_seconds: active
-                        .program_duration()
-                        .map_or(0.0, |duration| duration.as_secs_f64()),
-                    frame_size,
-                    square_pixel_frame_size,
-                    frame_rate: target_frame_rate
-                        .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate)),
-                },
-                graphics_dir,
-            )
-            .await
-            {
+            let graphics_context = PlaybackGraphicsRenderContext {
+                channel_id: channel.id,
+                channel_number: channel.number.clone(),
+                media_item_id: active.media_item_id,
+                media_path: resolved.clone(),
+                channel_start_time: start_time,
+                content_start_time: start_time,
+                stream_seek_seconds: start_position.as_secs_f64(),
+                duration_seconds: active
+                    .program_duration()
+                    .map_or(0.0, |duration| duration.as_secs_f64()),
+                frame_size,
+                square_pixel_frame_size,
+                frame_rate: target_frame_rate
+                    .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate)),
+            };
+            let rendered = if let Some(cancellation) = retained_cancellation.as_mut() {
+                let (sender, receiver) = tokio::sync::oneshot::channel();
+                let (cancelled, result) = await_retained_startup_stage(
+                    cancellation,
+                    sender,
+                    ersatzrs_infra::playback::render_playback_graphics_overlays_cancellable(
+                        &state.pool,
+                        &graphics,
+                        &graphics_context,
+                        graphics_dir,
+                        startup_deadline,
+                        receiver,
+                    ),
+                )
+                .await;
+                if cancelled {
+                    if let Ok(artifacts) = result {
+                        artifacts.shutdown().await;
+                    }
+                    cleanup_stream_artifact(&graphics_cleanup_dir).await;
+                    if let Some(playback) = retained_playback.take() {
+                        let _ = playback.prepared.cancel().await;
+                    }
+                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                }
+                result
+            } else {
+                render_playback_graphics_overlays(
+                    &state.pool,
+                    &graphics,
+                    &graphics_context,
+                    graphics_dir,
+                )
+                .await
+            };
+            match rendered {
                 Ok(PlaybackGraphicsArtifacts {
                     overlays,
                     dynamic_text_controllers: controllers,
@@ -610,12 +1095,29 @@ async fn serve_channel_stream_with_channel(
         active.content_duration,
         channel_start_time,
     );
-    let media_input = active.remote_stream.as_ref().map_or_else(
-        || InputFile::video(resolved.clone()),
-        remote_stream_input_file,
+    let media_input = retained_playback.as_ref().map_or_else(
+        || {
+            active.remote_stream.as_ref().map_or_else(
+                || Ok(InputFile::video(resolved.clone())),
+                remote_stream_input_file,
+            )
+        },
+        |playback| Ok(playback.video_input.clone()),
     );
+    let media_input = match media_input {
+        Ok(input) => input,
+        Err(error) => {
+            shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+            cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+            if let Some(playback) = retained_playback.take() {
+                let _ = playback.prepared.cancel().await;
+            }
+            return (StatusCode::SERVICE_UNAVAILABLE, error.to_string()).into_response();
+        }
+    };
     let remote_stream = active.remote_stream.clone();
-    let command = match build_stream_command_with_input_and_opacity_clock(
+    let retained_stream = retained_playback.is_some();
+    let command = match build_stream_command_with_retained_inputs(
         media_input.clone(),
         output_format,
         start_position,
@@ -632,6 +1134,7 @@ async fn serve_channel_stream_with_channel(
         watermark_inputs.clone(),
         graphics_overlays.clone(),
         Some(opacity_clock),
+        retained_stream,
     ) {
         Ok(command) => command,
         Err(error) => {
@@ -646,12 +1149,17 @@ async fn serve_channel_stream_with_channel(
             );
             shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
             cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+            if let Some(playback) = retained_playback.take() {
+                let _ = playback.prepared.cancel().await;
+            }
             return (StatusCode::UNSUPPORTED_MEDIA_TYPE, error.to_string()).into_response();
         }
     };
     let slate_metadata = metadata.clone();
     let slate_runtime_capabilities = runtime_capabilities.clone();
     let retry_playback_profile = playback_profile.clone();
+    let retry_preferred_audio_title = preferred_audio_title.map(str::to_owned);
+    let retry_preferred_audio_language = preferred_audio_language.clone();
     let retry = StreamDenialRetry {
         pool: state.pool.clone(),
         shared_ffmpeg_runtime: Arc::clone(&state.ffmpeg_runtime),
@@ -660,84 +1168,240 @@ async fn serve_channel_stream_with_channel(
         source_stream: source_stream.clone(),
         graph_operation: ersatzrs_ffmpeg::selected_hardware_graph(&command),
         ffmpeg_path: command.executable.clone(),
-        rebuild: Some({
+        rebuild: Some(StreamRetryBuilder({
             let media_input = media_input.clone();
             let channel_number = channel.number.clone();
-            Box::new(move |mode| {
-                let (capabilities, force_software_encode) = match mode {
-                    StreamRetryMode::HardwareDecodeDenied(capabilities)
-                    | StreamRetryMode::HardwareGraphDenied(capabilities) => (capabilities, false),
-                    StreamRetryMode::HardwareEncodeDenied(capabilities) => (capabilities, true),
-                };
-                let mut playback_profile = retry_playback_profile;
-                if force_software_encode {
-                    force_software_h264_encoding(&mut playback_profile);
-                }
-                tracing::debug!(
-                    channel_number = %channel_number,
-                    force_software_encode,
-                    "rebuilding channel stream command after runtime hardware rejection"
-                );
-                build_stream_command_with_input_and_opacity_clock(
-                    media_input,
-                    output_format,
-                    start_position,
-                    stream_duration,
-                    &playback_profile,
-                    target_frame_rate,
-                    effective_streaming_mode,
-                    metadata,
-                    capabilities,
-                    source_stream,
-                    source_audio_streams,
-                    audio_selection,
-                    subtitle_input,
-                    watermark_inputs,
-                    graphics_overlays,
-                    Some(opacity_clock),
-                )
-                .ok()
-            })
-        }),
-    };
-    let capacity_reservation =
-        if effective_streaming_mode == ersatzrs_domain::StreamingMode::TransportStream {
-            match reserve_mpeg_ts_capacity(state, &channel.number).await {
-                Ok(Some(reservation)) => Some(reservation),
-                Ok(None) => {
-                    return mpeg_ts_capacity_wait_response(
-                        state,
-                        &channel,
-                        command,
-                        graphics_cleanup_dirs,
-                        dynamic_text_controllers,
+            let pool = state.pool.clone();
+            Box::new(move |mode, cancel| {
+                Box::pin(async move {
+                    let (capabilities, force_software_encode) = match mode {
+                        StreamRetryMode::HardwareDecodeDenied(capabilities)
+                        | StreamRetryMode::HardwareGraphDenied(capabilities) => {
+                            (capabilities, false)
+                        }
+                        StreamRetryMode::HardwareEncodeDenied(capabilities) => (capabilities, true),
+                    };
+                    let mut playback_profile = retry_playback_profile;
+                    if force_software_encode {
+                        force_software_h264_encoding(&mut playback_profile);
+                    }
+                    let mut fresh = if let Some(source) = interval_source {
+                        let extractor = ersatzrs_infra::ffprobe::FfprobeExtractor::new(
+                            ersatzrs_ffmpeg::ffprobe_path(),
+                        );
+                        let programme_ms = u64::try_from(start_position.as_millis()).ok()?;
+                        let (sender, receiver) = tokio::sync::oneshot::channel();
+                        let operation = source.prepare_playback_cancellable(
+                            IntervalPlaybackContext {
+                                pool: &pool,
+                                probe: &extractor,
+                                spawn_context: RemoteStreamSpawnContext::mpeg_ts(&channel_number),
+                            },
+                            programme_ms,
+                            u32::try_from(playback_profile.resolution.height).ok(),
+                            startup_deadline,
+                            receiver,
+                        );
+                        tokio::pin!(operation);
+                        let result = tokio::select! {
+                            biased;
+                            () = cancel.notified() => {
+                                drop(sender);
+                                if let Ok(Some(playback)) = operation.await {
+                                    let _ = playback.prepared.cancel().await;
+                                }
+                                return None;
+                            },
+                            result = &mut operation => result,
+                        };
+                        Some(result.ok()??)
+                    } else {
+                        None
+                    };
+                    let audio_selection = if let Some(playback) = &fresh {
+                        let explicit = ersatzrs_infra::playback::remap_pinned_audio_selection(
+                            explicit_audio_selection,
+                            &source_audio_streams,
+                            &playback.source_audio,
+                        );
+                        let Ok(explicit) = explicit else {
+                            if let Some(fresh) = fresh.take() {
+                                let _ = fresh.prepared.cancel().await;
+                            }
+                            return None;
+                        };
+                        match explicit {
+                            PlaybackAudioSelection::Automatic => {
+                                select_playback_audio_stream_index(
+                                    &playback.source_audio,
+                                    retry_preferred_audio_language.as_deref(),
+                                    retry_preferred_audio_title.as_deref(),
+                                )
+                                .map_or(
+                                    PlaybackAudioSelection::Automatic,
+                                    PlaybackAudioSelection::Exact,
+                                )
+                            }
+                            selection => selection,
+                        }
+                    } else {
+                        audio_selection
+                    };
+                    let audio_selection = if let Some(fresh) = &fresh {
+                        retained_audio_selection(audio_selection, &fresh.source_audio)
+                    } else {
+                        audio_selection
+                    };
+                    let metadata = if let Some(fresh) = &fresh {
+                        playback_output_metadata(
+                            metadata.service_provider.as_deref(),
+                            metadata.service_name.as_deref(),
+                            retry_preferred_audio_language.as_deref(),
+                            &fresh.source_audio,
+                            None,
+                            audio_selection,
+                        )
+                    } else {
+                        metadata
+                    };
+                    let retained_stream = fresh.is_some();
+                    let media_input = fresh
+                        .as_ref()
+                        .map_or(media_input, |fresh| fresh.video_input.clone());
+                    let source_stream = fresh
+                        .as_ref()
+                        .map_or(source_stream, |fresh| Some(fresh.source_video.clone()));
+                    let source_audio_streams = fresh
+                        .as_ref()
+                        .map_or(source_audio_streams, |fresh| fresh.source_audio.clone());
+                    tracing::debug!(
+                        channel_number = %channel_number,
+                        force_software_encode,
+                        "rebuilding channel stream command after runtime hardware rejection"
+                    );
+                    let command = build_stream_command_with_retained_inputs(
+                        media_input,
+                        output_format,
+                        start_position,
+                        stream_duration,
                         &playback_profile,
                         target_frame_rate,
-                        slate_metadata,
-                        slate_runtime_capabilities,
-                        Some(retry),
-                        remote_stream.clone(),
-                    )
-                    .await;
-                }
-                Err(error) => {
-                    tracing::error!(
-                        %error,
-                        channel_id = channel.id,
-                        channel_number = %channel.number,
-                        "failed to load MPEG-TS transcode capacity"
+                        effective_streaming_mode,
+                        metadata,
+                        capabilities,
+                        source_stream.clone(),
+                        source_audio_streams,
+                        audio_selection,
+                        subtitle_input,
+                        watermark_inputs,
+                        graphics_overlays,
+                        Some(opacity_clock),
+                        retained_stream,
                     );
+                    let Ok(command) = command else {
+                        if let Some(fresh) = fresh.take() {
+                            let _ = fresh.prepared.cancel().await;
+                        }
+                        return None;
+                    };
+                    if fresh.is_some() && tokio::time::Instant::now() >= startup_deadline {
+                        if let Some(fresh) = fresh {
+                            let _ = fresh.prepared.cancel().await;
+                        }
+                        return None;
+                    }
+                    Some(StreamRetryAttempt {
+                        command,
+                        source_stream,
+                        prepared: fresh.map(|fresh| fresh.prepared),
+                    })
+                })
+            })
+        })),
+    };
+    let capacity_reservation = if interval_reservation.is_some() {
+        interval_reservation
+    } else if effective_streaming_mode == ersatzrs_domain::StreamingMode::TransportStream {
+        match reserve_mpeg_ts_capacity(state, &channel.number).await {
+            Ok(Some(reservation)) => Some(reservation),
+            Ok(None) => {
+                if let Some(playback) = retained_playback.take() {
+                    let _ = playback.prepared.cancel().await;
                     shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
                     cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
                 }
+                return mpeg_ts_capacity_wait_response(
+                    state,
+                    &channel,
+                    command,
+                    graphics_cleanup_dirs,
+                    dynamic_text_controllers,
+                    &playback_profile,
+                    target_frame_rate,
+                    slate_metadata,
+                    slate_runtime_capabilities,
+                    Some(retry),
+                    remote_stream.clone(),
+                )
+                .await;
             }
-        } else {
-            None
-        };
+            Err(error) => {
+                tracing::error!(
+                    %error,
+                    channel_id = channel.id,
+                    channel_number = %channel.number,
+                    "failed to load MPEG-TS transcode capacity"
+                );
+                if let Some(playback) = retained_playback.take() {
+                    let _ = playback.prepared.cancel().await;
+                }
+                shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+                cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        }
+    } else {
+        None
+    };
 
     let cleanup_on_spawn_failure = graphics_cleanup_dirs.clone();
-    match spawn_stream_body(
+    if retained_playback.is_some() && tokio::time::Instant::now() >= startup_deadline {
+        if let Some(playback) = retained_playback.take() {
+            let _ = playback.prepared.cancel().await;
+        }
+        shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+        cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "retained interval startup deadline expired",
+        )
+            .into_response();
+    }
+    let retained_output = if retained_playback.is_some() {
+        match RetainedTsOutput::from_command(
+            &command,
+            stream_duration.or_else(|| active.remaining_duration(now)),
+        ) {
+            Ok(output) => Some(output),
+            Err(reason) => {
+                tracing::warn!(
+                    channel_id = channel.id,
+                    reason,
+                    "retained MPEG-TS reserve refused"
+                );
+                if let Some(playback) = retained_playback.take() {
+                    let _ = playback.prepared.cancel().await;
+                }
+                shutdown_dynamic_text_controllers(dynamic_text_controllers).await;
+                cleanup_stream_artifacts(&graphics_cleanup_dirs).await;
+                return (StatusCode::UNSUPPORTED_MEDIA_TYPE, reason).into_response();
+            }
+        }
+    } else {
+        None
+    };
+    match spawn_stream_body_with_prepared_input(
         &command,
         graphics_cleanup_dirs,
         dynamic_text_controllers,
@@ -746,9 +1410,18 @@ async fn serve_channel_stream_with_channel(
         capacity_reservation,
         Some(retry),
         remote_stream,
-    ) {
+        retained_playback.map(|playback| playback.prepared),
+        retained_output
+            .as_ref()
+            .map(|output| (output.terminal.clone(), output.completed.clone())),
+    )
+    .await
+    {
         Ok(body) => {
             let mut response = body.into_response();
+            if let Some(output) = retained_output {
+                response.extensions_mut().insert(output);
+            }
             response.headers_mut().insert(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static(content_type_for_output_format(output_format)),
@@ -797,24 +1470,39 @@ async fn serve_segmenter_wrapper_stream(
     headers: &HeaderMap,
     query: &HlsQuery,
 ) -> Response {
-    let path_replacements =
-        match load_required_path_replacements(state, channel, "wrapped segmenter").await {
-            Ok(replacements) => replacements,
-            Err(response) => return response,
-        };
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let path_replacements = match tokio::time::timeout_at(
+        tokio::time::Instant::from_std(deadline),
+        load_required_path_replacements(state, channel, "wrapped segmenter"),
+    )
+    .await
+    {
+        Ok(Ok(replacements)) => replacements,
+        Ok(Err(response)) => return response,
+        Err(_) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "segmenter startup deadline expired",
+            )
+                .into_response();
+        }
+    };
 
-    hls::ensure_segmenter_worker_running(
+    hls::ensure_segmenter_worker_running_before(
         state,
         &channel.number,
         channel.id,
         channel.idle_behavior,
         OutputFormat::Hls,
         path_replacements,
+        deadline,
     )
     .await;
 
     let initial_segment_count = hls::load_initial_segment_count(state).await;
-    let startup_timeout = hls::load_segmenter_startup_timeout(state).await;
+    let startup_timeout = hls::load_segmenter_startup_timeout(state)
+        .await
+        .min(deadline.saturating_duration_since(std::time::Instant::now()));
     let wait_result = hls::wait_for_initial_segments(
         &*state.hls_sessions,
         &channel.number,
@@ -894,7 +1582,9 @@ async fn serve_segmenter_wrapper_stream(
         capacity_reservation,
         None,
         None,
-    ) {
+    )
+    .await
+    {
         Ok(body) => {
             let mut response = body.into_response();
             response
@@ -1026,7 +1716,9 @@ async fn serve_legacy_concat_stream(
         capacity_reservation,
         None,
         None,
-    ) {
+    )
+    .await
+    {
         Ok(body) => {
             let mut response = body.into_response();
             response
@@ -1545,6 +2237,7 @@ pub(crate) async fn load_active_media_path(
                   pi."AudioStreamIndex" AS "AudioStreamIndex",
                   pi."SubtitleStreamIndex" AS "SubtitleStreamIndex",
                   rs."Url" AS "RemoteUrl",
+                  rs."Id" AS "RemoteStreamId",
                   rs."AddonId" AS "RemoteAddonId",
                   rs."Script" AS "RemoteLegacyScript",
                   rs."Duration" AS "RemoteDuration",
@@ -1647,21 +2340,26 @@ pub(crate) async fn load_active_media_path(
             tags: Vec::new(),
             ..RemoteStreamDefinition::default()
         };
-        Some(
-            resolve_remote_stream_with_addons(
-                pool,
-                &definition,
-                &AddonRuntimeContext {
-                    ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
-                    ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),
-                },
-            )
-            .await
-            .map_err(|error| RepositoryError::Decode {
-                kind: "active remote stream",
-                value: error.to_string(),
-            })?,
+        let runtime = AddonRuntimeContext {
+            ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
+            ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),
+        };
+        let published = ersatzrs_infra::addon_media_list_playback::resolve_published_remote_stream(
+            pool,
+            decode_active_item_column(&row, "RemoteStreamId")?,
+            &runtime,
+            &ersatzrs_infra::file_system_layout::addon_processed_media_folder(),
         )
+        .await?;
+        Some(match published {
+            Some(stream) => stream,
+            None => resolve_remote_stream_with_addons(pool, &definition, &runtime)
+                .await
+                .map_err(|error| RepositoryError::Decode {
+                    kind: "active remote stream",
+                    value: error.to_string(),
+                })?,
+        })
     } else {
         None
     };
@@ -1922,6 +2620,7 @@ fn build_stream_command_with_opacity_clock(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn build_stream_command_with_input_and_opacity_clock(
     input: InputFile,
     output_format: OutputFormat,
@@ -1939,6 +2638,47 @@ fn build_stream_command_with_input_and_opacity_clock(
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     opacity_clock: Option<WatermarkOpacityClock>,
+) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
+    build_stream_command_with_retained_inputs(
+        input,
+        output_format,
+        start_position,
+        duration,
+        playback_profile,
+        target_frame_rate,
+        streaming_mode,
+        metadata,
+        runtime_capabilities,
+        source_stream,
+        source_audio_streams,
+        audio_selection,
+        subtitle_input,
+        watermark_inputs,
+        graphics_overlays,
+        opacity_clock,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn build_stream_command_with_retained_inputs(
+    input: InputFile,
+    output_format: OutputFormat,
+    start_position: Duration,
+    duration: Option<Duration>,
+    playback_profile: &PlaybackProfile,
+    target_frame_rate: Option<FrameRate>,
+    streaming_mode: StreamingMode,
+    metadata: OutputMetadata,
+    runtime_capabilities: FfmpegCapabilityReport,
+    source_stream: Option<SourceVideoStream>,
+    source_audio_streams: Vec<SourceAudioStream>,
+    audio_selection: PlaybackAudioSelection,
+    subtitle_input: Option<InputFile>,
+    watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
+    graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    opacity_clock: Option<WatermarkOpacityClock>,
+    retained_stream: bool,
 ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let seek_after_input = input.seek_after_input;
     let needs_hls_direct_mpegts_transcode = hls_direct_mpegts_needs_transcode(
@@ -2017,6 +2757,9 @@ fn build_stream_command_with_input_and_opacity_clock(
     request.state.duration = duration;
     request.state.metadata = metadata;
     request.state.report_progress = false;
+    if retained_stream {
+        request = request.with_retained_stream_input();
+    }
     if let Ok(thread_count) = u32::try_from(playback_profile.profile.thread_count) {
         if thread_count > 0 {
             request.state.thread_count = Some(thread_count);
@@ -2030,6 +2773,22 @@ fn build_stream_command_with_input_and_opacity_clock(
         playback_profile.profile.hardware_acceleration
     };
     ersatzrs_ffmpeg::build_pipeline_command(acceleration, request)
+}
+
+fn retained_audio_selection(
+    selection: PlaybackAudioSelection,
+    audio: &[SourceAudioStream],
+) -> PlaybackAudioSelection {
+    match selection {
+        PlaybackAudioSelection::Automatic => audio
+            .iter()
+            .find(|audio| audio.default)
+            .or_else(|| audio.first())
+            .map_or(PlaybackAudioSelection::Disabled, |audio| {
+                PlaybackAudioSelection::Exact(audio.index)
+            }),
+        selection => selection,
+    }
 }
 
 fn hls_direct_mpegts_needs_transcode(
@@ -2378,7 +3137,67 @@ struct StreamDenialRetry {
     /// `None` when the rebuilt command would be refused. Unreachable in
     /// practice — the initial build already accepted this source — but the
     /// retry must fail terminally rather than panic if that ever changes.
-    rebuild: Option<Box<dyn FnOnce(StreamRetryMode) -> Option<FfmpegCommand> + Send>>,
+    rebuild: Option<StreamRetryBuilder>,
+}
+
+struct StreamRetryAttempt {
+    command: FfmpegCommand,
+    source_stream: Option<SourceVideoStream>,
+    prepared: Option<PreparedRemoteStreamInput>,
+}
+
+type DeferredStreamRetry = Box<
+    dyn FnOnce(
+            StreamRetryMode,
+            Arc<Notify>,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Option<StreamRetryAttempt>> + Send>,
+        > + Send,
+>;
+
+struct StreamRetryBuilder(DeferredStreamRetry);
+
+impl StreamRetryBuilder {
+    async fn build(
+        self,
+        mode: StreamRetryMode,
+        cancel: &Arc<Notify>,
+    ) -> Option<StreamRetryAttempt> {
+        (self.0)(mode, cancel.clone()).await
+    }
+}
+
+#[cfg(test)]
+fn immediate_stream_retry(
+    build: Box<dyn FnOnce(StreamRetryMode) -> Option<FfmpegCommand> + Send>,
+) -> StreamRetryBuilder {
+    StreamRetryBuilder(Box::new(move |mode, _| {
+        Box::pin(async move {
+            build(mode).map(|command| StreamRetryAttempt {
+                command,
+                source_stream: None,
+                prepared: None,
+            })
+        })
+    }))
+}
+
+async fn spawn_stream_retry(
+    attempt: StreamRetryAttempt,
+    producer: Option<&RemoteStreamCommand>,
+    channel_number: &str,
+) -> Result<RemoteStreamProcess, StreamSpawnError> {
+    match attempt.prepared {
+        Some(prepared) => spawn_ffmpeg_with_prepared_remote_input(
+            &attempt.command,
+            None,
+            prepared,
+            RemoteStreamSpawnContext::mpeg_ts(channel_number),
+        )
+        .await
+        .map_err(|error| StreamSpawnError::Spawn(error.to_string())),
+        None => spawn_stream_process(&attempt.command, producer, channel_number),
+    }
 }
 
 // The three variants share a prefix because they are three flavours of the same
@@ -2417,7 +3236,59 @@ impl Drop for StreamBodyDisposeGuard {
 enum DirectStreamOutcome {
     Completed,
     Cancelled,
-    Failed(String),
+    Failed(DirectStreamFailure),
+}
+
+#[derive(Default)]
+struct DirectStreamFailure {
+    redacted_stderr: String,
+    graph_failure: Option<ersatzrs_ffmpeg::GraphFailureKind>,
+    decode_denial: Option<ersatzrs_ffmpeg::HardwareDecodeDenial>,
+    encoder_open_failure: bool,
+    client_disconnect: bool,
+    wrote_media: bool,
+}
+
+struct StreamFailureContext {
+    graph: Option<ersatzrs_ffmpeg::HardwareGraphOperation>,
+    acceleration: ersatzrs_domain::HardwareAccelerationKind,
+    source: Option<SourceVideoStream>,
+}
+
+impl From<String> for DirectStreamFailure {
+    fn from(redacted_stderr: String) -> Self {
+        Self {
+            redacted_stderr,
+            ..Self::default()
+        }
+    }
+}
+
+impl std::fmt::Display for DirectStreamFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.redacted_stderr)
+    }
+}
+
+fn classify_stream_stderr(
+    raw: &str,
+    remote_stream: Option<&ResolvedRemoteStream>,
+    graph: Option<ersatzrs_ffmpeg::HardwareGraphOperation>,
+    acceleration: ersatzrs_domain::HardwareAccelerationKind,
+    source: Option<&SourceVideoStream>,
+) -> DirectStreamFailure {
+    DirectStreamFailure {
+        redacted_stderr: remote_stream.map_or_else(
+            || raw.to_owned(),
+            |stream| redact_remote_stream_output(raw, stream),
+        ),
+        graph_failure: graph
+            .and_then(|graph| ersatzrs_ffmpeg::GraphFailureKind::classify_runtime(graph, raw)),
+        decode_denial: learned_hardware_decode_denial(false, acceleration, source, raw),
+        encoder_open_failure: ffmpeg_stderr_is_hardware_encoder_open_failure(raw),
+        client_disconnect: ffmpeg_stderr_is_client_disconnect(raw),
+        wrote_media: false,
+    }
 }
 
 fn spawn_stream_process(
@@ -2435,7 +3306,7 @@ fn spawn_stream_process(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn spawn_stream_body(
+async fn spawn_stream_body(
     command: &FfmpegCommand,
     cleanup_paths: Vec<PathBuf>,
     dynamic_text_controllers: Vec<DynamicTextController>,
@@ -2445,12 +3316,51 @@ fn spawn_stream_body(
     retry: Option<StreamDenialRetry>,
     remote_stream: Option<ResolvedRemoteStream>,
 ) -> Result<Body, StreamSpawnError> {
-    let child = spawn_stream_process(
+    spawn_stream_body_with_prepared_input(
         command,
-        remote_stream.as_ref().and_then(remote_stream_producer),
-        &channel_number,
-    )?;
+        cleanup_paths,
+        dynamic_text_controllers,
+        channel_number,
+        session_registry,
+        capacity_reservation,
+        retry,
+        remote_stream,
+        None,
+        None,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn spawn_stream_body_with_prepared_input(
+    command: &FfmpegCommand,
+    cleanup_paths: Vec<PathBuf>,
+    dynamic_text_controllers: Vec<DynamicTextController>,
+    channel_number: String,
+    session_registry: Arc<dyn HlsSessionRegistry>,
+    capacity_reservation: Option<ActiveTranscodeReservation>,
+    retry: Option<StreamDenialRetry>,
+    remote_stream: Option<ResolvedRemoteStream>,
+    prepared: Option<PreparedRemoteStreamInput>,
+    terminal: Option<(Arc<std::sync::atomic::AtomicU8>, Arc<Notify>)>,
+) -> Result<Body, StreamSpawnError> {
+    let mut child = match prepared {
+        Some(prepared) => spawn_ffmpeg_with_prepared_remote_input(
+            command,
+            None,
+            prepared,
+            RemoteStreamSpawnContext::mpeg_ts(&channel_number),
+        )
+        .await
+        .map_err(|error| StreamSpawnError::Spawn(error.to_string()))?,
+        None => spawn_stream_process(
+            command,
+            remote_stream.as_ref().and_then(remote_stream_producer),
+            &channel_number,
+        )?,
+    };
     if child.stdout.is_none() {
+        let _ = child.kill().await;
         return Err(StreamSpawnError::MissingStdout);
     }
     let handle = Arc::new(DirectStreamHandle::new(channel_number.clone()));
@@ -2462,7 +3372,7 @@ fn spawn_stream_body(
         let _capacity_reservation = capacity_reservation;
         let registered = session_registry.try_insert(handle).await;
         let mut retry = retry;
-        let _ = supervise_stream_command_with_retry(
+        let outcome = supervise_stream_command_with_retry(
             child,
             &mut writer,
             &cancel,
@@ -2471,6 +3381,18 @@ fn spawn_stream_body(
             remote_stream.as_ref(),
         )
         .await;
+        if let Some((terminal, completed)) = terminal {
+            terminal.store(
+                if matches!(outcome, DirectStreamOutcome::Completed) {
+                    TERMINAL_SUCCESS
+                } else {
+                    TERMINAL_FAILURE
+                },
+                Ordering::Release,
+            );
+            completed.notify_one();
+            drop(writer);
+        }
         if registered {
             session_registry.remove(&channel_number).await;
         }
@@ -2615,12 +3537,31 @@ async fn supervise_stream_command_with_retry(
     remote_stream: Option<&ResolvedRemoteStream>,
 ) -> DirectStreamOutcome {
     loop {
-        let outcome =
-            supervise_stream_process(&mut child, writer, cancel, channel_number, remote_stream)
-                .await;
-        let DirectStreamOutcome::Failed(stderr) = outcome else {
+        let outcome = supervise_stream_process_with_retry_context(
+            &mut child,
+            writer,
+            cancel,
+            channel_number,
+            remote_stream,
+            retry.as_ref().map(|retry| StreamFailureContext {
+                graph: retry.graph_operation,
+                acceleration: retry.acceleration,
+                source: retry.source_stream.clone(),
+            }),
+        )
+        .await;
+        let DirectStreamOutcome::Failed(mut stderr) = outcome else {
             return outcome;
         };
+        if stderr.wrote_media
+            && remote_stream.is_some_and(|stream| {
+                matches!(stream.source, RemoteStreamSource::RetainedIntervals(_))
+            })
+        {
+            // The outer reserve may already contain this attempt's TS prefix.
+            // Never concatenate a restarted programme clock onto those bytes.
+            return DirectStreamOutcome::Failed(stderr);
+        }
         let Some(mut context) = retry.take() else {
             return DirectStreamOutcome::Failed(stderr);
         };
@@ -2630,12 +3571,7 @@ async fn supervise_stream_command_with_retry(
         // published even when the session has already spent its one retry.
         // Checked before the decode classifier because a graph failure is the
         // more specific diagnosis.
-        if let (Some(operation), Some(kind)) = (
-            context.graph_operation,
-            context.graph_operation.and_then(|operation| {
-                ersatzrs_ffmpeg::GraphFailureKind::classify_runtime(operation, &stderr)
-            }),
-        ) {
+        if let (Some(operation), Some(kind)) = (context.graph_operation, stderr.graph_failure) {
             let device = context.runtime_capabilities.hardware_graph_device();
             let denial = ersatzrs_ffmpeg::HardwareGraphDenial::new(operation, &device, kind);
             let evidence = denial.evidence();
@@ -2669,22 +3605,36 @@ async fn supervise_stream_command_with_retry(
                 evidence,
                 "retrying channel stream once through the next proven graph after a runtime graph failure"
             );
-            let Some(retry_command) = build_retry_command(StreamRetryMode::HardwareGraphDenied(
-                context.runtime_capabilities.clone(),
-            )) else {
+            let Some(retry_command) = build_retry_command
+                .build(
+                    StreamRetryMode::HardwareGraphDenied(context.runtime_capabilities.clone()),
+                    cancel,
+                )
+                .await
+            else {
                 tracing::warn!(
                     channel_number = %channel_number,
                     "rebuilt command was refused; not retrying after graph denial"
                 );
-                return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned());
+                return DirectStreamOutcome::Failed(
+                    "rebuilt command was refused".to_owned().into(),
+                );
             };
-            let next_graph_operation = ersatzrs_ffmpeg::selected_hardware_graph(&retry_command);
-            let next_ffmpeg_path = retry_command.executable.clone();
-            match spawn_stream_process(
-                &retry_command,
+            let next_graph_operation =
+                ersatzrs_ffmpeg::selected_hardware_graph(&retry_command.command);
+            let next_ffmpeg_path = retry_command.command.executable.clone();
+            if retry_command.source_stream.is_some() {
+                context
+                    .source_stream
+                    .clone_from(&retry_command.source_stream);
+            }
+            match spawn_stream_retry(
+                retry_command,
                 remote_stream.and_then(remote_stream_producer),
                 channel_number,
-            ) {
+            )
+            .await
+            {
                 Ok(next) => {
                     child = next;
                     context.graph_operation = next_graph_operation;
@@ -2696,18 +3646,17 @@ async fn supervise_stream_command_with_retry(
                 }
                 Err(error) => {
                     tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after graph denial");
-                    return DirectStreamOutcome::Failed(error.to_string());
+                    return DirectStreamOutcome::Failed(error.to_string().into());
                 }
             }
             continue;
         }
 
-        if let Some(denial) = learned_hardware_decode_denial(
-            context.rebuild.is_none(),
-            context.acceleration,
-            context.source_stream.as_ref(),
-            &stderr,
-        ) {
+        if let Some(denial) = stderr
+            .decode_denial
+            .take()
+            .filter(|_| context.rebuild.is_some())
+        {
             tracing::warn!(
                 channel_number = %channel_number,
                 acceleration = ?denial.acceleration,
@@ -2732,22 +3681,36 @@ async fn supervise_stream_command_with_retry(
             let Some(rebuild) = context.rebuild.take() else {
                 return DirectStreamOutcome::Failed(stderr);
             };
-            let Some(retry_command) = rebuild(StreamRetryMode::HardwareDecodeDenied(
-                context.runtime_capabilities.clone(),
-            )) else {
+            let Some(retry_command) = rebuild
+                .build(
+                    StreamRetryMode::HardwareDecodeDenied(context.runtime_capabilities.clone()),
+                    cancel,
+                )
+                .await
+            else {
                 tracing::warn!(
                     channel_number = %channel_number,
                     "rebuilt command was refused; not retrying after hardware decode denial"
                 );
-                return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned());
+                return DirectStreamOutcome::Failed(
+                    "rebuilt command was refused".to_owned().into(),
+                );
             };
-            let next_graph_operation = ersatzrs_ffmpeg::selected_hardware_graph(&retry_command);
-            let next_ffmpeg_path = retry_command.executable.clone();
-            match spawn_stream_process(
-                &retry_command,
+            let next_graph_operation =
+                ersatzrs_ffmpeg::selected_hardware_graph(&retry_command.command);
+            let next_ffmpeg_path = retry_command.command.executable.clone();
+            if retry_command.source_stream.is_some() {
+                context
+                    .source_stream
+                    .clone_from(&retry_command.source_stream);
+            }
+            match spawn_stream_retry(
+                retry_command,
                 remote_stream.and_then(remote_stream_producer),
                 channel_number,
-            ) {
+            )
+            .await
+            {
                 Ok(next) => {
                     child = next;
                     context.graph_operation = next_graph_operation;
@@ -2759,14 +3722,14 @@ async fn supervise_stream_command_with_retry(
                 }
                 Err(error) => {
                     tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware decode denial");
-                    return DirectStreamOutcome::Failed(error.to_string());
+                    return DirectStreamOutcome::Failed(error.to_string().into());
                 }
             }
             continue;
         }
 
         if context.acceleration == ersatzrs_domain::HardwareAccelerationKind::None
-            || !ffmpeg_stderr_is_hardware_encoder_open_failure(&stderr)
+            || !stderr.encoder_open_failure
         {
             return DirectStreamOutcome::Failed(stderr);
         }
@@ -2784,24 +3747,30 @@ async fn supervise_stream_command_with_retry(
             acceleration = ?context.acceleration,
             "retrying channel stream once with software video encode after runtime hardware encoder rejection"
         );
-        let Some(retry_command) = build_retry_command(StreamRetryMode::HardwareEncodeDenied(
-            context.runtime_capabilities,
-        )) else {
+        let Some(retry_command) = build_retry_command
+            .build(
+                StreamRetryMode::HardwareEncodeDenied(context.runtime_capabilities),
+                cancel,
+            )
+            .await
+        else {
             tracing::warn!(
                 channel_number = %channel_number,
                 "rebuilt command was refused; not retrying after hardware encoder rejection"
             );
-            return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned());
+            return DirectStreamOutcome::Failed("rebuilt command was refused".to_owned().into());
         };
-        match spawn_stream_process(
-            &retry_command,
+        match spawn_stream_retry(
+            retry_command,
             remote_stream.and_then(remote_stream_producer),
             channel_number,
-        ) {
+        )
+        .await
+        {
             Ok(next) => child = next,
             Err(error) => {
                 tracing::warn!(%error, channel_number = %channel_number, "failed to respawn ffmpeg channel stream after hardware encoder rejection");
-                return DirectStreamOutcome::Failed(error.to_string());
+                return DirectStreamOutcome::Failed(error.to_string().into());
             }
         }
     }
@@ -2827,15 +3796,44 @@ async fn supervise_stream_process(
     channel_number: &str,
     remote_stream: Option<&ResolvedRemoteStream>,
 ) -> DirectStreamOutcome {
+    supervise_stream_process_with_retry_context(
+        child,
+        writer,
+        cancel,
+        channel_number,
+        remote_stream,
+        None,
+    )
+    .await
+}
+
+async fn supervise_stream_process_with_retry_context(
+    child: &mut RemoteStreamProcess,
+    writer: &mut tokio::io::DuplexStream,
+    cancel: &Arc<Notify>,
+    channel_number: &str,
+    remote_stream: Option<&ResolvedRemoteStream>,
+    retry: Option<StreamFailureContext>,
+) -> DirectStreamOutcome {
     let mut stdout = child.stdout.take();
     let stderr_remote_stream = remote_stream.cloned();
+    let graph = retry.as_ref().and_then(|retry| retry.graph);
+    let acceleration = retry
+        .as_ref()
+        .map_or(ersatzrs_domain::HardwareAccelerationKind::None, |retry| {
+            retry.acceleration
+        });
+    let source = retry.and_then(|retry| retry.source);
     let stderr_task = child.stderr.take().map(|stderr| {
         tokio::spawn(async move {
             let stderr = read_ffmpeg_stderr_tail(stderr).await;
-            match stderr_remote_stream {
-                Some(stream) => redact_remote_stream_output(&stderr, &stream),
-                None => stderr,
-            }
+            classify_stream_stderr(
+                &stderr,
+                stderr_remote_stream.as_ref(),
+                graph,
+                acceleration,
+                source.as_ref(),
+            )
         })
     });
 
@@ -2843,11 +3841,11 @@ async fn supervise_stream_process(
     // write failure (client gone), or session cancellation.
     let pump = async {
         match stdout.as_mut() {
-            Some(stdout) => tokio::io::copy(stdout, writer).await.map(|_| ()),
-            None => Ok(()),
+            Some(stdout) => tokio::io::copy(stdout, writer).await,
+            None => Ok(0),
         }
     };
-    tokio::select! {
+    let wrote_media = tokio::select! {
         result = pump => {
             if result.is_err() {
                 // The body side is gone; stop the process instead of letting
@@ -2855,6 +3853,7 @@ async fn supervise_stream_process(
                 tracing::debug!(channel_number = %channel_number, "channel stream body writer failed; killing ffmpeg");
                 let _ = child.start_kill();
             }
+            result.map_or(true, |bytes| bytes > 0)
         }
         () = cancel.notified() => {
             tracing::debug!(channel_number = %channel_number, "channel stream cancelled; killing ffmpeg");
@@ -2862,21 +3861,41 @@ async fn supervise_stream_process(
                 tracing::warn!(%error, channel_number = %channel_number, "failed to kill ffmpeg channel stream");
             }
             let stderr = await_stderr_tail(stderr_task).await;
-            if !stderr.is_empty() {
+            if !stderr.redacted_stderr.is_empty() {
                 tracing::debug!(stderr = %stderr, channel_number = %channel_number, "ffmpeg channel stream stderr after cancellation");
             }
             return DirectStreamOutcome::Cancelled;
         }
-    }
+    };
 
-    match child.wait().await {
+    let waited = tokio::select! {
+        biased;
+        () = cancel.notified() => {
+            if let Err(error) = child.kill().await {
+                tracing::warn!(%error, channel_number, "failed to reap cancelled channel stream after stdout closed");
+            }
+            None
+        },
+        result = child.wait() => Some(result),
+    };
+    let Some(waited) = waited else {
+        let _ = await_stderr_tail(stderr_task).await;
+        return DirectStreamOutcome::Cancelled;
+    };
+    match waited {
         Ok(status) if status.success() => {
             let _ = await_stderr_tail(stderr_task).await;
             DirectStreamOutcome::Completed
         }
         Ok(status) => {
-            let stderr = await_stderr_tail(stderr_task).await;
-            if ffmpeg_stderr_is_client_disconnect(&stderr) {
+            let mut stderr = await_stderr_tail(stderr_task).await;
+            stderr.wrote_media = wrote_media;
+            if legacy_disconnect_is_success(
+                stderr.client_disconnect,
+                remote_stream.is_some_and(|stream| {
+                    matches!(stream.source, RemoteStreamSource::RetainedIntervals(_))
+                }),
+            ) {
                 tracing::debug!(%status, stderr = %stderr, "ffmpeg channel stream ended after client disconnect");
                 DirectStreamOutcome::Completed
             } else {
@@ -2885,7 +3904,8 @@ async fn supervise_stream_process(
             }
         }
         Err(error) => {
-            let stderr = await_stderr_tail(stderr_task).await;
+            let mut stderr = await_stderr_tail(stderr_task).await;
+            stderr.wrote_media = wrote_media;
             tracing::warn!(%error, stderr = %stderr, "failed to wait for ffmpeg channel stream");
             DirectStreamOutcome::Failed(stderr)
         }
@@ -2903,6 +3923,10 @@ async fn cleanup_stream_artifact(path: &std::path::Path) {
             tracing::debug!(%error, path = %path.display(), "failed to clean up IPTV stream artifact");
         }
     }
+}
+
+fn legacy_disconnect_is_success(client_disconnect: bool, retained: bool) -> bool {
+    client_disconnect && !retained
 }
 
 async fn cleanup_stream_artifacts(paths: &[PathBuf]) {
@@ -2976,19 +4000,20 @@ async fn read_ffmpeg_stderr_tail(mut stderr: tokio::process::ChildStderr) -> Str
 /// pipe ends restores that behavior: the orphan dies on its next write.
 const STDERR_TAIL_TIMEOUT: Duration = Duration::from_secs(2);
 
-async fn await_stderr_tail(stderr_task: Option<tokio::task::JoinHandle<String>>) -> String {
+async fn await_stderr_tail<T: Default + From<String>>(
+    stderr_task: Option<tokio::task::JoinHandle<T>>,
+) -> T {
     let Some(mut task) = stderr_task else {
-        return String::new();
+        return T::default();
     };
     match tokio::time::timeout(STDERR_TAIL_TIMEOUT, &mut task).await {
-        Ok(result) => {
-            result.unwrap_or_else(|error| format!("failed to join ffmpeg stderr reader: {error}"))
-        }
+        Ok(result) => result
+            .unwrap_or_else(|error| format!("failed to join ffmpeg stderr reader: {error}").into()),
         Err(_elapsed) => {
             // A grandchild still holds the stderr write end open; abandon the
             // reader so the pipe read ends drop and the orphan gets EPIPE.
             task.abort();
-            String::new()
+            T::default()
         }
     }
 }
@@ -3008,6 +4033,148 @@ fn ffmpeg_stderr_is_hardware_encoder_open_failure(stderr: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn retained_startup_cancellation_awaits_stage_and_preserves_cleanup_result() {
+        let (outer, mut cancellation) = tokio::sync::oneshot::channel();
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        drop(outer);
+        let (cancelled, result) =
+            await_retained_startup_stage(&mut cancellation, sender, async move {
+                assert!(receiver.await.is_err());
+                Ok::<_, ()>("completed artifact still needs shutdown")
+            })
+            .await;
+        assert!(cancelled);
+        assert_eq!(result, Ok("completed artifact still needs shutdown"));
+    }
+
+    #[test]
+    fn retained_nonzero_broken_pipe_never_counts_as_successful_eof() {
+        assert!(!legacy_disconnect_is_success(true, true));
+        assert!(legacy_disconnect_is_success(true, false));
+        assert!(!legacy_disconnect_is_success(false, false));
+    }
+
+    // POSIX shell closes stdout then replaces itself, leaving no grandchild.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn stream_cancellation_reaps_child_after_stdout_has_already_closed() {
+        let command = FfmpegCommand::new_with_executable(
+            "sh",
+            Vec::new(),
+            vec!["-c".into(), "exec 1>&-; exec sleep 30".into()],
+        );
+        let mut child = spawn_stream_process(&command, None, "synthetic").unwrap();
+        let mut stdout = child.stdout.take().unwrap();
+        let mut bytes = Vec::new();
+        tokio::time::timeout(Duration::from_secs(2), stdout.read_to_end(&mut bytes))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(bytes.is_empty());
+        child.stdout = Some(stdout);
+        let (_reader, mut writer) = tokio::io::duplex(4096);
+        let cancel = Arc::new(Notify::new());
+        let operation =
+            supervise_stream_process(&mut child, &mut writer, &cancel, "synthetic", None);
+        tokio::pin!(operation);
+        assert!(matches!(
+            futures_util::poll!(&mut operation),
+            std::task::Poll::Pending
+        ));
+        cancel.notify_one();
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_secs(2), operation)
+                .await
+                .unwrap(),
+            DirectStreamOutcome::Cancelled
+        ));
+    }
+
+    #[test]
+    fn stream_failure_classifies_before_redacting_private_source() {
+        let stream = ResolvedRemoteStream {
+            source: RemoteStreamSource::Prepared(PathBuf::from("synthetic-private-input")),
+            liveness: ersatzrs_domain::RemoteStreamLiveness::Finite,
+            is_live: false,
+            configured_duration: None,
+            fallback_query: None,
+            uses_addon: false,
+        };
+        let classified = classify_stream_stderr(
+            "synthetic-private-input Error while opening encoder",
+            Some(&stream),
+            None,
+            ersatzrs_domain::HardwareAccelerationKind::Nvenc,
+            None,
+        );
+        assert!(classified.encoder_open_failure);
+        assert!(!classified.to_string().contains("synthetic-private-input"));
+    }
+
+    #[test]
+    fn retained_automatic_audio_uses_actual_default_without_overriding_disabled() {
+        let first = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(7);
+        let mut default = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(3);
+        default.default = true;
+        let streams = [first, default];
+        assert_eq!(
+            retained_audio_selection(PlaybackAudioSelection::Automatic, &streams),
+            PlaybackAudioSelection::Exact(3)
+        );
+        assert_eq!(
+            retained_audio_selection(PlaybackAudioSelection::Disabled, &streams),
+            PlaybackAudioSelection::Disabled
+        );
+    }
+
+    #[test]
+    fn retained_mpegts_command_keeps_actual_indexes_and_edited_shared_clock() {
+        let video = InputFile::video("pipe:0")
+            .with_input_options(["-f", "nut"])
+            .with_stream_index(7);
+        let mut source = source_320p().with_index(7);
+        source.codec = SourceVideoCodec::RawVideo;
+        let command = build_stream_command_with_retained_inputs(
+            video,
+            OutputFormat::MpegTs,
+            Duration::from_secs(6),
+            Some(Duration::from_secs(20)),
+            &playback_profile(),
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(source),
+            vec![SourceAudioStream::new(SourceAudioCodec::Unknown).with_index(3)],
+            PlaybackAudioSelection::Exact(3),
+            None,
+            Vec::new(),
+            Vec::new(),
+            None,
+            true,
+        )
+        .unwrap();
+        let argv = command.arguments.join(" ");
+        assert!(!argv.contains("concatdec_select"));
+        assert!(argv.contains("0:7"));
+        assert!(argv.contains("0:3"));
+        assert!(command.arguments.iter().any(|arg| arg == "-copyts"));
+        assert!(!command.arguments.iter().any(|arg| arg == "-ss"));
+        let input_contract = command
+            .arguments
+            .windows(2)
+            .filter(|pair| matches!(pair[0].as_str(), "-f" | "-i"))
+            .map(|pair| pair.join(" "))
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::assert_snapshot!(input_contract, @"
+        -f nut
+        -i pipe:0
+        -f mpegts
+        ");
+    }
     use ersatzrs_domain::{
         FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
         StreamingMode, WatermarkLocation, WatermarkSize,
@@ -3050,10 +4217,12 @@ mod tests {
             load_active_media_path(&pool, 7, now).await,
             Err(RepositoryError::Decode { .. })
         ));
-        assert!(load_active_media_path(&pool, 99, now)
-            .await
-            .expect("load absent active playback item")
-            .is_none());
+        assert!(
+            load_active_media_path(&pool, 99, now)
+                .await
+                .expect("load absent active playback item")
+                .is_none()
+        );
         sqlx::query(
             r#"UPDATE "PlayoutItem"
                SET "SubtitleMode" = 0,
@@ -3171,6 +4340,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)] // Keep the minimal playback schema and its seed together.
     async fn active_playback_item_test_pool() -> DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
@@ -3223,6 +4393,7 @@ mod tests {
             )"#,
             r#"CREATE TABLE "RemoteStream" (
                 "Id" INTEGER PRIMARY KEY,
+                "ProviderId" TEXT NULL,
                 "Url" TEXT NULL,
                 "AddonId" TEXT NULL,
                 "Script" TEXT NULL,
@@ -3230,6 +4401,23 @@ mod tests {
                 "FallbackQuery" TEXT NULL,
                 "Liveness" INTEGER NOT NULL,
                 "IsLive" INTEGER NOT NULL
+            )"#,
+            r#"CREATE TABLE "MediaItem" (
+                "Id" INTEGER PRIMARY KEY,
+                "LibraryPathId" INTEGER NULL
+            )"#,
+            r#"CREATE TABLE "LibraryPath" (
+                "Id" INTEGER PRIMARY KEY,
+                "LibraryId" INTEGER NOT NULL
+            )"#,
+            r#"CREATE TABLE "AddonMediaListLibrary" (
+                "LibraryId" INTEGER PRIMARY KEY,
+                "AddonMediaListId" INTEGER NOT NULL
+            )"#,
+            r#"CREATE TABLE "AddonMediaList" (
+                "Id" INTEGER PRIMARY KEY,
+                "PublishedRevision" INTEGER NOT NULL,
+                "AddonId" TEXT NOT NULL
             )"#,
         ] {
             sqlx::query(statement)
@@ -3906,12 +5094,16 @@ mod tests {
         let second = playback_graphics_dir(10, 20);
 
         assert_ne!(first, second);
-        assert!(first
-            .parent()
-            .is_some_and(|path| path.ends_with(PathBuf::from("channel-10/item-20"))));
-        assert!(first
-            .file_name()
-            .is_some_and(|name| name.to_string_lossy().starts_with("request-")));
+        assert!(
+            first
+                .parent()
+                .is_some_and(|path| path.ends_with(PathBuf::from("channel-10/item-20")))
+        );
+        assert!(
+            first
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with("request-"))
+        );
     }
 
     #[test]
@@ -4239,6 +5431,7 @@ mod tests {
             None,
             None,
         )
+        .await
         .expect("spawn stream body");
         let grandchild_running = || async {
             tokio::process::Command::new("pgrep")
@@ -4307,6 +5500,7 @@ mod tests {
             None,
             None,
         )
+        .await
         .expect("spawn stream body");
 
         wait_for_capacity_active(1, 0).await;
@@ -4335,6 +5529,7 @@ mod tests {
             None,
             None,
         )
+        .await
         .expect("spawn stream body");
 
         assert_eq!(
@@ -4499,6 +5694,7 @@ mod tests {
             None,
             None,
         )
+        .await
         .expect("spawn stream body");
         // Wait for the fire-and-forget supervisor task to register the
         // session before dropping the response body.
@@ -5186,43 +6382,47 @@ mod tests {
     #[test]
     fn the_iptv_builder_allows_profile_8_1_transcode_but_rejects_unproven_stream_copy() {
         // Profile 8.1: the base layer is a conforming HDR10 signal.
-        assert!(build_stream_command(
-            "/media/dv81.mkv",
-            OutputFormat::MpegTs,
-            Duration::ZERO,
-            &playback_profile(),
-            None,
-            StreamingMode::TransportStream,
-            OutputMetadata::default(),
-            FfmpegCapabilityReport::default(),
-            Some(dolby_vision_source(8, 1)),
-            Vec::new(),
-            None,
-            None,
-            Vec::new(),
-            Vec::new(),
-        )
-        .is_ok());
+        assert!(
+            build_stream_command(
+                "/media/dv81.mkv",
+                OutputFormat::MpegTs,
+                Duration::ZERO,
+                &playback_profile(),
+                None,
+                StreamingMode::TransportStream,
+                OutputMetadata::default(),
+                FfmpegCapabilityReport::default(),
+                Some(dolby_vision_source(8, 1)),
+                Vec::new(),
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .is_ok()
+        );
 
         // ADR 0064 has no proven source/container/client passthrough matrix,
         // so even a low-level copy candidate is refused before spawn.
-        assert!(build_stream_command(
-            "/media/dv5.mkv",
-            OutputFormat::HlsMp4,
-            Duration::ZERO,
-            &playback_profile(),
-            None,
-            StreamingMode::HttpLiveStreamingDirect,
-            OutputMetadata::default(),
-            FfmpegCapabilityReport::default(),
-            Some(dolby_vision_source(5, 0)),
-            Vec::new(),
-            None,
-            None,
-            Vec::new(),
-            Vec::new(),
-        )
-        .is_err());
+        assert!(
+            build_stream_command(
+                "/media/dv5.mkv",
+                OutputFormat::HlsMp4,
+                Duration::ZERO,
+                &playback_profile(),
+                None,
+                StreamingMode::HttpLiveStreamingDirect,
+                OutputMetadata::default(),
+                FfmpegCapabilityReport::default(),
+                Some(dolby_vision_source(5, 0)),
+                Vec::new(),
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .is_err()
+        );
     }
 
     #[cfg(unix)]
@@ -5279,7 +6479,7 @@ mod tests {
             source_stream: None,
             graph_operation: Some(HardwareGraphOperation::NvencDolbyVisionProfile5Sdr),
             ffmpeg_path: ffmpeg.to_string_lossy().into_owned(),
-            rebuild: Some(Box::new(move |retry_mode| {
+            rebuild: Some(immediate_stream_retry(Box::new(move |retry_mode| {
                 rebuild_observer.store(true, Ordering::SeqCst);
                 let StreamRetryMode::HardwareGraphDenied(runtime_capabilities) = retry_mode else {
                     panic!("profile 5 graph failure must use the graph retry mode");
@@ -5289,7 +6489,7 @@ mod tests {
                     gpu
                 ));
                 None
-            })),
+            }))),
         });
         let child = spawn_stream_process(&command, None, "test").expect("spawn profile 5 tool");
         let (_reader, mut writer) = tokio::io::duplex(1024);
@@ -5382,13 +6582,13 @@ mod tests {
             source_stream: None,
             graph_operation: Some(HardwareGraphOperation::NvencHdrVulkanLibplacebo),
             ffmpeg_path: primary.to_string_lossy().into_owned(),
-            rebuild: Some(Box::new(move |_| {
+            rebuild: Some(immediate_stream_retry(Box::new(move |_| {
                 Some(FfmpegCommand::new_with_executable(
                     fallback_path,
                     Vec::new(),
                     vec!["-vf".to_owned(), "scale_cuda=256:144".to_owned()],
                 ))
-            })),
+            }))),
         });
         let child =
             spawn_stream_process(&initial_command, None, "test").expect("spawn primary tool");
@@ -5426,12 +6626,16 @@ mod tests {
                 )
         }));
         let shared = shared_runtime.read().await;
-        assert!(shared
-            .capabilities
-            .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu));
-        assert!(shared
-            .capabilities
-            .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
+        assert!(
+            shared
+                .capabilities
+                .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu)
+        );
+        assert!(
+            shared
+                .capabilities
+                .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu)
+        );
     }
 
     #[cfg(unix)]
@@ -5495,13 +6699,13 @@ mod tests {
             source_stream: Some(SourceVideoStream::new(SourceVideoCodec::Av1)),
             graph_operation: Some(HardwareGraphOperation::NvencCudaScale),
             ffmpeg_path: primary.to_string_lossy().into_owned(),
-            rebuild: Some(Box::new(move |_| {
+            rebuild: Some(immediate_stream_retry(Box::new(move |_| {
                 Some(FfmpegCommand::new_with_executable(
                     fallback_path,
                     Vec::new(),
                     vec!["-vf".to_owned(), "scale_cuda=256:144".to_owned()],
                 ))
-            })),
+            }))),
         });
         let child =
             spawn_stream_process(&initial_command, None, "test").expect("spawn primary tool");
@@ -5540,9 +6744,11 @@ mod tests {
             8
         ));
         let shared = shared_runtime.read().await;
-        assert!(shared
-            .capabilities
-            .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
+        assert!(
+            shared
+                .capabilities
+                .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu)
+        );
         assert!(shared.capabilities.hardware_decode_denied(
             ersatzrs_domain::HardwareAccelerationKind::Nvenc,
             "av1",

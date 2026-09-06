@@ -18,15 +18,18 @@ use ersatzrs_addon_contract::{
     AddonEntrypointKind, AddonIconMediaType, AddonManifest, AddonOperationError,
     AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon, CatalogPackage,
     LocalRepositoryManifest, RepositoryManifest, CAPABILITY_ADDON_CHECK_V1,
+    CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1, CAPABILITY_MEDIA_LIST_ENRICH_V1,
     CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_IMPORT_V2,
+    CAPABILITY_MEDIA_LIST_INTERVAL_METADATA_V1, CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1,
     CAPABILITY_MEDIA_LIST_LIST_V1, CAPABILITY_MEDIA_LIST_LIST_V2, CAPABILITY_MEDIA_LIST_LIST_V3,
     CAPABILITY_MEDIA_LIST_LIST_V4, CAPABILITY_MEDIA_LIST_LIST_V5, CAPABILITY_MEDIA_LIST_LIST_V6,
-    CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1, CAPABILITY_REMOTE_STREAM_ITEM_V1,
-    CAPABILITY_REMOTE_STREAM_ITEM_V2, CAPABILITY_REMOTE_STREAM_LIST_V1,
-    CAPABILITY_REMOTE_STREAM_LIST_V2, CAPABILITY_REMOTE_STREAM_LIST_V3,
-    CAPABILITY_REMOTE_STREAM_LIST_V4, CAPABILITY_REMOTE_STREAM_PLAY_V1,
-    CAPABILITY_REMOTE_STREAM_PLAY_V2, OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET,
-    OPERATION_CODE_MISSING_SETTING,
+    CAPABILITY_MEDIA_LIST_PREPARE_V1, CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1,
+    CAPABILITY_REMOTE_STREAM_ITEM_V1, CAPABILITY_REMOTE_STREAM_ITEM_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
+    CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
+    CAPABILITY_REMOTE_STREAM_PLAY_V1, CAPABILITY_REMOTE_STREAM_PLAY_V2,
+    CAPABILITY_REMOTE_STREAM_PLAY_V3, CAPABILITY_REMOTE_STREAM_PLAY_V4, OPERATION_CODE_FAILED,
+    OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
 };
 use ersatzrs_domain::EntityId;
 use futures_util::StreamExt as _;
@@ -111,6 +114,9 @@ pub enum AddonError {
     /// The add-on process failed its bounded invocation contract.
     #[error("add-on process failed: {0}")]
     Process(String),
+    /// Staging must remain reserved because process termination was not confirmed.
+    #[error("add-on process termination could not be confirmed")]
+    TerminationUnconfirmed,
     /// A list or play operation returned one structured bounded failure.
     #[error("{0}")]
     Operation(AddonOperationError),
@@ -281,28 +287,51 @@ pub struct AddonInvocation<'a> {
 pub(crate) struct ManagedAddonChild {
     child: Box<dyn ChildWrapper>,
     terminate_on_drop: bool,
+    #[cfg(unix)]
+    process_group: nix::unistd::Pid,
+    #[cfg(windows)]
+    process_job: crate::addon_process_job::TrackedJob,
 }
 
 impl ManagedAddonChild {
-    /// Wait for the leader, then terminate any members left in its managed
-    /// process group/job before the identifier can be reused.
+    /// Wait for the leader, terminate remaining members, and confirm the
+    /// managed process group/job is empty before reporting completion.
     pub(crate) async fn wait(&mut self) -> std::io::Result<ExitStatus> {
-        let result = self.child.wait().await;
+        #[cfg(unix)]
         if self.terminate_on_drop {
-            let _ = self.child.start_kill();
-            self.terminate_on_drop = false;
+            // Keep the exited leader waitable until signalling: its unreaped
+            // PID pins the process-group identity across this await boundary.
+            observe_process_leader_exit(self.process_group).await?;
         }
-        result
+        // The dependency's Windows wait may itself wait for descendants. Wait
+        // only for the leader so leftovers can be terminated immediately.
+        #[cfg(windows)]
+        let status = self.child.inner_mut().wait().await?;
+        self.start_kill()?;
+        #[cfg(unix)]
+        let status = {
+            // Preserve waitpid-based reaping when the host is PID 1 or a
+            // subreaper. Windows instead uses the independent tracking job.
+            let status = self.child.wait().await?;
+            wait_for_process_group_exit(self.process_group).await?;
+            status
+        };
+        #[cfg(windows)]
+        self.process_job.wait_for_exit().await?;
+        Ok(status)
     }
 
     /// Terminate the managed process group/job and wait for its leader.
     pub(crate) async fn kill(&mut self) -> std::io::Result<()> {
-        if self.terminate_on_drop {
-            let result = self.child.start_kill();
-            self.terminate_on_drop = false;
-            result?;
+        self.start_kill()?;
+        self.child.inner_mut().wait().await?;
+        #[cfg(unix)]
+        {
+            self.child.wait().await?;
+            wait_for_process_group_exit(self.process_group).await?;
         }
-        self.child.wait().await?;
+        #[cfg(windows)]
+        self.process_job.wait_for_exit().await?;
         Ok(())
     }
 
@@ -311,10 +340,62 @@ impl ManagedAddonChild {
         if !self.terminate_on_drop {
             return Ok(());
         }
-        let result = self.child.start_kill();
+        if let Err(error) = self.child.start_kill() {
+            // Unix reports ESRCH when the group has already exited. Windows
+            // terminates its job object instead and must preserve any error.
+            #[cfg(unix)]
+            let already_exited = error.raw_os_error() == Some(libc::ESRCH);
+            #[cfg(not(unix))]
+            let already_exited = false;
+            if !already_exited {
+                // Retain the drop fallback and permit an awaited kill retry.
+                return Err(error);
+            }
+        }
         self.terminate_on_drop = false;
-        result
+        Ok(())
     }
+}
+
+/// Observe only; the caller owns the timeout and must kill before any reaping.
+/// Every syscall is nonblocking, so cancellation leaves the leader waitable.
+#[cfg(unix)]
+async fn observe_process_leader_exit(group: nix::unistd::Pid) -> std::io::Result<()> {
+    use rustix::process::{waitid, Pid, WaitId, WaitIdOptions};
+
+    let leader = Pid::from_raw(group.as_raw())
+        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+    loop {
+        match waitid(
+            WaitId::Pid(leader),
+            WaitIdOptions::EXITED | WaitIdOptions::NOWAIT | WaitIdOptions::NOHANG,
+        ) {
+            Ok(Some(_)) => return Ok(()),
+            Ok(None) | Err(rustix::io::Errno::INTR) => {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            Err(error) => return Err(std::io::Error::from(error)),
+        }
+    }
+}
+
+/// `waitpid` can exhaust waitable children while orphaned group members still
+/// exist. Probe without signalling again after the first kill, so a recycled
+/// identifier cannot be targeted by a cleanup retry. Uncertain exit keeps the
+/// caller's reservation charged; even zombies are conservatively not absence.
+#[cfg(unix)]
+async fn wait_for_process_group_exit(group: nix::unistd::Pid) -> std::io::Result<()> {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match nix::sys::signal::killpg(group, None) {
+                Err(nix::errno::Errno::ESRCH) => return Ok(()),
+                Err(error) => return Err(std::io::Error::from(error)),
+                Ok(()) => tokio::time::sleep(Duration::from_millis(25)).await,
+            }
+        }
+    })
+    .await
+    .map_err(|_| std::io::Error::from(std::io::ErrorKind::TimedOut))?
 }
 
 impl Deref for ManagedAddonChild {
@@ -3255,10 +3336,21 @@ fn validate_supported_operation(capability: &str, operation: &str) -> Result<(),
         ) | (
             CAPABILITY_MEDIA_LIST_IMPORT_V1 | CAPABILITY_MEDIA_LIST_IMPORT_V2,
             "discover" | "enrich",
-        ) | (
-            CAPABILITY_REMOTE_STREAM_PLAY_V1 | CAPABILITY_REMOTE_STREAM_PLAY_V2,
-            "play"
-        )
+        ) | (CAPABILITY_MEDIA_LIST_ENRICH_V1, "enrich-options")
+            | (CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1, "test-access")
+            | (CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1, "runtime-info")
+            | (CAPABILITY_MEDIA_LIST_PREPARE_V1, "prepare")
+            | (CAPABILITY_REMOTE_STREAM_PLAY_V4, "play-intervals")
+            | (
+                CAPABILITY_MEDIA_LIST_INTERVAL_METADATA_V1,
+                "interval-metadata"
+            )
+            | (
+                CAPABILITY_REMOTE_STREAM_PLAY_V1
+                    | CAPABILITY_REMOTE_STREAM_PLAY_V2
+                    | CAPABILITY_REMOTE_STREAM_PLAY_V3,
+                "play"
+            )
     );
     if !supported {
         return Err(AddonError::Validation(format!(
@@ -3406,10 +3498,10 @@ async fn run_bounded_command(
     timeout: Duration,
     max_output_bytes: usize,
 ) -> Result<Vec<u8>, AddonError> {
-    run_bounded_command_inner(command, timeout, max_output_bytes, None, &[]).await
+    run_bounded_command_inner(command, timeout, max_output_bytes, None, &[], None).await
 }
 
-async fn run_bounded_command_with_input(
+pub(crate) async fn run_bounded_command_with_input(
     command: &ResolvedAddonCommand,
     timeout: Duration,
     max_output_bytes: usize,
@@ -3422,6 +3514,28 @@ async fn run_bounded_command_with_input(
         max_output_bytes,
         Some(input),
         sensitive_values,
+        None,
+    )
+    .await
+}
+
+/// Cancel cooperatively so callers can await managed process termination before
+/// releasing files or capacity. Dropping the sender also requests cancellation.
+pub(crate) async fn run_bounded_command_with_input_cancellable(
+    command: &ResolvedAddonCommand,
+    timeout: Duration,
+    max_output_bytes: usize,
+    input: &[u8],
+    sensitive_values: &[String],
+    cancellation: tokio::sync::oneshot::Receiver<()>,
+) -> Result<Vec<u8>, AddonError> {
+    run_bounded_command_inner(
+        command,
+        timeout,
+        max_output_bytes,
+        Some(input),
+        sensitive_values,
+        Some(cancellation),
     )
     .await
 }
@@ -3432,6 +3546,7 @@ async fn run_bounded_command_inner(
     max_output_bytes: usize,
     input: Option<&[u8]>,
     sensitive_values: &[String],
+    cancellation: Option<tokio::sync::oneshot::Receiver<()>>,
 ) -> Result<Vec<u8>, AddonError> {
     let mut process = addon_process(command);
     process
@@ -3471,36 +3586,45 @@ async fn run_bounded_command_inner(
     };
     let stdout_task = tokio::spawn(read_limited(stdout, max_output_bytes));
     let stderr_task = tokio::spawn(read_limited(stderr, MAX_CHECK_OUTPUT_BYTES));
-    let Ok(wait_result) = tokio::time::timeout(timeout, child.wait()).await else {
-        let _ = child.kill().await;
-        stdout_task.abort();
-        stderr_task.abort();
-        if let Some(task) = stdin_task {
-            task.abort();
-            let _ = task.await;
-        }
-        let _ = stdout_task.await;
-        let _ = stderr_task.await;
-        return Err(AddonError::Process("entrypoint timed out".to_owned()));
+    let wait_result = tokio::select! {
+        result = tokio::time::timeout(timeout, child.wait()) => match result {
+            Ok(Ok(status)) => Ok(status),
+            Ok(Err(_)) => Err("entrypoint wait failed"),
+            Err(_) => Err("entrypoint timed out"),
+        },
+        () = async {
+            if let Some(cancellation) = cancellation {
+                let _ = cancellation.await;
+            } else {
+                std::future::pending::<()>().await;
+            }
+        } => Err("entrypoint cancelled"),
     };
-    let Ok(status) = wait_result else {
-        let _ = child.start_kill();
-        stdout_task.abort();
-        stderr_task.abort();
-        if let Some(task) = stdin_task {
-            task.abort();
-            let _ = task.await;
+    let status = match wait_result {
+        Ok(status) => status,
+        Err(reason) => {
+            let stopped = tokio::time::timeout(Duration::from_secs(5), child.kill())
+                .await
+                .is_ok_and(|result| result.is_ok());
+            stdout_task.abort();
+            stderr_task.abort();
+            if let Some(task) = stdin_task {
+                task.abort();
+                let _ = task.await;
+            }
+            let _ = tokio::join!(stdout_task, stderr_task);
+            return Err(if stopped {
+                AddonError::Process(reason.to_owned())
+            } else {
+                AddonError::TerminationUnconfirmed
+            });
         }
-        let _ = stdout_task.await;
-        let _ = stderr_task.await;
-        return Err(AddonError::Process("entrypoint wait failed".to_owned()));
     };
     if let Some(task) = stdin_task {
         task.await
             .map_err(|_| AddonError::Process("stdin writer failed".to_owned()))?
             .map_err(|_| AddonError::Process("entrypoint stdin write failed".to_owned()))?;
     }
-    let _ = child.start_kill();
     let (stdout, stderr) = collect_bounded_output(stdout_task, stderr_task).await?;
     if stdout.len() > max_output_bytes || stderr.len() > MAX_CHECK_OUTPUT_BYTES {
         return Err(AddonError::Process(
@@ -3640,10 +3764,24 @@ pub(crate) fn spawn_managed_addon_process(process: Command) -> std::io::Result<M
     process.wrap(ProcessGroup::leader());
     #[cfg(windows)]
     process.wrap(JobObject);
+    #[cfg(windows)]
+    let process_job = crate::addon_process_job::TrackedJob::attach(&mut process)?;
     process.wrap(KillOnDrop);
-    process.spawn().map(|child| ManagedAddonChild {
+    let child = process.spawn()?;
+    #[cfg(unix)]
+    let process_group = child
+        .id()
+        .and_then(|id| i32::try_from(id).ok())
+        .filter(|id| *id > 1)
+        .map(nix::unistd::Pid::from_raw)
+        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::InvalidData))?;
+    Ok(ManagedAddonChild {
         child,
         terminate_on_drop: true,
+        #[cfg(unix)]
+        process_group,
+        #[cfg(windows)]
+        process_job,
     })
 }
 
@@ -5485,6 +5623,125 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
+    async fn managed_group_exit_requires_more_than_reaping_its_leader() {
+        let mut process = Command::new("/bin/sh");
+        process
+            .args(["-c", "sleep 30 >/dev/null 2>&1 & exit 0"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = spawn_managed_addon_process(process).unwrap();
+        let group = child.process_group;
+        // Observe without reaping; cleanup must retain the original group
+        // identity even after its leader has exited.
+        tokio::time::timeout(Duration::from_secs(5), observe_process_leader_exit(group))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(nix::sys::signal::killpg(group, None).is_ok());
+        assert!(tokio::time::timeout(
+            Duration::from_millis(75),
+            wait_for_process_group_exit(group),
+        )
+        .await
+        .is_err());
+        child.kill().await.unwrap();
+        assert_eq!(
+            nix::sys::signal::killpg(group, None),
+            Err(nix::errno::Errno::ESRCH)
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn managed_group_leader_observation_does_not_reap_before_kill() {
+        use rustix::process::{waitid, Pid, WaitId, WaitIdOptions};
+
+        let mut process = Command::new("/bin/sh");
+        process
+            .args(["-c", "exit 7"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = spawn_managed_addon_process(process).unwrap();
+        let group = child.process_group;
+        tokio::time::timeout(Duration::from_secs(5), observe_process_leader_exit(group))
+            .await
+            .unwrap()
+            .unwrap();
+        let leader = Pid::from_raw(group.as_raw()).unwrap();
+        // A second observation succeeds only while the leader is still waitable.
+        let status = waitid(
+            WaitId::Pid(leader),
+            WaitIdOptions::EXITED | WaitIdOptions::NOWAIT | WaitIdOptions::NOHANG,
+        )
+        .unwrap()
+        .expect("unreaped leader");
+        assert!(status.exited());
+        assert!(child.terminate_on_drop);
+        assert!(nix::sys::signal::killpg(group, None).is_ok());
+        let status = child.wait().await.unwrap();
+        assert_eq!(status.code(), Some(7));
+        assert_eq!(
+            waitid(
+                WaitId::Pid(leader),
+                WaitIdOptions::EXITED | WaitIdOptions::NOWAIT | WaitIdOptions::NOHANG
+            )
+            .unwrap_err(),
+            rustix::io::Errno::CHILD
+        );
+        assert_eq!(child.wait().await.unwrap().code(), Some(7));
+    }
+
+    // Linux-specific subreaper behavior is isolated in a fresh test process,
+    // so this process-wide setting cannot affect concurrently running tests.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[allow(clippy::disallowed_methods)] // Test-only flag separates the isolated subreaper child from its parent.
+    async fn managed_group_exit_reaps_adopted_descendants() {
+        const HELPER: &str = "ERSATZRS_TEST_ADOPTED_CHILD_REAPER";
+        if std::env::var_os(HELPER).is_none() {
+            let mut helper = Command::new(std::env::current_exe().unwrap());
+            helper
+                .args([
+                    "--exact",
+                    "addons::tests::managed_group_exit_reaps_adopted_descendants",
+                    "--nocapture",
+                ])
+                .env(HELPER, "1")
+                .kill_on_drop(true);
+            let output = tokio::time::timeout(Duration::from_secs(15), helper.output())
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "isolated subreaper regression failed"
+            );
+            return;
+        }
+        nix::sys::prctl::set_child_subreaper(true).unwrap();
+        let mut process = Command::new("/bin/sh");
+        process
+            .args(["-c", "sleep 30 >/dev/null 2>&1 & exit 0"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let mut child = spawn_managed_addon_process(process).unwrap();
+        let group = child.process_group;
+        assert!(tokio::time::timeout(Duration::from_secs(5), child.wait())
+            .await
+            .unwrap()
+            .unwrap()
+            .success());
+        assert_eq!(
+            nix::sys::signal::killpg(group, None),
+            Err(nix::errno::Errno::ESRCH)
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
     async fn timed_out_add_on_kills_its_descendant_process_group() {
         let temp = tempfile::tempdir().expect("temp directory");
         let marker = temp.path().join("orphan-marker");
@@ -5542,6 +5799,64 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
+    async fn cancelled_add_on_invocation_reaps_leader_before_returning() {
+        let temp = tempfile::tempdir().expect("temp directory");
+        let ready = temp.path().join("invocation-ready");
+        let marker = temp.path().join("cancelled-marker");
+        let command = ResolvedAddonCommand {
+            addon_id: "org.ersatzrs.addon.fixture".to_owned(),
+            program: "/bin/sh".to_owned(),
+            args: vec![
+                "-c".to_owned(),
+                "printf '%s' \"$$\" > \"$2\"; (sleep 1; printf orphan > \"$1\") & wait".to_owned(),
+                "addon".to_owned(),
+                marker.to_string_lossy().into_owned(),
+                ready.to_string_lossy().into_owned(),
+            ],
+            working_directory: temp.path().to_path_buf(),
+            environment: BTreeMap::new(),
+            state_revision: "fixture".to_owned(),
+        };
+        let (cancel, cancelled) = tokio::sync::oneshot::channel();
+        let invocation = tokio::spawn(async move {
+            super::run_bounded_command_with_input_cancellable(
+                &command,
+                Duration::from_secs(5),
+                1_024,
+                b"",
+                &[],
+                cancelled,
+            )
+            .await
+        });
+        let pid = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if let Ok(pid) = tokio::fs::read_to_string(&ready).await {
+                    if !pid.is_empty() {
+                        break pid;
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("invocation started");
+        cancel.send(()).expect("request cancellation");
+        let result = invocation.await.expect("runner completed");
+        assert!(
+            matches!(result, Err(AddonError::Process(message)) if message == "entrypoint cancelled")
+        );
+        let alive = std::process::Command::new("/bin/sh")
+            .args(["-c", "kill -0 \"$1\" 2>/dev/null", "probe", &pid])
+            .status()
+            .expect("probe synthetic process");
+        assert!(!alive.success(), "cancelled leader was not reaped");
+        tokio::time::sleep(Duration::from_millis(1_200)).await;
+        assert!(!marker.exists(), "cancelled descendant kept writing");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
     async fn aborted_add_on_invocation_kills_its_descendant_process_group() {
         let temp = tempfile::tempdir().expect("temp directory");
         let marker = temp.path().join("aborted-marker");
@@ -5589,6 +5904,21 @@ mod tests {
 
     #[test]
     fn only_host_supported_capability_operations_can_dispatch() {
+        for (capability, operation) in [
+            (CAPABILITY_MEDIA_LIST_ENRICH_V1, "enrich-options"),
+            (CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1, "test-access"),
+            (CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1, "runtime-info"),
+            (CAPABILITY_MEDIA_LIST_PREPARE_V1, "prepare"),
+            (CAPABILITY_REMOTE_STREAM_PLAY_V3, "play"),
+            (CAPABILITY_REMOTE_STREAM_PLAY_V4, "play-intervals"),
+        ] {
+            assert!(validate_supported_operation(capability, operation).is_ok());
+            assert!(validate_supported_operation(capability, "discover").is_err());
+        }
+        assert!(
+            validate_supported_operation(CAPABILITY_MEDIA_LIST_IMPORT_V2, "enrich-options")
+                .is_err()
+        );
         assert!(validate_supported_operation(CAPABILITY_ADDON_CHECK_V1, "check").is_ok());
         assert!(validate_supported_operation(CAPABILITY_MEDIA_LIST_LIST_V1, "list").is_ok());
         assert!(
@@ -5598,6 +5928,8 @@ mod tests {
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V1, "play").is_ok());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V2, "play").is_ok());
         assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V1, "list").is_err());
+        assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V3, "resolve").is_err());
+        assert!(validate_supported_operation(CAPABILITY_REMOTE_STREAM_PLAY_V4, "play").is_err());
     }
 
     #[tokio::test]

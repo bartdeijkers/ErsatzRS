@@ -6800,6 +6800,90 @@ create_playlist: true
     }
 
     #[tokio::test]
+    async fn prepared_remote_stream_duration_reaches_media_version_without_changing_yaml_identity()
+    {
+        use super::{upsert_local_remote_stream, LocalLibraryPath};
+        use ersatzrs_domain::RemoteStreamLiveness;
+        use ersatzrs_infra::remote_stream::{
+            RemoteStreamDefinition, RemoteStreamSource, ResolvedRemoteStream,
+        };
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::Executor as _;
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+        pool.execute("PRAGMA foreign_keys = OFF").await.unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let yaml_path = root.path().join("prepared.yml");
+        let manifest = super::remote_stream_playlist::parse_playlist_manifest(
+            "url: https://example.test/list\naddon: org.ersatzrs.addon.fixture\n",
+            &root.path().join("Fixture.playlist.yml"),
+        )
+        .unwrap();
+        let mut entry = super::remote_stream_playlist::PlaylistEntry::new(
+            "item",
+            "https://example.test/item",
+            "Prepared",
+        );
+        entry.duration_seconds = Some(120);
+        entry.liveness = Some(ersatzrs_addon_contract::RemoteStreamLiveness::Finite);
+        let bytes = super::remote_stream_playlist::prepared_definition_bytes_for_test(
+            &manifest, &entry, 90_250,
+        )
+        .unwrap();
+        tokio::fs::write(&yaml_path, &bytes).await.unwrap();
+        let definition: RemoteStreamDefinition = serde_yaml::from_slice(&bytes).unwrap();
+        assert_eq!(definition.duration.as_deref(), Some("00:01:30.250"));
+        let resolved = ResolvedRemoteStream {
+            source: RemoteStreamSource::Url("https://example.test/item".into()),
+            liveness: RemoteStreamLiveness::Finite,
+            is_live: false,
+            configured_duration: definition.duration.clone(),
+            fallback_query: None,
+            uses_addon: false,
+        };
+        let library_path = LocalLibraryPath {
+            id: 1,
+            path: root.path().display().to_string(),
+            media_kind: LibraryMediaKind::RemoteStreams,
+        };
+        let first = upsert_local_remote_stream(
+            &pool,
+            &library_path,
+            &yaml_path,
+            &definition,
+            &resolved,
+            None,
+        )
+        .await
+        .unwrap();
+        let second = upsert_local_remote_stream(
+            &pool,
+            &library_path,
+            &yaml_path,
+            &definition,
+            &resolved,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(first, second);
+        let rows: Vec<(String, String)> = sqlx::query_as(r#"SELECT "version"."Duration", "file"."Path"
+            FROM "MediaVersion" AS "version" JOIN "MediaFile" AS "file" ON "file"."MediaVersionId"="version"."Id"
+            WHERE "version"."RemoteStreamId"=?"#).bind(first).fetch_all(&pool).await.unwrap();
+        assert_eq!(
+            rows,
+            vec![("00:01:30.250".into(), yaml_path.display().to_string())]
+        );
+        assert_eq!(tokio::fs::read(&yaml_path).await.unwrap(), bytes);
+        assert_eq!(entry.duration_seconds, Some(120));
+    }
+
+    #[tokio::test]
     async fn remote_stream_provider_identity_survives_generated_path_change() {
         use super::{upsert_local_remote_stream, LocalLibraryPath};
         use ersatzrs_domain::{AddonMediaListItemAvailability, RemoteStreamLiveness};

@@ -1,5 +1,77 @@
 # TSDuck playback gate (E2E)
 
+## Real SponsorBlock publication and transport probe
+
+`tests/e2e/addon-sponsorblock-streaming.spec.ts` is opt-in and never runs in
+default CI. It installs the actual yt-dlp add-on through the admin trust flow,
+imports the required public fixture, prepares interval metadata, publishes,
+and schedules that scanner-owned media for serial MPEG-TS and HLS captures.
+It requires explicit FFmpeg 9 paths and does not use browser cookies.
+
+Run against an isolated host/database with an existing matched SSR/WASM build
+and installed Chromium. Keep its log available for the test; do not point these
+settings at a production database or browser profile:
+
+```bash
+E2E_SPONSORBLOCK_ADDON_CHECKOUT=/path/to/addons-checkout \
+ERSATZRS_BASE_URL=http://127.0.0.1:18409 \
+E2E_DB_PATH=/path/to/isolated/ErsatzRS.db \
+E2E_APP_STATE_DIR=/path/to/isolated/state \
+E2E_SPONSORBLOCK_HOST_LOG=/path/to/isolated/host.log \
+ErsatzRS_FFMPEG__PATH=/path/to/ffmpeg-9/bin/ffmpeg \
+ErsatzRS_FFPROBE__PATH=/path/to/ffmpeg-9/bin/ffprobe \
+npx playwright test tests/e2e/addon-sponsorblock-streaming.spec.ts \
+  --project=chromium --workers=1
+```
+
+Captures and timing evidence are retained even when a transport fails. This
+probe establishes actual publication and transport. Its H.264/AAC browser HLS
+check records first presented frame, post-start stalls/seeks, frame gaps, buffer
+samples and conservative temporal cut coverage while capturing those same
+segments. MPEG-TS feeds the same HTTP response to one bounded FFmpeg decoder and
+records first decoded audio/video, delivery gaps and decoded spans. A bounded
+host-log window rejects concealed inner playback failures; only a timestamped
+normal cancellation at or after the deliberate TS cutoff is exempt. Only static
+failure categories enter the evidence, never raw log lines. Neither check establishes
+exact source-content removal, audible continuity or injected network jitter.
+Run without concurrent builds or playback checks. For transport diagnosis,
+explicitly restart the retained
+isolated host/database and pass `E2E_SPONSORBLOCK_PUBLISHED_LIST_ID` with its
+existing E2E environment directly to Playwright; the fixture must already have
+a completed publication. Configure the isolated host with `ERSATZRS_APP_STATE_DIR`
+and `ERSATZRS_APP_DATA_DIR`; do not override `HOME` to isolate this probe.
+
+## SponsorBlock streaming feasibility experiment
+
+`sponsorblock-streaming-spike.mjs` is an isolated diagnostic, not a product or
+player acceptance gate. It generates a synthetic source, serves paced HTTP
+ranges with delayed opens, and runs one FFmpeg encoder into HLS. Its simulated
+consumer measures completed-segment reserve without pausing its playback clock
+to hide deficits. No real provider, credentials, application database or Rust
+build is involved. All temporary evidence is retained.
+
+```bash
+FFMPEG_PATH=/path/to/ffmpeg-9/bin/ffmpeg \
+FFPROBE_PATH=/path/to/ffmpeg-9/bin/ffprobe \
+node scripts/e2e/sponsorblock-streaming-spike.mjs
+```
+
+The approved startup budget is ten seconds target, fifteen seconds maximum.
+Other defaults remain experimental: eight seconds of startup reserve, 250 ms
+open delay plus repeating 0/150/300 ms jitter, and 128 KiB/s per-response body
+pacing. The earlier five-second cap and its results remain historical. The
+script header lists overrides. Set both
+`OPEN_DELAY_MS=0 OPEN_JITTER_MS=0` for the control. A missed bound exits nonzero;
+do not increase bounds merely to obtain a pass. A simulation-only pass proves neither correct
+removed content, A/V continuity, cancellation, nor uninterrupted real-player
+playback. Set `BROWSER_PROOF=1` to additionally run the existing Chromium and
+vendored HLS player against the growing output, checking startup and post-start
+video/buffer continuity. This does not boot ErsatzRS or prove audible continuity
+or actual-host integration. No browser or dependency is installed by the script.
+Run serially, without another build or playback gate.
+
+## Transport playback gate
+
 A **required manual gate for confirming correct playback** — *not* part of CI.
 
 CI proves the code compiles and the units pass; it does **not** prove that the

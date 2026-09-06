@@ -311,7 +311,9 @@ impl LanguageStrings for DutchStrings {
     }
 
     fn no_media_source_configured(&self, provider: &'static str) -> String {
-        format!("Geen {provider}-bron geconfigureerd. Klik op Verbinding configureren om er een toe te voegen.")
+        format!(
+            "Geen {provider}-bron geconfigureerd. Klik op Verbinding configureren om er een toe te voegen."
+        )
     }
 
     fn provider_connection_title(&self, provider: &'static str) -> String {
@@ -360,7 +362,9 @@ impl LanguageStrings for DutchStrings {
         fallbacks: u64,
         fallback_hours: u64,
     ) -> String {
-        format!("Bij {recent} kana(a)l(en) werd live HLS-media in de afgelopen {minutes} minuten langzamer dan de werkelijke tijd geleverd; {active} was/waren bij de laatste meting nog niet hersteld; {fallbacks} kana(a)l(en) gebruiken maximaal {fallback_hours} uur een geverifieerde terugval naar software-encoding en/of lagere kwaliteit. Controleer de streaminglogboeken en voer de leveringsbewuste TSDuck-afspeeltest uit voordat u providerinstellingen wijzigt.")
+        format!(
+            "Bij {recent} kana(a)l(en) werd live HLS-media in de afgelopen {minutes} minuten langzamer dan de werkelijke tijd geleverd; {active} was/waren bij de laatste meting nog niet hersteld; {fallbacks} kana(a)l(en) gebruiken maximaal {fallback_hours} uur een geverifieerde terugval naar software-encoding en/of lagere kwaliteit. Controleer de streaminglogboeken en voer de leveringsbewuste TSDuck-afspeeltest uit voordat u providerinstellingen wijzigt."
+        )
     }
 
     fn artwork_cardinality_message(
@@ -1113,6 +1117,56 @@ fn xmltv_days_error_parts(error: &str) -> Option<(&str, &str)> {
 
 pub fn text(key: TextKey) -> &'static str {
     match key {
+        TextKey::AddonAccessTest => "Toegang testen",
+        TextKey::AddonAccessHelp => {
+            "Controleer dit item met de opgeslagen conceptopties. Niet-opgeslagen wijzigingen tellen niet mee; gepubliceerde weergave blijft gelijk."
+        }
+        TextKey::AddonAccessSaveFirst => {
+            "Sla eerst een optie op om de conceptinstellingen te activeren voordat u de toegang test."
+        }
+        TextKey::AddonAccessError => {
+            "De toegangscontrole kon niet worden geladen of gewijzigd. Vernieuw het item en probeer het opnieuw."
+        }
+        TextKey::AddonAccessNotChecked => "Niet gecontroleerd",
+        TextKey::AddonAccessQueued => "Toegangscontrole in wachtrij",
+        TextKey::AddonAccessRunning => "Toegang controleren",
+        TextKey::AddonAccessWaiting => "Wachten om de toegangscontrole opnieuw te proberen",
+        TextKey::AddonAccessCancelled => "Toegangscontrole geannuleerd",
+        TextKey::AddonAccessStale => "Toegangsresultaat verlopen of instellingen gewijzigd",
+        TextKey::AddonAccessAccessible => "Toegankelijk",
+        TextKey::AddonAccessProfileUnavailable => "Browserprofiel niet beschikbaar",
+        TextKey::AddonAccessProfileLocked => "Browserprofiel vergrendeld",
+        TextKey::AddonAccessDecryptionFailed => "Browserreferenties konden niet worden ontsleuteld",
+        TextKey::AddonAccessRestricted => "Toegang beperkt door de provider",
+        TextKey::AddonAccessNextAttempt => "Volgende poging:",
+        TextKey::AddonAccessExpires => "Resultaat verloopt:",
+        TextKey::AddonAccessRefresh => "Status vernieuwen",
+        TextKey::AddonOptionsCurrentFilter => "Huidig filter",
+        TextKey::AddonOptions => "Provideropties",
+        TextKey::AddonOptionsDraftHelp => {
+            "Wijzigingen worden in het concept opgeslagen. Gepubliceerde weergave behoudt de huidige opties totdat u publiceert."
+        }
+        TextKey::AddonOptionsProvisional => {
+            "Deze pakketstandaarden zijn voorlopig. Door een optie op te slaan activeert u ze voor dit concept."
+        }
+        TextKey::AddonOptionsListDefault => "Lijststandaard",
+        TextKey::AddonOptionsInherited => "Overgenomen",
+        TextKey::AddonOptionsOverride => "Overschrijving",
+        TextKey::AddonOptionsFiniteOnly => {
+            "Niet beschikbaar voor live-items of items met onbekende duur: deze optie vereist media met een vaste duur. Direct afspelen blijft beschikbaar."
+        }
+        TextKey::AddonOptionsResetPackage => "Pakketstandaard herstellen",
+        TextKey::AddonOptionsResetList => "Lijststandaard herstellen",
+        TextKey::AddonOptionsMixed => "Verschillende waarden — kies een waarde",
+        TextKey::AddonOptionsPreviewHelp => {
+            "Controleer deze specifieke items voordat u toepast. Bij een tussentijdse concept- of schemawijziging is een nieuw voorbeeld vereist."
+        }
+        TextKey::AddonOptionsBefore => "Voor",
+        TextKey::AddonOptionsAfter => "Na",
+        TextKey::AddonOptionsConflict => {
+            "Opties konden niet worden opgeslagen of geladen. Het concept, de selectie of het pakketschema is mogelijk gewijzigd. Laad de editor opnieuw en probeer het nogmaals."
+        }
+        TextKey::AddonOptionsNone => "Dit pakket definieert geen opties.",
         TextKey::Addon => "Add-on",
         TextKey::PrimaryFeature => "Hoofdfilm",
         TextKey::MovieExtra => "Filmextra",
@@ -1156,10 +1210,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TriggerOperator => "Aangevraagd door een beheerder",
         TextKey::TriggerRestoreRevision => "Aangevraagd door een revisie te herstellen",
         TextKey::TestSource => "Bron testen",
-        TextKey::TestSourceHelp => "Controleer de opgeslagen bron zonder de lijst te importeren of te wijzigen.",
+        TextKey::TestSourceHelp => {
+            "Controleer de opgeslagen bron zonder de lijst te importeren of te wijzigen."
+        }
         TextKey::SourceTestQueued => "Brontest staat in de wachtrij",
         TextKey::SourceTestRunning => "Brontest wordt uitgevoerd…",
-        TextKey::SourceTestStale => "De brontest is verouderd omdat de opgeslagen invoer niet meer overeenkomt met de huidige lijst, het add-onpakket of de standaardwaarden.",
+        TextKey::SourceTestStale => {
+            "De brontest is verouderd omdat de opgeslagen invoer niet meer overeenkomt met de huidige lijst, het add-onpakket of de standaardwaarden."
+        }
         TextKey::SourceAvailable => "Bron is beschikbaar",
         TextKey::SourceUnsupported => "Bron wordt niet ondersteund",
         TextKey::SourceTestFailed => "Brontest mislukt",
@@ -1169,20 +1227,28 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ReturnedFirstPageItems => "Items op de eerste pagina",
         TextKey::ProviderTotalItemCount => "Totaal aantal items volgens de provider",
         TextKey::DraftChanges => "Opgeslagen conceptwijzigingen",
-        TextKey::ExactDraftDiffHelp => "Exacte verschillen tussen het opgeslagen concept en de huidige gepubliceerde revisie.",
-        TextKey::DraftDiffUnavailable => "Een exacte conceptvergelijking is beschikbaar nadat een volledige revisie is gepubliceerd.",
+        TextKey::ExactDraftDiffHelp => {
+            "Exacte verschillen tussen het opgeslagen concept en de huidige gepubliceerde revisie."
+        }
+        TextKey::DraftDiffUnavailable => {
+            "Een exacte conceptvergelijking is beschikbaar nadat een volledige revisie is gepubliceerd."
+        }
         TextKey::MetadataChanges => "Metadatawijzigingen",
         TextKey::ExcludedItems => "Uitgesloten items",
         TextKey::Conflicts => "Conflicten",
         TextKey::PendingRemovals => "Openstaande verwijderingen",
-        TextKey::PendingRemovalHelp => "Eén keer afwezig bij een volledige vergelijking. Bevestig de verwijdering nu, of wacht op een tweede volledige waarneming minstens 24 uur later.",
+        TextKey::PendingRemovalHelp => {
+            "Eén keer afwezig bij een volledige vergelijking. Bevestig de verwijdering nu, of wacht op een tweede volledige waarneming minstens 24 uur later."
+        }
         TextKey::Reappearances => "Opnieuw verschenen items",
         TextKey::RemovalCandidates => "Kandidaten voor verwijdering",
         TextKey::ConfirmRemoval => "Verwijdering bevestigen",
         TextKey::RemovalConfirmed => "Verwijdering bevestigd.",
         TextKey::RemovalConfirmationFailed => "Bevestigen van verwijdering is mislukt.",
         TextKey::RevisionHistory => "Revisiegeschiedenis",
-        TextKey::RevisionHistoryHelp => "Herstellen vervangt het huidige concept en publiceert de gekozen momentopname als een nieuwe revisie.",
+        TextKey::RevisionHistoryHelp => {
+            "Herstellen vervangt het huidige concept en publiceert de gekozen momentopname als een nieuwe revisie."
+        }
         TextKey::NoRevisionHistory => "Er worden nog geen gepubliceerde revisies bewaard.",
         TextKey::Revision => "Revisie",
         TextKey::CompareRevisions => "Revisies vergelijken",
@@ -1220,13 +1286,20 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SavedRevision => "Opgeslagen revisie",
         TextKey::PublishList => "Lijst publiceren",
         TextKey::PreparePublication => "Publicatie voorbereiden",
+        TextKey::ProcessedMediaRequired => "Voor te bereiden mediabestanden",
+        TextKey::ProcessedMediaQueued => "Mediavoorbereiding ingepland",
+        TextKey::PreparingProcessedMedia => "Mediabestanden worden voorbereid",
         TextKey::PreparingPublication => "Publicatie wordt voorbereid",
         TextKey::Publishing => "Publiceren…",
         TextKey::PublicationQueued => "Publicatie staat in de wachtrij",
         TextKey::RestoringPublication => "Vorige revisie herstellen…",
         TextKey::Published => "Gepubliceerd",
-        TextKey::PublishSavedRevisionHelp => "Publiceren gebruikt exact de opgeslagen revisie. Sla lijstwijzigingen eerst op.",
-        TextKey::ChangesSavedImmediately => "Item- en bulkwijzigingen worden direct opgeslagen en kunnen ongedaan worden gemaakt.",
+        TextKey::PublishSavedRevisionHelp => {
+            "Publiceren gebruikt exact de opgeslagen revisie. Sla lijstwijzigingen eerst op."
+        }
+        TextKey::ChangesSavedImmediately => {
+            "Item- en bulkwijzigingen worden direct opgeslagen en kunnen ongedaan worden gemaakt."
+        }
         TextKey::ReviewItem => "Item beoordelen",
         TextKey::ShowFullDescription => "Volledige beschrijving tonen",
         TextKey::ShowLess => "Minder tonen",
@@ -1239,13 +1312,19 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockerPublicationInProgress => "Publicatie is al bezig.",
         TextKey::BlockerRecoveryRequired => "Een eerdere publicatie moet nog worden hersteld.",
         TextKey::BlockerCollectionTitleMissing => "De collectie heeft een titel nodig.",
-        TextKey::BlockerInvalidArtwork => "Afbeeldingen moeten een geldige begrensde HTTPS-URL gebruiken.",
+        TextKey::BlockerInvalidArtwork => {
+            "Afbeeldingen moeten een geldige begrensde HTTPS-URL gebruiken."
+        }
         TextKey::BlockerNoIncludedItems => "Neem ten minste één item op.",
         TextKey::BlockerMoviePrimaryCount => "Filmpublicatie vereist precies één hoofdfilm.",
         TextKey::BlockerPlaybackDecisionRequired => "Kies eindig of live afspeelgedrag.",
-        TextKey::BlockerPlaybackDetailsUnavailable => "Vereiste afspeeldetails zijn niet beschikbaar via deze add-on.",
+        TextKey::BlockerPlaybackDetailsUnavailable => {
+            "Vereiste afspeeldetails zijn niet beschikbaar via deze add-on."
+        }
         TextKey::BlockerPlaybackDetailsFailed => "Providerdetails bevatten geen positieve duur.",
-        TextKey::BlockerUnavailableWithoutReplacement => "Het niet-beschikbare item heeft een geldige lokale vervanging nodig.",
+        TextKey::BlockerUnavailableWithoutReplacement => {
+            "Het niet-beschikbare item heeft een geldige lokale vervanging nodig."
+        }
         TextKey::BlockerItemTitleMissing => "Het item heeft een titel nodig.",
         TextKey::BlockerSeasonEpisodeMissing => "Voer een geldig seizoen- en afleveringsnummer in.",
         TextKey::BlockerArtistMissing => "Voer ten minste één artiest in.",
@@ -1271,14 +1350,24 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PhaseVerifying => "Revisie verifiëren",
         TextKey::PhaseCleaningUp => "Publicatiebestanden opruimen",
         TextKey::PhaseComplete => "Voltooid",
-        TextKey::InstallLeavesDisabled => "Na installatie blijft deze add-on uitgeschakeld totdat u hem inschakelt.",
-        TextKey::EnableActivatesPermissions => "Inschakelen activeert de opgegeven machtigingen van de add-on.",
+        TextKey::InstallLeavesDisabled => {
+            "Na installatie blijft deze add-on uitgeschakeld totdat u hem inschakelt."
+        }
+        TextKey::EnableActivatesPermissions => {
+            "Inschakelen activeert de opgegeven machtigingen van de add-on."
+        }
         TextKey::FirstAired => "Eerste uitzending",
         TextKey::LoadItemDetailsAfterPublishing => "Itemdetails automatisch laden",
-        TextKey::LoadItemDetailsHelp => "Importeer eerst het overzicht. Technische details die nodig zijn voor afspelen worden vóór de eerste publicatie geladen; de overige uitgebreide metadata volgt in een beheerst tempo.",
-        TextKey::OverviewOnlyManualDetailsHelp => "Importeer alleen het overzicht en vraag beschrijvende details handmatig op. Technische details die nodig zijn voor afspelen worden vóór publicatie wel automatisch voorbereid.",
+        TextKey::LoadItemDetailsHelp => {
+            "Importeer eerst het overzicht. Technische details die nodig zijn voor afspelen worden vóór de eerste publicatie geladen; de overige uitgebreide metadata volgt in een beheerst tempo."
+        }
+        TextKey::OverviewOnlyManualDetailsHelp => {
+            "Importeer alleen het overzicht en vraag beschrijvende details handmatig op. Technische details die nodig zijn voor afspelen worden vóór publicatie wel automatisch voorbereid."
+        }
         TextKey::PlaybackDetailsQueued => "Afspeeldetails in wachtrij",
-        TextKey::PublishAgainAfterDetails => "Controleer de voltooide details en publiceer daarna opnieuw.",
+        TextKey::PublishAgainAfterDetails => {
+            "Controleer de voltooide details en publiceer daarna opnieuw."
+        }
         TextKey::FetchDetails => "Details ophalen",
         TextKey::DetailsQueued => "Details in wachtrij",
         TextKey::DetailsLoading => "Details laden",
@@ -1295,7 +1384,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ResumeImport => "Import hervatten",
         TextKey::RetryImportNow => "Import nu opnieuw proberen",
         TextKey::EmptyImportNeedsRetry => "Lege import moet opnieuw worden geprobeerd",
-        TextKey::EmptyImportRetryHelp => "Deze voltooide import bevat geen items. Werk de add-on bij en probeer opnieuw; je lijstinstellingen en bewerkingen blijven behouden.",
+        TextKey::EmptyImportRetryHelp => {
+            "Deze voltooide import bevat geen items. Werk de add-on bij en probeer opnieuw; je lijstinstellingen en bewerkingen blijven behouden."
+        }
         TextKey::CancelImport => "Import annuleren",
         TextKey::OtherPageItemsAffected => "Meer betrokken items staan op andere pagina's",
         TextKey::ElapsedTime => "Verstreken tijd",
@@ -1318,7 +1409,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AllRemaining => "Alle resterende",
         TextKey::ReplaceExistingEpisodeNumbers => "Bestaande afleveringsnummers vervangen",
         TextKey::AutoDetectSeasons => "Seizoenen automatisch herkennen aan uitzenddatums",
-        TextKey::AutoDetectSeasonsHelp => "Een nieuw seizoen begint zodra het verschil tussen twee bekende uitzenddatums minimaal het ingestelde aantal dagen is. Items zonder datum blijven in het huidige seizoen.",
+        TextKey::AutoDetectSeasonsHelp => {
+            "Een nieuw seizoen begint zodra het verschil tussen twee bekende uitzenddatums minimaal het ingestelde aantal dagen is. Items zonder datum blijven in het huidige seizoen."
+        }
         TextKey::MinimumSeasonGapDays => "Minimale tijd tussen seizoenen (dagen)",
         TextKey::NumberingStartsAt => "Nummering begint bij",
         TextKey::FirstIncludedItem => "Eerste opgenomen item",
@@ -1352,13 +1445,27 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Year => "Jaar",
         TextKey::SortTitle => "Sorteertitel",
         TextKey::MovieFilesAndExtras => "Filmbestanden en extra's",
-        TextKey::MovieFilesAndExtrasHelp => "Wijs precies één hoofdfilm toe. De bronvolgorde bepaalt de rol niet, dus een trailer mag vooraan staan.",
-        TextKey::EpisodesMetadataHelp => "Controleer de identiteit en nummering van afleveringen; de bronvolgorde blijft ongewijzigd.",
-        TextKey::MusicVideosMetadataHelp => "Artiest, album en track horen bij elke video, zodat lijsten met meerdere artiesten geldig blijven.",
-        TextKey::OtherVideosMetadataHelp => "Gebruik dit type voor zelfstandige video's, niet voor één film met extra's.",
-        TextKey::SongsMetadataHelp => "Track, schijf, artiest en album worden per nummer bewerkt; de lijstvolgorde vervangt de tracknummering niet.",
-        TextKey::ImagesMetadataHelp => "Bijschrift en maker zijn bewerkbaar; formaat, afmetingen en bronidentiteit blijven feitelijke brongegevens.",
-        TextKey::RemoteStreamsMetadataHelp => "Bewerk hier de presentatiemetadata; verbinding en protocol blijven feiten van de providerbron.",
+        TextKey::MovieFilesAndExtrasHelp => {
+            "Wijs precies één hoofdfilm toe. De bronvolgorde bepaalt de rol niet, dus een trailer mag vooraan staan."
+        }
+        TextKey::EpisodesMetadataHelp => {
+            "Controleer de identiteit en nummering van afleveringen; de bronvolgorde blijft ongewijzigd."
+        }
+        TextKey::MusicVideosMetadataHelp => {
+            "Artiest, album en track horen bij elke video, zodat lijsten met meerdere artiesten geldig blijven."
+        }
+        TextKey::OtherVideosMetadataHelp => {
+            "Gebruik dit type voor zelfstandige video's, niet voor één film met extra's."
+        }
+        TextKey::SongsMetadataHelp => {
+            "Track, schijf, artiest en album worden per nummer bewerkt; de lijstvolgorde vervangt de tracknummering niet."
+        }
+        TextKey::ImagesMetadataHelp => {
+            "Bijschrift en maker zijn bewerkbaar; formaat, afmetingen en bronidentiteit blijven feitelijke brongegevens."
+        }
+        TextKey::RemoteStreamsMetadataHelp => {
+            "Bewerk hier de presentatiemetadata; verbinding en protocol blijven feiten van de providerbron."
+        }
         TextKey::CastAndCredits => "Cast en medewerkers",
         TextKey::OneCreditPerLine => "Eén persoon per regel: naam | rol",
         TextKey::Poster => "Poster",
@@ -1366,29 +1473,47 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PublishMetadata => "Publiceren",
         TextKey::IncludeItem => "Opnemen",
         TextKey::IncludeInPublication => "Opnemen bij publicatie",
-        TextKey::MetadataDraftNotice => "Controleer de metadata en opgenomen items voordat je deze lijst publiceert.",
-        TextKey::ApplyToAllItemsPrompt => "Elk item krijgt de gekozen mediasoort, waarmee waarden die de add-on heeft afgeleid of die je zelf hebt ingesteld worden overschreven.",
+        TextKey::MetadataDraftNotice => {
+            "Controleer de metadata en opgenomen items voordat je deze lijst publiceert."
+        }
+        TextKey::ApplyToAllItemsPrompt => {
+            "Elk item krijgt de gekozen mediasoort, waarmee waarden die de add-on heeft afgeleid of die je zelf hebt ingesteld worden overschreven."
+        }
         TextKey::TelevisionEpisode => "Televisieaflevering",
         TextKey::CollectionTypeAuto => "Bepalen uit de items",
         TextKey::CurrentLibraryType => "Huidig bibliotheektype",
-        TextKey::CollectionTypeChangeHelp => "Je kunt dit na de import wijzigen. Sla op en publiceer om de bestaande items opnieuw in te delen zonder de add-on opnieuw te importeren; volgorde, opnamekeuzes en metadata-aanpassingen blijven behouden.",
+        TextKey::CollectionTypeChangeHelp => {
+            "Je kunt dit na de import wijzigen. Sla op en publiceer om de bestaande items opnieuw in te delen zonder de add-on opnieuw te importeren; volgorde, opnamekeuzes en metadata-aanpassingen blijven behouden."
+        }
         TextKey::NonPlayableItems => "Niet-afspeelbare items",
         TextKey::UnknownItems => "Onbekende items",
         TextKey::PlayableItems => "Afspeelbare items",
         TextKey::ApplyToAllItems => "Op alle items toepassen",
         TextKey::ChangeAddon => "Add-on wijzigen",
-        TextKey::ChangeAddonHelp => "Kies een andere add-on om de lijst daarmee opnieuw te importeren.",
-        TextKey::ChangeAddonPrompt => "De lijst wordt opnieuw geïmporteerd via de gekozen add-on. Itemmetadata, vervangingen en hoofdstukcorrecties worden opnieuw afgeleid van de nieuwe provider.",
+        TextKey::ChangeAddonHelp => {
+            "Kies een andere add-on om de lijst daarmee opnieuw te importeren."
+        }
+        TextKey::ChangeAddonPrompt => {
+            "De lijst wordt opnieuw geïmporteerd via de gekozen add-on. Itemmetadata, vervangingen en hoofdstukcorrecties worden opnieuw afgeleid van de nieuwe provider."
+        }
         TextKey::AddonAutoDetect => "Bepalen uit de URL",
         TextKey::AddonAutoDetected => "Automatisch gekozen op basis van de URL.",
-        TextKey::AddonMediaListNoAddonForUrl => "Geen enkele geïnstalleerde add-on verwerkt deze URL. Kies er een of stel een standaard remote stream-verwerker in.",
+        TextKey::AddonMediaListNoAddonForUrl => {
+            "Geen enkele geïnstalleerde add-on verwerkt deze URL. Kies er een of stel een standaard remote stream-verwerker in."
+        }
         TextKey::DefaultRemoteStreamAddon => "Standaard remote stream-verwerker",
-        TextKey::DefaultRemoteStreamAddonHelp => "Wordt gebruikt voor HTTP- en HTTPS-bronnen die geen enkele geïnstalleerde add-on claimt. De add-on moet de host nog steeds mogen benaderen.",
+        TextKey::DefaultRemoteStreamAddonHelp => {
+            "Wordt gebruikt voor HTTP- en HTTPS-bronnen die geen enkele geïnstalleerde add-on claimt. De add-on moet de host nog steeds mogen benaderen."
+        }
         TextKey::AddonDetailWait => "Tempo voor itemdetails",
         TextKey::MinimumDetailWait => "Minimale wachttijd voor details",
         TextKey::MaximumDetailWait => "Maximale wachttijd voor details",
-        TextKey::AddonDetailWaitHelp => "Na elke poging om itemdetails in te lezen wacht ErsatzRS een nieuw willekeurig aantal seconden binnen dit globale bereik voordat een lijst dezelfde providerhost weer mag gebruiken.",
-        TextKey::AddonDetailWaitInvalid => "Vul positieve hele seconden in en zorg dat het minimum niet hoger is dan het maximum.",
+        TextKey::AddonDetailWaitHelp => {
+            "Na elke poging om itemdetails in te lezen wacht ErsatzRS een nieuw willekeurig aantal seconden binnen dit globale bereik voordat een lijst dezelfde providerhost weer mag gebruiken."
+        }
+        TextKey::AddonDetailWaitInvalid => {
+            "Vul positieve hele seconden in en zorg dat het minimum niet hoger is dan het maximum."
+        }
         TextKey::Addons => "Add-ons",
         TextKey::AddonOverview => "Overzicht",
         TextKey::AddonUpdates => "Updates",
@@ -1402,14 +1527,18 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::InstallRepositoryFromFile => "Repository installeren vanuit bestand",
         TextKey::License => "Licentie",
         TextKey::UnknownSources => "Onbekende bronnen",
-        TextKey::UnknownSourcesHelp => "Sta add-ons uit lokale Git-checkouts en ZIP-bestanden toe. Add-ons draaien met de toegang van de ErsatzRS-servicegebruiker.",
+        TextKey::UnknownSourcesHelp => {
+            "Sta add-ons uit lokale Git-checkouts en ZIP-bestanden toe. Add-ons draaien met de toegang van de ErsatzRS-servicegebruiker."
+        }
         TextKey::Verified => "Geverifieerd",
         TextKey::Unverified => "Niet geverifieerd",
         TextKey::Sideloaded => "Lokaal geïnstalleerd",
         TextKey::GitCheckout => "Git-checkout",
         TextKey::OfflineBundle => "Offlinebundel",
         TextKey::LegacyUnmanaged => "Verouderde catalogus · onbeheerd",
-        TextKey::LegacyAdoptionHelp => "Dit vervangt de onbeheerde catalogusinstallatie door de geselecteerde lokale bron, met behoud van instellingen en gegevens.",
+        TextKey::LegacyAdoptionHelp => {
+            "Dit vervangt de onbeheerde catalogusinstallatie door de geselecteerde lokale bron, met behoud van instellingen en gegevens."
+        }
         TextKey::Enabled => "Ingeschakeld",
         TextKey::Disabled => "Uitgeschakeld",
         TextKey::Source => "Bron",
@@ -1426,9 +1555,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ChooseFile => "Bestand kiezen…",
         TextKey::NoFileSelected => "Geen bestand gekozen",
         TextKey::EditRepository => "Repository bewerken",
-        TextKey::OfficialRepositoryProtected => "De officiële repository kan niet worden verwijderd.",
+        TextKey::OfficialRepositoryProtected => {
+            "De officiële repository kan niet worden verwijderd."
+        }
         TextKey::UnknownSourcesRequired => "Schakel eerst onbekende bronnen in.",
-        TextKey::NoRepositories => "Geen lokale repositories gevonden. Clone een repository naar de checkoutmap hierboven en ververs daarna.",
+        TextKey::NoRepositories => {
+            "Geen lokale repositories gevonden. Clone een repository naar de checkoutmap hierboven en ververs daarna."
+        }
         TextKey::AddonPackage => "Add-onpakket",
         TextKey::RepositoryPackage => "Repositorypakket",
         TextKey::NoSigningKeyPinned => "Er is geen openbare ondertekeningssleutel vastgelegd.",
@@ -1486,21 +1619,39 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "Artiest niet gevonden",
         TextKey::AfterDurationEnd => "Na einde duur",
         TextKey::AutomaticRefresh => "Automatisch vernieuwen",
-        TextKey::AdaptiveRefreshUnavailable => "Adaptief vernieuwen is niet beschikbaar omdat deze add-on broncontroles niet meer ondersteunt. Kies een ander interval om automatisch vernieuwen te hervatten.",
+        TextKey::AdaptiveRefreshUnavailable => {
+            "Adaptief vernieuwen is niet beschikbaar omdat deze add-on broncontroles niet meer ondersteunt. Kies een ander interval om automatisch vernieuwen te hervatten."
+        }
         TextKey::RefreshPublicationPolicy => "Publicatie na vernieuwing",
         TextKey::RefreshPublicationReview => "Elke vernieuwing beoordelen",
         TextKey::RefreshPublicationAutomatic => "Veilige toevoegingen automatisch publiceren",
-        TextKey::RefreshPublicationPolicyHelp => "Geldt alleen voor geplande vernieuwingen na je eerste publicatie. Handmatig vernieuwen, afstemmen en resetten vereisen altijd beoordeling. Wijzigingen of onveilige toevoegingen blijven ter beoordeling.",
+        TextKey::RefreshPublicationPolicyHelp => {
+            "Geldt alleen voor geplande vernieuwingen na je eerste publicatie. Handmatig vernieuwen, afstemmen en resetten vereisen altijd beoordeling. Wijzigingen of onveilige toevoegingen blijven ter beoordeling."
+        }
         TextKey::AutoPublicationHeld => "Automatische publicatie vereist beoordeling",
-        TextKey::AutoPublicationBaselineUnavailable => "Er is geen gepubliceerde basis beschikbaar.",
+        TextKey::PreparationWorkerUnavailable => {
+            "De achtergrondtaak voor mediavoorbereiding is niet beschikbaar. Start de server opnieuw voordat u de voorbereiding opnieuw probeert."
+        }
+        TextKey::PreparationProcessRecoveryRequired => {
+            "Mediavoorbereiding vereist procesherstel. Controleer of eerdere providerprocessen zijn gestopt voordat u gereserveerde opslag herstelt en de voorbereiding opnieuw probeert."
+        }
+        TextKey::AutoPublicationBaselineUnavailable => {
+            "Er is geen gepubliceerde basis beschikbaar."
+        }
         TextKey::AutoPublicationExistingChanges => "Bestaande items zijn gewijzigd.",
-        TextKey::AutoPublicationConflicts => "Metadata- of vervangingsconflicten vereisen beoordeling.",
+        TextKey::AutoPublicationConflicts => {
+            "Metadata- of vervangingsconflicten vereisen beoordeling."
+        }
         TextKey::AutoPublicationRemovals => "Items zijn verwijderd.",
         TextKey::AutoPublicationRestricted => "Sommige toevoegingen hebben toegangsbeperkingen.",
         TextKey::AutoPublicationUnavailable => "Sommige toevoegingen zijn niet beschikbaar.",
         TextKey::AutoPublicationOptionsChanged => "Publicatieopties zijn gewijzigd.",
-        TextKey::AutoPublicationPreparationFailed => "Het voorbereiden van de publicatie is mislukt.",
-        TextKey::AutoPublicationConcurrentChange => "De lijst is tijdens de voorbereiding gewijzigd.",
+        TextKey::AutoPublicationPreparationFailed => {
+            "Het voorbereiden van de publicatie is mislukt."
+        }
+        TextKey::AutoPublicationConcurrentChange => {
+            "De lijst is tijdens de voorbereiding gewijzigd."
+        }
         TextKey::RefreshCadenceAdaptive => "Adaptief",
         TextKey::RefreshCadenceDaily => "Dagelijks",
         TextKey::RefreshCadenceWeekly => "Wekelijks",
@@ -1523,7 +1674,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockGroup => "Blokgroep",
         TextKey::BlockCannotBeMoved => {
             "Het blok kan daar niet worden geplaatst omdat het zou overlappen of middernacht zou passeren."
-        },
+        }
         TextKey::BlockCopied => "Blok gekopieerd.",
         TextKey::BlockCreated => "Blok aangemaakt.",
         TextKey::BlockDeleted => "Blok verwijderd.",
@@ -1535,7 +1686,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BlockItems => "Blokitems",
         TextKey::BlockName => "Bloknaam",
         TextKey::BlockNotFound => "Blok niet gevonden.",
-        TextKey::BlockPreviewFailed => "Het blokvoorbeeld kon niet worden gemaakt. Controleer de blokitems en probeer het opnieuw.",
+        TextKey::BlockPreviewFailed => {
+            "Het blokvoorbeeld kon niet worden gemaakt. Controleer de blokitems en probeer het opnieuw."
+        }
         TextKey::Blocks => "Blokken",
         TextKey::BlockToRemove => "Te verwijderen blok",
         TextKey::BlockWillNotFit => "Het blok past niet op of na de gekozen starttijd.",
@@ -1600,22 +1753,22 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BreakContent => "Breakinhoud",
         TextKey::BreakContentBody => {
             "Breakinhoud kan specifieke items afspelen (met playlists) en blokken aanvullen tot hun volledige ingestelde duur."
-        },
+        }
         TextKey::BreakContentItem => "Breakinhouditem",
         TextKey::BreakContentMode => "Breakinhoudmodus",
         TextKey::DeadAirFallback => "Dead-air fallback",
         TextKey::DeadAirFallbackBody => {
             "Wanneer er voor de huidige tijd geen uitzenditem wordt gevonden, wordt willekeurig een item uit deze collectie gekozen, herhaald en precies passend ingekort tot de start van het volgende uitzenditem. Dit vervangt de afbeelding Kanaal is offline die anders zou worden getoond."
-        },
+        }
         TextKey::DeadAirFallbackCollectionType => "Collectietype voor dead-air fallback",
         TextKey::DeadAirFallbackMode => "Dead-air fallbackmodus",
         TextKey::Deco => "Decoratie",
         TextKey::DecoCannotBeAdded => {
             "Decoratie kan niet worden toegevoegd omdat deze zou overlappen of middernacht zou passeren."
-        },
+        }
         TextKey::DecoCannotBeMoved => {
             "Decoratie kan daar niet naartoe worden verplaatst omdat deze zou overlappen of middernacht zou passeren."
-        },
+        }
         TextKey::DecoCreated => "Decoratie aangemaakt.",
         TextKey::DecoDeleted => "Decoratie verwijderd.",
         TextKey::DecoGroup => "Decoratiegroep",
@@ -1643,7 +1796,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DefaultFiller => "Standaard filler",
         TextKey::DefaultFillerBody => {
             "Nadat alle blokken zijn gepland, vult een tweede ronde ongeplande tijd met willekeurige items uit deze collectie."
-        },
+        }
         TextKey::DefaultFillerCollectionType => "Collectietype voor standaard filler",
         TextKey::DefaultFillerMode => "Standaard fillermodus",
         TextKey::DeleteDeco => "Decoratie verwijderen",
@@ -1672,7 +1825,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::WatermarkMode => "Zenderlogomodus",
         TextKey::DecoTemplates => "Decoratiesjablonen",
         TextKey::DefaultFfmpegProfile => "Standaard FFmpeg-profiel",
-        TextKey::DefaultFfmpegProfileHelp => "Het FFmpeg-profiel dat wordt gebruikt bij het maken van nieuwe kanalen",
+        TextKey::DefaultFfmpegProfileHelp => {
+            "Het FFmpeg-profiel dat wordt gebruikt bij het maken van nieuwe kanalen"
+        }
         TextKey::DefaultMinimumLogLevel => "Standaard minimaal logniveau",
         TextKey::DefaultMpegTsScript => "Standaard MPEG-TS-script",
         TextKey::DefaultMpegTsScriptHelp => "Het MPEG-TS-script dat wordt gebruikt bij streaming",
@@ -1695,7 +1850,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DeleteAddonMediaList => "add-on-lijst verwijderen",
         TextKey::DisabledCollectionsAlreadyPresent => {
             "Uitgeschakelde collecties staan al in deze multi-collectie"
-        },
+        }
         TextKey::EmptyTrash => "Prullenbak legen",
         TextKey::ExtractEmbeddedSubtitles => "Ingesloten (tekst)ondertitels extraheren",
         TextKey::ErasedPlayoutItemsAndHistory => "Uitzenditems en geschiedenis zijn gewist.",
@@ -1703,7 +1858,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::EraseItemsAndHistory => "Items en geschiedenis wissen",
         TextKey::ErasePlayoutItemsAndHistoryConfirm => {
             "Hiermee worden alle uitzenditems en geschiedenis voor deze sequentiële uitzending verwijderd. Doorgaan?"
-        },
+        }
         TextKey::Episode => "Aflevering",
         TextKey::FanArt => "fanart",
         TextKey::Ffmpeg => "FFmpeg",
@@ -1719,11 +1874,11 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::FillerPresetActionFailed => "Actie voor opvulvoorinstelling mislukt.",
         TextKey::FillerPresetCouldNotBeSaved => {
             "Opvulvoorinstelling kon niet worden opgeslagen. Controleer de formulierwaarden en probeer het opnieuw."
-        },
+        }
         TextKey::FillerPresetDeleted => "Opvulvoorinstelling verwijderd.",
         TextKey::FillerPresetExpressionHelp => {
             "Voeg bij mid-roll-opvulling alleen opvulling toe wanneer deze expressie waar is voor een bepaald mid-roll-punt."
-        },
+        }
         TextKey::FillerPresetSaved => "Opvulvoorinstelling opgeslagen.",
         TextKey::FillerPresets => "Opvulvoorinstellingen",
         TextKey::Flags => "Vlaggen",
@@ -1735,9 +1890,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Height => "Hoogte",
         TextKey::HlsDirectOutputFormat => "Direct HLS-uitvoerformaat",
         TextKey::HlsSegmenterIdleTimeout => "Time-out voor inactieve HLS-segmenter",
-        TextKey::HlsSegmenterIdleTimeoutHelp => "Het aantal seconden dat een kanaal blijft transcoderen wanneer geen enkele client nog verzoeken heeft ontvangen",
+        TextKey::HlsSegmenterIdleTimeoutHelp => {
+            "Het aantal seconden dat een kanaal blijft transcoderen wanneer geen enkele client nog verzoeken heeft ontvangen"
+        }
         TextKey::HlsSegmenterInitialSegmentCount => "Aanvankelijk aantal HLS-segmenten",
-        TextKey::HlsSegmenterInitialSegmentCountHelp => "Stelt de start van de stream uit totdat het opgegeven aantal segmenten van 4 seconden is getranscodeerd; een groter aantal betekent een tragere start maar mogelijk minder buffering",
+        TextKey::HlsSegmenterInitialSegmentCountHelp => {
+            "Stelt de start van de stream uit totdat het opgegeven aantal segmenten van 4 seconden is getranscodeerd; een groter aantal betekent een tragere start maar mogelijk minder buffering"
+        }
         TextKey::HomeRunning => "IPTV-server is actief.",
         TextKey::HttpMinimumLogLevel => "Minimaal logniveau voor verzoeklogging",
         TextKey::Id => "Id",
@@ -1748,7 +1907,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Items => "Items",
         TextKey::Language => "Taal",
         TextKey::Languages => "Talen",
-            TextKey::MusicLabels => "Muzieklabels",
+        TextKey::MusicLabels => "Muzieklabels",
         TextKey::LeaveEmptyToAutoDetect => "Laat leeg voor automatische detectie",
         TextKey::Libraries => "Bibliotheken",
         TextKey::LibraryRefreshInterval => "Vernieuwingsinterval bibliotheek",
@@ -1778,7 +1937,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MultiCollectionNameRequired => "Naam van multi-collectie is verplicht!",
         TextKey::MultiCollectionNameTooLong => {
             "Naam van multi-collectie mag niet langer zijn dan 50 tekens."
-        },
+        }
         TextKey::MultiCollectionSaved => "Multi-collectie opgeslagen.",
         TextKey::Music => "Muziek",
         TextKey::Name => "Naam",
@@ -1965,7 +2124,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SyncNow => "Nu synchroniseren",
         TextKey::LastSync => "Laatste synchronisatie",
         TextKey::NeverSynced => "Nooit gesynchroniseerd",
-        TextKey::ManagedManifestReadOnly => "Dit handmatig geschreven manifest is hier alleen-lezen.",
+        TextKey::ManagedManifestReadOnly => {
+            "Dit handmatig geschreven manifest is hier alleen-lezen."
+        }
         TextKey::Truncated => "Ingekort",
         TextKey::MissingDuration => "Duur ontbreekt",
         TextKey::Orphaned => "Niet meer aanwezig",
@@ -1979,7 +2140,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Save => "Opslaan",
         TextKey::SaveMultiCollection => "Multi-collectie opslaan",
         TextKey::SavePlaylist => "Afspeellijst opslaan",
-        TextKey::SaveTroubleshootingReportsToDisk => "Probleemoplossingsrapporten op schijf opslaan",
+        TextKey::SaveTroubleshootingReportsToDisk => {
+            "Probleemoplossingsrapporten op schijf opslaan"
+        }
         TextKey::SaveAsSmartCollection => "Opslaan als slimme collectie",
         TextKey::SearchQueryRequired => "Zoekopdracht is verplicht",
         TextKey::SaveSettings => "Instellingen opslaan",
@@ -2023,7 +2186,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::FlexibleStartSoonAsPossible => "Flexibel - start zo snel mogelijk",
         TextKey::FlexibleStartSoonAsPossibleAfterStartTime => {
             "Flexibel - start zo snel mogelijk na de starttijd"
-        },
+        }
         TextKey::FillWithGroupMode => "Vullen met groepsmodus (serie of artiest)",
         TextKey::GraphicsElements => "Grafische elementen",
         TextKey::AddGraphicsElement => "Grafisch element toevoegen",
@@ -2032,9 +2195,13 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DrawvgRendererOption => "Drawvg — statisch/vector",
         TextKey::EditGraphicsElement => "Grafisch element bewerken",
         TextKey::FontFile => "Lettertypebestand",
-        TextKey::FontFileOptionalHelp => "Optioneel. Laat leeg om het meegeleverde Roboto-lettertype te gebruiken.",
+        TextKey::FontFileOptionalHelp => {
+            "Optioneel. Laat leeg om het meegeleverde Roboto-lettertype te gebruiken."
+        }
         TextKey::GraphicsElement => "Grafisch element",
-        TextKey::GraphicsElementConfigInvalid => "Dit grafische tekstelement heeft een ongeldige configuratie en is niet gewijzigd.",
+        TextKey::GraphicsElementConfigInvalid => {
+            "Dit grafische tekstelement heeft een ongeldige configuratie en is niet gewijzigd."
+        }
         TextKey::GraphicsElementKindImage => "Afbeelding",
         TextKey::GraphicsElementKindMotion => "Beweging",
         TextKey::GraphicsElementKindScript => "Script",
@@ -2043,22 +2210,34 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::GraphicsElementNameTooLong => "De naam mag maximaal 50 tekens bevatten.",
         TextKey::GraphicsElementNotEditable => "Hier niet bewerkbaar",
         TextKey::GraphicsElementNotFound => "Grafisch element niet gevonden.",
-        TextKey::GraphicsElementNotText => "Alleen grafische tekstelementen kunnen hier worden bewerkt.",
+        TextKey::GraphicsElementNotText => {
+            "Alleen grafische tekstelementen kunnen hier worden bewerkt."
+        }
         TextKey::GraphicsElementSaved => "Grafisch element opgeslagen.",
         TextKey::GraphicsElementSaveFailed => "Het grafische element kon niet worden opgeslagen.",
         TextKey::GraphicsElementType => "Type",
-        TextKey::GraphicsExistingDrawvgHelp => "Bestaande en nieuwe elementen gebruiken standaard Drawvg.",
-        TextKey::GraphicsStreamRestartHelp => "Wijzigingen gelden voor nieuw gestarte streams en herstarten actieve streams niet.",
+        TextKey::GraphicsExistingDrawvgHelp => {
+            "Bestaande en nieuwe elementen gebruiken standaard Drawvg."
+        }
+        TextKey::GraphicsStreamRestartHelp => {
+            "Wijzigingen gelden voor nieuw gestarte streams en herstarten actieve streams niet."
+        }
         TextKey::NoGraphicsElements => "Geen grafische elementen gevonden.",
-        TextKey::RefreshPeriodBounds => "De vernieuwingsperiode moet tussen 250 en 60000 milliseconden liggen.",
+        TextKey::RefreshPeriodBounds => {
+            "De vernieuwingsperiode moet tussen 250 en 60000 milliseconden liggen."
+        }
         TextKey::RefreshPeriodMilliseconds => "Vernieuwingsperiode (milliseconden)",
         TextKey::ReloadFrameInterval => "Frame-interval voor herladen",
-        TextKey::ReloadFrameIntervalBounds => "Het frame-interval voor herladen moet minimaal 1 zijn.",
+        TextKey::ReloadFrameIntervalBounds => {
+            "Het frame-interval voor herladen moet minimaal 1 zijn."
+        }
         TextKey::Renderer => "Renderer",
         TextKey::SaveGraphicsElement => "Grafisch element opslaan",
         TextKey::TextTemplate => "Tekstsjabloon",
         TextKey::TextTemplateRequired => "Een tekstsjabloon is verplicht.",
-        TextKey::TextTemplateTooLong => "Het sjabloon moet geldige UTF-8-tekst van maximaal 64 KiB zijn.",
+        TextKey::TextTemplateTooLong => {
+            "Het sjabloon moet geldige UTF-8-tekst van maximaal 64 KiB zijn."
+        }
         TextKey::GraphicsIds => "Grafische ID's",
         TextKey::Genres => "Genres",
         TextKey::GroupName => "Groepsnaam",
@@ -2069,7 +2248,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MarathonBatchSize => "Marathonbatchgrootte",
         TextKey::MarathonBatchSizeHelp => {
             "Hoeveel items uit elke groep worden afgespeeld voordat wordt doorgegaan; leeg of nul speelt alle items af"
-        },
+        }
         TextKey::MarathonGroupBy => "Marathon groeperen op",
         TextKey::MarathonShuffleGroups => "Shuffle op marathongroepen",
         TextKey::MarathonShuffleItems => "Shuffle op marathonitems",
@@ -2085,7 +2264,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MultipleCount => "Aantal meerdere",
         TextKey::MultipleCountHelp => {
             "Kan een expressie zijn met 'count' (collectiegrootte) en 'random' (0 tot count-1)"
-        },
+        }
         TextKey::MultipleMode => "Modus voor meerdere",
         TextKey::NewScheduleName => "Nieuwe schemanaam",
         TextKey::NewSmartCollection => "Nieuwe slimme collectie",
@@ -2109,9 +2288,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Random => "Willekeurig",
         TextKey::RandomCount => "Willekeurig aantal",
         TextKey::RandomRotation => "Willekeurige rotatie",
-        TextKey::RemainingDurationHelp => {
-            "duur van de inhoud na dit mid-roll-punt, in seconden"
-        },
+        TextKey::RemainingDurationHelp => "duur van de inhoud na dit mid-roll-punt, in seconden",
         TextKey::RandomStartPoint => "Willekeurig startpunt",
         TextKey::RemoveFailed => "Verwijderen mislukt",
         TextKey::RemovedFromCollection => "Uit collectie verwijderd.",
@@ -2123,7 +2300,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::RerunRerun => "Herhaling - herhaling",
         TextKey::ReadOnlyTwentyFourHourPlayoutView => {
             "Alleen-lezen 24-uursweergave van geplande uitzenditems."
-        },
+        }
         TextKey::SaveSchedule => "Schema opslaan",
         TextKey::SaveScheduleItems => "Schema-items opslaan",
         TextKey::SaveSmartCollection => "Slimme collectie opslaan",
@@ -2142,7 +2319,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ScheduleItemFiller => "Filler voor schema-item",
         TextKey::ScheduleItemFillerHelp => {
             "Pre-, mid- en post-roll filler wordt toegepast op elk media-item dat door dit schema-item wordt geselecteerd. Voeg content als volgend schema-item toe om deze eenmaal na een blok met Meerdere af te spelen."
-        },
+        }
         TextKey::ScheduleItemOverrides => "Overschrijvingen voor schema-item",
         TextKey::ScheduleItems => "Schema-items",
         TextKey::ScheduleNotFound => "Schema niet gevonden.",
@@ -2153,7 +2330,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShuffleScope => "Smart Shuffle-bereik",
         TextKey::SmartShuffleScopePlayout => "Uitzending",
         TextKey::SmartShuffleScopeScheduleItem => "Schema-item",
-        TextKey::SmartShuffleValidation => "Kies een afstandsdrempel en ten minste één gelijkenisregel.",
+        TextKey::SmartShuffleValidation => {
+            "Kies een afstandsdrempel en ten minste één gelijkenisregel."
+        }
         TextKey::SmartShuffleScopeContentSource => "Inhoudsbron",
         TextKey::SmartShuffleAfterItems => "Video's tussen vergelijkbare items",
         TextKey::SmartShuffleAfterDurationMinutes => "Smart Shuffle-duur (minuten)",
@@ -2161,7 +2340,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SmartShuffleInheritedBlock => {
             "Dit item heeft geen Smart Shuffle-overschrijving en behoudt eventueel verouderd uitzendbeleid."
         }
-        TextKey::SmartShuffleInactive => "Smart Shuffle is niet actief omdat deze afspeelvolgorde niet willekeurig is.",
+        TextKey::SmartShuffleInactive => {
+            "Smart Shuffle is niet actief omdat deze afspeelvolgorde niet willekeurig is."
+        }
         TextKey::SmartShuffleOverrideBlock => "Overschrijven voor dit blokitem",
         TextKey::SimilarityRules => "Gelijkenisregels",
         TextKey::AlbumArtist => "Albumartiest",
@@ -2187,13 +2368,17 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Select => "Selecteren",
         TextKey::SelectCollection => "Collectie selecteren",
         TextKey::SelectGroupForNewTemplate => "Selecteer een groep voor het nieuwe sjabloon",
-        TextKey::SelectScheduleItemPrompt => "Selecteer een schema-item om te bewerken of voeg een nieuw item toe.",
+        TextKey::SelectScheduleItemPrompt => {
+            "Selecteer een schema-item om te bewerken of voeg een nieuw item toe."
+        }
         TextKey::SelectSchedule => "Selecteer een schema",
         TextKey::SelectSmartCollection => "Slimme collectie selecteren",
         TextKey::Shuffle => "Shuffle",
         TextKey::ShuffleInOrder => "Shuffle in volgorde",
         TextKey::ShuffleScheduleItems => "Shuffle op schema-items",
-        TextKey::ShuffleScheduleItemsHelp => "Opmerking: dit schakelt vaste starttijden en flood-modus uit",
+        TextKey::ShuffleScheduleItemsHelp => {
+            "Opmerking: dit schakelt vaste starttijden en flood-modus uit"
+        }
         TextKey::ShuffledGroups => "Shuffle-groepen",
         TextKey::Show => "Serie",
         TextKey::ShowNotFound => "Serie niet gevonden",
@@ -2230,7 +2415,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::MatchAny => "Aan één of meer voldoen",
         TextKey::MatchAnyHelp => "Ten minste één regel in deze groep moet overeenkomen.",
         TextKey::ExcludeAny => "Overeenkomsten uitsluiten",
-        TextKey::ExcludeAnyHelp => "Items die aan een regel in deze groep voldoen, worden uitgesloten.",
+        TextKey::ExcludeAnyHelp => {
+            "Items die aan een regel in deze groep voldoen, worden uitgesloten."
+        }
         TextKey::AddRule => "Regel toevoegen",
         TextKey::EditRule => "Regel bewerken",
         TextKey::RemoveRule => "Regel verwijderen",
@@ -2256,13 +2443,17 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::RangeStart => "Begin van bereik",
         TextKey::RangeEnd => "Einde van bereik",
         TextKey::NestedGroup => "Geneste groep",
-        TextKey::NestedGroupHelp => "Bewerk deze groep in focusmodus, zodat steeds één logisch niveau zichtbaar is.",
+        TextKey::NestedGroupHelp => {
+            "Bewerk deze groep in focusmodus, zodat steeds één logisch niveau zichtbaar is."
+        }
         TextKey::AddNestedGroup => "Geneste groep toevoegen",
         TextKey::EditNestedGroup => "Geneste groep bewerken",
         TextKey::BackToRules => "Terug naar regels",
         TextKey::BackToSearch => "Terug naar zoeken",
         TextKey::CanonicalQuery => "Canonieke zoekopdracht",
-        TextKey::CanonicalQueryHelp => "Dit is de zoekopdracht die zoeken, planning en de opgeslagen collectie gebruiken.",
+        TextKey::CanonicalQueryHelp => {
+            "Dit is de zoekopdracht die zoeken, planning en de opgeslagen collectie gebruiken."
+        }
         TextKey::LivePreview => "Live voorbeeld",
         TextKey::MatchingItems => "overeenkomende items",
         TextKey::QueryValid => "Zoekopdracht is geldig",
@@ -2272,7 +2463,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SearchWildcardRequired => "Een jokertekenregel moet * of ? bevatten.",
         TextKey::SavedSearches => "Opgeslagen zoekopdrachten",
         TextKey::SavedSearchName => "Naam opgeslagen zoekopdracht",
-        TextKey::SavedSearchHelp => "Sla deze complexe zoekopdracht op om haar later te hervatten en wijzigen.",
+        TextKey::SavedSearchHelp => {
+            "Sla deze complexe zoekopdracht op om haar later te hervatten en wijzigen."
+        }
         TextKey::ChooseSavedSearch => "Kies een opgeslagen zoekopdracht",
         TextKey::LoadSavedSearch => "Zoekopdracht laden",
         TextKey::SaveSavedSearch => "Zoekopdracht opslaan",
@@ -2282,13 +2475,17 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SavedSearchSaved => "Zoekopdracht opgeslagen.",
         TextKey::SavedSearchDeleted => "Opgeslagen zoekopdracht verwijderd.",
         TextKey::SavedSearchLoaded => "Opgeslagen zoekopdracht geladen.",
-        TextKey::SavedSearchNameRequired => "Een naam voor de opgeslagen zoekopdracht is verplicht.",
+        TextKey::SavedSearchNameRequired => {
+            "Een naam voor de opgeslagen zoekopdracht is verplicht."
+        }
         TextKey::SavedSearchNameTooLong => "De naam mag maximaal 80 tekens bevatten.",
         TextKey::SavedSearchNameUnique => "De naam van de opgeslagen zoekopdracht moet uniek zijn.",
         TextKey::NoSavedSearches => "Nog geen opgeslagen zoekopdrachten.",
         TextKey::RefreshPreview => "Voorbeeld vernieuwen",
         TextKey::NoRules => "Deze groep bevat geen regels.",
-        TextKey::SearchFiltersHelp => "Alleen veelgebruikte filters. Gebruik de collectiecomposer voor geneste logica.",
+        TextKey::SearchFiltersHelp => {
+            "Alleen veelgebruikte filters. Gebruik de collectiecomposer voor geneste logica."
+        }
         TextKey::SearchMedia => "Media zoeken",
         TextKey::SearchMoviesOrShows => "Films of series zoeken...",
         TextKey::SearchAddonMediaList => "add-on-lijst zoeken",
@@ -2298,7 +2495,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ShowMediaInfo => "Media-info weergeven",
         TextKey::ScriptedScheduleTimeout => "Time-out voor Scripted schema",
         TextKey::SkipMissingItems => "Ontbrekende items overslaan",
-        TextKey::SkipMissingItemsHelp => "Bepaalt of bestand-niet-gevonden of niet-beschikbare items in uitzendingen worden opgenomen",
+        TextKey::SkipMissingItemsHelp => {
+            "Bepaalt of bestand-niet-gevonden of niet-beschikbare items in uitzendingen worden opgenomen"
+        }
         TextKey::SmartCollections => "Slimme collecties",
         TextKey::SmartCollection => "Slimme collectie",
         TextKey::SmartCollectionDeleted => "Slimme collectie verwijderd.",
@@ -2345,19 +2544,33 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonMediaListFolderHelp => "Optioneel; anders afgeleid van de lijstnaam",
         TextKey::DestructiveActions => "Destructieve acties",
         TextKey::ReconcileEntireSource => "Volledige bron vergelijken",
-        TextKey::ReconcileEntireSourceHelp => "Vergelijk een volledige momentopname van de bron zonder de huidige publicatie of iteminstellingen te wijzigen.",
+        TextKey::ReconcileEntireSourceHelp => {
+            "Vergelijk een volledige momentopname van de bron zonder de huidige publicatie of iteminstellingen te wijzigen."
+        }
         TextKey::ReconcileQueued => "Volledige bronvergelijking staat in de wachtrij.",
         TextKey::ReconcileFailed => "Volledige bronvergelijking is mislukt.",
         TextKey::ResetAndReload => "Opnieuw instellen en laden",
-        TextKey::ResetAddonMediaListHelp => "Verwijder alle gegenereerde resultaten voor deze lijst en zet daarna een volledige import in de wachtrij.",
+        TextKey::ResetAddonMediaListHelp => {
+            "Verwijder alle gegenereerde resultaten voor deze lijst en zet daarna een volledige import in de wachtrij."
+        }
         TextKey::SourceHost => "Bronhost",
         TextKey::ResetRemoves => "Deze reset verwijdert",
-        TextKey::ResetRemovesItems => "Geïmporteerde items, providermetadata, aanpassingen van de beheerder, afleveringsnummering en vervangingen.",
-        TextKey::ResetRemovesArtifacts => "Gegenereerde media, NFO-bestanden, illustraties, ondertitels, caches en archieven.",
-        TextKey::ResetRemovesRuntime => "Taken, controlepunten, revisieartefacten, items in de gegenereerde afspeellijst en geprojecteerde media.",
+        TextKey::ResetRemovesItems => {
+            "Geïmporteerde items, providermetadata, aanpassingen van de beheerder, afleveringsnummering en vervangingen."
+        }
+        TextKey::ResetRemovesArtifacts => {
+            "Gegenereerde media, NFO-bestanden, illustraties, ondertitels, caches en archieven."
+        }
+        TextKey::ResetRemovesRuntime => {
+            "Taken, controlepunten, revisieartefacten, items in de gegenereerde afspeellijst en geprojecteerde media."
+        }
         TextKey::ResetRetains => "Deze reset behoudt",
-        TextKey::ResetRetainsSettings => "De lijstnaam, koppelingen met add-on, bron en bibliotheek, identiteit van de gegenereerde afspeellijst, vernieuwings- en publicatiebeleid, artefactquotum en overige beheerdersinstellingen.",
-        TextKey::ResetReloadFailureWarning => "Als het opnieuw laden mislukt, blijven kanalen en de gegenereerde afspeellijst leeg.",
+        TextKey::ResetRetainsSettings => {
+            "De lijstnaam, koppelingen met add-on, bron en bibliotheek, identiteit van de gegenereerde afspeellijst, vernieuwings- en publicatiebeleid, artefactquotum en overige beheerdersinstellingen."
+        }
+        TextKey::ResetReloadFailureWarning => {
+            "Als het opnieuw laden mislukt, blijven kanalen en de gegenereerde afspeellijst leeg."
+        }
         TextKey::TypeListNameToConfirm => "Typ de huidige lijstnaam om te bevestigen",
         TextKey::ResetQueued => "Opnieuw instellen en laden staat in de wachtrij.",
         TextKey::ResetAddonMediaListFailed => "Opnieuw instellen en laden is mislukt.",
@@ -2368,13 +2581,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Trash => "Prullenbak",
         TextKey::TrashAlreadyEmpty => "De prullenbak is al leeg.",
         TextKey::TrashEmpty => "De prullenbak is leeg.",
-        TextKey::TrashEmptyConfirm => "Alle items waarvan het bestand ontbreekt uit de database verwijderen?",
+        TextKey::TrashEmptyConfirm => {
+            "Alle items waarvan het bestand ontbreekt uit de database verwijderen?"
+        }
         TextKey::TrashEmptyConfirmHelp => {
             "Dit verwijdert de momenteel ontbrekende media-items en hun afhankelijke metadatarijen permanent."
-        },
+        }
         TextKey::TrashSubtitle => {
             "Items waarvan de bronbestanden momenteel ontbreken op schijf of bij de provider."
-        },
+        }
         TextKey::Troubleshooting => "Probleemoplossing",
         TextKey::TunerCount => "Aantal tuners",
         TextKey::TvShows => "Series",
@@ -2385,7 +2600,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::UseChaptersAsMediaItems => "Hoofdstukken als media-items gebruiken",
         TextKey::UseChaptersAsMediaItemsHelp => {
             "Plan afzonderlijke hoofdstukken in plaats van volledige bestanden"
-        },
+        }
         TextKey::UseEmbeddedSubtitles => "Ingesloten ondertitels gebruiken",
         TextKey::Uuid => "UUID",
         TextKey::UntitledItem => "Item zonder titel",
@@ -2399,20 +2614,22 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ActiveTranscodeLimit => "Maximaal gelijktijdige streamingtranscodes",
         TextKey::ActiveTranscodeLimitHelp => {
             "Harde limiet voor FFmpeg-streamingtranscodes. Wanneer alle slots bezet zijn, krijgt een nieuwe kijker een melding dat alle streams in gebruik zijn totdat er een slot vrijkomt; actieve streams omzeilen de limiet niet."
-        },
+        }
         TextKey::ActiveTranscodeSuggestionHardware => {
             "Hardware-encoder gevonden; dit is een voorgestelde waarde, geen automatische wijziging."
-        },
+        }
         TextKey::ActiveTranscodeSuggestionSoftware => {
             "Alleen software-encoding; dit is een voorgestelde waarde, geen automatische wijziging."
-        },
+        }
         TextKey::Peak => "piek",
         TextKey::StreamsInUse => "Streams in gebruik",
         TextKey::SuggestedTranscodeLimit => "Voorgestelde waarde",
         TextKey::Watermarks => "Zenderlogo's",
         TextKey::Width => "Breedte",
         TextKey::WorkAheadSegmenterLimit => "Vooruitwerkende HLS-transcodes",
-        TextKey::WorkAheadSegmenterLimitHelp => "Hoeveel HLS-transcodeslots vooruit mogen werken op maximale snelheid om buffer op te bouwen. Vooruitwerken wijkt altijd voor bekeken streams.",
+        TextKey::WorkAheadSegmenterLimitHelp => {
+            "Hoeveel HLS-transcodeslots vooruit mogen werken op maximale snelheid om buffer op te bouwen. Vooruitwerken wijkt altijd voor bekeken streams."
+        }
         TextKey::AccelerationKind => "Acceleratietype",
         TextKey::AddFfmpegProfile => "FFmpeg-profiel toevoegen",
         TextKey::AddProfile => "Profiel toevoegen",
@@ -2482,8 +2699,12 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TargetLoudnessLufs => "Doelloudness (LUFS)",
         TextKey::ThreadCountAuto => "Aantal threads (0 = auto)",
         TextKey::OutputDynamicRange => "Dynamisch bereik van uitvoer",
-        TextKey::OutputDynamicRangeCopyHint => "Video wordt gekopieerd, dus de uitvoer behoudt het dynamisch bereik van de bron.",
-        TextKey::HdrStaticMetadataHint => "Laat leeg om de gedocumenteerde HDR10-standaardwaarden te gebruiken. Ze gelden alleen wanneer de bron zelf geen HDR-metadata bevat; het masteringscherm en de lichtniveaus van de bron winnen altijd.",
+        TextKey::OutputDynamicRangeCopyHint => {
+            "Video wordt gekopieerd, dus de uitvoer behoudt het dynamisch bereik van de bron."
+        }
+        TextKey::HdrStaticMetadataHint => {
+            "Laat leeg om de gedocumenteerde HDR10-standaardwaarden te gebruiken. Ze gelden alleen wanneer de bron zelf geen HDR-metadata bevat; het masteringscherm en de lichtniveaus van de bron winnen altijd."
+        }
         TextKey::HdrMasteringDisplay => "Masteringscherm",
         TextKey::HdrMaxCll => "MaxCLL (cd/m²)",
         TextKey::HdrMaxFall => "MaxFALL (cd/m²)",
@@ -2526,7 +2747,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::GeneratePlaylist => "Afspeellijst in oorspronkelijke volgorde maken",
         TextKey::GeneratePlaylistFromSortedAddonMediaListItems => {
             "Behoud na elke publicatie de oorspronkelijke volgorde van de provider"
-        },
+        }
         TextKey::MusicVideos => "Muziekvideo's",
         TextKey::NewCollectionName => "Nieuwe collectienaam",
         TextKey::NoMediaMatched => "Geen media gevonden.",
@@ -2542,15 +2763,19 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::SelectAll => "Alles selecteren",
         TextKey::SelectGroup => "(Selecteer een groep)",
         TextKey::SelectPlaylist => "(Selecteer een afspeellijst)",
-        TextKey::SelectSearchCollectionHelp => "Selecteer de collectie waaraan de zoekresultaten worden toegevoegd.",
-        TextKey::SelectSearchPlaylistHelp => "Selecteer de afspeellijst waaraan de zoekresultaten worden toegevoegd.",
+        TextKey::SelectSearchCollectionHelp => {
+            "Selecteer de collectie waaraan de zoekresultaten worden toegevoegd."
+        }
+        TextKey::SelectSearchPlaylistHelp => {
+            "Selecteer de afspeellijst waaraan de zoekresultaten worden toegevoegd."
+        }
         TextKey::Selected => "Geselecteerd",
         TextKey::SelectCollectionToAddThisMovie => {
             "Selecteer een collectie om deze film toe te voegen."
-        },
+        }
         TextKey::SelectPlaylistToAddThisMovie => {
             "Selecteer een afspeellijst om deze film toe te voegen."
-        },
+        }
         TextKey::Add => "Toevoegen",
         TextKey::AddLibrary => "Bibliotheek toevoegen",
         TextKey::Address => "Adres",
@@ -2562,7 +2787,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ClickAuthorizePlex => "Klik hier om op Plex.tv te autoriseren",
         TextKey::ClickPlayoutItemHelp => {
             "Klik op een uitzenditem om titel, tijden en planningscontext te bekijken."
-        },
+        }
         TextKey::ConfigureConnection => "Verbinding configureren",
         TextKey::Connection => "Verbinding",
         TextKey::DeepScanCollections => "Collecties diep scannen",
@@ -2581,7 +2806,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::LocalLibraries => "Lokale bibliotheken",
         TextKey::LocalPath => "Lokaal pad",
         TextKey::MediaKind => "Mediasoort",
-        TextKey::NoLibrariesConfigured => "Geen bibliotheken geconfigureerd. Voeg eerst een mediabron toe.",
+        TextKey::NoLibrariesConfigured => {
+            "Geen bibliotheken geconfigureerd. Voeg eerst een mediabron toe."
+        }
         TextKey::NoSchedulingContext => "Geen planningscontext",
         TextKey::NoPlayoutItemsInWindow => "Geen uitzenditems in dit 24-uursvenster",
         TextKey::NoPlayoutsFound => "Geen uitzendingen gevonden.",
@@ -2616,12 +2843,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Categories => "Categorieën",
         TextKey::CategoriesHelp => "Komma-gescheiden lijst met categorieën",
         TextKey::Channel => "Kanaal",
-        TextKey::ChannelCouldNotBeSaved => "Kanaal kon niet worden opgeslagen. Controleer de formulierwaarden en probeer het opnieuw.",
+        TextKey::ChannelCouldNotBeSaved => {
+            "Kanaal kon niet worden opgeslagen. Controleer de formulierwaarden en probeer het opnieuw."
+        }
         TextKey::ChannelDisabled => "Kanaal uitgeschakeld",
         TextKey::ChannelHiddenFromEpg => "Kanaal verborgen in EPG",
         TextKey::ChannelLogo => "Kanaallogo",
         TextKey::ChannelLogoPreview => "Voorbeeld van kanaallogo",
-        TextKey::ChannelLogoUploadFailed => "Uploaden van kanaallogo mislukt. Controleer het bestand en probeer het opnieuw.",
+        TextKey::ChannelLogoUploadFailed => {
+            "Uploaden van kanaallogo mislukt. Controleer het bestand en probeer het opnieuw."
+        }
         TextKey::Check => "Controle",
         TextKey::Continuous => "Continu",
         TextKey::DateAndTime => "Datum en tijd",
@@ -2663,13 +2894,17 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::FfmpegRuntimeUpdated => "FFmpeg-runtime bijgewerkt",
         TextKey::FfmpegRuntimeVersion => "Versie",
         TextKey::HealthNoPersistedRun => "Er zijn nu geen toepasselijke gezondheidscontroles.",
-        TextKey::HealthPersistedRunHelp => "Huidige pariteitsgezondheidscontroles. Deze pagina wordt vernieuwd nadat mediascans de itemstatus bijwerken.",
+        TextKey::HealthPersistedRunHelp => {
+            "Huidige pariteitsgezondheidscontroles. Deze pagina wordt vernieuwd nadat mediascans de itemstatus bijwerken."
+        }
         TextKey::HistoryDetails => "Geschiedenisdetails",
         TextKey::HlsDirect => "HLS direct",
         TextKey::HlsSegmenter => "HLS-segmenter",
         TextKey::Hours => "uur",
         TextKey::IdleBehavior => "Gedrag bij inactiviteit",
-        TextKey::IdleBehaviorHelp => "Bepaalt hoe transcodering zich gedraagt nadat alle clients zijn losgekoppeld",
+        TextKey::IdleBehaviorHelp => {
+            "Bepaalt hoe transcodering zich gedraagt nadat alle clients zijn losgekoppeld"
+        }
         TextKey::Info => "Info",
         TextKey::Import => "Import",
         TextKey::IsEnabled => "Ingeschakeld",
@@ -2703,9 +2938,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::NvidiaCapabilitiesNotCollected => "NVIDIA-mogelijkheden zijn nog niet verzameld.",
         TextKey::Number => "Nummer",
         TextKey::OnDemand => "Op aanvraag",
-        TextKey::MatchedPointsHelp => {
-            "aantal mid-roll-punten dat al overeenkwam met de expressie"
-        },
+        TextKey::MatchedPointsHelp => "aantal mid-roll-punten dat al overeenkwam met de expressie",
         TextKey::Pass => "Geslaagd",
         TextKey::ParityDebt => "ParityDebt",
         TextKey::PlaybackTroubleshooting => "Afspeelprobleemoplossing",
@@ -2715,7 +2948,9 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PlayoutModeHelp => "Bepaalt de voortgang van de uitzending van het kanaal",
         TextKey::PlayoutOffset => "Uitzendverschuiving",
         TextKey::PlayoutSource => "Uitzendbron",
-        TextKey::PlayoutSourceHelp => "Bepaalt de bron van de kanaalinhoud. Dit kan niet worden gewijzigd wanneer het kanaal al een uitzending heeft.",
+        TextKey::PlayoutSourceHelp => {
+            "Bepaalt de bron van de kanaalinhoud. Dit kan niet worden gewijzigd wanneer het kanaal al een uitzending heeft."
+        }
         TextKey::Preview => "Voorbeeld",
         TextKey::PreviewBlockPlayout => "Voorbeeld van blokuitzending",
         TextKey::PreviewChannel => "Kanaalvoorbeeld",
@@ -2751,12 +2986,16 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PreviewUnavailable => "De livestream is niet beschikbaar.",
         TextKey::PreviewCapacityReached => "Alle transcodeerplaatsen zijn momenteel bezet.",
         TextKey::PreviewNetworkError => "De netwerkverbinding van het voorbeeld is verbroken.",
-        TextKey::PreviewMediaError => "De browser kan de ingestelde uitvoer van dit kanaal niet decoderen.",
+        TextKey::PreviewMediaError => {
+            "De browser kan de ingestelde uitvoer van dit kanaal niet decoderen."
+        }
         TextKey::PreviewDerivativeNote => {
             "Het beheervoorbeeld gebruikt een browsercompatibele H.264/AAC-afgeleide; de ingestelde kanaaluitvoer blijft ongewijzigd."
         }
         TextKey::JavascriptRequiredPlayback => "JavaScript is vereist voor interactief afspelen.",
-        TextKey::ConfirmStopTranscodeSession => "De gedeelde transcodeersessie voor dit kanaal stoppen?",
+        TextKey::ConfirmStopTranscodeSession => {
+            "De gedeelde transcodeersessie voor dit kanaal stoppen?"
+        }
         TextKey::PreviewPlaylistPlayout => "Voorbeeld van afspeellijstuitzending",
         TextKey::PreferredAudioTitle => "Voorkeurstitel voor audio",
         TextKey::PreferredSubtitleLanguage => "Voorkeurstaal voor ondertitels",
@@ -2836,13 +3075,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Failed => "Mislukt",
         TextKey::TroubleshootingPlaybackStartDebt => {
             "Afspeelvoorbeeld voor media-items en kanalen schrijft nu FFmpeg-rapporten, logs, media_info.json, troubleshooting_info.json, geselecteerde stream-selector-YAML en capability-bestanden, voert stream-selectorregels uit en verwijst door naar /iptv/session/.troubleshooting/live.m3u8."
-        },
+        }
         TextKey::UnableToLoadMediaInfo => "Kan media-informatie niet laden",
         TextKey::UnableToLoadPlaybackTroubleshooting => {
             "Kan context voor afspeelprobleemoplossing niet laden"
-        },
+        }
         TextKey::UploadLogo => "Logo uploaden",
-        TextKey::UploadLogoHelp => "Kies een lokale afbeelding om het opgeslagen kanaallogo bij opslaan te vervangen",
+        TextKey::UploadLogoHelp => {
+            "Kies een lokale afbeelding om het opgeslagen kanaallogo bij opslaan te vervangen"
+        }
         TextKey::Warning => "Waarschuwing",
         TextKey::Watermark => "Zenderlogo",
         TextKey::WatermarkIds => "Zenderlogo-ID's",

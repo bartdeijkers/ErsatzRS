@@ -4,6 +4,13 @@
 
 Accepted (2026-09-01), amended (2026-09-04)
 
+The mandatory SponsorBlock processed-video preparation decision is superseded
+by [ADR 0087](0087-stream-sponsorblock-intervals-without-playback-underruns.md)
+(2026-09-05, amended 2026-09-06). Streaming is AMM-M-01A; optional list-level
+Download ahead modes are AMM-M-01B. File-preparation requirements below apply
+only to those download paths, not the streaming default.
+Other lifecycle and provider-option decisions remain accepted.
+
 ## Implementation
 
 Partial — AMM-J-01 through AMM-J-04 and the AMM-K-01 provider-neutral

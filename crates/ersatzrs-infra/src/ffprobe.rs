@@ -53,6 +53,10 @@ pub enum FfprobeError {
     },
     #[error("ffprobe timed out for {path}")]
     Timeout { path: String },
+    #[error("ffprobe cancelled for {path}")]
+    Cancelled { path: String },
+    #[error("ffprobe returned invalid metadata for {path}")]
+    InvalidOutput { path: String },
 }
 
 pub type Result<T> = std::result::Result<T, FfprobeError>;
@@ -139,8 +143,182 @@ impl FfprobeExtractor {
         stream: &ResolvedRemoteStream,
         timeout: StdDuration,
     ) -> Result<FfprobeMediaVersion> {
+        let deadline = tokio::time::Instant::now() + timeout;
         let label = redacted_source_label(&stream.source);
-        let (args, mut producer) = Self::remote_probe_command(stream, &label)?;
+        let (args, producer) = Self::remote_probe_command(stream, &label)?;
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        self.run_remote_probe(Some(stream), args, producer, deadline, receiver)
+            .await
+    }
+
+    /// Probe an owned input within the caller's bounded startup budget.
+    /// Input options precede the locator; encoding filters are not applied by ffprobe.
+    /// Signal cancellation and await this future before releasing input ownership.
+    ///
+    /// # Errors
+    /// Rejects invalid budgets, cancellation, failed probes and invalid output.
+    /// Errors never include the private input path or raw diagnostics.
+    pub async fn extract_input_cancellable(
+        &self,
+        input: &ersatzrs_ffmpeg::InputFile,
+        remaining_startup: StdDuration,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<FfprobeMediaVersion> {
+        if remaining_startup.is_zero() || remaining_startup > StdDuration::from_secs(15) {
+            return Err(FfprobeError::Timeout {
+                path: "published interval media".to_owned(),
+            });
+        }
+        let deadline = tokio::time::Instant::now() + remaining_startup;
+        self.run_remote_probe(
+            None,
+            remote_probe_input_args(input),
+            None,
+            deadline,
+            cancellation,
+        )
+        .await
+    }
+
+    /// Probe the bounded NUT header from an already-running v4 producer.
+    /// Native container headers identify raw video and PCM without reading or
+    /// decoding a complete frame. The owner replays these bytes to the encoder.
+    ///
+    /// # Errors
+    /// Rejects oversized/empty prefixes, cancellation and malformed media headers.
+    pub async fn extract_retained_prefix_cancellable(
+        &self,
+        prefix: &[u8],
+        deadline: tokio::time::Instant,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<FfprobeMediaVersion> {
+        use std::io::Write as _;
+        let label = "published interval media";
+        if prefix.is_empty() || prefix.len() > 64 * 1024 {
+            return Err(FfprobeError::Spawn {
+                path: label.to_owned(),
+                source: std::io::Error::other("invalid retained media prefix"),
+            });
+        }
+        let mut file = tempfile::NamedTempFile::new().map_err(|source| FfprobeError::Spawn {
+            path: label.to_owned(),
+            source,
+        })?;
+        file.write_all(prefix)
+            .map_err(|source| FfprobeError::Spawn {
+                path: label.to_owned(),
+                source,
+            })?;
+        let args = vec![
+            "-hide_banner".to_owned(),
+            "-v".to_owned(),
+            "error".to_owned(),
+            "-f".to_owned(),
+            "nut".to_owned(),
+            "-nofind_stream_info".to_owned(),
+            "-show_streams".to_owned(),
+            "-show_format".to_owned(),
+            "-of".to_owned(),
+            "json".to_owned(),
+            "-i".to_owned(),
+            file.path().to_string_lossy().into_owned(),
+        ];
+        self.run_remote_probe(None, args, None, deadline, cancellation)
+            .await
+    }
+
+    async fn run_remote_probe(
+        &self,
+        stream: Option<&ResolvedRemoteStream>,
+        args: Vec<String>,
+        producer: Option<crate::remote_stream::RemoteStreamCommand>,
+        deadline: tokio::time::Instant,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<FfprobeMediaVersion> {
+        let label = stream.map_or_else(
+            || "published interval media".to_owned(),
+            |stream| redacted_source_label(&stream.source),
+        );
+        let (status, stdout, stderr) = self
+            .run_owned_probe_output(&label, stream, args, producer, deadline, cancellation)
+            .await?;
+        finish_remote_ffprobe(status, &label, &stdout, &stderr, stream)
+    }
+
+    /// Count decoded frames of a local watermark under the shared startup deadline.
+    /// Signal cancellation and await this future before releasing input ownership.
+    ///
+    /// # Errors
+    /// Returns static errors for cancellation, timeout, failed probes or invalid counts.
+    pub async fn count_watermark_frames_cancellable(
+        &self,
+        path: &str,
+        deadline: tokio::time::Instant,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<u64> {
+        let label = "watermark frame count";
+        let args = [
+            "-loglevel",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-count_frames",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-print_format",
+            "csv",
+            path,
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        let (status, stdout, _) = self
+            .run_owned_probe_output(label, None, args, None, deadline, cancellation)
+            .await?;
+        if !status.success() {
+            return Err(FfprobeError::Process {
+                path: label.to_owned(),
+                status,
+                stderr: "watermark frame count failed".to_owned(),
+            });
+        }
+        String::from_utf8_lossy(&stdout)
+            .trim()
+            .strip_prefix("stream,")
+            .and_then(|count| count.parse::<u64>().ok())
+            .ok_or_else(|| FfprobeError::InvalidOutput {
+                path: label.to_owned(),
+            })
+    }
+
+    #[allow(clippy::too_many_lines)] // One owner keeps process, readers and producer cleanup ordered.
+    async fn run_owned_probe_output(
+        &self,
+        label: &str,
+        stream: Option<&ResolvedRemoteStream>,
+        args: Vec<String>,
+        producer: Option<crate::remote_stream::RemoteStreamCommand>,
+        deadline: tokio::time::Instant,
+        mut cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<(ExitStatus, Vec<u8>, String)> {
+        let label = label.to_owned();
+        if !matches!(
+            cancellation.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ) {
+            return Err(FfprobeError::Cancelled { path: label });
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(FfprobeError::Timeout { path: label });
+        }
+        let mut producer = producer
+            .as_ref()
+            .map(spawn_remote_stream_producer)
+            .transpose()
+            .map_err(|error| FfprobeError::Spawn {
+                path: label.clone(),
+                source: std::io::Error::other(error),
+            })?;
         let mut process = Command::new(&self.ffprobe_path);
         process
             .args(&args)
@@ -152,10 +330,18 @@ impl FfprobeExtractor {
         } else {
             process.stdin(Stdio::null());
         }
-        let mut child = process.spawn().map_err(|source| FfprobeError::Spawn {
-            path: label.clone(),
-            source,
-        })?;
+        let mut child = match process.spawn() {
+            Ok(child) => child,
+            Err(source) => {
+                if let Some(producer) = producer.as_mut() {
+                    let _ = producer.kill().await;
+                }
+                return Err(FfprobeError::Spawn {
+                    path: label,
+                    source,
+                });
+            }
+        };
 
         let mut producer_pipe = if let Some(mut producer) = producer.take() {
             let Some(consumer_stdin) = child.stdin.take() else {
@@ -172,18 +358,12 @@ impl FfprobeExtractor {
                     label.clone(),
                     RemoteStreamSpawnContext::probe(),
                     Some("0".to_owned()),
-                    match &stream.source {
-                        RemoteStreamSource::Addon(command) => {
-                            remote_stream_environment_secrets(command)
-                        }
-                        RemoteStreamSource::Url(_) => Vec::new(),
-                    },
-                    match &stream.source {
-                        RemoteStreamSource::Addon(command) => {
-                            command_has_file_backed_secret(command)
-                        }
-                        RemoteStreamSource::Url(_) => false,
-                    },
+                    stream
+                        .and_then(crate::remote_stream::remote_stream_producer)
+                        .map_or_else(Vec::new, remote_stream_environment_secrets),
+                    stream
+                        .and_then(crate::remote_stream::remote_stream_producer)
+                        .is_some_and(command_has_file_backed_secret),
                 )
                 .map_err(|error| FfprobeError::Spawn {
                     path: label.clone(),
@@ -204,9 +384,15 @@ impl FfprobeExtractor {
         })?;
         let stdout_task = tokio::spawn(read_remote_ffprobe_stdout(stdout));
         let stderr_task = tokio::spawn(read_stderr_tail(stderr));
-        let status = match tokio::time::timeout(timeout, child.wait()).await {
-            Ok(Ok(status)) => status,
-            Ok(Err(source)) => {
+        let waited = tokio::select! {
+            biased;
+            _ = &mut cancellation => None,
+            result = tokio::time::timeout_at(deadline, child.wait()) => Some(result),
+        };
+        let status = match waited {
+            Some(Ok(Ok(status))) => status,
+            Some(Ok(Err(source))) => {
+                let _ = child.kill().await;
                 shutdown_remote_producer(&mut producer_pipe).await;
                 stdout_task.abort();
                 stderr_task.abort();
@@ -217,92 +403,126 @@ impl FfprobeExtractor {
                     source,
                 });
             }
-            Err(_) => {
+            Some(Err(_)) | None => {
                 let _ = child.kill().await;
                 shutdown_remote_producer(&mut producer_pipe).await;
                 stdout_task.abort();
                 stderr_task.abort();
                 let _ = stdout_task.await;
                 let _ = stderr_task.await;
-                return Err(FfprobeError::Timeout { path: label });
+                return Err(if waited.is_none() {
+                    FfprobeError::Cancelled { path: label }
+                } else {
+                    FfprobeError::Timeout { path: label }
+                });
             }
         };
         shutdown_remote_producer(&mut producer_pipe).await;
-        let (stdout, stderr) =
-            Self::collect_remote_ffprobe_output(stdout_task, stderr_task, &label).await?;
-        finish_remote_ffprobe(status, &label, &stdout, &stderr, stream)
+        let (stdout, stderr) = Self::collect_remote_ffprobe_output(
+            stdout_task,
+            stderr_task,
+            &label,
+            deadline,
+            cancellation,
+        )
+        .await?;
+        Ok((status, stdout, stderr))
     }
 
     async fn collect_remote_ffprobe_output(
         mut stdout_task: tokio::task::JoinHandle<std::io::Result<Vec<u8>>>,
         mut stderr_task: tokio::task::JoinHandle<String>,
         label: &str,
+        deadline: tokio::time::Instant,
+        mut cancellation: tokio::sync::oneshot::Receiver<()>,
     ) -> Result<(Vec<u8>, String)> {
-        let readers = tokio::time::timeout(REMOTE_FFPROBE_PIPE_SHUTDOWN_TIMEOUT, async {
-            let stdout = (&mut stdout_task)
-                .await
-                .map_err(|_| std::io::Error::other("ffprobe stdout reader failed"))??;
-            let stderr = (&mut stderr_task)
-                .await
-                .map_err(|_| std::io::Error::other("ffprobe stderr reader failed"))?;
+        let deadline =
+            deadline.min(tokio::time::Instant::now() + REMOTE_FFPROBE_PIPE_SHUTDOWN_TIMEOUT);
+        let mut stdout_complete = false;
+        let mut stderr_complete = false;
+        let collect = async {
+            let stdout = (&mut stdout_task).await;
+            stdout_complete = true;
+            let stdout =
+                stdout.map_err(|_| std::io::Error::other("ffprobe stdout reader failed"))??;
+            let stderr = (&mut stderr_task).await;
+            stderr_complete = true;
+            let stderr =
+                stderr.map_err(|_| std::io::Error::other("ffprobe stderr reader failed"))?;
             Ok::<_, std::io::Error>((stdout, stderr))
-        })
-        .await;
+        };
+        let readers = tokio::select! {
+            biased;
+            _ = &mut cancellation => None,
+            result = tokio::time::timeout_at(deadline, collect) => Some(result),
+        };
+        // A completed reader must not be polled twice. Every unfinished reader
+        // is aborted and joined on cancellation, timeout or its sibling's error.
+        if !stdout_complete {
+            stdout_task.abort();
+            let _ = stdout_task.await;
+        }
+        if !stderr_complete {
+            stderr_task.abort();
+            let _ = stderr_task.await;
+        }
         match readers {
-            Ok(Ok(output)) => Ok(output),
-            Ok(Err(source)) => Err(FfprobeError::Spawn {
+            Some(Ok(Ok(output))) => Ok(output),
+            Some(Ok(Err(source))) => Err(FfprobeError::Spawn {
                 path: label.to_owned(),
                 source,
             }),
-            Err(_) => {
-                stdout_task.abort();
-                stderr_task.abort();
-                let _ = stdout_task.await;
-                let _ = stderr_task.await;
-                Err(FfprobeError::Spawn {
-                    path: label.to_owned(),
-                    source: std::io::Error::other("ffprobe output pipes did not close"),
-                })
-            }
+            Some(Err(_)) => Err(FfprobeError::Timeout {
+                path: label.to_owned(),
+            }),
+            None => Err(FfprobeError::Cancelled {
+                path: label.to_owned(),
+            }),
         }
     }
 
     fn remote_probe_command(
         stream: &ResolvedRemoteStream,
         label: &str,
-    ) -> Result<(Vec<String>, Option<crate::addons::ManagedAddonChild>)> {
-        let mut args = [
-            "-hide_banner",
-            "-print_format",
-            "json",
-            "-show_format",
-            "-show_streams",
-            "-show_chapters",
-            // One frame only: Matroska carries HDR static metadata as frame
-            // side data, and a full frame walk would be ruinous on a scan.
-            "-read_intervals",
-            "%+#1",
-            "-show_frames",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-        let input = remote_stream_input_file(stream);
-        args.extend(input.input_options);
-        args.extend(["-i".to_owned(), input.path]);
+    ) -> Result<(
+        Vec<String>,
+        Option<crate::remote_stream::RemoteStreamCommand>,
+    )> {
+        let input = remote_stream_input_file(stream).map_err(|error| FfprobeError::Spawn {
+            path: label.to_owned(),
+            source: std::io::Error::other(error),
+        })?;
+        let args = remote_probe_input_args(&input);
         let producer = match &stream.source {
-            RemoteStreamSource::Url(_) => None,
-            RemoteStreamSource::Addon(command) => {
-                Some(spawn_remote_stream_producer(command).map_err(|error| {
-                    FfprobeError::Spawn {
-                        path: label.to_owned(),
-                        source: std::io::Error::other(error),
-                    }
-                })?)
-            }
+            RemoteStreamSource::Url(_)
+            | RemoteStreamSource::Prepared(_)
+            | RemoteStreamSource::RetainedIntervals(_) => None,
+            RemoteStreamSource::Addon(command) => Some(command.clone()),
         };
         Ok((args, producer))
     }
+}
+
+fn remote_probe_input_args(input: &ersatzrs_ffmpeg::InputFile) -> Vec<String> {
+    let mut args = [
+        "-hide_banner",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        "-show_chapters",
+        // One frame only: Matroska carries HDR static metadata as frame
+        // side data, and a full frame walk would be ruinous on a scan.
+        "-read_intervals",
+        "%+#1",
+        "-show_frames",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect::<Vec<_>>();
+    args.extend(input.input_options.iter().cloned());
+    args.extend(["-i".to_owned(), input.path.clone()]);
+    args
 }
 
 fn finish_remote_ffprobe(
@@ -310,18 +530,30 @@ fn finish_remote_ffprobe(
     label: &str,
     stdout: &[u8],
     stderr: &str,
-    stream: &ResolvedRemoteStream,
+    stream: Option<&ResolvedRemoteStream>,
 ) -> Result<FfprobeMediaVersion> {
     if !status.success() {
         return Err(FfprobeError::Process {
             path: label.to_owned(),
             status,
-            stderr: redact_remote_stream_output(stderr, stream),
+            stderr: stream.map_or_else(
+                || "published interval media diagnostics redacted".to_owned(),
+                |stream| redact_remote_stream_output(stderr, stream),
+            ),
         });
     }
-    parse_ffprobe_json(Path::new("remote-stream"), stdout).map_err(|source| FfprobeError::Json {
-        path: label.to_owned(),
-        source,
+    parse_ffprobe_json(Path::new("remote-stream"), stdout).map_err(|source| {
+        if stream.is_none() {
+            // Deserialization errors can quote invalid string values from stdout.
+            FfprobeError::InvalidOutput {
+                path: label.to_owned(),
+            }
+        } else {
+            FfprobeError::Json {
+                path: label.to_owned(),
+                source,
+            }
+        }
     })
 }
 
@@ -837,6 +1069,125 @@ struct FfprobeTags {
     mimetype: Option<String>,
 }
 
+#[cfg(test)]
+mod retained_probe_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn watermark_count_rejects_cancelled_or_expired_startup_before_spawn() {
+        let extractor = FfprobeExtractor::new("nonexistent-watermark-probe");
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        sender.send(()).unwrap();
+        assert!(matches!(
+            extractor
+                .count_watermark_frames_cancellable(
+                    "synthetic-logo.gif",
+                    tokio::time::Instant::now() + StdDuration::from_secs(15),
+                    receiver,
+                )
+                .await,
+            Err(FfprobeError::Cancelled { .. })
+        ));
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        assert!(matches!(
+            extractor
+                .count_watermark_frames_cancellable(
+                    "synthetic-logo.gif",
+                    tokio::time::Instant::now(),
+                    receiver,
+                )
+                .await,
+            Err(FfprobeError::Timeout { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn retained_prefix_rejects_cancelled_expired_and_oversized_before_spawn() {
+        let extractor = FfprobeExtractor::new("nonexistent-retained-probe");
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        sender.send(()).unwrap();
+        assert!(matches!(
+            extractor
+                .extract_retained_prefix_cancellable(
+                    b"synthetic",
+                    tokio::time::Instant::now() + StdDuration::from_secs(15),
+                    receiver,
+                )
+                .await,
+            Err(FfprobeError::Cancelled { .. })
+        ));
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        assert!(matches!(
+            extractor
+                .extract_retained_prefix_cancellable(
+                    b"synthetic",
+                    tokio::time::Instant::now(),
+                    receiver,
+                )
+                .await,
+            Err(FfprobeError::Timeout { .. })
+        ));
+        for prefix in [Vec::new(), vec![0; 64 * 1024 + 1]] {
+            let (_sender, receiver) = tokio::sync::oneshot::channel();
+            assert!(matches!(
+                extractor
+                    .extract_retained_prefix_cancellable(
+                        &prefix,
+                        tokio::time::Instant::now() + StdDuration::from_secs(15),
+                        receiver,
+                    )
+                    .await,
+                Err(FfprobeError::Spawn { .. })
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn retained_probe_reader_deadline_keeps_completed_reader_and_aborts_stalled_sibling() {
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (dropped, drop_observed) = tokio::sync::oneshot::channel::<()>();
+        let stdout = tokio::spawn(async { Ok(vec![1, 2, 3]) });
+        let stderr = tokio::spawn(async move {
+            let _dropped = dropped;
+            let _ = started.send(());
+            std::future::pending::<String>().await
+        });
+        ready.await.unwrap();
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        let result = FfprobeExtractor::collect_remote_ffprobe_output(
+            stdout,
+            stderr,
+            "published interval media",
+            tokio::time::Instant::now() + StdDuration::from_millis(20),
+            receiver,
+        )
+        .await;
+        assert!(matches!(result, Err(FfprobeError::Timeout { .. })));
+        assert!(drop_observed.await.is_err());
+    }
+
+    #[tokio::test]
+    async fn retained_probe_reader_error_aborts_unfinished_sibling() {
+        let (dropped, drop_observed) = tokio::sync::oneshot::channel::<()>();
+        let stdout = tokio::spawn(async { Err(std::io::Error::other("bounded output limit")) });
+        let stderr = tokio::spawn(async move {
+            let _dropped = dropped;
+            std::future::pending::<String>().await
+        });
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        let result = FfprobeExtractor::collect_remote_ffprobe_output(
+            stdout,
+            stderr,
+            "published interval media",
+            tokio::time::Instant::now() + StdDuration::from_secs(1),
+            receiver,
+        )
+        .await;
+        assert!(matches!(result, Err(FfprobeError::Spawn { .. })));
+        assert!(drop_observed.await.is_err());
+    }
+}
+
 // Process-permission setup is Unix-specific; the shared producer lifecycle is
 // also covered by the cross-platform tests in remote_stream.rs.
 #[cfg(all(test, unix))]
@@ -844,6 +1195,118 @@ mod tests {
     use std::os::unix::fs::PermissionsExt as _;
 
     use super::*;
+
+    #[tokio::test]
+    async fn watermark_count_preserves_decoded_frame_count_and_rejects_invalid_output() {
+        let temporary = tempfile::tempdir().unwrap();
+        let program = temporary.path().join("watermark-probe.sh");
+        for (output, expected) in [
+            ("stream,1", Some(1)),
+            ("stream,2", Some(2)),
+            ("stream,N/A", None),
+        ] {
+            std::fs::write(&program, format!("#!/bin/sh\nprintf '%s' '{output}'\n")).unwrap();
+            std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let extractor = FfprobeExtractor::new(program.to_str().unwrap());
+            let (_sender, receiver) = tokio::sync::oneshot::channel();
+            let result = extractor
+                .count_watermark_frames_cancellable(
+                    "synthetic-logo.gif",
+                    tokio::time::Instant::now() + StdDuration::from_secs(15),
+                    receiver,
+                )
+                .await;
+            if let Some(expected) = expected {
+                assert_eq!(result.unwrap(), expected);
+            } else {
+                assert!(matches!(result, Err(FfprobeError::InvalidOutput { .. })));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn retained_probe_cancellation_reaps_child_and_redacts_errors() {
+        let temporary = tempfile::tempdir().unwrap();
+        let program = temporary.path().join("probe.sh");
+        let pid_path = temporary.path().join("probe.sh.pid");
+        std::fs::write(
+            &program,
+            "#!/bin/sh\nprintf '%s' $$ > \"$0.pid\"\nwhile :; do :; done\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let extractor = FfprobeExtractor::new(program.to_str().unwrap());
+        let input = b"synthetic NUT prefix";
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let resolution = extractor.extract_retained_prefix_cancellable(
+            input,
+            tokio::time::Instant::now() + StdDuration::from_secs(15),
+            receiver,
+        );
+        tokio::pin!(resolution);
+        let wait_started = async {
+            while !pid_path.exists() {
+                tokio::time::sleep(StdDuration::from_millis(5)).await;
+            }
+        };
+        tokio::select! {
+            result = &mut resolution => panic!("probe ended before cancellation: {result:?}"),
+            result = tokio::time::timeout(StdDuration::from_secs(2), wait_started) => result.unwrap(),
+        }
+        sender.send(()).unwrap();
+        let result = tokio::time::timeout(StdDuration::from_secs(2), resolution)
+            .await
+            .unwrap();
+        assert!(matches!(result, Err(FfprobeError::Cancelled { .. })));
+        let pid: i32 = std::fs::read_to_string(&pid_path).unwrap().parse().unwrap();
+        assert_eq!(
+            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None),
+            Err(nix::errno::Errno::ESRCH)
+        );
+
+        std::fs::write(
+            &program,
+            "#!/bin/sh\nprintf '%s' 'synthetic-private-capability' >&2\nexit 1\n",
+        )
+        .unwrap();
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        let error = extractor
+            .extract_retained_prefix_cancellable(
+                input,
+                tokio::time::Instant::now() + StdDuration::from_secs(1),
+                receiver,
+            )
+            .await
+            .unwrap_err();
+        assert!(!error.to_string().contains("synthetic-private-capability"));
+        assert!(!error.to_string().contains("private-input"));
+        assert!(matches!(error, FfprobeError::Process { .. }));
+        std::fs::write(&program, "#!/bin/sh\nprintf '%s' '{\"streams\":[{\"index\":\"synthetic-private-capability\"}]}'\n").unwrap();
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        let error = extractor
+            .extract_retained_prefix_cancellable(
+                input,
+                tokio::time::Instant::now() + StdDuration::from_secs(1),
+                receiver,
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(error, FfprobeError::InvalidOutput { .. }));
+        assert!(!error.to_string().contains("synthetic-private-capability"));
+
+        std::fs::write(&program, "#!/bin/sh\nprintf '%s' '{\"streams\":[{\"index\":0,\"codec_type\":\"video\",\"codec_name\":\"h264\",\"width\":640,\"height\":360}],\"format\":{\"duration\":\"10\"}}'\n").unwrap();
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        let result = extractor
+            .extract_retained_prefix_cancellable(
+                input,
+                tokio::time::Instant::now() + StdDuration::from_secs(1),
+                receiver,
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.streams[0].codec.as_deref(), Some("h264"));
+        assert_eq!(result.version.width, 640);
+    }
 
     #[tokio::test]
     async fn remote_probe_timeout_cancels_stalled_producer() {

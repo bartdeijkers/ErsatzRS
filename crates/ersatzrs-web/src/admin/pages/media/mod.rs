@@ -1,4 +1,5 @@
 pub mod add_to_schedule_modal;
+pub mod addon_list_options;
 pub mod addon_lists;
 pub mod artists;
 pub mod browser;

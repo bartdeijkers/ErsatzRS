@@ -193,8 +193,11 @@ pub struct AddonMediaListSaveForm {
     metadata_thumbnail: String,
 }
 
-fn people_form_values(value: &str) -> Vec<AddonMediaListNfoPerson> {
-    value
+fn people_form_values(
+    value: &str,
+    original: &[AddonMediaListNfoPerson],
+) -> Vec<AddonMediaListNfoPerson> {
+    let parsed = value
         .lines()
         .filter_map(|line| {
             let (name, role) = line.split_once('|').map_or((line, None), |(name, role)| {
@@ -207,7 +210,17 @@ fn people_form_values(value: &str) -> Vec<AddonMediaListNfoPerson> {
                 thumb: None,
             })
         })
-        .collect()
+        .collect::<Vec<_>>();
+    // Keep fields absent from the HTML control when its visible entries match.
+    if parsed
+        .iter()
+        .map(|person| (&person.name, &person.role))
+        .eq(original.iter().map(|person| (&person.name, &person.role)))
+    {
+        original.to_vec()
+    } else {
+        parsed
+    }
 }
 
 fn metadata_from_save_form(
@@ -226,7 +239,7 @@ fn metadata_from_save_form(
     metadata.writers = comma_form_values(&input.metadata_writers);
     metadata.artists = comma_form_values(&input.metadata_artists);
     metadata.languages = comma_form_values(&input.metadata_languages);
-    metadata.people = people_form_values(&input.metadata_people);
+    metadata.people = people_form_values(&input.metadata_people, &metadata.people);
     metadata.artwork.retain(|artwork| {
         !matches!(
             artwork.role,
@@ -271,7 +284,7 @@ fn item_metadata_from_review_form(
     metadata.directors = comma_form_values(&input.directors);
     metadata.writers = comma_form_values(&input.writers);
     metadata.languages = comma_form_values(&input.languages);
-    metadata.people = people_form_values(&input.people);
+    metadata.people = people_form_values(&input.people, &metadata.people);
     metadata.artwork.retain(|artwork| {
         !matches!(
             artwork.role,
@@ -539,6 +552,9 @@ pub async fn publish_addon_media_list_form(
         }
         Ok(AddonMediaListPublishResult::PreparingPlaybackDetails { .. }) => {
             Redirect::to(&format!("/media/addon-lists/{id}?status=preparing"))
+        }
+        Ok(AddonMediaListPublishResult::PreparingMedia { .. }) => {
+            Redirect::to(&format!("/media/addon-lists/{id}?status=preparing-media"))
         }
         Err(error) => {
             tracing::error!(%error, addon_media_list_id = id, "failed to publish add-on media list from HTML form");
@@ -1002,6 +1018,25 @@ mod tests {
     use axum::body::Bytes;
 
     use super::*;
+
+    #[test]
+    fn unchanged_people_form_preserves_provider_fields() {
+        let original = vec![AddonMediaListNfoPerson {
+            name: "Fixture presenter".into(),
+            role: Some("Channel".into()),
+            order: Some(0),
+            thumb: Some("https://example.invalid/presenter.jpg".into()),
+        }];
+        assert_eq!(
+            people_form_values("Fixture presenter | Channel", &original),
+            original
+        );
+        assert_ne!(
+            people_form_values("Changed presenter | Channel", &original),
+            original
+        );
+        assert!(people_form_values("", &original).is_empty());
+    }
 
     #[test]
     fn save_form_requires_cadence_and_defaults_missing_checkboxes_to_false() {

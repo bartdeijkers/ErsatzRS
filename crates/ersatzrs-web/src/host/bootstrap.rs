@@ -132,6 +132,7 @@ async fn scan_local_addon_repositories_on_startup(pool: &ersatzrs_infra::db::DbP
     }
 }
 
+#[allow(clippy::too_many_lines)] // Keep startup binding, task ownership and shutdown ordering together.
 pub async fn run() {
     let startup = ersatzrs_infra::db::bootstrap_media_server_database()
         .await
@@ -199,6 +200,11 @@ pub async fn run() {
             .unwrap_or_else(|error| abort_after_startup_recovery_error(&error));
     tracing::info!(recovered_refreshes, "startup scan recovery complete");
 
+    let listener = tokio::net::TcpListener::bind(listen_addr)
+        .await
+        .unwrap_or_else(|e| panic!("failed to bind to {listen_addr}: {e}"));
+    let listen_addr = listener.local_addr().expect("bound web listener address");
+
     // Coordinated shutdown: the signal handler cancels this token, the axum
     // server drains in-flight requests, and every background task observes the
     // same token so the whole process exits cleanly (tray "Exit", `docker stop`,
@@ -226,10 +232,6 @@ pub async fn run() {
     let app = super::router::build_app(app_state);
 
     tracing::info!(%listen_addr, "ersatzrs-web listening");
-
-    let listener = tokio::net::TcpListener::bind(listen_addr)
-        .await
-        .unwrap_or_else(|e| panic!("failed to bind to {listen_addr}: {e}"));
 
     tokio::spawn(shutdown_signal(shutdown.clone()));
 

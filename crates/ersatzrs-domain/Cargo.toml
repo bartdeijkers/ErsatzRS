@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 serde = { version = "1", features = ["derive"] }
+thiserror = "2"
 urlencoding = "2"
 uuid = { version = "1", features = ["js", "serde", "v4"] }
 

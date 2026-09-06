@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod addon_media_list;
+pub mod addon_media_list_playback;
 pub mod content_variants;
 pub mod health;
 pub mod hls;

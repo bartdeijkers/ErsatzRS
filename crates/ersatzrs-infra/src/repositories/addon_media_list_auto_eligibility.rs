@@ -135,7 +135,15 @@ pub(crate) async fn assess_auto_publication_in_tx(
         if has_additions {
             displaced.rank = new.rank;
         }
-        if &displaced != *new {
+        // Draft capture does not populate immutable publication playback choices.
+        // Match saved-draft comparison semantics without hiding operator timing,
+        // inclusion, metadata or relative-order changes.
+        displaced.prepared_artifact_id = None;
+        displaced.playback_timeline = None;
+        let mut draft = (*new).clone();
+        draft.prepared_artifact_id = None;
+        draft.playback_timeline = None;
+        if displaced != draft {
             return Ok(Hold(Reason::ExistingChanges));
         }
         if old_options.get(identity) != new_options.get(identity) {
@@ -243,7 +251,14 @@ mod tests {
         "#).execute(&pool).await.unwrap();
         super::super::make_repositories(pool.clone())
             .addon_media_lists
-            .retain_published_revision(1, 1, 1, chrono::Utc::now(), &[], &[])
+            .retain_published_revision(
+                1,
+                1,
+                1,
+                chrono::Utc::now(),
+                &[],
+                &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
+            )
             .await
             .unwrap();
         pool
@@ -252,6 +267,84 @@ mod tests {
     const ADDITION: &str = r#"INSERT INTO "AddonMediaListItem" (
         "Id", "AddonMediaListId", "ProviderId", "DisplayTitle", "Title", "Kind", "Rank"
         ) VALUES (11, 1, 'new', 'New', 'New', 4, 1)"#;
+
+    #[tokio::test]
+    async fn publication_playback_selections_allow_additions_but_preserve_operator_edit_holds() {
+        use ersatzrs_core::{
+            addon_media_list_playback::AddonMediaListPlaybackTimelinePlan,
+            repositories::AddonMediaListRevisionArtifacts,
+        };
+        use AutoPublicationAssessment::{Eligible, Hold, NoChanges};
+        use AutoPublicationHoldReason::ExistingChanges;
+
+        for prepared_file in [false, true] {
+            let pool = fixture().await;
+            sqlx::raw_sql(r#"UPDATE "AddonMediaList" SET "DraftRevision"=2, "PublishedRevision"=2 WHERE "Id"=1;
+                UPDATE "AddonMediaListItem" SET "ProviderLiveness"=1,"EffectiveLiveness"=1,"DurationSeconds"=20 WHERE "Id"=10;"#)
+                .execute(&pool).await.unwrap();
+            let mut artifacts = AddonMediaListRevisionArtifacts::default();
+            if prepared_file {
+                let id = sqlx::query(r#"INSERT INTO "AddonMediaListArtifact"
+                    ("AddonMediaListId","AddonMediaListItemId","CacheKey","Kind","State","DurationMilliseconds","CreatedAt","UpdatedAt")
+                    VALUES (1,10,'fixture-prepared',1,2,17000,'2026-09-06T00:00:00Z','2026-09-06T00:00:00Z')"#)
+                    .execute(&pool).await.unwrap().last_insert_rowid();
+                artifacts.ids.push(id);
+                artifacts.prepared_media.insert("old".into(), id);
+            } else {
+                artifacts.streaming_plans.insert(
+                    "old".into(),
+                    AddonMediaListPlaybackTimelinePlan::new(
+                        20_000,
+                        0..20_000,
+                        &[2_000..3_000, 4_000..6_000],
+                        "a".repeat(64),
+                    )
+                    .unwrap(),
+                );
+            }
+            super::super::make_repositories(pool.clone())
+                .addon_media_lists
+                .retain_published_revision(1, 2, 2, chrono::Utc::now(), &[], &artifacts)
+                .await
+                .unwrap();
+            for (add, mutation, expected) in [
+                (false, "SELECT 1", NoChanges),
+                (true, "SELECT 1", Eligible),
+                (
+                    true,
+                    r#"UPDATE "AddonMediaListItem" SET "Title"='Edited' WHERE "Id"=10"#,
+                    Hold(ExistingChanges),
+                ),
+                (
+                    true,
+                    r#"UPDATE "AddonMediaListItem" SET "DurationSeconds"=21 WHERE "Id"=10"#,
+                    Hold(ExistingChanges),
+                ),
+                (
+                    true,
+                    r#"UPDATE "AddonMediaListItem" SET "FragmentStartSeconds"=1 WHERE "Id"=10"#,
+                    Hold(ExistingChanges),
+                ),
+                (
+                    true,
+                    r#"UPDATE "AddonMediaListItem" SET "FragmentEndSeconds"=19 WHERE "Id"=10"#,
+                    Hold(ExistingChanges),
+                ),
+            ] {
+                let mut tx = pool.begin().await.unwrap();
+                if add {
+                    sqlx::query(ADDITION).execute(&mut *tx).await.unwrap();
+                }
+                sqlx::query(mutation).execute(&mut *tx).await.unwrap();
+                assert_eq!(
+                    assess_auto_publication_in_tx(&mut tx, 1).await.unwrap(),
+                    expected,
+                    "prepared_file={prepared_file}, addition={add}, mutation={mutation}"
+                );
+                tx.rollback().await.unwrap();
+            }
+        }
+    }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)] // Table-driven mutations share one real retained-snapshot fixture.
@@ -460,7 +553,14 @@ mod tests {
         .unwrap();
         super::super::make_repositories(pool.clone())
             .addon_media_lists
-            .retain_published_revision(1, 2, 2, chrono::Utc::now(), &[], &[])
+            .retain_published_revision(
+                1,
+                2,
+                2,
+                chrono::Utc::now(),
+                &[],
+                &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
+            )
             .await
             .unwrap();
         for (name, first_rank, second_rank, added_rank, expected) in [
@@ -505,7 +605,14 @@ mod tests {
             .unwrap();
         super::super::make_repositories(pool.clone())
             .addon_media_lists
-            .retain_published_revision(1, 2, 2, chrono::Utc::now(), &[], &[])
+            .retain_published_revision(
+                1,
+                2,
+                2,
+                chrono::Utc::now(),
+                &[],
+                &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
+            )
             .await
             .unwrap();
         let mut tx = pool.begin().await.unwrap();

@@ -72,6 +72,40 @@ fn normalize_language_input(value: &str) -> String {
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum TextKey {
+    AddonAccessTest,
+    AddonAccessHelp,
+    AddonAccessSaveFirst,
+    AddonAccessError,
+    AddonAccessNotChecked,
+    AddonAccessQueued,
+    AddonAccessRunning,
+    AddonAccessWaiting,
+    AddonAccessCancelled,
+    AddonAccessStale,
+    AddonAccessAccessible,
+    AddonAccessProfileUnavailable,
+    AddonAccessProfileLocked,
+    AddonAccessDecryptionFailed,
+    AddonAccessRestricted,
+    AddonAccessNextAttempt,
+    AddonAccessExpires,
+    AddonAccessRefresh,
+    AddonOptionsCurrentFilter,
+    AddonOptions,
+    AddonOptionsDraftHelp,
+    AddonOptionsProvisional,
+    AddonOptionsListDefault,
+    AddonOptionsInherited,
+    AddonOptionsOverride,
+    AddonOptionsFiniteOnly,
+    AddonOptionsResetPackage,
+    AddonOptionsResetList,
+    AddonOptionsMixed,
+    AddonOptionsPreviewHelp,
+    AddonOptionsBefore,
+    AddonOptionsAfter,
+    AddonOptionsConflict,
+    AddonOptionsNone,
     Addon,
     PrimaryFeature,
     MovieExtra,
@@ -179,6 +213,9 @@ pub enum TextKey {
     SavedRevision,
     PublishList,
     PreparePublication,
+    ProcessedMediaRequired,
+    ProcessedMediaQueued,
+    PreparingProcessedMedia,
     PreparingPublication,
     Publishing,
     PublicationQueued,
@@ -446,6 +483,8 @@ pub enum TextKey {
     RefreshPublicationAutomatic,
     RefreshPublicationPolicyHelp,
     AutoPublicationHeld,
+    PreparationProcessRecoveryRequired,
+    PreparationWorkerUnavailable,
     AutoPublicationBaselineUnavailable,
     AutoPublicationExistingChanges,
     AutoPublicationConflicts,
@@ -1831,6 +1870,40 @@ pub enum TextKey {
 }
 
 pub const ALL_TEXT_KEYS: &[TextKey] = &[
+    TextKey::AddonAccessTest,
+    TextKey::AddonAccessHelp,
+    TextKey::AddonAccessSaveFirst,
+    TextKey::AddonAccessError,
+    TextKey::AddonAccessNotChecked,
+    TextKey::AddonAccessQueued,
+    TextKey::AddonAccessRunning,
+    TextKey::AddonAccessWaiting,
+    TextKey::AddonAccessCancelled,
+    TextKey::AddonAccessStale,
+    TextKey::AddonAccessAccessible,
+    TextKey::AddonAccessProfileUnavailable,
+    TextKey::AddonAccessProfileLocked,
+    TextKey::AddonAccessDecryptionFailed,
+    TextKey::AddonAccessRestricted,
+    TextKey::AddonAccessNextAttempt,
+    TextKey::AddonAccessExpires,
+    TextKey::AddonAccessRefresh,
+    TextKey::AddonOptionsCurrentFilter,
+    TextKey::AddonOptions,
+    TextKey::AddonOptionsDraftHelp,
+    TextKey::AddonOptionsProvisional,
+    TextKey::AddonOptionsListDefault,
+    TextKey::AddonOptionsInherited,
+    TextKey::AddonOptionsOverride,
+    TextKey::AddonOptionsFiniteOnly,
+    TextKey::AddonOptionsResetPackage,
+    TextKey::AddonOptionsResetList,
+    TextKey::AddonOptionsMixed,
+    TextKey::AddonOptionsPreviewHelp,
+    TextKey::AddonOptionsBefore,
+    TextKey::AddonOptionsAfter,
+    TextKey::AddonOptionsConflict,
+    TextKey::AddonOptionsNone,
     TextKey::Addon,
     TextKey::PrimaryFeature,
     TextKey::MovieExtra,
@@ -1938,6 +2011,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::SavedRevision,
     TextKey::PublishList,
     TextKey::PreparePublication,
+    TextKey::ProcessedMediaRequired,
+    TextKey::ProcessedMediaQueued,
+    TextKey::PreparingProcessedMedia,
     TextKey::PreparingPublication,
     TextKey::Publishing,
     TextKey::PublicationQueued,
@@ -2203,6 +2279,8 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::RefreshPublicationAutomatic,
     TextKey::RefreshPublicationPolicyHelp,
     TextKey::AutoPublicationHeld,
+    TextKey::PreparationProcessRecoveryRequired,
+    TextKey::PreparationWorkerUnavailable,
     TextKey::AutoPublicationBaselineUnavailable,
     TextKey::AutoPublicationExistingChanges,
     TextKey::AutoPublicationConflicts,
@@ -4008,14 +4086,12 @@ const HLS_LIVE_DELIVERY_TITLE: &str = "HLS Live Delivery";
 const ADDONS_HEALTH_TITLE: &str = "Add-ons";
 const CLASSIC_PLAYOUT_STATE_MESSAGE_PREFIX: &str =
     "Classic playout state is not safe to Refresh for: ";
-const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str =
-    ". Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
+const CLASSIC_PLAYOUT_STATE_MESSAGE_SUFFIX: &str = ". Use Reset Playout for legacy or incompatible state; Refresh never clears a window without a complete checkpoint.";
 const SCAN_REFRESH_STATE_MESSAGE_PREFIX: &str = "Scan refresh state needs attention: ";
 const SCAN_REFRESH_UNRESOLVED_RESOLUTION_SEPARATOR: &str = " unresolved impact resolution(s), ";
 const SCAN_REFRESH_STALE_RESOLUTION_SEPARATOR: &str = " stale impact resolution(s), ";
 const SCAN_REFRESH_FAILED_INTENT_SEPARATOR: &str = " failed playout refresh intent(s), and ";
-const SCAN_REFRESH_STALE_INTENT_SUFFIX: &str =
-    " stale playout refresh intent(s). Review scanner and scheduling logs, then retry the affected scan or playout refresh.";
+const SCAN_REFRESH_STALE_INTENT_SUFFIX: &str = " stale playout refresh intent(s). Review scanner and scheduling logs, then retry the affected scan or playout refresh.";
 const ARTWORK_CARDINALITY_MESSAGE_PREFIX: &str = "Artwork cardinality needs attention: ";
 const ARTWORK_CARDINALITY_SHOW_SEPARATOR: &str = " duplicate show artwork row(s), ";
 const ARTWORK_CARDINALITY_SEASON_SEPARATOR: &str = " duplicate season artwork row(s), and ";
@@ -4067,6 +4143,18 @@ pub fn health_check_message_text(
     };
     if title == "Add-on media lists" && displayed_message == "Automatic publication needs review" {
         return text(language, TextKey::AutoPublicationHeld).to_owned();
+    }
+    if title == "Add-on media lists"
+        && displayed_message
+            == "Media preparation needs process recovery. Confirm prior provider processes have stopped before recovering retained storage and retrying preparation."
+    {
+        return text(language, TextKey::PreparationProcessRecoveryRequired).to_owned();
+    }
+    if title == "Add-on media lists"
+        && displayed_message
+            == "Media preparation worker is unavailable. Restart the server before retrying preparation."
+    {
+        return text(language, TextKey::PreparationWorkerUnavailable).to_owned();
     }
     if title == CLASSIC_PLAYOUT_STATE_TITLE {
         if let Some(playouts) = displayed_message
@@ -4624,6 +4712,49 @@ mod tests {
             assert_eq!(localized, text(language, TextKey::AutoPublicationHeld));
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(localized, "Automatic publication needs review");
+            }
+        }
+    }
+
+    #[test]
+    fn preparation_worker_unavailable_health_is_localized_for_every_language() {
+        let message = "Media preparation worker is unavailable. Restart the server before retrying preparation.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for (full, brief) in [(message, ""), ("", message)] {
+                let localized =
+                    health_check_message_text(language, "Add-on media lists", full, brief);
+                assert_eq!(
+                    localized,
+                    text(language, TextKey::PreparationWorkerUnavailable)
+                );
+                assert_ne!(
+                    localized,
+                    text(language, TextKey::PreparationProcessRecoveryRequired)
+                );
+                if language != UiLanguage::English {
+                    assert_ne!(localized, message);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn preparation_process_recovery_health_is_localized_for_every_language() {
+        let message = "Media preparation needs process recovery. Confirm prior provider processes have stopped before recovering retained storage and retrying preparation.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for (full, brief) in [(message, ""), ("", message)] {
+                let localized =
+                    health_check_message_text(language, "Add-on media lists", full, brief);
+                assert_eq!(
+                    localized,
+                    text(language, TextKey::PreparationProcessRecoveryRequired)
+                );
+                assert!(!localized.is_empty());
+                if definition.code != UiLanguage::English.code() {
+                    assert_ne!(localized, message);
+                }
             }
         }
     }

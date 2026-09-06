@@ -216,6 +216,14 @@ pub fn spawn_background_tasks(
             maintenance.application.clone(),
             shutdown.clone(),
         )),
+        tokio::spawn(run_addon_item_operations(
+            maintenance.pool.clone(),
+            shutdown.clone(),
+        )),
+        tokio::spawn(crate::host::preparation_worker::supervise(
+            maintenance.pool.clone(),
+            shutdown.clone(),
+        )),
         tokio::spawn(run_maintenance_scheduler(
             maintenance.playout_build_rx,
             maintenance.application.clone(),
@@ -290,6 +298,48 @@ async fn run_addon_media_list_imports(
             result = work => {
                 if let Err(error) = result {
                     tracing::warn!(error = %error, "add-on list import worker iteration failed");
+                }
+            }
+        }
+    }
+}
+
+async fn run_addon_item_operations(pool: DbPool, shutdown: CancellationToken) {
+    let coordinator =
+        ersatzrs_infra::addon_media_list_item_coordinator::AddonMediaListItemCoordinator::new(pool);
+    let mut interval = tokio::time::interval(std::time::Duration::from_millis(250));
+    let mut metadata_turn = false;
+    loop {
+        tokio::select! {
+            () = shutdown.cancelled() => break,
+            _ = interval.tick() => {}
+        }
+        // Give both durable kinds a bounded opportunity; access traffic cannot
+        // starve interval discovery. File preparation keeps its separate worker.
+        metadata_turn = !metadata_turn;
+        if metadata_turn {
+            let (cancel, cancellation) = tokio::sync::oneshot::channel();
+            let work = coordinator.process_one_interval_metadata(cancellation);
+            tokio::pin!(work);
+            tokio::select! {
+                () = shutdown.cancelled() => {
+                    let _ = cancel.send(());
+                    let _ = work.await; // Do not drop the provider's process-cleanup future.
+                    break;
+                }
+                result = &mut work => {
+                    if result.is_err() {
+                        tracing::warn!("add-on item interval metadata worker iteration failed");
+                    }
+                }
+            }
+            continue;
+        }
+        tokio::select! {
+            () = shutdown.cancelled() => break,
+            result = coordinator.process_one_access() => {
+                if result.is_err() {
+                    tracing::warn!("add-on item access worker iteration failed");
                 }
             }
         }

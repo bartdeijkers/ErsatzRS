@@ -4,7 +4,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
-use ersatzrs_core::hls::{HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry};
+use ersatzrs_core::hls::{
+    HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry, HlsStartupReadiness,
+};
 use ersatzrs_core::repositories::{ChannelRepository, ConfigRepository};
 use ersatzrs_domain::{
     Channel, ChannelIdleBehavior, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, StreamingMode,
@@ -81,29 +83,58 @@ fn hls_at_capacity_response() -> Response {
     (StatusCode::SERVICE_UNAVAILABLE, HLS_AT_CAPACITY_MESSAGE).into_response()
 }
 
-pub(crate) async fn ensure_segmenter_worker_running(
+async fn startup_read<T>(
+    deadline: std::time::Instant,
+    read: impl std::future::Future<Output = ersatzrs_core::repositories::Result<T>>,
+) -> ersatzrs_core::repositories::Result<T> {
+    tokio::time::timeout_at(deadline.into(), read)
+        .await
+        .unwrap_or_else(|_| {
+            Err(ersatzrs_core::repositories::RepositoryError::unavailable(
+                "HLS startup",
+                "deadline expired",
+            ))
+        })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn ensure_segmenter_worker_running_before(
     state: &AppState,
     channel_number: &str,
     channel_id: i64,
     idle_behavior: ChannelIdleBehavior,
     output_format: OutputFormat,
     path_replacements: Vec<ersatzrs_core::path_replacement::PathReplacement>,
+    deadline: std::time::Instant,
 ) {
     if let Some(worker) = state.hls_sessions.try_get(channel_number).await {
         worker.touch();
         return;
     }
 
-    let segmenter_timeout = load_segmenter_idle_timeout(state, idle_behavior).await;
+    let Ok(segmenter_timeout) = tokio::time::timeout_at(
+        deadline.into(),
+        load_segmenter_idle_timeout(state, idle_behavior),
+    )
+    .await
+    else {
+        return;
+    };
     let working_dir = hls_working_dir(channel_number);
-    let worker = HlsSessionWorker::new(
+    let worker = HlsSessionWorker::new_with_options(
         channel_number.to_string(),
         channel_id,
-        working_dir,
+        HlsSessionOptions::standard(channel_number, working_dir),
         output_format,
         path_replacements,
         Arc::clone(&state.ffmpeg_runtime),
     );
+    let Ok(minimum_segments) =
+        tokio::time::timeout_at(deadline.into(), load_initial_segment_count(state)).await
+    else {
+        return;
+    };
+    worker.initialize_startup(deadline, minimum_segments);
     if state.hls_sessions.try_insert(worker.clone()).await {
         worker.start(
             state.pool.clone(),
@@ -205,10 +236,33 @@ pub(crate) async fn wait_for_initial_segments(
     let started_at = tokio::time::Instant::now();
     let mut saw_at_capacity = false;
     while started_at.elapsed() < startup_timeout {
+        let mut poll_at = tokio::time::Instant::now() + INITIAL_SEGMENT_POLL_INTERVAL;
         if let Some(handle) = registry.try_get(channel_number).await {
-            if let Some(playlist) = handle.trim_playlist().await {
-                if count_playlist_segments(&playlist) >= segment_count {
-                    return InitialSegmentWaitResult::Ready;
+            match handle.startup_readiness() {
+                HlsStartupReadiness::Ready => return InitialSegmentWaitResult::Ready,
+                HlsStartupReadiness::Failed => {
+                    return if handle.admission_status() == HlsAdmissionStatus::AtCapacity {
+                        InitialSegmentWaitResult::AtCapacity
+                    } else {
+                        InitialSegmentWaitResult::Timeout
+                    }
+                }
+                HlsStartupReadiness::Pending { deadline } => {
+                    poll_at = poll_at.min(deadline.into());
+                    if std::time::Instant::now() >= deadline {
+                        return if handle.admission_status() == HlsAdmissionStatus::AtCapacity {
+                            InitialSegmentWaitResult::AtCapacity
+                        } else {
+                            InitialSegmentWaitResult::Timeout
+                        };
+                    }
+                }
+                HlsStartupReadiness::Legacy => {
+                    if let Some(playlist) = handle.trim_playlist().await {
+                        if count_playlist_segments(&playlist) >= segment_count {
+                            return InitialSegmentWaitResult::Ready;
+                        }
+                    }
                 }
             }
             if handle.admission_status() == HlsAdmissionStatus::AtCapacity {
@@ -217,7 +271,7 @@ pub(crate) async fn wait_for_initial_segments(
         } else {
             return InitialSegmentWaitResult::MissingSession;
         }
-        tokio::time::sleep(INITIAL_SEGMENT_POLL_INTERVAL).await;
+        tokio::time::sleep_until(poll_at).await;
     }
 
     if saw_at_capacity {
@@ -232,6 +286,27 @@ fn count_playlist_segments(playlist: &str) -> usize {
         .lines()
         .filter(|line| line.trim_start().starts_with("#EXTINF:"))
         .count()
+}
+
+/// Waiters never own cancellation of a potentially shared healthy worker.
+async fn wait_for_retained_startup(handle: &dyn HlsSessionHandle) -> bool {
+    loop {
+        match handle.startup_readiness() {
+            HlsStartupReadiness::Legacy | HlsStartupReadiness::Ready => return true,
+            HlsStartupReadiness::Failed => return false,
+            HlsStartupReadiness::Pending { deadline } => {
+                if std::time::Instant::now() >= deadline {
+                    return false;
+                }
+                tokio::time::sleep_until(
+                    (std::time::Instant::now() + INITIAL_SEGMENT_POLL_INTERVAL)
+                        .min(deadline)
+                        .into(),
+                )
+                .await;
+            }
+        }
+    }
 }
 
 fn hls_working_dir(channel_number: &str) -> std::path::PathBuf {
@@ -275,6 +350,7 @@ async fn ensure_preview_worker_running(
     state: &AppState,
     channel: &Channel,
     path_replacements: Vec<ersatzrs_core::path_replacement::PathReplacement>,
+    deadline: std::time::Instant,
 ) {
     if let Some(worker) = state.preview_hls_sessions.try_get(&channel.number).await {
         worker.touch();
@@ -289,8 +365,19 @@ async fn ensure_preview_worker_running(
         path_replacements,
         Arc::clone(&state.ffmpeg_runtime),
     );
+    let Ok(timeout) =
+        tokio::time::timeout_at(deadline.into(), load_segmenter_startup_timeout(state)).await
+    else {
+        return;
+    };
+    let idle_timeout = Some(timeout);
+    let Ok(minimum_segments) =
+        tokio::time::timeout_at(deadline.into(), load_initial_segment_count(state)).await
+    else {
+        return;
+    };
+    worker.initialize_startup(deadline, minimum_segments);
     if state.preview_hls_sessions.try_insert(worker.clone()).await {
-        let idle_timeout = Some(load_segmenter_startup_timeout(state).await);
         worker.start(
             state.pool.clone(),
             Arc::clone(&state.preview_hls_sessions),
@@ -463,11 +550,12 @@ pub async fn serve_channel_m3u8(
     headers: &HeaderMap,
     query: &HlsQuery,
 ) -> Response {
-    let channel = match state
-        .repositories
-        .channel
-        .get_by_number(channel_number)
-        .await
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let channel = match startup_read(
+        deadline,
+        state.repositories.channel.get_by_number(channel_number),
+    )
+    .await
     {
         Ok(channel) if channel.is_enabled => channel,
         Ok(_) => return StatusCode::NOT_FOUND.into_response(),
@@ -505,6 +593,7 @@ pub async fn serve_channel_m3u8(
                 &access_token,
                 output_format,
                 DEFAULT_INITIAL_SEGMENT_COUNT,
+                deadline,
             )
             .await
         }
@@ -517,6 +606,7 @@ pub async fn serve_channel_m3u8(
                 &access_token,
                 OutputFormat::Hls,
                 MIN_STABLE_INITIAL_SEGMENT_COUNT,
+                deadline,
             )
             .await
         }
@@ -540,6 +630,8 @@ pub async fn serve_channel_m3u8(
     }
 }
 
+// Keep admission and its single request deadline visible in one route owner.
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 async fn serve_hls_segmenter_playlist(
     state: &AppState,
     channel_number: &str,
@@ -548,10 +640,22 @@ async fn serve_hls_segmenter_playlist(
     access_token: &AccessToken,
     output_format: OutputFormat,
     min_initial_segment_count: usize,
+    deadline: std::time::Instant,
 ) -> Response {
     let scheme = request_scheme(headers);
     let host = request_host(headers);
-    let spec = match streaming_specs::load_spec(&state.pool, channel.id).await {
+    let spec = match startup_read(deadline, async {
+        streaming_specs::load_spec(&state.pool, channel.id)
+            .await
+            .map_err(|_| {
+                ersatzrs_core::repositories::RepositoryError::unavailable(
+                    "HLS startup",
+                    "streaming spec unavailable",
+                )
+            })
+    })
+    .await
+    {
         Ok(spec) => spec,
         Err(error) => {
             tracing::warn!(
@@ -563,34 +667,52 @@ async fn serve_hls_segmenter_playlist(
         }
     };
 
-    let path_replacements =
-        match stream::load_path_replacements(&state.repositories.media_source).await {
-            Ok(replacements) => replacements,
-            Err(error) => {
-                tracing::error!(
-                    %error,
-                    channel_id = channel.id,
-                    channel_number = %channel.number,
-                    "failed to load path replacements for hls worker"
-                );
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
+    let path_replacements = match startup_read(
+        deadline,
+        stream::load_path_replacements(&state.repositories.media_source),
+    )
+    .await
+    {
+        Ok(replacements) => replacements,
+        Err(error) => {
+            tracing::error!(
+                %error,
+                channel_id = channel.id,
+                channel_number = %channel.number,
+                "failed to load path replacements for hls worker"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
 
-    ensure_segmenter_worker_running(
+    ensure_segmenter_worker_running_before(
         state,
         &channel.number,
         channel.id,
         channel.idle_behavior,
         output_format,
         path_replacements,
+        deadline,
     )
     .await;
 
-    let initial_segment_count = load_initial_segment_count(state)
+    let Ok((initial_segment_count, startup_timeout)) =
+        tokio::time::timeout_at(deadline.into(), async {
+            (
+                load_initial_segment_count(state)
+                    .await
+                    .max(min_initial_segment_count),
+                load_segmenter_startup_timeout(state).await,
+            )
+        })
         .await
-        .max(min_initial_segment_count);
-    let startup_timeout = load_segmenter_startup_timeout(state).await;
+    else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "HLS startup deadline expired",
+        )
+            .into_response();
+    };
     match wait_for_initial_segments(
         &*state.hls_sessions,
         &channel.number,
@@ -643,6 +765,9 @@ pub async fn get_session_playlist(
 
     if let Some(handle) = state.hls_sessions.try_get(&channel_number).await {
         handle.touch();
+        if !wait_for_retained_startup(&*handle).await {
+            return (StatusCode::SERVICE_UNAVAILABLE, "HLS startup is not ready").into_response();
+        }
         let admission_status = handle.admission_status();
         let access_token = AccessToken::new(query.access_token);
         return match handle.trim_playlist().await {
@@ -672,17 +797,29 @@ pub async fn get_preview_master_playlist(
     headers: HeaderMap,
     Query(query): Query<HlsQuery>,
 ) -> Response {
-    let channel = match state
-        .repositories
-        .channel
-        .get_by_number(&channel_number)
-        .await
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let channel = match startup_read(
+        deadline,
+        state.repositories.channel.get_by_number(&channel_number),
+    )
+    .await
     {
         Ok(channel) if channel.is_enabled => channel,
         Ok(_) | Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
     let access_token = AccessToken::new(query.access_token);
-    let mut spec = match streaming_specs::load_spec(&state.pool, channel.id).await {
+    let mut spec = match startup_read(deadline, async {
+        streaming_specs::load_spec(&state.pool, channel.id)
+            .await
+            .map_err(|_| {
+                ersatzrs_core::repositories::RepositoryError::unavailable(
+                    "HLS startup",
+                    "streaming spec unavailable",
+                )
+            })
+    })
+    .await
+    {
         Ok(spec) => spec,
         Err(error) => {
             tracing::warn!(
@@ -697,23 +834,40 @@ pub async fn get_preview_master_playlist(
         spec.video_format = FFmpegProfileVideoFormat::H264;
         spec.audio_format = FFmpegProfileAudioFormat::Aac;
     }
-    let path_replacements =
-        match stream::load_path_replacements(&state.repositories.media_source).await {
-            Ok(replacements) => replacements,
-            Err(error) => {
-                tracing::error!(
-                    %error,
-                    channel_id = channel.id,
-                    channel_number = %channel.number,
-                    "failed to load path replacements for browser preview"
-                );
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
-    ensure_preview_worker_running(&state, &channel, path_replacements).await;
+    let path_replacements = match startup_read(
+        deadline,
+        stream::load_path_replacements(&state.repositories.media_source),
+    )
+    .await
+    {
+        Ok(replacements) => replacements,
+        Err(error) => {
+            tracing::error!(
+                %error,
+                channel_id = channel.id,
+                channel_number = %channel.number,
+                "failed to load path replacements for browser preview"
+            );
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    ensure_preview_worker_running(&state, &channel, path_replacements, deadline).await;
 
-    let initial_segment_count = load_initial_segment_count(&state).await;
-    let startup_timeout = load_segmenter_startup_timeout(&state).await;
+    let Ok((initial_segment_count, startup_timeout)) =
+        tokio::time::timeout_at(deadline.into(), async {
+            (
+                load_initial_segment_count(&state).await,
+                load_segmenter_startup_timeout(&state).await,
+            )
+        })
+        .await
+    else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "HLS startup deadline expired",
+        )
+            .into_response();
+    };
     match wait_for_initial_segments(
         &*state.preview_hls_sessions,
         &channel.number,
@@ -746,6 +900,9 @@ pub async fn get_preview_session_playlist(
 ) -> Response {
     if let Some(handle) = state.preview_hls_sessions.try_get(&channel_number).await {
         handle.touch();
+        if !wait_for_retained_startup(&*handle).await {
+            return (StatusCode::SERVICE_UNAVAILABLE, "HLS startup is not ready").into_response();
+        }
         let admission_status = handle.admission_status();
         let access_token = AccessToken::new(query.access_token);
         return match handle.trim_playlist().await {
@@ -990,6 +1147,8 @@ mod tests {
         touched: AtomicUsize,
         admission_status: HlsAdmissionStatus,
         playlist: Mutex<Option<String>>,
+        readiness: Mutex<HlsStartupReadiness>,
+        cancelled: AtomicUsize,
     }
 
     impl FakeHandle {
@@ -1003,6 +1162,8 @@ mod tests {
                 touched: AtomicUsize::new(0),
                 admission_status,
                 playlist: Mutex::new(None),
+                readiness: Mutex::new(HlsStartupReadiness::Legacy),
+                cancelled: AtomicUsize::new(0),
             })
         }
 
@@ -1016,6 +1177,9 @@ mod tests {
 
     #[async_trait]
     impl HlsSessionHandle for FakeHandle {
+        fn startup_readiness(&self) -> HlsStartupReadiness {
+            *self.readiness.lock().unwrap()
+        }
         fn channel_number(&self) -> &str {
             &self.channel
         }
@@ -1035,9 +1199,26 @@ mod tests {
                 .clone()
         }
 
-        async fn cancel(&self) {}
+        async fn cancel(&self) {
+            self.cancelled.fetch_add(1, Ordering::SeqCst);
+        }
 
         fn playout_updated(&self) {}
+    }
+
+    #[tokio::test]
+    async fn retained_variant_waiter_never_bypasses_gate_or_cancels_shared_worker() {
+        let handle = FakeHandle::new("42");
+        handle.set_playlist("#EXTM3U\n#EXTINF:4,\na.ts\n#EXTINF:4,\nb.ts\n#EXTINF:4,\nc.ts\n");
+        *handle.readiness.lock().unwrap() = HlsStartupReadiness::Pending {
+            deadline: std::time::Instant::now(),
+        };
+        assert!(!wait_for_retained_startup(&*handle).await);
+        assert_eq!(handle.cancelled.load(Ordering::SeqCst), 0);
+        *handle.readiness.lock().unwrap() = HlsStartupReadiness::Ready;
+        assert!(wait_for_retained_startup(&*handle).await);
+        *handle.readiness.lock().unwrap() = HlsStartupReadiness::Legacy;
+        assert!(wait_for_retained_startup(&*handle).await);
     }
 
     #[test]

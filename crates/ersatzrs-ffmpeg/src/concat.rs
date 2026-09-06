@@ -44,3 +44,14 @@ impl ConcatPlaylist {
         Ok(path.to_path_buf())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn internal_programme_playlist_is_unchanged() {
+        assert_eq!(ConcatPlaylist::new("http", "localhost", "1", "hybrid").render(),
+            "ffconcat version 1.0\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\nfile http://localhost/ffmpeg/stream/1?mode=hybrid\n");
+    }
+}

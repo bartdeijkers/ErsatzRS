@@ -2619,6 +2619,7 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
             view! {
                 <AddonMediaListEditorIsland
                     id=id
+                    options_available=super::addon_list_options::options_available(id)
                     initial_error=error
                     initial_status=status
                     initial_form=initial_form
@@ -2635,6 +2636,7 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
                     initial_compare_revisions=compare_left.zip(compare_right)
                     initial_review_category=review_category
                 />
+                <super::addon_list_options::AddonListOptions list_id=id item_ids=Vec::new()/>
             }
             .into_any()
         },
@@ -2760,6 +2762,7 @@ pub fn AddonMediaListItemPage() -> impl IntoView {
                             initial_status=status
                             initial_error=error
                         />
+                        <super::addon_list_options::AddonListOptions list_id=list_id item_ids=vec![item_id]/>
                     }
                     .into_any()
                 },
@@ -2944,7 +2947,7 @@ fn AddonMediaListItemIsland(
         metadata.directors = comma_values(&directors.get_untracked());
         metadata.writers = comma_values(&writers.get_untracked());
         metadata.languages = comma_values(&languages.get_untracked());
-        metadata.people = people_values(&people.get_untracked());
+        metadata.people = people_values(&people.get_untracked(), &metadata.people);
         metadata.artwork = artwork_values(
             &metadata.artwork,
             [
@@ -3050,8 +3053,11 @@ fn people_lines(people: &[AddonMediaListNfoPerson]) -> String {
         .join("\n")
 }
 
-fn people_values(value: &str) -> Vec<AddonMediaListNfoPerson> {
-    value
+fn people_values(
+    value: &str,
+    original: &[AddonMediaListNfoPerson],
+) -> Vec<AddonMediaListNfoPerson> {
+    let parsed = value
         .lines()
         .filter_map(|line| {
             let (name, role) = line
@@ -3063,7 +3069,18 @@ fn people_values(value: &str) -> Vec<AddonMediaListNfoPerson> {
                 ..AddonMediaListNfoPerson::default()
             })
         })
-        .collect()
+        .collect::<Vec<_>>();
+    // Name/role are the only editable fields. An untouched input must not
+    // discard provider order/thumbnails or falsely mark the draft as edited.
+    if parsed
+        .iter()
+        .map(|person| (&person.name, &person.role))
+        .eq(original.iter().map(|person| (&person.name, &person.role)))
+    {
+        original.to_vec()
+    } else {
+        parsed
+    }
 }
 
 fn artwork_value(artwork: &[AddonMediaListArtwork], role: AddonMediaListArtworkRole) -> String {
@@ -3340,8 +3357,10 @@ fn publication_primary_action_without_job(
 ) -> PublicationPrimaryAction {
     if !readiness.blockers.is_empty() {
         PublicationPrimaryAction::None
-    } else if readiness.required_playback_detail_count > 0 {
-        if readiness.required_playback_detail_pending > 0 {
+    } else if readiness.required_playback_detail_count > 0
+        || readiness.required_prepared_media_count > 0
+    {
+        if publication_preparation_active(readiness) {
             PublicationPrimaryAction::None
         } else {
             PublicationPrimaryAction::Prepare
@@ -3350,6 +3369,24 @@ fn publication_primary_action_without_job(
         PublicationPrimaryAction::None
     } else {
         PublicationPrimaryAction::Publish
+    }
+}
+
+fn publication_preparation_active(readiness: &AddonMediaListPublicationReadiness) -> bool {
+    readiness.required_playback_detail_pending > 0 || readiness.required_prepared_media_pending > 0
+}
+
+fn prepared_media_status(readiness: RwSignal<AddonMediaListPublicationReadiness>) -> impl IntoView {
+    view! {
+        <p
+            class=style::preparation_state
+            data-prepared-media-status
+            style:display=move || if readiness.with(|value| value.required_prepared_media_count > 0) { "flex" } else { "none" }
+            role="status"
+        >
+            <span style=icon_style(IconName::Clock, "1rem") aria-hidden="true"></span>
+            <span>{move || readiness.with(|value| format!("{}: {}", tr(TextKey::ProcessedMediaRequired), value.required_prepared_media_count))}</span>
+        </p>
     }
 }
 
@@ -3931,6 +3968,7 @@ const fn publication_blocker_href(kind: AddonMediaListPublicationBlockerKind) ->
 #[island]
 fn AddonMediaListEditorIsland(
     id: i64,
+    options_available: bool,
     initial_error: String,
     initial_status: String,
     initial_form: Option<AddonMediaListForm>,
@@ -3964,6 +4002,7 @@ fn AddonMediaListEditorIsland(
         "published" => Some(TextKey::Published),
         "publishing" => Some(TextKey::Publishing),
         "preparing" => Some(TextKey::PreparingPublication),
+        "preparing-media" => Some(TextKey::PreparingProcessedMedia),
         "recovery-queued" => Some(TextKey::RecoveryQueued),
         "reset-queued" => Some(TextKey::ResetQueued),
         "reconcile-queued" => Some(TextKey::ReconcileQueued),
@@ -4190,7 +4229,7 @@ fn AddonMediaListEditorIsland(
                 || comma_values(&show_writers.get()) != saved.writers
                 || comma_values(&show_artists.get()) != saved.artists
                 || comma_values(&show_languages.get()) != saved.languages
-                || people_values(&show_people.get()) != saved.people
+                || people_values(&show_people.get(), &saved.people) != saved.people
                 || artwork_values(
                     &saved.artwork,
                     [
@@ -4224,7 +4263,7 @@ fn AddonMediaListEditorIsland(
     let publish_step_active = Memo::new(move |_| {
         publication_readiness.with(|readiness| {
             readiness.review_state == AddonMediaListReviewState::Publishing
-                || readiness.required_playback_detail_pending > 0
+                || publication_preparation_active(readiness)
         })
     });
     let published_step_complete = Memo::new(move |_| {
@@ -4451,6 +4490,21 @@ fn AddonMediaListEditorIsland(
                 .len()
             })
         })
+    });
+    let option_scopes = Memo::new(move |_| {
+        let (start, end, _, _, _) = item_page_range.get();
+        items.with(|items| draft_diff.with(|diff| {
+            let category_items = items.iter().filter(|item| item_matches_draft_category(item.id, active_draft_category, diff)).cloned().collect::<Vec<_>>();
+            let page_ids = bulk_scope_items(&category_items, "current_page", presentation_kind.get(), need_review_filter.get(), start, end).iter().map(|item| item.id).collect::<BTreeSet<_>>();
+            [("all", TextKey::AllItems), ("current_page", TextKey::CurrentPage), ("current_filter", TextKey::AddonOptionsCurrentFilter)].into_iter().map(|(scope, label)| {
+                let scoped = if scope == "current_filter" {
+                    category_items.iter().filter(|item| !need_review_filter.get() || item_needs_review(item, presentation_kind.get())).cloned().collect::<Vec<_>>()
+                } else { bulk_scope_items(&category_items, scope, presentation_kind.get(), need_review_filter.get(), start, end) };
+                let off_page = scoped.iter().filter(|item| !page_ids.contains(&item.id)).count();
+                let value = serde_json::json!({"items": scoped.iter().map(|item| item.id.to_string()).collect::<Vec<_>>().join(","), "off_page_count": off_page}).to_string();
+                (label, value)
+            }).collect::<Vec<_>>()
+        }))
     });
     let episode_numbering_off_page_count = Memo::new(move |_| {
         let preview = episode_numbering_row_preview.get();
@@ -4814,14 +4868,17 @@ fn AddonMediaListEditorIsland(
                             }
                             let publication_active =
                                 publication_readiness.with_untracked(|readiness| {
-                                    readiness.publication.as_ref().is_some_and(|publication| {
-                                        matches!(
-                                            publication.state,
-                                            AddonMediaListPublicationState::Queued
-                                                | AddonMediaListPublicationState::Publishing
-                                                | AddonMediaListPublicationState::Restoring
+                                    publication_preparation_active(readiness)
+                                        || readiness.publication.as_ref().is_some_and(
+                                            |publication| {
+                                                matches!(
+                                                    publication.state,
+                                                    AddonMediaListPublicationState::Queued
+                                                        | AddonMediaListPublicationState::Publishing
+                                                        | AddonMediaListPublicationState::Restoring
+                                                )
+                                            },
                                         )
-                                    })
                                 });
                             let source_probe_active = source_probe.with_untracked(|probe| {
                                 probe.as_ref().is_some_and(|probe| {
@@ -4950,6 +5007,16 @@ fn AddonMediaListEditorIsland(
                 Ok(AddonMediaListPublishResult::Queued { .. }) => {
                     toast.push(tr(TextKey::Publishing).to_string(), ToastSeverity::Info);
                     set_browser_location(&format!("/media/addon-lists/{id}"));
+                }
+                Ok(AddonMediaListPublishResult::PreparingMedia { item_count }) => {
+                    toast.push(
+                        format!("{}: {item_count}", tr(TextKey::ProcessedMediaQueued)),
+                        ToastSeverity::Info,
+                    );
+                    reload_readiness_action.dispatch(id);
+                    if !poll_running.get_untracked() {
+                        poll_epoch.update(|epoch| *epoch = epoch.wrapping_add(1));
+                    }
                 }
                 Ok(AddonMediaListPublishResult::PreparingPlaybackDetails { item_count }) => {
                     toast.push(
@@ -5287,6 +5354,8 @@ fn AddonMediaListEditorIsland(
                                 PublicationPrimaryAction::Restoring => tr(TextKey::RestoringPublication),
                                 PublicationPrimaryAction::PublishBlocked => tr(TextKey::PublishBlocked),
                                 PublicationPrimaryAction::None
+                                    if publication_readiness.with(|readiness| readiness.required_prepared_media_pending > 0) => tr(TextKey::PreparingProcessedMedia),
+                                PublicationPrimaryAction::None
                                     if publication_readiness.with(|readiness| readiness.required_playback_detail_pending > 0) => tr(TextKey::PreparingPublication),
                                 PublicationPrimaryAction::None
                                     if publication_readiness.with(|readiness| readiness.review_state == AddonMediaListReviewState::Published) => tr(TextKey::Published),
@@ -5338,6 +5407,7 @@ fn AddonMediaListEditorIsland(
                         <span style=icon_style(IconName::Clock, "1rem") aria-hidden="true"></span>
                         <span>{move || publication_readiness.with(|readiness| format!("{}: {}", tr(TextKey::PreparePublication), readiness.required_playback_detail_count))}</span>
                     </p>
+                    {prepared_media_status(publication_readiness)}
                     <p class=style::workflow_message style:display=if initial_error_key.is_some() { "flex" } else { "none" } role="alert">
                         {initial_error_key.map(tr).unwrap_or_default()}
                     </p>
@@ -5381,7 +5451,7 @@ fn AddonMediaListEditorIsland(
                         next_show_metadata.writers = comma_values(&show_writers.get_untracked());
                         next_show_metadata.artists = comma_values(&show_artists.get_untracked());
                         next_show_metadata.languages = comma_values(&show_languages.get_untracked());
-                        next_show_metadata.people = people_values(&show_people.get_untracked());
+                        next_show_metadata.people = people_values(&show_people.get_untracked(), &next_show_metadata.people);
                         next_show_metadata.artwork = artwork_values(
                             &show_metadata.artwork,
                             [
@@ -5503,6 +5573,7 @@ fn AddonMediaListEditorIsland(
                         >
                             <span style=icon_style(IconName::Upload, "1.125rem") aria-hidden="true"></span>
                             <span>{move || match primary_action.get() {
+                                PublicationPrimaryAction::Prepare => tr(TextKey::PreparePublication),
                                 PublicationPrimaryAction::Queued => tr(TextKey::PublicationQueued),
                                 PublicationPrimaryAction::Publishing => tr(TextKey::Publishing),
                                 PublicationPrimaryAction::Restoring => tr(TextKey::RestoringPublication),
@@ -6484,6 +6555,16 @@ fn AddonMediaListEditorIsland(
                         </button>
                     </div>
                     <section class=style::bulk_edit_toolbar aria-label=tr(TextKey::BulkEdit)>
+                        <form method="post" action="/api/addon-lists/options/edit" hidden=!options_available>
+                            <input type="hidden" name="list_id" value=id.to_string()/>
+                            <label>
+                                <span>{tr(TextKey::AddonOptions)}</span>
+                                <select name="scope" class=style::page_size aria-label=format!("{} · {}", tr(TextKey::AddonOptions), tr(TextKey::Scope))>
+                                    {move || option_scopes.get().into_iter().map(|(label, value)| view! { <option value=value>{tr(label)}</option> }).collect_view()}
+                                </select>
+                            </label>
+                            <button type="submit" class=style::undo_button disabled=move || items.with(Vec::is_empty)>{tr(TextKey::AddonOptions)}</button>
+                        </form>
                         <label>
                             <span>{tr(TextKey::Scope)}</span>
                             <select
@@ -6991,6 +7072,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unchanged_people_input_preserves_provider_fields_and_preparation_action() {
+        let original = vec![AddonMediaListNfoPerson {
+            name: "Fixture presenter".into(),
+            role: Some("Channel".into()),
+            order: Some(0),
+            thumb: Some("https://example.invalid/presenter.jpg".into()),
+        }];
+        let parsed = people_values(&people_lines(&original), &original);
+        assert_eq!(parsed, original);
+        let readiness = AddonMediaListPublicationReadiness {
+            required_prepared_media_count: 1,
+            ..AddonMediaListPublicationReadiness::default()
+        };
+        assert_eq!(
+            publication_primary_action(parsed != original, &readiness),
+            PublicationPrimaryAction::Prepare
+        );
+        assert_ne!(
+            people_values("Changed presenter | Channel", &original),
+            original
+        );
+        assert!(people_values("", &original).is_empty());
+    }
+
+    #[test]
     fn reset_source_context_never_includes_credentials_or_url_details() {
         assert_eq!(
             redacted_source_host(
@@ -7490,6 +7596,66 @@ mod tests {
         assert_eq!(
             publication_blocker_group_label(&groups[1]),
             "The collection needs a title."
+        );
+    }
+
+    #[test]
+    fn prepared_media_status_ssr_keeps_a_stable_localized_status_node() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let readiness = RwSignal::new(AddonMediaListPublicationReadiness {
+                required_prepared_media_count: 3,
+                ..AddonMediaListPublicationReadiness::default()
+            });
+            let html = prepared_media_status(readiness).to_html();
+            assert!(html.contains("data-prepared-media-status"));
+            assert!(html.contains("role=\"status\""));
+            assert!(html.contains("Media files to prepare: 3"));
+
+            readiness.update(|value| value.required_prepared_media_count = 0);
+            let html = prepared_media_status(readiness).to_html();
+            assert!(html.contains("data-prepared-media-status"));
+            assert!(html.replace(' ', "").contains("display:none"));
+        });
+    }
+
+    #[test]
+    fn prepared_media_keeps_polling_and_failed_work_offers_explicit_retry() {
+        let mut readiness = AddonMediaListPublicationReadiness {
+            included_count: 1,
+            review_state: AddonMediaListReviewState::Ready,
+            required_prepared_media_count: 1,
+            ..AddonMediaListPublicationReadiness::default()
+        };
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::Prepare
+        );
+        assert!(!publication_preparation_active(&readiness));
+
+        readiness.required_prepared_media_pending = 1;
+        assert!(publication_preparation_active(&readiness));
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::None
+        );
+
+        // A failed preparation remains required but is not automatically retried.
+        readiness.required_prepared_media_pending = 0;
+        assert!(!publication_preparation_active(&readiness));
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::Prepare
+        );
+        assert_eq!(
+            publication_primary_action(true, &readiness),
+            PublicationPrimaryAction::Save
+        );
+
+        readiness.required_prepared_media_count = 0;
+        assert_eq!(
+            publication_primary_action(false, &readiness),
+            PublicationPrimaryAction::Publish
         );
     }
 

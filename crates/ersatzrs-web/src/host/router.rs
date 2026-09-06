@@ -318,6 +318,38 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::addon_media_lists::add_addon_media_list_form),
         )
         .route(
+            "/api/addon-lists/options/test-access",
+            post(api::addon_list_options::test_access).layer(DefaultBodyLimit::max(4096)),
+        )
+        .route(
+            "/api/addon-lists/options/cancel-access",
+            post(api::addon_list_options::cancel_access).layer(DefaultBodyLimit::max(4096)),
+        )
+        .route(
+            "/api/addon-lists/options/edit",
+            post(api::addon_list_options::edit).layer(DefaultBodyLimit::max(
+                crate::admin::server_fns::addon_list_options::MAX_OPTION_FORM_BYTES,
+            )),
+        )
+        .route(
+            "/api/addon-lists/options/change",
+            post(api::addon_list_options::change).layer(DefaultBodyLimit::max(
+                crate::admin::server_fns::addon_list_options::MAX_OPTION_FORM_BYTES,
+            )),
+        )
+        .route(
+            "/api/addon-lists/options/apply",
+            post(api::addon_list_options::apply).layer(DefaultBodyLimit::max(
+                crate::admin::server_fns::addon_list_options::MAX_OPTION_FORM_BYTES,
+            )),
+        )
+        .route(
+            "/api/addon-lists/options/undo",
+            post(api::addon_list_options::undo).layer(DefaultBodyLimit::max(
+                crate::admin::server_fns::addon_list_options::MAX_OPTION_FORM_BYTES,
+            )),
+        )
+        .route(
             "/api/addon-lists/match",
             post(api::addon_media_lists::match_addon_media_list_form),
         )

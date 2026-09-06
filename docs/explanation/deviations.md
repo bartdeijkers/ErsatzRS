@@ -3,6 +3,23 @@
 ErsatzRS preserves ErsatzTV behavior by default. Deliberate deviations must be
 listed here and backed by ADRs.
 
+## Streaming SponsorBlock cuts
+
+The accepted M-01A direction uses server-side interval streaming instead of
+mandatory full-file preparation. Skip-induced playback underruns are not an
+acceptable tradeoff. M-01B adds explicit list-level Download ahead modes,
+including new-videos-only preparation. These remain planned, not implemented
+runtime behavior.
+
+ADR: [0087](../adr/0087-stream-sponsorblock-intervals-without-playback-underruns.md)
+
+The official yt-dlp add-on prefers native executable capabilities throughout
+the remaining AMM work. Its media transfer belongs to yt-dlp, not a custom
+host CDN adapter; the host retains scheduling, final encoding and bounded
+playback reserve. This replacement is still awaiting runtime acceptance.
+
+Transfer decision: [0088](../adr/0088-prefer-native-yt-dlp-transfer-and-capabilities.md)
+
 ## drawvg graphics instead of external renderer
 
 ErsatzRS uses FFmpeg `drawvg` instead of recreating ErsatzTV's external

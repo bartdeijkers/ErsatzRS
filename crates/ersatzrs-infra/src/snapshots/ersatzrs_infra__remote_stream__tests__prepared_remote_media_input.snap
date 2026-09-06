@@ -1,0 +1,5 @@
+---
+source: crates/ersatzrs-infra/src/remote_stream.rs
+expression: "arguments.join(\" \")"
+---
+-ss 00:00:12.5000000 -i objects/prepared.media

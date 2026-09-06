@@ -863,6 +863,10 @@ pub(crate) async fn claim_provider_host(
     lease_expires: &str,
     delay: u32,
 ) -> Result<Option<String>> {
+    ensure_provider_recovery_not_required(
+        crate::addon_media_list_preparation::provider_process_recovery_required()
+            || crate::addon_preparation_worker::recovery_required_in_transaction(tx).await?,
+    )?;
     let cooldown = sqlx::query(
         r#"SELECT "NextEligibleAt", "LeaseExpiresAt"
            FROM "AddonProviderHostCooldown" WHERE "ProviderHost" = ?"#,
@@ -918,6 +922,19 @@ pub(crate) async fn claim_provider_host(
         .repository()?;
     }
     Ok(None)
+}
+
+// This process-wide fence takes precedence over lease expiry and provider host.
+// Keep its predicate injectable for tests without toggling the real global latch
+// while unrelated provider tests run concurrently.
+pub(crate) fn ensure_provider_recovery_not_required(recovery_required: bool) -> Result<()> {
+    if recovery_required {
+        return Err(RepositoryError::unavailable(
+            "provider admission",
+            "provider process cleanup requires host recovery",
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) async fn release_provider_host_lease(
@@ -1142,16 +1159,17 @@ pub(crate) async fn record_refresh_success_tx(
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone as _, Utc};
-    use ersatzrs_domain::{
-        AddonMediaListRefreshCadence, AddonMediaListRefreshState, AddonMediaListSourceCheckOutcome,
-        EntityId,
-    };
+    #[cfg(unix)]
+    use ersatzrs_domain::AddonMediaListSourceCheckOutcome;
+    use ersatzrs_domain::{AddonMediaListRefreshCadence, AddonMediaListRefreshState, EntityId};
     use sqlx::Row as _;
 
     use super::{
-        encode_datetime, encode_enum, failure_retry_at, next_adaptive_check_at,
-        next_fixed_refresh_at, record_refresh_success_tx, AddonMediaListRefreshCoordinator,
+        encode_datetime, encode_enum, ensure_provider_recovery_not_required, failure_retry_at,
+        next_adaptive_check_at, next_fixed_refresh_at, record_refresh_success_tx,
+        AddonMediaListRefreshCoordinator,
     };
+    #[cfg(unix)]
     use crate::repositories::common::decode_datetime;
 
     async fn fixture_pool() -> (tempfile::TempDir, crate::db::DbPool) {
@@ -1477,6 +1495,17 @@ mod tests {
             cooldown.get::<Option<String>, _>("LeaseOwner").as_deref(),
             Some(first.lease_owner.as_str())
         );
+    }
+
+    #[test]
+    fn provider_recovery_fence_is_independent_of_cooldown_expiry() {
+        // Recovery has no timeout: neither a different host nor an expired
+        // database lease supplies proof that the old child process has exited.
+        assert!(ensure_provider_recovery_not_required(false).is_ok());
+        let failure = ensure_provider_recovery_not_required(true).unwrap_err();
+        assert!(failure
+            .to_string()
+            .contains("provider process cleanup requires host recovery"));
     }
 
     #[tokio::test]

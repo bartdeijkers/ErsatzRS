@@ -42,6 +42,12 @@ pub fn data_folder() -> PathBuf {
     app_state_folder().join("data")
 }
 
+/// Revision-pinned Remote Stream artifacts, outside disposable cache pruning.
+#[must_use]
+pub fn addon_processed_media_folder() -> PathBuf {
+    data_folder().join("addon-processed-media")
+}
+
 /// Root for the managed ADR 0008 `FFmpeg` runtime (`~/.ersatzrs/ffmpeg`).
 #[must_use]
 pub fn ffmpeg_runtime_folder() -> PathBuf {

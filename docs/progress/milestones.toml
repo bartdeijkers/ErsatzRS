@@ -2685,10 +2685,10 @@ debt from earlier AMM slices; this is not reported as a passed lint gate.
 '''
 
 [[milestone]]
-id         = 'amm-m-01'
+id         = 'amm-m-01a'
 phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
-title      = 'Add per-item browser cookies and checked SponsorBlock removal'
-status     = 'In progress'
+title      = 'Stream yt-dlp videos with SponsorBlock intervals removed'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-04', 'amm-l-05']
@@ -2701,16 +2701,576 @@ browser enum crosses IPC; cookie bytes never reach storage, logs, health, or
 diagnostics. Durable Test access returns a typed redacted result and expires on
 URL, package/tool, or option change. Test access and pre-publication work use
 the explicitly saved draft choice; channel playback and published metadata
-retain the published choice until Publish succeeds. Finite items use --sponsorblock-remove default with
-cancellation/restart/invalidation and real channel proof; live items show the
-exact unsupported reason and remain playable.
+retain the published choice until Publish succeeds. Under ADR 0087, finite items
+use metadata-only SponsorBlock discovery and server-side retained-range playback,
+not mandatory full-download/file processing. Published intervals, effective
+duration and programme-to-source seek mapping agree. Hard cuts must not cause
+user-visible underruns, spinners, frozen video or audio gaps under the measured
+network-delay/jitter fixture. Prove bounded buffering and cancellation in actual
+MPEG-TS and HLS playback; correct timestamps alone are insufficient. Live items
+show the exact unsupported reason and remain playable.
+The maintainer's revised startup allowance targets ten seconds and enforces
+a twenty-second maximum including source opening and
+reserve establishment, without relaxing the uninterrupted-cut requirement.
+Mandatory real-provider completion gate: import and publish the maintainer's
+public yt-dlp fixture https://www.youtube.com/watch?v=nealYSA39fA through the
+add-on list, then test it in scheduled MPEG-TS and HLS channel playout. Verify
+removal of the known source interval 15:44-17:13 (944000-1033000 milliseconds),
+edited duration and uninterrupted audio/video across the cut in both outputs.
+Record observed provider intervals, startup timing against the approved budget,
+and playback continuity evidence. Synthetic fixtures or direct extracted-URL
+playback cannot substitute for this gate. If the video or interval is unavailable,
+leave M-01A open and report the blocker; do not silently replace the fixture.
 '''
 evidence = '''
+Completed 2026-09-06 after the approved startup revision and final acceptance
+audit. Shared options/access and interval streaming belong to this slice,
+renamed from AMM-M-01 on 2026-09-06.
+Preserved full-download preparation work belongs to AMM-M-01B, not this gate.
+Latest authorization supersedes the comparison-only pause: remove the custom
+Range adapter and implement yt-dlp-owned transfer under ADR 0088. Across all
+remaining AMM slices, native yt-dlp capabilities are preferred over custom
+substitutes. Independent Astra options and runtime audits find no unmet
+acceptance clause or new P1/P2. Options evidence is the four passing hydrated
+and no-JavaScript cases in test-results/amm-m01-run-2/playwright-results.json,
+plus the focused context-invalidation and immutable-publication regressions
+recorded below. Finite/live operation filtering preserves live playback with
+the exact unsupported reason. The published-intent/timeline regressions and
+run-15 persisted-state assertions prove frozen intervals, edited duration,
+programme seeking and no full-file preparation. Actual cancellation evidence
+is in test-results/m01a-native-cancellation (TS startup, TS ready and HLS idle).
+Review corrections, valid earlier results and the final real-provider proof
+below cover the agreed slice; release/platform integration remains AMM-N-03.
+Latest revised-budget proof: matched server/frontend builds pass for web binary
+SHA-256 e0c63041266ed7a896684ae57e93e66604ac17413466fc4d5ff04933cddbeec5.
+The installed native package and completed publication are unchanged from run 7.
+Official add-on source is committed locally as
+72eedfba36bea95a85a554634c4c2baa26985975; no remote publication is claimed.
+The maintainer explicitly approved the accumulated 122-file host commit scope,
+including preserved optional preparation groundwork, after the staging check
+requested scope confirmation. Workflow-maintenance changes remain excluded;
+the commit-boundary hold is resolved without changing acceptance.
+Run 15 passes the required serial real-video MPEG-TS/HLS test under the existing
+2 MiB/s CONNECT delay/jitter fixture, with no experimental FFmpeg overrides.
+First decoded TS video/audio is 16.205/16.204 seconds (first bytes 11.663);
+maximum decoded-delivery gap is 97.6 ms. HLS first presented frame is 13.673
+seconds, with 910 frames, maximum gap 83.4 ms, proven cut coverage and no
+post-start stalls. Both host-log windows contain no playback failures.
+The fixture now joins five seconds earlier to preserve pre-cut observation
+under the longer deadline; the excluded source interval is unchanged.
+Strict offline decoding and all 38 TSDuck structure/continuity checks pass.
+Source-reference comparison measures 90.180 seconds removed in both outputs,
+with 200 ms seam correlations 0.9846/0.9933 and no alignment correction; this
+is lossy decoded content correspondence, not sample-exact or listening proof.
+Artifacts are in test-results/m01a-native-host-15, including network-shaping
+and content-comparison JSON. The shaper forwards 13.29 MB over 40 connections,
+at most four live, maximum observed socket queue 73611 bytes and no rejections.
+The ten-second target is missed; the approved twenty-second maximum is met.
+Host and shaper are stopped. Final slice acceptance is verified; no CI or full
+closeout was run. Download-ahead selection and subtitles remain later slices.
+2026-09-06 startup amendment: after measured TS startup failures, the maintainer
+explicitly approved a twenty-second absolute maximum, retaining the ten-second
+target and unchanged cut-continuity proof. Earlier fifteen-second results below
+remain historical; they are not retroactively declared passing captures.
+The native section-boundary correction now uses retained-only FFmpeg VFR.
+A faithful nonseekable two-input native reproduction fails with duplicate DTS
+under passthrough at an 11 ms boundary phase; VFR preserves monotonic A/V and
+matches an independent decoded audio reference. Five focused retained_stream_
+tests pass; Astra's scoped review finds no P1/P2 in the correction or atomic
+channel-number fixture setup. The matched-host run-15 result above supplies
+the required real MPEG-TS/HLS proof with the revised startup deadline.
+Startup-stage observations in runs 12-14 keep the decoder and network fixture
+unchanged: first TS bytes take 10.600, 11.198 and 10.799 seconds respectively,
+but none provides decoded A/V before its fifteen-second cutoff. Native input
+analysis limited to one second and a ten-second initial encoder input burst
+do not establish acceptance; both temporary experiments are removed. Run 12
+places native transfer launch at 3.315 seconds and first raw media at 8.263
+seconds. FFmpeg 9 source confirms HLS opening/discovery precedes the requested
+seek and can require initial and sought-segment transfers. No custom transport
+or further startup tuning is authorized merely to improve these measurements.
+Measured delay/jitter checkpoint: the test-only CONNECT shaper uses native
+yt-dlp --proxy, a shared 2 MiB/s ceiling, 250/400/550 ms opening delays and
+observed periodic 141-152 ms pauses. Run 8 forwards 8.8 MB over 30 encrypted
+tunnels, with seven live at most and 73405 bytes maximum observed socket queue.
+HLS starts at 13.673 seconds and presents 760 frames through the cut without
+post-start stalls (maximum gap 83.3 ms). TS first bytes take 10.905 seconds,
+but decoded A/V miss the fifteen-second limit, so this gate fails. Run 9's
+temporary outer initial-burst candidate is also unsuccessful and removed:
+the native inner consumer exposes a duplicate DTS boundary failure (exit 234),
+tracked separately from the already-fixed NUT identifier. Actual TS cancellation
+passes during startup (6.109 seconds cleanup) and after media starts (0.219
+seconds), including process-group observation. The valid HLS cancellation
+repetition uses the unchanged sixty-second idle setting and stops all seventeen
+observed playback processes after 30.136 seconds, with no host failures and no
+restart during the observation. All six encrypted tunnels close before process
+cleanup; maximum observed descendant RSS is 694864 KiB. Its first attempt is
+explicitly invalid: the temporary shaper lifetime expired and caused producer
+failure, not successful idle cleanup. These are demonstrated failures and
+remaining M-01A requirements,
+not authorization to reopen the transport design or pull later-slice work forward.
+Replacement checkpoint: the web-host type check, 48 focused Rust regressions
+(31 contract/process/probe/pipeline, six HLS, eleven MPEG-TS/buffer) and six
+offline official add-on tests pass. Checks ran serially with at most two Cargo
+jobs/test threads. Review fixed awaited cleanup on cancellation/refusal,
+uncertain-termination propagation and request-value leakage in diagnostics.
+No custom adapter code references remain; ordinary playback and M-01B
+groundwork are preserved. A separate-video/audio native section experiment
+produces 148 monotonically timed video frames and all 284160 expected PCM
+samples exactly. Header-only FFmpeg probing needs only the same producer's
+64 KiB prefix. These are not live-host, HDR/track-fidelity or real-video
+continuity acceptance. The new native path still needs the required scheduled
+MPEG-TS/HLS gate. No CI, full closeout, commit, push or release at that checkpoint.
+Latest verified correction: nine offline native-package regressions pass and
+Astra review finds no remaining P1/P2 in the bounded identifier transform.
+Fresh installation/import/publication in test-results/m01a-native-host-7 passes
+the required serial MPEG-TS/HLS scenario; the installed stream-playback source
+hash matches the checkout. TS first decoded video/audio is 12.602/12.601 seconds
+(first bytes 8.026 seconds); HLS first presented frame is 9.865 seconds, with
+760 frames and a maximum gap of 66.7 ms through the cut window. Both saved
+captures pass strict FFmpeg decoding, 36 structural checks and two independent
+continuity checks. Native reference comparison measures 90.180 seconds removed
+in both, with 200 ms seam correlations 0.9985/0.9911 and no alignment correction.
+All six instrumented section/consumer processes exit zero with no diagnostic
+bytes, versus 92 bytes from consumers before the correction. These are lossy
+content-correspondence observations, not sample-exact or human listening proof.
+All hosts are stopped. The historical run-4 raw error is unavailable; the
+same-parameter reproduction establishes the fixed defect without claiming
+forensic certainty about every possible historical failure. Remaining buffering,
+cancellation and media-fidelity acceptance keeps M-01A In progress.
+Earlier handoff diagnosis: the corrected manual observer passes both paths in
+test-results/m01a-native-host-6 (decoded TS 11.687 seconds, presented HLS 10.662
+seconds, no recorded host failures). A separate serial synthetic experiment
+then isolates a real same-parameter join defect: native FFmpeg emits a 25-byte
+NUT file identifier per section, which the continuous demuxer interprets as
+frame data. Two independently valid one-second 30 fps/48 kHz raw/PCM sections
+fail with exit 234 and non-monotonic timestamps when joined unchanged. Removing
+only the repeated identifier passes with exactly 60 frames, 384000 PCM bytes
+and two-second spans without diagnostics. The first spawnSync pipe harness
+timed out even on controls; only the corrected async-stdin experiment supports
+this finding. A bounded identifier-only stream transform is being verified in
+the native package. This isolates a reproducible defect, not the hidden stderr
+of run 4. Changed-rate controls still fail after identifier removal and do not
+prove the actual fixture changes parameters. No broader container parser or
+normalization infrastructure is justified by those controls.
+Earlier strengthened observation: test-results/m01a-native-host-4 measures first
+decoded TS audio/video at 11.342 seconds, but an inner encoder exits 234 at least
+24.257 seconds before client cutoff. The outer legacy concat response continues
+decoding while source-reference correspondence fails (200 ms audio seam
+correlation 0.0191 versus baseline 0.9947). Exit status alone does not identify
+the cause. A temporary bounded diagnostic wrapper in run 5 does not reproduce
+the encoder failure: decoded TS starts at 12.363 seconds, HLS first presented
+frame at 10.439 seconds, with 760 frames and maximum frame gap 66.8 ms. Its saved
+TS passes strict decoding and source-reference correspondence again supports
+90.180 seconds removed, with 200 ms seam correlation 0.9996 and no alignment
+correction; this does not explain the previous failed content match. That run
+fails only the newly added log observer's normal-cancellation false positive;
+the cutoff-scoped cancellation exemption and two offline regressions subsequently
+pass. Review found and fixed an early-cancellation bypass: only a timestamped
+normal cancellation at or after the test's recorded intentional cutoff is
+exempt; earlier or unverifiable cancellations remain failures.
+Do not relabel the failed run as a passing gate. The HLS initial-seek observer
+now allows completion only of a seek begun before the first frame. The manual
+TS capture decodes the same HTTP response and both paths require bounded
+host-log evidence so an inner failure cannot silently pass. All test hosts
+stopped cleanly. Root cause, repeat acceptance and remaining stress/fidelity
+requirements remain open; no CI, full closeout, commit or push was run.
+Earlier native real-host baseline: matched two-job SSR/WASM builds pass. A fresh
+installation imports the required video, prepares metadata without download jobs
+or artifacts, and publishes source duration 1053000 ms with exclusions
+54900-58057 and 943460-1033640 ms, giving edited duration 959663 ms.
+The first native run exposes valid 7.1 MB metadata exceeding the 4 MiB wrapper
+limit. Only retained-play extraction now allows 16 MiB, preserving native caption
+and format data; native-selected audio need not repeat codec fields already
+validated by the actual NUT probe. Seven offline package regressions pass,
+including large metadata preservation and refusal above the new bound.
+The browser diagnostic explicitly uses H.264/AAC rather than inheriting the
+machine's AC-3 default. The serial reused-publication run in
+test-results/m01a-native-host-3 passes: TS first bytes 6.444 s, video/audio packet
+spans 35.500/35.499 s; HLS first presented frame 9.418 s, 760 observed frames
+through the conservative cut window, no post-start stalls or seeks, and maximum
+presented-frame gap 66.7 ms. Both saved captures pass strict FFmpeg 9 decoding
+and all 38 TSDuck structure/continuity checks. Two short native source-reference
+sections support the intended content jump; pre/post audio alignment measures
+90.180 s removed in each output, with 200 ms seam correlations 0.9947/0.9992
+and no alignment correction. This lossy correspondence is not sample-exact or
+human listening proof. The host and all probe processes stopped cleanly.
+Keep M-01A In progress: TS playable-first-frame/inter-arrival evidence, measured
+network delay/jitter and cancellation, metadata fidelity and remaining platform
+acceptance are not established by this baseline. No CI, closeout, commit or push.
+Latest 2026-09-06 approved comparison: the maintainer explicitly prefers yt-dlp
+for its regular provider/streaming fixes. Adapter testing is not adoption or
+expansion approval. A serial synthetic filter-path comparison uses the existing
+concat directives, separate A/V inputs, select/aselect=concatdec_select,
+aresample=async=1, copyts/xerror and readrate 1.05 with an eight-second burst.
+It bypasses the registry and yt-dlp and is not actual-adapter acceptance. All
+148 ordered video hashes match, but PCM has 284672 rather than 284160 samples
+(512 extra, 10.667 ms net excess). Final AAC identifies the excluded 880 Hz tone
+in adjacent 10 ms windows beginning at 2.97 and 2.98 seconds before the retained
+660 Hz tone. There is no quiet seam window. This establishes boundary content
+leakage, not exact leakage duration or audible verification. Astra review agrees.
+At the same 250000 bytes/second per-response limit, eight seconds of A/V packet
+coverage arrive in 5.392 seconds and post-cut coverage in 15.369 seconds, versus
+54.482 seconds for continuous-span transfer. The optimistic packet model remains
+insufficient for player, full startup, jitter or actual-registry acceptance.
+The preserved matched host then reuses the already imported, prepared and
+completed real publication for one-worker serial scheduled TS/HLS probes.
+MPEG-TS starts in 10.618 seconds, captures 35.5 seconds of video and 35.456 seconds
+of audio packet span across the cut, and passes FFmpeg 9 strict full decoding.
+HLS fails HTTP 503 after about 3.265 seconds with no media. Its only saved cause
+is a generic retained-input preparation failure; source maps several resolution,
+registration and probe failures to this same outcome. No specific provider,
+adapter, redirect or codec cause is established. The Playwright probe exits 1
+with HLS in failedPaths. Evidence is retained in test-results/m01a-real-host-8.
+The host shut down cleanly and all probes finished. No production code, adapter,
+add-on package or runtime tooling changed; no builds, CI, commit, push or deletion
+occurred. Further implementation remains paused, with the required gate open.
+Earlier 2026-09-06 approved bounded follow-up: one yt-dlp stream-copy transfer
+spans both retained ranges with two seconds of initial decode preroll. One live
+downstream FFmpeg uses the preserved common source clock, sample-accurate atrim
+branches, separate video/audio concat filters and one AAC encoder. It uses no
+source-clock readrate throttle, custom stitching service or intermediate-file
+playback. All 148 ordered pre-encoder source-frame hashes and all 284160 edited
+PCM samples match the local source reference exactly. Final AAC has no quiet
+10 ms windows at the cut; only initial encoder priming is quiet. Strict decoding
+passes, and audio/video timestamps have no meaningful gaps. This is fixture
+evidence, not general alternate-track or audible acceptance.
+A longer control retains 1.12-20.08 and 110.12-119.08 seconds, removing 90.04
+seconds. Unthrottled loopback delivers eight seconds of A/V packet coverage in
+1.121 seconds. At 250000 bytes/second per HTTP response, eight seconds arrive
+in 7.464 seconds but post-cut coverage arrives only at 54.482 seconds. Starting
+at the latest allowed fifteen seconds exhausts the 18.96-second prefix around
+33.96 seconds, about twenty seconds too early. Final limited-case decoding is
+clean, confirming that timestamp correctness does not prove timely delivery.
+The packet-arrival model is optimistic: it observes packet start positions,
+normalizes first timestamps per stream and samples reserve after arrivals; it
+is not complete-packet, player, actual-host or jitter acceptance. Independent
+Astra review confirms these limitations cannot explain away this large deficit.
+Reject continuous-span transfer for the tested no-underrun requirement. Seeking
+past long exclusions remains necessary at this bandwidth; this does not prove
+the custom adapter is necessary or already correct. Recommend bounded acceptance
+testing of the preserved range-seeking, single-encoder candidate, pending new
+approval. No production edits, builds, public-provider requests, browser-profile
+access, CI, commit, push or deletion occurred. Only temporary diagnostics and
+structured progress were written. Real scheduled MPEG-TS/HLS acceptance remains
+open, and production implementation remains paused with all changes preserved.
+Earlier 2026-09-06 transport reassessment: production work was paused and all
+existing changes preserved. The maintainer approved only a bounded yt-dlp-owned
+transfer feasibility proof. Installed yt-dlp 2026.08.19 with FFmpeg 9 seeks two
+off-keyframe ranges (90.12-93.08 and 110.12-113.08 seconds) from synthetic
+120-second separate H.264/AAC HTTP Range inputs. Neither source is read in full.
+Default stream-copy emits six excluded-color video frames. Accurate cuts
+explicitly re-encode video and audio and produce the expected 74 red then 74 blue
+frames without excluded-color frames, but both stream clocks reset at the join.
+These marker counts do not prove unique source-frame identity. First stdout
+arrives near 0.8 seconds on loopback with pre-resolved metadata; this is not
+provider-inclusive playable startup or reserve proof. Response-pipeline byte
+counters in accurate mode total about 50 percent of video and 80 percent of
+audio, not precise client-consumed bytes or general provider efficiency.
+One separately measured FFmpeg -dts_delta_threshold 1 stream-copy remux reads
+the saved capture through stdin. Its video spans 5.920 seconds with the expected
+marker counts and continuous timestamps. Audio frame intervals still overlap
+by 37.333 ms, decoded audio lasts 5.973333 seconds, and three adjacent 10 ms
+analysis windows at the seam are near-silent. Direct source-audio controls have
+no such quiet windows. The remux reports corrupt-packet and non-monotonic-DTS
+corrections; exit zero is not clean acceptance. No live-pipe, jitter, player or
+audible acceptance follows. Independent Astra read-only review confirms these
+limits. Reject repeated independently encoded sections plus remux as an accepted
+seamless A/V path. A continuous-audio-encoder alternative or further bounded
+seam investigation requires maintainer direction before implementation resumes.
+No builds, public-provider requests, browser profiles, CI, commit or push were
+used for this proof. The mandatory real-video scheduled TS/HLS gate remains open.
+2026-09-06 real-host acceptance attempt: the required public video is available
+without browser cookies. Metadata-only discovery reports source duration
+1053000 ms and exclusions 54900-58057 and 943460-1033640 ms, deriving 959663 ms.
+The opt-in addon-sponsorblock-streaming Playwright probe installs the actual
+local package through normal admin trust/storage handling and imports the video.
+After two corrected test-only cookie-control assumptions, the real editor
+exposes a false-dirty comparison: its name/role control discards a provider
+person's ordering field and hides Prepare despite one required interval job.
+The focused fix preserves hidden person fields when visible entries match,
+including HTML-only saves. Independent Astra review finds no P1/P2; four focused
+web tests and the rebuilt real browser confirm preparation and Publish work.
+The scanner projects the edited duration, but publication convergence checks
+artwork beside the manifest instead of in its owning nested streams folder.
+The actual artwork bytes match the journal and database hash. The owner-path fix
+passes twenty candidate-verification regressions and Astra review; publication
+now completes normally in the real host. MPEG-TS captures 35.5 seconds of A/V with
+11.348-second first-byte startup. Its capture passes nineteen TSDuck structure
+and continuity checks plus strict PCR jitter, full decode, and decoded video/audio
+timestamp coverage (no meaningful gaps). HLS starts in 13.872 seconds but stops
+at 19.433 seconds, near the late cut, after two range-endpoint HTTP 502 responses.
+The expected scheduled remainder is 38.820 seconds. A resumed-publication probe
+confirms rejected CDN HTTP 302 redirects, also affecting TS. Retained-only xerror
+now reports the failure honestly and refuses duplicate-prefix retries. Bounded
+manual redirects preserve method/range/headers within one deadline and validate
+each host, rejecting HTTPS downgrade and cross-origin Authorization. Thirteen
+contract/range/HLS-argv tests, thirteen retained pipeline tests, scoped Clippy and
+Astra review pass. The initial mock-listener tests were sandbox-denied and pass
+with loopback permission. The next actual-provider rerun, player, source-content
+and audible continuity proof remain open. No complete playback acceptance is claimed.
+2026-09-06 startup-reserve checkpoint: both retained inputs use an eight-second
+initial burst. HLS gates actual completed segments with the configured count
+floor; MPEG-TS buffers bounded encoded bytes and paces output against its mux rate.
+Short remainders require successful EOF, with bounded codec-tail tolerance.
+Retries after partial media output are refused to prevent replaying a failed
+prefix. Initial discovery, graphics and watermark probes share the request
+deadline; cancellation signals and awaits probe/controller cleanup. Four review
+findings are corrected: accumulated pacing drift, post-stdout cancellation,
+short-tail capacity and false successful EOF after a nonzero Broken pipe exit.
+Independent Astra rereview confirms the three supervisor/EOF fixes and the HLS
+watchdog, graphics cancellation and partial-output retry paths. Twelve focused
+FFmpeg tests, all 216 ordinary pipeline regressions, 24 infrastructure tests and
+an initial 13 web tests pass. The final expanded 34-test web selection also passes,
+including existing HLS playlist, capacity-release and hardware-retry cases.
+Scoped infra/web library Clippy in the test profile and formatting pass after
+small style fixes and removing an unused new compatibility wrapper.
+The HLS command snapshot was reviewed for exactly the two new burst flags.
+A transient incremental compiler panic cleared on retry after
+source fixes, without cache deletion or concurrent builds. Direct MP4, selected
+subtitle clock mapping, actual channel cancellation, measured startup/reserve
+and the mandatory real-provider playout gate remain open. No completion claim,
+CI, broad closeout, commit, push or release follows from this checkpoint.
+Earlier evidence below retains pre-split names and decisions as history; the
+01A/01B split supersedes instructions to remove preparation-only infrastructure.
+2026-09-06 published-input checkpoint: listener-bound local origins, private
+retained concat files and source registrations now have encoder-owned lifetimes.
+Cancellation revokes immediately; successful awaited exit releases input files.
+The opt-in FFmpeg policy retains concat selectors and shared timestamps, clears
+already-consumed seeks and preserves disabled audio and ordinary input behavior.
+Publication selection returns frozen interval intent without provider execution;
+fresh resolution validates the current schema without rehashing the historical
+plan and includes installation lookup in the remaining startup budget. Ordinary
+inputs and ffprobe fail closed for unresolved interval intent. Independent Astra
+review found no P1/P2 in these deltas. Twenty-one retained/pipeline tests, all 216
+existing pipeline snapshots and 42 publication/remote-runtime tests pass. The
+earlier 54-test input-ownership checkpoint also passed. Fresh metadata/stream
+selection has since gained cancellable explicit-input probing, a shared probe
+deadline through output collection, redacted malformed-output errors and pure
+in-memory video/audio conversion. Thirteen focused probe/metadata and existing
+loader tests pass; scoped FFmpeg/infra/web library Clippy (test profile) passes
+with warnings denied. Review corrected a lowercase-profile test expectation;
+no production P1/P2 was found in these deltas. Channel attempt/retry wiring
+now has a shared resolve/register/probe composition ready to consume: one owned
+result carries retained files, actual-index logical inputs and fresh stream
+metadata. Nineteen focused publication/probe/composition tests pass. Review found
+no P1/P2; scoped FFmpeg/infra/web library Clippy (test profile) passes after three
+local style fixes. An additional entry cap prevents a longer caller deadline from granting
+each stage a separate fifteen-second allowance. Muxed uses one probe; separate
+uses two sequential probes. EOF precedes provider/disk work, cancellation awaits
+cleanup, and probed suffix duration never replaces the frozen plan. Both channel
+encoder/retry paths now consume these owned inputs, using fresh stream metadata,
+source-free capacity waiting and typed failure evidence before private diagnostic
+redaction. Explicit audio choices are remapped semantically; normal preferences
+are evaluated on fresh metadata. Selected source-clock subtitles are explicitly
+refused pending edited-clock handling. Twenty-three HLS/audio, fourteen MPEG-TS
+command/selection and nine existing retry/body-drop/capacity tests pass. Two
+cross-review P2s are fixed and independently rereviewed: exhausted HLS plans
+terminate instead of looping, and default-track audio metadata matches playback.
+Scoped FFmpeg/infra/web library Clippy (test profile) passes with warnings denied
+after boxing the HLS worker future and local style fixes; formatting and diff
+checks pass. Builds remained serial with two jobs; a combined-crate test command
+was stopped before tests when it selected a cold dependency feature graph.
+The final eight retained HLS/audio and three MPEG-TS regressions pass again after
+the lint fixes. No actual-provider or channel-continuity claim follows from these tests.
+Full startup-budget coverage (including metadata/graphics awaits and reserve),
+channel cancellation and the mandatory real yt-dlp scheduled
+MPEG-TS/HLS proof remain open. Native Windows
+abrupt-drop file cleanup has not been verified. No CI/full closeout was run.
+2026-09-06 approved Range-adapter checkpoint: the existing web host owns bounded
+ephemeral source registration and a fixed-URL GET/HEAD endpoint authenticated by
+one private capability header. It forwards validated source headers/ranges with
+backpressure, rejects unsupported responses and releases upstream work on revoke
+or body drop. Independent review fixed cancellation of an unpolled/full body.
+Nineteen focused resolver/concat/adapter tests and two host-route tests pass;
+scoped infra/web library Clippy (test profile) passes with warnings denied.
+The single-header concat generator preserves old output and has two new inline
+snapshots. Installed FFmpeg 9 confirms per-file capability propagation and a
+later exact byte seek; the corrected synthetic proof passes after removing an
+overstrict assertion about an already-buffered early seek. The official provider
+resolver passes six new offline tests and nineteen existing operation tests.
+No new listener, cache, prefetcher, transcoder or FFmpeg build was introduced.
+Shared published resolver/channel wiring, startup reserve and actual-host audio
+and video continuity remain open. This checkpoint does not complete M-01A.
+2026-09-06 streaming implementation resumed: domain MediaPlaybackTimeline now
+normalizes source exclusions within full-item/chapter windows, derives exact
+millisecond programme duration and maps joins, cut boundaries and EOF. The
+separate FFmpeg retained-range concat renderer consumes that validated timeline,
+escapes locators and preserves the existing internal programme playlist API.
+Eleven focused domain/FFmpeg tests pass, including two inline snapshots; an
+independent GPT-6 Astra source review finds no P1/P2. Focused domain/FFmpeg
+all-target Clippy (test profile) and formatting pass. This is shared groundwork,
+not wired playback: metadata/seekable-transport
+resolution, actual-host HLS/MPEG-TS filters/buffering, audio and cancellation
+remain open. Prepared-file infrastructure is unchanged and retained for 01B.
+Context7 documentation was reconciled with installed yt-dlp 2026.08.19 source:
+SponsorBlock runs in after_filter before download, but that stage's --print
+runs before its postprocessors. Read the later metadata result, require successful
+process completion and distinguish absent/unsupported intervals from an empty
+successful lookup. No real provider or cookie-profile calls were performed.
+The next persistence increment adds a validated version-one core interval plan,
+a nullable bounded revision-item JSON field, immutable selection comparison and
+journal/source-revision restore transport. Old absent fields preserve snapshot
+digests. Five core tests, all nineteen lifecycle repository integration tests and
+one journal restore test pass against freshly migrated temporary SQLite databases.
+Scoped core/infra all-target Clippy (test profile) passes. Review
+found and fixed P2 draft-comparison noise: publication-only file/interval
+selections are no longer mistaken for saved draft edits; both regressions pass.
+Rereview finds no further P1/P2 in this increment. Normal publication still
+awaits context-matched durable metadata results; provider source/options/timing
+fingerprint binding is not proved by DTO shape validation alone. Until transport
+integration exists, a retained streaming plan fails closed rather than playing
+the uncut source. No actual-host streaming acceptance or slice commit is claimed.
+Scanner publication now derives exact YAML milliseconds and coarse cached
+inclusion duration from frozen journal plans or digest-validated retained revisions.
+It rejects conflicting file/interval selections and corrupt retained plans,
+without consulting newer draft timing or invoking the provider again. Five
+focused scanner tests pass, including staged replay, legacy/file compatibility
+and retained-plan tampering. Scoped scanner all-target Clippy (test profile)
+passes. Independent Astra review finds no P1/P2.
+Metadata-only execution must use a distinct kind in the existing durable item
+queue and the ordinary host coordinator, not the private preparation worker.
+The latter continues owning only full-file jobs for 01B. The metadata increment
+now implements kind 2 with a lossless job-table constraint migration, preserves
+legacy serialized inputs/rows/indexes, binds saved timing into request identity,
+and fences artifact-free interval results against current timing and exact claims.
+The versioned interval-metadata wire operation distinguishes successful empty
+exclusions from unsupported/failed discovery. The ordinary host coordinator
+alternates access and metadata opportunities, shares provider cooldowns, and
+signals then awaits child cleanup on shutdown or heartbeat failure.
+Ten protocol tests and fifteen focused infrastructure tests pass, including
+no-artifact success, migration preservation, timing drift without a draft revision
+bump, unsupported rejection and real synthetic probe/provider cancellation.
+Scoped addon-contract/infra all-target Clippy and the native web host binary
+type-check pass in the test profile, with at most two Cargo jobs and no parallel
+builds. The host check reports only an existing proc-macro-error2 future-compatibility
+warning; no CI, full closeout, matched asset build or runtime-host gate was run.
+Review found and fixed P2 process-local-only quarantine: durable cleanup-required
+evidence now blocks interval reclaim and shared provider admission after restart,
+lease expiry and job/list deletion. Independent Astra rereview finds no further
+P1/P2 in this increment. Verified cleanup and an operator recovery action remain
+open; no automatic reset of unresolved cleanup is permitted.
+Normal publication now queues/selects context-matched kind-2 interval evidence
+through readiness, queue_required_media and select_publication_playback, without
+silently falling back to full download. The first sixteen focused selection,
+readiness, admission and journal tests pass. Integration review found two P2s:
+automatic refresh omitted required interval admission, and retained playback
+selections falsely triggered existing-draft-change holds. Both are fixed in the
+existing flow; forty-two focused selection, admission, automatic-publication and
+durable-queue tests pass. An older detail-preparation fixture now sets provider
+and effective liveness consistently, as production does, so it exercises actual
+admission before asserting failed-work holds. Independent Astra rereview finds
+no remaining P1/P2 in these paths. Terminal automatic
+attempts remain closed, while manual retry remains explicit. File selection and
+preparation remain preserved and tested for M-01B.
+Scoped infra all-target Clippy (test profile) passes. The retained-selection
+regression also passes after its lint-only fixture adjustment. Verification
+remains serial with two Cargo jobs and two nextest threads; no CI, full closeout,
+matched web asset build, runtime acceptance or slice commit was performed.
+The official add-ons checkout now declares and dispatches interval-metadata from
+both platform entrypoints through the existing shared Deno adapter. It returns
+only bounded whole-source duration and intervals, preserves browser enums and
+context echoes, and distinguishes empty success from unsupported or failed
+discovery. No media, FFmpeg or ffprobe process is required. Context7
+(/yt-dlp/yt-dlp) documented the simulation flags; installed yt-dlp 2026.08.19
+source and a network/process-blocked preprocessing test settle the stage timing
+and category semantics. Mark default is not removal default: the explicit
+all,-filler,-poi_highlight,-chapter mask matches the preserved file operation.
+Review also avoided the default selector's FFmpeg merge-capability probe by
+using an explicit format selector. Eighteen focused provider tests pass, including
+the real installed preprocessing test and preserved file/access behavior; a
+separate manifest/localization regression also passes. Deno check and the
+current host manifest validator pass. Independent Astra review finds no further
+P1/P2 in this metadata increment. No real provider, cookie profile, media
+download, CI, full closeout, commit or push was used. Seekable transport and
+actual-host streaming acceptance remain open.
+The next increment adds remote-stream.resolve.v1 as a separate success-only
+JSON contract and bounded InstalledItemRuntime operation. Muxed/separate HTTP
+inputs carry required headers and codec/format identity only in ephemeral data;
+source duration and frozen identity must match. Current tool version is reported
+without rehashing the historical plan or adding a preliminary probe. Six contract
+tests and ten focused infrastructure tests pass, including existing metadata
+coordinator coverage. Independent Astra review found and fixed preflight waits
+outside the deadline/cancellation boundary; held-pool tests cover both cases.
+Rereview finds no further P1/P2. The final combined sixteen-test run passes;
+scoped contract/infra all-target Clippy (test profile) and formatting pass.
+Cookie/Set-Cookie transport headers are rejected to preserve the browser-cookie
+IPC boundary; provider resolution must not export yt-dlp's separate cookies field.
+No provider resolver or channel wiring is claimed.
+Official FFmpeg source inspection found ffconcat does not inherit parent HTTP
+headers and its line parser cannot represent arbitrary multiline header values.
+Dedicated user_agent/referer plus one custom header is representable; exact
+packaged-runtime support and actual provider-required headers remain to be checked.
+Do not drop required headers or introduce a proxy/prefetch service implicitly.
+Follow-up runtime proof now confirms that limitation on installed FFmpeg
+n9.0-20260805: a synthetic WAV server requires two fixture headers. Direct input
+exits 0; concat with parent headers, escaped CRLF, repeated option headers, or
+literal multiline headers exits 1. Only loopback requests and synthetic data
+were used; the sandbox socket denial was followed by an approved unrestricted
+loopback-only rerun. No compiler or real provider ran. Installed yt-dlp
+2026.08.19 source confirms requested_formats (or the top-level muxed format)
+owns finalized per-format headers. requested_downloads removes inherited fields
+and is not a complete transport list. Cookies live separately and cannot be
+exported under the browser-cookie contract. There is no existing media Range
+relay: artwork proxy behavior cannot be reused without new range/lifetime work.
+Further transport implementation awaits maintainer choice of a bounded in-host
+Range adapter or managed FFmpeg extension; neither is approved by this evidence.
+Current direction (2026-09-05): the maintainer approved ADR 0087's streaming-first
+proof conditional on no skip-induced user-visible buffering. M-01 stays reserved
+to Codex. The existing preparation work and evidence below are preserved history,
+not streaming acceptance. Preparation implementation and crash/restart proof are
+paused. Start with existing-buffer assessment and one bounded synthetic proof;
+do not delete old code, introduce another encoder/service, or start M-02.
+On 2026-09-06 the maintainer additionally approved a small bounded startup delay
+to establish playable reserve. Run the single-encoder synthetic range/buffer
+feasibility test before production integration, with measured startup and delay
+bounds; simulated reserve is not actual-host/player acceptance.
+The standalone scripts/e2e/sponsorblock-streaming-spike.mjs is now source-reviewed
+and syntax-checked. Two serial FFmpeg 9 experiments use one encoder, a paced
+synthetic HTTP source and retained intervals, an experimental eight-second reserve
+and five-second startup cap. With 250/400/550 ms per-open delays, the early-cut and
+late-join cases start in 8.82/6.91 seconds: both fail the cap. A zero-open-delay
+control starts in 5.21/4.61 seconds (first fails, second passes this narrow check).
+No simulated underruns occur after startup; minimum pre-arrival reserve is
+3.68 seconds with jitter and 4.39 seconds without it. Only 27-30% of unique source
+bytes have been offered at startup and later ranges remain unopened. This proves
+incremental fetching in the fixture, not bandwidth savings: the early-cut jitter
+case offers roughly 120% of the source size across requests. There is no decoded
+cut/A-V, cancellation, real-player, actual-host or legacy-TS acceptance. The two
+experiment commands exit 1; do not count these as successful M-01 acceptance.
+Artifacts are retained in task-owned temporary directories. Stop for the ADR 0087
+bounded-look-ahead reassessment before production changes or preparation cleanup.
+The maintainer then specified 10-15 seconds as the acceptable initial startup
+budget. The retained 8.82/6.91-second jittered measurements fit this approved
+allowance; the original command results against five seconds are not rewritten.
+Next is real-player continuity validation within fifteen seconds, not another
+simulation or new prefetch infrastructure. Preparation code remains untouched.
+Real-player experiment now passes (BROWSER_PROOF=1, FFmpeg 9, Chromium and the
+checked-in hls.js 1.6.16), with the same paced source and 250/400/550 ms open delays.
+Early-cut playback starts in 8.943 seconds and late-join in 7.010 seconds; both
+reach the expected end without post-start waiting/stalled events, seeks, HLS
+errors or detected freezes at the explicit 250 ms threshold. All 600/525 video
+frames are presented. The command exits 0 and keeps its temporary evidence.
+Independent read-only analysis of the earlier identical synthetic source/range
+pipeline compares all 600/525 output frames to a trim/concat source reference:
+minimum per-frame PSNR is 39.44/39.37 dB. Video timestamp steps are 40 ms with no
+non-increasing timestamps; audio steps reach 32 ms, so sample-exact audio or
+audible continuity is not claimed. This supports the simple buffered range
+approach under measured conditions, not a need for a new prefetch subsystem.
+Actual ErsatzRS host/publication integration, provider metadata, audio and
+cancellation acceptance remain open. No existing preparation code was changed.
 Reserved for Codex on 2026-09-04 after AMM-L-05. Resumed by explicit maintainer
 request after the overnight pause; the M-01 reservation remains active.
 Implementation was paused for the maintainer-requested amm-ci-01 repair before
 AMM-M-02. That repair now has exact-SHA green CI; resume the reserved, uncommitted
-M-01 work next.
+M-01 work next. Active ownership resumed on 2026-09-05: the parent agent owns
+serialized checks and host integration; Astra workers supplied preparation
+orchestration and source-only official provider changes. Browser-name argument
+mapping was explicitly approved; real profiles, cookies and authenticated
+provider execution are not part of this validation. Preparation cancellation,
+concurrent promotion heartbeat and shared in-process recovery fencing are now
+implemented; seven focused preparation/process/fence regressions passed serially.
+Startup cleanup proof, preparation host wiring and focused channel proof remain open;
+do not start M-02 or duplicate this reserved work.
 Resumed again on 2026-09-05 after a read-only WSL interruption audit found a
 package/service replacement immediately before the orderly shutdown, without
 recorded OOM evidence. Heavy local checks must not overlap the self-hosted CI
@@ -2734,17 +3294,185 @@ of expired or changed access evidence. Access worker/UI wiring and bounded
 artifact admission are now added. The synthetic shared-cooldown access worker
 test passes; five artifact integration tests and one artifact unit test passed
 before the interruption. A read-only access coordinator/runtime/queue review
-found no actionable P1/P2; the new failed-completion ownership regression and
-updated native web tests still need serial verification. Artifact review found
+found no actionable P1/P2; the new failed-completion ownership regression now
+passes with all seven item-job integration tests. Updated native web tests still
+need serial verification. Artifact review found
 and fixed a P2 in cache reuse after confirmed
 item removal/reappearance: exact matching unowned artifacts now reattach to the
 new item inside the claim transaction, while conflicting owners are rejected.
 The reviewer confirmed the fix by source inspection; all six artifact integration
 tests, including ready/failed reuse, passed serially after outage recovery.
-This is not runtime acceptance: preparation orchestration, provider execution and published-file
-playback remain unfinished in this same slice. The official
-yt-dlp package still streams directly to stdout; SponsorBlock requires explicit
-file preparation. Do not start M-02 or claim M-01 runtime acceptance yet.
+The current serial run also passes all six artifact integration tests. Official
+provider source now implements typed access/runtime/preparation and options-aware
+enrichment/direct playback; twelve synthetic provider tests pass, including
+chapter-bound preparation and all-content-removed rejection using standard
+yt-dlp chapter-removal ranges without a custom cut timeline. Four offline Deno
+type checks also pass after the final chapter change. Review identified and fixed
+the existing detail-job admission path bypassing the shared recovery guard.
+Further M-01 integration adds the persisted detail-purpose/options context,
+transactional replay validation, retained-source mismatch rejection and explicit
+draft-only enrichment. A two-item regression proves unrelated draft revision
+increments do not continually requeue sibling work. Nine focused detail/selector
+regressions pass serially, including legacy checkpoint replay and exclusion of
+items using a replacement. Publication now freezes the selected prepared-media
+map in its journal; restore reads the retained revision map. Per-provider bindings
+are digest-covered and retain explicit artifact pins, while absent fields preserve
+legacy snapshot serialization. The expanded serial lifecycle/repository run
+passes all 30 tests, including restoring a retained artifact after draft item
+recreation and existing publication-detail queue behavior. A synthetic installed
+provider IPC regression now checks filtered saved option values, unchanged legacy
+request bytes and missing-capability rejection; all ten focused IPC/context/selector
+tests pass. Focused infra library Clippy also passes after this integration.
+Published playback now follows the selected MediaVersion's RemoteStreamId through
+its owning library/list and immutable current revision, rather than matching URLs
+or mutable draft ownership. Prepared files require retained pins, Ready state,
+positive duration, contained regular-file paths and the admitted size; missing
+required media cannot fall back to the source. Direct published options require
+playback v3 and its explicit capability/envelope, while unbound legacy publications
+retain v1/v2 behavior. Five playback regressions and the seekable-local-input argv
+snapshot pass. Scanner YAML retains exact prepared milliseconds, with rounded-up
+seconds used only for immediate/cached playlist inclusion. The generated-YAML to
+MediaVersion regression passes across repeated upserts with unchanged media/YAML
+identity. Review caught and fixed missing-duration items being omitted despite
+successful preparation. Ordinary preparation no longer treats an expired claim
+as permission to delete predecessor files: unfinished reservations remain charged
+and return ProcessRecoveryRequired before provider invocation. Two interruption
+fixtures and two redacted recovery-health regressions pass; the health notice is
+localized in all nine cultures. The focused infra/scanner set now has 57 passing
+tests: 53 passed initially, two corrected fixture setups and two localhost-mock
+tests passed in the targeted four-test rerun with socket permission. The two
+recovery-health tests and three native web playback/localization tests also pass.
+All builds/tests ran serially with two Cargo jobs and two test threads; workspace
+formatting, structured progress validation and affected infra/scanner library
+Clippy with warnings denied all pass.
+Prepare publication now admits saved-draft files before taking the publication
+lease, with one local runtime-info probe per list and no repeated-click reset of
+pending jobs or cooldowns. Readiness separates required files from provider
+details, uses prepared duration, and excludes confirmed removals and usable local
+replacements consistently. Invalid replacements retain the preparation requirement.
+The dedicated preparation worker signals cancellation and awaits cleanup; concurrent
+heartbeat monitoring keeps shutdown responsive during SQLite contention and cancels
+final probing when ownership is lost. All 21 focused app/infra regressions pass,
+including locked-database cancellation, final-probe ownership loss, candidate
+exclusions and unchanged pending admission. The existing localized Prepare action,
+polling and native POST fallback now expose processed-file progress; its two native
+SSR/control-state regressions pass, along with hydration and architecture lint.
+All 43 affected repository, artifact, item-job and retained-revision integration
+tests pass, preserving legacy detail admission and retained-artifact restoration.
+The 66-test checkpoint ran serially with two build jobs and two test threads;
+focused core/app/infra/web library Clippy with warnings denied and formatting pass.
+The process owner now separately checks Unix group absence after termination;
+an initial ten-test process/cancellation run passes, including a leader-reaped
+but still-populated group. Windows adds a safe kill-on-close tracking job assigned
+while the child is suspended and requires a successful empty membership query.
+Review corrected registry inspection before process-wrap 9.1 empties its hooks,
+and changed the production wait to reap only the leader before killing descendants.
+Unix retains group reaping after termination for adopted children. All eleven
+focused Linux process/cancellation tests pass, including an isolated subreaper
+regression. All four native Windows tracking-job tests pass with one build job
+and one test thread, including the production leader-exit cleanup path. Windows
+incremental compilation was disabled for that command only because its session
+locks are unsupported on the configured UNC target directory; the target was
+not changed. Focused infra library Clippy with warnings denied, formatting,
+diff checks and the locked dependency license audit pass. Review also corrected
+platform-specific fixture imports.
+This is not runtime acceptance: actual restart process cleanup and the focused
+browser/publication-to-channel playback proof remain unfinished in this same slice.
+Neither lease expiry nor a reaped leader permits release of restart reservations.
+Restart design review found that persisted job/generation/lease identity cannot
+prove OS process termination. Automatic recovery after a forced host-only exit
+requires an explicit process-supervision design; until then uncertain attempts
+remain blocked with storage charged. The maintainer has now approved automatic
+forced-host-exit recovery; the supervision design and implementation remain open.
+Four Chromium/Firefox option cases pass, including native no-JavaScript forms.
+Eight focused scanner tests and scanner library Clippy pass for byte-stable
+publication verification. The prepared-playback browser now proves completed
+retained publication, artifact pinning and a 60-second MediaVersion, but actual
+Hybrid playback exposed an HLS loader bypass to raw provider playback. The
+loader now uses the shared published resolver, with four focused loader tests
+and infra library Clippy passing. A sequential one-job server/frontend rebuild
+and repeated Chromium acceptance pass: actual Hybrid TS decodes the prepared
+red frame and never invokes raw provider play. Independent review found no
+P1/P2 in the binding. Forced-host-exit recovery remains the open runtime gate.
+The maintainer approved that recovery and ADR 0086 now records a private
+same-executable preparation worker, durable attempt-bound cleanup and quarantine.
+Unix non-reaping leader observation passes seven focused process tests without
+changing Windows cleanup. The first checkpoint/shutdown/Health selection passes
+eight tests. Private worker dispatch and distinct localized unavailability
+reporting are wired; process-level EOF/restart proof, native Windows worker
+acceptance and the final matched browser repetition remain pending. Review found
+an unresolved Running-checkpoint admission race; its focused repair is queued
+before further runtime acceptance. No incomplete M-01 claim or commit is made.
+Do not start M-02 or claim M-01 runtime acceptance yet. No CI,
+broad closeout, commit, push or release was run for M-01.
+'''
+
+[[milestone]]
+id         = 'amm-m-01b'
+phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
+title      = 'Add generic list-level streaming and Download ahead modes'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-m-01a']
+acceptance = '''
+Add a provider-neutral delivery setting as a labeled native HTML select at list
+level, localized in every supported culture and usable with and without
+JavaScript. Choices are Stream (default),
+Download ahead, and Download ahead only for new videos; this is neither a
+checkbox nor a per-item override. The setting is independent of SponsorBlock
+and available for supported add-on lists, not keyed to yt-dlp or a removal
+option. Use declared delivery capabilities for unsupported-mode feedback;
+do not promise download support for every provider or finite/live source.
+Keep yt-dlp as the first integration without building speculative adapters.
+Download ahead works with SponsorBlock disabled or unavailable; interval
+removal is a separate optional operation, not optional to honor once enabled.
+Enabled SponsorBlock applies in every mode: streamed items skip intervals via
+AMM-M-01A; downloaded items have those intervals removed from their files.
+The new-videos-only mode must honor it for both existing streamed items and
+newly imported downloaded items. A delivery-mode change must never silently
+disable removal; report unsupported or failed removal explicitly rather than
+claiming uncut media is processed. Stream uses AMM-M-01A without mandatory full
+downloads. Download ahead prepares included finite videos in full before their
+prepared publication becomes playable, removing SponsorBlock intervals when
+the existing removal option is enabled. The new-videos choice applies only to
+videos first imported after enabling that mode; videos already in the list
+keep streaming. Persist that distinction across refreshes and restarts rather
+than treating a cache miss or repeated import of an existing item as new.
+Freeze each item's effective delivery choice with its published revision;
+changing the saved list setting must not mutate current published playback.
+Reuse shared browser/access, durable jobs, artifact admission and revision
+binding; validate processed duration, safe cancellation/restart and actual
+prepared channel playback. No partial-file playback or silent cross-mode
+fallback. Preserve live playback with an explicit finite-only reason.
+Keep downloads bounded using existing admission limits; operator storage
+administration and full LRU management remain AMM-M-03. Show preparation
+progress/failures without disrupting the last complete publication. Focused
+tests cover SponsorBlock enabled and disabled in all three choices, including
+both existing-streamed and new-downloaded cohorts in new-videos-only mode,
+downloads without SponsorBlock support, provider-neutral
+mode eligibility, the first-import boundary, persistence and
+draft/published isolation, plus hydrated and no-JavaScript selection/save.
+'''
+evidence = '''
+Created on 2026-09-06 at the maintainer's request; delivery has not started.
+The maintainer clarified that delivery mode is a generic list option, useful
+independently of SponsorBlock. Neither provider identity nor SponsorBlock
+availability should gate the setting; actual delivery support is capability-based.
+The maintainer explicitly chose a list-level HTML select and confirmed that
+new means first imported after enabling the new-videos mode, leaving existing
+videos streaming. Existing uncommitted full-file preparation, worker recovery,
+admission, revision pins and playback tests are preserved groundwork inherited
+from the former AMM-M-01. Their historical evidence remains in AMM-M-01A;
+it is not acceptance of the new selector or mode semantics. ADR 0087 owns the
+mode decision; ADR 0086 recovery applies to preparation, not streaming. Plan
+this slice in detail when 01A is complete; do not delete or duplicate groundwork.
+The native M-01A host probe also exposes a preserved M-01B supervisor defect:
+Tokio Child::wait closes its still-owned stdin liveness writer, so the idle
+preparation worker immediately exits and health reports it unavailable.
+Metadata-only streaming publication remains functional. The separately recorded
+preparation-worker-wait-closes-liveness debt requires holding stdin outside Child
+until shutdown and a regression proving idle survival followed by clean EOF drain.
 '''
 
 [[milestone]]
@@ -2853,7 +3581,7 @@ title      = 'Publish human-authored yt-dlp subtitles into channel playback'
 status     = 'Not started'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
-depends_on = ['amm-m-01', 'amm-ci-01']
+depends_on = ['amm-m-01b', 'amm-ci-01']
 acceptance = '''
 The official package requests only configured global default/fallback subtitle
 languages with --write-subs and explicit --no-write-auto-subs, writes bounded

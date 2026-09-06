@@ -157,7 +157,8 @@ changelog, and git history for evidence. The authoritative live state is always
   safe yt-dlp archive early stop and rich headers, inherited/bulk
   cookies/SponsorBlock/subtitles,
   artifact budgets, and validated startup/daily yt-dlp maintenance with
-  rollback.
+  rollback. ADR 0088 requires native yt-dlp capability preference across these
+  slices and yt-dlp-owned media transfer, without a custom host Range adapter.
 - `playout-refresh-and-addon-tv-deduplication.md` — corrective Windows-dogfood
   plan for real Classic Refresh checkpoints, dependency-scoped scan
   invalidation, safe existing-database behavior, and idempotent add-on

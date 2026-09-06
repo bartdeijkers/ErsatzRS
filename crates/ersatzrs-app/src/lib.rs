@@ -6,6 +6,7 @@
 //! from concrete infrastructure ports.
 #![allow(clippy::missing_errors_doc)]
 
+pub mod addon_media_list_options;
 pub mod commands;
 pub mod error;
 pub mod operations;
@@ -16,14 +17,15 @@ pub use error::{ApplicationError, Result};
 pub use ersatzrs_domain::{ScanPlayoutRefresh, ScanPlayoutRefreshReason};
 pub use operations::OperationCoordinator;
 pub use ports::{
-    AddonIconRead, AddonOverviewRead, AddonRepositoryRead, AddonRuntime, AddonRuntimeError,
-    AddonSettingEdit, AddonSettingRead, AdminFfmpegRuntimeRead, AdminHealthRead,
-    AdminHealthRuntime, AdminHealthRuntimeError, AdminTroubleshootingRuntime,
-    AdminTroubleshootingRuntimeError, ApplicationPorts, AvailableAddonRead, BlockPreviewBuilder,
-    ChannelRuntime, ChannelRuntimeError, InstalledAddonRead, MediaSourceRuntime,
-    MediaSourceRuntimeError, PlaybackPreviewRequest, PlayoutBuildQueue, PlayoutBuildQueueError,
-    PlexPinFlow, RemoteServerInfo, RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead,
-    RemoteStreamPlaylistRead, RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
+    AddonIconRead, AddonItemAccessRead, AddonItemAccessState, AddonOverviewRead,
+    AddonRepositoryRead, AddonRuntime, AddonRuntimeError, AddonSettingEdit, AddonSettingRead,
+    AdminFfmpegRuntimeRead, AdminHealthRead, AdminHealthRuntime, AdminHealthRuntimeError,
+    AdminTroubleshootingRuntime, AdminTroubleshootingRuntimeError, ApplicationPorts,
+    AvailableAddonRead, BlockPreviewBuilder, ChannelRuntime, ChannelRuntimeError,
+    InstalledAddonRead, MediaSourceRuntime, MediaSourceRuntimeError, PlaybackPreviewRequest,
+    PlayoutBuildQueue, PlayoutBuildQueueError, PlexPinFlow, RemoteServerInfo,
+    RemoteStreamPlaylistEdit, RemoteStreamPlaylistEntryRead, RemoteStreamPlaylistRead,
+    RemoteStreamPlaylistRuntime, RemoteStreamPlaylistRuntimeError,
     RemoteStreamPlaylistTroubleshootingRead, ScanRuntime, ScanRuntimeError, ScanRuntimeReport,
     ScanWorkQueue, ScanWorkQueueError, SettingsFfmpegPaths, SettingsRuntime, SettingsRuntimeError,
     SourceAddonRouting, WindowsStartupStatus,

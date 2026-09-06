@@ -10,6 +10,11 @@ use chrono::Datelike;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 
+mod media_list_operations;
+pub use media_list_operations::*;
+mod remote_stream_retained_play;
+pub use remote_stream_retained_play::*;
+
 /// Current package-manifest schema. Schema v1 remains readable.
 pub const ADDON_MANIFEST_VERSION: u32 = 5;
 /// Current repository-index schema. Schema v1 remains readable.
@@ -1957,6 +1962,8 @@ impl AddonManifest {
     pub fn has_remote_stream_play_capability(&self) -> bool {
         self.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V1)
             || self.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V2)
+            || self.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V3)
+            || self.has_capability(CAPABILITY_REMOTE_STREAM_PLAY_V4)
     }
 }
 
@@ -2268,6 +2275,8 @@ pub enum AddonMediaListOptionOperation {
     Artifact,
     Preparation,
     Playback,
+    /// Check access using saved draft options before publication.
+    TestAccess,
 }
 
 /// Media applicability declared independently from provider identity.
@@ -2308,6 +2317,11 @@ pub struct AddonMediaListOptionDefinition {
     pub default: AddonMediaListOptionValue,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub choices: Vec<AddonMediaListOptionChoice>,
+    /// When this Boolean option is effectively true, require a prepared artifact.
+    /// Only finite-media options targeting preparation may declare this flag.
+    /// Omission preserves the serialized identity of existing option schemas.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub requires_preparation: bool,
 }
 
 impl AddonMediaListOptionDefinition {
@@ -2320,10 +2334,10 @@ impl AddonMediaListOptionDefinition {
         }
         validate_option_localization(&self.label, "capabilities.options.label", 256)?;
         validate_option_localization(&self.description, "capabilities.options.description", 1_024)?;
-        if self.operation_targets.is_empty() || self.operation_targets.len() > 4 {
+        if self.operation_targets.is_empty() || self.operation_targets.len() > 5 {
             return invalid(
                 "capabilities.options.operation_targets",
-                "must contain between one and four operations",
+                "must contain between one and five operations",
             );
         }
         if self.operation_targets.iter().collect::<BTreeSet<_>>().len()
@@ -2332,6 +2346,18 @@ impl AddonMediaListOptionDefinition {
             return invalid(
                 "capabilities.options.operation_targets",
                 "contains a duplicate operation",
+            );
+        }
+        if self.requires_preparation
+            && (self.kind != AddonMediaListOptionKind::Boolean
+                || self.applicability != AddonMediaListOptionApplicability::FiniteOnly
+                || !self
+                    .operation_targets
+                    .contains(&AddonMediaListOptionOperation::Preparation))
+        {
+            return invalid(
+                "capabilities.options.requires_preparation",
+                "requires a finite-only Boolean option targeting preparation",
             );
         }
         match self.kind {
@@ -4259,6 +4285,18 @@ mod tests {
         BTreeMap::from([("en-US".to_owned(), value.to_owned())])
     }
 
+    #[test]
+    fn manifest_recognizes_retained_play_v4_without_legacy_playback() {
+        let mut manifest = valid_manifest();
+        assert!(!manifest.has_remote_stream_play_capability());
+        manifest.capabilities.push(AddonCapability {
+            id: CAPABILITY_REMOTE_STREAM_PLAY_V4.to_owned(),
+            options: Vec::new(),
+        });
+        assert!(manifest.has_remote_stream_play_capability());
+        manifest.validate().unwrap();
+    }
+
     fn valid_manifest() -> AddonManifest {
         AddonManifest {
             manifest_version: 1,
@@ -4304,6 +4342,7 @@ mod tests {
             kind: AddonMediaListOptionKind::Boolean,
             default: AddonMediaListOptionValue::Boolean(true),
             choices: Vec::new(),
+            requires_preparation: false,
         }
     }
 
@@ -4322,6 +4361,7 @@ mod tests {
             applicability: AddonMediaListOptionApplicability::All,
             kind: AddonMediaListOptionKind::Enum,
             default: AddonMediaListOptionValue::Enum("none".to_owned()),
+            requires_preparation: false,
             choices: vec![
                 AddonMediaListOptionChoice {
                     value: "none".to_owned(),
@@ -4546,6 +4586,103 @@ mod tests {
 
         let oversized_output = vec![b'x'; MAX_MEDIA_LIST_SOURCE_CHECK_OUTPUT_BYTES + 1];
         assert!(parse_media_list_source_check_output(&oversized_output).is_err());
+    }
+
+    #[test]
+    fn preparation_requirement_is_finite_boolean_and_preparation_only() {
+        let mut definition = boolean_option("process_media");
+        definition.requires_preparation = true;
+        for scope in [
+            AddonMediaListOptionScope::ListDefault,
+            AddonMediaListOptionScope::ItemOverride,
+            AddonMediaListOptionScope::Both,
+        ] {
+            definition.scope = scope;
+            definition
+                .validate()
+                .expect("valid preparation requirement");
+        }
+        let serialized = serde_json::to_string(&definition).unwrap();
+        assert!(serialized.contains("\"requires_preparation\":true"));
+        assert_eq!(
+            serde_json::from_str::<AddonMediaListOptionDefinition>(&serialized).unwrap(),
+            definition
+        );
+
+        let mut invalid = definition.clone();
+        invalid.applicability = AddonMediaListOptionApplicability::All;
+        assert!(invalid.validate().is_err());
+        for operation in [
+            AddonMediaListOptionOperation::Enrich,
+            AddonMediaListOptionOperation::Artifact,
+            AddonMediaListOptionOperation::Playback,
+            AddonMediaListOptionOperation::TestAccess,
+        ] {
+            let mut invalid = definition.clone();
+            invalid.operation_targets = vec![operation];
+            assert!(invalid.validate().is_err());
+        }
+        let mut invalid = enum_option("process_media");
+        invalid.applicability = AddonMediaListOptionApplicability::FiniteOnly;
+        invalid.requires_preparation = true;
+        assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn legacy_option_json_retains_exact_serialization() {
+        let legacy = concat!(
+            "{\"key\":\"process_media\",\"label\":{\"en-US\":\"Process media\"},",
+            "\"description\":{\"en-US\":\"Prepare finite media.\"},\"scope\":\"both\",",
+            "\"operation_targets\":[\"preparation\",\"playback\"],",
+            "\"applicability\":\"finite_only\",\"kind\":\"boolean\",\"default\":true}"
+        );
+        let definition: AddonMediaListOptionDefinition = serde_json::from_str(legacy).unwrap();
+        definition.validate().expect("legacy declaration");
+        assert!(!definition.requires_preparation);
+        assert_eq!(serde_json::to_string(&definition).unwrap(), legacy);
+
+        let mut future = serde_json::to_value(&definition).unwrap();
+        future["future_requirement"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<AddonMediaListOptionDefinition>(future).is_err());
+    }
+
+    #[test]
+    fn test_access_options_require_explicit_declaration_and_remain_bounded() {
+        let mut definition = enum_option("browser_profile");
+        definition
+            .operation_targets
+            .push(AddonMediaListOptionOperation::TestAccess);
+        definition.validate().expect("all five operation targets");
+        let mut capability = AddonCapability {
+            id: CAPABILITY_MEDIA_LIST_OPTIONS_V1.to_owned(),
+            options: vec![definition],
+        };
+        let values = AddonMediaListOptionValues {
+            schema: CAPABILITY_MEDIA_LIST_OPTIONS_V1.to_owned(),
+            values: BTreeMap::from([(
+                "browser_profile".to_owned(),
+                AddonMediaListOptionValue::Enum("firefox".to_owned()),
+            )]),
+        };
+        capability
+            .validate_option_values(&values, AddonMediaListOptionOperation::TestAccess, false)
+            .expect("explicit access options");
+        assert_eq!(
+            serde_json::to_string(&AddonMediaListOptionOperation::TestAccess).unwrap(),
+            "\"test_access\""
+        );
+        capability.options[0].operation_targets.pop();
+        assert!(capability
+            .validate_option_values(&values, AddonMediaListOptionOperation::TestAccess, false)
+            .is_err());
+        capability.options[0].operation_targets.extend([
+            AddonMediaListOptionOperation::TestAccess,
+            AddonMediaListOptionOperation::TestAccess,
+        ]);
+        assert!(capability.options[0].validate().is_err());
+        assert!(
+            serde_json::from_str::<AddonMediaListOptionOperation>("\"future_operation\"").is_err()
+        );
     }
 
     #[test]

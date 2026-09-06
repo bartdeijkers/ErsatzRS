@@ -31,7 +31,7 @@ use crate::dynamic_text::{
     shutdown_dynamic_text_controllers, DynamicTextController, DynamicTextControllerRequest,
 };
 use crate::ffmpeg_config::use_embedded_subtitles;
-use crate::ffprobe::FfprobeExtractor;
+use crate::ffprobe::{FfprobeExtractor, FfprobeMediaVersion};
 use crate::file_system_layout::{
     data_path, fonts_cache_folder, resources_cache_folder, subtitle_cache_folder,
 };
@@ -368,17 +368,164 @@ pub async fn load_source_audio_streams(
             let language: Option<String> = decode_playback_column(&row, "Language")?;
             let title: Option<String> = decode_playback_column(&row, "Title")?;
 
-            let mut stream = SourceAudioStream::new(SourceAudioCodec::from_ffmpeg_name(
-                codec.as_deref().unwrap_or_default(),
+            Ok(source_audio_stream(
+                index,
+                codec.as_deref(),
+                Some(channels),
+                default,
+                language.as_deref(),
+                title.as_deref(),
             ))
-            .with_index(index);
-            stream.channels = Some(channels);
-            stream.default = default;
-            stream.language = language.as_deref().and_then(non_empty_string);
-            stream.title = title.as_deref().and_then(non_empty_string);
-            Ok(stream)
         })
         .collect()
+}
+
+/// Convert fresh probe metadata without persisting it or replacing programme duration.
+///
+/// # Errors
+/// Rejects ambiguous video geometry, invalid indexes and missing video codecs.
+/// The probe projection has version-level aspect/rate metadata, so multiple
+/// video streams cannot safely be paired with an arbitrary selected stream.
+pub fn source_video_stream_from_probe(
+    probe: &FfprobeMediaVersion,
+) -> Result<Option<SourceVideoStream>> {
+    let mut videos = probe
+        .streams
+        .iter()
+        .filter(|stream| stream.kind == ersatzrs_domain::MediaStreamKind::Video);
+    let Some(video) = videos.next() else {
+        return Ok(None);
+    };
+    if videos.next().is_some() {
+        return Err(probe_metadata_error(
+            "multiple video streams have ambiguous geometry",
+        ));
+    }
+    let index = usize::try_from(video.index)
+        .map_err(|_| probe_metadata_error("invalid video stream index"))?;
+    let codec = video
+        .codec
+        .as_deref()
+        .filter(|codec| !codec.trim().is_empty())
+        .ok_or_else(|| probe_metadata_error("video codec is missing"))?;
+    let mut stream =
+        SourceVideoStream::new(SourceVideoCodec::from_ffmpeg_name(codec)).with_index(index);
+    stream.profile.clone_from(&video.profile);
+    stream.pixel_format = video
+        .pixel_format
+        .as_deref()
+        .and_then(PixelFormat::from_ffmpeg_name);
+    stream.scan_kind = probe.version.video_scan_kind;
+    stream.frame_size = frame_size_from_db(
+        video.width.unwrap_or(probe.version.width),
+        video.height.unwrap_or(probe.version.height),
+    );
+    stream.frame_rate = probe
+        .version
+        .r_frame_rate
+        .as_deref()
+        .and_then(parse_frame_rate);
+    stream
+        .sample_aspect_ratio
+        .clone_from(&probe.version.sample_aspect_ratio);
+    stream
+        .display_aspect_ratio
+        .clone_from(&probe.version.display_aspect_ratio);
+    stream.is_still_image = video.attached_pic;
+    stream.rotation_degrees = video.rotation;
+    stream
+        .mastering_display
+        .clone_from(&video.mastering_display);
+    stream.max_cll = video.max_cll;
+    stream.max_fall = video.max_fall;
+    stream.color_params = derive_color_params(
+        video.pixel_format.as_deref(),
+        video.color_range.as_deref(),
+        video.color_transfer.as_deref(),
+        video.color_primaries.as_deref(),
+        video.color_space.as_deref(),
+    );
+    let configuration = (|| {
+        Some(ersatzrs_ffmpeg::DolbyVisionConfiguration {
+            profile: u8::try_from(video.dolby_vision_profile?).ok()?,
+            bl_signal_compatibility_id: u8::try_from(video.dolby_vision_bl_compatibility_id?)
+                .ok()?,
+            rpu_present: video.dolby_vision_rpu_present?,
+            el_present: video.dolby_vision_el_present?,
+            bl_present: video.dolby_vision_bl_present?,
+        })
+    })();
+    apply_source_dolby_vision_metadata(
+        &mut stream,
+        video.dolby_vision_metadata_state,
+        video.dolby_vision_metadata_hint.clone(),
+        configuration,
+    );
+    Ok(Some(stream))
+}
+
+/// Convert every fresh audio stream, preserving transport indexes and languages.
+/// No database write or historical audio metadata is involved.
+///
+/// # Errors
+/// Rejects invalid or duplicate audio indexes and negative channel counts.
+pub fn source_audio_streams_from_probe(
+    probe: &FfprobeMediaVersion,
+) -> Result<Vec<SourceAudioStream>> {
+    let mut indexes = HashSet::new();
+    let mut streams = probe
+        .streams
+        .iter()
+        .filter(|stream| stream.kind == ersatzrs_domain::MediaStreamKind::Audio)
+        .map(|audio| {
+            let index = usize::try_from(audio.index)
+                .map_err(|_| probe_metadata_error("invalid audio stream index"))?;
+            if !indexes.insert(index) {
+                return Err(probe_metadata_error("duplicate audio stream index"));
+            }
+            let channels = audio
+                .channels
+                .map(u32::try_from)
+                .transpose()
+                .map_err(|_| probe_metadata_error("invalid audio channel count"))?;
+            Ok(source_audio_stream(
+                index,
+                audio.codec.as_deref(),
+                channels,
+                audio.default,
+                audio.language.as_deref(),
+                audio.title.as_deref(),
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    streams.sort_by_key(|stream| stream.index);
+    Ok(streams)
+}
+
+fn probe_metadata_error(value: &'static str) -> RepositoryError {
+    RepositoryError::Decode {
+        kind: "fresh playback metadata",
+        value: value.to_owned(),
+    }
+}
+
+fn source_audio_stream(
+    index: usize,
+    codec: Option<&str>,
+    channels: Option<u32>,
+    default: bool,
+    language: Option<&str>,
+    title: Option<&str>,
+) -> SourceAudioStream {
+    let mut stream = SourceAudioStream::new(SourceAudioCodec::from_ffmpeg_name(
+        codec.unwrap_or_default(),
+    ))
+    .with_index(index);
+    stream.channels = channels;
+    stream.default = default;
+    stream.language = language.and_then(non_empty_string);
+    stream.title = title.and_then(non_empty_string);
+    stream
 }
 
 fn decode_playback_column<T>(row: &crate::db::DbRow, column: &'static str) -> Result<T>
@@ -446,6 +593,68 @@ pub fn select_playback_audio_stream_index(
         .unwrap_or(candidates);
 
     prioritize_audio_stream(&candidates).map(|stream| stream.index)
+}
+
+/// Preserve an explicit audio choice when fresh formats use different transport indexes.
+/// Ordinary language/title preferences should instead be evaluated on fresh metadata.
+/// Codec, channel count and index are format properties, not stable track identity.
+///
+/// # Errors
+/// Rejects missing or ambiguous track identity rather than silently changing a pin.
+pub fn remap_pinned_audio_selection(
+    selection: PlaybackAudioSelection,
+    previous: &[SourceAudioStream],
+    fresh: &[SourceAudioStream],
+) -> Result<PlaybackAudioSelection> {
+    let PlaybackAudioSelection::Exact(index) = selection else {
+        return Ok(selection);
+    };
+    let unavailable = || RepositoryError::Decode {
+        kind: "published interval audio selection",
+        value: "the pinned audio track cannot be uniquely mapped to the resolved media".to_owned(),
+    };
+    let selected = previous
+        .iter()
+        .find(|stream| stream.index == index)
+        .ok_or_else(unavailable)?;
+    let language = selected
+        .language
+        .as_deref()
+        .map(str::trim)
+        .filter(|language| !language.is_empty() && !language.eq_ignore_ascii_case("und"));
+    let title = selected
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|title| !title.is_empty());
+    if language.is_none() && title.is_none() {
+        return if previous.len() == 1 && fresh.len() == 1 {
+            Ok(PlaybackAudioSelection::Exact(fresh[0].index))
+        } else {
+            Err(unavailable())
+        };
+    }
+    let codes = language.map(|language| language_codes::all_language_codes([language]));
+    let matches = |stream: &&SourceAudioStream| {
+        codes
+            .as_ref()
+            .is_none_or(|codes| language_matches_preference(stream.language.as_deref(), codes))
+            && title.is_none_or(|title| {
+                stream
+                    .title
+                    .as_deref()
+                    .is_some_and(|candidate| candidate.trim().eq_ignore_ascii_case(title))
+            })
+    };
+    if previous.iter().filter(matches).count() != 1 {
+        return Err(unavailable());
+    }
+    let mut candidates = fresh.iter().filter(matches);
+    let selected = candidates.next().ok_or_else(unavailable)?;
+    if candidates.next().is_some() {
+        return Err(unavailable());
+    }
+    Ok(PlaybackAudioSelection::Exact(selected.index))
 }
 
 fn contains_case_insensitive(value: &str, needle: &str) -> bool {
@@ -1646,17 +1855,102 @@ pub async fn select_playback_graphics(
 ///
 /// Returns database/template errors from variable assembly or rendering errors
 /// from generated SVG/ASS artifacts.
-#[allow(clippy::too_many_lines)]
 pub async fn render_playback_graphics_overlays(
     pool: &DbPool,
     graphics: &[ResolvedPlaybackGraphicsElement],
     context: &PlaybackGraphicsRenderContext,
     output_dir: impl AsRef<Path>,
 ) -> Result<PlaybackGraphicsArtifacts> {
-    let output_dir = output_dir.as_ref().to_path_buf();
+    render_playback_graphics_overlays_inner(pool, graphics, context, output_dir.as_ref(), None)
+        .await
+}
+
+/// Render overlays within the caller's shared playback startup deadline.
+///
+/// Signal cancellation and await this future before releasing the graphics
+/// directory. Motion/Hold probes and already started text controllers are
+/// stopped and awaited before returning a startup failure.
+///
+/// # Errors
+/// Returns rendering/database errors, or a static startup cancellation/timeout error.
+pub async fn render_playback_graphics_overlays_cancellable(
+    pool: &DbPool,
+    graphics: &[ResolvedPlaybackGraphicsElement],
+    context: &PlaybackGraphicsRenderContext,
+    output_dir: impl AsRef<Path>,
+    deadline: tokio::time::Instant,
+    cancellation: tokio::sync::oneshot::Receiver<()>,
+) -> Result<PlaybackGraphicsArtifacts> {
+    let mut startup = GraphicsStartupBudget {
+        deadline,
+        cancellation,
+    };
+    render_playback_graphics_overlays_inner(
+        pool,
+        graphics,
+        context,
+        output_dir.as_ref(),
+        Some(&mut startup),
+    )
+    .await
+}
+
+struct GraphicsStartupBudget {
+    deadline: tokio::time::Instant,
+    cancellation: tokio::sync::oneshot::Receiver<()>,
+}
+
+impl GraphicsStartupBudget {
+    fn check(&mut self) -> Result<()> {
+        if !matches!(
+            self.cancellation.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ) {
+            return Err(graphics_startup_error("cancelled"));
+        }
+        if tokio::time::Instant::now() >= self.deadline {
+            return Err(graphics_startup_error("deadline exceeded"));
+        }
+        Ok(())
+    }
+
+    // Only child-free futures may be dropped here. DynamicTextController::start
+    // spawns its refresh task after its last await and returns it in the same poll.
+    async fn child_free<T>(&mut self, work: impl std::future::Future<Output = T>) -> Result<T> {
+        self.check()?;
+        tokio::select! {
+            biased;
+            _ = &mut self.cancellation => Err(graphics_startup_error("cancelled")),
+            () = tokio::time::sleep_until(self.deadline) => {
+                Err(graphics_startup_error("deadline exceeded"))
+            }
+            result = work => Ok(result),
+        }
+    }
+}
+
+fn graphics_startup_error(value: &'static str) -> RepositoryError {
+    RepositoryError::Decode {
+        kind: "graphics startup",
+        value: value.to_owned(),
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+async fn render_playback_graphics_overlays_inner(
+    pool: &DbPool,
+    graphics: &[ResolvedPlaybackGraphicsElement],
+    context: &PlaybackGraphicsRenderContext,
+    output_dir: &Path,
+    mut startup: Option<&mut GraphicsStartupBudget>,
+) -> Result<PlaybackGraphicsArtifacts> {
+    let output_dir = output_dir.to_path_buf();
     let renderer = GraphicsTemplateRenderer::new(&output_dir);
     let mut artifacts = PlaybackGraphicsArtifacts::default();
     let render_result: Result<()> = async {
+        if let Some(startup) = startup.as_deref_mut() {
+            startup.check()?;
+        }
         for resolved in graphics {
             let variable_context = GraphicsTemplateContext {
                 channel_id: context.channel_id,
@@ -1679,10 +1973,18 @@ pub async fn render_playback_graphics_overlays(
                 &variable_context,
                 usize::try_from(resolved.element.epg_entries.max(0)).unwrap_or_default(),
                 resolved.variables.as_deref(),
+            );
+            let variables = match startup.as_deref_mut() {
+                Some(startup) => startup.child_free(variables).await??,
+                None => variables.await?,
+            };
+            let element = render_graphics_element_templates(&resolved.element, &variables)?;
+            let render_context = graphics_render_context_with_motion_probe(
+                context,
+                &element,
+                startup.as_deref_mut(),
             )
             .await?;
-            let element = render_graphics_element_templates(&resolved.element, &variables)?;
-            let render_context = graphics_render_context_with_motion_probe(context, &element).await;
             let drawtext_config = match &element.config {
                 GraphicsElementConfig::Text(config)
                     if config.renderer == TextGraphicsRenderer::Drawtext =>
@@ -1700,7 +2002,7 @@ pub async fn render_playback_graphics_overlays(
                     continue;
                 };
                 let text_file = output_dir.join(format!("{}-dynamic-text.txt", element.id));
-                let controller = match DynamicTextController::start(DynamicTextControllerRequest {
+                let controller = DynamicTextController::start(DynamicTextControllerRequest {
                     element_id: element.id,
                     template,
                     variables,
@@ -1708,9 +2010,12 @@ pub async fn render_playback_graphics_overlays(
                     refresh_interval_milliseconds: config.drawtext.refresh_interval_milliseconds,
                     playback_offset_seconds: context.stream_seek_seconds,
                     playback_duration_seconds: context.duration_seconds,
-                })
-                .await
-                {
+                });
+                let controller = match startup.as_deref_mut() {
+                    Some(startup) => startup.child_free(controller).await?,
+                    None => controller.await,
+                };
+                let controller = match controller {
                     Ok(controller) => controller,
                     Err(error) => {
                         tracing::warn!(
@@ -1759,6 +2064,9 @@ pub async fn render_playback_graphics_overlays(
                 }
             }
         }
+        if let Some(startup) = startup.as_deref_mut() {
+            startup.check()?;
+        }
         Ok(())
     }
     .await;
@@ -1774,14 +2082,15 @@ pub async fn render_playback_graphics_overlays(
 async fn graphics_render_context_with_motion_probe(
     context: &PlaybackGraphicsRenderContext,
     element: &GraphicsElement,
-) -> GraphicsRenderContext {
+    startup: Option<&mut GraphicsStartupBudget>,
+) -> Result<GraphicsRenderContext> {
     let render_context =
         GraphicsRenderContext::new(context.frame_size, context.square_pixel_frame_size);
     let GraphicsElementConfig::Motion(config) = &element.config else {
-        return render_context;
+        return Ok(render_context);
     };
     if config.end_behavior != MotionEndBehavior::Hold {
-        return render_context;
+        return Ok(render_context);
     }
     let Some(video_path) = config
         .video_path
@@ -1789,13 +2098,15 @@ async fn graphics_render_context_with_motion_probe(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
-        return render_context;
+        return Ok(render_context);
     };
 
-    match FfprobeExtractor::new(ffprobe_path())
-        .extract(video_path)
-        .await
-    {
+    let extractor = FfprobeExtractor::new(ffprobe_path());
+    let probe = match startup {
+        Some(startup) => graphics_motion_probe_cancellable(&extractor, video_path, startup).await?,
+        None => extractor.extract(video_path).await,
+    };
+    Ok(match probe {
         Ok(probe) => {
             if let Ok(duration) = probe.version.duration.to_std() {
                 render_context.with_motion_source_duration(element.id, duration.as_secs_f64())
@@ -1807,6 +2118,48 @@ async fn graphics_render_context_with_motion_probe(
             tracing::debug!(%error, element_id = element.id, video_path, "failed to probe graphics motion duration; using zero-duration hold fallback");
             render_context.with_motion_source_duration(element.id, 0.0)
         }
+    })
+}
+
+async fn graphics_motion_probe_cancellable(
+    extractor: &FfprobeExtractor,
+    video_path: &str,
+    startup: &mut GraphicsStartupBudget,
+) -> Result<std::result::Result<FfprobeMediaVersion, crate::ffprobe::FfprobeError>> {
+    startup.check()?;
+    let remaining = startup
+        .deadline
+        .saturating_duration_since(tokio::time::Instant::now())
+        .min(Duration::from_secs(15));
+    let input = InputFile::video(video_path);
+    let (cancel, cancellation) = tokio::sync::oneshot::channel();
+    // Reuse the bounded startup-input owner for a local Motion/Hold asset.
+    // It owns bounded pipe readers and awaits process cleanup on cancellation.
+    let probe = extractor.extract_input_cancellable(&input, remaining, cancellation);
+    tokio::pin!(probe);
+    let result = tokio::select! {
+        biased;
+        _ = &mut startup.cancellation => {
+            let _ = cancel.send(());
+            let _ = probe.await;
+            return Err(graphics_startup_error("cancelled"));
+        }
+        () = tokio::time::sleep_until(startup.deadline) => {
+            let _ = cancel.send(());
+            let _ = probe.await;
+            return Err(graphics_startup_error("deadline exceeded"));
+        }
+        result = &mut probe => result,
+    };
+    startup.check()?;
+    match result {
+        Err(crate::ffprobe::FfprobeError::Timeout { .. }) => {
+            Err(graphics_startup_error("deadline exceeded"))
+        }
+        Err(crate::ffprobe::FfprobeError::Cancelled { .. }) => {
+            Err(graphics_startup_error("cancelled"))
+        }
+        result => Ok(result),
     }
 }
 
@@ -1972,7 +2325,15 @@ pub async fn watermark_input_for_stream(
     image_path: &str,
     overlay: &ersatzrs_ffmpeg::WatermarkOverlay,
 ) -> InputFile {
-    if is_watermark_animated(image_path).await {
+    watermark_input_with_animation(image_path, overlay, is_watermark_animated(image_path).await)
+}
+
+fn watermark_input_with_animation(
+    image_path: &str,
+    overlay: &ersatzrs_ffmpeg::WatermarkOverlay,
+    animated: bool,
+) -> InputFile {
+    if animated {
         InputFile::watermark_animated(image_path)
     } else if !overlay.fade_points.is_empty()
         || overlay
@@ -1986,16 +2347,61 @@ pub async fn watermark_input_for_stream(
     }
 }
 
+/// Resolve watermark inputs within the shared playback startup deadline.
+/// Signal cancellation and await this future before releasing startup ownership.
+///
+/// # Errors
+/// Returns a static startup error on cancellation or deadline expiry. Ordinary
+/// frame-count failures preserve the historical still-image fallback.
+pub async fn watermark_inputs_for_stream_cancellable(
+    watermarks: Vec<ResolvedPlaybackWatermark>,
+    program_duration: Option<Duration>,
+    deadline: tokio::time::Instant,
+    cancellation: tokio::sync::oneshot::Receiver<()>,
+) -> Result<Vec<(InputFile, WatermarkOverlay)>> {
+    let mut startup = GraphicsStartupBudget {
+        deadline,
+        cancellation,
+    };
+    startup.check()?;
+    let mut inputs = Vec::with_capacity(watermarks.len());
+    for resolved in watermarks {
+        if let Some(overlay) = watermark_overlay_for_stream(&resolved.watermark, program_duration) {
+            let path = resolved.image_path.to_string_lossy().into_owned();
+            let animated = is_watermark_animated_inner(&path, Some(&mut startup)).await?;
+            inputs.push((
+                watermark_input_with_animation(&path, &overlay, animated),
+                overlay,
+            ));
+        }
+    }
+    startup.check()?;
+    Ok(inputs)
+}
+
 /// Port of `FFmpegLibraryProcessService.IsWatermarkAnimated`: count decoded
 /// frames with ffprobe, treat more than one frame as animated, cache the
 /// answer per file name for a day, and fall back to "still" on any error.
 async fn is_watermark_animated(path: &str) -> bool {
+    is_watermark_animated_inner(path, None)
+        .await
+        .unwrap_or(false)
+}
+
+async fn is_watermark_animated_inner(
+    path: &str,
+    mut startup: Option<&mut GraphicsStartupBudget>,
+) -> Result<bool> {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
     use std::time::Instant;
 
     static CACHE: OnceLock<Mutex<HashMap<String, (bool, Instant)>>> = OnceLock::new();
     const CACHE_TTL: std::time::Duration = std::time::Duration::from_hours(24);
+
+    if let Some(startup) = startup.as_deref_mut() {
+        startup.check()?;
+    }
 
     let cache_key = Path::new(path).file_name().map_or_else(
         || path.to_owned(),
@@ -2005,9 +2411,22 @@ async fn is_watermark_animated(path: &str) -> bool {
     if let Ok(guard) = cache.lock() {
         if let Some((animated, stored)) = guard.get(&cache_key) {
             if stored.elapsed() < CACHE_TTL {
-                return *animated;
+                return Ok(*animated);
             }
         }
+    }
+
+    if let Some(startup) = startup {
+        let extractor = FfprobeExtractor::new(ffprobe_path());
+        let Some(animated) =
+            probe_watermark_animation_cancellable(&extractor, path, startup).await?
+        else {
+            return Ok(false);
+        };
+        if let Ok(mut guard) = cache.lock() {
+            guard.insert(cache_key, (animated, Instant::now()));
+        }
+        return Ok(animated);
     }
 
     let output = tokio::process::Command::new(ffprobe_path())
@@ -2026,11 +2445,11 @@ async fn is_watermark_animated(path: &str) -> bool {
         .output()
         .await;
 
-    match output {
+    Ok(match output {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let Ok(frame_count) = stdout.trim().replace("stream,", "").parse::<i64>() else {
-                return false;
+                return Ok(false);
             };
             let animated = frame_count > 1;
             if let Ok(mut guard) = cache.lock() {
@@ -2049,6 +2468,40 @@ async fn is_watermark_animated(path: &str) -> bool {
         Err(error) => {
             tracing::warn!(%error, path, "error checking watermark frame count");
             false
+        }
+    })
+}
+
+async fn probe_watermark_animation_cancellable(
+    extractor: &FfprobeExtractor,
+    path: &str,
+    startup: &mut GraphicsStartupBudget,
+) -> Result<Option<bool>> {
+    startup.check()?;
+    let (cancel, receiver) = tokio::sync::oneshot::channel();
+    let probe = extractor.count_watermark_frames_cancellable(path, startup.deadline, receiver);
+    tokio::pin!(probe);
+    let result = tokio::select! {
+        biased;
+        _ = &mut startup.cancellation => {
+            let _ = cancel.send(());
+            let _ = probe.await;
+            return Err(graphics_startup_error("cancelled"));
+        }
+        result = &mut probe => result,
+    };
+    startup.check()?;
+    match result {
+        Ok(frames) => Ok(Some(frames > 1)),
+        Err(crate::ffprobe::FfprobeError::Timeout { .. }) => {
+            Err(graphics_startup_error("deadline exceeded"))
+        }
+        Err(crate::ffprobe::FfprobeError::Cancelled { .. }) => {
+            Err(graphics_startup_error("cancelled"))
+        }
+        Err(_) => {
+            tracing::warn!("error checking watermark frame count; using still-image fallback");
+            Ok(None)
         }
     }
 }
@@ -2782,13 +3235,28 @@ fn decode_source_display_metadata(
     let metadata_hint = decode_playback_column::<Option<String>>(row, "DolbyVisionMetadataHint")
         .ok()
         .flatten();
+    apply_source_dolby_vision_metadata(
+        stream,
+        metadata_state,
+        metadata_hint,
+        decode_dolby_vision_configuration(row),
+    );
+    Ok(())
+}
+
+fn apply_source_dolby_vision_metadata(
+    stream: &mut SourceVideoStream,
+    metadata_state: ersatzrs_domain::DolbyVisionMetadataState,
+    metadata_hint: Option<String>,
+    configuration: Option<ersatzrs_ffmpeg::DolbyVisionConfiguration>,
+) {
     if metadata_state == ersatzrs_domain::DolbyVisionMetadataState::Incomplete {
         stream.incomplete_dolby_vision = Some(ersatzrs_ffmpeg::IncompleteDolbyVisionMetadata {
             reason: metadata_hint.unwrap_or_else(|| {
                 "the media provider omitted required Dolby Vision fields".to_owned()
             }),
         });
-    } else if let Some(configuration) = decode_dolby_vision_configuration(row) {
+    } else if let Some(configuration) = configuration {
         stream.dolby_vision = Some(configuration);
     } else if metadata_state == ersatzrs_domain::DolbyVisionMetadataState::Complete {
         stream.incomplete_dolby_vision = Some(
@@ -2798,7 +3266,6 @@ fn decode_source_display_metadata(
             },
         );
     }
-    Ok(())
 }
 
 /// Rebuild the persisted Dolby Vision configuration record (ADR 0064).
@@ -2877,6 +3344,337 @@ fn derive_color_params(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn graphics_startup_context() -> PlaybackGraphicsRenderContext {
+        PlaybackGraphicsRenderContext {
+            channel_id: 1,
+            channel_number: "1".to_owned(),
+            media_item_id: 1,
+            media_path: "synthetic-media.mkv".to_owned(),
+            channel_start_time: Utc::now(),
+            content_start_time: Utc::now(),
+            stream_seek_seconds: 0.0,
+            duration_seconds: 60.0,
+            frame_size: FrameSize::new(1920, 1080),
+            square_pixel_frame_size: FrameSize::new(1920, 1080),
+            frame_rate: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn graphics_startup_cancellation_interrupts_held_database_pool() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        let _held = pool.acquire().await.unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        let output = temporary.path().join("not-created");
+        let graphics = [ResolvedPlaybackGraphicsElement {
+            element: GraphicsElement::default(),
+            variables: None,
+        }];
+        let context = graphics_startup_context();
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let render = render_playback_graphics_overlays_cancellable(
+            &pool,
+            &graphics,
+            &context,
+            &output,
+            tokio::time::Instant::now() + Duration::from_secs(15),
+            receiver,
+        );
+        tokio::pin!(render);
+        tokio::select! {
+            biased;
+            _ = &mut render => panic!("graphics should wait for the held database connection"),
+            () = tokio::task::yield_now() => {}
+        }
+        sender.send(()).unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(1), render)
+            .await
+            .unwrap();
+        assert!(matches!(result, Err(RepositoryError::Decode {
+            kind: "graphics startup", value,
+        }) if value == "cancelled"));
+        assert!(!output.exists());
+    }
+
+    #[tokio::test]
+    async fn graphics_startup_expired_deadline_does_not_read_database_or_create_artifacts() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect_lazy("sqlite::memory:")
+            .unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        let output = temporary.path().join("not-created");
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        let result = render_playback_graphics_overlays_cancellable(
+            &pool,
+            &[ResolvedPlaybackGraphicsElement {
+                element: GraphicsElement::default(),
+                variables: None,
+            }],
+            &graphics_startup_context(),
+            &output,
+            tokio::time::Instant::now(),
+            receiver,
+        )
+        .await;
+        assert!(matches!(result, Err(RepositoryError::Decode {
+            kind: "graphics startup", value,
+        }) if value == "deadline exceeded"));
+        assert!(!output.exists());
+    }
+
+    #[tokio::test]
+    async fn graphics_startup_motion_probe_cancellation_never_uses_hold_fallback() {
+        let extractor = FfprobeExtractor::new("nonexistent-graphics-probe");
+        let (sender, cancellation) = tokio::sync::oneshot::channel();
+        sender.send(()).unwrap();
+        let mut startup = GraphicsStartupBudget {
+            deadline: tokio::time::Instant::now() + Duration::from_secs(15),
+            cancellation,
+        };
+        let result =
+            graphics_motion_probe_cancellable(&extractor, "synthetic-motion.mkv", &mut startup)
+                .await;
+        assert!(matches!(result, Err(RepositoryError::Decode {
+            kind: "graphics startup", value,
+        }) if value == "cancelled"));
+    }
+
+    #[tokio::test]
+    async fn watermark_startup_cancellation_never_uses_still_image_fallback() {
+        let extractor = FfprobeExtractor::new("nonexistent-watermark-probe");
+        let (sender, cancellation) = tokio::sync::oneshot::channel();
+        sender.send(()).unwrap();
+        let mut startup = GraphicsStartupBudget {
+            deadline: tokio::time::Instant::now() + Duration::from_secs(15),
+            cancellation,
+        };
+        assert!(matches!(
+            probe_watermark_animation_cancellable(&extractor, "synthetic-logo.gif", &mut startup).await,
+            Err(RepositoryError::Decode { kind: "graphics startup", value }) if value == "cancelled"
+        ));
+        let (_sender, cancellation) = tokio::sync::oneshot::channel();
+        let mut startup = GraphicsStartupBudget {
+            deadline: tokio::time::Instant::now(),
+            cancellation,
+        };
+        assert!(matches!(
+            probe_watermark_animation_cancellable(&extractor, "synthetic-logo.gif", &mut startup).await,
+            Err(RepositoryError::Decode { kind: "graphics startup", value }) if value == "deadline exceeded"
+        ));
+    }
+
+    // Fake executable permissions and PID liveness assertions are Unix-specific;
+    // preflight/deadline and database cancellation tests above run on all targets.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn graphics_startup_motion_probe_cancellation_awaits_child_cleanup() {
+        assert_startup_probe_cancellation_awaits_child_cleanup(false).await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn watermark_startup_probe_cancellation_awaits_child_cleanup() {
+        assert_startup_probe_cancellation_awaits_child_cleanup(true).await;
+    }
+
+    #[cfg(unix)]
+    async fn assert_startup_probe_cancellation_awaits_child_cleanup(watermark: bool) {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let program = temporary.path().join("motion-probe.sh");
+        let pid_path = temporary.path().join("motion-probe.sh.pid");
+        std::fs::write(
+            &program,
+            "#!/bin/sh\nprintf '%s' $$ > \"$0.pid\"\nwhile :; do :; done\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let extractor = FfprobeExtractor::new(program.to_str().unwrap());
+        let (sender, cancellation) = tokio::sync::oneshot::channel();
+        let mut startup = GraphicsStartupBudget {
+            deadline: tokio::time::Instant::now() + Duration::from_secs(15),
+            cancellation,
+        };
+        let probe = async {
+            if watermark {
+                probe_watermark_animation_cancellable(
+                    &extractor,
+                    "synthetic-logo.gif",
+                    &mut startup,
+                )
+                .await
+                .map(|_| ())
+            } else {
+                graphics_motion_probe_cancellable(&extractor, "synthetic-motion.mkv", &mut startup)
+                    .await
+                    .map(|_| ())
+            }
+        };
+        tokio::pin!(probe);
+        let wait_started = async {
+            while !pid_path.exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        };
+        tokio::select! {
+            result = &mut probe => panic!("motion probe ended before cancellation: {result:?}"),
+            result = tokio::time::timeout(Duration::from_secs(2), wait_started) => result.unwrap(),
+        }
+        sender.send(()).unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(2), probe)
+            .await
+            .unwrap();
+        assert!(matches!(result, Err(RepositoryError::Decode {
+            kind: "graphics startup", value,
+        }) if value == "cancelled"));
+        let pid: i32 = std::fs::read_to_string(pid_path).unwrap().parse().unwrap();
+        assert_eq!(
+            nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None),
+            Err(nix::errno::Errno::ESRCH),
+        );
+    }
+
+    fn fresh_playback_probe() -> FfprobeMediaVersion {
+        crate::ffprobe::parse_ffprobe_json(
+            Path::new("synthetic-media"),
+            br#"{
+          "format":{"duration":"120"},
+          "streams":[
+            {"index":7,"codec_type":"audio","codec_name":"aac","channels":6,
+             "disposition":{"default":1},"tags":{"language":"jpn","title":"Main audio"}},
+            {"index":3,"codec_type":"video","codec_name":"hevc","profile":"Main 10",
+             "width":1920,"height":1080,"pix_fmt":"yuv420p10le",
+             "sample_aspect_ratio":"4:3","display_aspect_ratio":"64:27",
+             "r_frame_rate":"24000/1001","field_order":"progressive",
+             "color_transfer":"smpte2084","color_primaries":"bt2020",
+             "color_space":"bt2020nc","color_range":"tv"}
+          ]
+        }"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn fresh_playback_metadata_preserves_geometry_color_and_audio_selection() {
+        let mut probe = fresh_playback_probe();
+        let video = probe
+            .streams
+            .iter_mut()
+            .find(|stream| stream.index == 3)
+            .unwrap();
+        video.rotation = Some(90);
+        video.mastering_display = Some("synthetic mastering display".into());
+        video.max_cll = Some(1000);
+        video.max_fall = Some(400);
+        let source = source_video_stream_from_probe(&probe).unwrap().unwrap();
+        assert_eq!(source.index, 3);
+        assert_eq!(source.codec, SourceVideoCodec::Hevc);
+        assert_eq!(source.profile.as_deref(), Some("main 10"));
+        assert_eq!(source.frame_size, Some(FrameSize::new(1920, 1080)));
+        assert_eq!(source.frame_rate, Some(FrameRate::new(24000, 1001)));
+        assert_eq!(source.sample_aspect_ratio.as_deref(), Some("4:3"));
+        assert_eq!(source.display_aspect_ratio.as_deref(), Some("64:27"));
+        assert_eq!(source.rotation_degrees, Some(90));
+        assert_eq!(
+            source.mastering_display.as_deref(),
+            Some("synthetic mastering display")
+        );
+        assert_eq!(source.max_cll, Some(1000));
+        assert_eq!(source.max_fall, Some(400));
+        assert!(source.color_params.is_hdr);
+        assert!(source.color_params.is_bt2020_ten);
+        let audio = source_audio_streams_from_probe(&probe).unwrap();
+        assert_eq!(audio.len(), 1);
+        assert_eq!(audio[0].index, 7);
+        assert_eq!(audio[0].channels, Some(6));
+        assert_eq!(audio[0].language.as_deref(), Some("jpn"));
+        assert_eq!(audio[0].title.as_deref(), Some("Main audio"));
+        assert!(audio[0].default);
+        assert_eq!(probe.version.duration, chrono::Duration::seconds(120));
+    }
+
+    #[test]
+    fn fresh_playback_metadata_preserves_complete_and_incomplete_dolby_vision() {
+        let mut probe = fresh_playback_probe();
+        let video = probe
+            .streams
+            .iter_mut()
+            .find(|stream| stream.index == 3)
+            .unwrap();
+        video.dolby_vision_metadata_state = ersatzrs_domain::DolbyVisionMetadataState::Complete;
+        video.dolby_vision_profile = Some(8);
+        video.dolby_vision_bl_compatibility_id = Some(1);
+        video.dolby_vision_bl_present = Some(true);
+        video.dolby_vision_el_present = Some(false);
+        video.dolby_vision_rpu_present = Some(true);
+        assert_eq!(
+            source_video_stream_from_probe(&probe)
+                .unwrap()
+                .unwrap()
+                .dolby_vision
+                .unwrap()
+                .profile,
+            8
+        );
+        let video = probe
+            .streams
+            .iter_mut()
+            .find(|stream| stream.index == 3)
+            .unwrap();
+        video.dolby_vision_bl_present = None;
+        let source = source_video_stream_from_probe(&probe).unwrap().unwrap();
+        assert!(source.dolby_vision.is_none());
+        assert!(source.incomplete_dolby_vision.is_some());
+        let video = probe
+            .streams
+            .iter_mut()
+            .find(|stream| stream.index == 3)
+            .unwrap();
+        video.dolby_vision_metadata_state = ersatzrs_domain::DolbyVisionMetadataState::Incomplete;
+        video.dolby_vision_metadata_hint = Some("missing base layer flag".into());
+        assert_eq!(
+            source_video_stream_from_probe(&probe)
+                .unwrap()
+                .unwrap()
+                .incomplete_dolby_vision
+                .unwrap()
+                .reason,
+            "missing base layer flag"
+        );
+    }
+
+    #[test]
+    fn fresh_playback_metadata_rejects_ambiguous_or_invalid_streams() {
+        let mut probe = fresh_playback_probe();
+        let video = probe
+            .streams
+            .iter()
+            .find(|stream| stream.index == 3)
+            .unwrap()
+            .clone();
+        probe.streams.push(video);
+        assert!(source_video_stream_from_probe(&probe).is_err());
+        probe
+            .streams
+            .retain(|stream| stream.kind == ersatzrs_domain::MediaStreamKind::Audio);
+        assert!(source_video_stream_from_probe(&probe).unwrap().is_none());
+        probe.streams[0].index = 0;
+        assert_eq!(source_audio_streams_from_probe(&probe).unwrap()[0].index, 0);
+        probe.streams[0].channels = Some(-1);
+        assert!(source_audio_streams_from_probe(&probe).is_err());
+        probe.streams[0].channels = None;
+        probe.streams.push(probe.streams[0].clone());
+        assert!(source_audio_streams_from_probe(&probe).is_err());
+        probe.streams.pop();
+        probe.streams[0].index = -1;
+        assert!(source_audio_streams_from_probe(&probe).is_err());
+    }
     use chrono::TimeZone;
 
     async fn source_stream_test_pool() -> DbPool {
@@ -3232,6 +4030,101 @@ mod tests {
 
         assert!(selected.passed);
         assert_eq!(selected.selected.map(|stream| stream.stream_index), Some(2));
+    }
+
+    #[test]
+    fn retained_audio_pin_maps_identity_not_codec_or_transport_index() {
+        let mut original = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+        original.language = Some("eng".into());
+        original.title = Some("Main audio".into());
+        let mut commentary = original.clone().with_index(2);
+        commentary.title = Some("Commentary".into());
+        let previous = [original.clone(), commentary];
+        let mut fresh =
+            SourceAudioStream::new(SourceAudioCodec::from_ffmpeg_name("opus")).with_index(0);
+        fresh.language = Some("en".into());
+        fresh.title = Some("main audio".into());
+        let mut wrong = fresh.clone().with_index(1);
+        wrong.title = Some("Commentary".into());
+        assert_eq!(
+            remap_pinned_audio_selection(
+                PlaybackAudioSelection::Exact(1),
+                &previous,
+                &[wrong, fresh.clone()]
+            )
+            .unwrap(),
+            PlaybackAudioSelection::Exact(0)
+        );
+        assert!(remap_pinned_audio_selection(
+            PlaybackAudioSelection::Exact(99),
+            &previous,
+            std::slice::from_ref(&fresh)
+        )
+        .is_err());
+        assert!(remap_pinned_audio_selection(
+            PlaybackAudioSelection::Exact(1),
+            &previous,
+            &[fresh.clone(), fresh.with_index(3)]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn retained_audio_pin_does_not_guess_missing_or_ambiguous_identity() {
+        let mut original = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+        original.language = Some("jpn".into());
+        let mut fresh = original.clone().with_index(0);
+        fresh.language = Some("eng".into());
+        assert!(remap_pinned_audio_selection(
+            PlaybackAudioSelection::Exact(1),
+            std::slice::from_ref(&original),
+            std::slice::from_ref(&fresh)
+        )
+        .is_err());
+        fresh.language = None;
+        assert!(remap_pinned_audio_selection(
+            PlaybackAudioSelection::Exact(1),
+            std::slice::from_ref(&original),
+            &[fresh]
+        )
+        .is_err());
+        assert!(remap_pinned_audio_selection(
+            PlaybackAudioSelection::Exact(1),
+            &[original.clone(), original.clone().with_index(2)],
+            &[original.with_index(0)]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn retained_audio_pin_preserves_silence_and_unlabelled_single_audio() {
+        for selection in [
+            PlaybackAudioSelection::Disabled,
+            PlaybackAudioSelection::Automatic,
+        ] {
+            assert_eq!(
+                remap_pinned_audio_selection(selection, &[], &[]).unwrap(),
+                selection
+            );
+        }
+        let original = SourceAudioStream::new(SourceAudioCodec::Aac).with_index(1);
+        let fresh =
+            SourceAudioStream::new(SourceAudioCodec::from_ffmpeg_name("opus")).with_index(0);
+        assert_eq!(
+            remap_pinned_audio_selection(
+                PlaybackAudioSelection::Exact(1),
+                std::slice::from_ref(&original),
+                std::slice::from_ref(&fresh)
+            )
+            .unwrap(),
+            PlaybackAudioSelection::Exact(0)
+        );
+        assert!(remap_pinned_audio_selection(
+            PlaybackAudioSelection::Exact(1),
+            &[original],
+            &[fresh.clone(), fresh.with_index(2)]
+        )
+        .is_err());
     }
 
     #[test]

@@ -6,22 +6,24 @@ use ersatzrs_addon_contract::{
     AddonCapability, AddonMediaListOptionValue as ContractOptionValue,
     AddonMediaListOptionValueScope, AddonMediaListOptionValues as ContractOptionValues,
 };
+use ersatzrs_core::addon_media_list_playback::AddonMediaListPlaybackTimelinePlan;
 use ersatzrs_core::repositories::{
     AddonMediaListArtifact, AddonMediaListDraftDiff, AddonMediaListDraftOptions,
     AddonMediaListImportCheckpoint, AddonMediaListImportLifecycle, AddonMediaListItemOptionValues,
     AddonMediaListItemTombstone, AddonMediaListLifecycleJob, AddonMediaListLifecycleRepository,
-    AddonMediaListLifecycleSettings, AddonMediaListOptionSchema, AddonMediaListOptionSchemaRef,
-    AddonMediaListOptionValues, AddonMediaListPublishedOptions, AddonMediaListReferencePins,
-    AddonMediaListResetImpact, AddonMediaListRevisionDiff, AddonMediaListRevisionFile,
-    AddonMediaListRevisionFileBlob, AddonMediaListRevisionItem, AddonMediaListRevisionRestoreFence,
-    AddonMediaListRevisionSnapshot, AddonMediaListRevisionSummary, AddonProcessedArtifactPolicy,
-    AddonToolMaintenanceAttempt, CreateAddonMediaListLifecycleJob, RepositoryError, Result,
+    AddonMediaListLifecycleSettings, AddonMediaListOptionItem, AddonMediaListOptionSchema,
+    AddonMediaListOptionSchemaRef, AddonMediaListOptionValues, AddonMediaListPublishedOptions,
+    AddonMediaListReferencePins, AddonMediaListResetImpact, AddonMediaListRevisionArtifacts,
+    AddonMediaListRevisionDiff, AddonMediaListRevisionFile, AddonMediaListRevisionFileBlob,
+    AddonMediaListRevisionItem, AddonMediaListRevisionRestoreFence, AddonMediaListRevisionSnapshot,
+    AddonMediaListRevisionSummary, AddonProcessedArtifactPolicy, AddonToolMaintenanceAttempt,
+    CreateAddonMediaListLifecycleJob, RepositoryError, Result,
     PROCESSED_ARTIFACT_GLOBAL_BYTE_LIMIT_KEY, PROCESSED_ARTIFACT_MAX_CONCURRENCY_KEY,
     PROCESSED_ARTIFACT_MINIMUM_FREE_BYTES_KEY, PROCESSED_ARTIFACT_RETENTION_SECONDS_KEY,
 };
 use ersatzrs_domain::{
-    AddonMediaListItemAvailability, AddonMediaListRefreshCadence, EntityId,
-    ManagedLibraryOperationState,
+    AddonMediaListArtifactKind, AddonMediaListArtifactState, AddonMediaListItemAvailability,
+    AddonMediaListRefreshCadence, EntityId, ManagedLibraryOperationState, RemoteStreamLiveness,
 };
 use sha2::{Digest as _, Sha256};
 use sqlx::Row;
@@ -315,9 +317,54 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         Ok(result)
     }
 
+    async fn option_items(
+        &self,
+        list_id: EntityId,
+        item_ids: &[EntityId],
+    ) -> Result<Vec<AddonMediaListOptionItem>> {
+        if item_ids.len() > 10_000
+            || item_ids.iter().collect::<BTreeSet<_>>().len() != item_ids.len()
+        {
+            return Err(RepositoryError::Conflict(
+                "option item lookup requires at most 10000 distinct item identities".into(),
+            ));
+        }
+        // read-only transaction: every selection chunk sees one item snapshot.
+        let mut tx = self.0.begin().await.repository()?;
+        let mut items = Vec::with_capacity(item_ids.len());
+        for chunk in item_ids.chunks(900) {
+            let mut query = sqlx::QueryBuilder::<crate::db::Db>::new(
+                r#"SELECT "Id", "ProviderId",
+                          COALESCE("LivenessOverride", "ProviderLiveness") AS "Liveness"
+                   FROM "AddonMediaListItem" WHERE "AddonMediaListId" = "#,
+            );
+            query.push_bind(list_id).push(r#" AND "Id" IN ("#);
+            let mut separated = query.separated(", ");
+            for item_id in chunk {
+                separated.push_bind(*item_id);
+            }
+            separated.push_unseparated(")");
+            for row in query.build().fetch_all(&mut *tx).await.repository()? {
+                items.push(AddonMediaListOptionItem {
+                    item_id: row.try_get("Id").repository()?,
+                    provider_id: row.try_get("ProviderId").repository()?,
+                    liveness: decode_enum_column("RemoteStreamLiveness", &row, "Liveness")?,
+                });
+            }
+        }
+        if items.len() != item_ids.len() {
+            return Err(RepositoryError::Conflict(
+                "option item identity does not belong to the saved list".into(),
+            ));
+        }
+        tx.commit().await.repository()?;
+        Ok(items)
+    }
+
     async fn save_draft_options(&self, options: &AddonMediaListDraftOptions) -> Result<i32> {
         let list_json = encode_option_values(&options.list_values)?;
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        crate::addon_media_list_sync::ensure_not_publishing_tx(&mut tx, options.list_id).await?;
         let schema_binding =
             resolve_schema(&mut tx, options.list_id, options.schema.as_ref()).await?;
         validate_stored_values(schema_binding.as_ref(), &options.list_values, true)?;
@@ -326,12 +373,18 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         }
         let schema_id = schema_binding.as_ref().map(|(id, _)| *id);
 
+        let mut item_ids = BTreeSet::new();
         for item in &options.item_values {
             let Some(item_id) = item.item_id else {
                 return Err(RepositoryError::Conflict(
                     "draft item option values require a current item id".into(),
                 ));
             };
+            if !item_ids.insert(item_id) {
+                return Err(RepositoryError::Conflict(
+                    "draft item option values contain a duplicate item identity".into(),
+                ));
+            }
             let provider_id = sqlx::query_scalar::<_, String>(
                 r#"SELECT "ProviderId" FROM "AddonMediaListItem"
                    WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
@@ -575,7 +628,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         source_draft_revision: i32,
         completed_at: chrono::DateTime<chrono::Utc>,
         files: &[AddonMediaListRevisionFile],
-        artifact_ids: &[EntityId],
+        artifacts: &AddonMediaListRevisionArtifacts,
     ) -> Result<AddonMediaListRevisionSnapshot> {
         let completed_at = decode_datetime(
             "AddonMediaListRevision.CompletedAt",
@@ -590,13 +643,32 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
                 left.published_relative_path
                     .cmp(&right.published_relative_path)
             });
-            let mut expected_artifacts = artifact_ids.to_vec();
+            let mut expected_artifacts = artifacts.ids.clone();
             expected_artifacts.sort_unstable();
             expected_artifacts.dedup();
             if existing.source_draft_revision != source_draft_revision
                 || encode_datetime(existing.completed_at) != encode_datetime(completed_at)
                 || existing.files != expected_files
                 || existing.artifact_ids != expected_artifacts
+                || existing
+                    .items
+                    .iter()
+                    .filter_map(|item| {
+                        item.prepared_artifact_id
+                            .map(|id| (item.provider_id.clone(), id))
+                    })
+                    .collect::<BTreeMap<_, _>>()
+                    != artifacts.prepared_media
+                || existing
+                    .items
+                    .iter()
+                    .filter_map(|item| {
+                        item.playback_timeline
+                            .clone()
+                            .map(|plan| (item.provider_id.clone(), plan))
+                    })
+                    .collect::<BTreeMap<_, _>>()
+                    != artifacts.streaming_plans
             {
                 return Err(RepositoryError::Conflict(
                     "completed publication revision is immutable".into(),
@@ -629,9 +701,12 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
             source_draft_revision,
             completed_at,
             files,
-            artifact_ids,
+            &artifacts.ids,
         )
         .await?;
+        bind_prepared_revision_items_in_tx(&mut tx, &mut snapshot, &artifacts.prepared_media)
+            .await?;
+        bind_streaming_revision_items(&mut snapshot, &artifacts.streaming_plans)?;
         snapshot.snapshot_digest = revision_snapshot_digest(&snapshot)?;
         insert_revision_snapshot_in_tx(&mut tx, &snapshot).await?;
         tx.commit().await.repository()?;
@@ -1860,6 +1935,89 @@ pub(crate) async fn capture_current_revision_snapshot(
     })
 }
 
+fn bind_streaming_revision_items(
+    snapshot: &mut AddonMediaListRevisionSnapshot,
+    plans: &BTreeMap<String, AddonMediaListPlaybackTimelinePlan>,
+) -> Result<()> {
+    for (provider_id, plan) in plans {
+        let item = snapshot.items.iter_mut().find(|item| item.provider_id == *provider_id)
+            .filter(|item| item.published
+                && item.replacement_media_item_id.is_none()
+                && item.prepared_artifact_id.is_none()
+                && item.effective_liveness == RemoteStreamLiveness::Finite)
+            .ok_or_else(|| RepositoryError::Conflict(
+                "streaming plan must belong to a published finite item without a replacement or prepared file".into()
+            ))?;
+        item.playback_timeline = Some(plan.clone());
+    }
+    Ok(())
+}
+
+/// Bind at most one Ready processed file to each published logical item.
+async fn bind_prepared_revision_items_in_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    snapshot: &mut AddonMediaListRevisionSnapshot,
+    prepared_media: &BTreeMap<String, EntityId>,
+) -> Result<()> {
+    for (provider_id, artifact_id) in prepared_media {
+        let item = snapshot
+            .items
+            .iter_mut()
+            .find(|item| item.provider_id == *provider_id)
+            .filter(|item| {
+                item.published
+                    && item.replacement_media_item_id.is_none()
+                    && item.effective_liveness == RemoteStreamLiveness::Finite
+            })
+            .ok_or_else(|| {
+                RepositoryError::Conflict(
+                    "prepared media must belong to a published provider item".into(),
+                )
+            })?;
+        if !snapshot.artifact_ids.contains(artifact_id) {
+            return Err(RepositoryError::Conflict(
+                "prepared media requires a retained artifact pin".into(),
+            ));
+        }
+        let owned: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS (
+                   SELECT 1 FROM "AddonMediaListArtifact" AS "artifact"
+                   LEFT JOIN "AddonMediaListItem" AS "item"
+                     ON "item"."Id" = "artifact"."AddonMediaListItemId"
+                    AND "item"."AddonMediaListId" = "artifact"."AddonMediaListId"
+                   WHERE "artifact"."Id" = ? AND "artifact"."AddonMediaListId" = ?
+                     AND ("item"."ProviderId" = ? OR EXISTS (
+                         SELECT 1 FROM "AddonMediaListRevisionItem" AS "retained_item"
+                         JOIN "AddonMediaListRevision" AS "revision"
+                           ON "revision"."Id" = "retained_item"."AddonMediaListRevisionId"
+                         WHERE "revision"."AddonMediaListId" = "artifact"."AddonMediaListId"
+                           AND "retained_item"."PreparedArtifactId" = "artifact"."Id"
+                           AND "retained_item"."ProviderId" = ?
+                           AND "retained_item"."SourceUrl" IS ?
+                     )) AND "artifact"."Kind" = ?
+                     AND "artifact"."State" = ? AND "artifact"."DurationMilliseconds" > 0
+               )"#,
+        )
+        .bind(artifact_id)
+        .bind(snapshot.list_id)
+        .bind(provider_id)
+        .bind(provider_id)
+        .bind(&item.source_url)
+        .bind(encode_enum(AddonMediaListArtifactKind::ProcessedMedia))
+        .bind(encode_enum(AddonMediaListArtifactState::Ready))
+        .fetch_one(&mut **tx)
+        .await
+        .repository()?;
+        if !owned {
+            return Err(RepositoryError::Conflict(
+                "prepared media is not an admitted file owned by this item".into(),
+            ));
+        }
+        item.prepared_artifact_id = Some(*artifact_id);
+    }
+    Ok(())
+}
+
 async fn load_current_revision_items_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -1973,6 +2131,8 @@ fn decode_current_revision_item(row: &crate::db::DbRow) -> Result<AddonMediaList
         replacement_media_item_id: row.try_get("ReplacementMediaItemId").repository()?,
         replacement_media_version_id: row.try_get("ReplacementMediaVersionId").repository()?,
         published_media_item_id: row.try_get("MediaItemId").repository()?,
+        prepared_artifact_id: None,
+        playback_timeline: None,
     })
 }
 
@@ -2074,8 +2234,8 @@ async fn insert_revision_item_in_tx(
                "Availability", "AvailabilityReason", "AvailabilityReasonCode",
                "ProviderLiveness", "LivenessOverride", "EffectiveLiveness", "MetadataJson",
                "MetadataDigest", "ReplacementMediaItemId", "ReplacementMediaVersionId",
-               "PublishedMediaItemId"
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               "PublishedMediaItemId", "PreparedArtifactId", "PlaybackTimelineJson"
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(revision_id)
     .bind(&item.provider_id)
@@ -2110,6 +2270,9 @@ async fn insert_revision_item_in_tx(
     .bind(item.replacement_media_item_id)
     .bind(item.replacement_media_version_id)
     .bind(item.published_media_item_id)
+    .bind(item.prepared_artifact_id)
+    .bind(item.playback_timeline.as_ref().map(serde_json::to_string).transpose()
+        .map_err(|_| invalid_playback_timeline())?)
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -2247,6 +2410,17 @@ pub(crate) async fn load_valid_revision_snapshot_in_tx(
 }
 
 fn decode_revision_item_row(row: &crate::db::DbRow) -> Result<AddonMediaListRevisionItem> {
+    let playback_timeline = row
+        .try_get::<Option<String>, _>("PlaybackTimelineJson")
+        .repository()?
+        .map(|json| {
+            if json.len() > 65_536 {
+                return Err(invalid_playback_timeline());
+            }
+            serde_json::from_str::<AddonMediaListPlaybackTimelinePlan>(&json)
+                .map_err(|_| invalid_playback_timeline())
+        })
+        .transpose()?;
     Ok(AddonMediaListRevisionItem {
         provider_id: row.try_get("ProviderId").repository()?,
         guids: decode_string_vec(
@@ -2291,7 +2465,16 @@ fn decode_revision_item_row(row: &crate::db::DbRow) -> Result<AddonMediaListRevi
         replacement_media_item_id: row.try_get("ReplacementMediaItemId").repository()?,
         replacement_media_version_id: row.try_get("ReplacementMediaVersionId").repository()?,
         published_media_item_id: row.try_get("PublishedMediaItemId").repository()?,
+        prepared_artifact_id: row.try_get("PreparedArtifactId").repository()?,
+        playback_timeline,
     })
+}
+
+fn invalid_playback_timeline() -> RepositoryError {
+    RepositoryError::Decode {
+        kind: "add-on media-list playback timeline",
+        value: "invalid retained interval plan".into(),
+    }
 }
 
 fn decode_revision_file_blob_row(row: &crate::db::DbRow) -> Result<AddonMediaListRevisionFileBlob> {
@@ -3007,9 +3190,10 @@ fn draft_publication_item_changed(
     published: &AddonMediaListRevisionItem,
 ) -> bool {
     // Inclusion has its own compact review counters, while Published and its
-    // generated media id describe the immutable live projection rather than
-    // the saved draft. Every other retained field can change the next
-    // publication and belongs in the existing metadata bucket.
+    // generated media id and playback selections describe the immutable live
+    // projection rather than the saved draft. Draft loaders do not populate
+    // these fields; comparing them would permanently flag unchanged items.
+    // Source timing, metadata and effective options are compared separately.
     let mut current = current.clone();
     let mut published = published.clone();
     current.included = true;
@@ -3018,6 +3202,10 @@ fn draft_publication_item_changed(
     published.published = false;
     current.published_media_item_id = None;
     published.published_media_item_id = None;
+    current.prepared_artifact_id = None;
+    published.prepared_artifact_id = None;
+    current.playback_timeline = None;
+    published.playback_timeline = None;
     current != published
 }
 

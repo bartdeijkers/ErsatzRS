@@ -2955,8 +2955,59 @@ async fn configure_verifiable_tv_publication(pool: &SqlitePool, repositories: &R
 }
 
 async fn prepare_verifiable_tv_publication() -> VerifiablePublication {
+    prepare_verifiable_tv_publication_with_nested_streams(false).await
+}
+
+#[allow(clippy::too_many_lines)] // Keep the optional scanner layout and sealed candidate setup together.
+async fn prepare_verifiable_tv_publication_with_nested_streams(
+    nested_streams: bool,
+) -> VerifiablePublication {
     let pool = common::test_db().await;
     let directory = seed_managed_list(&pool).await;
+    if nested_streams {
+        // The real playlist scanner writes stream definitions, NFOs and item
+        // artwork under the manifest's `folder: streams`, not beside the manifest.
+        let streams = directory.path().join("streams");
+        fs::create_dir(&streams).expect("create scanner-style stream directory");
+        for entry in fs::read_dir(directory.path()).expect("list seeded stream files") {
+            let entry = entry.expect("read seeded stream entry");
+            if entry
+                .file_type()
+                .expect("read fixture entry type")
+                .is_file()
+            {
+                fs::rename(entry.path(), streams.join(entry.file_name()))
+                    .expect("move seeded stream file into scanner directory");
+            }
+        }
+        let files: Vec<(i64, String)> =
+            sqlx::query_as(r#"SELECT "Id", "Path" FROM "MediaFile" ORDER BY "Id""#)
+                .fetch_all(&pool)
+                .await
+                .expect("load scanner fixture media paths");
+        for (id, path) in files {
+            let path = streams.join(Path::new(&path).file_name().expect("stream file name"));
+            sqlx::query(r#"UPDATE "MediaFile" SET "Path" = ? WHERE "Id" = ?"#)
+                .bind(path.to_string_lossy().as_ref())
+                .bind(id)
+                .execute(&pool)
+                .await
+                .expect("record scanner-style media path");
+        }
+        sqlx::query(
+            r#"UPDATE "AddonMediaListLibrary" SET "ManifestPath" = ? WHERE "AddonMediaListId" = 1"#,
+        )
+        .bind(
+            directory
+                .path()
+                .join("list.playlist.yml")
+                .to_string_lossy()
+                .as_ref(),
+        )
+        .execute(&pool)
+        .await
+        .expect("record manifest beside its streams directory");
+    }
     let repositories = make_repositories(pool.clone());
     configure_verifiable_tv_publication(&pool, &repositories).await;
     let saved_revision = scalar::<i32>(
@@ -3586,6 +3637,88 @@ async fn candidate_verification_accepts_complete_item_scoped_materializations() 
 }
 
 #[tokio::test]
+async fn candidate_verification_accepts_nested_stream_artwork_paths() {
+    let fixture = prepare_verifiable_tv_publication_with_nested_streams(true).await;
+    let files: Vec<String> = sqlx::query_scalar(
+        r#"SELECT "FileName" FROM "AddonMediaListArtworkMaterialization"
+           WHERE "AddonMediaListId" = 1 ORDER BY "ScopeItemId""#,
+    )
+    .fetch_all(&fixture.pool)
+    .await
+    .expect("load parent and item materialization file names");
+    assert_eq!(files.len(), 2);
+    for file in files {
+        assert!(fixture
+            .directory
+            .path()
+            .join("streams")
+            .join(&file)
+            .is_file());
+        assert!(!fixture.directory.path().join(file).exists());
+    }
+    verify_publication_candidate(&fixture)
+        .await
+        .expect("scanner-style nested parent and item artwork must converge");
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_artwork_owner_outside_managed_root() {
+    let fixture = prepare_verifiable_tv_publication_with_nested_streams(true).await;
+    let outside = tempfile::tempdir().expect("outside artwork directory");
+    // Matching bytes exist both inside and outside the sealed tree. Only the
+    // database owner path changes, so this tests containment rather than a
+    // missing-file or sealed-tree-digest failure.
+    let files: Vec<String> = sqlx::query_scalar(
+        r#"SELECT "FileName" FROM "AddonMediaListArtworkMaterialization"
+           WHERE "AddonMediaListId" = 1"#,
+    )
+    .fetch_all(&fixture.pool)
+    .await
+    .expect("load materialization file names");
+    for file in files {
+        fs::copy(
+            fixture.directory.path().join("streams").join(&file),
+            outside.path().join(file),
+        )
+        .expect("copy matching artwork outside the managed root");
+    }
+    sqlx::query(
+        r#"UPDATE "MediaFile" SET "Path" = ?
+           WHERE "MediaVersionId" IN (
+               SELECT "Id" FROM "MediaVersion" WHERE "RemoteStreamId" = 110
+           )"#,
+    )
+    .bind(
+        outside
+            .path()
+            .join("S01E01.strm")
+            .to_string_lossy()
+            .as_ref(),
+    )
+    .execute(&fixture.pool)
+    .await
+    .expect("move only the materialization owner path outside the managed root");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("matching artwork outside the publication must not verify");
+    assert!(error.to_string().contains("convergence verification"));
+}
+
+#[tokio::test]
+async fn candidate_verification_rejects_modified_nested_artwork_bytes() {
+    let fixture = prepare_verifiable_tv_publication_with_nested_streams(true).await;
+    fs::write(
+        fixture.directory.path().join("streams").join("S01E01.jpg"),
+        b"modified artwork bytes",
+    )
+    .expect("modify only nested item artwork bytes");
+    let error = verify_publication_candidate(&fixture)
+        .await
+        .expect_err("modified nested artwork must not verify");
+    assert!(error.to_string().contains("publication tree"));
+}
+
+#[tokio::test]
 async fn candidate_verification_accepts_a_file_valued_manifest_path() {
     let fixture = prepare_verifiable_tv_publication().await;
     sqlx::query(
@@ -3609,7 +3742,7 @@ async fn candidate_verification_accepts_a_file_valued_manifest_path() {
 
 #[tokio::test]
 async fn candidate_verification_rejects_materialization_hash_not_matching_sealed_bytes() {
-    let fixture = prepare_verifiable_tv_publication().await;
+    let fixture = prepare_verifiable_tv_publication_with_nested_streams(true).await;
     let fake_sha = "0000000000000000000000000000000000000000000000000000000000000000";
     sqlx::query(
         r#"UPDATE "AddonMediaListArtworkMaterialization" SET "Sha256" = ?
@@ -3807,19 +3940,14 @@ async fn candidate_verification_rejects_missing_expected_artwork_materialization
 
 #[tokio::test]
 async fn candidate_verification_rejects_a_missing_materialized_artwork_file() {
-    let fixture = prepare_verifiable_tv_publication().await;
-    let managed_root = scalar::<String>(
-        &fixture.pool,
-        r#"SELECT "ManifestPath" FROM "AddonMediaListLibrary" WHERE "AddonMediaListId" = 1"#,
-    )
-    .await;
+    let fixture = prepare_verifiable_tv_publication_with_nested_streams(true).await;
     let file_name = scalar::<String>(
         &fixture.pool,
         r#"SELECT "FileName" FROM "AddonMediaListArtworkMaterialization"
            WHERE "AddonMediaListId" = 1 AND "ScopeItemId" = 0"#,
     )
     .await;
-    fs::remove_file(Path::new(&managed_root).join(file_name))
+    fs::remove_file(fixture.directory.path().join("streams").join(file_name))
         .expect("remove materialized parent artwork file");
     let error = verify_publication_candidate(&fixture)
         .await

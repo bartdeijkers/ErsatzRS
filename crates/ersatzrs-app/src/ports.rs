@@ -525,6 +525,28 @@ pub struct AddonSettingEdit {
     pub reference: Option<String>,
 }
 
+/// Durable access-check state without provider diagnostics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AddonItemAccessState {
+    Queued,
+    Running,
+    Waiting,
+    Complete,
+    Failed,
+    Cancelled,
+    Stale,
+}
+
+/// Redacted access evidence for one saved item context.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonItemAccessRead {
+    pub job_id: i64,
+    pub state: AddonItemAccessState,
+    pub outcome: Option<ersatzrs_addon_contract::MediaListAccessCheckOutcome>,
+    pub next_eligible_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
 /// Failure from the native add-on lifecycle adapter.
 #[derive(Debug, thiserror::Error)]
 #[error("{message}")]
@@ -571,6 +593,52 @@ impl SourceAddonRouting {
 /// Local source, package, configuration, and process lifecycle operations.
 #[async_trait]
 pub trait AddonRuntime: Send + Sync {
+    /// Whether the enabled package provides access checking and runtime identity.
+    async fn supports_media_list_access_check(
+        &self,
+        _addon_id: &str,
+    ) -> Result<bool, AddonRuntimeError> {
+        Ok(false)
+    }
+
+    /// Queue a durable access check using the exact saved draft revision.
+    async fn queue_media_list_access_check(
+        &self,
+        _list_id: i64,
+        _item_id: i64,
+        _expected_revision: i32,
+    ) -> Result<i64, AddonRuntimeError> {
+        Err(AddonRuntimeError::new("item access checks are unavailable"))
+    }
+
+    /// Read current typed access evidence; unsupported adapters have no evidence.
+    async fn media_list_access_check(
+        &self,
+        _list_id: i64,
+        _item_id: i64,
+    ) -> Result<Option<AddonItemAccessRead>, AddonRuntimeError> {
+        Ok(None)
+    }
+
+    /// Cancel only the explicitly owned item job.
+    async fn cancel_media_list_access_check(
+        &self,
+        _list_id: i64,
+        _item_id: i64,
+        _job_id: i64,
+    ) -> Result<(), AddonRuntimeError> {
+        Err(AddonRuntimeError::new("item access checks are unavailable"))
+    }
+
+    /// Read the installed package's validated option declaration without activating it.
+    async fn media_list_option_schema(
+        &self,
+        _addon_id: &str,
+    ) -> Result<Option<ersatzrs_core::repositories::AddonMediaListOptionSchema>, AddonRuntimeError>
+    {
+        Ok(None)
+    }
+
     async fn overview(&self) -> Result<AddonOverviewRead, AddonRuntimeError>;
     async fn installed_icon(
         &self,
