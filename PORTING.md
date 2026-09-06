@@ -39,7 +39,7 @@ maintainer's local filesystem layout leaks into committed files.
 7. Add tests at the narrowest useful level.
 8. Add `insta` snapshots for generated FFmpeg argv, filter graphs, YAML
    scheduling output, and generated SVG/drawvg fragments.
-9. Update the parity matrix.
+9. Update the owning structured parity record when its status or debt changes.
 10. Add an ADR if behavior deliberately diverges from ErsatzTV.
 
 ## No-Stopgap Parity Gate
@@ -57,38 +57,29 @@ Parity is not complete until the implementation proves these items:
   hydration is not guaranteed.
 - Detail/list route behavior and SSR fallback links work without relying on a
   hidden hydrated-only path.
-- The parity matrix, `STATUS.md`, `TEST.md`, and any active plan file are in
-  sync with the actual route/runtime state.
+- Structured parity, route and hydration records reflect the actual state.
+  Keep milestone acceptance and detailed current evidence in the owning record;
+  other documents link or summarize briefly and change only when their own
+  facts change. Follow `skills/update-parity.md`.
 
-Use a visible `ParityDebt` section for anything incomplete:
+Record incomplete behavior as visible debt in the owning
+`docs/progress/parity/<slug>.toml`, following `skills/update-parity.md`;
+link to it from plans instead of maintaining a second debt report. A feature
+with required behavior still outstanding must stay below `Ported`. This does
+not prevent an authorized engineering checkpoint; see
+[CONTRIBUTING.md](CONTRIBUTING.md#delivery-claims).
 
-```md
-## ParityDebt
+## Parity verification
 
-- Behavior:
-  - Status: blocked by missing schema/data | intentionally divergent | next-slice required
-  - Evidence:
-  - Owner/follow-up:
-  - ADR/deviation link:
-```
+Use focused checks during implementation, guided by `skills/rust-inner-loop.md`.
+Run `cargo xtask parity-check web` before claiming admin UI parity complete,
+and repeat it when relevant changes invalidate its evidence. Preserve all
+agreed acceptance requirements.
 
-A feature with `next-slice required` debt must stay below `Ported` in the
-parity matrix.
-
-## Fast Parity Gate
-
-For admin/media slices, use the fast gate ladder before wider workspace gates:
-
-```bash
-cargo xtask parity-check web
-```
-
-The command runs formatting, hydration lint, focused web tests, and focused web
-clippy. Add more scopes for the command log when useful:
-
-```bash
-cargo xtask parity-check web media
-```
+The gate includes progress, formatting, architecture and hydration checks, web
+tests and web Clippy. Scope labels such as `web media` do not narrow the
+executed checks. Treat `affected-checks` output as recommendations, not a
+requirement to repeat the gate during every iteration.
 
 ## C# to Rust Mapping
 

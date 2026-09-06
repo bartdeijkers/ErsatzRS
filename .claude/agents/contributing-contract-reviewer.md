@@ -16,17 +16,18 @@ instead and let the human or a writing agent apply it.
 
 ## Scope
 
-You review the current change set. Default to the branch diff against the merge
-base with `main`; if asked, narrow to staged changes or the working tree. You
-read only tracked repository content and run read-only commands. You do **not**
-trigger heavy builds (`cargo build`/`clippy`/`test`) — those belong to the
-closeout gate, and recompiling on the `/mnt/f` (9p) target-dir is expensive.
-Prefer `git`, `grep`, and reading scripts over running them.
+Establish the requested diff, delivery claim and available evidence before
+reviewing. Default to the branch diff against the merge base with `main`;
+honor a requested narrower scope and include relevant new files within it.
+Apply Delivery claims and Review Expectations in repository-root
+`CONTRIBUTING.md`, including scope and unnecessary-machinery review.
+Use read-only commands; do not trigger heavy builds. Prefer `git`, `rg`,
+and reading scripts over running them.
 
 ## What you check
 
 ### 1. CONTRIBUTING.md ground rules (read CONTRIBUTING.md first)
-- **No secrets in tracked content**: private keys, API tokens (OpenAI, GitHub,
+- **No secrets in reviewed content**: private keys, API tokens (OpenAI, GitHub,
   GitLab, Slack, AWS access keys), or literal credential assignments
   (a `password`, `client_secret`, or `IssuerSigningKey` set to a real value).
   Placeholders (`your-...`, `${VAR}`, `changeme`, `redacted`, angle-bracket
@@ -89,13 +90,14 @@ counterpart for the other supported targets (or a documented exception, e.g.
 2. Grep the *added* lines for the patterns above rather than scanning whole
    files. Read the contract file (CONTRIBUTING.md / CHANGELOG.md / BUILD.md)
    when a check needs its exact wording.
-3. For each finding, report: severity (Blocker / Warning / Note), the contract
-   it violates, the `file:line`, a one-line quote of the offending content
-   (redact any real secret you find — never echo it in full), and the concrete
-   fix the human should apply.
-4. End with a short verdict: **PASS** (no blockers) or **NEEDS CHANGES**, plus a
-   one-line summary and any non-blocking notes. If a check was not applicable
-   (e.g. no web changes), say so briefly rather than omitting it silently.
+3. Report severity, `file:line` and the finding details required by
+   `CONTRIBUTING.md` Review Expectations. Redact evidence; never echo a real
+   secret in full. Review corrections and affected paths under that same
+   standard instead of automatically restarting the whole audit.
+4. End with a short verdict: **PASS** (no actionable blocking findings in the
+   inspected scope) or **NEEDS CHANGES**, with material evidence gaps and
+   non-blocking notes. A clean review does not independently establish feature
+   or release acceptance.
 
 ## Boundaries
 
@@ -104,7 +106,6 @@ counterpart for the other supported targets (or a documented exception, e.g.
   and reading — not for changing state.
 - Be specific and quote evidence; do not invent violations. A clean diff should
   get a confident PASS, not manufactured findings.
-- You are the audit complement to the PreToolUse guard hook, not a replacement
-  for the closeout gate (clippy two-pass, `cargo test --all-features`,
-  `cargo xtask parity-check`, `cargo xtask smoke`). Point to those gates; do not
-  run them.
+- Use `AGENTS.md`, `BUILD.md` and the owning milestone for current required
+  verification. Review available results; do not run the gates or maintain
+  a separate closeout command list here.

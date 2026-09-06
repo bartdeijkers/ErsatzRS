@@ -25,6 +25,20 @@ relevant ones before starting non-trivial work:
 - **[plans/INDEX.md](plans/INDEX.md)** for locked decisions, the contract
   index, and deferred work.
 
+## Delivery accountability
+  
+ErsatzRS exists to deliver dependable, personally meaningful television. Prefer complete, maintainable viewing experiences over expanding implementation scope.
+  
+- Before implementation, identify the active milestone, user-visible outcome, explicit exclusions and required acceptance evidence.
+- Do not add, remove or weaken acceptance requirements without maintainer approval. Necessary implementation details do not require repeated approval.
+- Every substantial change must support an accepted requirement, correct a demonstrated defect, or preserve an existing safety invariant.
+- Prefer existing repository and dependency capabilities. New infrastructure requires a demonstrated gap and the smallest justified solution.
+- Keep work reviewable through coherent engineering checkpoints. A checkpoint commit does not imply milestone completion.
+- Review findings must identify the affected behavior, credible failure path, impact and smallest correction. Speculative improvements are not automatically blockers.
+- Reuse valid evidence. Repeat checks when relevant code, inputs or assumptions change—not simply to obtain another green result.
+- If repeated work produces no new evidence, identify the failed hypothesis and change the approach. Do not silently expand the task.
+- Report what is proven, what remains unproven, and the next concrete action. Activity alone is not completion.
+
 ## Supported Platforms
 
 ErsatzRS targets the same set of platforms as ErsatzTV. All six must build and run correctly:
@@ -382,7 +396,23 @@ This is primarily a porting project, not greenfield design. When implementing a 
 
 ## Session Handoff
 
-When ending a work session, update the progress index in `docs/progress/`:
+Report at meaningful checkpoints: coherent delivery, a material blocker, a
+proposed scope change, or session handoff. Distinguish partial progress from
+verified acceptance using the delivery claims in
+[CONTRIBUTING.md](CONTRIBUTING.md#delivery-claims):
+
+```text
+Delivered:
+Evidence:
+Remaining blocker:
+Scope change: none / proposed change
+```
+
+Name the next concrete action under Remaining blocker when work remains.
+Reference canonical evidence rather than repeating its detailed history.
+Do not create a report file per turn.
+
+When handing off a work session, use the existing progress mechanism:
 
 1. Record the session:
    `cargo xtask progress add-session --agent "<name>" --summary "<one line>"`
@@ -391,5 +421,7 @@ When ending a work session, update the progress index in `docs/progress/`:
    (status/summary/ADR) — see the `update-parity` skill.
 3. If a phase checklist item, TODO, focus, or remaining work changed, update
    `docs/progress/phase.toml` (note unfinished work under `next_steps`).
-4. Validate with `cargo xtask progress check`, then commit with
-   `docs(status): update session log`.
+4. Validate changed progress records with `cargo xtask progress check`.
+   Include handoff updates in an authorized coherent commit; a separate
+   status-only commit is not required. Recording a handoff does not authorize
+   committing.

@@ -9,6 +9,26 @@ Parity is tracked as one file per feature under `docs/progress/parity/`. The
 old monolithic `docs/reference/parity-matrix.md` table is now a stub; do not
 edit it for parity data.
 
+## Milestone agreement and evidence
+
+Use the existing milestone record:
+
+- `title`: the viewer or operator outcome.
+- `acceptance`: concise scope and exclusions, followed by observable success
+  conditions and any mandated proof method.
+- `evidence`: current results mapped to those conditions, with references,
+  relevant revision/environment, failures and remaining gaps.
+- `plan`: implementation sequence and unresolved decisions; link to acceptance
+  and evidence rather than copying them.
+
+Detailed current milestone evidence belongs in that milestone's `evidence`.
+Parity files retain feature status and owning debt; debt entries link to
+milestone evidence where shared. Sessions summarize checkpoints. ADRs own
+decisions. Other documents link or summarize briefly.
+
+Apply this convention prospectively. Do not migrate historical records or
+change agreed acceptance merely to fit the format.
+
 ## Workflow
 
 1. Find the feature file: `cargo xtask progress parity` lists slugs, or look in
@@ -49,15 +69,18 @@ When runtime evidence disproves a completed claim:
 3. If a linked ADR begins its Implementation section with `Implemented`, change
    that implementation token to `Partial` and explain the reopened gap. Do not
    change an accepted decision's Status unless the decision itself changed.
-4. Add an open milestone with measurable acceptance and a live plan. Put
-   release-critical corrective work in `phase.toml` next steps.
-5. Update `[Unreleased]`, prepend a session entry, and run
-   `cargo xtask progress check`.
+4. Reuse the owning milestone and live plan when they cover the correction.
+   Reopen a completed milestone if its acceptance is disproven, and retain or
+   restore a live plan for it. Add a new milestone only for separately agreed
+   delivery scope; a missing plan does not require a new milestone.
+   Put release-critical corrective work in `phase.toml` next steps.
+5. Update `[Unreleased]` and run `cargo xtask progress check`. Use the
+   existing Session Handoff mechanism in `AGENTS.md` at handoff.
 
 When closing the regression, record the resolution and concrete test/runtime
-evidence, complete the milestone, restore `Ported`/`Implemented` only when no
-linked debt remains, and prune a plan only after its substance is preserved in
-structured progress.
+evidence. Complete the owning milestone only when all its acceptance is proven;
+restore `Ported`/`Implemented` only when no linked debt remains. Prune a plan
+only after its substance is preserved in structured progress.
 
 ## Rule
 

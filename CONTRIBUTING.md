@@ -62,6 +62,25 @@ only for doctests. CI remains on its existing direct Cargo test selection.
    `cargo xtask progress check`.
 6. Add an ADR when required by [docs/adr/0001-record-architecture-decisions.md](docs/adr/0001-record-architecture-decisions.md).
 
+## Delivery claims
+
+An engineering checkpoint is coherent, reviewed work with verification
+appropriate to its changed behavior. It may be committed when authorized
+while feature acceptance remains open.
+
+Feature acceptance means every agreed user-visible requirement is proven by
+the required evidence. Release acceptance means the integrated candidate
+passes its required release gates.
+
+Identify which claim is being made. Reuse applicable evidence when the relevant
+code, inputs and assumptions remain unchanged; identify its tested revision or
+artifact where relevant. Record unmet requirements without treating them as
+passed. A checkpoint does not waive feature, PR or release gates.
+
+Use the milestone-field convention in `skills/update-parity.md` for canonical
+acceptance and evidence, and the Session Handoff format in
+[AGENTS.md](AGENTS.md#session-handoff) for checkpoint reports.
+
 ## Commit Messages
 
 Use Conventional Commits:
@@ -120,7 +139,8 @@ explicitly in the relevant changelog entry.
 - Tests were added or the absence of tests is explained.
 - Snapshots were reviewed when generated output changed.
 - `cargo fmt`, `cargo clippy`, `./run.sh test-closeout`, and `cargo deny check`
-  were run.
+  have applicable passing results linked; reuse still-valid results rather than
+  rerunning them to prepare this checklist. Identify any outstanding gate.
 - `CHANGELOG.md` was updated.
 - `docs/progress/` parity files were updated for ported behavior.
 - An ADR is linked when the change affects architecture or deviates from
@@ -128,6 +148,17 @@ explicitly in the relevant changelog entry.
 
 ## Review Expectations
 
-Reviews prioritize correctness, maintainability, parity risk, test coverage, and
-operational safety. Style feedback should point to an existing contract or be
-converted into one if it will matter again.
+Review accepted behavior, credible regressions and safety risks, unnecessary
+machinery, and whether the evidence supports the completion claim.
+
+Each blocking finding identifies the affected requirement or invariant, a
+reproduction or credible failure path, user or operational impact, and the
+smallest necessary correction.
+
+Distinguish demonstrated defects from speculative improvements. Reject proposed
+fixes that lack a supported problem or introduce unnecessary scope or machinery;
+explain why. Style feedback should cite an existing contract.
+
+After corrections, review the fixes and affected paths. Reopen settled areas
+when new evidence or changed assumptions warrant it. Continue until actionable
+serious defects are resolved; a fixed review count is not a completion rule.

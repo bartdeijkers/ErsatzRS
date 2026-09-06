@@ -7,7 +7,7 @@ description: Select and run the cheapest faithful ErsatzRS Rust edit loop. Use w
 
 ## Select the loop
 
-1. Read the inner-loop section of [BUILD.md](../BUILD.md).
+1. Read the inner-loop section of repository-root `BUILD.md`.
 2. Run `cargo xtask affected-checks` for the working tree, or pass explicit
    repository-relative paths when the intended slice is narrower.
 3. Inspect `.cargo/config.toml` and `CARGO_TARGET_DIR`. Use the configured target
@@ -30,13 +30,17 @@ because a build is slow; use `cargo xtask target-size` and the documented
 
 - Add consumer-crate checks when a public type, feature, serialized contract,
   SQL shape, or crate boundary changed.
-- Add hydration, migration, playback, or architecture gates when
-  `affected-checks` identifies that surface.
+- Use `affected-checks` to identify hydration, migration, playback or architecture
+  surfaces. Select checks appropriate to the changed behavior; its printed
+  recommendations do not require repeated broad gates during iteration.
 - Suspect the stale-binary trap when runtime behavior disagrees with source:
   identify the executable under the configured target/package before debugging
   code further.
-- Run the workspace Clippy configuration, `test-closeout`, Leptos/parity gates, and
-  other broad milestone requirements once after the focused loop is green.
+- Select broad verification from the delivery claim in `CONTRIBUTING.md` and its
+  existing requirements. A passing focused loop does not itself require every
+  broad gate. Reuse valid results and run outstanding required gates before
+  claiming the corresponding acceptance.
 
-Report the selected Cargo graph, focused commands and outcomes, and the broad
-gates still due. Never describe an unrun closeout gate as passed.
+Use the Session Handoff format in `AGENTS.md`; reference the selected Cargo graph
+and results in canonical evidence, and identify required gates still due.
+Never describe an unrun closeout gate as passed.

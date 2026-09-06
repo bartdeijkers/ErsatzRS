@@ -60,49 +60,18 @@ For large ports, add a concise top-level Rust comment or module doc mapping the
 main sections of the Rust file back to the ErsatzTV source files. Do not paste
 large source excerpts.
 
-## Slice Scaffold
+## Slice agreement
 
-Start new parity plans or status notes with this scaffold:
-
-```md
-# <Feature> Parity Slice
-
-## Source Map
-
-- ErsatzTV UI/pages:
-- ErsatzTV components/view models:
-- ErsatzTV validators:
-- ErsatzTV handlers/services:
-- ErsatzTV repository/query paths:
-- Side effects:
-- ErsatzRS target modules:
-- Intentional deviations:
-
-## Acceptance
-
-- [ ] UI fields/actions/routes/back-links match ErsatzTV.
-- [ ] Validation and error surfaces match ErsatzTV.
-- [ ] Persistence and side effects match ErsatzTV.
-- [ ] Critical save/action paths have SSR or browser-safe fallback.
-- [ ] UI layout has screenshot/bounding-box evidence against ErsatzTV or an
-      attached reference screenshot when this is an admin UI route.
-- [ ] Repeated defect classes have reusable tests or playbook coverage.
-- [ ] Parity docs, status, and active plan files are updated.
-
-## ParityDebt
-
-- None.
-
-## Verification
-
-- [ ] `cargo xtask parity-check web`
-- [ ] Focused repository/app/scanner tests, when non-web behavior changed.
-- [ ] Browser smoke for hydrated or fallback UI.
-```
+Use the existing milestone's acceptance and evidence, following the field
+convention in `skills/update-parity.md`. Keep implementation sequence in the
+linked live plan and source maps there when needed; reuse existing maps and
+update them when the mapped behavior changes. Do not copy acceptance or
+detailed current evidence into another status report.
 
 For large admin pages, split commits around natural boundaries: data/server
 functions, list page, editor/detail page, actions and side effects, then
-hydration/browser verification.
+hydration/browser verification. Apply the delivery claims in `CONTRIBUTING.md`;
+a checkpoint does not declare full feature acceptance.
 
 ## Implementation Rules
 
@@ -119,25 +88,9 @@ hydration/browser verification.
 5. For admin UI layout, prefer existing ErsatzRS primitives and CSS-module
    patterns, but preserve ErsatzTV's visible geometry unless a documented
    project-level design decision says otherwise.
-6. Do not hide incomplete behavior in prose. Add a visible `ParityDebt`
-   section to the plan/status note when anything remains.
-
-## ParityDebt
-
-Use this shape for any behavior that cannot land in the slice:
-
-```md
-## ParityDebt
-
-- Behavior:
-  - Status: blocked by missing schema/data | intentionally divergent | next-slice required
-  - Evidence:
-  - Owner/follow-up:
-  - ADR/deviation link:
-```
-
-Parity cannot be claimed while `ParityDebt` contains a `next-slice required`
-item for the page or feature under review.
+6. Record incomplete behavior in the owning structured parity debt, following
+   `skills/update-parity.md`; link to that record from the plan. Parity cannot
+   be claimed while required behavior for the page or feature remains open.
 
 ## No-Stopgap Acceptance
 
@@ -162,22 +115,18 @@ evidence:
 - Repeated historical defect class has a reusable regression test or playbook:
   card action menus, hydrated islands attaching, SSR links/fallback modals, or
   post-add/remove/edit side effects.
-- The feature's `docs/progress/parity/<slug>.toml` (plus `routes.toml` /
-  `hydration.toml` / `phase.toml` as relevant), `TEST.md`, and any active
-  `/plans` file are updated when their status changed, and
-  `cargo xtask progress check` passes.
+- Structured progress reflects the actual state and
+  `cargo xtask progress check` passes. Follow `skills/update-parity.md` for
+  canonical milestone evidence and debt. Update `TEST.md` or a plan only when
+  its own testing guidance or intended work changes.
 
-## Fast Gate Ladder
+## Verification
 
-Use the narrow ladder while iterating:
-
-```bash
-cargo xtask parity-check web
-```
-
-Add scopes as useful (`media`, `scanner`, `infra`, etc.) for the final command
-log even when they only document intent. Use full workspace gates only at the
-end or when the slice changes shared behavior.
+Use focused checks during implementation, guided by `skills/rust-inner-loop.md`.
+Run the required web parity gate before claiming admin UI parity complete, and
+repeat it when relevant changes invalidate its evidence, as described in
+`PORTING.md` under Parity verification. Scope labels do not narrow the gate.
+Preserve all agreed acceptance requirements.
 
 ## Visual Browser Loop
 
@@ -196,18 +145,10 @@ For admin UI routes, run this before claiming parity:
    wrong dividers, and pager/action alignment.
 5. Use browser snapshots, bounding boxes, or computed styles to prove or debug
    mismatches. CSS changes are not proven until the running page reflects them.
-6. Add remaining mismatch as `ParityDebt`; do not report UI parity complete.
+6. Record remaining mismatches in the owning parity debt; do not report UI
+   parity complete.
 
-## Final Report
+## Checkpoint report
 
-Report:
-
-```text
-Source map
-Visual source map, for UI routes
-Parity behavior implemented
-ParityDebt
-Verification run
-Full gates left, if any
-Changed files
-```
+Use the Session Handoff format in `AGENTS.md`. Link to source maps, canonical
+milestone evidence and owning parity debt instead of repeating them.
