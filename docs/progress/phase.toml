@@ -78,8 +78,15 @@ exactly the two download E2Es to M-01B, whose acceptance requires re-enablement;
 streaming gates and lower-level preparation tests remain active. The Firefox
 test now waits for hydration and passes against the preserved matched UI build
 (test-results/ci-m01a-firefox-save/playwright-results.json). No remaining P1/P2
-was found in independent Astra review. Next: push this reviewed correction,
-then require terminal green CI for that exact SHA before M-01B.
+was found in independent Astra review. Correction b3625b1a is pushed. CI
+34126397059 passes Clippy and all active browser tests (302 passed, 28 skipped,
+including the two approved M-01B deferrals). The Test job passes all web unit
+tests but finds the same absent-journal fixture defect in the production scan
+continuity integration test. That fixture now supplies the required journal;
+production behavior and continuity assertions are unchanged. Independent Astra
+review finds no P1/P2. The repaired integration test and all 50 xtask tests pass
+in the focused nextest run. Next: push the correction, then require terminal
+green CI for that exact SHA before M-01B.
 Its options, frozen publication, metadata-only intervals,
 real scheduled MPEG-TS/HLS cut continuity and bounded cancellation are verified
 in the owning milestone. The approved startup policy retains a ten-second

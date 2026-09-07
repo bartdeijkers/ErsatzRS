@@ -431,11 +431,19 @@ async fn seed_managed_library(
         .execute(pool)
         .await
         .expect("seed Local library path");
+    // Staging requires a journal even when the publication has no playback
+    // selections; an absent journal is not a valid staged fixture.
+    let publication_journal = serde_json::json!({
+        "previous_review_state": ersatzrs_domain::AddonMediaListReviewState::Ready,
+        "previous_presentation_kind": ersatzrs_domain::AddonMediaListPresentationKind::RemoteStreams,
+        "previous_items": [],
+        "previous_playlist": null
+    });
     sqlx::query(
         r#"INSERT INTO "AddonMediaList" (
                "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ItemCount",
-               "ReviewState", "PublishedRevision"
-           ) VALUES (?, ?, ?, ?, ?, ?, 3, 1)"#,
+               "ReviewState", "PublishedRevision", "PublicationJournalJson"
+           ) VALUES (?, ?, ?, ?, ?, ?, 3, 1, ?)"#,
     )
     .bind(list_id)
     .bind(ADDON_ID)
@@ -443,6 +451,7 @@ async fn seed_managed_library(
     .bind(format!("https://example.invalid/{list_provider_id}"))
     .bind(name)
     .bind(i32::try_from(item_provider_ids.len()).expect("small fixture item count"))
+    .bind(publication_journal.to_string())
     .execute(pool)
     .await
     .expect("seed staged add-on media list");
