@@ -65,9 +65,9 @@ videos stream; enabled SponsorBlock applies in every mode. M-02 and AMM-N await.
 id          = 'preparation-worker-wait-closes-liveness'
 description = 'Keep the download-ahead preparation worker alive until host shutdown instead of closing its liveness pipe when awaiting exit.'
 discovered  = '2026-09-06'
-resolved    = false
+resolved    = true
 adr         = '0086'
-evidence    = 'A fresh isolated native-transfer host records an Idle preparation checkpoint and worker-unavailable=true immediately after startup. Astra review confirms that locked Tokio 1.53.1 Child::wait closes child.stdin; supervise_command leaves the liveness writer in that field while selecting wait, so the worker receives EOF and exits. Metadata-only interval discovery and publication still succeed in the independent host coordinator. Fix the deferred M-01B supervisor by retaining stdin separately until shutdown, and prove idle survival followed by cancellation-driven EOF and clean drain without an unavailable health flag.'
+evidence    = 'CI 34116601910 reproduces missing preparation-worker startup and publication completion. Locked Tokio 1.53.1 source and documented Child::wait behavior confirm premature stdin closure. The supervisor now owns the writer separately until shutdown. The real-child worker_stdin_liveness_survives_exit_polling_until_shutdown regression proves idle survival followed by cancellation-driven EOF, awaited drain and no unavailable health flag. All 29 focused contract, prepared-input, checkpoint, HLS and startup-cancellation tests pass with bounded nextest concurrency; workspace Clippy and independent Astra P1/P2 review pass. Exact-push browser restart/publication verification remains due in CI; this correction does not complete M-01B.'
 
 [[debt]]
 id          = 'retained-ts-inner-failure-concealed-by-concat'

@@ -180,6 +180,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep the add-on preparation worker alive while the host monitors its exit;
+  release its liveness pipe only on shutdown so queued preparation can run.
+
 - Add-on list publication verifies artwork in its owning media folder, including
   nested playlist folders, while retaining managed-folder and content-hash checks.
 - Saved add-on lists with provider-supplied person ordering or thumbnails no

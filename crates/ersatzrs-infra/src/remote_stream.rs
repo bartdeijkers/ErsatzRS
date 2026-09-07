@@ -1365,7 +1365,7 @@ async fn run_remote_stream_producer(
         }
     };
     if let Some(prepared) = &prepared {
-        let failed = !status.as_ref().is_ok_and(|status| status.success()) && !cancelled;
+        let failed = !status.as_ref().is_ok_and(ExitStatus::success) && !cancelled;
         prepared.result.store(
             if failed { 2 } else { 1 },
             std::sync::atomic::Ordering::Release,

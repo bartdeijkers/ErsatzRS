@@ -1247,18 +1247,17 @@ impl HlsSessionWorker {
                             deadline
                         }
                     };
-                    match self
-                        .prepare_interval_playback(
-                            &pool,
-                            source,
-                            start_position,
-                            playback_frame_size(&playback_profile).height,
-                            deadline,
-                            active_transcode_slot_id,
-                            idle_timeout,
-                            watch_idle_timeout,
-                        )
-                        .await
+                    match Box::pin(self.prepare_interval_playback(
+                        &pool,
+                        source,
+                        start_position,
+                        playback_frame_size(&playback_profile).height,
+                        deadline,
+                        active_transcode_slot_id,
+                        idle_timeout,
+                        watch_idle_timeout,
+                    ))
+                    .await
                     {
                         Ok(Some(prepared)) => Some(prepared),
                         Ok(None) => {
@@ -1892,7 +1891,11 @@ impl HlsSessionWorker {
                 graphics_overlays,
                 HlsDiscontinuity::from(discontinuity),
                 Some(opacity_clock),
-                interval_playback.is_some(),
+                if interval_playback.is_some() {
+                    HlsInputTimeline::RetainedIntervals
+                } else {
+                    HlsInputTimeline::Original
+                },
             );
             let retained_failure = Arc::new(std::sync::Mutex::new(RetainedHlsFailure::default()));
             let (outcome, selected_graph_for_denial) = match command {
@@ -3515,8 +3518,14 @@ fn build_hls_command_with_explicit_discontinuity(
         graphics_overlays,
         hls_discontinuity,
         opacity_clock,
-        false,
+        HlsInputTimeline::Original,
     )
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HlsInputTimeline {
+    Original,
+    RetainedIntervals,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3541,7 +3550,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
     hls_discontinuity: HlsDiscontinuity,
     opacity_clock: Option<WatermarkOpacityClock>,
-    retained_stream: bool,
+    input_timeline: HlsInputTimeline,
 ) -> Result<FfmpegCommand, ersatzrs_ffmpeg::UnsupportedSource> {
     let seek_after_input = input.seek_after_input;
     let mut desired = DesiredVideoState::from_profile(
@@ -3594,7 +3603,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
         }
     }
     request.state.duration = duration;
-    if retained_stream {
+    if input_timeline == HlsInputTimeline::RetainedIntervals {
         request = request.with_retained_stream_input();
     }
     request.state.output_ts_offset = output_ts_offset;
@@ -6493,7 +6502,7 @@ mod tests {
                 Vec::new(),
                 HlsDiscontinuity::Absent,
                 None,
-                true,
+                HlsInputTimeline::RetainedIntervals,
             )
             .unwrap();
             let args = command.arguments.join(" ");
@@ -6508,7 +6517,7 @@ mod tests {
                     .any(|arg| arg == "-ss" || arg == "-r"),
                 "{args}"
             );
-            assert!(args.contains("-fps_mode:v passthrough"), "{args}");
+            assert!(args.contains("-fps_mode:v vfr"), "{args}");
             assert!(args.contains("0:7"), "{args}");
             assert!(
                 !args.contains("concatdec_select") && !args.contains("setpts="),
@@ -8678,7 +8687,7 @@ mod tests {
             Vec::new(),
             HlsDiscontinuity::Absent,
             None,
-            false,
+            HlsInputTimeline::Original,
         )
         .expect("the remote fixture source is playable");
         let arguments = command.arguments.join(" ");

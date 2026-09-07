@@ -86,12 +86,15 @@ async fn supervise_command(
         record_worker_unavailable(&pool).await;
         return;
     };
+    // Child::wait closes stdin before observing exit. Keep the host liveness
+    // lease separately so polling for an unexpected exit does not stop the worker.
+    let host_liveness = child.stdin.take();
     let result = tokio::select! {
         biased;
         () = shutdown.cancelled() => {
             // Closing the only parent write handle also works after SIGKILL or
             // TerminateProcess. Never kill the worker before it records cleanup.
-            drop(child.stdin.take());
+            drop(host_liveness);
             child.wait().await
         },
         result = child.wait() => result,
@@ -193,5 +196,76 @@ mod tests {
         .await
         .unwrap();
         assert_unavailable(&pool).await;
+    }
+
+    #[tokio::test]
+    async fn worker_stdin_liveness_survives_exit_polling_until_shutdown() {
+        let temporary = tempfile::tempdir().unwrap();
+        let ready = temporary.path().join("ready");
+        let drained = temporary.path().join("drained");
+        let pool = ersatzrs_infra::db::init("sqlite::memory:").await.unwrap();
+        #[cfg(unix)]
+        let mut command = Command::new("/bin/sh");
+        #[cfg(unix)]
+        command.args([
+            "-c",
+            "printf ready > \"$ERSATZRS_TEST_READY\"; read -r parent_lease; printf drained > \"$ERSATZRS_TEST_DRAINED\"; exit 0",
+        ]);
+        #[cfg(windows)]
+        let mut command = Command::new("cmd.exe");
+        #[cfg(windows)]
+        command.args([
+            "/D",
+            "/C",
+            "echo ready>\"%ERSATZRS_TEST_READY%\" & set /p parent_lease= & echo drained>\"%ERSATZRS_TEST_DRAINED%\" & exit /b 0",
+        ]);
+        command
+            .env("ERSATZRS_TEST_READY", &ready)
+            .env("ERSATZRS_TEST_DRAINED", &drained);
+        let shutdown = CancellationToken::new();
+        let supervision =
+            supervise_command(pool.clone(), shutdown.clone(), temporary.path(), command);
+        tokio::pin!(supervision);
+        let observation = async {
+            let started = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                while !ready.exists() {
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .is_ok();
+            // A real child needs a scheduling opportunity after its ready marker;
+            // virtual time alone cannot prove that its stdin remains open.
+            if started {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+            started && !drained.exists()
+        };
+        let (finished, retained_lease) = tokio::select! {
+            () = &mut supervision => (true, false),
+            retained = observation => (false, retained),
+        };
+        // Always release the lease and await cleanup before any assertion.
+        shutdown.cancel();
+        if !finished {
+            tokio::time::timeout(std::time::Duration::from_secs(5), &mut supervision)
+                .await
+                .unwrap();
+        }
+        assert!(
+            retained_lease,
+            "exit polling must not close the stdin lease"
+        );
+        assert!(
+            drained.exists(),
+            "shutdown must deliver EOF and await drain"
+        );
+        let unavailable: Option<String> = sqlx::query_scalar(
+            r#"SELECT "Value" FROM "ConfigElement" WHERE "Key"='addon.preparation.worker-unavailable'"#,
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+        assert_ne!(unavailable.as_deref(), Some("true"));
     }
 }

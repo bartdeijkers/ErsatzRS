@@ -111,12 +111,12 @@ impl PublishedIntervalSource {
             _ = &mut cancellation => {
                 let _ = cancel.send(());
                 match startup.await {
-                    Ok(prepared) => prepared.cancel().await.map_err(playback_error)?,
-                    Err(error) => return Err(playback_error(error)),
+                    Ok(prepared) => prepared.cancel().await.map_err(|error| playback_error(&error))?,
+                    Err(error) => return Err(playback_error(&error)),
                 }
                 return Err(ItemRuntimeError::Failed);
             },
-            result = &mut startup => result.map_err(playback_error)?,
+            result = &mut startup => result.map_err(|error| playback_error(&error))?,
         };
         let metadata = async {
             check_startup(&mut cancellation, deadline)?;
@@ -149,7 +149,10 @@ impl PublishedIntervalSource {
         let (source_video, source_audio) = match metadata {
             Ok(metadata) => metadata,
             Err(error) => {
-                prepared.cancel().await.map_err(playback_error)?;
+                prepared
+                    .cancel()
+                    .await
+                    .map_err(|error| playback_error(&error))?;
                 return Err(error);
             }
         };
@@ -232,7 +235,7 @@ impl PublishedIntervalSource {
     }
 }
 
-fn playback_error(error: RemoteStreamError) -> ItemRuntimeError {
+fn playback_error(error: &RemoteStreamError) -> ItemRuntimeError {
     match error {
         RemoteStreamError::PreparedTerminationUnconfirmed => {
             ItemRuntimeError::TerminationUnconfirmed
@@ -338,11 +341,11 @@ mod tests {
     #[test]
     fn retained_playback_preserves_uncertain_process_cleanup() {
         assert_eq!(
-            playback_error(RemoteStreamError::PreparedTerminationUnconfirmed),
+            playback_error(&RemoteStreamError::PreparedTerminationUnconfirmed),
             ItemRuntimeError::TerminationUnconfirmed,
         );
         assert_eq!(
-            playback_error(RemoteStreamError::PreparedCancelled),
+            playback_error(&RemoteStreamError::PreparedCancelled),
             ItemRuntimeError::Failed,
         );
     }

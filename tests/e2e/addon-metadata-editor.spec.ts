@@ -1733,7 +1733,7 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.firstItemId};
       )
       .toBe('-1,2');
 
-    await bulk.getByLabel('Scope').selectOption('all');
+    await bulk.getByLabel('Scope', { exact: true }).selectOption('all');
     await bulk.getByLabel('Bulk edit · Media kind').selectOption('television_episode');
     await bulk.getByLabel('Bulk edit · Playback behavior').selectOption('live');
     const applyAll = bulk.getByRole('button', { name: /apply \(2\)/i });

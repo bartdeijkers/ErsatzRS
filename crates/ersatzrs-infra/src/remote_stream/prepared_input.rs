@@ -1,7 +1,24 @@
 //! A bounded startup prefix and its still-owned add-on transfer process.
 
-use super::*;
+use std::path::Path;
+use std::process::ExitStatus;
 use std::sync::{atomic::AtomicU8, Arc};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::process::ChildStdout;
+use tokio::sync::oneshot;
+use tokio::task::JoinHandle;
+
+use ersatzrs_ffmpeg::FfmpegCommand;
+
+use crate::addons::ManagedAddonChild;
+
+use super::{
+    command_has_file_backed_secret, finish_stderr_task, read_stderr_tail,
+    remote_stream_environment_secrets, run_remote_stream_producer, spawn_remote_stream_consumer,
+    spawn_remote_stream_producer_with_stdin, PreparedProducerReplay, RemoteStreamCommand,
+    RemoteStreamError, RemoteStreamProcess, RemoteStreamProducerDiagnostics,
+    RemoteStreamProducerPipe, RemoteStreamSpawnContext,
+};
 
 const PREFIX_BYTES: usize = 64 * 1024;
 const MAX_REQUEST_BYTES: usize = 512 * 1024;
@@ -110,7 +127,7 @@ impl PreparedRemoteStreamInput {
         let outcome = tokio::select! {
             biased;
             _ = &mut cancellation => Err(RemoteStreamError::PreparedCancelled),
-            _ = tokio::time::sleep_until(deadline) => Err(RemoteStreamError::PreparedTimeout),
+            () = tokio::time::sleep_until(deadline) => Err(RemoteStreamError::PreparedTimeout),
             result = input.read_prefix(request_json) => result,
         };
         let outcome = outcome.and_then(|()| {
@@ -331,6 +348,8 @@ pub async fn spawn_ffmpeg_with_prepared_remote_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+    use std::path::PathBuf;
     use std::time::Duration;
 
     #[tokio::test]

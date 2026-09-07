@@ -60,29 +60,39 @@ early stop, additions-only automatic publication, and updater rollback.
 next_steps = '''
 AMM-M-01A is Complete. The maintainer approved the accumulated 122-file host
 commit scope, including preserved M-01B groundwork and excluding the separate
-workflow-maintenance edits. The official add-on is committed locally at
-72eedfb, without push.
+workflow-maintenance edits. The host and official add-on commits are pushed
+(b1960c50 and 72eedfb respectively); host formatting correction f6c3cf13 is
+also pushed. The maintainer explicitly prioritizes exact-SHA green CI before
+starting M-01B and authorizes corrective pushes. CI 34116601910 finished red:
+four browser failures, Clippy diagnostics, and one stale retained-HLS VFR
+assertion (771 other infrastructure tests passed). The corrective checkpoint
+fixes worker liveness, an ambiguous Scope test selector, the stale assertion
+and the diagnosed lint issues. Workspace Clippy and 29 focused nextest tests
+pass; independent Astra review finds no remaining P1/P2. Next: push the
+reviewed correction and verify terminal green CI for that exact SHA.
 Its options, frozen publication, metadata-only intervals,
 real scheduled MPEG-TS/HLS cut continuity and bounded cancellation are verified
 in the owning milestone. The approved startup policy retains a ten-second
 target and twenty-second maximum; the target is not claimed achieved.
 
-Next: plan AMM-M-01B from its existing acceptance and preserved implementation.
+After CI is green: plan AMM-M-01B from its existing acceptance and preserved implementation.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native
 yt-dlp executable capabilities; the removed custom Range adapter has no fallback.
 Keep existing HDR/subtitle refusals and ordinary playback behavior intact.
 The non-blocking static startup-stage diagnostic debt remains visible in the
 owning parity file; do not invent new infrastructure to clear speculative cases.
 Run build/media checks serially with bounded concurrency after the prior WSL
-overload. Do not run CI/full closeout or push before the agreed AMM-N-03 pause.
+overload. The current CI-first/push approval overrides the earlier N-03-only
+restriction for these corrections, not for unrelated later-slice work.
 
 Preserve full-download preparation groundwork for M-01B, which is Not started.
 Its generic provider-neutral native list select offers Stream (default),
 Download ahead, and Download ahead only for new videos. New means first
 imported after enabling the mode; existing videos continue streaming. Enabled
 SponsorBlock applies in every mode. Do not delete or duplicate that groundwork.
-Record the observed private-worker liveness defect for M-01B: Child::wait closes
-stdin prematurely; retain the writer separately and test survival until shutdown.
+The private-worker liveness correction retains the writer separately and its
+survival/shutdown regression passes; the owning parity debt records evidence.
+Full browser restart/publication verification remains part of the current CI gate.
 
 Deliver M-01A, M-01B, M-02, M-03 and the remaining AMM-N work in dependency order.
 AMM-CI-01 is complete at c75c07d3 with green exact-SHA CI 33978757158; that is

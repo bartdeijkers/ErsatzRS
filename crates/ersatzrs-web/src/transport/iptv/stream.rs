@@ -669,7 +669,7 @@ async fn serve_channel_stream_admitted_inner(
         };
         let mut cancellation = admission.cancellation;
         let (sender, receiver) = tokio::sync::oneshot::channel();
-        let (cancelled, result) = await_retained_startup_stage(
+        let (cancelled, result) = Box::pin(await_retained_startup_stage(
             &mut cancellation,
             sender,
             source.prepare_playback_cancellable(
@@ -683,7 +683,7 @@ async fn serve_channel_stream_admitted_inner(
                 admission.deadline,
                 receiver,
             ),
-        )
+        ))
         .await;
         retained_cancellation = Some(cancellation);
         if cancelled {

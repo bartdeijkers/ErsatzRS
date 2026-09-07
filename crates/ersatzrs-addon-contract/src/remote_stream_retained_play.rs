@@ -159,9 +159,12 @@ mod tests {
     fn retained_play_request_rejects_empty_reversed_overlapping_and_outside_ranges() {
         for ranges in [
             vec![],
-            vec![0..0],
+            vec![Range { start: 0, end: 0 }],
             vec![Range { start: 10, end: 9 }],
-            vec![0..20001],
+            vec![Range {
+                start: 0,
+                end: 20001,
+            }],
             vec![10..20, 0..5],
             vec![0..10, 9..20],
             vec![0..10, 0..10],
