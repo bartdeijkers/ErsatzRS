@@ -68,8 +68,18 @@ four browser failures, Clippy diagnostics, and one stale retained-HLS VFR
 assertion (771 other infrastructure tests passed). The corrective checkpoint
 fixes worker liveness, an ambiguous Scope test selector, the stale assertion
 and the diagnosed lint issues. Workspace Clippy and 29 focused nextest tests
-pass; independent Astra review finds no remaining P1/P2. Next: push the
-reviewed correction and verify terminal green CI for that exact SHA.
+pass; independent Astra review finds no remaining P1/P2. Correction 17434002
+is pushed. CI 34121700249 passes Clippy but exposes three scanner tests whose
+shared Publishing fixture omits its required journal. All three pass after the
+narrow fixture repair. Its browser run has 301 passes and three failures: two
+preparation E2Es assuming the superseded mandatory-download path, and one Firefox
+editor test filling fields before hydration. The maintainer approved deferring
+exactly the two download E2Es to M-01B, whose acceptance requires re-enablement;
+streaming gates and lower-level preparation tests remain active. The Firefox
+test now waits for hydration and passes against the preserved matched UI build
+(test-results/ci-m01a-firefox-save/playwright-results.json). No remaining P1/P2
+was found in independent Astra review. Next: push this reviewed correction,
+then require terminal green CI for that exact SHA before M-01B.
 Its options, frozen publication, metadata-only intervals,
 real scheduled MPEG-TS/HLS cut continuity and bounded cancellation are verified
 in the owning milestone. The approved startup policy retains a ten-second
@@ -92,7 +102,8 @@ imported after enabling the mode; existing videos continue streaming. Enabled
 SponsorBlock applies in every mode. Do not delete or duplicate that groundwork.
 The private-worker liveness correction retains the writer separately and its
 survival/shutdown regression passes; the owning parity debt records evidence.
-Full browser restart/publication verification remains part of the current CI gate.
+Full download browser restart/publication verification is deferred to M-01B with
+explicit maintainer approval; its preserved tests must be re-enabled there.
 
 Deliver M-01A, M-01B, M-02, M-03 and the remaining AMM-N work in dependency order.
 AMM-CI-01 is complete at c75c07d3 with green exact-SHA CI 33978757158; that is

@@ -3453,6 +3453,11 @@ both existing-streamed and new-downloaded cohorts in new-videos-only mode,
 downloads without SponsorBlock support, provider-neutral
 mode eligibility, the first-import boundary, persistence and
 draft/published isolation, plus hydrated and no-JavaScript selection/save.
+Re-enable tests/e2e/addon-preparation-restart.spec.ts and
+tests/e2e/addon-prepared-playback.spec.ts through the explicit Download ahead
+workflow. Prove actual host-death cleanup and safe restart, revision artifact
+pinning and decoded prepared-file channel playback; do not restore a mandatory
+download fallback to Stream merely to satisfy these tests.
 '''
 evidence = '''
 Created on 2026-09-06 at the maintainer's request; delivery has not started.
@@ -3461,18 +3466,21 @@ independently of SponsorBlock. Neither provider identity nor SponsorBlock
 availability should gate the setting; actual delivery support is capability-based.
 The maintainer explicitly chose a list-level HTML select and confirmed that
 new means first imported after enabling the new-videos mode, leaving existing
-videos streaming. Existing uncommitted full-file preparation, worker recovery,
+videos streaming. Existing committed full-file preparation, worker recovery,
 admission, revision pins and playback tests are preserved groundwork inherited
 from the former AMM-M-01. Their historical evidence remains in AMM-M-01A;
 it is not acceptance of the new selector or mode semantics. ADR 0087 owns the
 mode decision; ADR 0086 recovery applies to preparation, not streaming. Plan
 this slice in detail when 01A is complete; do not delete or duplicate groundwork.
-The native M-01A host probe also exposes a preserved M-01B supervisor defect:
-Tokio Child::wait closes its still-owned stdin liveness writer, so the idle
-preparation worker immediately exits and health reports it unavailable.
-Metadata-only streaming publication remains functional. The separately recorded
-preparation-worker-wait-closes-liveness debt requires holding stdin outside Child
-until shutdown and a regression proving idle survival followed by clean EOF drain.
+The supervisor liveness defect is corrected in 17434002; the owning parity debt
+records the passing idle-survival/EOF-drain regression. CI 34121700249 confirms
+the real worker now starts, but both preserved download E2Es still invoke the
+obsolete mandatory-download Prepare publication path. Stream deliberately admits
+interval metadata only; the fixture has no interval capability and queues no jobs.
+On 2026-09-07 the maintainer explicitly approved deferring exactly these two E2Es
+until this slice supplies the explicit delivery workflow. Their bodies remain
+preserved, with re-enablement required above. M-01A streaming acceptance and
+lower-level preparation tests remain active; this is not download acceptance.
 '''
 
 [[milestone]]

@@ -44,6 +44,7 @@ function streamBytes(url: string): Promise<Buffer> {
 }
 
 test('prepared publication pins its generated file and plays it instead of raw provider output', async ({ page, baseURL }, info) => {
+  test.fixme(true, 'AMM-M-01B: the generic Download ahead delivery workflow is not yet implemented');
   test.setTimeout(300000);
   test.skip(!dbPath, 'Requires the wrapper-owned isolated E2E database');
   test.skip(info.project.name !== 'chromium', 'Shared database acceptance runs once');

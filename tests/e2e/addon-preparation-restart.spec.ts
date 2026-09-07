@@ -39,6 +39,7 @@ async function unusedPort(): Promise<number> {
 }
 
 test('actual host death drains preparation before one safe restart', async ({ browser, request }, info) => {
+  test.fixme(true, 'AMM-M-01B: the generic Download ahead delivery workflow is not yet implemented');
   test.setTimeout(300000);
   const server = process.env.E2E_SERVER_BIN;
   const site = process.env.E2E_SITE_ROOT;

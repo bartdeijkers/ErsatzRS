@@ -67,7 +67,7 @@ description = 'Keep the download-ahead preparation worker alive until host shutd
 discovered  = '2026-09-06'
 resolved    = true
 adr         = '0086'
-evidence    = 'CI 34116601910 reproduces missing preparation-worker startup and publication completion. Locked Tokio 1.53.1 source and documented Child::wait behavior confirm premature stdin closure. The supervisor now owns the writer separately until shutdown. The real-child worker_stdin_liveness_survives_exit_polling_until_shutdown regression proves idle survival followed by cancellation-driven EOF, awaited drain and no unavailable health flag. All 29 focused contract, prepared-input, checkpoint, HLS and startup-cancellation tests pass with bounded nextest concurrency; workspace Clippy and independent Astra P1/P2 review pass. Exact-push browser restart/publication verification remains due in CI; this correction does not complete M-01B.'
+evidence    = 'CI 34116601910 reproduces missing preparation-worker startup and publication completion. Locked Tokio 1.53.1 source and documented Child::wait behavior confirm premature stdin closure. The supervisor now owns the writer separately until shutdown. The real-child worker_stdin_liveness_survives_exit_polling_until_shutdown regression proves idle survival followed by cancellation-driven EOF, awaited drain and no unavailable health flag. All 29 focused contract, prepared-input, checkpoint, HLS and startup-cancellation tests pass with bounded nextest concurrency; workspace Clippy and independent Astra P1/P2 review pass. CI 34121700249 confirms real worker startup. The subsequent browser download admission failure belongs to the explicitly deferred M-01B workflow and its separate forced-host-exit recovery debt; this correction does not complete M-01B.'
 
 [[debt]]
 id          = 'retained-ts-inner-failure-concealed-by-concat'
@@ -250,7 +250,7 @@ id          = 'preparation-worker-forced-host-exit-recovery'
 description = 'AMM-M-01B: preserve preparation process ownership after forced web-host exit and resume only after exact-attempt cleanup proof.'
 discovered  = '2026-09-05'
 adr         = '0086'
-evidence    = 'Preparation implementation remains preserved and incomplete. ADR 0087 scopes this worker to AMM-M-01B Download ahead, not AMM-M-01A streaming; its native crash/restart gate awaits 01B. Existing reservations or processes must not be cleared merely because the design changed. Reuse the groundwork rather than deleting or duplicating it.'
+evidence    = 'Preparation implementation remains preserved and incomplete. ADR 0087 scopes this worker to AMM-M-01B Download ahead, not AMM-M-01A streaming; its native crash/restart gate awaits 01B. On 2026-09-07 the maintainer explicitly approved deferring the two download-ahead browser tests after CI demonstrated their obsolete mandatory-download admission path. The owning amm-m-01b acceptance requires re-enabling both through the explicit delivery workflow. Existing reservations or processes must not be cleared merely because the design changed. Reuse the groundwork rather than deleting or duplicating it.'
 resolved    = false
 
 [[debt]]

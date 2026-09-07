@@ -154,6 +154,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Defer the two preserved download-ahead browser acceptance tests to AMM-M-01B,
+  where they must use its explicit delivery workflow; streaming acceptance and
+  lower-level preparation tests remain active.
+
 - Reopen the add-on-list atomic-publication contract after Windows dogfood
   showed that a failed post-scan directory rollback can leave an otherwise
   valid recovery journal permanently blocked. AMM-J now owns durable restart

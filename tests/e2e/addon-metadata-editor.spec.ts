@@ -2000,6 +2000,7 @@ WHERE "Id" = ${seed.secondItemId};
     await expect(page).toHaveURL(
       new RegExp(`/media/addon-lists/${seed.listId}/items/${seed.secondItemId}$`),
     );
+    await waitUntilHydrated(page);
     const itemEditor = page.locator('#addon-list-item-review-form');
     await expect(itemEditor).toBeVisible();
     const itemMetadata = itemEditor.getByTestId('addon-item-metadata');

@@ -5789,15 +5789,25 @@ create_playlist: true
         .execute(pool)
         .await
         .expect("fixture add-on installation");
-        pool.execute(
+        // A staged publication owns a journal even when it has no playback
+        // selections; an absent journal must remain a production error.
+        let publication_journal = serde_json::json!({
+            "previous_review_state": ersatzrs_domain::AddonMediaListReviewState::Ready,
+            "previous_presentation_kind": ersatzrs_domain::AddonMediaListPresentationKind::RemoteStreams,
+            "previous_items": [],
+            "previous_playlist": null
+        });
+        sqlx::query(
             r#"INSERT INTO "AddonMediaList" (
                    "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
-                   "ContentKindOverride", "ReviewState"
+                   "ContentKindOverride", "ReviewState", "PublicationJournalJson"
                ) VALUES (
                    50, 'org.ersatzrs.addon.fixture', 'fixture/list',
-                   'https://example.test/playlist', 'Fixture', 0, 3
+                   'https://example.test/playlist', 'Fixture', 0, 3, ?
                )"#,
         )
+        .bind(publication_journal.to_string())
+        .execute(pool)
         .await
         .expect("managed add-on list");
         sqlx::query(
