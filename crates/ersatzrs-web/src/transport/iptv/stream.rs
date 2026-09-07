@@ -3,20 +3,20 @@ use std::process::Stdio;
 use std::{
     path::PathBuf,
     sync::{
-        Arc,
         atomic::{AtomicU64, Ordering},
+        Arc,
     },
     time::Duration,
 };
 
 use axum::{
     body::Body,
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
 use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
-use ersatzrs_core::path_replacement::{PathPlatform, PathReplacement, replace_path};
+use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{
     ChannelRepository, ConfigRepository, MediaSourceRepository, RepositoryError,
 };
@@ -26,48 +26,48 @@ use ersatzrs_domain::{
     StreamingMode,
 };
 use ersatzrs_ffmpeg::{
-    ConcatPlaylist, DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport,
-    FrameRate, FrameSize, GraphicsPipelineOverlay, InputFile, MPEGTS_PCR_PERIOD_MS,
-    MpegTsMuxingOptions, OutputFormat, OutputMetadata, PipelineRequest, SourceAudioCodec,
-    SourceAudioStream, SourceVideoCodec, SourceVideoStream, WatermarkOpacityClock,
-    build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command,
+    build_mpegts_concat_command, build_mpegts_segmenter_wrapper_command, ConcatPlaylist,
+    DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FrameRate,
+    FrameSize, GraphicsPipelineOverlay, InputFile, MpegTsMuxingOptions, OutputFormat,
+    OutputMetadata, PipelineRequest, SourceAudioCodec, SourceAudioStream, SourceVideoCodec,
+    SourceVideoStream, WatermarkOpacityClock, MPEGTS_PCR_PERIOD_MS,
 };
 use ersatzrs_infra::addons::AddonRuntimeContext;
 use ersatzrs_infra::channel_playout::load_channel_playout_context;
 use ersatzrs_infra::db::DbPool;
-use ersatzrs_infra::dynamic_text::{DynamicTextController, shutdown_dynamic_text_controllers};
+use ersatzrs_infra::dynamic_text::{shutdown_dynamic_text_controllers, DynamicTextController};
 use ersatzrs_infra::ffmpeg_capabilities::{
     learned_hardware_decode_denial, persist_hardware_decode_denial_into_runtime,
 };
 use ersatzrs_infra::ffmpeg_config::playback_language_preferences;
 use ersatzrs_infra::file_system_layout;
 use ersatzrs_infra::hls_worker::{
-    ALL_STREAMS_IN_USE_SLATE_MESSAGE, MpegTsSlateCommandRequest, build_mpeg_ts_slate_command,
+    build_mpeg_ts_slate_command, MpegTsSlateCommandRequest, ALL_STREAMS_IN_USE_SLATE_MESSAGE,
 };
 use ersatzrs_infra::playback::{
-    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
-    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
     render_playback_graphics_overlays, select_channel_playback_subtitle,
     select_custom_playback_streams, select_pinned_playback_subtitle,
     select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
     subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
+    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
+    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use ersatzrs_infra::published_interval_source::IntervalPlaybackContext;
 use ersatzrs_infra::remote_stream::{
-    PreparedRemoteStreamInput, spawn_ffmpeg_with_prepared_remote_input,
+    decode_persisted_liveness, redact_remote_stream_output, remote_stream_input_file,
+    remote_stream_playback_start, remote_stream_producer, resolve_remote_stream_with_addons,
+    spawn_ffmpeg_with_remote_input, RemoteStreamCommand, RemoteStreamDefinition,
+    RemoteStreamProcess, RemoteStreamSource, RemoteStreamSpawnContext, ResolvedRemoteStream,
 };
 use ersatzrs_infra::remote_stream::{
-    RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSource,
-    RemoteStreamSpawnContext, ResolvedRemoteStream, decode_persisted_liveness,
-    redact_remote_stream_output, remote_stream_input_file, remote_stream_playback_start,
-    remote_stream_producer, resolve_remote_stream_with_addons, spawn_ffmpeg_with_remote_input,
+    spawn_ffmpeg_with_prepared_remote_input, PreparedRemoteStreamInput,
 };
 use ersatzrs_infra::subtitles::rebase_burned_text_subtitle_input;
 use ersatzrs_infra::transcode_capacity::{
-    ActiveTranscodeReservation, ActiveTranscodeSlot, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
     load_active_transcode_limit, request_active_transcode_reclaim, try_reserve_active_transcode,
+    ActiveTranscodeReservation, ActiveTranscodeSlot, DEFAULT_ACTIVE_TRANSCODE_LIMIT,
 };
 use serde::Deserialize;
 use sqlx::Row;
@@ -78,7 +78,7 @@ use tokio::sync::{Notify, RwLock};
 use tokio_util::io::ReaderStream;
 
 use super::retained_stream_buffer::{
-    ReservePolicy, TERMINAL_FAILURE, TERMINAL_SUCCESS, forward_retained_ts,
+    forward_retained_ts, ReservePolicy, TERMINAL_FAILURE, TERMINAL_SUCCESS,
 };
 use crate::host::state::AppState;
 use crate::transport::iptv::access_token::AccessToken;
@@ -4217,12 +4217,10 @@ mod tests {
             load_active_media_path(&pool, 7, now).await,
             Err(RepositoryError::Decode { .. })
         ));
-        assert!(
-            load_active_media_path(&pool, 99, now)
-                .await
-                .expect("load absent active playback item")
-                .is_none()
-        );
+        assert!(load_active_media_path(&pool, 99, now)
+            .await
+            .expect("load absent active playback item")
+            .is_none());
         sqlx::query(
             r#"UPDATE "PlayoutItem"
                SET "SubtitleMode" = 0,
@@ -5094,16 +5092,12 @@ mod tests {
         let second = playback_graphics_dir(10, 20);
 
         assert_ne!(first, second);
-        assert!(
-            first
-                .parent()
-                .is_some_and(|path| path.ends_with(PathBuf::from("channel-10/item-20")))
-        );
-        assert!(
-            first
-                .file_name()
-                .is_some_and(|name| name.to_string_lossy().starts_with("request-"))
-        );
+        assert!(first
+            .parent()
+            .is_some_and(|path| path.ends_with(PathBuf::from("channel-10/item-20"))));
+        assert!(first
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with("request-")));
     }
 
     #[test]
@@ -6382,47 +6376,43 @@ mod tests {
     #[test]
     fn the_iptv_builder_allows_profile_8_1_transcode_but_rejects_unproven_stream_copy() {
         // Profile 8.1: the base layer is a conforming HDR10 signal.
-        assert!(
-            build_stream_command(
-                "/media/dv81.mkv",
-                OutputFormat::MpegTs,
-                Duration::ZERO,
-                &playback_profile(),
-                None,
-                StreamingMode::TransportStream,
-                OutputMetadata::default(),
-                FfmpegCapabilityReport::default(),
-                Some(dolby_vision_source(8, 1)),
-                Vec::new(),
-                None,
-                None,
-                Vec::new(),
-                Vec::new(),
-            )
-            .is_ok()
-        );
+        assert!(build_stream_command(
+            "/media/dv81.mkv",
+            OutputFormat::MpegTs,
+            Duration::ZERO,
+            &playback_profile(),
+            None,
+            StreamingMode::TransportStream,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(dolby_vision_source(8, 1)),
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .is_ok());
 
         // ADR 0064 has no proven source/container/client passthrough matrix,
         // so even a low-level copy candidate is refused before spawn.
-        assert!(
-            build_stream_command(
-                "/media/dv5.mkv",
-                OutputFormat::HlsMp4,
-                Duration::ZERO,
-                &playback_profile(),
-                None,
-                StreamingMode::HttpLiveStreamingDirect,
-                OutputMetadata::default(),
-                FfmpegCapabilityReport::default(),
-                Some(dolby_vision_source(5, 0)),
-                Vec::new(),
-                None,
-                None,
-                Vec::new(),
-                Vec::new(),
-            )
-            .is_err()
-        );
+        assert!(build_stream_command(
+            "/media/dv5.mkv",
+            OutputFormat::HlsMp4,
+            Duration::ZERO,
+            &playback_profile(),
+            None,
+            StreamingMode::HttpLiveStreamingDirect,
+            OutputMetadata::default(),
+            FfmpegCapabilityReport::default(),
+            Some(dolby_vision_source(5, 0)),
+            Vec::new(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .is_err());
     }
 
     #[cfg(unix)]
@@ -6626,16 +6616,12 @@ mod tests {
                 )
         }));
         let shared = shared_runtime.read().await;
-        assert!(
-            shared
-                .capabilities
-                .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu)
-        );
-        assert!(
-            shared
-                .capabilities
-                .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu)
-        );
+        assert!(shared
+            .capabilities
+            .hardware_graph_denied(HardwareGraphOperation::NvencHdrVulkanLibplacebo, gpu));
+        assert!(shared
+            .capabilities
+            .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
     }
 
     #[cfg(unix)]
@@ -6744,11 +6730,9 @@ mod tests {
             8
         ));
         let shared = shared_runtime.read().await;
-        assert!(
-            shared
-                .capabilities
-                .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu)
-        );
+        assert!(shared
+            .capabilities
+            .hardware_graph_denied(HardwareGraphOperation::NvencCudaScale, gpu));
         assert!(shared.capabilities.hardware_decode_denied(
             ersatzrs_domain::HardwareAccelerationKind::Nvenc,
             "av1",

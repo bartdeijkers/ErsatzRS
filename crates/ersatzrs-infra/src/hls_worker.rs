@@ -4,8 +4,8 @@ use std::fmt::Write as _;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    Arc,
     atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU64, Ordering},
+    Arc,
 };
 use std::time::Duration;
 
@@ -20,7 +20,7 @@ use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{
     HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry, HlsStartupReadiness,
 };
-use ersatzrs_core::path_replacement::{PathPlatform, PathReplacement, replace_path};
+use ersatzrs_core::path_replacement::{replace_path, PathPlatform, PathReplacement};
 use ersatzrs_core::repositories::{RepositoryError, Result as RepositoryResult};
 use ersatzrs_domain::{
     Channel, ChannelMusicVideoCreditsMode, ChannelStreamSelectorMode, ChannelSubtitleMode,
@@ -28,44 +28,44 @@ use ersatzrs_domain::{
     HardwareAccelerationKind, StreamingMode, VideoScanKind,
 };
 use ersatzrs_ffmpeg::{
-    DesiredVideoState, FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FrameRate,
-    FrameSize, GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind, OutputFormat,
-    OutputMetadata, PipelineRequest, RealtimeMode, SourceAudioCodec, SourceAudioStream,
-    SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkOpacityClock,
-    build_pipeline_for_acceleration, ffmpeg_path, ffprobe_path,
+    build_pipeline_for_acceleration, ffmpeg_path, ffprobe_path, DesiredVideoState,
+    FfmpegCapabilityReport, FfmpegCommand, FfmpegRuntimeReport, FrameRate, FrameSize,
+    GraphicsPipelineOverlay, HlsOutput, InputFile, InputKind, OutputFormat, OutputMetadata,
+    PipelineRequest, RealtimeMode, SourceAudioCodec, SourceAudioStream, SourceVideoCodec,
+    SourceVideoStream, SubtitleMethod, WatermarkOpacityClock,
 };
 
 use crate::dynamic_text::shutdown_dynamic_text_controllers;
 use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
 use crate::ffmpeg_config::playback_language_preferences;
 use crate::hls_delivery::{
-    HlsDeliveryObservation, HlsDeliverySoftwareScope, HlsDeliveryState,
     clear_hls_delivery_fallback, load_hls_delivery_fallback, persist_hls_delivery_fallback,
-    persist_hls_delivery_observation,
+    persist_hls_delivery_observation, HlsDeliveryObservation, HlsDeliverySoftwareScope,
+    HlsDeliveryState,
 };
 use crate::playback::{
-    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
-    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
     enrich_source_video_stream_for_playback, load_channel_playback_profile,
     load_channel_target_frame_rate, load_source_audio_streams, load_source_video_stream_by_index,
     render_playback_graphics_overlays, select_channel_playback_subtitle,
     select_custom_playback_streams, select_pinned_playback_subtitle,
     select_playback_audio_stream_index, select_playback_graphics, select_playback_watermarks,
     subtitle_fonts_dir, subtitle_input_for_stream, watermark_inputs_for_stream,
+    CustomStreamSelection, PlaybackAudioSelection, PlaybackGraphicsArtifacts,
+    PlaybackGraphicsRenderContext, PlaybackProfile, PlaybackSubtitle,
 };
 use crate::remote_stream::{
+    decode_persisted_liveness, redact_remote_stream_output, redacted_source_label,
+    remote_stream_input_file, remote_stream_playback_start, remote_stream_producer,
+    remote_stream_video_height_ceiling, resolve_remote_stream_with_addons,
+    spawn_ffmpeg_with_remote_input, with_remote_stream_video_height_ceiling, RemoteStreamCommand,
+    RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext, ResolvedRemoteStream,
     REMOTE_STREAM_DEFAULT_MAX_VIDEO_HEIGHT, REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
-    RemoteStreamCommand, RemoteStreamDefinition, RemoteStreamProcess, RemoteStreamSpawnContext,
-    ResolvedRemoteStream, decode_persisted_liveness, redact_remote_stream_output,
-    redacted_source_label, remote_stream_input_file, remote_stream_playback_start,
-    remote_stream_producer, remote_stream_video_height_ceiling, resolve_remote_stream_with_addons,
-    spawn_ffmpeg_with_remote_input, with_remote_stream_video_height_ceiling,
 };
 use crate::subtitles::rebase_burned_text_subtitle_input;
 use crate::transcode_capacity::{
-    ActiveTranscodeKind, ActiveTranscodeReclaimHandle, ActiveTranscodeSlot,
     load_active_transcode_limit, promote_hls_transcode_to_realtime,
-    request_active_transcode_reclaim, try_reserve_active_transcode,
+    request_active_transcode_reclaim, try_reserve_active_transcode, ActiveTranscodeKind,
+    ActiveTranscodeReclaimHandle, ActiveTranscodeSlot,
 };
 use sha2::{Digest, Sha256};
 use sqlx::Row;
@@ -3462,7 +3462,11 @@ impl HlsDiscontinuity {
 
 impl From<bool> for HlsDiscontinuity {
     fn from(enabled: bool) -> Self {
-        if enabled { Self::Present } else { Self::Absent }
+        if enabled {
+            Self::Present
+        } else {
+            Self::Absent
+        }
     }
 }
 
@@ -6854,11 +6858,9 @@ mod tests {
         assert_eq!(startup_under_run.state, HlsDeliveryState::UnderRun);
 
         let mut midstream = HlsDeliveryTracker::new(None, None);
-        assert!(
-            midstream
-                .observe(Duration::from_secs(5), &delivery_segments(1, 1), now,)
-                .is_none()
-        );
+        assert!(midstream
+            .observe(Duration::from_secs(5), &delivery_segments(1, 1), now,)
+            .is_none());
         let stalled = midstream
             .observe(Duration::from_secs(17), &[], now)
             .expect("twelve seconds without a segment should be an under-run");
@@ -7163,13 +7165,11 @@ mod tests {
             Arc::clone(&runtime),
         );
 
-        assert!(
-            !worker
-                .runtime_capabilities()
-                .await
-                .filters
-                .contains("runtime-refresh-marker")
-        );
+        assert!(!worker
+            .runtime_capabilities()
+            .await
+            .filters
+            .contains("runtime-refresh-marker"));
 
         runtime
             .write()
@@ -7178,13 +7178,11 @@ mod tests {
             .filters
             .insert("runtime-refresh-marker".to_owned());
 
-        assert!(
-            worker
-                .runtime_capabilities()
-                .await
-                .filters
-                .contains("runtime-refresh-marker")
-        );
+        assert!(worker
+            .runtime_capabilities()
+            .await
+            .filters
+            .contains("runtime-refresh-marker"));
     }
 
     #[test]
@@ -7359,13 +7357,11 @@ mod tests {
         );
         assert!(first.is_some());
         assert!(second.is_some());
-        assert!(
-            try_reserve_active_transcode(
-                2,
-                test_active_slot("3", ActiveTranscodeKind::HlsRealtime, Duration::ZERO, true,),
-            )
-            .is_none()
-        );
+        assert!(try_reserve_active_transcode(
+            2,
+            test_active_slot("3", ActiveTranscodeKind::HlsRealtime, Duration::ZERO, true,),
+        )
+        .is_none());
         assert_eq!(
             crate::transcode_capacity::active_transcode_snapshot(2).active,
             2
@@ -7376,13 +7372,11 @@ mod tests {
             crate::transcode_capacity::active_transcode_snapshot(2).active,
             0
         );
-        assert!(
-            try_reserve_active_transcode(
-                0,
-                test_active_slot("4", ActiveTranscodeKind::HlsRealtime, Duration::ZERO, true,),
-            )
-            .is_none()
-        );
+        assert!(try_reserve_active_transcode(
+            0,
+            test_active_slot("4", ActiveTranscodeKind::HlsRealtime, Duration::ZERO, true,),
+        )
+        .is_none());
     }
 
     #[test]
@@ -7789,16 +7783,12 @@ mod tests {
         .await
         .expect("next live playout item");
 
-        assert!(
-            !current_remote_stream_is_live(&pool, 7, wall_clock_now)
-                .await
-                .expect("wall-clock liveness")
-        );
-        assert!(
-            current_remote_stream_is_live(&pool, 7, transcode_cursor)
-                .await
-                .expect("cursor liveness")
-        );
+        assert!(!current_remote_stream_is_live(&pool, 7, wall_clock_now)
+            .await
+            .expect("wall-clock liveness"));
+        assert!(current_remote_stream_is_live(&pool, 7, transcode_cursor)
+            .await
+            .expect("cursor liveness"));
     }
 
     #[tokio::test]
@@ -7807,12 +7797,10 @@ mod tests {
         let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
             .expect("timestamp")
             .with_timezone(&Utc);
-        assert!(
-            load_active_hls_item(&pool, 99, &[], now)
-                .await
-                .expect("load absent active item")
-                .is_none()
-        );
+        assert!(load_active_hls_item(&pool, 99, &[], now)
+            .await
+            .expect("load absent active item")
+            .is_none());
         assert!(matches!(
             load_active_hls_item(&pool, 7, &[], now).await,
             Err(RepositoryError::Decode { .. })
@@ -7870,11 +7858,9 @@ mod tests {
         .await
         .expect("select remote stream");
 
-        assert!(
-            current_remote_stream_is_live(&pool, 7, now)
-                .await
-                .expect("load current live state")
-        );
+        assert!(current_remote_stream_is_live(&pool, 7, now)
+            .await
+            .expect("load current live state"));
         assert!(matches!(
             load_active_hls_item(&pool, 7, &[], now).await,
             Err(RepositoryError::Decode { .. })
@@ -8732,9 +8718,7 @@ mod tests {
         .expect("the fixture source is playable");
         let arguments = command.arguments.join(" ");
 
-        assert!(
-            arguments.contains("-hls_segment_options mpegts_flags=+initial_discontinuity+latm")
-        );
+        assert!(arguments.contains("-hls_segment_options mpegts_flags=+initial_discontinuity+latm"));
     }
 
     #[test]
@@ -9244,12 +9228,10 @@ mod tests {
         )
         .expect("the fixture source is playable");
 
-        assert!(
-            command
-                .arguments
-                .join(" ")
-                .contains("-ss 00:15:00.0000000 -i /media/test.mkv")
-        );
+        assert!(command
+            .arguments
+            .join(" ")
+            .contains("-ss 00:15:00.0000000 -i /media/test.mkv"));
     }
 
     #[test]
@@ -9362,15 +9344,13 @@ mod tests {
         let source = SourceVideoStream::new(SourceVideoCodec::Av1);
         let stderr = "Your platform doesn't support hardware accelerated AV1 decoding";
 
-        assert!(
-            learned_hardware_decode_denial(
-                true,
-                HardwareAccelerationKind::Nvenc,
-                Some(&source),
-                stderr,
-            )
-            .is_none()
-        );
+        assert!(learned_hardware_decode_denial(
+            true,
+            HardwareAccelerationKind::Nvenc,
+            Some(&source),
+            stderr,
+        )
+        .is_none());
     }
 
     #[test]
@@ -9450,27 +9430,19 @@ mod tests {
         )
         .expect("trimmed playlist");
 
-        assert!(
-            trimmed
-                .playlist
-                .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:12.387+0000\nlive000041.ts")
-        );
-        assert!(
-            trimmed
-                .playlist
-                .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:17.187+0000\nlive000042.ts")
-        );
-        assert!(
-            trimmed
-                .playlist
-                .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:17.507+0000\nlive000043.ts")
-        );
+        assert!(trimmed
+            .playlist
+            .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:12.387+0000\nlive000041.ts"));
+        assert!(trimmed
+            .playlist
+            .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:17.187+0000\nlive000042.ts"));
+        assert!(trimmed
+            .playlist
+            .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T08:34:17.507+0000\nlive000043.ts"));
         assert!(!trimmed.playlist.contains("#EXT-X-DISCONTINUITY"));
-        assert!(
-            !trimmed
-                .playlist
-                .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T10:34:11.869+0200")
-        );
+        assert!(!trimmed
+            .playlist
+            .contains("#EXT-X-PROGRAM-DATE-TIME:2026-06-13T10:34:11.869+0200"));
     }
 
     #[test]
@@ -9849,17 +9821,15 @@ mod tests {
         let init_name = init.file_name().and_then(|name| name.to_str()).unwrap();
 
         assert!(playlist.contains(&format!("#EXT-X-MAP:URI=\"{init_name}\"")));
-        assert!(
-            segment
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| {
-                    name.starts_with("live_")
-                        && Path::new(name)
-                            .extension()
-                            .is_some_and(|extension| extension.eq_ignore_ascii_case("m4s"))
-                })
-        );
+        assert!(segment
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name.starts_with("live_")
+                    && Path::new(name)
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("m4s"))
+            }));
 
         let combined = concatenate_fmp4_init_and_segment(working_dir.path(), init_name, &segment)
             .await
@@ -10592,11 +10562,9 @@ mod tests {
         .expect("trimmed playlist");
 
         assert_eq!(trimmed.generated_at, Some(1_760_874_038));
-        assert!(
-            !trimmed
-                .referenced_files
-                .contains("live_1760873990_000001.m4s")
-        );
+        assert!(!trimmed
+            .referenced_files
+            .contains("live_1760873990_000001.m4s"));
         assert!(init_is_at_or_after_trim_generation(
             "1760874038_init.mp4",
             trimmed.generated_at
