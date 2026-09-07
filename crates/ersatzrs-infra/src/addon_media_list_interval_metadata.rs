@@ -190,7 +190,7 @@ impl AddonMediaListItemCoordinator {
     }
 
     /// Retain the pinned process owner across shutdown/heartbeat selection and await cleanup.
-    async fn run_interval_stage<T>(
+    pub(super) async fn run_interval_stage<T>(
         &self,
         job: &ClaimedItemOperation,
         host: Option<&str>,
@@ -228,7 +228,11 @@ impl AddonMediaListItemCoordinator {
         }
     }
 
-    async fn defer_interval(&self, job: &ClaimedItemOperation, seconds: u32) -> Result<bool> {
+    pub(super) async fn defer_interval(
+        &self,
+        job: &ClaimedItemOperation,
+        seconds: u32,
+    ) -> Result<bool> {
         let now = Utc::now();
         self.queue
             .defer(job, now, now + Duration::seconds(i64::from(seconds)))
@@ -236,7 +240,7 @@ impl AddonMediaListItemCoordinator {
         Ok(true)
     }
 
-    async fn finish_interval_error(
+    pub(super) async fn finish_interval_error(
         &self,
         job: &ClaimedItemOperation,
         error: ItemRuntimeError,
@@ -407,6 +411,7 @@ esac
             item_is_finite: true,
             max_video_height: None,
             requested_timing: Some(timing),
+            requested_subtitle_languages: Vec::new(),
         };
         let coordinator = AddonMediaListItemCoordinator::new(pool);
         let id = coordinator

@@ -103,6 +103,12 @@ async fn classify_requirements(
     mode: SelectionMode,
 ) -> Result<Vec<SelectedRequirement>> {
     require_revision(pool, list_id, saved_draft_revision).await?;
+    let requested_languages = if mode == SelectionMode::PreparedFile {
+        crate::addon_media_list_subtitle_selection::requested_preparation_languages(pool, list_id)
+            .await?
+    } else {
+        Vec::new()
+    };
     // Read-only transaction: take one consistent delivery-policy/identity snapshot.
     let mut delivery_tx = pool.begin().await.repository()?;
     let deliveries =
@@ -227,6 +233,8 @@ async fn classify_requirements(
                 || input.provider_id != requirement.provider_id
                 || input.resolved_options()? != options
                 || (mode == SelectionMode::PreparedFile && input.preparation_v2 != Some(true))
+                || (mode == SelectionMode::PreparedFile
+                    && input.requested_subtitle_languages != requested_languages)
                 || input.context_fingerprint != fingerprint
                 || job
                     .try_get::<String, _>("ContextFingerprint")
@@ -280,7 +288,7 @@ async fn classify_requirements(
                 continue;
             }
             if let Some(artifact_id) = artifact_id {
-                if completion == Some(ItemOperationCompletion::Prepared { artifact_id })
+                if matches!(completion, Some(ItemOperationCompletion::Prepared { artifact_id: completed_id, .. }) if completed_id == artifact_id)
                     && job
                         .try_get::<Option<String>, _>("CacheKey")
                         .repository()?
@@ -301,6 +309,15 @@ async fn classify_requirements(
         });
     }
     require_revision(pool, list_id, saved_draft_revision).await?;
+    if mode == SelectionMode::PreparedFile
+        && crate::addon_media_list_subtitle_selection::requested_preparation_languages(
+            pool, list_id,
+        )
+        .await?
+            != requested_languages
+    {
+        return Err(stale());
+    }
     Ok(requirements)
 }
 
@@ -454,6 +471,7 @@ mod tests {
             item_is_finite: true,
             max_video_height: Some(720),
             requested_timing: None,
+            requested_subtitle_languages: Vec::new(),
         };
         input.context_fingerprint = input.base_fingerprint().unwrap();
         let fingerprint = input.context_fingerprint.clone();
@@ -467,9 +485,134 @@ mod tests {
         sqlx::query(r#"INSERT INTO "AddonMediaListItemOperationJob" ("AddonMediaListId","AddonMediaListItemId","Kind","SavedDraftRevision","InputJson","ContextFingerprint","State","ArtifactId","OutcomeJson","CreatedAt","UpdatedAt")
             VALUES (1,10,1,0,?,?,2,?,?,'2026-09-05T00:00:00Z','2026-09-05T00:00:00Z')"#)
             .bind(serde_json::to_string(&input).unwrap()).bind(fingerprint).bind(artifact_id)
-            .bind(serde_json::to_string(&ItemOperationCompletion::Prepared { artifact_id }).unwrap())
+            .bind(serde_json::to_string(&ItemOperationCompletion::Prepared { artifact_id, subtitle_artifact_ids: Vec::new() }).unwrap())
             .execute(&pool).await.unwrap();
         (temporary, pool, artifact_id)
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)] // Exact successful media/caption context and settings transitions.
+    async fn prepared_selection_fences_enabled_and_cleared_subtitle_languages() {
+        let (_directory, pool, artifact_id) = fixture().await;
+        let raw: String =
+            sqlx::query_scalar(r#"SELECT "ManifestJson" FROM "AddonInstallation" LIMIT 1"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let mut manifest: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        manifest["capabilities"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"id":"media-list.subtitles.v1"}));
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson"=?"#)
+            .bind(manifest.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES(?,'eng')
+            ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value";"#,
+        )
+        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE)
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(preparation_requirements(&pool, 1, 0, &[]).await.unwrap()[0]
+            .artifact_id
+            .is_none());
+        let raw: String = sqlx::query_scalar(
+            r#"SELECT "InputJson" FROM "AddonMediaListItemOperationJob" LIMIT 1"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let mut input: ItemOperationInput = serde_json::from_str(&raw).unwrap();
+        let runtime = InstalledItemRuntime::load(&pool, input.addon_id().unwrap(), None)
+            .await
+            .unwrap();
+        input.package_identity = runtime.package_identity().to_owned();
+        input.requested_subtitle_languages = vec!["en".into()];
+        input.context_fingerprint = input.base_fingerprint().unwrap();
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItemOperationJob" SET "InputJson"=?,"ContextFingerprint"=?"#,
+        )
+        .bind(serde_json::to_string(&input).unwrap())
+        .bind(&input.context_fingerprint)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(r#"UPDATE "AddonMediaListArtifact" SET "CacheKey"=? WHERE "Id"=?"#)
+            .bind(&input.context_fingerprint)
+            .bind(artifact_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            preparation_requirements(&pool, 1, 0, &[]).await.unwrap()[0].artifact_id,
+            Some(artifact_id)
+        );
+        sqlx::query(r#"INSERT INTO "AddonMediaListArtifact" ("Id","AddonMediaListId","AddonMediaListItemId","CacheKey","Kind","State","RelativePath","ByteLength","Sha256","OperationContextFingerprint","SubtitleLanguage","SubtitleTimeline","CompletedAt","CreatedAt","UpdatedAt")
+            VALUES(90,1,10,'caption-fixture',0,2,'fixture.en.srt',32,?,?,'en',1,'2026-09-07T00:00:00Z','2026-09-07T00:00:00Z','2026-09-07T00:00:00Z')"#)
+            .bind("a".repeat(64)).bind(&input.context_fingerprint).execute(&pool).await.unwrap();
+        // A failed earlier attempt can leave promoted captions with this same
+        // context. A later successful no-human result must not discover them.
+        assert!(
+            crate::addon_media_list_subtitle_selection::select_subtitle_artifacts(&pool, 1, 0, &[])
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        sqlx::query(
+            r#"UPDATE "AddonMediaListArtifact" SET "PreparedSubtitleIdsJson"='[90]' WHERE "Id"=?"#,
+        )
+        .bind(artifact_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(r#"UPDATE "AddonMediaListItemOperationJob" SET "OutcomeJson"=?"#)
+            .bind(
+                serde_json::to_string(&ItemOperationCompletion::Prepared {
+                    artifact_id,
+                    subtitle_artifact_ids: vec![90],
+                })
+                .unwrap(),
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            crate::addon_media_list_subtitle_selection::select_subtitle_artifacts(&pool, 1, 0, &[])
+                .await
+                .unwrap()["item"],
+            vec![90]
+        );
+        sqlx::query(
+            r#"UPDATE "AddonMediaListArtifact" SET "OperationContextFingerprint"=? WHERE "Id"=90"#,
+        )
+        .bind("b".repeat(64))
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(
+            crate::addon_media_list_subtitle_selection::select_subtitle_artifacts(&pool, 1, 0, &[])
+                .await
+                .is_err()
+        );
+        sqlx::query(r#"UPDATE "AddonMediaListArtifact" SET "OperationContextFingerprint"=?,"SubtitleTimeline"=0 WHERE "Id"=90"#)
+            .bind(&input.context_fingerprint).execute(&pool).await.unwrap();
+        assert!(
+            crate::addon_media_list_subtitle_selection::select_subtitle_artifacts(&pool, 1, 0, &[])
+                .await
+                .is_err()
+        );
+        sqlx::query(r#"UPDATE "ConfigElement" SET "Value"='' WHERE "Key"=?"#)
+            .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(preparation_requirements(&pool, 1, 0, &[]).await.unwrap()[0]
+            .artifact_id
+            .is_none());
     }
 
     #[tokio::test]
@@ -608,7 +751,7 @@ mod tests {
             sqlx::query(r#"INSERT INTO "AddonMediaListItemOperationJob" ("AddonMediaListId","AddonMediaListItemId","Kind","SavedDraftRevision","InputJson","ContextFingerprint","State","ArtifactId","OutcomeJson","CreatedAt","UpdatedAt")
                 VALUES (1,11,1,0,?,?,2,?,?,'2026-09-05T00:00:00Z','2026-09-05T00:00:00Z')"#)
                 .bind(serde_json::to_string(&input).unwrap()).bind(&input.context_fingerprint).bind(artifact_id)
-                .bind(serde_json::to_string(&ItemOperationCompletion::Prepared { artifact_id }).unwrap())
+            .bind(serde_json::to_string(&ItemOperationCompletion::Prepared { artifact_id, subtitle_artifact_ids: Vec::new() }).unwrap())
                 .execute(&pool).await.unwrap();
 
             assert_eq!(

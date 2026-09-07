@@ -166,6 +166,9 @@ pub struct AddonMediaListRevisionItem {
     /// Omit legacy absence from serialization to preserve existing snapshot digests.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prepared_artifact_id: Option<EntityId>,
+    /// Exact manual caption artifacts selected with this publication.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subtitle_artifact_ids: Vec<EntityId>,
     /// Exact interval plan for streamed playback, never an ephemeral transport URL.
     /// Omit absence so pre-streaming snapshot digests remain unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -178,6 +181,7 @@ pub struct AddonMediaListRevisionItem {
 pub struct AddonMediaListRevisionArtifacts {
     pub ids: Vec<EntityId>,
     pub prepared_media: std::collections::BTreeMap<String, EntityId>,
+    pub subtitles: std::collections::BTreeMap<String, Vec<EntityId>>,
     /// Context-bound plans keyed by the owning provider item, without artifact pins.
     pub streaming_plans: std::collections::BTreeMap<
         String,

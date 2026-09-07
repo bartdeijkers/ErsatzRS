@@ -131,7 +131,7 @@ fn try_lock(root: &Path) -> Result<Option<File>> {
     }
 }
 
-/// Run only preparation work against an already-initialized database.
+/// Run file-writing item work against an already-initialized database.
 /// Sending or dropping `shutdown` requests an awaited process-tree drain.
 ///
 /// # Errors
@@ -174,6 +174,7 @@ pub async fn run_preparation_worker(
     session.record(Phase::Idle, None).await?;
     set_worker_unavailable(&pool, false).await?;
     let coordinator = AddonMediaListItemCoordinator::new(pool);
+    let mut subtitle_turn = false;
     loop {
         tokio::select! {
             biased;
@@ -181,8 +182,18 @@ pub async fn run_preparation_worker(
             () = tokio::time::sleep(Duration::from_millis(250)) => {}
         }
         let (cancel, cancellation) = tokio::sync::oneshot::channel();
-        let operation =
-            coordinator.process_one_preparation_supervised(root, cancellation, &session);
+        subtitle_turn = !subtitle_turn;
+        let operation = async {
+            if subtitle_turn {
+                coordinator
+                    .process_one_subtitles_supervised(root, cancellation, &session)
+                    .await
+            } else {
+                coordinator
+                    .process_one_preparation_supervised(root, cancellation, &session)
+                    .await
+            }
+        };
         tokio::pin!(operation);
         tokio::select! {
             biased;
@@ -330,7 +341,7 @@ async fn recovery_required_on(connection: &mut sqlx::SqliteConnection) -> Result
             let attempt = checkpoint.attempt.ok_or_else(unavailable)?;
             let live: bool = sqlx::query_scalar(
                 r#"SELECT EXISTS(SELECT 1
-                FROM "AddonMediaListItemOperationJob" WHERE "Id"=? AND "Kind"=1
+                FROM "AddonMediaListItemOperationJob" WHERE "Id"=? AND "Kind" IN (1,3)
                 AND "State"=1 AND "Generation"=? AND "LeaseOwner"=? AND "LeaseExpiresAt">?)"#,
             )
             .bind(attempt.job_id)

@@ -59,6 +59,7 @@ async fn fixture() -> (
         item_is_finite: true,
         max_video_height: Some(1080),
         requested_timing: None,
+        requested_subtitle_languages: Vec::new(),
     };
     (pool.clone(), AddonMediaListItemJobQueue::new(pool), input)
 }
@@ -244,6 +245,7 @@ async fn artifact_reappearance_reattaches_only_unowned_matching_cache_entries() 
                         &job,
                         ItemOperationCompletion::Prepared {
                             artifact_id: artifact.id,
+                            subtitle_artifact_ids: Vec::new(),
                         },
                         now,
                     )
@@ -342,6 +344,7 @@ async fn artifact_promotes_verified_file_and_never_replaces_ready_artifact() {
         byte_length: bytes.len() as u64,
         sha256: sha256_hex(bytes),
         duration_milliseconds: 1000,
+        subtitles: Vec::new(),
     };
     let tools = tempfile::tempdir().unwrap();
     let probe = tools.path().join("ffprobe");

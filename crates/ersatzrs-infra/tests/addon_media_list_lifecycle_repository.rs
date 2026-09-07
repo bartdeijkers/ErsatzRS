@@ -1621,6 +1621,7 @@ async fn streaming_revision_rejects_wrong_owner_nonfinite_unpublished_and_prepar
             ids: vec![artifact_id],
             prepared_media: BTreeMap::from([("item-10".into(), artifact_id)]),
             streaming_plans: BTreeMap::from([("item-10".into(), plan.clone())]),
+            ..Default::default()
         },
     ] {
         assert!(repository

@@ -2262,6 +2262,39 @@ async fn upsert_local_remote_stream(
     )
     .await?;
 
+    // Reconcile sidecars beside the stable YAML identity, not an expiring URL
+    // or prepared artifact path. Retain embedded streams on unprobed rescans.
+    let subtitle_streams = sqlx::query(
+        r#"SELECT "Index", "Codec", "Language", "Title", "Default", "Forced", "FileName"
+           FROM "MediaStream" WHERE "MediaVersionId" = ? AND "MediaStreamKind" = 3"#,
+    )
+    .bind(version_id)
+    .fetch_all(&mut *tx)
+    .await?
+    .into_iter()
+    .map(|row| -> Result<MediaStream> {
+        Ok(MediaStream {
+            kind: MediaStreamKind::Subtitle,
+            index: row.try_get("Index")?,
+            codec: row.try_get("Codec")?,
+            language: row.try_get("Language")?,
+            title: row.try_get("Title")?,
+            default: row.try_get("Default")?,
+            forced: row.try_get("Forced")?,
+            file_name: row.try_get("FileName")?,
+            ..MediaStream::default()
+        })
+    })
+    .collect::<Result<Vec<_>>>()?;
+    update_local_file_subtitles(
+        &mut tx,
+        SubtitleMetadataOwner::RemoteStream(metadata_id),
+        &subtitle_streams,
+        path,
+        true,
+    )
+    .await?;
+
     tx.commit().await?;
     Ok(item_id)
 }
@@ -5411,6 +5444,99 @@ mod tests {
             row.get::<Option<i64>, _>("ParentMediaItemId"),
             Some(primary_id)
         );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn remote_stream_subtitle_sidecars_reconcile_idempotently_after_removal_and_restore() {
+        let root = tempfile::tempdir().unwrap();
+        let yaml = root.path().join("Fixture.yml");
+        let english = root.path().join("Fixture.en.srt");
+        let dutch = root.path().join("Fixture.nl.vtt");
+        std::fs::write(
+            &yaml,
+            "url: https://example.test/live\nis_live: true\ntitle: Fixture\n",
+        )
+        .unwrap();
+        std::fs::write(&english, "1\n00:00:00,000 --> 00:00:01,000\nEnglish\n").unwrap();
+        let dutch_bytes = "WEBVTT\n\n00:00.000 --> 00:01.000\nNederlands\n";
+        std::fs::write(&dutch, dutch_bytes).unwrap();
+        std::fs::write(root.path().join("Unrelated.fr.srt"), "unrelated").unwrap();
+        let pool = test_db().await;
+        let library_path = super::LocalLibraryPath {
+            id: 1,
+            path: root.path().display().to_string(),
+            media_kind: LibraryMediaKind::RemoteStreams,
+        };
+        seed_local_library(&pool, &library_path, "Remote Streams", 7).await;
+        let config = super::LocalScanConfig {
+            library_id: 1,
+            ffprobe_path: "unused-definition-scan-probe".into(),
+        };
+        let report = super::scan_local_library(&pool, &config).await.unwrap();
+        assert_eq!(report.failed_files, 0, "{:?}", report.issues);
+        let identity = remote_stream_subtitle_fixture_identity(&pool).await;
+        // An unprobed rescan must retain an earlier probe's embedded track.
+        sqlx::query(r#"INSERT INTO "MediaStream" (
+            "MediaVersionId", "Index", "MediaStreamKind", "Codec", "Language", "Title", "Default", "Forced", "Channels"
+        ) VALUES (?, 5, 3, 'subrip', 'deu', 'Embedded', 0, 1, 0)"#)
+            .bind(identity.1).execute(&pool).await.unwrap();
+        let mut baseline = Vec::new();
+        for phase in 0..4 {
+            if phase == 2 {
+                std::fs::remove_file(&dutch).unwrap();
+            } else if phase == 3 {
+                // Model recovery restoring the previous candidate's sidecar.
+                std::fs::write(&dutch, dutch_bytes).unwrap();
+            }
+            let report = super::scan_local_library(&pool, &config).await.unwrap();
+            assert_eq!(report.failed_files, 0, "{:?}", report.issues);
+            let rows: Vec<(i64, String, Option<String>, String, i32)> = sqlx::query_as(
+                r#"SELECT "Id", "Language", "Path", "Codec", "SubtitleKind"
+                   FROM "Subtitle" WHERE "RemoteStreamMetadataId" = ? ORDER BY "SubtitleKind", "Codec""#,
+            )
+            .bind(identity.2)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+            assert_eq!(
+                rows.iter().map(|row| row.1.as_str()).collect::<Vec<_>>(),
+                if phase == 2 {
+                    vec!["deu", "eng"]
+                } else {
+                    vec!["deu", "eng", "dut"]
+                }
+            );
+            assert_eq!(rows[0].3, "subrip");
+            assert_eq!(rows[0].4, 0);
+            assert_eq!(rows[1].2.as_deref(), english.to_str());
+            assert_eq!(rows[1].3, "subrip");
+            assert_eq!(rows[1].4, 1);
+            if phase != 2 {
+                assert_eq!(rows[2].2.as_deref(), dutch.to_str());
+                assert_eq!(rows[2].3, "webvtt");
+            }
+            if phase == 0 {
+                baseline = rows;
+            } else if phase == 1 {
+                assert_eq!(rows, baseline, "rescans must not recreate subtitle rows");
+            } else {
+                assert_eq!(rows[..2], baseline[..2], "unaffected tracks stay stable");
+            }
+            assert_eq!(
+                remote_stream_subtitle_fixture_identity(&pool).await,
+                identity
+            );
+        }
+    }
+
+    async fn remote_stream_subtitle_fixture_identity(pool: &sqlx::SqlitePool) -> (i64, i64, i64) {
+        sqlx::query_as(
+            r#"SELECT "stream"."Id", "version"."Id", "metadata"."Id"
+               FROM "RemoteStream" AS "stream"
+               JOIN "MediaVersion" AS "version" ON "version"."RemoteStreamId" = "stream"."Id"
+               JOIN "RemoteStreamMetadata" AS "metadata" ON "metadata"."RemoteStreamId" = "stream"."Id""#,
+        ).fetch_one(pool).await.unwrap()
     }
 
     #[tokio::test]

@@ -1018,6 +1018,38 @@ Implementation plan (approved choices, 2026-09-04; delivery remains in progress)
 
 ### AMM-M-02 — Human subtitles selected by FFmpeg language settings
 
+Approved and completed locally 2026-09-07; the owning milestone records acceptance.
+Reuse existing language settings and
+item/channel/global precedence. Native yt-dlp acquires only primary/fallback
+human subtitles, normalizes new artifacts to SRT, and cuts downloaded video
+and subtitles together. Stream mode acquires subtitle files only and maps cues
+through the frozen retained intervals using the existing subtitle parser.
+Include requested languages in preparation identity; changes may reprepare
+downloaded media. Reuse jobs, artifact ownership, sealed publication/recovery
+and scanner sidecar reconciliation. No new cache service or settings page.
+HLS acceptance uses existing transcoded rendering, not new HLS Direct subtitle
+delivery. Focused tests and P1/P2 review precede local commit; no CI/full closeout.
+
+Dependency checkpoint: the official yt-dlp 2026.08.19 executable fails the native
+timestamp-range regression (processor registration, then unhashable ranges).
+The approved isolated range and SRT cue fixes now pass native regressions after
+review corrections; see milestone evidence. The official installed runtime is
+unchanged. The maintainer requested local completion with no upstream submissions.
+Use the stock executable's package-local postprocessor extension to correct
+range inputs and SRT cue timing while retaining native media transfer, merging,
+SponsorBlock processing and replacement. Fail closed if the required extension
+is not loaded; preserve the existing caption byte limits. The provider JSON
+template explicitly represents subtitle absence. Scheduled playback acceptance
+passes; no runtime fork, installed-executable replacement or publication.
+
+Source map: ErsatzTV `FFmpegStreamSelector.cs`, subtitle extraction/seek handlers,
+and `LocalSubtitlesProvider.cs`; ADR 0052 owns the global-language extension.
+Targets are the add-on contract/native yt-dlp package, infra item operations,
+publication/artifact ownership and `subtitles.rs`, scanner RemoteStream
+sidecar reconciliation, and existing MPEG-TS/HLS subtitle-input construction.
+Existing settings/UI and validators remain unchanged. Side effects are bounded
+provider work, revision-bound files/Subtitle rows, and recovery reconciliation.
+
 - Materialize only manually authored primary/fallback subtitle files through
   the artifact contract with `--no-write-auto-subs` explicit.
 - Project idempotent subtitle rows and retain them through publication/recovery.

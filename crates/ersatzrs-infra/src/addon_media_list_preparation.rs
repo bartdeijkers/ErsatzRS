@@ -189,6 +189,15 @@ impl AddonMediaListItemCoordinator {
             item_is_finite: true,
             max_video_height,
             requested_timing: None,
+            requested_subtitle_languages: if generic
+                && installed
+                    .manifest
+                    .has_capability(ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_SUBTITLES_V1)
+            {
+                crate::addon_media_list_subtitles::requested_languages(&self.pool).await?
+            } else {
+                Vec::new()
+            },
         };
         input.context_fingerprint = input.base_fingerprint()?;
         if automatic {
@@ -567,6 +576,7 @@ impl AddonMediaListItemCoordinator {
                         job,
                         ItemOperationCompletion::Prepared {
                             artifact_id: artifact.id,
+                            subtitle_artifact_ids: self.prepared_subtitle_ids(artifact.id).await?,
                         },
                         Utc::now(),
                     )
@@ -590,7 +600,10 @@ impl AddonMediaListItemCoordinator {
                 self.queue
                     .complete(
                         job,
-                        ItemOperationCompletion::Prepared { artifact_id },
+                        ItemOperationCompletion::Prepared {
+                            artifact_id,
+                            subtitle_artifact_ids: self.prepared_subtitle_ids(artifact_id).await?,
+                        },
                         Utc::now(),
                     )
                     .await
@@ -624,6 +637,24 @@ impl AddonMediaListItemCoordinator {
                 }
             }
         }
+    }
+
+    async fn prepared_subtitle_ids(&self, artifact_id: i64) -> Result<Vec<i64>> {
+        let json: String = sqlx::query_scalar(r#"SELECT "PreparedSubtitleIdsJson" FROM "AddonMediaListArtifact" WHERE "Id"=? AND "Kind"=1 AND "State"=2"#)
+            .bind(artifact_id).fetch_one(&self.pool).await.repository()?;
+        if json.len() > 128 {
+            return Err(RepositoryError::Conflict(
+                "invalid prepared subtitle ownership".into(),
+            ));
+        }
+        let ids: Vec<i64> = serde_json::from_str(&json)
+            .map_err(|_| RepositoryError::Conflict("invalid prepared subtitle ownership".into()))?;
+        if ids.len() > 2 {
+            return Err(RepositoryError::Conflict(
+                "invalid prepared subtitle ownership".into(),
+            ));
+        }
+        Ok(ids)
     }
 
     #[allow(clippy::too_many_lines)] // Provider and probe cancellation retain the same reservation owner.
@@ -733,14 +764,24 @@ impl AddonMediaListItemCoordinator {
         // Probe/promotion may outlast a heartbeat interval; keep the claim live without
         // cancelling an in-progress atomic file/database promotion on an unrelated tick.
         let (cancel_probe, probe_cancellation) = tokio::sync::oneshot::channel();
-        let promotion = store.promote_cancellable(
-            job,
-            reservation,
-            result,
-            ffprobe_path,
-            Utc::now(),
-            probe_cancellation,
-        );
+        let promotion = async {
+            crate::addon_media_list_subtitle_artifacts::SubtitleArtifactStore::new(
+                self.pool.clone(),
+            )
+            .promote_prepared(job, reservation, &result.subtitles, Utc::now())
+            .await
+            .map_err(crate::addon_media_list_artifacts::ArtifactPromotionError::from)?;
+            store
+                .promote_cancellable(
+                    job,
+                    reservation,
+                    result,
+                    ffprobe_path,
+                    Utc::now(),
+                    probe_cancellation,
+                )
+                .await
+        };
         tokio::pin!(promotion);
         let mut process_guard = PreparationProcessGuard {
             cleanup_unconfirmed: true,
@@ -1115,6 +1156,7 @@ pub(crate) mod tests {
             byte_length: 7,
             sha256: digest,
             duration_milliseconds: 1000,
+            subtitles: Vec::new(),
         };
         let probe = temporary.path().join("probe.sh");
         tokio::fs::write(&probe, "#!/bin/sh\necho $$ > probe-pid\nexec sleep 30\n")

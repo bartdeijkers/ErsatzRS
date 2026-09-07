@@ -669,6 +669,13 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
                     })
                     .collect::<BTreeMap<_, _>>()
                     != artifacts.streaming_plans
+                || existing
+                    .items
+                    .iter()
+                    .filter(|item| !item.subtitle_artifact_ids.is_empty())
+                    .map(|item| (item.provider_id.clone(), item.subtitle_artifact_ids.clone()))
+                    .collect::<BTreeMap<_, _>>()
+                    != artifacts.subtitles
             {
                 return Err(RepositoryError::Conflict(
                     "completed publication revision is immutable".into(),
@@ -707,6 +714,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         bind_prepared_revision_items_in_tx(&mut tx, &mut snapshot, &artifacts.prepared_media)
             .await?;
         bind_streaming_revision_items(&mut snapshot, &artifacts.streaming_plans)?;
+        bind_subtitle_revision_items_in_tx(&mut tx, &mut snapshot, &artifacts.subtitles).await?;
         snapshot.snapshot_digest = revision_snapshot_digest(&snapshot)?;
         insert_revision_snapshot_in_tx(&mut tx, &snapshot).await?;
         tx.commit().await.repository()?;
@@ -1953,6 +1961,57 @@ fn bind_streaming_revision_items(
     Ok(())
 }
 
+async fn bind_subtitle_revision_items_in_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    snapshot: &mut AddonMediaListRevisionSnapshot,
+    subtitles: &BTreeMap<String, Vec<EntityId>>,
+) -> Result<()> {
+    for (provider_id, ids) in subtitles {
+        let item = snapshot
+            .items
+            .iter_mut()
+            .find(|item| {
+                item.provider_id == *provider_id
+                    && item.published
+                    && item.replacement_media_item_id.is_none()
+            })
+            .ok_or_else(invalid_playback_timeline)?;
+        if ids.is_empty() || ids.len() > 2 || (ids.len() == 2 && ids[0] == ids[1]) {
+            return Err(invalid_playback_timeline());
+        }
+        let mut languages = std::collections::BTreeSet::new();
+        for id in ids {
+            if !snapshot.artifact_ids.contains(id) {
+                return Err(invalid_playback_timeline());
+            }
+            let language: Option<String> = sqlx::query_scalar(
+                r#"SELECT "SubtitleLanguage" FROM "AddonMediaListArtifact"
+                WHERE "Id"=? AND "AddonMediaListId"=? AND "Kind"=0 AND "State"=2
+                  AND "SubtitleTimeline"=? AND "CompletedAt" IS NOT NULL"#,
+            )
+            .bind(id)
+            .bind(snapshot.list_id)
+            .bind(i32::from(item.prepared_artifact_id.is_some()))
+            .fetch_optional(&mut **tx)
+            .await
+            .repository()?
+            .flatten();
+            let language = language.ok_or_else(invalid_playback_timeline)?;
+            if !languages.insert(
+                language
+                    .split('-')
+                    .next()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase(),
+            ) {
+                return Err(invalid_playback_timeline());
+            }
+        }
+        item.subtitle_artifact_ids.clone_from(ids);
+    }
+    Ok(())
+}
+
 /// Bind at most one Ready processed file to each published logical item.
 async fn bind_prepared_revision_items_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
@@ -2132,6 +2191,7 @@ fn decode_current_revision_item(row: &crate::db::DbRow) -> Result<AddonMediaList
         replacement_media_version_id: row.try_get("ReplacementMediaVersionId").repository()?,
         published_media_item_id: row.try_get("MediaItemId").repository()?,
         prepared_artifact_id: None,
+        subtitle_artifact_ids: Vec::new(),
         playback_timeline: None,
     })
 }
@@ -2234,8 +2294,8 @@ async fn insert_revision_item_in_tx(
                "Availability", "AvailabilityReason", "AvailabilityReasonCode",
                "ProviderLiveness", "LivenessOverride", "EffectiveLiveness", "MetadataJson",
                "MetadataDigest", "ReplacementMediaItemId", "ReplacementMediaVersionId",
-               "PublishedMediaItemId", "PreparedArtifactId", "PlaybackTimelineJson"
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               "PublishedMediaItemId", "PreparedArtifactId", "PlaybackTimelineJson", "SubtitleArtifactIdsJson"
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
     )
     .bind(revision_id)
     .bind(&item.provider_id)
@@ -2273,6 +2333,7 @@ async fn insert_revision_item_in_tx(
     .bind(item.prepared_artifact_id)
     .bind(item.playback_timeline.as_ref().map(serde_json::to_string).transpose()
         .map_err(|_| invalid_playback_timeline())?)
+    .bind(serde_json::to_string(&item.subtitle_artifact_ids).map_err(|_| invalid_playback_timeline())?)
     .execute(&mut **tx)
     .await
     .repository()?;
@@ -2466,6 +2527,11 @@ fn decode_revision_item_row(row: &crate::db::DbRow) -> Result<AddonMediaListRevi
         replacement_media_version_id: row.try_get("ReplacementMediaVersionId").repository()?,
         published_media_item_id: row.try_get("PublishedMediaItemId").repository()?,
         prepared_artifact_id: row.try_get("PreparedArtifactId").repository()?,
+        subtitle_artifact_ids: serde_json::from_str(
+            &row.try_get::<String, _>("SubtitleArtifactIdsJson")
+                .repository()?,
+        )
+        .map_err(|_| invalid_playback_timeline())?,
         playback_timeline,
     })
 }
@@ -3206,6 +3272,8 @@ fn draft_publication_item_changed(
     published.prepared_artifact_id = None;
     current.playback_timeline = None;
     published.playback_timeline = None;
+    current.subtitle_artifact_ids.clear();
+    published.subtitle_artifact_ids.clear();
     current != published
 }
 

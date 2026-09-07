@@ -43,6 +43,9 @@ async fn queue_required_media_impl(
     excluded_item_ids: &[i64],
     automatic: bool,
 ) -> Result<u64> {
+    let subtitle_count =
+        queue_required_subtitles(pool, list_id, saved_revision, excluded_item_ids, automatic)
+            .await?;
     let downloads = crate::addon_media_list_prepared_selection::preparation_requirements(
         pool,
         list_id,
@@ -52,7 +55,7 @@ async fn queue_required_media_impl(
     .await?;
     let coordinator =
         crate::addon_media_list_item_coordinator::AddonMediaListItemCoordinator::new(pool.clone());
-    let mut download_count = 0_u64;
+    let mut download_count = subtitle_count;
     for item in downloads
         .into_iter()
         .filter(|item| item.artifact_id.is_none())
@@ -158,6 +161,7 @@ async fn queue_required_media_impl(
             item_is_finite: true,
             max_video_height: None,
             requested_timing: Some(timing),
+            requested_subtitle_languages: Vec::new(),
         };
         let id = if automatic {
             queue
@@ -200,6 +204,110 @@ fn saved_seconds(row: &crate::db::DbRow, column: &str) -> Result<Option<u64>> {
         .map(u64::try_from)
         .transpose()
         .map_err(|_| unavailable())
+}
+
+async fn queue_required_subtitles(
+    pool: &DbPool,
+    list_id: i64,
+    saved_revision: i32,
+    excluded_item_ids: &[i64],
+    automatic: bool,
+) -> Result<u64> {
+    let missing = crate::addon_media_list_subtitle_selection::subtitle_requirements(
+        pool,
+        list_id,
+        saved_revision,
+        excluded_item_ids,
+    )
+    .await?
+    .into_iter()
+    .filter(|item| item.artifacts.is_none())
+    .collect::<Vec<_>>();
+    let count = u64::try_from(missing.len()).map_err(|_| unavailable())?;
+    if missing.iter().all(|item| item.pending) {
+        return Ok(count);
+    }
+    let addon_id: String = sqlx::query_scalar(
+        r#"SELECT "AddonId" FROM "AddonMediaList"
+        WHERE "Id"=? AND "DraftRevision"=? AND "ReviewState"<>3"#,
+    )
+    .bind(list_id)
+    .bind(saved_revision)
+    .fetch_optional(pool)
+    .await
+    .repository()?
+    .ok_or_else(unavailable)?;
+    let runtime = InstalledItemRuntime::load(pool, &addon_id, None)
+        .await
+        .map_err(|_| unavailable())?;
+    let tool_version = runtime
+        .runtime_info()
+        .await
+        .map_err(|_| unavailable())?
+        .tool_version;
+    let languages = crate::addon_media_list_subtitles::requested_languages(pool).await?;
+    let queue = AddonMediaListItemJobQueue::new(pool.clone());
+    for item in missing.into_iter().filter(|item| !item.pending) {
+        let source_url: String = sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT "SourceUrl" FROM "AddonMediaListItem"
+            WHERE "Id"=? AND "AddonMediaListId"=? AND "Included"=1
+              AND COALESCE("LivenessOverride","ProviderLiveness")=1"#,
+        )
+        .bind(item.item_id)
+        .bind(list_id)
+        .fetch_optional(pool)
+        .await
+        .repository()?
+        .flatten()
+        .ok_or_else(unavailable)?;
+        let options = load_draft_item_options(pool, list_id, item.item_id).await?;
+        if let Some(options) = &options {
+            runtime
+                .validate_options(options)
+                .map_err(|_| unavailable())?;
+        }
+        let mut input = ItemOperationInput {
+            source_url,
+            provider_id: item.provider_id,
+            context_fingerprint: String::new(),
+            schema: options.as_ref().map(|value| value.schema.clone()),
+            definition: options.as_ref().map(|value| value.definition.clone()),
+            options: options.as_ref().map(|value| value.values.clone()),
+            addon_id: options.is_none().then(|| addon_id.clone()),
+            preparation_v2: None,
+            package_identity: runtime.package_identity().to_owned(),
+            tool_version: tool_version.clone(),
+            item_is_finite: true,
+            max_video_height: None,
+            requested_timing: None,
+            requested_subtitle_languages: languages.clone(),
+        };
+        input.context_fingerprint = input.base_fingerprint()?;
+        if automatic {
+            queue
+                .enqueue_once(
+                    list_id,
+                    item.item_id,
+                    saved_revision,
+                    ItemOperationKind::Subtitles,
+                    input,
+                    Utc::now(),
+                )
+                .await?;
+        } else {
+            queue
+                .enqueue(
+                    list_id,
+                    item.item_id,
+                    saved_revision,
+                    ItemOperationKind::Subtitles,
+                    input,
+                    Utc::now(),
+                )
+                .await?;
+        }
+    }
+    Ok(count)
 }
 
 fn unavailable() -> RepositoryError {

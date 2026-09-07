@@ -15,6 +15,14 @@ release section when tagging a release.
 
 ### Added
 
+- Acquire human-authored yt-dlp subtitles only for the configured global primary
+  and fallback languages, without automatic captions. Caption artifacts use the
+  existing bounded file worker and are bound to publication revisions; streaming
+  maps their cues through the frozen cuts without downloading the video, while
+  Download ahead uses yt-dlp's native processing with a package-local caption
+  timing correction. Captions remain aligned across scheduled joins and cuts
+  in MPEG-TS and transcoded HLS playback.
+
 - Add generic list-level Stream, Download ahead, and new-videos-only delivery
   selection. New-videos-only shows its saved cutoff beside the selector;
   re-enabling it establishes a fresh cutoff while current published playback

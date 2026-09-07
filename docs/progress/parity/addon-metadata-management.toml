@@ -2,7 +2,7 @@ feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'In progress'
-adr        = ['0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088']
+adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088']
 
 summary = '''
 ADR 0075 implements a provider-neutral metadata draft with generated parent
@@ -32,12 +32,9 @@ without detail calls; AMM-G-07 proves the seven-URL matrix, provider order and
 identity, typed live/finite behavior, and invalid-output rejection. Retry keeps
 operator state while replacing only an incomplete generation. NSF live browser
 acceptance covers publication, scheduling, playout, MPEG-TS and HLS.
-AMM-H closed the Windows dogfood television-cardinality regression. Artwork
-candidates are canonicalized before replacement, television and admin reads
-select one deterministic non-empty artwork winner, and narrow restart-safe
-SQLite/MySQL repairs remove only safe exact duplicates. Aggregate health and
-runtime-audit diagnostics plus a 27-episode browser proof keep the invariant
-visible without exposing media paths.
+AMM-H closes Windows television-cardinality regressions with canonical artwork,
+deterministic reads, restart-safe exact-duplicate repairs and aggregate health.
+Its milestone owns the 27-episode browser and runtime-audit evidence.
 AMM-I closes the import/review UX gaps under `amm-i-01`.
 After Windows dogfood exposed a stranded journal, AMM-J-01 adds restart-safe
 exact-revision jobs, shared managed-library leases, and legacy-journal adoption.
@@ -53,13 +50,15 @@ reconciliation, and scheduler-only validated-additions publication with exact
 revision fences, retry-safe preparation, and localized Activity/Health holds.
 AMM-M-01A is Complete under ADRs 0087/0088; its milestone owns the options,
 real MPEG-TS/HLS cut and cancellation evidence. Native yt-dlp replaces the
-Range adapter and remains preferred in later slices. SDR/subtitle refusals
+Range adapter and remains preferred in later slices. HDR/unmapped-subtitle refusals
 remain explicit; static startup-stage diagnostics remain non-blocking debt.
 M-01B completes the generic native list select: Stream, Download ahead, or
 Download ahead only for new videos first imported after enabling it. Its saved
 UTC cutoff is visible and renewed on re-enabling; published playback stays
 frozen. Existing videos stream and enabled SponsorBlock applies in every mode.
-M-02 and AMM-N await.
+M-02 completes ADR 0052 manual primary/fallback captions, revision-pinned files
+and aligned MPEG-TS/transcoded HLS captions in both delivery modes. Its milestone
+owns acceptance evidence. M-03 and AMM-N await.
 '''
 
 [[debt]]

@@ -327,7 +327,109 @@ fn parse_hms_millis(text: &str, sep: char) -> Option<i64> {
     if !(0..60).contains(&minutes) || !(0..60).contains(&seconds) {
         return None;
     }
-    Some(((hours * 60 + minutes) * 60 + seconds) * 1_000 + millis)
+    if hours < 0 {
+        return None;
+    }
+    hours
+        .checked_mul(60)?
+        .checked_add(minutes)?
+        .checked_mul(60)?
+        .checked_add(seconds)?
+        .checked_mul(1_000)?
+        .checked_add(millis)
+}
+
+/// A source subtitle cannot be safely transformed into the published clock.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum SubtitleTimelineError {
+    #[error("subtitle exceeds its byte limit")]
+    TooLarge,
+    #[error("subtitle contains invalid SRT cues")]
+    InvalidSrt,
+}
+
+/// Map normalized source-clock SRT cues onto a validated edited timeline.
+///
+/// Intersects cues with each retained source range, including fragment bounds,
+/// and splits cues spanning cuts. Payload lines are preserved; sequence numbers
+/// and timestamps are regenerated. The returned clock starts at programme zero;
+/// the caller must apply any later programme join exactly once.
+///
+/// # Errors
+/// Rejects malformed or cue-free input atomically and enforces `max_bytes` on
+/// both input and output, including amplification from splitting cues. An empty
+/// successful result means valid cues had no intersection with retained media.
+pub fn map_srt_through_timeline(
+    content: &str,
+    timeline: &ersatzrs_domain::MediaPlaybackTimeline,
+    max_bytes: usize,
+) -> std::result::Result<String, SubtitleTimelineError> {
+    if content.len() > max_bytes {
+        return Err(SubtitleTimelineError::TooLarge);
+    }
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let lines: Vec<&str> = content.lines().collect();
+    let mut cues = Vec::new();
+    for block in lines
+        .split(|line| line.trim().is_empty())
+        .filter(|block| !block.is_empty())
+    {
+        if block.len() < 3
+            || block[0].is_empty()
+            || !block[0].bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return Err(SubtitleTimelineError::InvalidSrt);
+        }
+        let (start, end) =
+            split_subtitle_timing_line(block[1]).ok_or(SubtitleTimelineError::InvalidSrt)?;
+        let start = parse_srt_timestamp(start).ok_or(SubtitleTimelineError::InvalidSrt)?;
+        let end = parse_srt_timestamp(end).ok_or(SubtitleTimelineError::InvalidSrt)?;
+        if start >= end
+            || block[2..]
+                .iter()
+                .any(|line| split_subtitle_timing_line(line).is_some())
+        {
+            return Err(SubtitleTimelineError::InvalidSrt);
+        }
+        cues.push((start, end, &block[2..]));
+    }
+    if cues.is_empty() {
+        return Err(SubtitleTimelineError::InvalidSrt);
+    }
+    cues.sort_by_key(|(start, _, _)| *start);
+    let mut output = String::new();
+    let mut offset = 0_i64;
+    let mut sequence = 0_usize;
+    for range in timeline.retained_ranges() {
+        // The domain constructor bounds source coordinates to signed milliseconds.
+        let range_start =
+            i64::try_from(range.start).map_err(|_| SubtitleTimelineError::InvalidSrt)?;
+        let range_end = i64::try_from(range.end).map_err(|_| SubtitleTimelineError::InvalidSrt)?;
+        for &(start, end, payload) in &cues {
+            let start = start.max(range_start);
+            let end = end.min(range_end);
+            if start >= end {
+                continue;
+            }
+            sequence += 1;
+            let mut piece = format!(
+                "{sequence}\n{} --> {}\n",
+                format_srt_timestamp(offset + (start - range_start)),
+                format_srt_timestamp(offset + (end - range_start)),
+            );
+            for line in payload {
+                piece.push_str(line);
+                piece.push('\n');
+            }
+            piece.push('\n');
+            if piece.len() > max_bytes.saturating_sub(output.len()) {
+                return Err(SubtitleTimelineError::TooLarge);
+            }
+            output.push_str(&piece);
+        }
+        offset += range_end - range_start;
+    }
+    Ok(output)
 }
 
 /// Parse a right-padded/truncated fractional-second digit string to a fixed
@@ -663,6 +765,80 @@ fn rebase_ass_cues(
 /// rebasing: an empty file is written and cached as a skip-burn marker.
 pub async fn rebase_text_subtitle(input_path: &str, seek_seconds: i64) -> Option<String> {
     rebase_text_subtitle_with_format(input_path, None, seek_seconds).await
+}
+
+/// Strict retained-SRT path: source bytes have already passed publication verification.
+pub(crate) async fn rebase_verified_srt(
+    content: &str,
+    seek_milliseconds: u64,
+) -> Result<Option<String>> {
+    rebase_verified_srt_in(content, seek_milliseconds, &subtitle_seek_cache_folder()).await
+}
+
+async fn rebase_verified_srt_in(
+    content: &str,
+    seek_milliseconds: u64,
+    cache: &Path,
+) -> Result<Option<String>> {
+    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    let invalid = || {
+        ersatzrs_core::repositories::RepositoryError::Conflict(
+            "verified subtitle seek could not be prepared".into(),
+        )
+    };
+    let timeline = ersatzrs_domain::MediaPlaybackTimeline::from_exclusions(
+        i64::MAX as u64,
+        seek_milliseconds..i64::MAX as u64,
+        &[],
+    )
+    .map_err(|_| invalid())?;
+    let limit = 8 * 1024 * 1024;
+    let output = map_srt_through_timeline(content, &timeline, limit).map_err(|_| invalid())?;
+    if output.is_empty() {
+        return Ok(None);
+    }
+    let mut hash = sha2::Sha256::new();
+    hash.update(b"ersatzrs:verified-srt-seek:v1\0");
+    hash.update(seek_milliseconds.to_le_bytes());
+    hash.update(content.as_bytes());
+    let name = hash
+        .finalize()
+        .iter()
+        .fold(String::with_capacity(64), |mut name, byte| {
+            use std::fmt::Write as _;
+            write!(name, "{byte:02x}").expect("string write");
+            name
+        });
+    tokio::fs::create_dir_all(cache)
+        .await
+        .map_err(|_| invalid())?;
+    let path = cache.join(format!("verified-{name}.srt"));
+    let path_text = path.to_str().ok_or_else(invalid)?.to_owned();
+    match tokio::fs::File::open(&path).await {
+        Ok(file) => {
+            let mut cached = Vec::new();
+            file.take(u64::try_from(limit + 1).map_err(|_| invalid())?)
+                .read_to_end(&mut cached)
+                .await
+                .map_err(|_| invalid())?;
+            if cached == output.as_bytes() {
+                return Ok(Some(path_text));
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(invalid()),
+    }
+    // A unique temporary file and atomic replacement prevent concurrent joins
+    // from observing a partial cache entry. Dropped futures remove their temp file.
+    let temporary = tempfile::NamedTempFile::new_in(cache).map_err(|_| invalid())?;
+    let mut file = tokio::fs::File::from_std(temporary.reopen().map_err(|_| invalid())?);
+    file.write_all(output.as_bytes())
+        .await
+        .map_err(|_| invalid())?;
+    file.flush().await.map_err(|_| invalid())?;
+    drop(file);
+    temporary.persist(&path).map_err(|_| invalid())?;
+    Ok(Some(path_text))
 }
 
 async fn rebase_text_subtitle_with_format(
@@ -1365,6 +1541,85 @@ mod tests {
     }
 
     #[test]
+    fn timeline_srt_maps_before_after_and_split_cues_with_unicode_payload() {
+        let timeline = ersatzrs_domain::MediaPlaybackTimeline::from_exclusions(
+            10_000,
+            0..10_000,
+            &[2_000..4_000, 6_000..7_000],
+        )
+        .unwrap();
+        let source = "1\n00:00:00,500 --> 00:00:01,500\nBefore\n\n2\n00:00:01,500 --> 00:00:04,500\nHéllo 世界\nSecond line\n\n3\n00:00:07,000 --> 00:00:08,000\nAfter\n";
+        assert_eq!(
+            map_srt_through_timeline(source, &timeline, 4096).unwrap(),
+            "1\n00:00:00,500 --> 00:00:01,500\nBefore\n\n2\n00:00:01,500 --> 00:00:02,000\nHéllo 世界\nSecond line\n\n3\n00:00:02,000 --> 00:00:02,500\nHéllo 世界\nSecond line\n\n4\n00:00:04,000 --> 00:00:05,000\nAfter\n\n",
+        );
+    }
+
+    #[test]
+    fn timeline_srt_respects_cut_boundaries_and_source_fragment() {
+        let timeline = ersatzrs_domain::MediaPlaybackTimeline::from_exclusions(
+            10_000,
+            2_000..8_000,
+            &[4_000..6_000, 8_000..9_000],
+        )
+        .unwrap();
+        let source = "1\n00:00:00,000 --> 00:00:02,000\nBefore fragment\n\n2\n00:00:01,000 --> 00:00:04,000\nLeft\n\n3\n00:00:04,000 --> 00:00:06,000\nExcluded\n\n4\n00:00:06,000 --> 00:00:09,000\nRight\n\n5\n00:00:08,000 --> 00:00:10,000\nAfter fragment\n";
+        assert_eq!(
+            map_srt_through_timeline(source, &timeline, 4096).unwrap(),
+            "1\n00:00:00,000 --> 00:00:02,000\nLeft\n\n2\n00:00:02,000 --> 00:00:04,000\nRight\n\n",
+        );
+        assert_eq!(
+            map_srt_through_timeline(
+                "1\n00:00:04,000 --> 00:00:06,000\nRemoved\n",
+                &timeline,
+                4096
+            )
+            .unwrap(),
+            "",
+        );
+    }
+
+    #[test]
+    fn timeline_srt_rejects_invalid_input_atomically_and_bounds_split_output() {
+        let timeline = ersatzrs_domain::MediaPlaybackTimeline::from_exclusions(
+            10_000,
+            0..10_000,
+            &[2_000..4_000, 6_000..7_000],
+        )
+        .unwrap();
+        let valid = "1\n00:00:00,000 --> 00:00:10,000\nCaption\n";
+        for invalid in [
+            String::new(),
+            "Not SRT".into(),
+            "1\n00:00:02,000 --> 00:00:01,000\nReversed\n".into(),
+            "1\n00:00:02,000 --> 00:00:02,000\nEmpty\n".into(),
+            "1\n9223372036854775807:00:00,000 --> 00:00:02,000\nOverflow\n".into(),
+            "1\n-1:00:00,000 --> 00:00:02,000\nNegative\n".into(),
+            format!("{valid}\n2\ninvalid --> timing\nBad trailing cue\n"),
+            format!("{valid}\nUnrecognized trailing block\n"),
+        ] {
+            assert_eq!(
+                map_srt_through_timeline(&invalid, &timeline, 4096),
+                Err(SubtitleTimelineError::InvalidSrt)
+            );
+        }
+        assert_eq!(
+            map_srt_through_timeline(valid, &timeline, valid.len() - 1),
+            Err(SubtitleTimelineError::TooLarge)
+        );
+        assert_eq!(
+            map_srt_through_timeline(valid, &timeline, valid.len()),
+            Err(SubtitleTimelineError::TooLarge)
+        );
+        let expected = map_srt_through_timeline(valid, &timeline, 4096).unwrap();
+        let crlf = format!("\u{feff}{}", valid.replace('\n', "\r\n"));
+        assert_eq!(
+            map_srt_through_timeline(&crlf, &timeline, 4096).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
     fn image_codec_filter_matches_etv_list() {
         for codec in IMAGE_CODECS {
             assert!(is_image_codec(codec), "{codec} should be an image codec");
@@ -1372,6 +1627,71 @@ mod tests {
         for codec in ["subrip", "ass", "webvtt", "mov_text", "srt"] {
             assert!(!is_image_codec(codec), "{codec} should be text");
         }
+    }
+
+    #[tokio::test]
+    async fn verified_srt_seek_is_millisecond_exact_and_content_fenced() {
+        let directory = tempfile::tempdir().unwrap();
+        let content = "1\n00:00:01,000 --> 00:00:03,000\nHéllo\n";
+        let path = rebase_verified_srt_in(content, 1843, directory.path())
+            .await
+            .unwrap()
+            .unwrap();
+        let expected = "1\n00:00:00,000 --> 00:00:01,157\nHéllo\n\n";
+        assert_eq!(tokio::fs::read_to_string(&path).await.unwrap(), expected);
+        assert_eq!(
+            rebase_verified_srt_in(content, 1843, directory.path())
+                .await
+                .unwrap(),
+            Some(path.clone())
+        );
+        let revised = content.replace("Héllo", "Revised");
+        let revised_path = rebase_verified_srt_in(&revised, 1843, directory.path())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(path, revised_path);
+        assert!(tokio::fs::read_to_string(&revised_path)
+            .await
+            .unwrap()
+            .contains("Revised"));
+        let other_join = rebase_verified_srt_in(content, 1844, directory.path())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_ne!(path, other_join);
+        // A digest-derived filename is not permission to trust corrupted cache bytes.
+        tokio::fs::write(&path, b"stale cached captions")
+            .await
+            .unwrap();
+        assert_eq!(
+            rebase_verified_srt_in(content, 1843, directory.path())
+                .await
+                .unwrap(),
+            Some(path.clone())
+        );
+        assert_eq!(tokio::fs::read_to_string(path).await.unwrap(), expected);
+    }
+
+    #[tokio::test]
+    async fn verified_srt_seek_exhaustion_is_distinct_from_invalid_or_failed_cache() {
+        let directory = tempfile::tempdir().unwrap();
+        let content = "1\n00:00:01,000 --> 00:00:03,000\nCaption\n";
+        assert!(rebase_verified_srt_in(content, 3000, directory.path())
+            .await
+            .unwrap()
+            .is_none());
+        assert!(rebase_verified_srt_in("invalid", 0, directory.path())
+            .await
+            .is_err());
+        let blocked = directory.path().join("not-a-directory");
+        tokio::fs::write(&blocked, b"fixture").await.unwrap();
+        assert!(rebase_verified_srt_in(content, 1843, &blocked)
+            .await
+            .is_err());
+        assert!(rebase_verified_srt_in(content, u64::MAX, directory.path())
+            .await
+            .is_err());
     }
 
     #[test]

@@ -303,6 +303,9 @@ impl MediaListIntervalMetadataResult {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MediaListPrepareRequest {
+    /// Explicit primary/fallback languages; empty preserves the legacy request.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requested_subtitle_languages: Vec<String>,
     pub source_url: String,
     pub provider_id: String,
     pub context_fingerprint: String,
@@ -337,6 +340,7 @@ impl MediaListPrepareRequest {
         schema: Option<&AddonCapability>,
         item_is_finite: bool,
     ) -> Result<(), ContractError> {
+        crate::media_list_subtitles::validate_languages(&self.requested_subtitle_languages, true)?;
         validate_tool_version(&self.tool_version)?;
         if !item_is_finite {
             return invalid("media list prepare", "requires finite media");
@@ -392,6 +396,9 @@ impl MediaListPrepareRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MediaListPrepareResult {
+    /// Manual sidecars processed together with this media on its final clock.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subtitles: Vec<crate::MediaListSubtitleArtifact>,
     pub provider_id: String,
     pub context_fingerprint: String,
     pub tool_version: String,
@@ -407,6 +414,15 @@ impl MediaListPrepareResult {
     /// # Errors
     /// Rejects mismatched identity, unsafe paths, digest or media bounds.
     pub fn validate(&self, request: &MediaListPrepareRequest) -> Result<(), ContractError> {
+        crate::media_list_subtitles::validate_artifacts(
+            &self.subtitles,
+            &request.requested_subtitle_languages,
+            crate::MediaListSubtitleTimeline::Prepared,
+            request.maximum_file_bytes,
+            request
+                .maximum_staging_bytes
+                .saturating_sub(self.byte_length),
+        )?;
         validate_tool_version_echo(&self.tool_version, &request.tool_version)?;
         if self.selected_format.is_empty()
             || self.selected_format.len() > 128
@@ -493,7 +509,7 @@ pub(crate) fn validate_context(
     }
     validate_digest(fingerprint)
 }
-fn validate_tool_version_echo(value: &str, expected: &str) -> Result<(), ContractError> {
+pub(crate) fn validate_tool_version_echo(value: &str, expected: &str) -> Result<(), ContractError> {
     validate_tool_version(value)?;
     if value != expected {
         return invalid(
@@ -503,7 +519,7 @@ fn validate_tool_version_echo(value: &str, expected: &str) -> Result<(), Contrac
     }
     Ok(())
 }
-fn validate_digest(value: &str) -> Result<(), ContractError> {
+pub(crate) fn validate_digest(value: &str) -> Result<(), ContractError> {
     if value.len() != 64
         || !value
             .bytes()
@@ -590,6 +606,7 @@ mod tests {
     fn prepare_request() -> MediaListPrepareRequest {
         let access = access_request();
         MediaListPrepareRequest {
+            requested_subtitle_languages: Vec::new(),
             tool_version: access.tool_version,
             source_url: access.source_url,
             provider_id: access.provider_id,
@@ -755,6 +772,7 @@ mod tests {
         let mut request = prepare_request();
         let legacy = serde_json::to_value(&request).unwrap();
         assert!(legacy["options"].is_object());
+        assert!(legacy.get("requested_subtitle_languages").is_none());
         request.validate(&schema, true).unwrap();
         request.validate_generic(Some(&schema), true).unwrap();
         assert!(request.validate_generic(None, true).is_err());
@@ -808,6 +826,7 @@ mod tests {
     fn prepared_descriptor_rejects_traversal_absolute_paths_and_bad_media() {
         let request = prepare_request();
         let valid = MediaListPrepareResult {
+            subtitles: Vec::new(),
             tool_version: request.tool_version.clone(),
             selected_format: "137+140".to_owned(),
             provider_id: request.provider_id.clone(),
@@ -818,6 +837,28 @@ mod tests {
             duration_milliseconds: 120_000,
         };
         valid.validate(&request).unwrap();
+        assert!(serde_json::to_value(&valid)
+            .unwrap()
+            .get("subtitles")
+            .is_none());
+        let mut subtitle_request = request.clone();
+        subtitle_request.requested_subtitle_languages = vec!["en".into()];
+        let mut with_subtitle = valid.clone();
+        with_subtitle
+            .subtitles
+            .push(crate::MediaListSubtitleArtifact {
+                language: "en-US".into(),
+                format: crate::MediaListSubtitleFormat::Srt,
+                provenance: crate::MediaListSubtitleProvenance::Manual,
+                timeline: crate::MediaListSubtitleTimeline::Prepared,
+                relative_path: "prepared.en-US.srt".into(),
+                byte_length: 64,
+                sha256: "d".repeat(64),
+            });
+        with_subtitle.validate(&subtitle_request).unwrap();
+        assert!(with_subtitle.validate(&request).is_err());
+        with_subtitle.subtitles[0].timeline = crate::MediaListSubtitleTimeline::Source;
+        assert!(with_subtitle.validate(&subtitle_request).is_err());
         for path in [
             "../escape.mkv",
             "/absolute.mkv",
@@ -938,6 +979,7 @@ mod tests {
         result.validate(&access).unwrap();
         let request = prepare_request();
         let mut result = MediaListPrepareResult {
+            subtitles: Vec::new(),
             provider_id: request.provider_id.clone(),
             context_fingerprint: request.context_fingerprint.clone(),
             tool_version: "changed-version".to_owned(),

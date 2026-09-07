@@ -157,6 +157,8 @@ struct PublicationJournal {
     /// None identifies a journal written before prepared-media selection existed.
     #[serde(default)]
     prepared_media: Option<std::collections::BTreeMap<String, EntityId>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    subtitles: Option<std::collections::BTreeMap<String, Vec<EntityId>>>,
     /// Frozen selection; None is a journal created before interval streaming.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     streaming_plans: Option<
@@ -204,6 +206,7 @@ impl SqliteAddonMediaListRepository {
         Ok(
             ersatzrs_core::repositories::AddonMediaListRevisionArtifacts {
                 prepared_media: journal.prepared_media.unwrap_or_default(),
+                subtitles: journal.subtitles.unwrap_or_default(),
                 streaming_plans: journal.streaming_plans.unwrap_or_default(),
                 ..Default::default()
             },
@@ -3277,6 +3280,7 @@ async fn stage_publication_impl(
         previous_materializations,
         target_database: None,
         prepared_media: Some(playback_selection.prepared_media),
+        subtitles: Some(playback_selection.subtitles),
         streaming_plans: Some(playback_selection.streaming_plans),
     };
     let journal_json = match serde_json::to_string(&journal) {
@@ -3427,6 +3431,11 @@ async fn select_publication_playback(
             let mut selection =
                 ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default();
             for item in snapshot.items {
+                if !item.subtitle_artifact_ids.is_empty() {
+                    selection
+                        .subtitles
+                        .insert(item.provider_id.clone(), item.subtitle_artifact_ids);
+                }
                 if let Some(artifact_id) = item.prepared_artifact_id {
                     selection
                         .prepared_media
@@ -3453,9 +3462,21 @@ async fn select_publication_playback(
         excluded_item_ids,
     )
     .await?;
+    let subtitles = crate::addon_media_list_subtitle_selection::select_subtitle_artifacts(
+        &repository.0,
+        list_id,
+        saved_revision,
+        excluded_item_ids,
+    )
+    .await?;
     Ok(
         ersatzrs_core::repositories::AddonMediaListRevisionArtifacts {
-            ids: prepared_media.values().copied().collect(),
+            ids: prepared_media
+                .values()
+                .copied()
+                .chain(subtitles.values().flatten().copied())
+                .collect(),
+            subtitles,
             streaming_plans,
             prepared_media,
         },
@@ -3884,9 +3905,13 @@ async fn retain_published_revision_before_cleanup(
             byte_length: blob.byte_length,
         });
     }
-    let artifact_ids =
-        current_published_artifact_ids(&repository.0, list_id, journal.prepared_media.as_ref())
-            .await?;
+    let artifact_ids = current_published_artifact_ids(
+        &repository.0,
+        list_id,
+        journal.prepared_media.as_ref(),
+        journal.subtitles.as_ref(),
+    )
+    .await?;
     ensure_current_publication_claim(&repository.0, list_id, fence, true).await?;
     repository
         .retain_published_revision(
@@ -3898,6 +3923,7 @@ async fn retain_published_revision_before_cleanup(
             &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts {
                 ids: artifact_ids,
                 prepared_media: journal.prepared_media.clone().unwrap_or_default(),
+                subtitles: journal.subtitles.clone().unwrap_or_default(),
                 streaming_plans: journal.streaming_plans.clone().unwrap_or_default(),
             },
         )
@@ -3909,6 +3935,7 @@ async fn current_published_artifact_ids(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
     prepared_media: Option<&std::collections::BTreeMap<String, EntityId>>,
+    subtitles: Option<&std::collections::BTreeMap<String, Vec<EntityId>>>,
 ) -> Result<Vec<EntityId>> {
     let rows = sqlx::query_as::<_, (EntityId, i32)>(
         r#"SELECT "artifact"."Id", "artifact"."Kind"
@@ -3935,6 +3962,16 @@ async fn current_published_artifact_ids(
     Ok(rows
         .into_iter()
         .filter(|(id, kind)| {
+            if *kind == 0
+                && subtitles.is_some_and(|selected| {
+                    !selected
+                        .values()
+                        .flatten()
+                        .any(|selected_id| selected_id == id)
+                })
+            {
+                return false;
+            }
             prepared_media.is_none_or(|selected| {
                 *kind
                     != crate::repositories::common::encode_enum(
@@ -5610,18 +5647,33 @@ async fn addon_media_list_publication_readiness(
         .map(|item| item.item_id)
         .chain(downloads.iter().map(|item| item.item_id))
         .collect();
-    let required_prepared_media_count = preparation
+    let subtitles = crate::addon_media_list_subtitle_selection::subtitle_requirements(
+        pool,
+        list_id,
+        form.draft_revision,
+        &excluded,
+    )
+    .await?;
+    let required_prepared_media_count = subtitles
         .iter()
-        .filter(|item| item.plan.is_none())
+        .filter(|item| item.artifacts.is_none())
         .count() as u64
+        + preparation
+            .iter()
+            .filter(|item| item.plan.is_none())
+            .count() as u64
         + downloads
             .iter()
             .filter(|item| item.artifact_id.is_none())
             .count() as u64;
-    let required_prepared_media_pending = preparation
+    let required_prepared_media_pending = subtitles
         .iter()
-        .filter(|item| item.plan.is_none() && item.pending)
+        .filter(|item| item.artifacts.is_none() && item.pending)
         .count() as u64
+        + preparation
+            .iter()
+            .filter(|item| item.plan.is_none() && item.pending)
+            .count() as u64
         + downloads
             .iter()
             .filter(|item| item.artifact_id.is_none() && item.pending)

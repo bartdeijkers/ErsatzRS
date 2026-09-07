@@ -3622,7 +3622,7 @@ subsequent local progress-only handoff commit.
 id         = 'amm-m-02'
 phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
 title      = 'Publish human-authored yt-dlp subtitles into channel playback'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-m-01b', 'amm-ci-01']
@@ -3636,9 +3636,62 @@ item/channel override precedence, publication recovery, and actual MPEG-TS/HLS
 channel viewing with the selected subtitle.
 '''
 evidence = '''
-Not started. ADR 0052 already supplies selection precedence and settings, but
-the yt-dlp add-on exposes no subtitle artifact and generated Remote Streams
-therefore have no provider subtitle rows.
+Reserved by Codex on 2026-09-07 after maintainer approval of the focused plan.
+ADR 0052 supplies unchanged item/channel/global primary then global fallback
+selection. HLS uses existing transcoded rendering; HLS Direct soft-subtitle
+delivery remains excluded. Language changes may invalidate prepared downloads.
+
+Stock yt-dlp 2026.08.19 exposed three native defects: timestamp-only processor
+registration, list-valued ranges, and SRT concat clocks/removed cues. The approved
+correction ships in add-on 0.10.0 through stock yt-dlp's package-local
+postprocessor extension, not an installed-executable replacement or runtime
+fork. Native transfer, merging, SponsorBlock media processing and replacement
+remain owned by yt-dlp. The extension preserves SRT payload/settings, clips and
+splits cues through retained intervals, removes empty processed descriptors,
+bounds source/output to 4 MiB, and fails closed if its required processor is not
+loaded. The provider explicitly emits {} for absent requested_subtitles.
+No upstream submission or runtime replacement was made.
+
+Verification on 2026-09-07:
+- 48 focused provider tests pass against stock yt-dlp and FFmpeg 9, including
+  real offline separate audio/video merge, manual subtitle conversion/cutting,
+  all-cues-removed cleanup, subtitle-only transfer, automatic/unrelated caption
+  refusal, malformed output, byte bounds, rich payloads and native streaming.
+- Three wire-contract tests, 68 host/scanner/health tests and two lossless
+  migration tests pass. Coverage includes restart recovery, exact completion
+  bindings, language invalidation, source/prepared clocks and scanner ownership.
+- 64 focused artifact/job/revision/playback regressions pass (nextest run
+  de1462f2-e2a3-465b-98e9-f7b8bde336e8), including primary/fallback/unset/unrelated
+  selection and item/channel/global precedence with alias deduplication.
+- Matched SSR/WASM build passes. The actual-host synthetic four-capture test
+  tests/e2e/addon-subtitle-playback.spec.ts passes in 3.2 minutes, with results
+  under test-results/amm-m-02-final-run and decoded media/proofs under
+  test-results/amm-m-02-final-browser. Stream and Download ahead both publish
+  exact revision-pinned caption IDs and scanner Subtitle rows, then play a
+  nonzero scheduled join over MPEG-TS and transcoded HLS. Decoded frame sheets
+  were visually inspected: MANUAL BEFORE changes to MANUAL AFTER at the retained
+  red/blue cut; REMOVED CUE and excluded green frames are absent. HLS reports no
+  post-start waiting/stall/seek events and maximum frame gaps of 66.7 ms. MPEG-TS
+  first decoded frames arrive within 7.19 seconds and decoded delivery gaps stay
+  below 85 ms. This synthetic caption proof complements, not replaces, M-01A's
+  existing real-video transport gate.
+- The first viewing attempt stopped on duplicate synthetic playlist names
+  before download-ahead capture. Distinct fixture names corrected setup; no
+  application behavior or acceptance guard was weakened.
+Review corrected millisecond subtitle joins, content-fenced atomic cache reuse,
+subtitle-job recovery health and bounded plugin output. Ordinary subtitle/HDR
+handling is unchanged; unmapped selected subtitle clocks remain refused.
+Focused Clippy passes for contract, infra, scanner and web across all targets.
+After mechanical lint corrections, all 68 subtitle/recovery regressions pass
+again (nextest run fef19e46-9335-49e4-a400-5400c5cec2f5). Runtime smoke passes
+(run 411333-1788812709): MPEG-TS media, HLS variant playlist and initial segments
+all return HTTP 200 without host failure signatures. Its first attempt failed
+before playback because the invocation used the wrong ffprobe environment key;
+the corrected FFmpeg 9/ffprobe pair passed without an application change.
+Package manifest/layout/bundle regressions pass (26 passed, 34 platform/provider
+skips). The official add-on 0.10.0 is committed locally as a9e7256.
+M-02 acceptance is complete. No push, CI, full closeout, upstream submission or
+later-slice implementation was performed; integrated release proof remains N-03.
 '''
 
 [[milestone]]

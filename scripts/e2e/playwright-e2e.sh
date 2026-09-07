@@ -240,6 +240,7 @@ ERSATZRS_DB_PATH="$DB_PATH_ENV" \
 E2E_APP_STATE_DIR="$APP_STATE_DIR_ENV" \
 E2E_SERVER_BIN="$(native_env_path "$SERVER_BIN")" \
 E2E_SITE_ROOT="$SITE_ROOT_ENV" \
+E2E_SPONSORBLOCK_HOST_LOG="$(native_env_path "$TMP_LOG")" \
 PLAYWRIGHT_JSON_OUTPUT_NAME="$RESULT_JSON" \
   npx --yes playwright test "${PLAYWRIGHT_ARGS[@]}" --reporter=line,json
 STATUS=$?

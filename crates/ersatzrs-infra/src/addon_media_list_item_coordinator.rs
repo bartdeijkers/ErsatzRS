@@ -103,6 +103,7 @@ impl AddonMediaListItemCoordinator {
                     item_is_finite: liveness == RemoteStreamLiveness::Finite,
                     max_video_height: None,
                     requested_timing: None,
+                    requested_subtitle_languages: Vec::new(),
                 },
                 Utc::now(),
             )

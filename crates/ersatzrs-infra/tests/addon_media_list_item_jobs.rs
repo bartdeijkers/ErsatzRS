@@ -59,6 +59,7 @@ async fn fixture() -> (
         item_is_finite: true,
         max_video_height: Some(1080),
         requested_timing: None,
+        requested_subtitle_languages: Vec::new(),
     };
     (pool.clone(), AddonMediaListItemJobQueue::new(pool), input)
 }
@@ -278,7 +279,7 @@ fn interval_timing_checks_overflow_and_uses_probed_duration() {
 }
 
 #[tokio::test]
-async fn legacy_input_bytes_and_interval_migration_preserve_jobs_and_indexes() {
+async fn legacy_input_bytes_and_interval_subtitle_migrations_preserve_jobs_and_indexes() {
     let (pool, queue, input) = fixture().await;
     let encoded = serde_json::to_string(&input).unwrap();
     assert!(!encoded.contains("requested_timing"));
@@ -307,6 +308,7 @@ async fn legacy_input_bytes_and_interval_migration_preserve_jobs_and_indexes() {
         .enqueue(1, 10, 0, ItemOperationKind::Preparation, input, now)
         .await
         .unwrap();
+    let preparation = queue.claim(now, 30).await.unwrap().unwrap();
     let query = r#"SELECT json_array("Id", "AddonMediaListId", "AddonMediaListItemId",
         "Kind", "Generation", "SavedDraftRevision", "InputJson", "ContextFingerprint",
         "State", "AttemptCount", "NextEligibleAt", "LeaseOwner", "LeaseExpiresAt",
@@ -322,29 +324,27 @@ async fn legacy_input_bytes_and_interval_migration_preserve_jobs_and_indexes() {
     )
     .await
     .unwrap();
-    sqlx::raw_sql(include_str!(
-        "../../../migrations/202609061030_addon_interval_metadata_jobs.sql"
-    ))
-    .execute(&pool)
-    .await
-    .unwrap();
-    let after: Vec<String> = sqlx::query_scalar(query).fetch_all(&pool).await.unwrap();
-    assert_eq!(before, after);
-    let after_indexes: Vec<(String, String)> =
-        sqlx::query_as(index_query).fetch_all(&pool).await.unwrap();
-    assert_eq!(indexes, after_indexes);
-    let sequence: i64 = sqlx::query_scalar(
-        r#"SELECT "seq" FROM "sqlite_sequence" WHERE "name"='AddonMediaListItemOperationJob'"#,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert_eq!(sequence, 100);
+    for migration in [
+        include_str!("../../../migrations/202609061030_addon_interval_metadata_jobs.sql"),
+        include_str!("../../../migrations/202609071900_addon_subtitle_jobs.sql"),
+    ] {
+        sqlx::raw_sql(migration).execute(&pool).await.unwrap();
+        let after: Vec<String> = sqlx::query_scalar(query).fetch_all(&pool).await.unwrap();
+        assert_eq!(before, after);
+        let after_indexes: Vec<(String, String)> =
+            sqlx::query_as(index_query).fetch_all(&pool).await.unwrap();
+        assert_eq!(indexes, after_indexes);
+        let sequence: i64 = sqlx::query_scalar(
+            r#"SELECT "seq" FROM "sqlite_sequence" WHERE "name"='AddonMediaListItemOperationJob'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(sequence, 100);
+    }
     assert_eq!(queue.status(id, now).await.unwrap().unwrap().state, 2);
-    assert_eq!(
-        queue.claim(now, 30).await.unwrap().unwrap().kind,
-        ItemOperationKind::Preparation
-    );
+    assert_eq!(preparation.kind, ItemOperationKind::Preparation);
+    queue.heartbeat(&preparation, now, 30).await.unwrap();
 }
 
 #[tokio::test]

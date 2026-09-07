@@ -10,10 +10,12 @@ use ersatzrs_addon_contract::{
     validate_operator_source_url, AddonCapability, MediaListAccessCheckRequest,
     MediaListAccessCheckResult, MediaListIntervalMetadataRequest, MediaListIntervalMetadataResult,
     MediaListItemRuntimeInfo, MediaListItemRuntimeInfoRequest, MediaListPrepareRequest,
-    MediaListPrepareResult, RemoteStreamRetainedPlayRequest, CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1,
+    MediaListPrepareResult, MediaListSubtitlesRequest, MediaListSubtitlesResult,
+    RemoteStreamRetainedPlayRequest, CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1,
     CAPABILITY_MEDIA_LIST_INTERVAL_METADATA_V1, CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1,
     CAPABILITY_MEDIA_LIST_PREPARE_V1, CAPABILITY_MEDIA_LIST_PREPARE_V2,
-    CAPABILITY_REMOTE_STREAM_PLAY_V4, MAX_MEDIA_LIST_OPERATION_OUTPUT_BYTES,
+    CAPABILITY_MEDIA_LIST_SUBTITLES_V1, CAPABILITY_REMOTE_STREAM_PLAY_V4,
+    MAX_MEDIA_LIST_OPERATION_OUTPUT_BYTES,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -187,6 +189,38 @@ impl InstalledItemRuntime {
                 request,
                 Duration::from_mins(1),
                 &[],
+                Some(cancellation),
+            )
+            .await?;
+        result
+            .validate(request)
+            .map_err(|_| ItemRuntimeError::InvalidResult)?;
+        Ok(result)
+    }
+
+    /// Acquire requested manual subtitle sidecars inside host-owned scratch.
+    /// The caller must signal cancellation and await cleanup before releasing
+    /// scratch, then independently validate physical files before admission.
+    ///
+    /// # Errors
+    /// Rejects invalid requests, unsupported packages, failed processes and
+    /// mismatched results. Unconfirmed cleanup retains its typed failure.
+    pub async fn subtitles_cancellable(
+        &self,
+        request: &MediaListSubtitlesRequest,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<MediaListSubtitlesResult, ItemRuntimeError> {
+        request
+            .validate(self.installation.manifest.media_list_option_schema(), true)
+            .map_err(|_| ItemRuntimeError::InvalidRequest)?;
+        self.validate_source(&request.source_url)?;
+        let result: MediaListSubtitlesResult = self
+            .invoke(
+                CAPABILITY_MEDIA_LIST_SUBTITLES_V1,
+                "subtitles",
+                request,
+                Duration::from_secs(u64::from(request.timeout_seconds)),
+                std::slice::from_ref(&request.staging_directory),
                 Some(cancellation),
             )
             .await?;

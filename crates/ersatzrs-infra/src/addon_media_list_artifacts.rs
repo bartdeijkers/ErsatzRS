@@ -61,10 +61,10 @@ pub struct ArtifactReservation {
     pub staging_directory: PathBuf,
     pub maximum_file_bytes: u64,
     pub maximum_staging_bytes: u64,
-    root: PathBuf,
-    generation: i64,
-    job_id: i64,
-    lease_owner: String,
+    pub(crate) root: PathBuf,
+    pub(crate) generation: i64,
+    pub(crate) job_id: i64,
+    pub(crate) lease_owner: String,
 }
 impl ArtifactReservation {
     /// Build the bounded provider request for this exact reservation owner.
@@ -98,6 +98,7 @@ impl ArtifactReservation {
             maximum_staging_bytes: self.maximum_staging_bytes,
             timeout_seconds: 3600,
             max_video_height: job.input.max_video_height,
+            requested_subtitle_languages: job.input.requested_subtitle_languages.clone(),
         };
         if job.input.preparation_v2 == Some(true) {
             request.validate_generic(job.input.definition.as_ref(), job.input.item_is_finite)
@@ -110,7 +111,7 @@ impl ArtifactReservation {
         .map_err(|_| invalid())?;
         Ok(request)
     }
-    fn matches(&self, job: &ClaimedItemOperation) -> Result<()> {
+    pub(crate) fn matches(&self, job: &ClaimedItemOperation) -> Result<()> {
         if self.job_id != job.id
             || self.generation != job.generation
             || self.lease_owner != job.lease_owner
@@ -228,8 +229,8 @@ impl AddonMediaListArtifactStore {
             SELECT COALESCE(SUM(CASE WHEN "State"=2 THEN "ByteLength" ELSE "ReservedBytes" END),0) AS "GlobalUsed",
                    COALESCE(SUM(CASE WHEN "AddonMediaListId"=? THEN CASE WHEN "State"=2 THEN "ByteLength" ELSE "ReservedBytes" END ELSE 0 END),0) AS "ListUsed",
                    COALESCE(SUM(CASE WHEN "State"<>2 THEN "ReservedBytes" ELSE 0 END),0) AS "Reserved",
-                   COALESCE(SUM(CASE WHEN "State"<>2 THEN 1 ELSE 0 END),0) AS "Running"
-            FROM "AddonMediaListArtifact" WHERE "Kind"=1 AND "State" IN (0,1,2)
+                   COALESCE(SUM(CASE WHEN "Kind"=1 AND "State"<>2 THEN 1 ELSE 0 END),0) AS "Running"
+            FROM "AddonMediaListArtifact" WHERE "Kind" IN (0,1) AND "State" IN (0,1,2)
         "#,
         )
         .bind(job.list_id)
@@ -454,7 +455,7 @@ impl AddonMediaListArtifactStore {
         if !same_generation {
             return Err(invalid());
         }
-        discard_owned_files(reservation).await?;
+        discard_owned_files(&mut tx, reservation).await?;
         release_reservation(&mut tx, reservation.id).await?;
         tx.commit().await.repository()?;
         Ok(())
@@ -471,7 +472,7 @@ impl AddonMediaListArtifactStore {
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let ids: Vec<i64> = sqlx::query_scalar(
             r#"SELECT "Id" FROM "AddonMediaListArtifact"
-            WHERE "Kind"=1 AND "State" IN (0,1) AND "PreparationJobId"=?
+            WHERE "Kind" IN (0,1) AND "State" IN (0,1) AND "PreparationJobId"=?
               AND "PreparationGeneration"=? AND "PreparationLeaseOwner"=? ORDER BY "Id" LIMIT 33"#,
         )
         .bind(attempt.job_id)
@@ -500,7 +501,7 @@ impl AddonMediaListArtifactStore {
                 lease_owner: attempt.lease_owner.clone(),
             };
             owned(&mut tx, &reservation).await?;
-            discard_owned_files(&reservation).await?;
+            discard_owned_files(&mut tx, &reservation).await?;
             release_reservation(&mut tx, id).await?;
         }
         tx.commit().await.repository()?;
@@ -564,7 +565,7 @@ impl AddonMediaListArtifactStore {
                 lease_owner: owner,
             };
             owned(&mut tx, &reservation).await?;
-            discard_owned_files(&reservation).await?;
+            discard_owned_files(&mut tx, &reservation).await?;
             release_reservation(&mut tx, reservation.id).await?;
         }
         recover_orphan_stages(&mut tx, job, &root).await?;
@@ -644,7 +645,39 @@ async fn recover_orphan_stages(
     Ok(())
 }
 
-async fn discard_owned_files(reservation: &ArtifactReservation) -> Result<()> {
+async fn discard_owned_files(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    reservation: &ArtifactReservation,
+) -> Result<()> {
+    // A hard crash can interrupt subtitle rename before its Ready transaction.
+    // These are the only two extra targets this exact reservation can create;
+    // committed immutable sidecars must survive normal release and recovery.
+    for index in 0..2 {
+        let relative = format!(
+            "objects/{}-{}-{}-subtitle-{index}.srt",
+            reservation.id, reservation.generation, reservation.lease_owner
+        );
+        let ready: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS(SELECT 1 FROM "AddonMediaListArtifact"
+            WHERE "State"=2 AND "RelativePath"=?)"#,
+        )
+        .bind(&relative)
+        .fetch_one(&mut **tx)
+        .await
+        .repository()?;
+        if ready {
+            continue;
+        }
+        match tokio::fs::symlink_metadata(reservation.root.join(&relative)).await {
+            Ok(metadata) if metadata.is_file() && !metadata.is_symlink() => {
+                tokio::fs::remove_file(reservation.root.join(relative))
+                    .await
+                    .map_err(|_| invalid())?;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            _ => return Err(invalid()),
+        }
+    }
     let stage = &reservation.staging_directory;
     match tokio::fs::symlink_metadata(stage).await {
         Ok(metadata) if metadata.is_dir() && !metadata.is_symlink() => {
@@ -679,7 +712,7 @@ async fn release_reservation(tx: &mut sqlx::Transaction<'_, crate::db::Db>, id: 
 fn invalid() -> RepositoryError {
     RepositoryError::Conflict("processed artifact ownership or validation failed".into())
 }
-async fn prepare_root(root: &Path) -> Result<PathBuf> {
+pub(crate) async fn prepare_root(root: &Path) -> Result<PathBuf> {
     tokio::fs::create_dir_all(root)
         .await
         .map_err(|_| invalid())?;
@@ -698,7 +731,7 @@ async fn prepare_root(root: &Path) -> Result<PathBuf> {
     }
     Ok(root)
 }
-fn stage_path(root: &Path, job: i64, generation: i64, owner: &str) -> Result<PathBuf> {
+pub(crate) fn stage_path(root: &Path, job: i64, generation: i64, owner: &str) -> Result<PathBuf> {
     uuid::Uuid::parse_str(owner).map_err(|_| invalid())?;
     if job <= 0 || generation <= 0 {
         return Err(invalid());
@@ -730,7 +763,7 @@ pub(crate) async fn confined_file(root: &Path, relative: &str) -> Result<PathBuf
     }
     Ok(current)
 }
-async fn measure_tree(root: &Path, limit: u64) -> Result<u64> {
+pub(crate) async fn measure_tree(root: &Path, limit: u64) -> Result<u64> {
     let mut pending = vec![root.to_path_buf()];
     let (mut count, mut bytes) = (0usize, 0u64);
     while let Some(path) = pending.pop() {
@@ -765,7 +798,7 @@ async fn measure_tree(root: &Path, limit: u64) -> Result<u64> {
     }
     Ok(bytes)
 }
-async fn inspect_file(path: &Path, limit: u64) -> Result<(u64, String)> {
+pub(crate) async fn inspect_file(path: &Path, limit: u64) -> Result<(u64, String)> {
     let mut file = tokio::fs::File::open(path).await.map_err(|_| invalid())?;
     let mut buffer = vec![0u8; 64 * 1024];
     let mut bytes = 0u64;
@@ -787,7 +820,7 @@ async fn inspect_file(path: &Path, limit: u64) -> Result<(u64, String)> {
     }
     Ok((bytes, digest))
 }
-async fn owned(
+pub(crate) async fn owned(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     reservation: &ArtifactReservation,
 ) -> Result<()> {

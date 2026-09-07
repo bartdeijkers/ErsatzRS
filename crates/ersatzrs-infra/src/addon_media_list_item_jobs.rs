@@ -23,6 +23,7 @@ pub enum ItemOperationKind {
     Access,
     Preparation,
     IntervalMetadata,
+    Subtitles,
 }
 impl ItemOperationKind {
     fn code(self) -> i32 {
@@ -30,6 +31,7 @@ impl ItemOperationKind {
             Self::Access => 0,
             Self::Preparation => 1,
             Self::IntervalMetadata => 2,
+            Self::Subtitles => 3,
         }
     }
 }
@@ -47,7 +49,7 @@ pub struct ItemOperationInput {
     pub definition: Option<AddonCapability>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub options: Option<AddonMediaListOptionValues>,
-    /// Explicit identity only for schema-less generic preparation.
+    /// Explicit identity for schema-less preparation or subtitle acquisition.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub addon_id: Option<String>,
     /// Absent for all legacy v1 jobs.
@@ -59,10 +61,30 @@ pub struct ItemOperationInput {
     pub max_video_height: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_timing: Option<ItemOperationTiming>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requested_subtitle_languages: Vec<String>,
 }
 
 impl ItemOperationInput {
     pub(crate) fn base_fingerprint(&self) -> Result<String> {
+        let fingerprint = self.options_fingerprint()?;
+        if self.requested_subtitle_languages.is_empty() {
+            return Ok(fingerprint);
+        }
+        let mut hash = Sha256::new();
+        hash.update(b"ersatzrs:addon-media-list:subtitle-languages:v1\0");
+        hash.update(fingerprint.as_bytes());
+        hash.update(
+            serde_json::to_vec(&self.requested_subtitle_languages).map_err(|_| conflict())?,
+        );
+        let mut result = String::with_capacity(64);
+        for byte in hash.finalize() {
+            write!(result, "{byte:02x}").map_err(|_| conflict())?;
+        }
+        Ok(result)
+    }
+
+    fn options_fingerprint(&self) -> Result<String> {
         if let Some(options) = self.resolved_options()? {
             let fingerprint = options.context_fingerprint(
                 &self.source_url,
@@ -94,7 +116,11 @@ impl ItemOperationInput {
         ))
         .map_err(|_| conflict())?;
         let mut hash = Sha256::new();
-        hash.update(b"ersatzrs:addon-media-list:preparation-without-options:v2\0");
+        if self.preparation_v2 == Some(true) {
+            hash.update(b"ersatzrs:addon-media-list:preparation-without-options:v2\0");
+        } else {
+            hash.update(b"ersatzrs:addon-media-list:subtitles-without-options:v1\0");
+        }
         hash.update(bytes);
         let mut result = String::with_capacity(64);
         for byte in hash.finalize() {
@@ -105,7 +131,12 @@ impl ItemOperationInput {
     pub(crate) fn addon_id(&self) -> Result<&str> {
         match (&self.schema, &self.addon_id) {
             (Some(schema), None) => Ok(&schema.addon_id),
-            (None, Some(id)) if self.preparation_v2 == Some(true) => Ok(id),
+            (None, Some(id))
+                if self.preparation_v2 == Some(true)
+                    || !self.requested_subtitle_languages.is_empty() =>
+            {
+                Ok(id)
+            }
             _ => Err(conflict()),
         }
     }
@@ -121,7 +152,12 @@ impl ItemOperationInput {
                     values: values.clone(),
                 },
             )),
-            (None, None, None) if self.preparation_v2 == Some(true) => Ok(None),
+            (None, None, None)
+                if self.preparation_v2 == Some(true)
+                    || !self.requested_subtitle_languages.is_empty() =>
+            {
+                Ok(None)
+            }
             _ => Err(conflict()),
         }
     }
@@ -202,6 +238,19 @@ fn milliseconds(seconds: u64) -> Result<u64> {
 fn validate_mode(kind: ItemOperationKind, input: &ItemOperationInput) -> Result<()> {
     input.addon_id()?;
     input.resolved_options()?;
+    ersatzrs_addon_contract::validate_requested_subtitle_languages(
+        &input.requested_subtitle_languages,
+        true,
+    )
+    .map_err(|_| conflict())?;
+    if !input.requested_subtitle_languages.is_empty()
+        && !matches!(
+            kind,
+            ItemOperationKind::Subtitles | ItemOperationKind::Preparation
+        )
+    {
+        return Err(conflict());
+    }
     if input.preparation_v2.is_some()
         && (input.preparation_v2 != Some(true) || kind != ItemOperationKind::Preparation)
     {
@@ -213,6 +262,11 @@ fn validate_mode(kind: ItemOperationKind, input: &ItemOperationInput) -> Result<
         }
         ItemOperationKind::Access => input.requested_timing.is_some(),
         ItemOperationKind::Preparation => !input.item_is_finite || input.requested_timing.is_some(),
+        ItemOperationKind::Subtitles => {
+            !input.item_is_finite
+                || input.requested_timing.is_some()
+                || input.requested_subtitle_languages.is_empty()
+        }
     } {
         return Err(conflict());
     }
@@ -252,9 +306,14 @@ pub enum ItemOperationCompletion {
     },
     Prepared {
         artifact_id: i64,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        subtitle_artifact_ids: Vec<i64>,
     },
     IntervalPlan {
         plan: AddonMediaListPlaybackTimelinePlan,
+    },
+    Subtitles {
+        artifact_ids: Vec<i64>,
     },
     Failed(ItemOperationFailure),
 }
@@ -578,6 +637,7 @@ impl AddonMediaListItemJobQueue {
                 0 => ItemOperationKind::Access,
                 1 => ItemOperationKind::Preparation,
                 2 => ItemOperationKind::IntervalMetadata,
+                3 => ItemOperationKind::Subtitles,
                 _ => return Err(conflict()),
             },
             generation: row.try_get::<i64, _>("Generation").repository()? + 1,
@@ -770,7 +830,7 @@ impl AddonMediaListItemJobQueue {
         let row = sqlx::query(
             r#"SELECT "AddonMediaListId","AddonMediaListItemId",
                 "SavedDraftRevision","InputJson" FROM "AddonMediaListItemOperationJob"
-            WHERE "Id"=? AND "Generation"=? AND "LeaseOwner"=? AND "Kind"=1 AND "State"=1"#,
+            WHERE "Id"=? AND "Generation"=? AND "LeaseOwner"=? AND "Kind" IN (1,3) AND "State"=1"#,
         )
         .bind(attempt.job_id)
         .bind(attempt.generation)
@@ -846,9 +906,10 @@ impl AddonMediaListItemJobQueue {
             {
                 (None, Some(encode_datetime(*expires_at)))
             }
-            ItemOperationCompletion::Prepared { artifact_id }
-                if job.kind == ItemOperationKind::Preparation =>
-            {
+            ItemOperationCompletion::Prepared {
+                artifact_id,
+                subtitle_artifact_ids,
+            } if job.kind == ItemOperationKind::Preparation => {
                 let owns: bool = sqlx::query_scalar(
                     r#"
             SELECT EXISTS(SELECT 1
@@ -872,6 +933,13 @@ impl AddonMediaListItemJobQueue {
                 if !owns {
                     return Err(conflict());
                 }
+                let stored: String = sqlx::query_scalar(r#"SELECT COALESCE("PreparedSubtitleIdsJson",'[]') FROM "AddonMediaListArtifact" WHERE "Id"=?"#)
+                    .bind(artifact_id).fetch_one(&mut *tx).await.repository()?;
+                let stored: Vec<i64> = serde_json::from_str(&stored).map_err(|_| conflict())?;
+                if stored != *subtitle_artifact_ids {
+                    return Err(conflict());
+                }
+                validate_subtitle_artifacts(&mut tx, job, subtitle_artifact_ids, 1).await?;
                 (Some(*artifact_id), None)
             }
             ItemOperationCompletion::IntervalPlan { plan }
@@ -884,6 +952,12 @@ impl AddonMediaListItemJobQueue {
                 {
                     return Err(conflict());
                 }
+                (None, None)
+            }
+            ItemOperationCompletion::Subtitles { artifact_ids }
+                if job.kind == ItemOperationKind::Subtitles && artifact_ids.len() <= 2 =>
+            {
+                validate_subtitle_artifacts(&mut tx, job, artifact_ids, 0).await?;
                 (None, None)
             }
             ItemOperationCompletion::Failed(_) => (None, None),
@@ -1101,6 +1175,52 @@ async fn owned_claim(
 }
 
 #[allow(clippy::too_many_lines)] // Verify saved identity, installation, liveness and exact timing together.
+async fn validate_subtitle_artifacts(
+    tx: &mut sqlx::Transaction<'_, Db>,
+    job: &ClaimedItemOperation,
+    artifact_ids: &[i64],
+    timeline: i32,
+) -> Result<()> {
+    if artifact_ids.len() > 2 || (artifact_ids.len() == 2 && artifact_ids[0] == artifact_ids[1]) {
+        return Err(conflict());
+    }
+    let mut languages = std::collections::BTreeSet::new();
+    for artifact_id in artifact_ids {
+        let language: Option<String> = sqlx::query_scalar(
+            r#"SELECT "SubtitleLanguage" FROM "AddonMediaListArtifact" WHERE "Id"=?
+            AND "AddonMediaListId"=? AND "AddonMediaListItemId"=?
+            AND "OperationContextFingerprint"=? AND "Kind"=0 AND "State"=2
+            AND "SubtitleTimeline"=? AND "SubtitleLanguage" IS NOT NULL
+            AND "CompletedAt" IS NOT NULL"#,
+        )
+        .bind(artifact_id)
+        .bind(job.list_id)
+        .bind(job.item_id)
+        .bind(&job.input.context_fingerprint)
+        .bind(timeline)
+        .fetch_optional(&mut **tx)
+        .await
+        .repository()?;
+        let language = language.ok_or_else(conflict)?;
+        let primary = ersatzrs_addon_contract::subtitle_logical_language(&language)
+            .map_err(|_| conflict())?;
+        if !languages.insert(primary.clone())
+            || !job
+                .input
+                .requested_subtitle_languages
+                .iter()
+                .any(|requested| {
+                    ersatzrs_addon_contract::subtitle_logical_language(requested)
+                        .is_ok_and(|requested| requested == primary)
+                })
+        {
+            return Err(conflict());
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)] // Validate the complete saved job identity in one transaction.
 async fn current(
     tx: &mut sqlx::Transaction<'_, Db>,
     list_id: i64,
@@ -1108,6 +1228,21 @@ async fn current(
     revision: i32,
     input: &ItemOperationInput,
 ) -> Result<()> {
+    if input.preparation_v2 == Some(true)
+        && crate::addon_media_list_subtitle_selection::requested_preparation_languages_in_tx(
+            tx, list_id,
+        )
+        .await?
+            != input.requested_subtitle_languages
+    {
+        return Err(conflict());
+    }
+    if !input.requested_subtitle_languages.is_empty()
+        && crate::addon_media_list_subtitles::requested_languages_in_tx(tx).await?
+            != input.requested_subtitle_languages
+    {
+        return Err(conflict());
+    }
     let valid: bool = sqlx::query_scalar(r#"
             SELECT EXISTS(SELECT 1
                 FROM "AddonMediaList" AS "list"
@@ -1212,4 +1347,72 @@ fn lease_deadline(now: DateTime<Utc>, seconds: u32) -> Result<String> {
         return Err(conflict());
     }
     Ok(encode_datetime(now + Duration::seconds(i64::from(seconds))))
+}
+
+#[cfg(test)]
+mod subtitle_input_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_prepared_completion_preserves_json_and_empty_subtitle_binding() {
+        let encoded = r#"{"Prepared":{"artifact_id":42}}"#;
+        let completion: ItemOperationCompletion = serde_json::from_str(encoded).unwrap();
+        assert_eq!(
+            completion,
+            ItemOperationCompletion::Prepared {
+                artifact_id: 42,
+                subtitle_artifact_ids: Vec::new(),
+            }
+        );
+        assert_eq!(serde_json::to_string(&completion).unwrap(), encoded);
+    }
+
+    fn legacy_input() -> ItemOperationInput {
+        serde_json::from_value(serde_json::json!({
+            "source_url":"https://example.test/item", "provider_id":"item",
+            "context_fingerprint":"a".repeat(64),
+            "addon_id":"org.ersatzrs.addon.fixture", "preparation_v2":true,
+            "package_identity":"b".repeat(64), "tool_version":"1.0",
+            "item_is_finite":true, "max_video_height":720
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn empty_subtitle_languages_preserve_legacy_serialization_and_fingerprint() {
+        let input = legacy_input();
+        assert!(input.requested_subtitle_languages.is_empty());
+        assert_eq!(
+            input.base_fingerprint().unwrap(),
+            input.options_fingerprint().unwrap()
+        );
+        let encoded = serde_json::to_value(&input).unwrap();
+        assert!(encoded.get("requested_subtitle_languages").is_none());
+        let decoded: ItemOperationInput = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded, input);
+        assert!(validate_mode(ItemOperationKind::Preparation, &input).is_ok());
+    }
+
+    #[test]
+    fn subtitle_requests_bind_languages_without_pretending_to_be_preparation() {
+        let mut input = legacy_input();
+        input.preparation_v2 = None;
+        input.requested_subtitle_languages = vec!["en".into(), "nl".into()];
+        assert!(validate_mode(ItemOperationKind::Subtitles, &input).is_ok());
+        assert!(input.resolved_options().unwrap().is_none());
+        assert_eq!(input.addon_id().unwrap(), "org.ersatzrs.addon.fixture");
+        let fingerprint = input.base_fingerprint().unwrap();
+        input.requested_subtitle_languages.reverse();
+        assert_ne!(input.base_fingerprint().unwrap(), fingerprint);
+        assert!(validate_mode(ItemOperationKind::Access, &input).is_err());
+        input.item_is_finite = false;
+        assert!(validate_mode(ItemOperationKind::Subtitles, &input).is_err());
+        input.item_is_finite = true;
+        input.requested_subtitle_languages = vec!["en".into(), "en".into()];
+        assert!(validate_mode(ItemOperationKind::Subtitles, &input).is_err());
+        input.requested_subtitle_languages = vec!["en".into(), "nl".into(), "de".into()];
+        assert!(validate_mode(ItemOperationKind::Subtitles, &input).is_err());
+        input.requested_subtitle_languages.clear();
+        assert!(validate_mode(ItemOperationKind::Subtitles, &input).is_err());
+    }
 }

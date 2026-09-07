@@ -3,6 +3,7 @@ import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
 import { chmodSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs';
 import { dirname, join, relative } from 'path';
+import { subtitleProviderSource } from './addon-subtitle-provider';
 
 export const addonId = 'org.ersatzrs.e2e.prepared-playback';
 export const sourceUrl = 'https://prepared.example.invalid/video';
@@ -36,7 +37,7 @@ function contentHash(root: string): string {
   return hash.digest('hex');
 }
 
-export function installPreparedFixture(dbPath: string, pauseFirst = false): { invocationLog: string } {
+export function installPreparedFixture(dbPath: string, pauseFirst = false, subtitleFixture = false): { invocationLog: string } {
   if (!dbPath) throw new Error('The isolated E2E database is required');
   const sqlite = (sql: string): string => preparedSqlite(dbPath, sql);
   const root = join(dirname(dbPath), 'addon-prepared-playback-package');
@@ -51,7 +52,7 @@ export function installPreparedFixture(dbPath: string, pauseFirst = false): { in
       record_type: 'item', provider_id: 'prepared-video', rank: 0,
       display_title: 'Prepared calibration', title: 'Prepared calibration', kind: 'remote_stream',
       guids: [], source_url: sourceUrl, availability: 'available', content_kind: 'other_video',
-      liveness: 'finite', duration_seconds: 120,
+      liveness: 'finite', duration_seconds: subtitleFixture ? 90 : 120,
     },
   ];
   // No network client exists in this provider. A raw play attempt is recorded and fails.
@@ -96,6 +97,7 @@ else if (command === 'discover' || command === 'list') {
     duration_milliseconds: 60000 });
 } else process.exit(77);
 `);
+  if (subtitleFixture) writeFileSync(join(root, 'provider.cjs'), subtitleProviderSource(invocationLog, records));
   const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
   writeFileSync(join(root, 'addon.sh'), `#!/bin/sh\nexec ${shellQuote(process.execPath)} ./provider.cjs "$@"\n`);
   chmodSync(join(root, 'addon.sh'), 0o755);
@@ -109,7 +111,7 @@ else if (command === 'discover' || command === 'list') {
         'remote-stream.play.v1', 'media-list.item-runtime.v1', 'media-list.prepare.v2'].map(id => ({ id })),
       { id: 'media-list.options.v1', options: [{ key: 'processed', label: { 'en-US': 'Prepare calibration' },
         description: { 'en-US': 'Generate a synthetic finite file' }, scope: 'both',
-        operation_targets: ['preparation'], applicability: 'finite_only', kind: 'boolean',
+        operation_targets: subtitleFixture ? ['preparation', 'playback'] : ['preparation'], applicability: 'finite_only', kind: 'boolean',
         default: false, requires_preparation: true }] },
     ],
     dependencies: [], entrypoints: { any: { path: 'addon.sh', kind: 'posix_shell' },
@@ -121,6 +123,9 @@ else if (command === 'discover' || command === 'list') {
     media_list_storage: { path_setting: 'MEDIA_STORAGE_PATH', default_subdirectory: 'prepared-playback',
       source_name: 'Prepared playback fixture' }, panels: [],
   };
+  if (subtitleFixture) manifest.capabilities.push(...[
+    'media-list.subtitles.v1', 'media-list.interval-metadata.v1', 'remote-stream.play.v4',
+  ].map(id => ({ id })));
   sqlite(`
 INSERT INTO "AddonInstallation" ("AddonId","Version","Enabled","PackageSha256","ContentSha256",
  "ManifestJson","InstallPath","InstalledAt","UpdatedAt","TrustTier")

@@ -909,7 +909,31 @@ async fn serve_channel_stream_admitted_inner(
             }
         }
     };
-    if interval_source.is_some() && subtitle.is_some() {
+    let mut retained_subtitle_input = None;
+    let retained_subtitle_verified =
+        if let (Some(source), Some(subtitle)) = (&interval_source, &subtitle) {
+            match tokio::time::timeout_at(
+                startup_deadline,
+                ersatzrs_infra::addon_media_list_subtitle_playback::prepare_retained_subtitle_input(
+                    &state.pool,
+                    active.media_item_id,
+                    subtitle,
+                    source.plan(),
+                    start_position,
+                ),
+            )
+            .await
+            {
+                Ok(Ok(input)) => {
+                    retained_subtitle_input = input;
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            true
+        };
+    if !retained_subtitle_verified {
         if let Some(playback) = retained_playback.take() {
             let _ = playback.prepared.cancel().await;
         }
@@ -942,7 +966,11 @@ async fn serve_channel_stream_admitted_inner(
         }
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
-    let subtitle_input = rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
+    let subtitle_input = if interval_source.is_some() {
+        retained_subtitle_input
+    } else {
+        rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await
+    };
     let watermark_inputs = match select_playback_watermarks(
         &state.pool,
         &channel,

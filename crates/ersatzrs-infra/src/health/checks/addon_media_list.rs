@@ -86,23 +86,25 @@ async fn preparation_recovery_failure(
         || sqlx::query_scalar(
             r#"SELECT EXISTS(
             SELECT 1 FROM "AddonMediaListArtifact" AS "artifact"
-            WHERE "artifact"."Kind" = 1 AND "artifact"."State" IN (0, 1)
+            WHERE "artifact"."Kind" IN (0, 1) AND "artifact"."State" IN (0, 1)
               AND NOT EXISTS (
                 SELECT 1 FROM "AddonMediaListItemOperationJob" AS "job"
                 WHERE "job"."Id" = "artifact"."PreparationJobId"
                   AND "job"."Generation" = "artifact"."PreparationGeneration"
                   AND "job"."LeaseOwner" = "artifact"."PreparationLeaseOwner"
-                  AND "job"."Kind" = 1 AND "job"."State" = 1
+                  AND (("artifact"."Kind" = 1 AND "job"."Kind" = 1)
+                    OR ("artifact"."Kind" = 0 AND "job"."Kind" = 3))
+                  AND "job"."State" = 1
                   AND "job"."LeaseExpiresAt" > ?)
         ) OR EXISTS (
             SELECT 1 FROM "AddonMediaListItemOperationJob" AS "job"
-            WHERE "job"."Kind" = 1 AND "job"."State" = 3
+            WHERE "job"."Kind" IN (1, 3) AND "job"."State" = 3
               AND json_extract("job"."OutcomeJson", '$.Failed') = 'ProcessRecoveryRequired'
               AND NOT EXISTS (
                 SELECT 1 FROM "AddonMediaListItemOperationJob" AS "newer"
                 WHERE "newer"."AddonMediaListId" = "job"."AddonMediaListId"
                   AND "newer"."AddonMediaListItemId" = "job"."AddonMediaListItemId"
-                  AND "newer"."Kind" = 1 AND "newer"."Id" > "job"."Id")
+                  AND "newer"."Kind" = "job"."Kind" AND "newer"."Id" > "job"."Id")
         )"#,
         )
         .bind(crate::repositories::common::encode_datetime(
@@ -1863,6 +1865,84 @@ mod tests {
         assert!(preparation_recovery_failure(&pool, "Add-on media lists")
             .await
             .expect("historical failure")
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn subtitle_recovery_health_tracks_exact_live_owner_and_preserves_reservation() {
+        let pool = fixture_pool().await;
+        sqlx::raw_sql(
+            r#"INSERT INTO "AddonMediaListItemOperationJob"
+               ("Id","Kind","State","LeaseOwner","LeaseExpiresAt")
+               VALUES (1,3,1,'private-subtitle-owner','2999-01-01T00:00:00Z');
+               INSERT INTO "AddonMediaListArtifact"
+               ("Id","Kind","State","ReservedBytes","PreparationJobId",
+                "PreparationGeneration","PreparationLeaseOwner","RelativePath")
+               VALUES (1,0,1,4096,1,1,'private-subtitle-owner','private/manual.srt');"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(preparation_recovery_failure(&pool, "Add-on media lists")
+            .await
+            .unwrap()
+            .is_none());
+        for update in [
+            r#"UPDATE "AddonMediaListItemOperationJob" SET "Kind"=1"#,
+            r#"UPDATE "AddonMediaListItemOperationJob" SET "Kind"=3,"Generation"=2"#,
+            r#"UPDATE "AddonMediaListItemOperationJob" SET "Generation"=1,"LeaseExpiresAt"='2000-01-01T00:00:00Z'"#,
+            r#"UPDATE "AddonMediaListItemOperationJob" SET "LeaseExpiresAt"='2999-01-01T00:00:00Z',"LeaseOwner"='other-owner'"#,
+        ] {
+            sqlx::query(update).execute(&pool).await.unwrap();
+            let result = preparation_recovery_failure(&pool, "Add-on media lists")
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(result.status, HealthCheckStatus::Fail);
+            for private in ["private-subtitle-owner", "private/manual.srt"] {
+                assert!(!result.message.contains(private));
+                assert!(!result.brief_message.contains(private));
+            }
+            let reserved: i64 = sqlx::query_scalar(
+                r#"SELECT "ReservedBytes" FROM "AddonMediaListArtifact" WHERE "Id"=1"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(reserved, 4096);
+        }
+        sqlx::query(r#"UPDATE "AddonMediaListArtifact" SET "State"=3,"ReservedBytes"=0"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(preparation_recovery_failure(&pool, "Add-on media lists")
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn subtitle_recovery_health_requires_same_item_and_kind_supersession() {
+        let pool = fixture_pool().await;
+        sqlx::raw_sql(
+            r#"INSERT INTO "AddonMediaListItemOperationJob" ("Id","Kind","State","OutcomeJson")
+               VALUES (1,3,3,'{"Failed":"ProcessRecoveryRequired"}');
+               INSERT INTO "AddonMediaListItemOperationJob" ("Id","Kind","State") VALUES (2,1,2);
+               INSERT INTO "AddonMediaListItemOperationJob" ("Id","Kind","State","AddonMediaListItemId") VALUES (3,3,2,99);"#,
+        ).execute(&pool).await.unwrap();
+        assert!(preparation_recovery_failure(&pool, "Add-on media lists")
+            .await
+            .unwrap()
+            .is_some());
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItemOperationJob" ("Id","Kind","State") VALUES (4,3,2)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(preparation_recovery_failure(&pool, "Add-on media lists")
+            .await
+            .unwrap()
             .is_none());
     }
 

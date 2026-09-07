@@ -314,8 +314,7 @@ async fn run_addon_item_operations(pool: DbPool, shutdown: CancellationToken) {
             () = shutdown.cancelled() => break,
             _ = interval.tick() => {}
         }
-        // Give both durable kinds a bounded opportunity; access traffic cannot
-        // starve interval discovery. File preparation keeps its separate worker.
+        // Give both metadata kinds a turn; file-writing work uses its supervised worker.
         metadata_turn = !metadata_turn;
         if metadata_turn {
             let (cancel, cancellation) = tokio::sync::oneshot::channel();
@@ -329,7 +328,7 @@ async fn run_addon_item_operations(pool: DbPool, shutdown: CancellationToken) {
                 }
                 result = &mut work => {
                     if result.is_err() {
-                        tracing::warn!("add-on item interval metadata worker iteration failed");
+                        tracing::warn!("add-on item metadata worker iteration failed");
                     }
                 }
             }

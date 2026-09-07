@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 
 mod media_list_operations;
 pub use media_list_operations::*;
+mod media_list_subtitles;
+pub use media_list_subtitles::*;
 mod remote_stream_retained_play;
 pub use remote_stream_retained_play::*;
 

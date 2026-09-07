@@ -1592,7 +1592,33 @@ impl HlsSessionWorker {
                     }
                 }
             };
-            if interval_playback.is_some() && subtitle.is_some() {
+            let mut retained_subtitle_input = None;
+            let retained_subtitle_verified =
+                if let (
+                    Some(subtitle),
+                    Some(crate::remote_stream::RemoteStreamSource::RetainedIntervals(source)),
+                ) = (
+                    subtitle.as_ref(),
+                    active.remote_stream.as_ref().map(|stream| &stream.source),
+                ) {
+                    match
+                    self.startup_read(
+                        crate::addon_media_list_subtitle_playback::prepare_retained_subtitle_input(
+                            &pool,
+                            active.media_item_id,
+                            subtitle,
+                            source.plan(),
+                            start_position,
+                        )
+                    )
+                    .await {
+                        Ok(input) => { retained_subtitle_input = input; true }
+                        Err(_) => false,
+                    }
+                } else {
+                    true
+                };
+            if !retained_subtitle_verified {
                 tracing::warn!(
                     channel_id = self.channel_id,
                     "retained HLS subtitles require edited-timeline mapping"
@@ -1631,8 +1657,11 @@ impl HlsSessionWorker {
                 subtitle.as_ref(),
                 audio_selection,
             );
-            let subtitle_input =
-                rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await;
+            let subtitle_input = if interval_playback.is_some() {
+                retained_subtitle_input
+            } else {
+                rebase_burned_text_subtitle_input(subtitle_input, start_seconds).await
+            };
             let watermark_channel = Channel {
                 id: self.channel_id,
                 watermark_id: active.channel_watermark_id,
