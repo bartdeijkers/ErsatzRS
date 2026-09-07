@@ -12,8 +12,8 @@ use ersatzrs_addon_contract::{
     MediaListItemRuntimeInfo, MediaListItemRuntimeInfoRequest, MediaListPrepareRequest,
     MediaListPrepareResult, RemoteStreamRetainedPlayRequest, CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1,
     CAPABILITY_MEDIA_LIST_INTERVAL_METADATA_V1, CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1,
-    CAPABILITY_MEDIA_LIST_PREPARE_V1, CAPABILITY_REMOTE_STREAM_PLAY_V4,
-    MAX_MEDIA_LIST_OPERATION_OUTPUT_BYTES,
+    CAPABILITY_MEDIA_LIST_PREPARE_V1, CAPABILITY_MEDIA_LIST_PREPARE_V2,
+    CAPABILITY_REMOTE_STREAM_PLAY_V4, MAX_MEDIA_LIST_OPERATION_OUTPUT_BYTES,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -253,7 +253,8 @@ impl InstalledItemRuntime {
         &self,
         request: &MediaListPrepareRequest,
     ) -> Result<MediaListPrepareResult, ItemRuntimeError> {
-        self.prepare_inner(request, None).await
+        self.prepare_inner(request, None, CAPABILITY_MEDIA_LIST_PREPARE_V1)
+            .await
     }
 
     /// Request cancellation through the channel and await this future before
@@ -267,21 +268,47 @@ impl InstalledItemRuntime {
         request: &MediaListPrepareRequest,
         cancellation: tokio::sync::oneshot::Receiver<()>,
     ) -> Result<MediaListPrepareResult, ItemRuntimeError> {
-        self.prepare_inner(request, Some(cancellation)).await
+        self.prepare_inner(
+            request,
+            Some(cancellation),
+            CAPABILITY_MEDIA_LIST_PREPARE_V1,
+        )
+        .await
+    }
+
+    /// Execute explicitly advertised generic finite preparation, including schema-less providers.
+    ///
+    /// # Errors
+    /// Rejects unsupported packages, invalid options or failed managed execution.
+    pub async fn prepare_generic_cancellable(
+        &self,
+        request: &MediaListPrepareRequest,
+        cancellation: tokio::sync::oneshot::Receiver<()>,
+    ) -> Result<MediaListPrepareResult, ItemRuntimeError> {
+        self.prepare_inner(
+            request,
+            Some(cancellation),
+            CAPABILITY_MEDIA_LIST_PREPARE_V2,
+        )
+        .await
     }
 
     async fn prepare_inner(
         &self,
         request: &MediaListPrepareRequest,
         cancellation: Option<tokio::sync::oneshot::Receiver<()>>,
+        capability: &str,
     ) -> Result<MediaListPrepareResult, ItemRuntimeError> {
-        request
-            .validate(self.schema()?, true)
-            .map_err(|_| ItemRuntimeError::InvalidRequest)?;
+        if capability == CAPABILITY_MEDIA_LIST_PREPARE_V2 {
+            request.validate_generic(self.installation.manifest.media_list_option_schema(), true)
+        } else {
+            request.validate(self.schema()?, true)
+        }
+        .map_err(|_| ItemRuntimeError::InvalidRequest)?;
         self.validate_source(&request.source_url)?;
         let result: MediaListPrepareResult = self
             .invoke(
-                CAPABILITY_MEDIA_LIST_PREPARE_V1,
+                capability,
                 "prepare",
                 request,
                 Duration::from_secs(u64::from(request.timeout_seconds)),

@@ -13,7 +13,7 @@ use crate::{
         ItemOperationFailure, ItemOperationInput, ItemOperationKind, ItemOperationStatus,
     },
     addon_media_list_item_runtime::{InstalledItemRuntime, ItemRuntimeError},
-    addon_media_list_options::{load_draft_item_options, ResolvedAddonItemOptions},
+    addon_media_list_options::load_draft_item_options,
     addon_media_list_refresh::{claim_provider_host, release_provider_host_lease},
     db::DbPool,
     repositories::{
@@ -93,9 +93,11 @@ impl AddonMediaListItemCoordinator {
                     source_url,
                     provider_id,
                     context_fingerprint,
-                    schema: options.schema,
-                    definition: options.definition,
-                    options: options.values,
+                    schema: Some(options.schema),
+                    definition: Some(options.definition),
+                    options: Some(options.values),
+                    addon_id: None,
+                    preparation_v2: None,
                     package_identity,
                     tool_version,
                     item_is_finite: liveness == RemoteStreamLiveness::Finite,
@@ -195,7 +197,7 @@ impl AddonMediaListItemCoordinator {
         };
         let Ok(runtime) = InstalledItemRuntime::load(
             &self.pool,
-            &job.input.schema.addon_id,
+            job.input.addon_id()?,
             Some(&job.input.package_identity),
         )
         .await
@@ -241,11 +243,7 @@ impl AddonMediaListItemCoordinator {
                 .await?;
             return Ok(true);
         }
-        let resolved = ResolvedAddonItemOptions {
-            schema: job.input.schema.clone(),
-            definition: job.input.definition.clone(),
-            values: job.input.options.clone(),
-        };
+        let resolved = job.input.resolved_options()?.ok_or_else(changed)?;
         let options = resolved.for_operation(
             AddonMediaListOptionOperation::TestAccess,
             if job.input.item_is_finite {

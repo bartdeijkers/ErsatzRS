@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod addon_list_lifecycle;
+pub mod addon_media_list_delivery;
 pub mod channel;
 pub mod collection;
 pub mod common;
@@ -19,6 +20,7 @@ pub mod scanning;
 pub mod scheduling;
 
 pub use addon_list_lifecycle::*;
+pub use addon_media_list_delivery::*;
 pub use channel::*;
 pub use collection::*;
 pub use common::*;

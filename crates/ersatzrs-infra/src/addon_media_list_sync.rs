@@ -496,6 +496,7 @@ impl AddonMediaListSynchronizer {
         list_id: EntityId,
         refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence,
         refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
+        delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode,
         next_refresh_at: Option<&str>,
         cadence_changed: bool,
         generate_playlist: bool,
@@ -548,6 +549,14 @@ impl AddonMediaListSynchronizer {
         if updated.rows_affected() != 1 {
             return Err(publication_in_progress());
         }
+
+        crate::addon_media_list_delivery::save_in_tx(
+            &mut tx,
+            list_id,
+            delivery_mode,
+            chrono::Utc::now(),
+        )
+        .await?;
 
         if cadence_changed {
             sqlx::query(
@@ -2280,6 +2289,7 @@ mod incremental_rank_tests {
 pub struct AddonMediaListRemoteSynchronizer<P> {
     local: AddonMediaListSynchronizer,
     provider: P,
+    delivery_mode: Option<ersatzrs_domain::AddonMediaListDeliveryMode>,
 }
 
 impl<P> AddonMediaListRemoteSynchronizer<P>
@@ -2291,7 +2301,18 @@ where
         Self {
             local: AddonMediaListSynchronizer::new(pool),
             provider,
+            delivery_mode: None,
         }
+    }
+
+    /// Preserve refresh defaults unless the operator explicitly selected delivery.
+    #[must_use]
+    pub(crate) fn with_delivery_mode(
+        mut self,
+        mode: Option<ersatzrs_domain::AddonMediaListDeliveryMode>,
+    ) -> Self {
+        self.delivery_mode = mode;
+        self
     }
 
     async fn import_finalization_phase(&self, job_id: EntityId, lease_owner: &str) -> Result<i32> {
@@ -2633,6 +2654,20 @@ where
         requested_folder: Option<&str>,
     ) -> Result<EntityId> {
         let list_id = self.local.save_list(list, &enumerated.metadata).await?;
+        if let Some(mode) = self.delivery_mode {
+            let mut tx = crate::db::begin_write(&self.local.pool)
+                .await
+                .repository()?;
+            ensure_not_publishing_tx(&mut tx, list_id).await?;
+            crate::addon_media_list_delivery::save_in_tx(
+                &mut tx,
+                list_id,
+                mode,
+                chrono::Utc::now(),
+            )
+            .await?;
+            tx.commit().await.repository()?;
+        }
         if list.chapter_input.trim().is_empty() {
             self.expand_item_chapters(list_id, &list.addon_id, enumerated)
                 .await?;

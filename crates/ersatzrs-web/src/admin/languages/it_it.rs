@@ -916,6 +916,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "Artista non trovato",
         TextKey::AfterDurationEnd => "Dopo la fine della durata",
         TextKey::AutomaticRefresh => "Aggiornamento Automatico",
+        TextKey::AddonDeliveryMode => "Distribuzione",
+        TextKey::AddonDeliveryStream => "Streaming",
+        TextKey::AddonDeliveryDownloadAhead => "Scarica in anticipo",
+        TextKey::AddonDeliveryNewVideos => "Scarica in anticipo — solo nuovi video",
+        TextKey::AddonDeliveryHelp => "Le modifiche hanno effetto dopo la prossima pubblicazione. Solo nuovi video scarica i video importati per la prima volta dopo la data limite salvata; quelli già noti vengono riprodotti in streaming. Riattivare la modalità imposta una nuova data limite. Solo i contenuti di durata finita possono essere scaricati in anticipo. I contenuti dal vivo e quelli di durata sconosciuta continuano a essere riprodotti in streaming.",
+        TextKey::AddonDeliveryUnavailable => "Il download richiede un componente aggiuntivo compatibile e attivo e contenuti di durata finita.",
+        TextKey::AddonDeliveryCutoff => "Data limite dei nuovi video",
+        TextKey::AddonDeliveryFreshCutoff => "Al salvataggio viene registrata una nuova data limite.",
         TextKey::AdaptiveRefreshUnavailable => {
             "L'aggiornamento adattivo non è disponibile perché questo add-on non supporta più i controlli della sorgente. Scegli un'altra frequenza per riprendere l'aggiornamento automatico."
         }

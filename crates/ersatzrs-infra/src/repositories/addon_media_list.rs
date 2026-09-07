@@ -406,6 +406,39 @@ impl PlaylistItemSnapshot {
 #[derive(Clone)]
 pub struct SqliteAddonMediaListRepository(pub Pool<crate::db::Db>);
 
+async fn require_delivery_capability(
+    pool: &Pool<crate::db::Db>,
+    addon_id: &str,
+    mode: ersatzrs_domain::AddonMediaListDeliveryMode,
+) -> Result<()> {
+    if mode == ersatzrs_domain::AddonMediaListDeliveryMode::Stream {
+        return Ok(());
+    }
+    let installed = crate::addons::load_installed_addon(pool, addon_id)
+        .await
+        .map_err(|_| {
+            RepositoryError::unavailable(
+                "set add-on delivery mode",
+                "installed add-on is unavailable",
+            )
+        })?;
+    if installed.is_some_and(|addon| {
+        addon
+            .manifest
+            .has_capability(ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_PREPARE_V2)
+            && addon
+                .manifest
+                .has_capability(ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1)
+    }) {
+        Ok(())
+    } else {
+        Err(RepositoryError::unavailable(
+            "set add-on delivery mode",
+            "the installed add-on does not declare generic Download ahead support",
+        ))
+    }
+}
+
 #[async_trait]
 #[allow(clippy::too_many_lines)]
 impl AddonMediaListRepository for SqliteAddonMediaListRepository {
@@ -568,6 +601,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         let row = sqlx::query(
             r#"SELECT "list"."Id", "list"."Name", "list"."AddonId", "list"."SourceUrl",
                       "list"."RefreshCadence", "list"."GeneratePlaylist", "list"."RefreshPublicationPolicy",
+                      "list"."DeliveryMode", "list"."DeliveryCutoffAt",
                       "list"."LastRefreshSucceededAt", "list"."NextRefreshAt",
                       "list"."RefreshRetryAt",
                       "list"."ContentKindOverride", "list"."PresentationKind",
@@ -589,6 +623,16 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             .map(|row| {
                 Ok(AddonMediaListAdminForm {
                     auto_publication_hold: None,
+                    delivery_mode: crate::repositories::common::decode_enum_column(
+                        "AddonMediaListDeliveryMode",
+                        &row,
+                        "DeliveryMode",
+                    )?,
+                    delivery_cutoff_at: decode_optional_datetime(
+                        "AddonMediaList.DeliveryCutoffAt",
+                        row.try_get("DeliveryCutoffAt").repository()?,
+                    )?
+                    .map(|value| value.to_rfc3339()),
                     id: row.try_get("Id").repository()?,
                     name: row.try_get("Name").repository()?,
                     addon_id: row.try_get("AddonId").repository()?,
@@ -1263,8 +1307,11 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         content_kind_override: AddonMediaListContentKind,
         chapter_input: &str,
         detail_import_policy: AddonMediaListDetailPolicy,
+        delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode,
     ) -> Result<EntityId> {
+        require_delivery_capability(&self.0, addon_id, delivery_mode).await?;
         AddonMediaListImportCoordinator::new(self.0.clone())
+            .with_delivery_mode(delivery_mode)
             .add_or_refresh(
                 addon_id,
                 source_url,
@@ -2102,6 +2149,8 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()> {
+        let policy = crate::addon_media_list_delivery::load(&self.0, id).await?;
+        require_delivery_capability(&self.0, addon_id, policy.mode).await?;
         crate::addon_media_list_import::AddonMediaListImportCoordinator::new(self.0.clone())
             .change_addon(id, addon_id)
             .await
@@ -2112,6 +2161,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         id: EntityId,
         refresh_cadence: AddonMediaListRefreshCadence,
         refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
+        delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode,
         generate_playlist: bool,
         content_kind_override: AddonMediaListContentKind,
         chapter_input: &str,
@@ -2124,6 +2174,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 id,
             })?;
         let cadence_changed = existing.refresh_cadence != refresh_cadence;
+        require_delivery_capability(&self.0, &existing.addon_id, delivery_mode).await?;
         if cadence_changed
             && refresh_cadence == AddonMediaListRefreshCadence::Adaptive
             && !InstalledAddonMediaListProvider::new(self.0.clone())
@@ -2178,6 +2229,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 id,
                 refresh_cadence,
                 refresh_publication_policy,
+                delivery_mode,
                 next_refresh_at.as_deref(),
                 cadence_changed,
                 generate_playlist,
@@ -3387,6 +3439,13 @@ async fn select_publication_playback(
             return Ok(selection);
         }
     }
+    let prepared_media = crate::addon_media_list_prepared_selection::select_prepared_media(
+        &repository.0,
+        list_id,
+        saved_revision,
+        excluded_item_ids,
+    )
+    .await?;
     let streaming_plans = crate::addon_media_list_prepared_selection::select_streaming_plans(
         &repository.0,
         list_id,
@@ -3396,8 +3455,9 @@ async fn select_publication_playback(
     .await?;
     Ok(
         ersatzrs_core::repositories::AddonMediaListRevisionArtifacts {
+            ids: prepared_media.values().copied().collect(),
             streaming_plans,
-            ..Default::default()
+            prepared_media,
         },
     )
 }
@@ -5487,6 +5547,7 @@ fn publication_in_progress() -> RepositoryError {
     )
 }
 
+#[allow(clippy::too_many_lines)] // Keep streamed and downloaded readiness in one shared classification.
 async fn addon_media_list_publication_readiness(
     pool: &Pool<crate::db::Db>,
     form: &AddonMediaListAdminForm,
@@ -5537,16 +5598,34 @@ async fn addon_media_list_publication_readiness(
         &excluded,
     )
     .await?;
-    item_classification.preparation_required =
-        preparation.iter().map(|item| item.item_id).collect();
+    let downloads = crate::addon_media_list_prepared_selection::preparation_requirements(
+        pool,
+        list_id,
+        form.draft_revision,
+        &excluded,
+    )
+    .await?;
+    item_classification.preparation_required = preparation
+        .iter()
+        .map(|item| item.item_id)
+        .chain(downloads.iter().map(|item| item.item_id))
+        .collect();
     let required_prepared_media_count = preparation
         .iter()
         .filter(|item| item.plan.is_none())
-        .count() as u64;
+        .count() as u64
+        + downloads
+            .iter()
+            .filter(|item| item.artifact_id.is_none())
+            .count() as u64;
     let required_prepared_media_pending = preparation
         .iter()
         .filter(|item| item.plan.is_none() && item.pending)
-        .count() as u64;
+        .count() as u64
+        + downloads
+            .iter()
+            .filter(|item| item.artifact_id.is_none() && item.pending)
+            .count() as u64;
     for item in &included {
         if access_restricted_without_replacement(item) {
             item_classification.restricted_excluded_count = item_classification
@@ -6487,7 +6566,7 @@ impl SqliteAddonMediaListRepository {
         .fetch_all(&self.0)
         .await
         .repository()?;
-        let required_media =
+        let mut required_media =
             crate::addon_media_list_prepared_selection::interval_metadata_requirements(
                 &self.0,
                 id,
@@ -6498,7 +6577,18 @@ impl SqliteAddonMediaListRepository {
             .into_iter()
             .map(|item| item.item_id)
             .collect::<std::collections::BTreeSet<_>>();
-        // Interval metadata supplies the positive edited duration itself, without an
+        required_media.extend(
+            crate::addon_media_list_prepared_selection::preparation_requirements(
+                &self.0,
+                id,
+                form.draft_revision,
+                &[],
+            )
+            .await?
+            .into_iter()
+            .map(|item| item.item_id),
+        );
+        // Interval metadata or prepared files supply the positive duration, without an
         // additional provider detail request for the same finite item.
         let mut detail_rows = Vec::new();
         let valid_replacements = self

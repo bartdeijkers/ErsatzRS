@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use chrono::{Duration, Utc};
-use ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_PREPARE_V1;
+use ersatzrs_addon_contract::{CAPABILITY_MEDIA_LIST_PREPARE_V1, CAPABILITY_MEDIA_LIST_PREPARE_V2};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::RemoteStreamLiveness;
 use sqlx::Row as _;
@@ -79,6 +79,30 @@ impl AddonMediaListItemCoordinator {
         revision: i32,
         max_video_height: Option<u32>,
     ) -> Result<i64> {
+        self.queue_preparation_impl(list_id, item_id, revision, max_video_height, false)
+            .await
+    }
+
+    pub(crate) async fn queue_preparation_once(
+        &self,
+        list_id: i64,
+        item_id: i64,
+        revision: i32,
+        max_video_height: Option<u32>,
+    ) -> Result<i64> {
+        self.queue_preparation_impl(list_id, item_id, revision, max_video_height, true)
+            .await
+    }
+
+    #[allow(clippy::too_many_lines)] // Validate and freeze one preparation input in its fenced transaction.
+    async fn queue_preparation_impl(
+        &self,
+        list_id: i64,
+        item_id: i64,
+        revision: i32,
+        max_video_height: Option<u32>,
+        automatic: bool,
+    ) -> Result<i64> {
         let row = sqlx::query(
             r#"SELECT "ProviderId", "SourceUrl",
                       COALESCE("LivenessOverride", "ProviderLiveness") AS "Liveness"
@@ -92,10 +116,30 @@ impl AddonMediaListItemCoordinator {
         .ok_or_else(changed)?;
         let liveness: RemoteStreamLiveness =
             decode_enum_column("RemoteStreamLiveness", &row, "Liveness")?;
-        let options = load_draft_item_options(&self.pool, list_id, item_id)
-            .await?
-            .ok_or_else(changed)?;
-        if !options.requires_preparation(liveness) {
+        let options = load_draft_item_options(&self.pool, list_id, item_id).await?;
+        let addon_id: String =
+            sqlx::query_scalar(r#"SELECT "AddonId" FROM "AddonMediaList" WHERE "Id"=?"#)
+                .bind(list_id)
+                .fetch_one(&self.pool)
+                .await
+                .repository()?;
+        // Read-only transaction: classify delivery; the queue owns the later fenced write.
+        let mut tx = self.pool.begin().await.repository()?;
+        let delivery = crate::addon_media_list_delivery::effective_item_delivery_in_tx(
+            &mut tx,
+            list_id,
+            &row.try_get::<String, _>("ProviderId").repository()?,
+            liveness,
+        )
+        .await?;
+        tx.commit().await.repository()?;
+        let generic = delivery == ersatzrs_domain::AddonMediaListDeliveryMode::DownloadAhead;
+        if liveness != RemoteStreamLiveness::Finite
+            || (!generic
+                && !options
+                    .as_ref()
+                    .is_some_and(|options| options.requires_preparation(liveness)))
+        {
             return Err(RepositoryError::Conflict(
                 "this item does not require finite preparation".into(),
             ));
@@ -105,18 +149,21 @@ impl AddonMediaListItemCoordinator {
             .repository()?
             .ok_or_else(changed)?;
         let provider_id: String = row.try_get("ProviderId").repository()?;
-        let runtime = InstalledItemRuntime::load(&self.pool, &options.schema.addon_id, None)
+        let runtime = InstalledItemRuntime::load(&self.pool, &addon_id, None)
             .await
             .map_err(runtime_error)?;
-        runtime.validate_options(&options).map_err(runtime_error)?;
-        let installed = crate::addons::load_installed_addon(&self.pool, &options.schema.addon_id)
+        if let Some(options) = &options {
+            runtime.validate_options(options).map_err(runtime_error)?;
+        }
+        let installed = crate::addons::load_installed_addon(&self.pool, &addon_id)
             .await
             .map_err(|_| changed())?
             .ok_or_else(changed)?;
-        if !installed
-            .manifest
-            .has_capability(CAPABILITY_MEDIA_LIST_PREPARE_V1)
-        {
+        if !installed.manifest.has_capability(if generic {
+            CAPABILITY_MEDIA_LIST_PREPARE_V2
+        } else {
+            CAPABILITY_MEDIA_LIST_PREPARE_V1
+        }) {
             return Err(RepositoryError::unavailable(
                 "item preparation",
                 "the item operation is unsupported",
@@ -128,35 +175,45 @@ impl AddonMediaListItemCoordinator {
             .map_err(runtime_error)?
             .tool_version;
         let package_identity = runtime.package_identity().to_owned();
-        let context_fingerprint = options.context_fingerprint(
-            &source_url,
-            &provider_id,
-            &package_identity,
-            &tool_version,
+        let mut input = ItemOperationInput {
+            source_url,
+            provider_id,
+            context_fingerprint: String::new(),
+            schema: options.as_ref().map(|options| options.schema.clone()),
+            definition: options.as_ref().map(|options| options.definition.clone()),
+            options: options.as_ref().map(|options| options.values.clone()),
+            addon_id: options.is_none().then_some(addon_id),
+            preparation_v2: generic.then_some(true),
+            package_identity,
+            tool_version,
+            item_is_finite: true,
             max_video_height,
-        )?;
-        self.queue
-            .enqueue(
-                list_id,
-                item_id,
-                revision,
-                ItemOperationKind::Preparation,
-                ItemOperationInput {
-                    source_url,
-                    provider_id,
-                    context_fingerprint,
-                    schema: options.schema,
-                    definition: options.definition,
-                    options: options.values,
-                    package_identity,
-                    tool_version,
-                    item_is_finite: true,
-                    max_video_height,
-                    requested_timing: None,
-                },
-                Utc::now(),
-            )
-            .await
+            requested_timing: None,
+        };
+        input.context_fingerprint = input.base_fingerprint()?;
+        if automatic {
+            self.queue
+                .enqueue_once(
+                    list_id,
+                    item_id,
+                    revision,
+                    ItemOperationKind::Preparation,
+                    input,
+                    Utc::now(),
+                )
+                .await
+        } else {
+            self.queue
+                .enqueue(
+                    list_id,
+                    item_id,
+                    revision,
+                    ItemOperationKind::Preparation,
+                    input,
+                    Utc::now(),
+                )
+                .await
+        }
     }
 
     /// Read the latest preparation for this exact item, hiding changed saved/tool context.
@@ -250,18 +307,13 @@ impl AddonMediaListItemCoordinator {
         {
             return Ok(false);
         }
-        let Some(options) = load_draft_item_options(&self.pool, list_id, item_id).await? else {
-            return Ok(false);
-        };
-        if options.schema != input.schema
-            || options.definition != input.definition
-            || options.values != input.options
-        {
+        let options = load_draft_item_options(&self.pool, list_id, item_id).await?;
+        if options != input.resolved_options()? {
             return Ok(false);
         }
         let Ok(runtime) = InstalledItemRuntime::load(
             &self.pool,
-            &input.schema.addon_id,
+            input.addon_id()?,
             Some(&input.package_identity),
         )
         .await
@@ -383,7 +435,7 @@ impl AddonMediaListItemCoordinator {
         }
         let Ok(runtime) = InstalledItemRuntime::load(
             &self.pool,
-            &job.input.schema.addon_id,
+            job.input.addon_id()?,
             Some(&job.input.package_identity),
         )
         .await
@@ -595,7 +647,17 @@ impl AddonMediaListItemCoordinator {
                 cleanup_unconfirmed: true,
             };
             let (cancel, provider_cancellation) = tokio::sync::oneshot::channel();
-            let operation = runtime.prepare_cancellable(&request, provider_cancellation);
+            let operation = async {
+                if job.input.preparation_v2 == Some(true) {
+                    runtime
+                        .prepare_generic_cancellable(&request, provider_cancellation)
+                        .await
+                } else {
+                    runtime
+                        .prepare_cancellable(&request, provider_cancellation)
+                        .await
+                }
+            };
             tokio::pin!(operation);
             let monitor = async {
                 let mut heartbeat = tokio::time::interval(std::time::Duration::from_secs(1));
@@ -811,6 +873,80 @@ pub(crate) mod tests {
     }
 
     #[tokio::test]
+    async fn generic_download_without_options_requires_v2_and_queues_owned_work() {
+        let temporary = tempfile::tempdir().unwrap();
+        let pool = fixture(&temporary.path().join("package")).await;
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "DraftOptionSchemaId"=NULL,"DeliveryMode"=1 WHERE "Id"=1"#)
+            .execute(&pool).await.unwrap();
+        let original: String =
+            sqlx::query_scalar(r#"SELECT "ManifestJson" FROM "AddonInstallation" LIMIT 1"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let mut manifest: serde_json::Value = serde_json::from_str(&original).unwrap();
+        manifest["capabilities"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|capability| capability["id"] != "media-list.options.v1");
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson"=?"#)
+            .bind(manifest.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let coordinator = AddonMediaListItemCoordinator::new(pool.clone());
+        assert!(
+            coordinator.queue_preparation(1, 10, 0, None).await.is_err(),
+            "legacy prepare must not promise generic downloads"
+        );
+        manifest["capabilities"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"id":"media-list.prepare.v2"}));
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson"=?"#)
+            .bind(manifest.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let id = coordinator.queue_preparation(1, 10, 0, None).await.unwrap();
+        let job = coordinator
+            .queue
+            .claim_kind(Utc::now(), 90, ItemOperationKind::Preparation)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(job.id, id);
+        assert_eq!(job.input.preparation_v2, Some(true));
+        assert!(job.input.resolved_options().unwrap().is_none());
+        assert_eq!(job.input.addon_id().unwrap(), "org.ersatzrs.addon.fixture");
+        coordinator
+            .queue
+            .complete(
+                &job,
+                ItemOperationCompletion::Failed(ItemOperationFailure::Failed),
+                Utc::now(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            coordinator
+                .queue_preparation_once(1, 10, 0, None)
+                .await
+                .unwrap(),
+            id
+        );
+        assert_eq!(
+            coordinator
+                .queue
+                .status(id, Utc::now())
+                .await
+                .unwrap()
+                .unwrap()
+                .state,
+            3
+        );
+    }
+
+    #[tokio::test]
     async fn preparation_shutdown_before_claim_leaves_job_queued() {
         let temporary = tempfile::tempdir().unwrap();
         let pool = fixture(&temporary.path().join("package")).await;
@@ -836,17 +972,17 @@ pub(crate) mod tests {
 
     #[tokio::test]
     async fn preparation_shutdown_awaits_provider_exit_before_releasing_reservation() {
-        shutdown_awaits_process_exit(false, false).await;
+        Box::pin(shutdown_awaits_process_exit(false, false)).await;
     }
 
     #[tokio::test]
     async fn preparation_shutdown_awaits_runtime_probe_exit() {
-        shutdown_awaits_process_exit(true, false).await;
+        Box::pin(shutdown_awaits_process_exit(true, false)).await;
     }
 
     #[tokio::test]
     async fn preparation_shutdown_kills_provider_while_heartbeat_database_is_locked() {
-        shutdown_awaits_process_exit(false, true).await;
+        Box::pin(shutdown_awaits_process_exit(false, true)).await;
     }
 
     #[allow(clippy::too_many_lines)] // Exercise cancellation, process exit and retained quota in one fixture.

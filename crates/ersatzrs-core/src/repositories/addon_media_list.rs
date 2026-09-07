@@ -105,6 +105,10 @@ pub struct AddonMediaListAdminForm {
     pub refresh_cadence: AddonMediaListRefreshCadence,
     /// Publication behavior for scheduled refresh additions.
     pub refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
+    /// Saved draft delivery policy; published playback remains revision-bound.
+    pub delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode,
+    /// Server-established cutoff for new-videos-only, shown beside the policy.
+    pub delivery_cutoff_at: Option<String>,
     /// Persisted cadence anchor advanced only by a successful source refresh.
     pub last_refresh_succeeded_at: Option<String>,
     /// Next fixed refresh or adaptive source check.
@@ -559,6 +563,7 @@ pub trait AddonMediaListRepository: Send + Sync {
     ) -> Result<EntityId>;
     /// Start a resumable import when supported, preserving the legacy bounded
     /// one-shot path for older packages.
+    #[allow(clippy::too_many_arguments)] // Keep the existing list-import boundary with its saved delivery policy.
     async fn add_or_refresh_with_policy(
         &self,
         addon_id: &str,
@@ -567,7 +572,14 @@ pub trait AddonMediaListRepository: Send + Sync {
         content_kind_override: AddonMediaListContentKind,
         chapter_input: &str,
         detail_import_policy: AddonMediaListDetailPolicy,
+        delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode,
     ) -> Result<EntityId> {
+        if delivery_mode != ersatzrs_domain::AddonMediaListDeliveryMode::Stream {
+            return Err(RepositoryError::unavailable(
+                "set add-on delivery mode",
+                "the repository does not support Download ahead",
+            ));
+        }
         let id = self
             .add_or_refresh(
                 addon_id,
@@ -930,11 +942,13 @@ pub trait AddonMediaListRepository: Send + Sync {
     /// replace the previous ones rather than being migrated.
     async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()>;
     /// Update refresh cadence and generated-playlist settings.
+    #[allow(clippy::too_many_arguments)] // The list settings are saved together under one publication fence.
     async fn update_settings(
         &self,
         id: EntityId,
         refresh_cadence: AddonMediaListRefreshCadence,
         refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
+        delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode,
         generate_playlist: bool,
         content_kind_override: AddonMediaListContentKind,
         chapter_input: &str,

@@ -55,10 +55,11 @@ AMM-M-01A is Complete under ADRs 0087/0088; its milestone owns the options,
 real MPEG-TS/HLS cut and cancellation evidence. Native yt-dlp replaces the
 Range adapter and remains preferred in later slices. SDR/subtitle refusals
 remain explicit; static startup-stage diagnostics remain non-blocking debt.
-Preserved preparation belongs to M-01B,
-not started: a generic native list select offers Stream, Download ahead, or
-Download ahead only for new videos first imported after enabling it. Existing
-videos stream; enabled SponsorBlock applies in every mode. M-02 and AMM-N await.
+M-01B completes the generic native list select: Stream, Download ahead, or
+Download ahead only for new videos first imported after enabling it. Its saved
+UTC cutoff is visible and renewed on re-enabling; published playback stays
+frozen. Existing videos stream and enabled SponsorBlock applies in every mode.
+M-02 and AMM-N await.
 '''
 
 [[debt]]
@@ -250,16 +251,16 @@ id          = 'preparation-worker-forced-host-exit-recovery'
 description = 'AMM-M-01B: preserve preparation process ownership after forced web-host exit and resume only after exact-attempt cleanup proof.'
 discovered  = '2026-09-05'
 adr         = '0086'
-evidence    = 'Preparation implementation remains preserved and incomplete. ADR 0087 scopes this worker to AMM-M-01B Download ahead, not AMM-M-01A streaming; its native crash/restart gate awaits 01B. On 2026-09-07 the maintainer explicitly approved deferring the two download-ahead browser tests after CI demonstrated their obsolete mandatory-download admission path. The owning amm-m-01b acceptance requires re-enabling both through the explicit delivery workflow. Existing reservations or processes must not be cleared merely because the design changed. Reuse the groundwork rather than deleting or duplicating it.'
-resolved    = false
+evidence    = 'Closed by amm-m-01b focused acceptance on 2026-09-07. The re-enabled actual-host-death browser test selects Download ahead, observes the provider and its descendant, kills the owned host, confirms cleanup before one safe restart, and verifies exactly one resumed successful preparation. The existing worker, reservations and recovery protocol are reused; AMM-N-03 still owns integrated packaged release acceptance.'
+resolved    = true
 
 [[debt]]
 id          = 'list-delivery-mode-selection'
 description = 'AMM-M-01B: implement the provider-neutral list-level native select for Stream, Download ahead, and Download ahead only for new videos, independent of SponsorBlock, with immutable published delivery choices and capability-based eligibility.'
 discovered  = '2026-09-06'
 adr         = '0087'
-evidence    = 'The maintainer confirmed that new means first imported after enabling the mode; existing videos continue streaming. No selector or durable first-import classification is implemented. Preserved full-download groundwork is not proof of these semantics. Scope includes localized hydrated/no-JavaScript save and refresh/restart persistence, not per-item delivery overrides or speculative cache infrastructure.'
-resolved    = false
+evidence    = 'Closed by amm-m-01b focused acceptance on 2026-09-07. The native localized selector and visible UTC cutoff use a persisted first-import identity fence. Re-enabling establishes a fresh cutoff; unchanged saves preserve it. Persistence and both-removal-setting mixed-cohort regressions pass. Hydrated/no-JavaScript cutoff tests pass in Chromium and Firefox. Decoded prepared-file playback remains pinned after saving Stream in the draft. The owning milestone records command and browser evidence; no per-item delivery override or speculative cache infrastructure is added.'
+resolved    = true
 
 [[debt]]
 id          = 'publication-verification-rewrites-sealed-playlist-sidecar'

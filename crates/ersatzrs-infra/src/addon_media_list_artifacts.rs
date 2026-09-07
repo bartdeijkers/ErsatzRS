@@ -1,7 +1,6 @@
 //! M01 bounded processed-media reservation and admission, without cache eviction.
 use crate::{
     addon_media_list_item_jobs::{validate_claim, ClaimedItemOperation, ItemOperationKind},
-    addon_media_list_options::ResolvedAddonItemOptions,
     addons::{run_bounded_command_with_input_cancellable, AddonError, ResolvedAddonCommand},
     db::DbPool,
     repositories::{common::encode_datetime, SqliteAddonMediaListRepository, SqlxResultExt as _},
@@ -75,20 +74,21 @@ impl ArtifactReservation {
     /// or a staging path that cannot be represented in the provider contract.
     pub fn prepare_request(&self, job: &ClaimedItemOperation) -> Result<MediaListPrepareRequest> {
         self.matches(job)?;
-        let resolved = ResolvedAddonItemOptions {
-            schema: job.input.schema.clone(),
-            definition: job.input.definition.clone(),
-            values: job.input.options.clone(),
-        };
+        let resolved = job.input.resolved_options()?;
         let request = MediaListPrepareRequest {
             source_url: job.input.source_url.clone(),
             provider_id: job.input.provider_id.clone(),
             context_fingerprint: job.input.context_fingerprint.clone(),
             tool_version: job.input.tool_version.clone(),
-            options: resolved.for_operation(
-                AddonMediaListOptionOperation::Preparation,
-                RemoteStreamLiveness::Finite,
-            )?,
+            options: resolved
+                .as_ref()
+                .map(|resolved| {
+                    resolved.for_operation(
+                        AddonMediaListOptionOperation::Preparation,
+                        RemoteStreamLiveness::Finite,
+                    )
+                })
+                .transpose()?,
             staging_directory: self
                 .staging_directory
                 .to_str()
@@ -99,9 +99,15 @@ impl ArtifactReservation {
             timeout_seconds: 3600,
             max_video_height: job.input.max_video_height,
         };
-        request
-            .validate(&job.input.definition, job.input.item_is_finite)
-            .map_err(|_| invalid())?;
+        if job.input.preparation_v2 == Some(true) {
+            request.validate_generic(job.input.definition.as_ref(), job.input.item_is_finite)
+        } else {
+            request.validate(
+                job.input.definition.as_ref().ok_or_else(invalid)?,
+                job.input.item_is_finite,
+            )
+        }
+        .map_err(|_| invalid())?;
         Ok(request)
     }
     fn matches(&self, job: &ClaimedItemOperation) -> Result<()> {
@@ -356,7 +362,7 @@ impl AddonMediaListArtifactStore {
             return Err(invalid().into());
         }
         let command = ResolvedAddonCommand {
-            addon_id: job.input.schema.addon_id.clone(),
+            addon_id: job.input.addon_id()?.to_owned(),
             program: ffprobe_path.into(),
             args: crate::ffprobe::ffprobe_args(&file),
             working_directory: reservation.staging_directory.clone(),

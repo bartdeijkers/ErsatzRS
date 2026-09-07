@@ -41,15 +41,90 @@ pub struct ItemOperationInput {
     pub source_url: String,
     pub provider_id: String,
     pub context_fingerprint: String,
-    pub schema: AddonMediaListOptionSchemaRef,
-    pub definition: AddonCapability,
-    pub options: AddonMediaListOptionValues,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema: Option<AddonMediaListOptionSchemaRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition: Option<AddonCapability>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<AddonMediaListOptionValues>,
+    /// Explicit identity only for schema-less generic preparation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub addon_id: Option<String>,
+    /// Absent for all legacy v1 jobs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preparation_v2: Option<bool>,
     pub package_identity: String,
     pub tool_version: String,
     pub item_is_finite: bool,
     pub max_video_height: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_timing: Option<ItemOperationTiming>,
+}
+
+impl ItemOperationInput {
+    pub(crate) fn base_fingerprint(&self) -> Result<String> {
+        if let Some(options) = self.resolved_options()? {
+            let fingerprint = options.context_fingerprint(
+                &self.source_url,
+                &self.provider_id,
+                &self.package_identity,
+                &self.tool_version,
+                self.max_video_height,
+            )?;
+            return if self.preparation_v2 == Some(true) {
+                let mut hash = Sha256::new();
+                hash.update(b"ersatzrs:addon-media-list:generic-preparation:v2\0");
+                hash.update(fingerprint.as_bytes());
+                let mut result = String::with_capacity(64);
+                for byte in hash.finalize() {
+                    write!(result, "{byte:02x}").map_err(|_| conflict())?;
+                }
+                Ok(result)
+            } else {
+                Ok(fingerprint)
+            };
+        }
+        let bytes = serde_json::to_vec(&(
+            self.addon_id()?,
+            &self.source_url,
+            &self.provider_id,
+            &self.package_identity,
+            &self.tool_version,
+            self.max_video_height,
+        ))
+        .map_err(|_| conflict())?;
+        let mut hash = Sha256::new();
+        hash.update(b"ersatzrs:addon-media-list:preparation-without-options:v2\0");
+        hash.update(bytes);
+        let mut result = String::with_capacity(64);
+        for byte in hash.finalize() {
+            write!(result, "{byte:02x}").map_err(|_| conflict())?;
+        }
+        Ok(result)
+    }
+    pub(crate) fn addon_id(&self) -> Result<&str> {
+        match (&self.schema, &self.addon_id) {
+            (Some(schema), None) => Ok(&schema.addon_id),
+            (None, Some(id)) if self.preparation_v2 == Some(true) => Ok(id),
+            _ => Err(conflict()),
+        }
+    }
+
+    pub(crate) fn resolved_options(
+        &self,
+    ) -> Result<Option<crate::addon_media_list_options::ResolvedAddonItemOptions>> {
+        match (&self.schema, &self.definition, &self.options) {
+            (Some(schema), Some(definition), Some(values)) => Ok(Some(
+                crate::addon_media_list_options::ResolvedAddonItemOptions {
+                    schema: schema.clone(),
+                    definition: definition.clone(),
+                    values: values.clone(),
+                },
+            )),
+            (None, None, None) if self.preparation_v2 == Some(true) => Ok(None),
+            _ => Err(conflict()),
+        }
+    }
 }
 
 /// Saved draft timing bound into interval metadata request identity.
@@ -125,6 +200,13 @@ fn milliseconds(seconds: u64) -> Result<u64> {
 }
 
 fn validate_mode(kind: ItemOperationKind, input: &ItemOperationInput) -> Result<()> {
+    input.addon_id()?;
+    input.resolved_options()?;
+    if input.preparation_v2.is_some()
+        && (input.preparation_v2 != Some(true) || kind != ItemOperationKind::Preparation)
+    {
+        return Err(conflict());
+    }
     if match kind {
         ItemOperationKind::IntervalMetadata => {
             !input.item_is_finite || input.requested_timing.is_none()
@@ -244,12 +326,8 @@ impl AddonMediaListItemJobQueue {
         retry_terminal: bool,
     ) -> Result<i64> {
         validate_mode(kind, &input)?;
-        let resolved = load_draft_item_options(&self.pool, list_id, item_id)
-            .await?
-            .ok_or_else(conflict)?;
-        if input.schema != resolved.schema
-            || input.definition != resolved.definition
-            || input.options != resolved.values
+        let resolved = load_draft_item_options(&self.pool, list_id, item_id).await?;
+        if input.resolved_options()? != resolved
             || (kind == ItemOperationKind::Preparation && !input.item_is_finite)
             || !digest(&input.package_identity)
             || !digest(&input.context_fingerprint)
@@ -265,26 +343,22 @@ impl AddonMediaListItemJobQueue {
         } else {
             RemoteStreamLiveness::Unknown
         };
-        let options = resolved.for_operation(
-            ersatzrs_addon_contract::AddonMediaListOptionOperation::TestAccess,
-            liveness,
-        )?;
-        MediaListAccessCheckRequest {
-            source_url: input.source_url.clone(),
-            provider_id: input.provider_id.clone(),
-            context_fingerprint: input.context_fingerprint.clone(),
-            tool_version: input.tool_version.clone(),
-            options,
+        if let Some(resolved) = &resolved {
+            let options = resolved.for_operation(
+                ersatzrs_addon_contract::AddonMediaListOptionOperation::TestAccess,
+                liveness,
+            )?;
+            MediaListAccessCheckRequest {
+                source_url: input.source_url.clone(),
+                provider_id: input.provider_id.clone(),
+                context_fingerprint: input.context_fingerprint.clone(),
+                tool_version: input.tool_version.clone(),
+                options,
+            }
+            .validate(&resolved.definition, input.item_is_finite)
+            .map_err(|_| conflict())?;
         }
-        .validate(&input.definition, input.item_is_finite)
-        .map_err(|_| conflict())?;
-        let base_fingerprint = resolved.context_fingerprint(
-            &input.source_url,
-            &input.provider_id,
-            &input.package_identity,
-            &input.tool_version,
-            input.max_video_height,
-        )?;
+        let base_fingerprint = input.base_fingerprint()?;
         let expected_fingerprint = match &input.requested_timing {
             Some(timing) => timing.bind_context_fingerprint(&base_fingerprint)?,
             None => base_fingerprint,
@@ -1038,24 +1112,24 @@ async fn current(
             SELECT EXISTS(SELECT 1
                 FROM "AddonMediaList" AS "list"
                 JOIN "AddonMediaListItem" AS "item" ON "item"."AddonMediaListId"="list"."Id"
-                JOIN "AddonMediaListOptionSchema" AS "schema" ON "schema"."Id"="list"."DraftOptionSchemaId"
+                LEFT JOIN "AddonMediaListOptionSchema" AS "schema" ON "schema"."Id"="list"."DraftOptionSchemaId"
                 WHERE "list"."Id"=?
                 AND "item"."Id"=?
                 AND "list"."DraftRevision"=?
                 AND "item"."ProviderId"=?
                 AND "item"."SourceUrl"=?
                 AND "list"."AddonId"=?
-                AND "schema"."SchemaDigest"=?
-                AND "schema"."CapabilityId"=?)
+                AND "schema"."SchemaDigest" IS ?
+                AND "schema"."CapabilityId" IS ?)
         "#)
         .bind(list_id)
         .bind(item_id)
         .bind(revision)
         .bind(&input.provider_id)
         .bind(&input.source_url)
-        .bind(&input.schema.addon_id)
-        .bind(&input.schema.schema_digest)
-        .bind(&input.schema.capability_id)
+        .bind(input.addon_id()?)
+        .bind(input.schema.as_ref().map(|schema| &schema.schema_digest))
+        .bind(input.schema.as_ref().map(|schema| &schema.capability_id))
         .fetch_one(&mut **tx)
         .await
         .repository()?;
@@ -1068,13 +1142,13 @@ async fn current(
         FROM "AddonInstallation" WHERE "AddonId"=? AND "Enabled"=1
     "#,
     )
-    .bind(&input.schema.addon_id)
+    .bind(input.addon_id()?)
     .fetch_optional(&mut **tx)
     .await
     .repository()?
     .ok_or_else(conflict)?;
     let identity = crate::addon_media_list_item_runtime::package_identity_for_parts(
-        &input.schema.addon_id,
+        input.addon_id()?,
         &installation.try_get::<String, _>("Version").repository()?,
         &installation
             .try_get::<String, _>("PackageSha256")

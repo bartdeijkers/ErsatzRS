@@ -27,9 +27,10 @@ is historical, not the active implementation or an approved fallback.
 
 Partial — M-01A streaming is complete under the native-transfer amendment in
 ADR 0088. Its owning milestone records options, frozen intervals, real scheduled
-MPEG-TS/HLS cut continuity and cancellation acceptance. The generic optional
-Download ahead modes remain M-01B; static startup-stage diagnostics remain
-separate visible debt. Current evidence belongs to the milestone, not the
+MPEG-TS/HLS cut continuity and cancellation acceptance. M-01B completes the
+generic optional Download ahead modes, including the visible renewed cutoff
+and frozen mixed publication. Static startup-stage diagnostics remain separate
+visible debt. Current evidence belongs to the milestones, not the
 superseded adapter checkpoints below.
 
 ### Historical implementation checkpoints
@@ -104,6 +105,11 @@ alone is insufficient: opening the next range at the cut can starve playback.
 Delivery mode is a generic provider-neutral list option, independent of
 SponsorBlock. Use one list-level native HTML select with three localized choices: **Stream**
 (default), **Download ahead**, and **Download ahead only for new videos**.
+On 2026-09-07 the maintainer confirmed that entering or re-enabling the
+new-videos-only mode establishes a fresh cutoff. Saving that same mode preserves
+the cutoff. Display its persisted date/time beside the list delivery selector.
+Already-known videos stream after the next publication; current published
+playback remains unchanged until publication succeeds.
 This is not a checkbox or a per-item delivery override. The last choice means
 videos first imported after enabling that mode; videos already in the list
 continue streaming. Preserve this distinction across refreshes and restarts.

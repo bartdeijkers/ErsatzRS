@@ -323,6 +323,12 @@ async fn clear_provider_state(
         .execute(&mut *tx)
         .await
         .repository()?;
+    crate::addon_media_list_delivery::reset_identity_in_tx(
+        &mut tx,
+        job.list_id,
+        chrono::Utc::now(),
+    )
+    .await?;
     let updated = sqlx::query(
         r#"UPDATE "AddonMediaList"
            SET "Description" = NULL, "ItemCount" = 0, "LastUpdate" = NULL,

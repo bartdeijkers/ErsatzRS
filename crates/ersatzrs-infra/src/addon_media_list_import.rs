@@ -54,6 +54,7 @@ pub struct AddonMediaListImportCoordinator {
     pool: DbPool,
     provider: InstalledAddonMediaListProvider,
     scheduled_refresh: bool,
+    delivery_mode: Option<ersatzrs_domain::AddonMediaListDeliveryMode>,
 }
 
 impl AddonMediaListImportCoordinator {
@@ -63,6 +64,7 @@ impl AddonMediaListImportCoordinator {
             provider: InstalledAddonMediaListProvider::new(pool.clone()),
             pool,
             scheduled_refresh: false,
+            delivery_mode: None,
         }
     }
 
@@ -71,6 +73,16 @@ impl AddonMediaListImportCoordinator {
             scheduled_refresh: true,
             ..Self::new(pool)
         }
+    }
+
+    /// Apply an operator-selected mode before first-import identities are saved.
+    #[must_use]
+    pub(crate) fn with_delivery_mode(
+        mut self,
+        mode: ersatzrs_domain::AddonMediaListDeliveryMode,
+    ) -> Self {
+        self.delivery_mode = Some(mode);
+        self
     }
 
     /// Queue the first full import after a reset has durably verified emptiness.
@@ -192,6 +204,7 @@ impl AddonMediaListImportCoordinator {
             };
             let provider = InstalledAddonMediaListProvider::new(self.pool.clone());
             let id = AddonMediaListRemoteSynchronizer::new(self.pool.clone(), provider)
+                .with_delivery_mode(self.delivery_mode)
                 .add_or_refresh(
                     addon_id,
                     source_url,
@@ -692,6 +705,21 @@ impl AddonMediaListImportCoordinator {
             (inserted_id(&mut tx, result).await.repository()?, false)
         };
 
+        if let Some(mode) = self.delivery_mode {
+            let previous = crate::addon_media_list_delivery::load_in_tx(&mut tx, list_id).await?;
+            crate::addon_media_list_delivery::save_in_tx(&mut tx, list_id, mode, Utc::now())
+                .await?;
+            if previous.mode != mode {
+                sqlx::query(
+                    r#"UPDATE "AddonMediaList" SET "DraftRevision" = "DraftRevision" + 1
+                    WHERE "Id" = ?"#,
+                )
+                .bind(list_id)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            }
+        }
         if !self.scheduled_refresh {
             crate::addon_media_list_auto_publication::manual_refresh_in_tx(&mut tx, list_id)
                 .await?;

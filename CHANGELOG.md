@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Add generic list-level Stream, Download ahead, and new-videos-only delivery
+  selection. New-videos-only shows its saved cutoff beside the selector;
+  re-enabling it establishes a fresh cutoff while current published playback
+  remains unchanged until publication. Download ahead honors optional
+  SponsorBlock removal using native yt-dlp processing.
+
 - Extend provider-neutral add-on-list option contracts with finite preparation
   requirements and an explicit access-check target while preserving existing
   schema bytes. Add native list/item editors with inherited values, explicit

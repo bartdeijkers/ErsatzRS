@@ -10,8 +10,8 @@ use ersatzrs_core::repositories::{
     AddonMediaListNfoPerson, RepositoryError,
 };
 use ersatzrs_domain::{
-    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListPresentationKind,
-    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
+    AddonMediaListContentKind, AddonMediaListDeliveryMode, AddonMediaListDetailPolicy,
+    AddonMediaListPresentationKind, AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
     AddonMediaListRefreshPublicationPolicy,
 };
 use serde::Deserialize;
@@ -32,6 +32,8 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 pub struct AddonMediaListAddForm {
+    #[serde(default)]
+    delivery_mode: AddonMediaListDeliveryMode,
     #[serde(default)]
     addon_id: String,
     source_url: String,
@@ -145,6 +147,8 @@ pub struct AddonMediaListItemReviewForm {
 
 #[derive(Debug, Deserialize)]
 pub struct AddonMediaListSaveForm {
+    #[serde(default)]
+    delivery_mode: Option<AddonMediaListDeliveryMode>,
     id: i64,
     #[serde(default)]
     saved_revision: i32,
@@ -338,6 +342,7 @@ pub async fn add_addon_media_list_form(
             AddonMediaListDetailPolicy::ManualOnly
         },
         input.refresh_cadence,
+        input.delivery_mode,
     )
     .await;
     match result {
@@ -346,6 +351,7 @@ pub async fn add_addon_media_list_form(
                 .application
                 .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
                     id,
+                    delivery_mode: input.delivery_mode,
                     refresh_cadence: input.refresh_cadence,
                     refresh_publication_policy: AddonMediaListRefreshPublicationPolicy::Review,
                     generate_playlist: input.generate_playlist,
@@ -414,6 +420,8 @@ pub async fn save_addon_media_list_form(
         }
     };
     let form = AddonMediaListForm {
+        delivery_mode: input.delivery_mode.unwrap_or(current.delivery_mode),
+        delivery_cutoff_at: current.delivery_cutoff_at,
         auto_publication_hold: current.auto_publication_hold.map(Into::into),
         id,
         name: current.name,

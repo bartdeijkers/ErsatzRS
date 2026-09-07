@@ -1,9 +1,9 @@
 use ersatzrs_domain::{
     AddonMediaListAutoPublicationHoldReason, AddonMediaListAvailabilityReason,
-    AddonMediaListContentKind, AddonMediaListDetailPolicy, AddonMediaListDetailState,
-    AddonMediaListImportMode, AddonMediaListImportPurpose, AddonMediaListImportState,
-    AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability, AddonMediaListItemKind,
-    AddonMediaListItemRole, AddonMediaListPresentationKind,
+    AddonMediaListContentKind, AddonMediaListDeliveryMode, AddonMediaListDetailPolicy,
+    AddonMediaListDetailState, AddonMediaListImportMode, AddonMediaListImportPurpose,
+    AddonMediaListImportState, AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability,
+    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
     AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
     AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
     AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
@@ -600,6 +600,10 @@ pub struct AddonMediaListRow {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListForm {
     #[serde(default)]
+    pub delivery_mode: AddonMediaListDeliveryMode,
+    #[serde(default)]
+    pub delivery_cutoff_at: Option<String>,
+    #[serde(default)]
     pub auto_publication_hold: Option<AddonMediaListAutoPublicationHoldRow>,
     pub id: i64,
     pub name: String,
@@ -731,6 +735,8 @@ pub struct AddonMediaListProviderRow {
     pub addon_id: String,
     pub name: String,
     pub supports_adaptive_refresh: bool,
+    #[serde(default)]
+    pub supports_download_ahead: bool,
 }
 
 // These independent transport projections mirror the admin read model; they
@@ -1170,6 +1176,12 @@ pub async fn list_addon_media_list_providers(
         })
         .map(|item| AddonMediaListProviderRow {
             supports_adaptive_refresh: item.manifest.has_media_list_source_check_capability(),
+            supports_download_ahead: item
+                .manifest
+                .has_capability(ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_PREPARE_V2)
+                && item
+                    .manifest
+                    .has_capability(ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1),
             addon_id: item.addon_id,
             name: item
                 .manifest
@@ -1307,6 +1319,8 @@ pub async fn get_addon_media_list_form(
         .map_err(ServerFnError::new)
         .map(|form| {
             form.map(|form| AddonMediaListForm {
+                delivery_mode: form.delivery_mode,
+                delivery_cutoff_at: form.delivery_cutoff_at,
                 auto_publication_hold: form.auto_publication_hold.map(Into::into),
                 id: form.id,
                 name: form.name,
@@ -1995,6 +2009,7 @@ pub async fn validate_addon_media_list_item_chapters(
 }
 
 #[server]
+#[allow(clippy::too_many_arguments)] // Mirrors the native add form's persisted settings.
 pub async fn add_addon_media_list(
     addon_id: String,
     source_url: String,
@@ -2003,6 +2018,7 @@ pub async fn add_addon_media_list(
     chapter_input: String,
     load_item_details: bool,
     refresh_cadence: AddonMediaListRefreshCadence,
+    delivery_mode: AddonMediaListDeliveryMode,
 ) -> Result<i64, ServerFnError> {
     use crate::host::state::AppState;
 
@@ -2020,6 +2036,7 @@ pub async fn add_addon_media_list(
             AddonMediaListDetailPolicy::ManualOnly
         },
         refresh_cadence,
+        delivery_mode,
     )
     .await
     .map_err(ServerFnError::new)?;
@@ -2034,6 +2051,7 @@ pub async fn add_addon_media_list(
         .application
         .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
             id,
+            delivery_mode: form.delivery_mode,
             refresh_cadence: form.refresh_cadence,
             refresh_publication_policy: form.refresh_publication_policy,
             generate_playlist: form.generate_playlist,
@@ -2366,6 +2384,7 @@ pub async fn add_addon_media_list_with_state(
     chapter_input: String,
     detail_import_policy: AddonMediaListDetailPolicy,
     refresh_cadence: AddonMediaListRefreshCadence,
+    delivery_mode: AddonMediaListDeliveryMode,
 ) -> ersatzrs_app::Result<i64> {
     // An omitted choice is resolved from the URL rather than rejected, so the
     // operator only has to name an add-on when nothing claims the host.
@@ -2403,6 +2422,7 @@ pub async fn add_addon_media_list_with_state(
     let list_id = state
         .application
         .add_addon_media_list(ersatzrs_app::commands::AddAddonMediaList {
+            delivery_mode,
             addon_id,
             source_url,
             folder_name,
@@ -2464,6 +2484,7 @@ pub async fn update_addon_media_list_with_state(
         .application
         .update_addon_media_list(ersatzrs_app::commands::UpdateAddonMediaList {
             id: form.id,
+            delivery_mode: form.delivery_mode,
             refresh_cadence: form.refresh_cadence,
             refresh_publication_policy: form.refresh_publication_policy,
             generate_playlist: form.generate_playlist,

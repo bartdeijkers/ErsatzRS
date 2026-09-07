@@ -43,13 +43,40 @@ async fn queue_required_media_impl(
     excluded_item_ids: &[i64],
     automatic: bool,
 ) -> Result<u64> {
+    let downloads = crate::addon_media_list_prepared_selection::preparation_requirements(
+        pool,
+        list_id,
+        saved_revision,
+        excluded_item_ids,
+    )
+    .await?;
+    let coordinator =
+        crate::addon_media_list_item_coordinator::AddonMediaListItemCoordinator::new(pool.clone());
+    let mut download_count = 0_u64;
+    for item in downloads
+        .into_iter()
+        .filter(|item| item.artifact_id.is_none())
+    {
+        download_count += 1;
+        if !item.pending {
+            if automatic {
+                coordinator
+                    .queue_preparation_once(list_id, item.item_id, saved_revision, None)
+                    .await?;
+            } else {
+                coordinator
+                    .queue_preparation(list_id, item.item_id, saved_revision, None)
+                    .await?;
+            }
+        }
+    }
     let requirements =
         interval_metadata_requirements(pool, list_id, saved_revision, excluded_item_ids).await?;
     let missing = requirements
         .into_iter()
         .filter(|item| item.plan.is_none())
         .collect::<Vec<_>>();
-    let count = u64::try_from(missing.len()).map_err(|_| unavailable())?;
+    let count = u64::try_from(missing.len()).map_err(|_| unavailable())? + download_count;
     if missing.iter().all(|item| item.pending) {
         // A repeated click never resets an active attempt or its persisted cooldown.
         return Ok(count);
@@ -121,9 +148,11 @@ async fn queue_required_media_impl(
             source_url,
             provider_id,
             context_fingerprint,
-            schema: options.schema,
-            definition: options.definition,
-            options: options.values,
+            schema: Some(options.schema),
+            definition: Some(options.definition),
+            options: Some(options.values),
+            addon_id: None,
+            preparation_v2: None,
             package_identity,
             tool_version: tool_version.clone(),
             item_is_finite: true,

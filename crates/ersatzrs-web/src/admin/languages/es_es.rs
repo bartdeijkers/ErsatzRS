@@ -908,6 +908,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "No se ha encontrado el artista",
         TextKey::AfterDurationEnd => "Después del final de la duración",
         TextKey::AutomaticRefresh => "Actualización automática",
+        TextKey::AddonDeliveryMode => "Distribución",
+        TextKey::AddonDeliveryStream => "Streaming",
+        TextKey::AddonDeliveryDownloadAhead => "Descargar por adelantado",
+        TextKey::AddonDeliveryNewVideos => "Descargar por adelantado — solo vídeos nuevos",
+        TextKey::AddonDeliveryHelp => "Los cambios se aplican tras la próxima publicación. Solo se descargan los vídeos importados por primera vez después de la fecha límite guardada; los ya conocidos se reproducen en streaming. Reactivar este modo establece una nueva fecha límite. Solo el contenido de duración finita puede descargarse por adelantado. El contenido en directo y aquel cuya duración se desconoce sigue reproduciéndose en streaming.",
+        TextKey::AddonDeliveryUnavailable => "La descarga requiere un complemento compatible y activado y contenido de duración finita.",
+        TextKey::AddonDeliveryCutoff => "Fecha límite de vídeos nuevos",
+        TextKey::AddonDeliveryFreshCutoff => "Al guardar se registra una nueva fecha límite.",
         TextKey::AdaptiveRefreshUnavailable => {
             "La actualización adaptativa no está disponible porque este complemento ya no admite comprobaciones del origen. Elija otra frecuencia para reanudar la actualización automática."
         }

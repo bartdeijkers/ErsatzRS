@@ -103,6 +103,12 @@ async fn classify_requirements(
     mode: SelectionMode,
 ) -> Result<Vec<SelectedRequirement>> {
     require_revision(pool, list_id, saved_draft_revision).await?;
+    // Read-only transaction: take one consistent delivery-policy/identity snapshot.
+    let mut delivery_tx = pool.begin().await.repository()?;
+    let deliveries =
+        crate::addon_media_list_delivery::load_item_deliveries_in_tx(&mut delivery_tx, list_id)
+            .await?;
+    delivery_tx.commit().await.repository()?;
     let excluded = excluded_item_ids.iter().copied().collect::<BTreeSet<_>>();
     let rows = sqlx::query(r#"SELECT "item"."Id", "item"."ProviderId", "item"."SourceUrl",
         "replacement"."MediaItemId" AS "ReplacementItemId", "replacement"."MediaVersionId" AS "ReplacementVersionId",
@@ -142,13 +148,21 @@ async fn classify_requirements(
         if liveness != RemoteStreamLiveness::Finite {
             continue;
         }
-        let Some(options) = load_draft_item_options(pool, list_id, item_id).await? else {
-            continue;
-        };
-        if !options.requires_preparation(liveness) {
+        let options = load_draft_item_options(pool, list_id, item_id).await?;
+        let provider_id: String = row.try_get("ProviderId").repository()?;
+        let download = deliveries.get(&provider_id)
+            == Some(&ersatzrs_domain::AddonMediaListDeliveryMode::DownloadAhead);
+        if match mode {
+            SelectionMode::PreparedFile => !download,
+            SelectionMode::StreamingIntervals => {
+                download
+                    || !options
+                        .as_ref()
+                        .is_some_and(|options| options.requires_preparation(liveness))
+            }
+        } {
             continue;
         }
-        let provider_id: String = row.try_get("ProviderId").repository()?;
         let source_url: Option<String> = row.try_get("SourceUrl").repository()?;
         let mut requirement = PreparationRequirement {
             item_id,
@@ -180,25 +194,19 @@ async fn classify_requirements(
             ) else {
                 continue;
             };
-            let Ok(runtime) = InstalledItemRuntime::load(
-                pool,
-                &options.schema.addon_id,
-                Some(&input.package_identity),
-            )
-            .await
+            let Ok(runtime) =
+                InstalledItemRuntime::load(pool, input.addon_id()?, Some(&input.package_identity))
+                    .await
             else {
                 continue;
             };
-            if runtime.validate_options(&options).is_err() {
+            if options
+                .as_ref()
+                .is_some_and(|options| runtime.validate_options(options).is_err())
+            {
                 continue;
             }
-            let base_fingerprint = options.context_fingerprint(
-                source_url,
-                &requirement.provider_id,
-                runtime.package_identity(),
-                &input.tool_version,
-                input.max_video_height,
-            )?;
+            let base_fingerprint = input.base_fingerprint()?;
             let fingerprint = match mode {
                 SelectionMode::PreparedFile => base_fingerprint,
                 SelectionMode::StreamingIntervals => {
@@ -217,9 +225,8 @@ async fn classify_requirements(
             if !input.item_is_finite
                 || input.source_url != source_url
                 || input.provider_id != requirement.provider_id
-                || input.schema != options.schema
-                || input.definition != options.definition
-                || input.options != options.values
+                || input.resolved_options()? != options
+                || (mode == SelectionMode::PreparedFile && input.preparation_v2 != Some(true))
                 || input.context_fingerprint != fingerprint
                 || job
                     .try_get::<String, _>("ContextFingerprint")
@@ -433,19 +440,27 @@ mod tests {
                 Some(720),
             )
             .unwrap();
-        let input = ItemOperationInput {
+        let mut input = ItemOperationInput {
             source_url: "https://example.test/item".into(),
             provider_id: "item".into(),
             context_fingerprint: fingerprint.clone(),
-            schema: options.schema,
-            definition: options.definition,
-            options: options.values,
+            schema: Some(options.schema),
+            definition: Some(options.definition),
+            options: Some(options.values),
+            addon_id: None,
+            preparation_v2: Some(true),
             package_identity: runtime.package_identity().into(),
             tool_version: "1.0".into(),
             item_is_finite: true,
             max_video_height: Some(720),
             requested_timing: None,
         };
+        input.context_fingerprint = input.base_fingerprint().unwrap();
+        let fingerprint = input.context_fingerprint.clone();
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "DeliveryMode"=1 WHERE "Id"=1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
         let artifact_id = sqlx::query(r#"INSERT INTO "AddonMediaListArtifact" ("AddonMediaListId","AddonMediaListItemId","CacheKey","Kind","State","DurationMilliseconds","CreatedAt","UpdatedAt")
             VALUES (1,10,?,1,2,12500,'2026-09-05T00:00:00Z','2026-09-05T00:00:00Z')"#)
             .bind(&fingerprint).execute(&pool).await.unwrap().last_insert_rowid();
@@ -510,6 +525,10 @@ mod tests {
         AddonMediaListPlaybackTimelinePlan,
     ) {
         let (temporary, pool, _) = fixture().await;
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "DeliveryMode"=0 WHERE "Id"=1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
         let encoded: String = sqlx::query_scalar(
             r#"SELECT "InputJson" FROM "AddonMediaListItemOperationJob" WHERE "Kind"=1"#,
         )
@@ -517,6 +536,8 @@ mod tests {
         .await
         .unwrap();
         let mut input: ItemOperationInput = serde_json::from_str(&encoded).unwrap();
+        input.preparation_v2 = None;
+        input.context_fingerprint = input.base_fingerprint().unwrap();
         let timing = ItemOperationTiming {
             item_duration_seconds: None,
             fragment_start_seconds: None,
@@ -540,6 +561,83 @@ mod tests {
             .bind(serde_json::to_string(&input).unwrap()).bind(&input.context_fingerprint)
             .bind(serde_json::to_string(&completion).unwrap()).execute(&pool).await.unwrap();
         (temporary, pool, plan)
+    }
+
+    #[tokio::test]
+    async fn new_only_selects_mixed_cohorts_with_and_without_removal() {
+        for removal_enabled in [true, false] {
+            let (_temporary, pool, plan) = streaming_fixture().await;
+            let mut tx = pool.begin().await.unwrap();
+            crate::addon_media_list_delivery::save_in_tx(
+                &mut tx,
+                1,
+                ersatzrs_domain::AddonMediaListDeliveryMode::DownloadAheadNewVideos,
+                chrono::Utc::now(),
+            )
+            .await
+            .unwrap();
+            tx.commit().await.unwrap();
+            sqlx::query(r#"INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","SourceUrl","ProviderLiveness")
+                VALUES (11,1,'new-item','New fixture',4,1,'New fixture','https://example.test/new-item',1)"#)
+                .execute(&pool).await.unwrap();
+            if !removal_enabled {
+                sqlx::query(r#"UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson"='{"remove":false}' WHERE "AddonMediaListId"=1"#)
+                    .execute(&pool).await.unwrap();
+            }
+
+            let encoded: String = sqlx::query_scalar(
+                r#"SELECT "InputJson" FROM "AddonMediaListItemOperationJob" WHERE "Kind"=1 AND "AddonMediaListItemId"=10"#,
+            )
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            let mut input: ItemOperationInput = serde_json::from_str(&encoded).unwrap();
+            let options = load_draft_item_options(&pool, 1, 11)
+                .await
+                .unwrap()
+                .unwrap();
+            input.source_url = "https://example.test/new-item".into();
+            input.provider_id = "new-item".into();
+            input.schema = Some(options.schema);
+            input.definition = Some(options.definition);
+            input.options = Some(options.values);
+            input.context_fingerprint = input.base_fingerprint().unwrap();
+            let artifact_id = sqlx::query(r#"INSERT INTO "AddonMediaListArtifact" ("AddonMediaListId","AddonMediaListItemId","CacheKey","Kind","State","DurationMilliseconds","CreatedAt","UpdatedAt")
+                VALUES (1,11,?,1,2,12500,'2026-09-05T00:00:00Z','2026-09-05T00:00:00Z')"#)
+                .bind(&input.context_fingerprint).execute(&pool).await.unwrap().last_insert_rowid();
+            sqlx::query(r#"INSERT INTO "AddonMediaListItemOperationJob" ("AddonMediaListId","AddonMediaListItemId","Kind","SavedDraftRevision","InputJson","ContextFingerprint","State","ArtifactId","OutcomeJson","CreatedAt","UpdatedAt")
+                VALUES (1,11,1,0,?,?,2,?,?,'2026-09-05T00:00:00Z','2026-09-05T00:00:00Z')"#)
+                .bind(serde_json::to_string(&input).unwrap()).bind(&input.context_fingerprint).bind(artifact_id)
+                .bind(serde_json::to_string(&ItemOperationCompletion::Prepared { artifact_id }).unwrap())
+                .execute(&pool).await.unwrap();
+
+            assert_eq!(
+                select_prepared_media(&pool, 1, 0, &[]).await.unwrap(),
+                BTreeMap::from([("new-item".into(), artifact_id)]),
+            );
+            let expected_plans = if removal_enabled {
+                BTreeMap::from([("item".into(), plan)])
+            } else {
+                BTreeMap::new()
+            };
+            assert_eq!(
+                select_streaming_plans(&pool, 1, 0, &[]).await.unwrap(),
+                expected_plans,
+            );
+
+            // Neither cohort may fall back to the other's transport evidence.
+            sqlx::query(
+                r#"DELETE FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListItemId"=11"#,
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            let requirements = preparation_requirements(&pool, 1, 0, &[]).await.unwrap();
+            assert_eq!(requirements.len(), 1);
+            assert_eq!(requirements[0].item_id, 11);
+            assert!(requirements[0].artifact_id.is_none());
+            assert!(select_prepared_media(&pool, 1, 0, &[]).await.is_err());
+        }
     }
 
     #[tokio::test]
@@ -575,6 +673,18 @@ mod tests {
             select_prepared_media(&pool, 1, 0, &[]).await.unwrap()["item"],
             artifact_id
         );
+        assert!(select_streaming_plans(&pool, 1, 0, &[])
+            .await
+            .unwrap()
+            .is_empty());
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "DeliveryMode"=0 WHERE "Id"=1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(select_prepared_media(&pool, 1, 0, &[])
+            .await
+            .unwrap()
+            .is_empty());
         let missing = interval_metadata_requirements(&pool, 1, 0, &[])
             .await
             .unwrap();
@@ -721,7 +831,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn skips_nonfinite_and_disabled_preparation() {
+    async fn skips_nonfinite_but_requires_download_when_removal_is_disabled() {
         let (_temporary, pool, _) = fixture().await;
         sqlx::query(r#"DELETE FROM "AddonMediaListItemOperationJob""#)
             .execute(&pool)
@@ -737,9 +847,11 @@ mod tests {
             .is_empty());
         sqlx::query(r#"UPDATE "AddonMediaListItem" SET "ProviderLiveness"=1, "DraftOptionOverridesJson"='{"remove":false}'"#)
             .execute(&pool).await.unwrap();
-        assert!(select_prepared_media(&pool, 1, 0, &[])
-            .await
-            .unwrap()
-            .is_empty());
+        let requirements = preparation_requirements(&pool, 1, 0, &[]).await.unwrap();
+        assert_eq!(requirements.len(), 1);
+        assert_eq!(requirements[0].item_id, 10);
+        assert_eq!(requirements[0].artifact_id, None);
+        assert!(!requirements[0].pending);
+        assert!(select_prepared_media(&pool, 1, 0, &[]).await.is_err());
     }
 }

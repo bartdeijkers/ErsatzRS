@@ -912,6 +912,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "Artiste introuvable",
         TextKey::AfterDurationEnd => "Après la fin de la durée",
         TextKey::AutomaticRefresh => "Actualisation automatique",
+        TextKey::AddonDeliveryMode => "Diffusion",
+        TextKey::AddonDeliveryStream => "Diffuser en streaming",
+        TextKey::AddonDeliveryDownloadAhead => "Télécharger à l'avance",
+        TextKey::AddonDeliveryNewVideos => "Télécharger à l'avance — nouvelles vidéos uniquement",
+        TextKey::AddonDeliveryHelp => "Les modifications prennent effet après la prochaine publication. Seules les vidéos importées pour la première fois après la date limite enregistrée sont téléchargées ; les vidéos déjà connues sont diffusées en streaming. Réactiver ce mode définit une nouvelle date limite. Seuls les médias de durée finie peuvent être téléchargés à l'avance. Les contenus en direct et ceux dont la durée est inconnue restent diffusés en streaming.",
+        TextKey::AddonDeliveryUnavailable => "Le téléchargement nécessite une extension compatible et activée et des médias de durée finie.",
+        TextKey::AddonDeliveryCutoff => "Date limite des nouvelles vidéos",
+        TextKey::AddonDeliveryFreshCutoff => "Une nouvelle date limite est enregistrée lors de la sauvegarde.",
         TextKey::AdaptiveRefreshUnavailable => {
             "L’actualisation adaptative est indisponible, car cette extension ne prend plus en charge les contrôles de source. Choisissez une autre fréquence pour reprendre l’actualisation automatique."
         }

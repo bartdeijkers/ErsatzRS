@@ -930,6 +930,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "Künstler nicht gefunden",
         TextKey::AfterDurationEnd => "Nach Ende der Dauer",
         TextKey::AutomaticRefresh => "Automatischer Aktualisierungszyklus",
+        TextKey::AddonDeliveryMode => "Bereitstellung",
+        TextKey::AddonDeliveryStream => "Streamen",
+        TextKey::AddonDeliveryDownloadAhead => "Vorab herunterladen",
+        TextKey::AddonDeliveryNewVideos => "Vorab herunterladen — nur neue Videos",
+        TextKey::AddonDeliveryHelp => "Änderungen gelten nach der nächsten Veröffentlichung. Nur neue Videos lädt Videos herunter, die erstmals nach dem gespeicherten Stichtag importiert wurden; bereits bekannte Videos werden gestreamt. Erneutes Aktivieren legt einen neuen Stichtag fest. Nur Medien mit endlicher Dauer können vorab heruntergeladen werden. Live-Inhalte und Inhalte mit unbekannter Dauer werden weiterhin gestreamt.",
+        TextKey::AddonDeliveryUnavailable => "Downloads erfordern ein kompatibles, aktiviertes Add-on und Medien mit endlicher Dauer.",
+        TextKey::AddonDeliveryCutoff => "Stichtag für neue Videos",
+        TextKey::AddonDeliveryFreshCutoff => "Beim Speichern wird ein neuer Stichtag festgelegt.",
         TextKey::AdaptiveRefreshUnavailable => {
             "Die adaptive Aktualisierung ist nicht verfügbar, da dieses Add-on keine Quellprüfungen mehr unterstützt. Wählen Sie einen anderen Zyklus, um automatische Aktualisierungen fortzusetzen."
         }

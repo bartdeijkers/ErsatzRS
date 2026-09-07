@@ -1619,6 +1619,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "Artiest niet gevonden",
         TextKey::AfterDurationEnd => "Na einde duur",
         TextKey::AutomaticRefresh => "Automatisch vernieuwen",
+        TextKey::AddonDeliveryMode => "Levering",
+        TextKey::AddonDeliveryStream => "Streamen",
+        TextKey::AddonDeliveryDownloadAhead => "Vooraf downloaden",
+        TextKey::AddonDeliveryNewVideos => "Vooraf downloaden — alleen nieuwe video's",
+        TextKey::AddonDeliveryHelp => "Wijzigingen in de levering gelden na de volgende publicatie. Alleen nieuwe video's downloadt video's die voor het eerst na het opgeslagen tijdstip zijn geïmporteerd; al bekende video's worden gestreamd. Opnieuw inschakelen stelt een nieuw tijdstip in. Alleen media met een eindige duur kunnen vooraf worden gedownload. Live-items en items waarvan de duur onbekend is, blijven streamen.",
+        TextKey::AddonDeliveryUnavailable => "Downloaden vereist een compatibele, ingeschakelde add-on en media met een eindige duur.",
+        TextKey::AddonDeliveryCutoff => "Grensdatum voor nieuwe video's",
+        TextKey::AddonDeliveryFreshCutoff => "Bij het opslaan wordt een nieuwe grensdatum vastgelegd.",
         TextKey::AdaptiveRefreshUnavailable => {
             "Adaptief vernieuwen is niet beschikbaar omdat deze add-on broncontroles niet meer ondersteunt. Kies een ander interval om automatisch vernieuwen te hervatten."
         }

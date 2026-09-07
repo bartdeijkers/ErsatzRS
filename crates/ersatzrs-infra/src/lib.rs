@@ -6,6 +6,7 @@ pub mod addon_media_list;
 mod addon_media_list_archive;
 pub mod addon_media_list_artifacts;
 pub mod addon_media_list_auto_publication;
+pub mod addon_media_list_delivery;
 mod addon_media_list_detail_options;
 pub mod addon_media_list_import;
 mod addon_media_list_interval_metadata;

@@ -44,7 +44,6 @@ function streamBytes(url: string): Promise<Buffer> {
 }
 
 test('prepared publication pins its generated file and plays it instead of raw provider output', async ({ page, baseURL }, info) => {
-  test.fixme(true, 'AMM-M-01B: the generic Download ahead delivery workflow is not yet implemented');
   test.setTimeout(300000);
   test.skip(!dbPath, 'Requires the wrapper-owned isolated E2E database');
   test.skip(info.project.name !== 'chromium', 'Shared database acceptance runs once');
@@ -59,6 +58,7 @@ test('prepared publication pins its generated file and plays it instead of raw p
   await hydrated(page, '/media/addon-lists/add');
   await page.getByLabel('Add-on list URL').fill(sourceUrl);
   await page.getByLabel('Add-on', { exact: true }).selectOption(addonId);
+  await page.getByLabel('Delivery', { exact: true }).selectOption('download_ahead');
   await page.getByLabel('Collection Type', { exact: true }).selectOption('remote_streams');
   await page.getByLabel('Storage folder').fill('prepared-playback');
   await page.getByRole('combobox', { name: 'Automatic Refresh' }).selectOption('never');
@@ -98,6 +98,16 @@ AND r."Revision"=(SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${
   expect(playlistId).toBeGreaterThan(0);
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "PlaylistItem" WHERE "PlaylistId"=${playlistId};`), { timeout: 60000 }).toBe('1');
   expect(sqlite(`SELECT "Duration" FROM "RemoteStream" WHERE "Id"=(SELECT "MediaItemId" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId});`)).toMatch(/^00:01:00(?:\.0+)?$/);
+
+  // A saved delivery change must leave the published file pinned and playable.
+  await hydrated(page, `/media/addon-lists/${listId}`);
+  await page.getByLabel('Delivery', { exact: true }).selectOption('stream');
+  await Promise.all([
+    page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+    page.locator('button[form="addon_media_lists-list-editor-form"]:visible').filter({ hasText: 'Save Changes' }).click(),
+  ]);
+  await expect.poll(() => sqlite(`SELECT "DeliveryMode" || '|' || "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe('0|1');
+  expect(sqlite(`SELECT COUNT(*) ${pinned} AND a."State"=2;`)).toBe('1');
 
   // Scheduling UI is covered separately. Seed only one current entry referencing
   // the scanner-produced media; all preparation/publication writes above are real host actions.

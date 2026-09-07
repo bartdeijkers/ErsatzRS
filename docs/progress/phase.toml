@@ -85,14 +85,23 @@ tests but finds the same absent-journal fixture defect in the production scan
 continuity integration test. That fixture now supplies the required journal;
 production behavior and continuity assertions are unchanged. Independent Astra
 review finds no P1/P2. The repaired integration test and all 50 xtask tests pass
-in the focused nextest run. Next: push the correction, then require terminal
-green CI for that exact SHA before M-01B.
-Its options, frozen publication, metadata-only intervals,
+in the focused nextest run. Correction 00aa7652f14f3871bc89659a26589f53a8138fc3
+is pushed and matches local main, origin/main, and live remote main. CI
+34131431342 is terminal green for that exact SHA: browser tests (302 passed,
+28 skipped), Clippy, Rust tests including the repaired continuity integration,
+progress validation, and architecture lint all pass. M-01B is now Complete under
+its focused local acceptance: the generic selector, visible renewed UTC cutoff,
+persisted first-import cohort and mixed publication reuse existing preparation.
+Unchanged saves preserve the cutoff; current publications stay frozen. Both
+deferred download E2Es are restored, including actual host-death recovery and
+decoded prepared-file playback after changing the draft to Stream. The owning
+milestone records browser, Rust, provider and review evidence. No later-slice work.
+M-01A's options, frozen publication, metadata-only intervals,
 real scheduled MPEG-TS/HLS cut continuity and bounded cancellation are verified
 in the owning milestone. The approved startup policy retains a ten-second
 target and twenty-second maximum; the target is not claimed achieved.
 
-After CI is green: plan AMM-M-01B from its existing acceptance and preserved implementation.
+Next, plan only AMM-M-02 and obtain approval before implementing subtitles.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native
 yt-dlp executable capabilities; the removed custom Range adapter has no fallback.
 Keep existing HDR/subtitle refusals and ordinary playback behavior intact.
@@ -102,15 +111,15 @@ Run build/media checks serially with bounded concurrency after the prior WSL
 overload. The current CI-first/push approval overrides the earlier N-03-only
 restriction for these corrections, not for unrelated later-slice work.
 
-Preserve full-download preparation groundwork for M-01B, which is Not started.
-Its generic provider-neutral native list select offers Stream (default),
+M-01B reuses full-download preparation groundwork. Its provider-neutral
+native list select offers Stream (default),
 Download ahead, and Download ahead only for new videos. New means first
 imported after enabling the mode; existing videos continue streaming. Enabled
 SponsorBlock applies in every mode. Do not delete or duplicate that groundwork.
 The private-worker liveness correction retains the writer separately and its
 survival/shutdown regression passes; the owning parity debt records evidence.
-Full download browser restart/publication verification is deferred to M-01B with
-explicit maintainer approval; its preserved tests must be re-enabled there.
+Full-download browser restart/publication verification now passes in M-01B;
+integrated packaged release acceptance remains AMM-N-03.
 
 Deliver M-01A, M-01B, M-02, M-03 and the remaining AMM-N work in dependency order.
 AMM-CI-01 is complete at c75c07d3 with green exact-SHA CI 33978757158; that is

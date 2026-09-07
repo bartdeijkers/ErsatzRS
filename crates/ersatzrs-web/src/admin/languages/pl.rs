@@ -1632,6 +1632,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "Nie znaleziono artysty",
         TextKey::AfterDurationEnd => "Po końcu czasu trwania",
         TextKey::AutomaticRefresh => "Automatyczne odświeżanie",
+        TextKey::AddonDeliveryMode => "Dostarczanie",
+        TextKey::AddonDeliveryStream => "Strumieniowanie",
+        TextKey::AddonDeliveryDownloadAhead => "Pobierz wcześniej",
+        TextKey::AddonDeliveryNewVideos => "Pobierz wcześniej — tylko nowe filmy",
+        TextKey::AddonDeliveryHelp => "Zmiany obowiązują po następnej publikacji. Pobierane są tylko filmy zaimportowane po raz pierwszy po zapisanej dacie granicznej; znane wcześniej filmy są strumieniowane. Ponowne włączenie tego trybu ustala nową datę graniczną. Wcześniej można pobierać tylko materiały o skończonym czasie trwania. Materiały na żywo oraz materiały o nieznanym czasie trwania są nadal strumieniowane.",
+        TextKey::AddonDeliveryUnavailable => "Pobieranie wymaga zgodnego, włączonego dodatku i materiałów o skończonym czasie trwania.",
+        TextKey::AddonDeliveryCutoff => "Data graniczna nowych filmów",
+        TextKey::AddonDeliveryFreshCutoff => "Nowa data graniczna zostanie ustalona przy zapisie.",
         TextKey::AdaptiveRefreshUnavailable => {
             "Odświeżanie adaptacyjne jest niedostępne, ponieważ ten dodatek nie obsługuje już sprawdzania źródła. Wybierz inną częstotliwość, aby wznowić automatyczne odświeżanie."
         }

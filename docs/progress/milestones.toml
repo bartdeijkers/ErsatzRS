@@ -3411,7 +3411,7 @@ broad closeout, commit, push or release was run for M-01.
 id         = 'amm-m-01b'
 phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
 title      = 'Add generic list-level streaming and Download ahead modes'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-m-01a']
@@ -3439,6 +3439,10 @@ the existing removal option is enabled. The new-videos choice applies only to
 videos first imported after enabling that mode; videos already in the list
 keep streaming. Persist that distinction across refreshes and restarts rather
 than treating a cache miss or repeated import of an existing item as new.
+Entering or re-enabling new-videos-only creates a fresh persisted cutoff;
+saving the unchanged mode preserves it. Show the saved cutoff date/time beside
+the delivery selector with localized explanatory text. Already-known videos
+stream after the next publication; current published playback stays frozen.
 Freeze each item's effective delivery choice with its published revision;
 changing the saved list setting must not mutate current published playback.
 Reuse shared browser/access, durable jobs, artifact admission and revision
@@ -3460,7 +3464,39 @@ pinning and decoded prepared-file channel playback; do not restore a mandatory
 download fallback to Stream merely to satisfy these tests.
 '''
 evidence = '''
-Created on 2026-09-06 at the maintainer's request; delivery has not started.
+Completed by Codex on 2026-09-07 after exact-SHA green M-01A CI. The maintainer
+approved a fresh cutoff on re-enabling new-videos-only and requires its date
+to be visible on the add-on list page. Implementation and focused acceptance
+are complete; integrated release acceptance remains AMM-N-03.
+The native selector, localized saved UTC cutoff, durable first-import identity
+fence, and mixed prepared-file/streaming publication selection are implemented.
+Six persistence tests cover initial/renewed cutoffs, unchanged saves, legacy
+backfill, removal/reappearance, reopen and explicit reset. Focused domain,
+contract, worker and selection tests pass, including both SponsorBlock settings
+for mixed cohorts, no-schema generic admission, and required-file fail-closed
+behavior. Existing settings round-trip and media-type-change integration tests
+also pass. The official yt-dlp preparation suite passes all 20 tests, including
+native download with removal disabled (official add-ons local commit ffac3ac).
+Browser acceptance exposed a missing v2 prepare entry in the host operation
+allowlist; the narrow correction and
+existing dispatch regression pass. Actual host-death cleanup and safe restart
+now pass through the explicit Download ahead browser workflow. The matched
+FFmpeg 9 browser run passes five tests: cutoff preservation/renewal with and
+without JavaScript in Chromium and Firefox, plus prepared-file channel playback
+in Chromium. The latter pins a completed revision, changes the saved draft to
+Stream, verifies the pin/current revision remain unchanged and decodes the
+prepared red-frame MPEG-TS output without invoking raw provider playback.
+Its Firefox duplicate remains intentionally skipped; host-death recovery is
+also exercised once in Chromium. Evidence is in the focused
+test-results/m01b-delivery-final/playwright-results.json and the preceding
+test-results/m01b-delivery/playwright-results.json recovery result. Initial
+cutoff assertions incorrectly compared UTC spellings and parsed SQLite UTC as
+local time; corrected assertions check the same instant and visible UTC copy.
+Independent Astra review reports no remaining P1/P2 in dispatch, publication
+freeze/restore, cancellation or artifact admission. Affected-crate all-targets
+Clippy, hydration lint and architecture lint pass. Thirty-one targeted Rust
+tests pass across the focused runs described above. Build and media checks remain serial with
+bounded workers; no full closeout, CI, push or later-slice implementation.
 The maintainer clarified that delivery mode is a generic list option, useful
 independently of SponsorBlock. Neither provider identity nor SponsorBlock
 availability should gate the setting; actual delivery support is capability-based.
@@ -3470,17 +3506,17 @@ videos streaming. Existing committed full-file preparation, worker recovery,
 admission, revision pins and playback tests are preserved groundwork inherited
 from the former AMM-M-01. Their historical evidence remains in AMM-M-01A;
 it is not acceptance of the new selector or mode semantics. ADR 0087 owns the
-mode decision; ADR 0086 recovery applies to preparation, not streaming. Plan
-this slice in detail when 01A is complete; do not delete or duplicate groundwork.
+mode decision; ADR 0086 recovery applies to preparation, not streaming. The
+approved implementation reuses that groundwork without another worker or cache.
 The supervisor liveness defect is corrected in 17434002; the owning parity debt
 records the passing idle-survival/EOF-drain regression. CI 34121700249 confirms
-the real worker now starts, but both preserved download E2Es still invoke the
-obsolete mandatory-download Prepare publication path. Stream deliberately admits
-interval metadata only; the fixture has no interval capability and queues no jobs.
+the real worker starts; before this slice both preserved download E2Es invoked
+the obsolete mandatory-download Prepare publication path. Stream deliberately
+admits interval metadata only, so those fixtures queued no preparation jobs.
 On 2026-09-07 the maintainer explicitly approved deferring exactly these two E2Es
-until this slice supplies the explicit delivery workflow. Their bodies remain
-preserved, with re-enablement required above. M-01A streaming acceptance and
-lower-level preparation tests remain active; this is not download acceptance.
+until this slice supplied the explicit delivery workflow. Both are now enabled
+and pass with their existing recovery/pinning/playback assertions preserved.
+M-01A streaming acceptance and lower-level preparation tests remain active.
 '''
 
 [[milestone]]

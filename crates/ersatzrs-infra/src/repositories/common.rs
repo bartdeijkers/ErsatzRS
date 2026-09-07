@@ -750,6 +750,12 @@ db_enum!(AddonMediaListRefreshPublicationPolicy {
     0 => AddonMediaListRefreshPublicationPolicy::Review,
     1 => AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions,
 });
+
+db_enum!(ersatzrs_domain::AddonMediaListDeliveryMode {
+    0 => ersatzrs_domain::AddonMediaListDeliveryMode::Stream,
+    1 => ersatzrs_domain::AddonMediaListDeliveryMode::DownloadAhead,
+    2 => ersatzrs_domain::AddonMediaListDeliveryMode::DownloadAheadNewVideos,
+});
 db_enum!(AddonMediaListImportPurpose {
     0 => AddonMediaListImportPurpose::Refresh,
     1 => AddonMediaListImportPurpose::Reconcile,

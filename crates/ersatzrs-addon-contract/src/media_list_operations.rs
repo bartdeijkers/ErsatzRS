@@ -13,6 +13,8 @@ pub const CAPABILITY_MEDIA_LIST_ENRICH_V1: &str = "media-list.enrich.v1";
 pub const CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1: &str = "media-list.access-check.v1";
 /// Invoked with `prepare`.
 pub const CAPABILITY_MEDIA_LIST_PREPARE_V1: &str = "media-list.prepare.v1";
+/// Generic finite download with optional provider options, invoked with `prepare`.
+pub const CAPABILITY_MEDIA_LIST_PREPARE_V2: &str = "media-list.prepare.v2";
 /// Metadata-only source interval discovery, invoked with `interval-metadata`.
 pub const CAPABILITY_MEDIA_LIST_INTERVAL_METADATA_V1: &str = "media-list.interval-metadata.v1";
 /// Bound source exclusions before host normalization and publication.
@@ -305,7 +307,8 @@ pub struct MediaListPrepareRequest {
     pub provider_id: String,
     pub context_fingerprint: String,
     pub tool_version: String,
-    pub options: AddonMediaListOptionValues,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<AddonMediaListOptionValues>,
     pub staging_directory: String,
     pub maximum_file_bytes: u64,
     pub maximum_staging_bytes: u64,
@@ -322,6 +325,18 @@ impl MediaListPrepareRequest {
         schema: &AddonCapability,
         item_is_finite: bool,
     ) -> Result<(), ContractError> {
+        self.validate_generic(Some(schema), item_is_finite)
+    }
+
+    /// Validate generic v2 delivery without inventing a provider options schema.
+    ///
+    /// # Errors
+    /// Rejects mismatched schema/envelope presence, invalid options or budgets.
+    pub fn validate_generic(
+        &self,
+        schema: Option<&AddonCapability>,
+        item_is_finite: bool,
+    ) -> Result<(), ContractError> {
         validate_tool_version(&self.tool_version)?;
         if !item_is_finite {
             return invalid("media list prepare", "requires finite media");
@@ -331,11 +346,20 @@ impl MediaListPrepareRequest {
             &self.provider_id,
             &self.context_fingerprint,
         )?;
-        schema.validate_option_values(
-            &self.options,
-            AddonMediaListOptionOperation::Preparation,
-            true,
-        )?;
+        match (schema, self.options.as_ref()) {
+            (Some(schema), Some(options)) => schema.validate_option_values(
+                options,
+                AddonMediaListOptionOperation::Preparation,
+                true,
+            )?,
+            (None, None) => {}
+            _ => {
+                return invalid(
+                    "media list prepare options",
+                    "schema and options must agree",
+                )
+            }
+        }
         if self.staging_directory.trim().is_empty()
             || self.staging_directory.len() > MAX_MEDIA_LIST_IMPORT_ARCHIVE_PATH_BYTES
             || self.staging_directory.chars().any(char::is_control)
@@ -570,7 +594,7 @@ mod tests {
             source_url: access.source_url,
             provider_id: access.provider_id,
             context_fingerprint: access.context_fingerprint,
-            options: access.options,
+            options: Some(access.options),
             staging_directory: "staging/attempt-1".to_owned(),
             maximum_file_bytes: 2048,
             maximum_staging_bytes: 4096,
@@ -723,6 +747,25 @@ mod tests {
         result.provider_id = request.provider_id.clone();
         result.context_fingerprint = "b".repeat(64);
         assert!(result.validate(&request).is_err());
+    }
+
+    #[test]
+    fn generic_preparation_accepts_no_schema_without_weakening_v1() {
+        let schema = schema(AddonMediaListOptionOperation::Preparation);
+        let mut request = prepare_request();
+        let legacy = serde_json::to_value(&request).unwrap();
+        assert!(legacy["options"].is_object());
+        request.validate(&schema, true).unwrap();
+        request.validate_generic(Some(&schema), true).unwrap();
+        assert!(request.validate_generic(None, true).is_err());
+        request.options = None;
+        request.validate_generic(None, true).unwrap();
+        assert!(request.validate(&schema, true).is_err());
+        assert!(request.validate_generic(None, false).is_err());
+        assert!(serde_json::to_value(&request)
+            .unwrap()
+            .get("options")
+            .is_none());
     }
 
     #[test]

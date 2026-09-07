@@ -19,7 +19,6 @@ use crate::{
         ClaimedItemOperation, ItemOperationCompletion, ItemOperationFailure, ItemOperationKind,
     },
     addon_media_list_item_runtime::{InstalledItemRuntime, ItemRuntimeError},
-    addon_media_list_options::ResolvedAddonItemOptions,
     addon_media_list_refresh::release_provider_host_lease,
     repositories::{common::encode_datetime, SqlxResultExt as _},
 };
@@ -51,7 +50,7 @@ impl AddonMediaListItemCoordinator {
         };
         let runtime = match InstalledItemRuntime::load(
             &self.pool,
-            &job.input.schema.addon_id,
+            job.input.addon_id()?,
             Some(&job.input.package_identity),
         )
         .await
@@ -59,11 +58,7 @@ impl AddonMediaListItemCoordinator {
             Ok(runtime) => runtime,
             Err(error) => return self.finish_interval_error(&job, error).await,
         };
-        let resolved = ResolvedAddonItemOptions {
-            schema: job.input.schema.clone(),
-            definition: job.input.definition.clone(),
-            values: job.input.options.clone(),
-        };
+        let resolved = job.input.resolved_options()?.ok_or_else(unavailable)?;
         let request = MediaListIntervalMetadataRequest {
             source_url: job.input.source_url.clone(),
             provider_id: job.input.provider_id.clone(),
@@ -402,9 +397,11 @@ esac
             source_url: "https://example.test/item".into(),
             provider_id: "item".into(),
             context_fingerprint: timing.bind_context_fingerprint(&base).unwrap(),
-            schema: options.schema,
-            definition: options.definition,
-            options: options.values,
+            schema: Some(options.schema),
+            definition: Some(options.definition),
+            options: Some(options.values),
+            addon_id: None,
+            preparation_v2: None,
             package_identity: runtime.package_identity().into(),
             tool_version: "1.0".into(),
             item_is_finite: true,

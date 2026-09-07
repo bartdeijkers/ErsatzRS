@@ -860,7 +860,8 @@ Do not add prefetch machinery or proceed to cleanup from this result alone.
 
 ### AMM-M-01B — List-level Download ahead modes
 
-Not started; depends on M-01A. Delivery mode is a generic, provider-neutral list
+Complete under the focused acceptance in `amm-m-01b`; integrated release
+acceptance remains AMM-N-03. Delivery mode is a generic, provider-neutral list
 option, independent of SponsorBlock. Add one labeled native HTML `<select>` to the
 list settings, localized and usable with and without JavaScript. Not a checkbox
 or a per-item delivery override. Its choices are:
@@ -889,6 +890,36 @@ streaming and full download. Reuse preserved jobs, bounded admission, artifact
 pins, recovery and playback binding. M-03 owns broader storage administration.
 Plan implementation details when M-01A is complete; no additional service,
 second preparation state machine or speculative cache framework is requested.
+
+Implementation sequence approved on 2026-09-07:
+
+1. Persist the list delivery mode and durable first-import identities. Entering
+   new-videos-only establishes a fresh cutoff; saving the unchanged mode does
+   not reset it. Preserve identities across refresh, removal/reappearance and
+   revision restore, rather than deriving newness from recreated item rows.
+2. Reuse the add/edit list form and save command. Show the saved cutoff date/time
+   next to the native delivery select, with localized help explaining that it
+   applies at the next publication. No new dialog or page redesign.
+3. Share effective delivery classification across admission, readiness and
+   publication selection. Download via existing Kind1 jobs independently of
+   removal/options-schema availability; use Kind2 interval metadata for streamed
+   items requesting removal. Preserve capability checks and revision fences.
+4. Freeze both delivery choices and the mixed prepared-artifact/interval maps.
+   Reuse existing worker, admission limits, validation, pins and playback.
+5. Make the official yt-dlp preparation flags honor optional removal using native
+   capabilities. Do not add host provider branches or a custom downloader/cutter.
+6. Add focused cohort/mode/removal/restore and hydrated/no-JS regressions, including
+   visible cutoff preservation/reset. Re-enable both deferred download E2Es with
+   their existing process cleanup, restart, pinning and decoded-playback assertions.
+7. Review and fix P1/P2, record evidence and commit locally. No CI or full
+   closeout; M-02 subtitles and M-03 storage administration remain excluded.
+
+Source/visual/hydration map: ADR 0087 owns this extension; no corresponding
+ErsatzTV delivery-mode editor exists. Extend `media/addon_lists.rs` and its
+existing list form islands, server functions and native POST fallbacks, with
+the existing field layout and translation files. The saved cutoff is server
+data, not a client-generated clock value. Browser proof covers add/edit forms,
+native select/save, cutoff visibility and no-JS parity.
 
 #### Preserved pre-split implementation plan
 

@@ -4449,6 +4449,8 @@ pub struct AddAddonMediaList {
     pub chapter_input: String,
     /// Whether optional item details should load automatically after Publish.
     pub detail_import_policy: ersatzrs_domain::AddonMediaListDetailPolicy,
+    /// Delivery policy saved before the first import admits item identities.
+    pub delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode,
 }
 
 /// Re-run local matching for one persisted Add-on media list.
@@ -4585,6 +4587,8 @@ pub struct UpdateAddonMediaList {
     pub refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence,
     /// Whether safe additions from scheduled refreshes may publish automatically.
     pub refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
+    /// Saved draft delivery policy, independent of provider removal options.
+    pub delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode,
     /// Maintain a generated playlist for matched rows.
     pub generate_playlist: bool,
     /// Force one descriptive content type for all entries, or retain
@@ -4746,6 +4750,7 @@ pub async fn add_addon_media_list(
             command.content_kind_override,
             command.chapter_input.trim(),
             command.detail_import_policy,
+            command.delivery_mode,
         )
         .await
         .map_err(Into::into)
@@ -5032,6 +5037,7 @@ pub async fn update_addon_media_list(
             command.id,
             command.refresh_cadence,
             command.refresh_publication_policy,
+            command.delivery_mode,
             command.generate_playlist,
             command.content_kind_override,
             command.chapter_input.trim(),
@@ -7063,6 +7069,7 @@ mod tests {
             _id: EntityId,
             _refresh_cadence: ersatzrs_domain::AddonMediaListRefreshCadence,
             _refresh_publication_policy: ersatzrs_domain::AddonMediaListRefreshPublicationPolicy,
+            _delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode,
             _generate_playlist: bool,
             _content_kind_override: ersatzrs_domain::AddonMediaListContentKind,
             _chapter_input: &str,
@@ -8389,6 +8396,7 @@ mod tests {
                 AddAddonMediaList {
                     addon_id: "org.ersatzrs.addon.fixture".to_owned(),
                     source_url: source_url.to_owned(),
+                    delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode::Stream,
                     folder_name: String::new(),
                     content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
                     chapter_input: String::new(),
@@ -8563,6 +8571,7 @@ mod tests {
             AddAddonMediaList {
                 addon_id: "org.ersatzrs.addon.fixture".to_owned(),
                 source_url: r"https://allowed.example\@evil.example/list".to_owned(),
+                delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode::Stream,
                 folder_name: String::new(),
                 content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
                 chapter_input: String::new(),
@@ -8596,6 +8605,7 @@ mod tests {
                 AddAddonMediaList {
                     addon_id: "org.ersatzrs.addon.fixture".to_owned(),
                     source_url: "https://example.test/episode".to_owned(),
+                    delivery_mode: ersatzrs_domain::AddonMediaListDeliveryMode::Stream,
                     folder_name: String::new(),
                     content_kind_override: ersatzrs_domain::AddonMediaListContentKind::Auto,
                     chapter_input: chapter_input.to_owned(),

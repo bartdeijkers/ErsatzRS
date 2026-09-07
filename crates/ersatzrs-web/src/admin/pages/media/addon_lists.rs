@@ -4,15 +4,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ersatzrs_domain::{
-    AddonMediaListAutoPublicationHoldReason, AddonMediaListContentKind, AddonMediaListDetailPolicy,
-    AddonMediaListDetailState, AddonMediaListImportMode, AddonMediaListImportPurpose,
-    AddonMediaListImportState, AddonMediaListIncrementalStrategy, AddonMediaListItemAvailability,
-    AddonMediaListItemKind, AddonMediaListItemRole, AddonMediaListPresentationKind,
-    AddonMediaListPublicationEnqueueTrigger, AddonMediaListPublicationErrorCategory,
-    AddonMediaListPublicationEventKind, AddonMediaListPublicationFilesystemTransition,
-    AddonMediaListPublicationOutcome, AddonMediaListPublicationPhase,
-    AddonMediaListPublicationRetryClass, AddonMediaListPublicationState,
-    AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
+    AddonMediaListAutoPublicationHoldReason, AddonMediaListContentKind, AddonMediaListDeliveryMode,
+    AddonMediaListDetailPolicy, AddonMediaListDetailState, AddonMediaListImportMode,
+    AddonMediaListImportPurpose, AddonMediaListImportState, AddonMediaListIncrementalStrategy,
+    AddonMediaListItemAvailability, AddonMediaListItemKind, AddonMediaListItemRole,
+    AddonMediaListPresentationKind, AddonMediaListPublicationEnqueueTrigger,
+    AddonMediaListPublicationErrorCategory, AddonMediaListPublicationEventKind,
+    AddonMediaListPublicationFilesystemTransition, AddonMediaListPublicationOutcome,
+    AddonMediaListPublicationPhase, AddonMediaListPublicationRetryClass,
+    AddonMediaListPublicationState, AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
     AddonMediaListRefreshPublicationPolicy, AddonMediaListReviewState, RemoteStreamLiveness,
 };
 use leptos::prelude::*;
@@ -1541,6 +1541,7 @@ fn AddonMediaListsIsland(
                     String::new(),
                     load_item_details,
                     refresh_cadence,
+                    AddonMediaListDeliveryMode::Stream,
                 )
                 .await
             }
@@ -2183,6 +2184,62 @@ const fn refresh_cadence_value(cadence: AddonMediaListRefreshCadence) -> &'stati
     }
 }
 
+const fn delivery_mode_value(mode: AddonMediaListDeliveryMode) -> &'static str {
+    match mode {
+        AddonMediaListDeliveryMode::Stream => "stream",
+        AddonMediaListDeliveryMode::DownloadAhead => "download_ahead",
+        AddonMediaListDeliveryMode::DownloadAheadNewVideos => "download_ahead_new_videos",
+    }
+}
+
+#[component]
+fn DeliveryModeSelect(
+    mode: RwSignal<AddonMediaListDeliveryMode>,
+    saved_mode: AddonMediaListDeliveryMode,
+    cutoff_at: Option<String>,
+    supports_download: Signal<bool>,
+) -> impl IntoView {
+    let cutoff = cutoff_at.unwrap_or_default();
+    let cutoff_label = chrono::DateTime::parse_from_rfc3339(&cutoff)
+        .ok()
+        .and_then(|timestamp| {
+            format_progress_timestamp(&timestamp.with_timezone(&chrono::Utc).to_rfc3339())
+        })
+        .unwrap_or_else(|| cutoff.clone());
+    let has_cutoff =
+        saved_mode == AddonMediaListDeliveryMode::DownloadAheadNewVideos && !cutoff.is_empty();
+    view! {
+        <div class=style::source_field>
+            <label>
+                <span class=style::field_title>{tr(TextKey::AddonDeliveryMode)}</span>
+                <select
+                    name="delivery_mode"
+                    class=style::boxed_input
+                    aria-label=tr(TextKey::AddonDeliveryMode)
+                    aria-describedby="addon-delivery-help addon-delivery-availability"
+                    prop:value=move || delivery_mode_value(mode.get())
+                    on:change=move |event| mode.set(match event_target_value(&event).as_str() {
+                        "download_ahead" => AddonMediaListDeliveryMode::DownloadAhead,
+                        "download_ahead_new_videos" => AddonMediaListDeliveryMode::DownloadAheadNewVideos,
+                        _ => AddonMediaListDeliveryMode::Stream,
+                    })
+                >
+                    <option value="stream" selected=saved_mode == AddonMediaListDeliveryMode::Stream>{tr(TextKey::AddonDeliveryStream)}</option>
+                    <option value="download_ahead" selected=saved_mode == AddonMediaListDeliveryMode::DownloadAhead disabled=move || !supports_download.get() && saved_mode != AddonMediaListDeliveryMode::DownloadAhead>{tr(TextKey::AddonDeliveryDownloadAhead)}</option>
+                    <option value="download_ahead_new_videos" selected=saved_mode == AddonMediaListDeliveryMode::DownloadAheadNewVideos disabled=move || !supports_download.get() && saved_mode != AddonMediaListDeliveryMode::DownloadAheadNewVideos>{tr(TextKey::AddonDeliveryNewVideos)}</option>
+                </select>
+            </label>
+            <small id="addon-delivery-help">{tr(TextKey::AddonDeliveryHelp)}</small>
+            <small id="addon-delivery-availability" style:display=move || if supports_download.get() { "none" } else { "block" }>{tr(TextKey::AddonDeliveryUnavailable)}</small>
+            <p data-testid="addon-delivery-cutoff" style:display=if has_cutoff { "block" } else { "none" }>
+                <span>{tr(TextKey::AddonDeliveryCutoff)}": "</span>
+                <time datetime=cutoff>{cutoff_label}</time>
+            </p>
+            <small style:display=move || if mode.get() == AddonMediaListDeliveryMode::DownloadAheadNewVideos && saved_mode != AddonMediaListDeliveryMode::DownloadAheadNewVideos { "block" } else { "none" }>{tr(TextKey::AddonDeliveryFreshCutoff)}</small>
+        </div>
+    }
+}
+
 fn refresh_cadence_from_value(value: &str) -> AddonMediaListRefreshCadence {
     match value {
         "adaptive" => AddonMediaListRefreshCadence::Adaptive,
@@ -2286,6 +2343,17 @@ fn AddAddonMediaListPageIsland(
     providers: Vec<AddonMediaListProviderRow>,
     initial_addon_id: String,
 ) -> impl IntoView {
+    let any_download_provider = providers
+        .iter()
+        .any(|provider| provider.supports_download_ahead);
+    let download_provider_ids = StoredValue::new(
+        providers
+            .iter()
+            .filter(|provider| provider.supports_download_ahead)
+            .map(|provider| provider.addon_id.clone())
+            .collect::<BTreeSet<_>>(),
+    );
+    let delivery_mode = RwSignal::new(AddonMediaListDeliveryMode::Stream);
     let any_adaptive_provider = providers
         .iter()
         .any(|provider| provider.supports_adaptive_refresh);
@@ -2350,6 +2418,7 @@ fn AddAddonMediaListPageIsland(
             String,
             AddonMediaListPresentationKind,
             AddonMediaListRefreshCadence,
+            AddonMediaListDeliveryMode,
             bool,
             bool,
         )| {
@@ -2359,6 +2428,7 @@ fn AddAddonMediaListPageIsland(
                 folder_name,
                 presentation,
                 refresh_cadence,
+                delivery_mode,
                 playlist,
                 load_item_details,
             ) = value.clone();
@@ -2371,6 +2441,7 @@ fn AddAddonMediaListPageIsland(
                     String::new(),
                     load_item_details,
                     refresh_cadence,
+                    delivery_mode,
                 )
                 .await?;
                 let mut form = get_addon_media_list_form(id)
@@ -2432,6 +2503,7 @@ fn AddAddonMediaListPageIsland(
                             folder_name.get_untracked(),
                             presentation.get_untracked(),
                             refresh_cadence.get_untracked(),
+                            delivery_mode.get_untracked(),
                             generate_playlist.get_untracked(),
                             load_item_details.get_untracked(),
                         ));
@@ -2544,6 +2616,15 @@ fn AddAddonMediaListPageIsland(
                         </span>
                         <input class=style::boxed_input type="text" name="folder_name" prop:value=move || folder_name.get() on:input=move |event| folder_name.set(event_target_value(&event)) placeholder=tr(TextKey::AddonMediaListFolderHelp)/>
                     </label>
+
+                    <DeliveryModeSelect
+                        mode=delivery_mode
+                        saved_mode=AddonMediaListDeliveryMode::Stream
+                        cutoff_at=None
+                        supports_download=Signal::derive(move || if hydrated.get() {
+                            download_provider_ids.with_value(|ids| ids.contains(&addon_id.get()))
+                        } else { any_download_provider })
+                    />
 
                     <label class=style::playlist_option>
                         <input type="checkbox" name="generate_playlist" value="true" prop:checked=move || generate_playlist.get() on:change=move |event| generate_playlist.set(event_target_checked(&event))/>
@@ -4023,6 +4104,9 @@ fn AddonMediaListEditorIsland(
     let submit_addon_id = addon_id.clone();
     let submit_source_url = source_url.clone();
     let refresh_cadence = RwSignal::new(form.refresh_cadence);
+    let delivery_mode = RwSignal::new(form.delivery_mode);
+    let saved_delivery_mode = form.delivery_mode;
+    let delivery_cutoff_at = form.delivery_cutoff_at.clone();
     let refresh_publication_policy = RwSignal::new(form.refresh_publication_policy);
     let saved_refresh_publication_policy = form.refresh_publication_policy;
     let generate_playlist = RwSignal::new(form.generate_playlist);
@@ -4124,6 +4208,9 @@ fn AddonMediaListEditorIsland(
     let display_id = form.source_url.clone();
     let display_folder = form.folder_name.clone();
     let form_addon_id = form.addon_id.clone();
+    let supports_download_ahead = providers
+        .iter()
+        .any(|provider| provider.addon_id == form.addon_id && provider.supports_download_ahead);
     let supports_adaptive_refresh = providers
         .iter()
         .any(|provider| provider.addon_id == form.addon_id && provider.supports_adaptive_refresh);
@@ -4242,6 +4329,7 @@ fn AddonMediaListEditorIsland(
     });
     let settings_dirty = Memo::new(move |_| {
         refresh_cadence.get() != saved_refresh_cadence
+            || delivery_mode.get() != saved_delivery_mode
             || refresh_publication_policy.get() != saved_refresh_publication_policy
             || generate_playlist.get() != saved_generate_playlist
             || detail_import_policy.get() != saved_detail_import_policy
@@ -5461,6 +5549,8 @@ fn AddonMediaListEditorIsland(
                             ],
                         );
                         save_action.dispatch((AddonMediaListForm {
+                            delivery_mode: delivery_mode.get_untracked(),
+                            delivery_cutoff_at: form.delivery_cutoff_at.clone(),
                             auto_publication_hold: auto_publication_hold.get_untracked(),
                             id: form_id.get_untracked(),
                             name: list_name.get_value(),
@@ -6123,6 +6213,12 @@ fn AddonMediaListEditorIsland(
                                 </div>
                             </div>
                             <div class=style::editor_source_pair>
+                                <DeliveryModeSelect
+                                    mode=delivery_mode
+                                    saved_mode=saved_delivery_mode
+                                    cutoff_at=delivery_cutoff_at
+                                    supports_download=Signal::derive(move || supports_download_ahead)
+                                />
                                 <label class=style::source_field>
                                     <span class=style::field_title>
                                         <span style=move || icon_style(presentation_icon(presentation_kind.get()), "1rem") aria-hidden="true"></span>

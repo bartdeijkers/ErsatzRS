@@ -894,6 +894,14 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ArtistNotFound => "Artist not found",
         TextKey::AfterDurationEnd => "After Duration End",
         TextKey::AutomaticRefresh => "Automatic Refresh",
+        TextKey::AddonDeliveryMode => "Delivery",
+        TextKey::AddonDeliveryStream => "Stream",
+        TextKey::AddonDeliveryDownloadAhead => "Download ahead",
+        TextKey::AddonDeliveryNewVideos => "Download ahead — new videos only",
+        TextKey::AddonDeliveryHelp => "Delivery changes take effect after the next publication. New videos only downloads videos first imported after the saved cutoff; already-known videos stream. Re-enabling this mode establishes a fresh cutoff. Only finite media can download ahead. Live items and items whose duration is unknown continue streaming.",
+        TextKey::AddonDeliveryUnavailable => "Downloading requires a compatible, enabled add-on and finite media.",
+        TextKey::AddonDeliveryCutoff => "New videos cutoff",
+        TextKey::AddonDeliveryFreshCutoff => "A fresh cutoff is recorded when you save.",
         TextKey::AdaptiveRefreshUnavailable => {
             "Adaptive refresh is unavailable because this add-on no longer supports source checks. Choose another cadence to resume automatic refresh."
         }

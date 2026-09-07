@@ -624,6 +624,83 @@ INSERT INTO "AddonProviderHostCooldown" (
 test.describe('shared add-on metadata editor', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required');
 
+  for (const javaScriptEnabled of [true, false]) {
+    test(`preserves and renews the visible new-video cutoff (${javaScriptEnabled ? 'hydrated' : 'no-JS'})`, async ({ browser, baseURL }, testInfo) => {
+      const seed = seedMetadataEditor(testInfo);
+      const previousCutoff = '2026-01-01T12:30:00Z';
+      sqlite(`
+UPDATE "AddonInstallation"
+SET "ManifestJson" = json_insert(
+    "ManifestJson",
+    '$.capabilities[#]', json('{"id":"media-list.prepare.v2"}'),
+    '$.capabilities[#]', json('{"id":"media-list.item-runtime.v1"}')
+)
+WHERE "AddonId" = '${sqlEscape(seed.addonId)}';
+UPDATE "AddonMediaList"
+SET "DeliveryMode" = 2, "DeliveryCutoffAt" = '${previousCutoff}', "DeliveryCutoffIdentityId" = 0
+WHERE "Id" = ${seed.listId};
+`);
+      const publishedRevision = sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`);
+      const context = await browser.newContext({ javaScriptEnabled, baseURL });
+      const page = await context.newPage();
+      const runtimeErrors = watchRuntimeErrors(page);
+      const savedDelivery = () => sqlite(`SELECT "DeliveryMode" || '|' || COALESCE("DeliveryCutoffAt", '') FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`);
+      const openEditor = async () => {
+        if (javaScriptEnabled) {
+          await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+        } else {
+          await page.goto(`/media/addon-lists/${seed.listId}`);
+        }
+      };
+      const save = async () => {
+        await Promise.all([
+          page.waitForEvent('framenavigated', (frame) => frame === page.mainFrame()),
+          page.getByRole('button', { name: 'Save Changes', exact: true }).click(),
+        ]);
+        await page.waitForLoadState('domcontentloaded');
+        await expect(page).not.toHaveURL(/error=/);
+      };
+      try {
+        await forceEnglish(page);
+        await openEditor();
+        const delivery = page.getByRole('combobox', { name: 'Delivery', exact: true });
+        await expect(delivery).toHaveValue('download_ahead_new_videos');
+        await expect(page.locator('#addon-delivery-help')).toContainText('Live items and items whose duration is unknown continue streaming.');
+        await expect(page.getByTestId('addon-delivery-cutoff')).toContainText('2026-01-01 12:30:00 UTC');
+        expect(Date.parse((await page.getByTestId('addon-delivery-cutoff').locator('time').getAttribute('datetime'))!)).toBe(Date.parse(previousCutoff));
+
+        // Saving another setting must preserve the new-only selection and its cutoff.
+        await page.getByRole('combobox', { name: 'Automatic Refresh', exact: true }).selectOption('weekly');
+        await save();
+        await expect.poll(() => sqlite(`SELECT "RefreshCadence" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('1');
+        expect(savedDelivery()).toBe(`2|${previousCutoff}`);
+        await openEditor();
+
+        await delivery.selectOption('stream');
+        await save();
+        await expect.poll(savedDelivery).toBe('0|');
+        await openEditor();
+        await expect(page.getByTestId('addon-delivery-cutoff')).toBeHidden();
+
+        await delivery.selectOption('download_ahead_new_videos');
+        await save();
+        await expect.poll(savedDelivery).toMatch(/^2\|.+/);
+        // SQLite stores UTC without an offset; format it explicitly for JS,
+        // which otherwise interprets this value in the runner's local timezone.
+        const freshCutoff = savedDelivery().slice(2).replace(' ', 'T') + 'Z';
+        expect(Date.parse(freshCutoff)).toBeGreaterThan(Date.parse(previousCutoff));
+        await openEditor();
+        await expect(delivery).toHaveValue('download_ahead_new_videos');
+        await expect(page.getByTestId('addon-delivery-cutoff')).toBeVisible();
+        expect(Date.parse((await page.getByTestId('addon-delivery-cutoff').locator('time').getAttribute('datetime'))!)).toBe(Date.parse(freshCutoff));
+        expect(sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe(publishedRevision);
+        expect(runtimeErrors).toEqual([]);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
   test('keeps source and import metadata together on the add page', async ({ page }) => {
     const runtimeErrors = watchRuntimeErrors(page);
     await forceEnglish(page);

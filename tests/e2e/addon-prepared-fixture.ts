@@ -106,7 +106,7 @@ else if (command === 'discover' || command === 'list') {
     source_url: 'https://prepared.example.invalid/addon', host_version: '*',
     capabilities: [
       ...['addon.check.v1', 'media-list.import.v1', 'media-list.list.v5', 'remote-stream.list.v4',
-        'remote-stream.play.v1', 'media-list.item-runtime.v1', 'media-list.prepare.v1'].map(id => ({ id })),
+        'remote-stream.play.v1', 'media-list.item-runtime.v1', 'media-list.prepare.v2'].map(id => ({ id })),
       { id: 'media-list.options.v1', options: [{ key: 'processed', label: { 'en-US': 'Prepare calibration' },
         description: { 'en-US': 'Generate a synthetic finite file' }, scope: 'both',
         operation_targets: ['preparation'], applicability: 'finite_only', kind: 'boolean',
