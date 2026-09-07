@@ -3602,6 +3602,33 @@ async fn execute_managed_library_operation(
                 }
             }
             AddonMediaListPublicationPhase::Verifying => {
+                let Some(outcome) = job.outcome else {
+                    return Outcome::Failed {
+                        message: "publication verification has no selected revision outcome"
+                            .to_owned(),
+                    };
+                };
+                if let Err(error) = application
+                    .ports
+                    .addon_media_lists()
+                    .prepare_publication_verification_scan(
+                        job.list_id,
+                        outcome,
+                        job.operation_id,
+                        job.generation,
+                        &claim.operation.owner_token,
+                        &claim.lease_owner,
+                    )
+                    .await
+                {
+                    return schedule_publication_retry(
+                        application,
+                        claim,
+                        &error.to_string(),
+                        error.publication_failure_cause(),
+                    )
+                    .await;
+                }
                 let child = match application
                     .ports
                     .managed_library_operations()
@@ -3639,12 +3666,6 @@ async fn execute_managed_library_operation(
                         Outcome::Deferred | Outcome::LeaseLost => return Outcome::LeaseLost,
                     }
                 }
-                let Some(outcome) = job.outcome else {
-                    return Outcome::Failed {
-                        message: "publication verification has no selected revision outcome"
-                            .to_owned(),
-                    };
-                };
                 if let Err(error) = application
                     .ports
                     .addon_media_lists()
@@ -3806,6 +3827,22 @@ async fn transition_publication(
         .unwrap_or(false)
 }
 
+/// Retry budget for one publication recovery before it becomes operator work.
+///
+/// Recovery retries assume a transient obstacle (a busy filesystem, a lock still
+/// held). A permanent one - a tree that cannot converge on its marker, a
+/// projection that cannot match its journal - fails identically every time, and
+/// an unbounded retry presents that as an eternal "retrying" banner with no
+/// action attached. Exhausting the budget fails the operation instead, so the
+/// list surfaces a terminal state, and both operator recovery actions stay
+/// available on it.
+///
+/// The budget counts the operation's attempts, which operator recovery does not
+/// reset. Retrying an already exhausted publication therefore gets one attempt
+/// and goes terminal again if it still fails, which keeps the operator in the
+/// loop rather than starting another unattended retry run.
+const PUBLICATION_RECOVERY_MAX_ATTEMPTS: i32 = 8;
+
 async fn schedule_publication_retry(
     application: &ApplicationServices,
     claim: &ersatzrs_core::repositories::ManagedLibraryOperationClaim,
@@ -3813,6 +3850,30 @@ async fn schedule_publication_retry(
     cause: Option<ersatzrs_core::repositories::AddonMediaListPublicationFailureCause>,
 ) -> commands::ExecuteManagedLibraryOperationOutcome {
     use commands::ExecuteManagedLibraryOperationOutcome as Outcome;
+
+    if claim.operation.attempt_count >= PUBLICATION_RECOVERY_MAX_ATTEMPTS {
+        // The diagnostic is not persisted: it can carry managed-library paths,
+        // and the stored publication diagnostics are deliberately static.
+        tracing::error!(
+            operation_id = claim.operation.id,
+            error = %diagnostic,
+            attempts = claim.operation.attempt_count,
+            "add-on publication recovery exhausted its retry budget"
+        );
+        let _ = application
+            .ports
+            .managed_library_operations()
+            .fail_publication(
+                claim,
+                "publication_recovery_exhausted",
+                "publication recovery exhausted its retry budget",
+                cause,
+            )
+            .await;
+        return Outcome::Failed {
+            message: diagnostic.to_owned(),
+        };
+    }
 
     let attempt = u32::try_from(claim.operation.attempt_count.max(1)).unwrap_or(1);
     let base = 1_i64

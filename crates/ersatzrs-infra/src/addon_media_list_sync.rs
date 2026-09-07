@@ -520,6 +520,17 @@ impl AddonMediaListSynchronizer {
                  AND NOT EXISTS (
                      SELECT 1
                      FROM "AddonMediaListPublicationJob" AS "job"
+                     WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                       AND "job"."Outcome" IS NOT NULL
+                       AND "job"."Id" = (
+                           SELECT MAX("latest"."Id") FROM "AddonMediaListPublicationJob" AS "latest"
+                           WHERE "latest"."AddonMediaListId" = "AddonMediaList"."Id"
+                       )
+                       AND "AddonMediaList"."PublicationJournalJson" IS NOT NULL
+                 )
+                 AND NOT EXISTS (
+                     SELECT 1
+                     FROM "AddonMediaListPublicationJob" AS "job"
                      JOIN "ManagedLibraryOperation" AS "operation"
                        ON "operation"."Id" = "job"."OperationId"
                      JOIN "ManagedLibraryLease" AS "lease"
@@ -1591,7 +1602,7 @@ impl AddonMediaListSynchronizer {
             r#"UPDATE "AddonMediaList"
                SET "ItemCount" = ?,
                    "ReviewState" = CASE
-                       WHEN ? = 1 AND "ReviewState" <> 0 THEN 1
+                       WHEN ? = 1 AND "ReviewState" NOT IN (0, 3) THEN 1
                        ELSE "ReviewState"
                    END,
                    "ReviewError" = CASE WHEN ? = 1 THEN NULL ELSE "ReviewError" END,

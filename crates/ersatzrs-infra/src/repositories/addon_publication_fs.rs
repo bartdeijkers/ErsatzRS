@@ -8,6 +8,15 @@ use std::path::{Path, PathBuf};
 use ersatzrs_domain::{AddonMediaListPublicationErrorCategory, EntityId};
 
 pub(crate) const PUBLICATION_MARKER_FILE: &str = ".ersatzrs-publication.json";
+/// Reserved prefix for internal state that lives beside published content.
+///
+/// The scanner keeps its own sidecars inside a managed folder (the remote-stream
+/// playlist sidecar and the NFO write-back state, for example) and rewrites them
+/// whenever it runs, including during the publication verification scan. Those
+/// files are not part of a published revision, so the tree fingerprint must skip
+/// them; otherwise a routine scan invalidates the sealed marker of a revision
+/// that never changed.
+const RESERVED_ENTRY_PREFIX: &str = ".ersatzrs-";
 const MARKER_SCHEMA_VERSION: u32 = 1;
 const CLEANUP_TOMBSTONE_SUFFIX: &str = ".cleanup-marker";
 pub(crate) const REVISION_BLOB_STORE_DIRECTORY: &str = ".ersatzrs-revision-blobs";
@@ -833,6 +842,29 @@ fn persist_prepared_candidate_seal_unlocked(
     }
 }
 
+/// Reseal only a verified legacy revision, under the same lock used by tree writers.
+pub(crate) fn upgrade_managed_fingerprint(
+    paths: &PublicationFsPaths,
+    identity: PublicationFsIdentity,
+    role: PublicationTreeRole,
+) -> Result<(), PublicationFsError> {
+    with_managed_tree_lock(paths, || {
+        verify_managed_complete(paths, identity, role)?;
+        let mut marker = read_marker(&paths.managed)?;
+        let content = fingerprint_tree(&paths.managed)?;
+        if marker.sha256.as_deref() != Some(content.sha256.as_str())
+            || marker.file_count != content.file_count
+            || marker.byte_count != content.byte_count
+        {
+            marker.sha256 = Some(content.sha256);
+            marker.file_count = content.file_count;
+            marker.byte_count = content.byte_count;
+            write_marker(&paths.managed, &marker)?;
+        }
+        Ok(())
+    })
+}
+
 pub(crate) fn verify_managed_complete(
     paths: &PublicationFsPaths,
     identity: PublicationFsIdentity,
@@ -1632,11 +1664,38 @@ fn hex_digest(bytes: &[u8]) -> String {
     value
 }
 
+/// Which entries one fingerprint walk covers.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FingerprintScope {
+    /// Published content only: every reserved internal entry is skipped.
+    Content,
+    /// Content plus the scanner sidecars, excluding only the root marker.
+    ///
+    /// Markers sealed before the sidecars were excluded recorded this shape.
+    /// Verification still accepts it so an already published revision stays
+    /// verifiable; nothing seals a new marker with it.
+    LegacyWithReservedState,
+}
+
 fn fingerprint_tree(root: &Path) -> Result<TreeFingerprint, PublicationFsError> {
+    fingerprint_tree_scoped(root, FingerprintScope::Content)
+}
+
+fn fingerprint_tree_scoped(
+    root: &Path,
+    scope: FingerprintScope,
+) -> Result<TreeFingerprint, PublicationFsError> {
     let mut hasher = Sha256::new();
     let mut file_count = 0_u64;
     let mut byte_count = 0_u64;
-    fingerprint_directory(root, root, &mut hasher, &mut file_count, &mut byte_count)?;
+    fingerprint_directory(
+        root,
+        root,
+        scope,
+        &mut hasher,
+        &mut file_count,
+        &mut byte_count,
+    )?;
     let mut sha256 = String::with_capacity(64);
     for byte in hasher.finalize() {
         write!(&mut sha256, "{byte:02x}").expect("writing to a String cannot fail");
@@ -1651,6 +1710,7 @@ fn fingerprint_tree(root: &Path) -> Result<TreeFingerprint, PublicationFsError> 
 fn fingerprint_directory(
     root: &Path,
     directory: &Path,
+    scope: FingerprintScope,
     hasher: &mut Sha256,
     file_count: &mut u64,
     byte_count: &mut u64,
@@ -1662,7 +1722,13 @@ fn fingerprint_directory(
     entries.sort_by_key(std::fs::DirEntry::file_name);
     for entry in entries {
         let entry_path = entry.path();
-        if entry_path == root.join(PUBLICATION_MARKER_FILE) {
+        let skip = match scope {
+            FingerprintScope::Content => is_reserved_entry(&entry.file_name()),
+            FingerprintScope::LegacyWithReservedState => {
+                entry_path == root.join(PUBLICATION_MARKER_FILE)
+            }
+        };
+        if skip {
             continue;
         }
         let file_type = entry
@@ -1677,11 +1743,21 @@ fn fingerprint_directory(
             PublicationFsError::UnsafeState("publication entry escaped its managed root")
         })?;
         let normalized = relative.to_string_lossy().replace('\\', "/");
+        // A content fingerprint describes files, not the directories holding
+        // them, because each file contributes its own root-relative path. The
+        // scanner creates and empties generated folders on its own schedule, so
+        // hashing a bare directory entry would let an empty folder invalidate a
+        // sealed revision whose published files never changed.
+        let hash_directory_entries = scope == FingerprintScope::LegacyWithReservedState;
+        if file_type.is_dir() && !hash_directory_entries {
+            fingerprint_directory(root, &entry_path, scope, hasher, file_count, byte_count)?;
+            continue;
+        }
         hasher.update(normalized.as_bytes());
         hasher.update([0]);
         if file_type.is_dir() {
             hasher.update(b"directory");
-            fingerprint_directory(root, &entry_path, hasher, file_count, byte_count)?;
+            fingerprint_directory(root, &entry_path, scope, hasher, file_count, byte_count)?;
         } else if file_type.is_file() {
             hasher.update(b"file");
             let mut file = File::open(&entry_path)
@@ -1702,6 +1778,14 @@ fn fingerprint_directory(
         hasher.update([0xff]);
     }
     Ok(())
+}
+
+/// Whether one directory entry holds internal state rather than published content.
+///
+/// The check is by name at any depth, so it covers the root publication marker
+/// and every scanner-owned sidecar nested under a generated media folder.
+fn is_reserved_entry(name: &std::ffi::OsStr) -> bool {
+    name.to_string_lossy().starts_with(RESERVED_ENTRY_PREFIX)
 }
 
 fn marker_if_present(path: &Path) -> Result<Option<PublicationTreeMarker>, PublicationFsError> {
@@ -1859,16 +1943,25 @@ fn verify_fingerprint(
             "the publication tree marker is not complete",
         ));
     }
-    let actual = fingerprint_tree(path)?;
-    if marker.sha256.as_deref() != Some(actual.sha256.as_str())
-        || marker.file_count != actual.file_count
-        || marker.byte_count != actual.byte_count
+    if fingerprint_matches(path, marker, FingerprintScope::Content)?
+        || fingerprint_matches(path, marker, FingerprintScope::LegacyWithReservedState)?
     {
-        return Err(PublicationFsError::Integrity(
-            "the publication tree does not match its integrity marker",
-        ));
+        return Ok(());
     }
-    Ok(())
+    Err(PublicationFsError::Integrity(
+        "the publication tree does not match its integrity marker",
+    ))
+}
+
+fn fingerprint_matches(
+    path: &Path,
+    marker: &PublicationTreeMarker,
+    scope: FingerprintScope,
+) -> Result<bool, PublicationFsError> {
+    let actual = fingerprint_tree_scoped(path, scope)?;
+    Ok(marker.sha256.as_deref() == Some(actual.sha256.as_str())
+        && marker.file_count == actual.file_count
+        && marker.byte_count == actual.byte_count)
 }
 
 fn remove_owned_tree(
@@ -2247,6 +2340,119 @@ mod tests {
             .expect_err("restored bytes must retain their sealed backup fingerprint");
 
         assert!(error.to_string().contains("integrity marker"));
+    }
+
+    /// Seal a restored revision, then let the scanner write into it the way the
+    /// publication verification scan does before the tree is verified.
+    fn restore_then_run_scanner(paths: &PublicationFsPaths, identity: PublicationFsIdentity) {
+        create_backup(paths, identity).expect("create backup");
+        fs::write(paths.managed.join("item.yml"), b"candidate").expect("candidate item");
+        assert_eq!(
+            restore_step(paths, identity).expect("move candidate aside"),
+            RestoreProgress::Advanced
+        );
+        assert_eq!(
+            restore_step(paths, identity).expect("restore previous publication"),
+            RestoreProgress::Advanced
+        );
+        let generated = paths.managed.join("streams");
+        fs::create_dir(&generated).expect("generated media folder");
+        fs::write(
+            generated.join(".ersatzrs-playlist.json"),
+            b"{\"entries\":[]}",
+        )
+        .expect("scanner playlist sidecar");
+        fs::write(generated.join(".ersatzrs-nfo-state.json"), b"{}").expect("scanner nfo state");
+    }
+
+    #[test]
+    fn scanner_sidecars_written_after_sealing_keep_the_revision_verifiable() {
+        let (_temp, paths, identity) = fixture();
+        restore_then_run_scanner(&paths, identity);
+
+        verify_managed_complete(&paths, identity, PublicationTreeRole::Previous)
+            .expect("scanner state beside published content must not break the sealed marker");
+    }
+
+    #[test]
+    fn scanner_sidecars_do_not_hide_tampering_with_published_content() {
+        let (_temp, paths, identity) = fixture();
+        restore_then_run_scanner(&paths, identity);
+        fs::write(paths.managed.join("item.yml"), b"tampered").expect("tamper restored item");
+
+        let error = verify_managed_complete(&paths, identity, PublicationTreeRole::Previous)
+            .expect_err("published bytes must still be covered by the marker");
+
+        assert!(error.to_string().contains("integrity marker"));
+    }
+
+    #[test]
+    fn markers_sealed_over_scanner_sidecars_still_verify() {
+        let (_temp, paths, identity) = fixture();
+        let generated = paths.managed.join("streams");
+        fs::create_dir(&generated).expect("generated media folder");
+        fs::write(generated.join(".ersatzrs-playlist.json"), b"{}").expect("scanner sidecar");
+        // A revision published before sidecars were excluded recorded them in
+        // its fingerprint; that marker must keep verifying after the upgrade.
+        let legacy =
+            fingerprint_tree_scoped(&paths.managed, FingerprintScope::LegacyWithReservedState)
+                .expect("legacy fingerprint");
+        write_marker(
+            &paths.managed,
+            &complete_marker(
+                identity,
+                PublicationTreeRole::Previous,
+                identity.previous_revision,
+                &legacy,
+            ),
+        )
+        .expect("legacy marker");
+
+        verify_managed_complete(&paths, identity, PublicationTreeRole::Previous)
+            .expect("a marker sealed over scanner sidecars must remain verifiable");
+        upgrade_managed_fingerprint(&paths, identity, PublicationTreeRole::Previous)
+            .expect("upgrade intact legacy marker before scanning");
+        let upgraded = read_marker(&paths.managed).expect("upgraded marker");
+        upgrade_managed_fingerprint(&paths, identity, PublicationTreeRole::Previous)
+            .expect("upgrade is restart safe");
+        assert_eq!(read_marker(&paths.managed).expect("marker"), upgraded);
+        fs::write(
+            generated.join(".ersatzrs-playlist.json"),
+            b"{\"entries\":[]}",
+        )
+        .expect("scan rewrites sidecar");
+        verify_managed_complete(&paths, identity, PublicationTreeRole::Previous)
+            .expect("legacy revision remains verifiable after scanning");
+        fs::write(paths.managed.join("item.yml"), b"tampered").expect("tamper content");
+        assert!(
+            upgrade_managed_fingerprint(&paths, identity, PublicationTreeRole::Previous).is_err()
+        );
+        assert_eq!(read_marker(&paths.managed).expect("marker"), upgraded);
+    }
+
+    #[test]
+    fn legacy_fingerprint_upgrade_refuses_changed_sidecars() {
+        let (_temp, paths, identity) = fixture();
+        let sidecar = paths.managed.join(".ersatzrs-playlist.json");
+        fs::write(&sidecar, b"{}").expect("sidecar");
+        let legacy =
+            fingerprint_tree_scoped(&paths.managed, FingerprintScope::LegacyWithReservedState)
+                .expect("legacy fingerprint");
+        let marker = complete_marker(
+            identity,
+            PublicationTreeRole::Previous,
+            identity.previous_revision,
+            &legacy,
+        );
+        write_marker(&paths.managed, &marker).expect("legacy marker");
+        fs::write(sidecar, b"changed").expect("change before upgrade");
+        assert!(
+            upgrade_managed_fingerprint(&paths, identity, PublicationTreeRole::Previous).is_err()
+        );
+        assert_eq!(
+            read_marker(&paths.managed).expect("unchanged marker"),
+            marker
+        );
     }
 
     #[test]

@@ -1649,6 +1649,48 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         Ok(AddonMediaListPublicationContinuation::VerificationRequired)
     }
 
+    async fn prepare_publication_verification_scan(
+        &self,
+        id: EntityId,
+        outcome: AddonMediaListPublicationOutcome,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let fence = PublicationClaimFence {
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        };
+        ensure_current_publication_claim(&self.0, id, fence, true).await?;
+        let (journal, _) = load_publication_journal_value(&self.0, id).await?;
+        // Journals predating tree markers retain their existing adoption path.
+        if journal.failed_folder.is_none()
+            || journal.previous_published_revision.is_none()
+            || journal.target_published_revision.is_none()
+        {
+            return Ok(());
+        }
+        let (paths, identity) =
+            publication_fs_context(&self.0, id, &journal, Some(operation_id), Some(generation))
+                .await?;
+        let role = publication_outcome_role(outcome);
+        tokio::task::spawn_blocking(move || {
+            addon_publication_fs::upgrade_managed_fingerprint(&paths, identity, role)
+        })
+        .await
+        .map_err(|error| {
+            RepositoryError::unavailable(
+                "prepare publication verification",
+                format!("marker upgrade task failed: {error}"),
+            )
+        })?
+        .map_err(|error| publication_fs_repository_error(&error))?;
+        ensure_current_publication_claim(&self.0, id, fence, true).await
+    }
+
     async fn verify_staged_publication_revision(
         &self,
         id: EntityId,
@@ -5540,6 +5582,15 @@ const fn artwork_role_value(role: AddonMediaListArtworkRole) -> i32 {
 /// Move an already published list back to review while preserving its last
 /// published item snapshot and library projection. A never-published import
 /// remains a draft until its first explicit publication.
+///
+/// Refused while a publication holds a live lease, and also once that publication
+/// has selected the revision it will verify. From `begin_publication_verification`
+/// until the recovery journal is cleared, the state machine checks the restored or committed
+/// revision against `Publishing`, so an edit that overwrote it would leave
+/// verification unable to converge and retrying forever. A live lease alone does
+/// not cover that window: a publication between verification retries holds no
+/// lease. An abandoned publication that never reached verification stays
+/// editable, so an expired lease still releases the draft.
 async fn mark_list_ready_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -5551,6 +5602,17 @@ async fn mark_list_ready_tx(
                "ReviewError" = NULL,
                "DraftRevision" = "DraftRevision" + 1
            WHERE "Id" = ?
+             AND NOT EXISTS (
+                 SELECT 1
+                 FROM "AddonMediaListPublicationJob" AS "job"
+                 WHERE "job"."AddonMediaListId" = "AddonMediaList"."Id"
+                   AND "job"."Outcome" IS NOT NULL
+                   AND "job"."Id" = (
+                       SELECT MAX("latest"."Id") FROM "AddonMediaListPublicationJob" AS "latest"
+                       WHERE "latest"."AddonMediaListId" = "AddonMediaList"."Id"
+                   )
+                   AND "AddonMediaList"."PublicationJournalJson" IS NOT NULL
+             )
              AND NOT EXISTS (
                  SELECT 1
                  FROM "AddonMediaListPublicationJob" AS "job"
@@ -8799,6 +8861,168 @@ mod tests {
     use sqlx::Executor as _;
 
     use super::{accept_reconcile_candidate_in_tx, is_safe_remote_artwork_url, FlatProjection};
+
+    /// One list whose publication has already selected the revision it verifies.
+    ///
+    /// This is the state a failed publication sits in for most of its life: the
+    /// restore picked `RestoredAfterFailure`, the operation holds no lease while
+    /// it waits between verification attempts, and the list must stay
+    /// `Publishing` for that verification to converge.
+    async fn publishing_list_between_verification_attempts(
+        outcome: Option<i32>,
+    ) -> sqlx::Pool<crate::db::Db> {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("connect SQLite fixture");
+        sqlx::migrate!("../../migrations")
+            .run(&pool)
+            .await
+            .expect("migrate SQLite fixture");
+        pool.execute("PRAGMA foreign_keys = OFF")
+            .await
+            .expect("disable fixture foreign keys");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name",
+                   "DraftRevision", "PublishedRevision", "ReviewState",
+                   "PublicationJournalJson"
+               ) VALUES (1, 'fixture.addon', 'fixture-list',
+                         'https://media.example.test/list', 'Fixture list',
+                         14, 0, 3, '{"previous_review_state":"draft"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed publishing list");
+        sqlx::query(
+            r#"INSERT INTO "ManagedLibraryOperation" (
+                   "Id", "LibraryId", "OwnerToken", "Kind", "State", "AttemptCount",
+                   "CreatedAt", "UpdatedAt"
+               ) VALUES (100, 1, 'fixture-owner', 6, 2, 9,
+                         '2026-09-07T20:52:46Z', '2026-09-07T21:01:48Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("seed waiting publication operation");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListPublicationJob" (
+                   "Id", "OperationId", "AddonMediaListId", "Generation",
+                   "SavedRevision", "TargetPublishedRevision", "Phase", "Outcome",
+                   "CreatedAt", "UpdatedAt"
+               ) VALUES (1, 100, 1, 1, 14, 1, 8, ?,
+                         '2026-09-07T20:52:46Z', '2026-09-07T21:01:48Z')"#,
+        )
+        .bind(outcome)
+        .execute(&pool)
+        .await
+        .expect("seed publication job");
+        pool
+    }
+
+    async fn review_state(pool: &sqlx::Pool<crate::db::Db>) -> i32 {
+        sqlx::query_scalar(r#"SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id" = 1"#)
+            .fetch_one(pool)
+            .await
+            .expect("read review state")
+    }
+
+    /// A publication between verification retries holds no lease and is not
+    /// `Running`, so a lease-only guard let an ordinary edit overwrite
+    /// `Publishing` with `Ready`. Verification checks the selected revision
+    /// against `Publishing` and could then never converge, retrying forever.
+    #[tokio::test]
+    async fn edits_cannot_leave_publishing_once_a_revision_is_being_verified() {
+        // 0 published, 1 restored after failure: both are selected revisions.
+        for outcome in [0, 1] {
+            let pool = publishing_list_between_verification_attempts(Some(outcome)).await;
+            let mut tx = crate::db::begin_write(&pool).await.expect("begin");
+
+            let error = super::mark_list_ready_tx(&mut tx, 1)
+                .await
+                .expect_err("a revision under verification must refuse the edit");
+
+            assert!(
+                matches!(
+                    error,
+                    ersatzrs_core::repositories::RepositoryError::Conflict(_)
+                ),
+                "outcome {outcome} produced {error:?}"
+            );
+            drop(tx);
+            assert_eq!(review_state(&pool).await, 3);
+        }
+    }
+
+    #[tokio::test]
+    async fn exhausted_publication_keeps_edits_blocked_until_journal_finalization() {
+        for outcome in [0, 1] {
+            let pool = publishing_list_between_verification_attempts(Some(outcome)).await;
+            sqlx::query(r#"UPDATE "AddonMediaListPublicationJob" SET "CompletedAt" = '2026-09-07T22:00:00Z'"#)
+                .execute(&pool).await.expect("complete failed job");
+            let mut tx = crate::db::begin_write(&pool).await.expect("begin");
+            assert!(matches!(
+                super::mark_list_ready_tx(&mut tx, 1).await,
+                Err(ersatzrs_core::repositories::RepositoryError::Conflict(_))
+            ));
+            tx.rollback().await.expect("rollback");
+            assert_eq!(review_state(&pool).await, 3);
+            let synchronizer = super::AddonMediaListSynchronizer::new(pool.clone());
+            assert!(matches!(
+                synchronizer
+                    .update_settings(
+                        1,
+                        ersatzrs_domain::AddonMediaListRefreshCadence::default(),
+                        ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::default(),
+                        ersatzrs_domain::AddonMediaListDeliveryMode::default(),
+                        None,
+                        false,
+                        false,
+                        ersatzrs_domain::AddonMediaListContentKind::default(),
+                        "",
+                    )
+                    .await,
+                Err(ersatzrs_core::repositories::RepositoryError::Conflict(_))
+            ));
+            assert_eq!(review_state(&pool).await, 3);
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "PublicationJournalJson" = NULL"#)
+                .execute(&pool)
+                .await
+                .expect("finalize journal");
+            let mut tx = crate::db::begin_write(&pool).await.expect("begin");
+            super::mark_list_ready_tx(&mut tx, 1)
+                .await
+                .expect("finalized recovery releases edits");
+            tx.commit().await.expect("commit");
+            assert_eq!(review_state(&pool).await, 1);
+        }
+    }
+
+    /// An abandoned publication that never chose a revision must still release
+    /// the draft, so an expired lease cannot lock a list forever.
+    #[tokio::test]
+    async fn edits_still_release_a_publication_that_never_reached_verification() {
+        let pool = publishing_list_between_verification_attempts(None).await;
+        // A previous generation's outcome must not lock an abandoned new draft.
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListPublicationJob" (
+            "Id", "OperationId", "AddonMediaListId", "Generation", "SavedRevision",
+            "TargetPublishedRevision", "Phase", "Outcome", "CreatedAt", "UpdatedAt", "CompletedAt"
+        ) VALUES (0, 99, 1, 0, 13, 0, 10, 0,
+            '2026-09-06T00:00:00Z', '2026-09-06T00:00:00Z', '2026-09-06T00:00:00Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("previous completed generation");
+        let mut tx = crate::db::begin_write(&pool).await.expect("begin");
+
+        super::mark_list_ready_tx(&mut tx, 1)
+            .await
+            .expect("an abandoned publication must not keep the draft locked");
+
+        tx.commit().await.expect("commit");
+        assert_eq!(review_state(&pool).await, 1);
+    }
 
     // Reuse the synthetic POSIX package fixture; Windows runner acceptance is separate.
     #[cfg(unix)]

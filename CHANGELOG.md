@@ -198,6 +198,25 @@ release section when tagging a release.
 
 ### Fixed
 
+- Stop an add-on list from getting stuck in an endless publication recovery.
+  The publication verification scan rewrites its own scanner sidecars inside the
+  managed folder it is about to verify, so the sealed revision fingerprint no
+  longer matched itself and recovery retried the same failure forever, leaving
+  the list permanently "Publish blocked". The fingerprint now covers published
+  content only, ignoring scanner state files and empty generated folders;
+  intact revisions sealed by earlier versions are verified and upgraded before
+  the scan rewrites their sidecars.
+
+- Keep a list in `Publishing` once its publication has selected the revision it
+  verifies, including after retry exhaustion until its recovery journal is
+  finalized. An ordinary edit landing between verification retries could
+  overwrite that state and leave recovery unable to converge. A publication that
+  never reached verification still releases the draft when its lease expires.
+
+- Give publication recovery a retry budget. A permanent failure now ends as a
+  terminal, operator-actionable state with its recovery actions available,
+  instead of retrying on a timer indefinitely.
+
 - Keep the add-on preparation worker alive while the host monitors its exit;
   release its liveness pipe only on shutdown so queued preparation can run.
 

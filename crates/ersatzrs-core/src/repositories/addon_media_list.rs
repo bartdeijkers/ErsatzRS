@@ -737,6 +737,29 @@ pub trait AddonMediaListRepository: Send + Sync {
             .await
             .map(|()| AddonMediaListPublicationContinuation::VerificationRequired)
     }
+    /// Upgrade an intact legacy tree marker before the verification scan writes sidecars.
+    async fn prepare_publication_verification_scan(
+        &self,
+        id: EntityId,
+        outcome: AddonMediaListPublicationOutcome,
+        operation_id: EntityId,
+        generation: i32,
+        owner_token: &str,
+        lease_owner: &str,
+    ) -> Result<()> {
+        let _ = (
+            id,
+            outcome,
+            operation_id,
+            generation,
+            owner_token,
+            lease_owner,
+        );
+        Err(RepositoryError::unavailable(
+            "prepare add-on media-list verification scan",
+            "not implemented",
+        ))
+    }
     /// Verify the selected filesystem and database revision before cleanup.
     async fn verify_staged_publication_revision(
         &self,
