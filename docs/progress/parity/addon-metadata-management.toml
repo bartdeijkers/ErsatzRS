@@ -468,3 +468,65 @@ discovered  = '2026-08-21'
 adr         = '0075'
 evidence    = 'Resolved by live Beeld & Geluid and yt-dlp runs on native Linux, native Windows, and WSL, including a spaced Unicode WSL path, plus Chromium and Firefox publication flows and the full release-candidate gate. A live Kreatief met Kurk regression on Windows and WSL produced 27 unique episode stills, no generic VPRO artwork, and output accepted by the runtime conformance parser.'
 resolved    = true
+
+[[debt]]
+id          = 'yt-dlp-adaptive-source-check'
+description = 'Enable the existing opt-in Adaptive cadence for the official yt-dlp package using a provider-neutral, bounded normalized-JSON sample instead of provider-specific feeds or unsafe ordering assumptions.'
+discovered  = '2026-09-08'
+adr         = '0085'
+resolved    = true
+evidence    = '''
+The 0.10.2 working-tree candidate adds media-list.source-check.v1 and capability
+routing in both entrypoints while retaining addon.check.v1 readiness. One native
+flat extraction samples the first 50 entries (single videos count as one), with
+no configuration, self-update, downloads, default plugins, or retries; 12 seconds
+overall and 1 MiB per output stream fit the host's existing containment/deadline.
+Ordered normalized metadata and source identity produce a versioned SHA-256
+validator; only exact, nonfuture UTC instants enter the optional sixteen-value
+history hint. Explicit empty playlists are observations; malformed, incomplete,
+failed and oversized extraction is never unchanged. Unknown validators are cold
+observations. Unchanged applies to this window; full refresh/reconciliation is
+needed outside it, with no new periodic full scan. Separate provider import URL
+support, fixed cadences, persistence, Health/Activity and AMM-M-03 remain intact.
+
+Linux x86-64 / WSL: tests/test_yt_dlp_source_check.py passes 15 normalized family,
+boundary, timestamp, validator, error, deadline, cancellation, readiness, and
+bundle cases. The existing test_repository.py suite passes 26 active cases
+(34 existing provider/platform skips). Native Windows x64 Deno passes eight
+checks through addon.bat using tests/test_yt_dlp_source_check_windows.ps1:
+first/same/changed, extraction failure, output cap, deadline, arguments, readiness.
+The current host's cargo xtask validate-addon-manifest accepts the candidate;
+the separate repository's pinned standalone validator predates existing package
+capabilities and cannot validate this manifest. It was not replaced.
+
+Native Linux measurements on 2026-09-08 used yt-dlp 2026.08.19, Deno 2.9.5 and
+one sequential invocation per observation, with no downloads or cookie options.
+The public Monstercat artist-list sample on SoundCloud returned 50 entries / 10,952 JSON bytes
+in 1.943 seconds; verbose logs contained four metadata-request messages excluding
+playlist/item progress. The public BlenderOfficial video-list sample returned 50 entries /
+41,986 bytes in 2.147 seconds with two such messages. These are diagnostic request
+counts and output sizes, not measured HTTP byte totals or universal request caps.
+Actual candidate first/same probes took 1.946/1.968 seconds (SoundCloud) and
+2.019/1.873 seconds (Blender), returning changed then unchanged with no timestamps.
+The public Vimeo 76979871 single-video sample failed extraction in 1.823 seconds; no success
+is claimed for it. Fixtures cover Vimeo, SoundCloud, Youtube and Generic normalized
+shapes, including single videos and overlapping IDs. Windows live-provider timing,
+ARM and macOS execution, and a new browser run are not claimed. Unmarked extractor
+approximate timestamps cannot be identified from the shared JSON contract.
+The offline bundle contains 18 files and passes ZIP integrity validation; the
+verified candidate SHA-256 is
+d9a1f036bb28e69fc229a3d1135ec7e9a4f7de36f7d48e206fa6736b0d00ba91.
+Deno type/lint checks, shell syntax, diff checks and progress validation pass.
+Focused cargo clippy -p ersatzrs-infra --lib --tests -- -D warnings passes.
+The POSIX installed_yt_dlp_candidate_adaptive_unchanged_then_changed host test
+passes against this exact package (nextest b04a34ac-2dad-4560-a100-ec08db7755e2).
+It copies the candidate into a throwaway installation, validates the manifest
+predicate projected into the Adaptive selector, runs real bounded invocation,
+and proves first/unchanged/changed results, no import or draft mutation on
+unchanged, one existing import job on change, and immutable installed bytes.
+Provider execution is synthetic; browser rendering was not exercised again.
+All fourteen focused host scheduler, bounded-contract, timeout and aborted
+process-group regressions pass (nextest fdd7200b-8c91-4fed-9bb3-27cd3480ee4e),
+including fixed cadences, cold start, backoff, provider pacing and no-reimport.
+'''
+resolution  = 'Official yt-dlp 0.10.2 supplies the accepted bounded-window probe through the existing AMM-L-01 scheduler. No scheduler, migration, fixed-cadence change or milestone restructuring was introduced. Integrated release/platform closeout remains AMM-N-03.'

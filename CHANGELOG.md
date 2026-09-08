@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Enable opt-in Adaptive refresh in yt-dlp package 0.10.2 through a bounded,
+  provider-neutral normalized-JSON probe. Matching source-bound validators avoid
+  imports; changed samples enter the existing refresh workflow. Checks sample
+  the first 50 entries, with a 12-second deadline and 1 MiB output caps;
+  changes outside that window require a full refresh/reconciliation.
+
 - Add advisory Health warnings for add-on-list disk usage, with editable
   thresholds of 25 GB per list and 250 GB combined by default. Zero disables
   each warning independently. Settings work with and without JavaScript;
