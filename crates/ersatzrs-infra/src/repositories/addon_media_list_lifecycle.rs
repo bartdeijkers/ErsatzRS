@@ -18,6 +18,7 @@ use ersatzrs_core::repositories::{
     AddonMediaListRevisionItem, AddonMediaListRevisionRestoreFence, AddonMediaListRevisionSnapshot,
     AddonMediaListRevisionSummary, AddonProcessedArtifactPolicy, AddonToolMaintenanceAttempt,
     CreateAddonMediaListLifecycleJob, RepositoryError, Result,
+    ADDON_LIST_TOTAL_DISK_WARNING_GB_DEFAULT, ADDON_LIST_TOTAL_DISK_WARNING_GB_KEY,
     PROCESSED_ARTIFACT_GLOBAL_BYTE_LIMIT_KEY, PROCESSED_ARTIFACT_MAX_CONCURRENCY_KEY,
     PROCESSED_ARTIFACT_MINIMUM_FREE_BYTES_KEY, PROCESSED_ARTIFACT_RETENTION_SECONDS_KEY,
 };
@@ -41,6 +42,66 @@ const TOOL_MAINTENANCE_HISTORY_LIMIT: i64 = 50;
 
 #[async_trait]
 impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
+    async fn disk_warning_gb(&self, list_id: Option<EntityId>) -> Result<u32> {
+        let value = if let Some(id) = list_id {
+            sqlx::query_scalar::<_, i64>(
+                r#"SELECT "DiskUsageWarningGb" FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(id)
+            .fetch_optional(&self.0)
+            .await
+            .repository()?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            })?
+            .to_string()
+        } else {
+            sqlx::query_scalar::<_, String>(
+                r#"SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?"#,
+            )
+            .bind(ADDON_LIST_TOTAL_DISK_WARNING_GB_KEY)
+            .fetch_optional(&self.0)
+            .await
+            .repository()?
+            .unwrap_or_else(|| ADDON_LIST_TOTAL_DISK_WARNING_GB_DEFAULT.to_string())
+        };
+        value.parse().map_err(|_| RepositoryError::Decode {
+            kind: "add-on list disk warning GB",
+            value,
+        })
+    }
+
+    async fn save_disk_warning_gb(&self, list_id: Option<EntityId>, warning_gb: u32) -> Result<()> {
+        if let Some(id) = list_id {
+            let result = sqlx::query(
+                r#"UPDATE "AddonMediaList" SET "DiskUsageWarningGb" = ? WHERE "Id" = ?"#,
+            )
+            .bind(i64::from(warning_gb))
+            .bind(id)
+            .execute(&self.0)
+            .await
+            .repository()?;
+            if result.rows_affected() == 0 {
+                return Err(RepositoryError::NotFound {
+                    kind: "add-on media list",
+                    id,
+                });
+            }
+        } else {
+            sqlx::query(
+                r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)
+                   ON CONFLICT("Key") DO UPDATE SET "Value" = excluded."Value""#,
+            )
+            .bind(ADDON_LIST_TOTAL_DISK_WARNING_GB_KEY)
+            .bind(warning_gb.to_string())
+            .execute(&self.0)
+            .await
+            .repository()?;
+        }
+        Ok(())
+    }
+
     async fn lifecycle_settings(
         &self,
         list_id: EntityId,

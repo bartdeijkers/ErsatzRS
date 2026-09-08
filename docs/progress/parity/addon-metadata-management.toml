@@ -58,7 +58,7 @@ UTC cutoff is visible and renewed on re-enabling; published playback stays
 frozen. Existing videos stream and enabled SponsorBlock applies in every mode.
 M-02 completes ADR 0052 manual primary/fallback captions, revision-pinned files
 and aligned MPEG-TS/transcoded HLS captions in both delivery modes. Its milestone
-owns acceptance evidence. M-03 and AMM-N await.
+owns evidence. M-03 completes disk warnings. AMM-N awaits.
 '''
 
 [[debt]]

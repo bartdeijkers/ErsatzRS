@@ -31,6 +31,45 @@ use crate::{
 };
 
 #[derive(Debug, Deserialize)]
+pub struct AddonMediaListDiskWarningForm {
+    #[serde(default)]
+    list_id: String,
+    #[serde(default)]
+    warning_gb: String,
+}
+
+/// Save advisory Health policy without touching media drafts or publication.
+pub async fn save_addon_media_list_disk_warning_form(
+    State(state): State<AppState>,
+    Form(input): Form<AddonMediaListDiskWarningForm>,
+) -> Redirect {
+    let list_id = if input.list_id.is_empty() {
+        None
+    } else {
+        match input.list_id.parse::<i64>() {
+            Ok(id) if id > 0 => Some(id),
+            _ => return Redirect::to("/media/addon-lists?disk_warning=error"),
+        }
+    };
+    let target = list_id.map_or_else(
+        || "/media/addon-lists".to_owned(),
+        |id| format!("/media/addon-lists/{id}"),
+    );
+    let Ok(warning_gb) = input.warning_gb.parse::<u32>() else {
+        return Redirect::to(&format!("{target}?disk_warning=error"));
+    };
+    let status = match state
+        .application
+        .save_addon_media_list_disk_warning_gb(list_id, warning_gb)
+        .await
+    {
+        Ok(()) => "saved",
+        Err(_) => "error",
+    };
+    Redirect::to(&format!("{target}?disk_warning={status}"))
+}
+
+#[derive(Debug, Deserialize)]
 pub struct AddonMediaListAddForm {
     #[serde(default)]
     delivery_mode: AddonMediaListDeliveryMode,
@@ -1065,6 +1104,19 @@ mod tests {
             parsed.presentation_kind,
             AddonMediaListPresentationKind::TelevisionShow
         );
+    }
+
+    #[test]
+    fn disk_warning_form_accepts_empty_combined_identity_and_zero() {
+        for body in ["list_id=&warning_gb=0", "warning_gb=0"] {
+            let parsed: AddonMediaListDiskWarningForm = serde_urlencoded::from_str(body).unwrap();
+            assert!(parsed.list_id.is_empty());
+            assert_eq!(parsed.warning_gb.parse::<u32>().unwrap(), 0);
+        }
+        let parsed: AddonMediaListDiskWarningForm =
+            serde_urlencoded::from_str("list_id=42&warning_gb=4294967295").unwrap();
+        assert_eq!(parsed.list_id, "42");
+        assert_eq!(parsed.warning_gb.parse::<u32>().unwrap(), u32::MAX);
     }
 
     #[test]

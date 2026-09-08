@@ -1,3 +1,4 @@
+mod addon_list_disk_usage;
 mod addon_media_list;
 mod addon_platform;
 mod artwork_cardinality;
@@ -36,6 +37,7 @@ mod vaapi_device;
 mod vaapi_driver;
 mod zero_duration;
 
+pub(super) use addon_list_disk_usage::AddonListDiskUsageHealthCheck;
 pub(super) use addon_media_list::AddonMediaListHealthCheck;
 pub(super) use addon_platform::AddonPlatformHealthCheck;
 pub(super) use artwork_cardinality::ArtworkCardinalityHealthCheck;

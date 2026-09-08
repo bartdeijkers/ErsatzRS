@@ -18,20 +18,20 @@ use crate::maintenance::{ProviderConnectivityResult, PROVIDER_CONNECTIVITY_KEY};
 mod checks;
 
 use checks::{
-    AddonMediaListHealthCheck, AddonPlatformHealthCheck, ArtworkCardinalityHealthCheck,
-    ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck, DolbyVisionHealthCheck,
-    DowngradeHealthCheck, DynamicTextGraphicsHealthCheck, EmptyScheduleHealthCheck,
-    EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck, FFmpegReportsHealthCheck,
-    FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck, FileNotFoundHealthCheck,
-    HardwareAccelerationHealthCheck, HardwareGraphHealthCheck, HlsDeliveryHealthCheck,
-    LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck, MirrorChannelHealthCheck,
-    MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck,
-    PlaybackDataAccessHealthCheck, ProviderConnectivityHealthCheck,
-    RemoteStreamAddonReadinessHealthCheck, RemoteStreamHealthCheck,
-    RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck, ScanRefreshStateHealthCheck,
-    SearchProjectionHealthCheck, SourceOrientationHealthCheck, SqliteConnectionDefaultsHealthCheck,
-    TsduckAvailabilityHealthCheck, UnavailableHealthCheck, VaapiDeviceHealthCheck,
-    VaapiDriverHealthCheck, ZeroDurationHealthCheck,
+    AddonListDiskUsageHealthCheck, AddonMediaListHealthCheck, AddonPlatformHealthCheck,
+    ArtworkCardinalityHealthCheck, ClassicPlayoutStateHealthCheck, DirtyMigrationHealthCheck,
+    DolbyVisionHealthCheck, DowngradeHealthCheck, DynamicTextGraphicsHealthCheck,
+    EmptyScheduleHealthCheck, EpisodeMetadataHealthCheck, FFmpegCapabilitiesHealthCheck,
+    FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck,
+    FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, HardwareGraphHealthCheck,
+    HlsDeliveryHealthCheck, LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck,
+    MirrorChannelHealthCheck, MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck,
+    PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
+    ProviderConnectivityHealthCheck, RemoteStreamAddonReadinessHealthCheck,
+    RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
+    ScanRefreshStateHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
+    SqliteConnectionDefaultsHealthCheck, TsduckAvailabilityHealthCheck, UnavailableHealthCheck,
+    VaapiDeviceHealthCheck, VaapiDriverHealthCheck, ZeroDurationHealthCheck,
 };
 
 /// `ConfigElement` key containing the latest health check result set as JSON.
@@ -55,7 +55,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 39] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 40] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -82,6 +82,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 39] = [
     "Remote Stream playlists",
     "Add-ons",
     "Add-on media lists",
+    "Add-on list disk usage",
     "File Not Found",
     "Unavailable",
     "Empty Schedule",
@@ -251,6 +252,7 @@ fn registered_health_checks(
         Box::new(RemoteStreamPlaylistHealthCheck::new(pool.clone())),
         Box::new(AddonPlatformHealthCheck::new(pool.clone())),
         Box::new(AddonMediaListHealthCheck::new(pool.clone())),
+        Box::new(AddonListDiskUsageHealthCheck::new(pool.clone())),
         Box::new(FileNotFoundHealthCheck::new(pool.clone())),
         Box::new(UnavailableHealthCheck::new(pool.clone())),
         Box::new(EmptyScheduleHealthCheck::new(pool.clone())),

@@ -1459,6 +1459,55 @@ pub fn AddonMediaListsPage() -> impl IntoView {
                 }))
             }}
         </Suspense>
+        <AddonListDiskWarningSettings list_id=None/>
+    }
+}
+
+/// Native Health settings stay outside media draft hydration and publication.
+#[component]
+fn AddonListDiskWarningSettings(list_id: Option<i64>) -> impl IntoView {
+    #[cfg(feature = "ssr")]
+    {
+        let state = expect_context::<crate::host::state::AppState>();
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(state.application.addon_media_list_disk_warning_gb(list_id))
+        });
+        let query = use_query_map();
+        let status = query.with_untracked(|params| params.get("disk_warning").unwrap_or_default());
+        let failed = result.is_err();
+        let saved = status == "saved";
+        let value = result.map(|value| value.to_string()).unwrap_or_default();
+        let label = tr(if list_id.is_some() {
+            TextKey::AddonListDiskWarningGb
+        } else {
+            TextKey::AddonListsCombinedDiskWarningGb
+        });
+        view! {
+            <section id="addon-list-disk-warning-settings" class=style::disk_warning_settings data-testid="addon-list-disk-warning-settings">
+                <div class=style::content>
+                    <h2>{tr(TextKey::AddonListDiskWarnings)}</h2>
+                    <form method="post" action="/api/addon-lists/disk-warning" class=style::disk_warning_form>
+                        <input type="hidden" name="list_id" value=list_id.map(|id| id.to_string()).unwrap_or_default()/>
+                        <label class=style::source_field>
+                            <span class=style::field_title>{label}</span>
+                            <input class=style::boxed_input type="number" name="warning_gb"
+                                min="0" max="4294967295" step="1" required
+                                value=value disabled=failed aria-describedby="addon-disk-warning-help"/>
+                        </label>
+                        <p id="addon-disk-warning-help">{tr(TextKey::AddonListDiskWarningHelp)}</p>
+                        <p role="alert" hidden=!(failed || status == "error")>{tr(TextKey::AddonListDiskWarningFailed)}</p>
+                        <p role="status" data-testid="addon-disk-warning-saved" hidden=!saved>{tr(TextKey::Saved)}</p>
+                        <button type="submit" class=style::btn_add disabled=failed>{tr(TextKey::Save)}</button>
+                    </form>
+                </div>
+            </section>
+        }.into_any()
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let _ = list_id;
+        ().into_any()
     }
 }
 
@@ -2717,6 +2766,7 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
                     initial_compare_revisions=compare_left.zip(compare_right)
                     initial_review_category=review_category
                 />
+                <AddonListDiskWarningSettings list_id=Some(id)/>
                 <super::addon_list_options::AddonListOptions list_id=id item_ids=Vec::new()/>
             }
             .into_any()
@@ -6212,6 +6262,7 @@ fn AddonMediaListEditorIsland(
                                     <small>{tr(TextKey::ChangeAddonHelp)}</small>
                                 </div>
                             </div>
+                            <a href="#addon-list-disk-warning-settings">{tr(TextKey::AddonListDiskWarnings)}</a>
                             <div class=style::editor_source_pair>
                                 <DeliveryModeSelect
                                     mode=delivery_mode

@@ -3449,8 +3449,8 @@ Reuse shared browser/access, durable jobs, artifact admission and revision
 binding; validate processed duration, safe cancellation/restart and actual
 prepared channel playback. No partial-file playback or silent cross-mode
 fallback. Preserve live playback with an explicit finite-only reason.
-Keep downloads bounded using existing admission limits; operator storage
-administration and full LRU management remain AMM-M-03. Show preparation
+Keep downloads bounded using existing admission limits; configurable disk-usage
+health warnings remain AMM-M-03 under its 2026-09-08 scope revision. Show preparation
 progress/failures without disrupting the last complete publication. Focused
 tests cover SponsorBlock enabled and disabled in all three choices, including
 both existing-streamed and new-downloaded cohorts in new-videos-only mode,
@@ -3697,26 +3697,57 @@ later-slice implementation was performed; integrated release proof remains N-03.
 [[milestone]]
 id         = 'amm-m-03'
 phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
-title      = 'Bound and expose processed-artifact storage'
-status     = 'Not started'
+title      = 'Warn about per-list and combined add-on-list disk usage'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-m-02']
 acceptance = '''
-Generic global/per-list byte ceilings, minimum free space, retention, and
-preparation concurrency are persisted and enforced before SponsorBlock process
-launch. The list and Add-ons pages expose effective budget and used, pinned,
-reclaimable, pending, and failed state with exact required/free/available disk
-blockers. Clear unused cache is restart-safe and LRU-evicts only unpinned
-completed artifacts; active jobs, retained revisions, and current/future
-playout remain pinned. Tests cover reservation races, low disk, cancellation,
-restart, cleanup idempotency, and prove transient artifacts never become Local
-library media or an unbounded permanent collection.
+Only configurable disk-usage health warnings are in scope. Persist a per-list
+warning threshold in each add-on list's settings and a combined-list threshold
+at a logical shared location on the add-on-lists settings surface. Health warns
+when actual used disk space reaches or exceeds either configured threshold,
+identifies the affected list or combined total, and reports usage and threshold
+without exposing private paths. These thresholds are advisory, never quotas.
+Tests prove persistence, per-list and combined accounting, threshold boundaries,
+and warning clearance on a subsequent health run after usage falls below the
+threshold. Settings are localized and usable with and without JavaScript.
+Seven-day retention, automatic deletion, LRU eviction, Clear unused cache,
+new admission controls, preparation concurrency controls and broader storage
+administration are explicitly excluded. Existing runtime safeguards are not
+changed by this slice. Defaults are 25 GB per list and 250 GB combined, using
+decimal GB. A value of zero independently disables the corresponding warning.
 '''
 evidence = '''
-Not started. ADR 0085 currently requires a bounded transient SponsorBlock cache
-but no persisted operator-visible quota, reservation, concurrency, retention,
-or safe reclamation contract exists.
+Scope narrowed by the maintainer on 2026-09-08 to disk-usage health warnings
+only; see the dated ADR 0085 amendment. The previous retention, reclamation,
+quota-administration and concurrency proposal is withdrawn, not deferred to
+another slice. Codex completed this slice locally on 2026-09-08 with the
+approved 25 GB per-list and 250 GB combined defaults, with zero disabling each
+warning independently. Existing policy persistence, artifact accounting and
+health infrastructure are reused where applicable. The native settings forms
+are independent of media drafts and work through the application boundary.
+The separate Health check counts owned file-content lengths and artwork upload
+payloads, not reservations or duplicated revision references. Allocation and
+SQLite page/WAL overhead and unattributable temporary files are excluded.
+Independent Astra review closed two P2s: preserve supported symlinks above
+trusted storage roots, and charge missing paths against the bounded measurement.
+No remaining P1/P2 was found. The focused infra/web nextest run passes all 32
+tests (run f348a689-dce2-43b0-9c4e-9fe9853518ad): thresholds, zero independence,
+accounting, removal recovery, migration/revision preservation, form decoding
+and all-language coverage. Hydration and architecture lint pass; three existing
+subtitle read transactions needed comment-only read-only annotations.
+Focused core/app/infra/web all-targets Clippy passes with warnings denied; an
+existing ignored manual fixture needed a narrowly scoped environment-read lint
+annotation, with no runtime change. Matched Chromium/Firefox hydrated/no-JS
+browser proof passes all four cases in addon-list-disk-warnings.spec.ts:
+defaults, save/reload, independent disable, list isolation, invalid input and
+unchanged revisions. Evidence is in
+test-results/amm-m-03-browser-accepted/playwright-results.json; inspected
+390/1440-pixel captures show compact controls without clipping. The initial
+browser attempts exposed only a missing synthetic manifest capability and a
+Firefox navigation-abort collector mismatch; both test corrections are included.
+No CI, push, full closeout or later-slice work has been run.
 '''
 
 [[milestone]]

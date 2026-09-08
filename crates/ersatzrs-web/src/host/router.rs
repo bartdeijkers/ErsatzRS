@@ -318,6 +318,11 @@ pub fn build_app(app_state: AppState) -> Router {
             post(api::addon_media_lists::add_addon_media_list_form),
         )
         .route(
+            "/api/addon-lists/disk-warning",
+            post(api::addon_media_lists::save_addon_media_list_disk_warning_form)
+                .layer(DefaultBodyLimit::max(4096)),
+        )
+        .route(
             "/api/addon-lists/options/test-access",
             post(api::addon_list_options::test_access).layer(DefaultBodyLimit::max(4096)),
         )

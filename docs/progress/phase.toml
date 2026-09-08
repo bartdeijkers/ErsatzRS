@@ -107,7 +107,15 @@ scanner/consumer tests, lossless migration checks, focused Clippy and runtime
 smoke. The package-local stock yt-dlp postprocessor correction is integrated;
 no installed executable replacement, runtime fork or upstream submission was
 made. Native transfer, merging and SponsorBlock media processing remain
-yt-dlp-owned. M-03 is the next unstarted slice; do not start it in this turn.
+yt-dlp-owned. M-03 is Complete locally: configurable per-list and combined-list
+disk-usage Health warnings default to 25 GB and 250 GB respectively (decimal GB).
+Zero independently disables each warning. Its owning milestone records 32 native
+tests, four matched Chromium/Firefox hydrated/no-JS cases, focused Clippy and
+static checks, with no remaining P1/P2 after independent Astra review.
+Seven-day retention, cleanup, eviction, new admission and concurrency controls
+are withdrawn, not deferred to N-03; existing runtime safeguards are unchanged.
+Next concrete action: plan AMM-N-01 read-only and request approval before
+implementation. Do not pull later-slice work into the M-03 checkpoint.
 HLS Direct expansion is excluded; language changes may reprepare
 downloaded media. No CI, push, full closeout or later-slice implementation.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native

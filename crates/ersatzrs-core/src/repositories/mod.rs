@@ -51,9 +51,10 @@ pub use addon_media_list_lifecycle::{
     AddonMediaListRevisionDiff, AddonMediaListRevisionFile, AddonMediaListRevisionFileBlob,
     AddonMediaListRevisionItem, AddonMediaListRevisionRestoreFence, AddonMediaListRevisionSnapshot,
     AddonMediaListRevisionSummary, AddonProcessedArtifactPolicy, AddonToolMaintenanceAttempt,
-    CreateAddonMediaListLifecycleJob, PROCESSED_ARTIFACT_GLOBAL_BYTE_LIMIT_KEY,
-    PROCESSED_ARTIFACT_MAX_CONCURRENCY_KEY, PROCESSED_ARTIFACT_MINIMUM_FREE_BYTES_KEY,
-    PROCESSED_ARTIFACT_RETENTION_SECONDS_KEY,
+    CreateAddonMediaListLifecycleJob, ADDON_LIST_DISK_WARNING_GB_BYTES,
+    ADDON_LIST_TOTAL_DISK_WARNING_GB_DEFAULT, ADDON_LIST_TOTAL_DISK_WARNING_GB_KEY,
+    PROCESSED_ARTIFACT_GLOBAL_BYTE_LIMIT_KEY, PROCESSED_ARTIFACT_MAX_CONCURRENCY_KEY,
+    PROCESSED_ARTIFACT_MINIMUM_FREE_BYTES_KEY, PROCESSED_ARTIFACT_RETENTION_SECONDS_KEY,
 };
 pub use addon_media_list_source_probe::{
     AddonMediaListSourceProbe, AddonMediaListSourceProbeOutcome,

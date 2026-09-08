@@ -120,6 +120,7 @@ pub(crate) async fn requested_languages_in_tx(tx: &mut Transaction<'_, Db>) -> R
 }
 
 pub(crate) async fn requested_languages(pool: &DbPool) -> Result<Vec<String>> {
+    // Read-only transaction: read primary and fallback language settings consistently.
     let mut tx = pool.begin().await.repository()?;
     let languages = requested_languages_in_tx(&mut tx).await?;
     tx.commit().await.repository()?;

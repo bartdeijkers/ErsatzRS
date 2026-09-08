@@ -7,7 +7,7 @@ splits former M-01 into M-01A (streaming, reserved and in progress) and M-01B
 (optional list-level Download ahead modes, not started). Streaming must not
 cause user-visible buffering at cuts. Preparation groundwork is preserved for
 M-01B, not scheduled for deletion. Delivery order is M-01A, M-01B, M-02, M-03;
-M-03 still owns storage administration, not the initial bounded admission.
+M-03 owns only disk-usage health warnings under the 2026-09-08 scope revision.
 
 Execution plan registered on 2026-09-01, broadened on 2026-09-02, and amended
 on 2026-09-04 with opt-in adaptive refresh scheduling. It
@@ -131,7 +131,7 @@ It does not:
 | `/search?query=addon_list:{id}` | Browse published members | Every Remote Stream card links to its canonical details route. |
 | `/media/remote/streams/:id` | Understand and use a stream | Show metadata, artwork, duration/liveness, subtitle tracks, owning list, published options, availability, playback health, and channel/watch actions. |
 | `/settings/ffmpeg` | Choose subtitle language intent | Existing default/fallback values remain canonical; the add-on-list page links here when neither is set. |
-| `/settings/addons/:id` | Understand yt-dlp maintenance and storage | Show storage budget/use, update history, before/after version/digest, rollback state, next daily attempt, typed outcome, Check for update now, and Clear unused cache. |
+| `/settings/addons/:id` | Understand yt-dlp maintenance | Show update history, before/after version/digest, rollback state, next daily attempt, typed outcome, and Check for update now. M-03 warning thresholds belong with add-on-list settings, not tool maintenance. |
 
 ### Publication action state machine
 
@@ -485,21 +485,15 @@ reserve bounded disk before launch, use the add-on process group/Windows Job
 Object, publish by atomic rename, and release partial files after failure.
 Health reports aggregate ready/pending/failed bytes and items, never source
 URLs or paths. Published artifacts stay pinned while a current/future playout
-can reference their revision and are then garbage-collected.
+can reference their revision. Existing ownership and admission safeguards stay
+unchanged; M-03 does not add garbage collection or automatic deletion.
 
-Persist generic global and per-list processed-artifact byte ceilings, a
-minimum-free-space floor, retention duration, and maximum preparation
-concurrency. Admission reserves estimated bytes before process launch, refuses
-work before breaching either ceiling or the floor, and reports required,
-reserved, free, pinned, and reclaimable byte counts. Least-recently-used
-cleanup may remove only unpinned completed artifacts; current/future playout,
-retained revisions, and active jobs pin their exact keys. **Clear unused
-cache** runs through the same ownership checks and is idempotent across restart.
-
-The list and Add-ons pages show the effective budget, used/pinned/reclaimable
-bytes, preparing/failed item counts, last collection, and exact disk blocker.
-No cache setting or cleanup action may turn the transient processed copy into a
-Local-library item or permanent media collection.
+The 2026-09-08 maintainer decision replaces the proposed storage administration
+with disk-usage health warnings only. Configure each list's warning threshold
+in its settings and the combined-list threshold alongside shared add-on-list
+settings. Reaching either threshold warns in Health without blocking work,
+changing playback or deleting files. See AMM-M-03 below and the dated ADR 0085
+amendment; retention, LRU, Clear unused cache and concurrency UI are withdrawn.
 
 The UI states that checked removal prepares a temporary processed copy and may
 delay publication/use disk. Live and unknown-liveness rows cannot select it;
@@ -887,7 +881,7 @@ provider adapters or universal download support are required in this slice.
 Freeze effective item delivery choices at publication; saving a new
 mode leaves the current publication intact. Do not silently fall back between
 streaming and full download. Reuse preserved jobs, bounded admission, artifact
-pins, recovery and playback binding. M-03 owns broader storage administration.
+pins, recovery and playback binding. M-03 owns disk-usage health warnings only.
 Plan implementation details when M-01A is complete; no additional service,
 second preparation state machine or speculative cache framework is requested.
 
@@ -912,7 +906,7 @@ Implementation sequence approved on 2026-09-07:
    visible cutoff preservation/reset. Re-enable both deferred download E2Es with
    their existing process cleanup, restart, pinning and decoded-playback assertions.
 7. Review and fix P1/P2, record evidence and commit locally. No CI or full
-   closeout; M-02 subtitles and M-03 storage administration remain excluded.
+   closeout; M-02 subtitles and M-03 disk-usage warnings remain excluded.
 
 Source/visual/hydration map: ADR 0087 owns this extension; no corresponding
 ErsatzTV delivery-mode editor exists. Extend `media/addon_lists.rs` and its
@@ -990,11 +984,11 @@ Implementation plan (approved choices, 2026-09-04; delivery remains in progress)
   resolution to the owning list/item and published revision, not a URL lookup;
   prepared files remain Remote Stream artifacts, never permanent Local media.
 - Approved initial admission limits: one preparation at a time, 20 GiB global,
-  10 GiB per list, 2 GiB maximum prepared file, 2 GiB free-space floor, and
-  seven-day retention for unpinned files. Oversized/full-cache work remains
-  blocked with a useful reason. Keep the policy foundation reusable by M-03;
-  storage administration, usage breakdowns, explicit cleanup and full LRU
-  management remain M-03 work. Never evict revision/playout-pinned files.
+  10 GiB per list, 2 GiB maximum prepared file and 2 GiB free-space floor.
+  The proposed seven-day retention was withdrawn on 2026-09-08. Existing
+  admission limits remain unchanged; M-03 adds only disk-usage health warnings,
+  not storage administration, explicit cleanup, LRU or concurrency controls.
+  Never evict revision/playout-pinned files.
 - Verify schema compatibility and inheritance; revision-fenced preview/apply/
   undo; draft/published isolation; typed access expiry/redaction; finite/live
   behavior; quota refusal; cancellation/restart and stale completion; and a
@@ -1057,15 +1051,49 @@ provider work, revision-bound files/Subtitle rows, and recovery reconciliation.
   no auto-caption import, item/channel override precedence, MPEG-TS, HLS, and
   real channel viewing.
 
-### AMM-M-03 — Bound processed-artifact storage
+### AMM-M-03 — Per-list and combined disk-usage health warnings
 
-- Persist global/per-list byte ceilings, minimum free space, retention, and
-  preparation concurrency; reserve before launch and report exact disk blockers.
-- Expose used, pinned, reclaimable, pending, and failed state plus Clear unused
-  cache; use LRU only for unpinned artifacts and retain every active/future
-  playout and retained-revision reference.
-- Prove quota races, low disk, cancellation, restart, cleanup idempotency, and
-  that no temporary SponsorBlock artifact becomes permanent Local media.
+Scope revised by the maintainer on 2026-09-08. Only advisory warnings belong
+to this slice; the owning milestone defines acceptance.
+
+1. Reuse list settings and Health infrastructure for persisted per-list and
+   combined-list warning thresholds. Defaults are 25 GB per list and 250 GB
+   combined (decimal GB); zero independently disables the corresponding warning.
+2. Measure used disk space per list and across lists; do not substitute reserved
+   capacity for usage. Report Health warnings at or above configured thresholds,
+   with usage/threshold values and no private paths.
+3. Place the per-list control in its settings and the combined control beside
+   shared add-on-list settings. Keep localization and native form fallbacks.
+4. Verify persistence, accounting, exact threshold boundaries, warning recovery
+   and focused browser behavior. Review/fix P1/P2, update progress and commit
+   locally without CI or full closeout.
+
+No seven-day retention, eviction, automatic deletion, Clear unused cache,
+quota administration, concurrency changes or new cache service. Existing
+admission, ownership, recovery and playback behavior remain unchanged.
+
+#### M-03 source and hydration map
+
+- Upstream Health result/registration pattern:
+  `$ERSATZTV_SRC/ErsatzTV.Infrastructure/Health/HealthCheckService.cs` and
+  `Checks/FFmpegReportsHealthCheck.cs`. List-specific disk thresholds have no
+  upstream form/validator counterpart; this is the approved ADR 0085 extension.
+- Persistence: `AddonMediaList.DiskUsageWarningGb` and the combined
+  `ConfigElement` setting, through the existing lifecycle repository and
+  `ApplicationServices`. Saves affect neither media revisions nor admission.
+- Health: a separate check in `ersatzrs-infra::health` measures list-owned
+  file-content bytes and uploaded artwork payloads, not reserved capacity.
+  References to the same stored path count once; separate materialized copies
+  consume space independently. Filesystem allocation, database page/WAL overhead
+  and anonymous temporary files without list ownership are not attributable.
+- Routes: `/media/addon-lists` and `/media/addon-lists/:id`, whose existing
+  `AddonMediaListsPage` / `AddonMediaListEditorPage` SSR wrappers retain their
+  islands. A small native settings form sits outside the media draft form;
+  the same POST path serves hydrated and no-JS sessions.
+- Reuse current form CSS, labels and buttons; no shared primitive or layout
+  redesign. Localize controls, helper text and Health messages in all cultures.
+- Browser proof: `tests/e2e/addon-list-disk-warnings.spec.ts`, with save/reload,
+  zero disabling, independent list/combined settings and unchanged revisions.
 
 ## AMM-N — yt-dlp maintenance and integrated closeout
 
@@ -1142,7 +1170,7 @@ once those conditions hold; no second release-approval prompt is required.
 | Non-destructive provider removal/reordering reconciliation | `amm-l-04` |
 | Review-by-default and additions-only automatic publication | `amm-l-05` |
 | Inherited/bulk item options and browser access preflight | `amm-m-01a` |
-| Processed-artifact disk budgets and safe reclamation | `amm-m-03` |
+| Per-list and combined disk-usage health warnings | `amm-m-03` |
 | Validated yt-dlp update rollback and history | `amm-n-02`, `amm-n-03` |
 | Dialog focus containment and accessible table sorting | `amm-k-04` |
 
@@ -1168,7 +1196,7 @@ complete only when all of the following exist:
 - matched SSR/WASM hydration and localization completeness;
 - actual subtitle selection and SponsorBlock-removed channel playback, not
   merely command construction;
-- low-disk/quota/LRU/pin acceptance plus update validation, atomic rollback,
+- existing admission/pin regressions, disk-usage health warnings, update validation, atomic rollback,
   quarantine, and bounded history; and
 - packaged Windows dogfood reproducing and clearing the original overlap
   scenario entirely through the admin UI.

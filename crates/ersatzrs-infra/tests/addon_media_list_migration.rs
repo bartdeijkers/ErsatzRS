@@ -1,6 +1,47 @@
 use sqlx::{sqlite::SqlitePoolOptions, Executor, Row, SqlitePool};
 
 #[tokio::test]
+async fn disk_warning_migration_defaults_existing_lists_without_revising_them() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    pool.execute("PRAGMA foreign_keys = ON").await.unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    let previous = sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version < 202_609_080_900)
+            .cloned()
+            .collect(),
+    );
+    previous.run(&pool).await.unwrap();
+    seed_legacy_lifecycle_rows(&pool).await;
+    migrations.run(&pool).await.unwrap();
+    let row: (i64, i64, i64) = sqlx::query_as(
+        r#"SELECT "DiskUsageWarningGb", "DraftRevision", "PublishedRevision"
+           FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row, (25, 7, 5));
+    pool.execute(r#"UPDATE "AddonMediaList" SET "DiskUsageWarningGb" = 0 WHERE "Id" = 1"#)
+        .await
+        .unwrap();
+    for invalid in [-1_i64, i64::from(u32::MAX) + 1] {
+        assert!(sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "DiskUsageWarningGb" = ? WHERE "Id" = 1"#
+        )
+        .bind(invalid)
+        .execute(&pool)
+        .await
+        .is_err());
+    }
+}
+
+#[tokio::test]
 async fn lifecycle_foundation_backfills_only_truthful_legacy_state() {
     const LIFECYCLE_FOUNDATION_VERSION: i64 = 202_609_041_500;
     let pool = SqlitePoolOptions::new()

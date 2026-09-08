@@ -28,6 +28,7 @@ pub(crate) async fn requested_preparation_languages(
     pool: &DbPool,
     list_id: i64,
 ) -> Result<Vec<String>> {
+    // Read-only transaction: observe configured languages and provider capabilities together.
     let mut tx = pool.begin().await.repository()?;
     let languages = requested_preparation_languages_in_tx(&mut tx, list_id).await?;
     tx.commit().await.repository()?;
@@ -83,6 +84,7 @@ pub(crate) async fn subtitle_requirements(
     {
         return Ok(Vec::new());
     }
+    // Read-only transaction: load the saved delivery policy and its item cohorts.
     let mut tx = pool.begin().await.repository()?;
     let deliveries =
         crate::addon_media_list_delivery::load_item_deliveries_in_tx(&mut tx, list_id).await?;

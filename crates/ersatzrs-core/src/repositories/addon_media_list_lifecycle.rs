@@ -18,6 +18,13 @@ use super::Result;
 
 pub type AddonMediaListOptionValues = BTreeMap<String, AddonMediaListOptionValue>;
 
+/// Decimal bytes per GB for advisory disk-usage settings (not admission quotas).
+pub const ADDON_LIST_DISK_WARNING_GB_BYTES: u64 = 1_000_000_000;
+/// Combined-list advisory warning setting; an explicit zero disables it.
+pub const ADDON_LIST_TOTAL_DISK_WARNING_GB_KEY: &str = "addons.media_lists.disk_warning_gb";
+/// Default combined-list disk-usage warning in decimal GB.
+pub const ADDON_LIST_TOTAL_DISK_WARNING_GB_DEFAULT: u32 = 250;
+
 /// Minimal current item identity and liveness needed to edit sparse options.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddonMediaListOptionItem {
@@ -443,6 +450,13 @@ pub struct AddonToolMaintenanceAttempt {
 /// Storage-only AMM-K foundation. Later milestones own execution and scheduling.
 #[async_trait]
 pub trait AddonMediaListLifecycleRepository: Send + Sync {
+    /// Read an independent advisory threshold in decimal GB; `None` selects
+    /// the combined-list setting and zero disables that warning.
+    async fn disk_warning_gb(&self, list_id: Option<EntityId>) -> Result<u32>;
+
+    /// Save only the advisory setting, without changing media drafts or quotas.
+    async fn save_disk_warning_gb(&self, list_id: Option<EntityId>, warning_gb: u32) -> Result<()>;
+
     async fn lifecycle_settings(
         &self,
         list_id: EntityId,

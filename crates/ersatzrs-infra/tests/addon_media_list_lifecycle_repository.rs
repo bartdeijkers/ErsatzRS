@@ -2325,6 +2325,52 @@ async fn seed_list(pool: &sqlx::SqlitePool) {
     .unwrap();
 }
 
+#[tokio::test]
+async fn disk_warning_settings_persist_zero_independently_without_media_or_quota_changes() {
+    let pool = common::test_db().await;
+    seed_list(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "AddonMediaList" ("Id", "AddonId", "ProviderId", "SourceUrl", "Name")
+           VALUES (2, 'org.example.lifecycle', 'second-list', 'https://example.invalid/second', 'Second');
+           UPDATE "AddonMediaList" SET "DraftRevision" = 7, "PublishedRevision" = 3,
+               "ProcessedArtifactByteLimit" = 1234 WHERE "Id" = 1;"#,
+    ).await.unwrap();
+    let repo = make_repositories(pool.clone()).addon_media_lists;
+    assert_eq!(repo.disk_warning_gb(Some(1)).await.unwrap(), 25);
+    assert_eq!(repo.disk_warning_gb(None).await.unwrap(), 250);
+    let policy = repo.processed_artifact_policy().await.unwrap();
+    repo.save_disk_warning_gb(Some(1), 0).await.unwrap();
+    assert_eq!(repo.disk_warning_gb(None).await.unwrap(), 250);
+    repo.save_disk_warning_gb(None, 0).await.unwrap();
+    repo.save_disk_warning_gb(Some(1), 37).await.unwrap();
+    // Recreate the repository: no process-local defaults override stored zero.
+    let repo = make_repositories(pool.clone()).addon_media_lists;
+    assert_eq!(repo.disk_warning_gb(Some(1)).await.unwrap(), 37);
+    assert_eq!(repo.disk_warning_gb(Some(2)).await.unwrap(), 25);
+    assert_eq!(repo.disk_warning_gb(None).await.unwrap(), 0);
+    repo.save_disk_warning_gb(None, 450).await.unwrap();
+    repo.save_disk_warning_gb(Some(1), 0).await.unwrap();
+    assert_eq!(repo.disk_warning_gb(Some(1)).await.unwrap(), 0);
+    assert_eq!(repo.disk_warning_gb(None).await.unwrap(), 450);
+    assert_eq!(repo.processed_artifact_policy().await.unwrap(), policy);
+    let unchanged: (i64, i64, i64) = sqlx::query_as(
+        r#"SELECT "DraftRevision", "PublishedRevision", "ProcessedArtifactByteLimit"
+           FROM "AddonMediaList" WHERE "Id" = 1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(unchanged, (7, 3, 1234));
+    assert!(matches!(
+        repo.disk_warning_gb(Some(999)).await,
+        Err(RepositoryError::NotFound { .. })
+    ));
+    assert!(matches!(
+        repo.save_disk_warning_gb(Some(999), 0).await,
+        Err(RepositoryError::NotFound { .. })
+    ));
+}
+
 fn fixed_time() -> chrono::DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 9, 4, 12, 0, 0).unwrap()
 }

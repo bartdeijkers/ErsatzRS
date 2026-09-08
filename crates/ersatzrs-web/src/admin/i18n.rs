@@ -1188,6 +1188,17 @@ pub enum TextKey {
     AddonMediaListSaveFailed,
     AddonMediaListSaved,
     AddonMediaLists,
+    AddonListDiskWarnings,
+    AddonListDiskWarningGb,
+    AddonListsCombinedDiskWarningGb,
+    AddonListDiskWarningHelp,
+    AddonListDiskWarningFailed,
+    AddonListDiskUsageTitle,
+    AddonListDiskUsageBrief,
+    AddonListDiskUsageUnavailable,
+    AddonListDiskUsageUnavailableBrief,
+    AddonListDiskUsageLine,
+    AddonListsCombinedDiskUsageLine,
     AddonMediaListUrl,
     AddonMediaListFolder,
     AddonMediaListFolderHelp,
@@ -2987,6 +2998,17 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonMediaListSaveFailed,
     TextKey::AddonMediaListSaved,
     TextKey::AddonMediaLists,
+    TextKey::AddonListDiskWarnings,
+    TextKey::AddonListDiskWarningGb,
+    TextKey::AddonListsCombinedDiskWarningGb,
+    TextKey::AddonListDiskWarningHelp,
+    TextKey::AddonListDiskWarningFailed,
+    TextKey::AddonListDiskUsageTitle,
+    TextKey::AddonListDiskUsageBrief,
+    TextKey::AddonListDiskUsageUnavailable,
+    TextKey::AddonListDiskUsageUnavailableBrief,
+    TextKey::AddonListDiskUsageLine,
+    TextKey::AddonListsCombinedDiskUsageLine,
     TextKey::AddonMediaListUrl,
     TextKey::AddonMediaListFolder,
     TextKey::AddonMediaListFolderHelp,
@@ -4138,12 +4160,50 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
         HLS_LIVE_DELIVERY_TITLE => text(language, TextKey::HlsLiveDelivery).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
+        "Add-on list disk usage" => text(language, TextKey::AddonListDiskUsageTitle).to_owned(),
         _ => title.to_owned(),
     }
 }
 
 pub fn health_check_message(title: &str, message: &str, brief_message: &str) -> String {
     health_check_message_text(use_i18n(), title, message, brief_message)
+}
+
+fn addon_list_disk_usage_line(language: UiLanguage, line: &str) -> Option<String> {
+    if line == "Add-on list disk usage could not be measured completely. Check storage access and retry the health check." {
+        return Some(text(language, TextKey::AddonListDiskUsageUnavailable).to_owned());
+    }
+    if line == "Add-on list disk usage could not be measured." {
+        return Some(text(language, TextKey::AddonListDiskUsageUnavailableBrief).to_owned());
+    }
+    let (scope, usage) = line.split_once(": ")?;
+    let (used, limit) = usage
+        .strip_suffix(" GB.")?
+        .split_once(" GB used; warning at ")?;
+    // Only the persisted check's numeric wire shape is interpolated. Unknown
+    // future diagnostic text retains the same untranslated fallback as other checks.
+    let (whole, fraction) = used.split_once('.')?;
+    whole.parse::<u64>().ok()?;
+    if fraction.len() != 3 || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    limit.parse::<u32>().ok()?;
+    let (key, id) = if scope == "Combined" {
+        (TextKey::AddonListsCombinedDiskUsageLine, None)
+    } else {
+        let id = scope.strip_prefix("List #")?.parse::<i64>().ok()?;
+        if id <= 0 {
+            return None;
+        }
+        (TextKey::AddonListDiskUsageLine, Some(id))
+    };
+    let localized = text(language, key)
+        .replace("{used}", used)
+        .replace("{limit}", limit);
+    Some(id.map_or_else(
+        || localized.clone(),
+        |id| localized.replace("{id}", &id.to_string()),
+    ))
 }
 
 pub fn health_check_message_text(
@@ -4157,6 +4217,18 @@ pub fn health_check_message_text(
     } else {
         message
     };
+    if title == "Add-on list disk usage" {
+        if displayed_message == "Add-on list disk usage warning" {
+            return text(language, TextKey::AddonListDiskUsageBrief).to_owned();
+        }
+        if let Some(lines) = displayed_message
+            .lines()
+            .map(|line| addon_list_disk_usage_line(language, line))
+            .collect::<Option<Vec<_>>>()
+        {
+            return lines.join("\n");
+        }
+    }
     if title == "Add-on media lists" && displayed_message == "Automatic publication needs review" {
         return text(language, TextKey::AutoPublicationHeld).to_owned();
     }
@@ -4728,6 +4800,49 @@ mod tests {
             assert_eq!(localized, text(language, TextKey::AutoPublicationHeld));
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(localized, "Automatic publication needs review");
+            }
+        }
+    }
+
+    #[test]
+    fn addon_list_disk_usage_health_is_localized_for_every_language() {
+        let title = "Add-on list disk usage";
+        let message = "List #1: 25.000 GB used; warning at 25 GB.\nCombined: 250.000 GB used; warning at 250 GB.";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for (diagnostic, key) in [
+                ("Add-on list disk usage could not be measured completely. Check storage access and retry the health check.", TextKey::AddonListDiskUsageUnavailable),
+                ("Add-on list disk usage could not be measured.", TextKey::AddonListDiskUsageUnavailableBrief),
+            ] {
+                for (full, brief) in [(diagnostic, ""), ("", diagnostic)] {
+                    assert_eq!(health_check_message_text(language, title, full, brief), text(language, key));
+                }
+            }
+            assert_eq!(
+                health_check_title_text(language, title),
+                text(language, TextKey::AddonListDiskUsageTitle)
+            );
+            let localized = health_check_message_text(language, title, message, "");
+            assert_eq!(localized.lines().count(), 2);
+            assert!(localized.contains("25.000"));
+            assert!(localized.contains("250.000"));
+            assert!(!localized.contains('{'));
+            assert_eq!(
+                health_check_message_text(language, title, "", "Add-on list disk usage warning"),
+                text(language, TextKey::AddonListDiskUsageBrief)
+            );
+            if language != UiLanguage::English {
+                assert_ne!(localized, message);
+            }
+            for unknown in [
+                "List #x: 25.000 GB used; warning at 25 GB.",
+                "Combined: NaN GB used; warning at 250 GB.",
+                "future diagnostic",
+            ] {
+                assert_eq!(
+                    health_check_message_text(language, title, unknown, ""),
+                    unknown
+                );
             }
         }
     }

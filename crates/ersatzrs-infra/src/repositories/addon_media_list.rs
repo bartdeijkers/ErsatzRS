@@ -179,6 +179,11 @@ struct PublicationFence<'a> {
 }
 
 impl SqliteAddonMediaListRepository {
+    /// Resolve the existing database-owned retained-file store without creating it.
+    pub(crate) async fn revision_disk_storage(&self) -> Result<(PathBuf, String)> {
+        revision_blob_storage(&self.0).await
+    }
+
     /// Read the exact playback selections owned by an active publication.
     /// Legacy journals without selections return empty maps.
     ///

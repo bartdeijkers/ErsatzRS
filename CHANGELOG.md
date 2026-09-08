@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Add advisory Health warnings for add-on-list disk usage, with editable
+  thresholds of 25 GB per list and 250 GB combined by default. Zero disables
+  each warning independently. Settings work with and without JavaScript;
+  warnings count list-owned file sizes and uploaded artwork without changing
+  download admission, deleting files or introducing retention policies.
+
 - Acquire human-authored yt-dlp subtitles only for the configured global primary
   and fallback languages, without automatic captions. Caption artifacts use the
   existing bounded file worker and are bound to publication revisions; streaming

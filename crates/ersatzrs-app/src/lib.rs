@@ -427,6 +427,29 @@ impl ApplicationServices {
             .await
     }
 
+    /// Read a list's advisory disk warning, or the combined threshold for `None`.
+    pub async fn addon_media_list_disk_warning_gb(&self, list_id: Option<i64>) -> Result<u32> {
+        Ok(self
+            .ports
+            .addon_media_list_lifecycle()
+            .disk_warning_gb(list_id)
+            .await?)
+    }
+
+    /// Save an advisory threshold in decimal GB; zero disables only this warning.
+    /// This does not modify drafts, publication readiness or storage admission.
+    pub async fn save_addon_media_list_disk_warning_gb(
+        &self,
+        list_id: Option<i64>,
+        warning_gb: u32,
+    ) -> Result<()> {
+        Ok(self
+            .ports
+            .addon_media_list_lifecycle()
+            .save_disk_warning_gb(list_id, warning_gb)
+            .await?)
+    }
+
     /// Apply bounded retention to completed publication event streams.
     pub async fn prune_addon_media_list_publication_history(&self) -> Result<u64> {
         Ok(self

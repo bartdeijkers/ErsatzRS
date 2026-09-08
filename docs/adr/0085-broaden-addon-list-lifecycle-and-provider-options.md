@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-09-01), amended (2026-09-04)
+Accepted (2026-09-01), amended (2026-09-04, 2026-09-08)
 
 The mandatory SponsorBlock processed-video preparation decision is superseded
 by [ADR 0087](0087-stream-sponsorblock-intervals-without-playback-underruns.md)
@@ -10,6 +10,13 @@ by [ADR 0087](0087-stream-sponsorblock-intervals-without-playback-underruns.md)
 Download ahead modes are AMM-M-01B. File-preparation requirements below apply
 only to those download paths, not the streaming default.
 Other lifecycle and provider-option decisions remain accepted.
+
+The 2026-09-08 maintainer amendment limits AMM-M-03 to configurable per-list
+and combined-list disk-usage health warnings. The proposed finite retention,
+LRU reclamation, Clear unused cache and quota/concurrency administration are
+withdrawn, not postponed to integrated closeout. Existing implemented admission
+and ownership safeguards remain unchanged. The owning AMM-M-03 milestone
+records warning settings and Health acceptance evidence.
 
 ## Implementation
 
@@ -277,17 +284,18 @@ finite media. Because yt-dlp applies removal to a video file, the package
 prepares a host-owned transient processed playback artifact rather than
 pretending the flag works on direct stdout. Preparation is durable, bounded by
 free-space and size policy, keyed by source fingerprint, options, and yt-dlp
-version, and garbage-collected after its cache lifetime. The artifact is not a
+version. The artifact is not a
 Local-library import or permanent media copy. Live items show the option as
 unavailable and continue through direct playback.
 
-The cache has explicit global and per-list byte ceilings, a minimum-free-space
-floor, bounded preparation concurrency, a finite retention time, and least-
-recently-used reclamation among unpinned entries. Current and known future
-playout references remain pinned. Admission reserves bytes before launch and
-fails with the required/free/available values when it cannot do so. Add-on
-Lists shows used, pinned, reclaimable, pending, and failed storage, and offers
-**Clear unused cache** without touching published or scheduled artifacts.
+Existing cache admission uses global/per-list byte ceilings, a minimum-free-space
+floor and bounded preparation. Current and known future playout references
+remain pinned. Under the 2026-09-08 amendment, M-03 adds only advisory Health
+warnings when per-list or combined-list used disk space reaches its configured
+threshold. Threshold controls belong at logical locations in add-on-list
+settings. They do not block work, trigger cleanup or alter playback. Finite
+retention, LRU eviction, Clear unused cache and broader storage administration
+are no longer requirements of this program.
 
 Changing either item option invalidates affected detail, subtitle, processed
 media, and playback readiness while preserving the last published revision.
