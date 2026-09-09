@@ -220,6 +220,10 @@ pub fn spawn_background_tasks(
             maintenance.pool.clone(),
             shutdown.clone(),
         )),
+        tokio::spawn(run_addon_tool_maintenance(
+            maintenance.pool.clone(),
+            shutdown.clone(),
+        )),
         tokio::spawn(crate::host::preparation_worker::supervise(
             maintenance.pool.clone(),
             shutdown.clone(),
@@ -298,6 +302,42 @@ async fn run_addon_media_list_imports(
             result = work => {
                 if let Err(error) = result {
                     tracing::warn!(error = %error, "add-on list import worker iteration failed");
+                }
+            }
+        }
+    }
+}
+
+async fn run_addon_tool_maintenance(pool: DbPool, shutdown: CancellationToken) {
+    let coordinator =
+        ersatzrs_infra::addon_tool_maintenance::AddonToolMaintenanceCoordinator::new(pool);
+    let mut interval = tokio::time::interval(std::time::Duration::from_mins(1));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            () = shutdown.cancelled() => break,
+            _ = interval.tick() => {}
+        }
+        if coordinator
+            .schedule_startup(chrono::Utc::now())
+            .await
+            .is_err()
+        {
+            tracing::warn!("add-on tool maintenance admission failed");
+            continue;
+        }
+        let (cancel, cancellation) = tokio::sync::oneshot::channel();
+        let work = coordinator.process_one(chrono::Utc::now(), cancellation);
+        tokio::pin!(work);
+        tokio::select! {
+            () = shutdown.cancelled() => {
+                let _ = cancel.send(());
+                let _ = work.await; // Preserve process-tree cleanup before host exit.
+                break;
+            }
+            result = &mut work => {
+                if result.is_err() {
+                    tracing::warn!("add-on tool maintenance iteration failed");
                 }
             }
         }

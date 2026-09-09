@@ -3,6 +3,7 @@ use ersatzrs_app::{
     AddonIconRead, AddonOverviewRead, AddonRepositoryRead, AddonRuntime, AddonRuntimeError,
     AddonSettingEdit, AddonSettingRead, AvailableAddonRead, InstalledAddonRead, SourceAddonRouting,
 };
+use ersatzrs_core::repositories::AddonMediaListLifecycleRepository;
 use ersatzrs_infra::addon_source_routing::{resolve_source_addon, ResolvedSourceAddon};
 use ersatzrs_infra::addons::{
     check_addon, disable_addon, enable_addon, ensure_addon_checkouts_folder,
@@ -21,11 +22,57 @@ pub struct NativeAddonRuntime {
     pool: DbPool,
 }
 
+fn safe_maintenance_version(value: Option<String>) -> Option<String> {
+    value.filter(|value| {
+        !value.is_empty()
+            && value.len() <= 128
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
+    })
+}
+
 impl NativeAddonRuntime {
     #[must_use]
     pub fn new(pool: DbPool) -> Self {
         Self { pool }
     }
+}
+
+async fn latest_tool_maintenance(
+    lifecycle: &dyn AddonMediaListLifecycleRepository,
+    addon_id: &str,
+    tool_keys: &[String],
+) -> Result<Vec<ersatzrs_app::ports::AddonToolMaintenanceRead>, AddonRuntimeError> {
+    let mut rows = Vec::new();
+    for tool_key in tool_keys {
+        if let Some(attempt) = lifecycle
+            .tool_maintenance_history(addon_id, tool_key)
+            .await
+            .map_err(runtime_error)?
+            .into_iter()
+            .next()
+        {
+            rows.push(ersatzrs_app::ports::AddonToolMaintenanceRead {
+                tool_key: tool_key.clone(),
+                state: attempt.state,
+                outcome: attempt.outcome,
+                diagnostic_code: attempt.diagnostic_code.map(|code| match code.as_str() {
+                    "unsupported_installation"
+                    | "update_failed"
+                    | "version_probe_failed"
+                    | "tool_unavailable"
+                    | "tool-busy"
+                    | "tool-cleanup-required" => code,
+                    _ => "update_failed".to_owned(),
+                }),
+                before_version: safe_maintenance_version(attempt.before_version),
+                after_version: safe_maintenance_version(attempt.after_version),
+                updated_at: attempt.updated_at.to_rfc3339(),
+            });
+        }
+    }
+    Ok(rows)
 }
 
 #[async_trait]
@@ -234,7 +281,16 @@ impl AddonRuntime for NativeAddonRuntime {
             .map_err(runtime_error)?;
             let is_legacy = value.source_id.is_none() && value.repository_id.is_some();
             let provenance_id = value.source_id.clone().or(value.repository_id);
+            let lifecycle =
+                ersatzrs_infra::repositories::SqliteAddonMediaListRepository(self.pool.clone());
+            let tool_maintenance = latest_tool_maintenance(
+                &lifecycle,
+                &value.addon_id,
+                &manifest.permissions.tool_update,
+            )
+            .await?;
             installed.push(InstalledAddonRead {
+                tool_maintenance,
                 icon_url: manifest
                     .icon
                     .as_ref()

@@ -355,6 +355,7 @@ mod tests {
     #[tokio::test]
     async fn prepared_input_rejects_cancelled_expired_and_oversized_requests_before_spawn() {
         let command = RemoteStreamCommand {
+            tool_paths: Vec::new(),
             program: "nonexistent-prepared-producer".into(),
             args: Vec::new(),
             working_directory: PathBuf::from("."),
@@ -404,6 +405,7 @@ mod tests {
     fn commands(script: &str) -> (RemoteStreamCommand, FfmpegCommand) {
         (
             RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "sh".into(),
                 args: vec!["-c".into(), script.into()],
                 working_directory: PathBuf::from("."),

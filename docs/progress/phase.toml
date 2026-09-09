@@ -114,8 +114,14 @@ tests, four matched Chromium/Firefox hydrated/no-JS cases, focused Clippy and
 static checks, with no remaining P1/P2 after independent Astra review.
 Seven-day retention, cleanup, eviction, new admission and concurrency controls
 are withdrawn, not deferred to N-03; existing runtime safeguards are unchanged.
-Next concrete action: plan AMM-N-01 read-only and request approval before
-implementation. Do not pull later-slice work into the M-03 checkpoint.
+AMM-N-01 is Complete locally: permission-reviewed native yt-dlp -U startup/daily
+maintenance defers busy tools without interrupting or draining playback, even
+beyond 24 hours. On 2026-09-09 the maintainer accepted explicit tool-scoped offline
+recovery for uncertain cleanup after abrupt host death. Its milestone owns
+POSIX/native Windows process recovery, localized guidance, focused Clippy,
+playback smoke and four matched hydrated/no-JS browser cases; P1/P2 review is closed.
+Next concrete action: plan AMM-N-02 read-only for maintainer approval. Do not
+implement rollback/quarantine/manual controls before approval; no CI or closeout.
 HLS Direct expansion is excluded; language changes may reprepare
 downloaded media. No CI, push, full closeout or later-slice implementation.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native

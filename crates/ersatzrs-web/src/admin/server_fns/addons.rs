@@ -30,7 +30,19 @@ pub struct AddonSettingRow {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonToolMaintenanceRow {
+    pub tool_key: String,
+    pub state: ersatzrs_domain::AddonToolMaintenanceState,
+    pub outcome: Option<ersatzrs_domain::AddonToolMaintenanceOutcome>,
+    pub diagnostic_code: Option<String>,
+    pub before_version: Option<String>,
+    pub after_version: Option<String>,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstalledAddonRow {
+    pub tool_maintenance: Vec<AddonToolMaintenanceRow>,
     pub addon_id: String,
     pub repository_id: Option<String>,
     pub version: String,
@@ -281,6 +293,21 @@ pub async fn uninstall_addon_package(addon_id: String, force: bool) -> Result<()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_app::ports::AddonToolMaintenanceRead> for AddonToolMaintenanceRow {
+    fn from(value: ersatzrs_app::ports::AddonToolMaintenanceRead) -> Self {
+        Self {
+            tool_key: value.tool_key,
+            state: value.state,
+            outcome: value.outcome,
+            diagnostic_code: value.diagnostic_code,
+            before_version: value.before_version,
+            after_version: value.after_version,
+            updated_at: value.updated_at,
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl From<ersatzrs_app::AddonOverviewRead> for AddonOverview {
     fn from(value: ersatzrs_app::AddonOverviewRead) -> Self {
         Self {
@@ -317,6 +344,7 @@ impl From<ersatzrs_app::AddonOverviewRead> for AddonOverview {
                 .installed
                 .into_iter()
                 .map(|item| InstalledAddonRow {
+                    tool_maintenance: item.tool_maintenance.into_iter().map(Into::into).collect(),
                     addon_id: item.addon_id,
                     repository_id: item.repository_id,
                     version: item.version,

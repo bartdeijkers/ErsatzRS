@@ -272,6 +272,7 @@ impl InstalledItemRuntime {
         );
         Ok(crate::remote_stream::RemoteStreamCommand {
             program: command.program,
+            tool_paths: command.tool_paths,
             args: command.args,
             working_directory: command.working_directory,
             environment: command.environment,

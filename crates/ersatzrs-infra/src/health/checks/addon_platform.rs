@@ -4,6 +4,7 @@ use super::super::{
 };
 use crate::db::DbRow;
 use ersatzrs_addon_contract::{AddonCheckStatus, AddonManifest};
+use ersatzrs_core::repositories::AddonMediaListLifecycleRepository;
 use semver::Version;
 
 pub(crate) struct AddonPlatformHealthCheck {
@@ -53,6 +54,7 @@ impl HealthCheck for AddonPlatformHealthCheck {
         let host_version = Version::parse(env!("CARGO_PKG_VERSION")).ok();
         let mut usable_default_addons = Vec::new();
         for row in installations {
+            warnings.extend(tool_maintenance_findings(&self.pool, &row).await?);
             if default_addon_is_usable(&row) {
                 if let Ok(addon_id) = row.try_get::<String, _>("AddonId") {
                     usable_default_addons.push(addon_id);
@@ -91,6 +93,55 @@ impl HealthCheck for AddonPlatformHealthCheck {
         }
         Ok(HealthCheckResult::pass(self.title()).with_link("/settings/addons"))
     }
+}
+
+async fn tool_maintenance_findings(pool: &Pool<Db>, row: &DbRow) -> Result<Vec<String>> {
+    use ersatzrs_domain::{
+        AddonToolMaintenanceOutcome as Outcome, AddonToolMaintenanceState as State,
+    };
+    let mut warnings = Vec::new();
+    let Some(manifest) = row
+        .try_get::<String, _>("ManifestJson")
+        .ok()
+        .and_then(|json| serde_json::from_str::<AddonManifest>(&json).ok())
+        .filter(|manifest| manifest.validate().is_ok())
+    else {
+        return Ok(warnings);
+    };
+    let repository = crate::repositories::SqliteAddonMediaListRepository(pool.clone());
+    for tool_key in &manifest.permissions.tool_update {
+        let Some(attempt) = repository
+            .tool_maintenance_history(&manifest.id, tool_key)
+            .await
+            .map_err(|error| ersatzrs_core::health::HealthCheckError::Database(error.to_string()))?
+            .into_iter()
+            .next()
+        else {
+            continue;
+        };
+        let code = match attempt.diagnostic_code.as_deref() {
+            Some("tool-cleanup-required") => Some("tool-cleanup-required"),
+            Some("tool-busy") => None,
+            _ if attempt.outcome == Some(Outcome::ManualUpdateRequired) => {
+                Some("unsupported_installation")
+            }
+            _ if attempt.state == State::Failed || attempt.outcome == Some(Outcome::Failed) => {
+                Some(match attempt.diagnostic_code.as_deref() {
+                    Some("version_probe_failed") => "version_probe_failed",
+                    Some("tool_unavailable") => "tool_unavailable",
+                    _ => "update_failed",
+                })
+            }
+            _ => None,
+        };
+        if let Some(code) = code {
+            warnings.push(format!(
+                "Tool maintenance {}/{tool_key}: {code}",
+                manifest.id
+            ));
+        }
+    }
+    Ok(warnings)
 }
 
 /// Whether one installation could serve as the default remote-stream add-on.
@@ -262,4 +313,110 @@ async fn installation_findings(
         None
     };
     (None, warning)
+}
+
+#[cfg(test)]
+mod tool_maintenance_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn maintenance_health_uses_latest_attempt_and_projects_only_actionable_status() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::raw_sql(
+            r#"CREATE TABLE "AddonInstallation" (
+            "AddonId" TEXT PRIMARY KEY, "ManifestJson" TEXT NOT NULL)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let (_, table) = include_str!(
+            "../../../../../migrations/202609041500_addon_list_lifecycle_foundation.sql"
+        )
+        .split_once("CREATE TABLE \"AddonToolMaintenanceJob\"")
+        .unwrap();
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "CREATE TABLE \"AddonToolMaintenanceJob\"{table}"
+        )))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let manifest = serde_json::json!({
+            "manifest_version": 6, "id": "org.example.maintenance", "version": "1.0.0",
+            "name": {"en-US": "Fixture"}, "summary": {"en-US": "Health fixture"},
+            "license": "MIT", "source_url": "https://example.test/maintenance", "host_version": "*",
+            "capabilities": [{"id": "addon.check.v1"}, {"id": "tool.update.v1"}],
+            "entrypoints": {"any": {"path": "fixture", "kind": "native"}},
+            "permissions": {"tool_update": ["TOOL_BIN"]},
+            "settings": [{"key": "TOOL_BIN", "kind": "executable", "label": {"en-US": "Tool"}, "default": "fixture"}]
+        });
+        sqlx::query(r#"INSERT INTO "AddonInstallation" VALUES ('org.example.maintenance', ?)"#)
+            .bind(manifest.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let row = sqlx::query(r#"SELECT * FROM "AddonInstallation""#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "AddonToolMaintenanceJob"
+            ("Id", "AddonId", "ToolKey", "Trigger", "State", "Outcome", "DiagnosticCode", "Diagnostic", "CreatedAt", "UpdatedAt")
+            VALUES (1, 'org.example.maintenance', 'TOOL_BIN', 0, 4, 4, 'update_failed', 'SYNTHETIC_PRIVATE_DIAGNOSTIC', '2026-09-01T00:00:00Z', '2026-09-01T00:00:00Z'),
+                   (2, 'org.example.maintenance', 'TOOL_BIN', 0, 3, 0, NULL, NULL, '2026-09-02T00:00:00Z', '2026-09-02T00:00:00Z')"#)
+            .execute(&pool).await.unwrap();
+        assert!(
+            tool_maintenance_findings(&pool, &row)
+                .await
+                .unwrap()
+                .is_empty(),
+            "new success supersedes old failure"
+        );
+        for (state, outcome, code, expected) in [
+            (3, Some(1), None, None),
+            (
+                3,
+                Some(2),
+                Some("unsupported_installation"),
+                Some("unsupported_installation"),
+            ),
+            (
+                4,
+                Some(4),
+                Some("version_probe_failed"),
+                Some("version_probe_failed"),
+            ),
+            (
+                4,
+                Some(4),
+                Some("tool_unavailable"),
+                Some("tool_unavailable"),
+            ),
+            (
+                4,
+                Some(4),
+                Some("SYNTHETIC_PRIVATE_DIAGNOSTIC"),
+                Some("update_failed"),
+            ),
+            (2, None, Some("tool-busy"), None),
+            (
+                2,
+                None,
+                Some("tool-cleanup-required"),
+                Some("tool-cleanup-required"),
+            ),
+        ] {
+            sqlx::query(r#"UPDATE "AddonToolMaintenanceJob" SET "State" = ?, "Outcome" = ?, "DiagnosticCode" = ? WHERE "Id" = 2"#)
+                .bind(state).bind(outcome).bind(code).execute(&pool).await.unwrap();
+            let findings = tool_maintenance_findings(&pool, &row).await.unwrap();
+            let expected: Vec<String> = expected
+                .map(|code| format!("Tool maintenance org.example.maintenance/TOOL_BIN: {code}"))
+                .into_iter()
+                .collect();
+            assert_eq!(findings, expected);
+            assert!(!findings.join(" ").contains("SYNTHETIC_PRIVATE"));
+        }
+    }
 }

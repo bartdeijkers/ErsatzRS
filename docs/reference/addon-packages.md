@@ -78,7 +78,7 @@ every invocation and by health checks.
 
 | Field | Contract |
 |---|---|
-| `manifest_version` | Integer `1` through `5`; version 2 adds the optional `icon` object, version 3 adds safe suggested secret-reference locations and managed media-list storage, version 4 adds `default_source_hosts`, and version 5 allows declarative option definitions on a versioned capability. |
+| `manifest_version` | Integer `1` through `6`; version 2 adds the optional `icon` object, version 3 adds safe suggested secret-reference locations and managed media-list storage, version 4 adds `default_source_hosts`, version 5 allows declarative option definitions on a versioned capability, and version 6 adds explicit native-tool self-update permission. |
 | `id` | Lowercase reverse-DNS identity with at least three components. |
 | `version` | SemVer. |
 | `name`, `summary` | Locale maps with a non-empty `en-US` value. |
@@ -89,13 +89,18 @@ every invocation and by health checks.
 | `capabilities` | Unique versioned IDs; every executable package includes `addon.check.v1`. Manifest v5 capabilities may carry the bounded declarative options owned by that exact capability version. |
 | `dependencies` | Unique add-on IDs with SemVer requirements and an optional flag. |
 | `entrypoints` | Exact release RID keys or `any`, with a package-relative path and launcher kind. |
-| `permissions` | Declared network hosts, media-read access, managed FFmpeg access, and external commands. |
+| `permissions` | Declared network hosts, media-read access, managed FFmpeg access, external commands, and optional `tool_update` executable-setting keys. |
 | `settings` | Host-rendered definitions with unique uppercase snake-case keys. |
 | `media_list_storage` | Optional schema-v3 link between a path setting, a safe profile-relative default folder, and an add-on-owned local media source. |
 | `default_source_hosts` | Optional schema-v4 list of hosts the package offers to process. Every entry must be covered by `permissions.network_hosts`, and no entry may claim every host or a whole top-level domain. |
 | `panels` | Optional host-rendered declarative blocks. |
 
 Required dependencies must be installed and enabled at a compatible version.
+In manifest v6, `permissions.tool_update` names at most 32 unique declared
+`executable` setting keys and requires `tool.update.v1`. Adding a tool-update
+permission requires explicit review before enabling the updated package; an
+ordinary external-command permission does not imply permission to replace it.
+
 Supported RIDs are `linux-x64`, `linux-arm64`, `linux-arm`, `osx-x64`,
 `osx-arm64`, and `win-x64`. Entrypoint kinds are `native`, `posix_shell`, and
 `windows_batch`; arbitrary interpreter strings are not part of the current

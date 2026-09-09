@@ -349,11 +349,23 @@ invocations with exact remediation. Package-manager, immutable, and read-only
 installations never enter this backup path.
 
 Every ErsatzRS start enqueues one update attempt for the enabled package. A
-separate daily schedule ensures an attempt at least once per 24 hours while the
-host remains running. Claims deduplicate simultaneous startup/daily triggers,
+separate daily schedule makes maintenance due at least once per 24 hours while
+the host remains running. The maintainer-approved playback-first amendment
+allows actual execution to remain pending beyond 24 hours while the tool is
+in use. Pending maintenance does not terminate playback or block new playback
+waiting for existing invocations to drain. Claims deduplicate startup/daily triggers,
 and a per-tool lease prevents discovery or playback from launching while the
 executable is being replaced. Other yt-dlp operations continue to pass
 `--no-update` so updates happen only in the controlled job.
+
+The maintainer accepts explicit offline recovery after abrupt host death when
+process-tree cleanup is uncertain. Normal shutdown/restart remains automatic.
+The recovery action requires operator confirmation that the host, scanner and
+related provider processes stopped, refuses a held executable lease, and retires
+only the selected tool's validated cleanup markers. It does not infer exit from
+marker age or a database lease expiry, repair an executable, or delete media.
+N-01 does not add general process supervision for automatic crash recovery;
+replacement validation, backup and rollback remain N-02 work.
 
 When `-U` reports an immutable, unpackaged, read-only, or package-manager-owned
 installation, Health and Add-ons show **Manual update required** with the

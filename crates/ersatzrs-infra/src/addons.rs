@@ -3,6 +3,10 @@
 //! Add-ons are data plus executables. They never load into the ErsatzRS
 //! process, and their manifests can only select host-controlled launch modes.
 
+mod tool_execution;
+pub(crate) use tool_execution::acquire_tool_lease;
+pub use tool_execution::invoke_tool_update;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read as _, Write as _};
 use std::ops::{Deref, DerefMut};
@@ -29,8 +33,8 @@ use ersatzrs_addon_contract::{
     CAPABILITY_REMOTE_STREAM_LIST_V1, CAPABILITY_REMOTE_STREAM_LIST_V2,
     CAPABILITY_REMOTE_STREAM_LIST_V3, CAPABILITY_REMOTE_STREAM_LIST_V4,
     CAPABILITY_REMOTE_STREAM_PLAY_V1, CAPABILITY_REMOTE_STREAM_PLAY_V2,
-    CAPABILITY_REMOTE_STREAM_PLAY_V3, CAPABILITY_REMOTE_STREAM_PLAY_V4, OPERATION_CODE_FAILED,
-    OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
+    CAPABILITY_REMOTE_STREAM_PLAY_V3, CAPABILITY_REMOTE_STREAM_PLAY_V4, CAPABILITY_TOOL_UPDATE_V1,
+    OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
 };
 use ersatzrs_domain::EntityId;
 use futures_util::StreamExt as _;
@@ -118,6 +122,12 @@ pub enum AddonError {
     /// Staging must remain reserved because process termination was not confirmed.
     #[error("add-on process termination could not be confirmed")]
     TerminationUnconfirmed,
+    /// The tool is currently in use; maintenance must defer without draining playback.
+    #[error("add-on tool is in use")]
+    ToolBusy,
+    /// A previous managed invocation has no confirmed process-tree cleanup.
+    #[error("add-on tool process cleanup is required")]
+    ToolCleanupRequired,
     /// A list or play operation returned one structured bounded failure.
     #[error("{0}")]
     Operation(AddonOperationError),
@@ -258,6 +268,8 @@ pub struct ResolvedAddonCommand {
     pub working_directory: PathBuf,
     pub environment: BTreeMap<String, String>,
     pub state_revision: String,
+    /// Canonical configured executables protected against concurrent maintenance.
+    pub tool_paths: Vec<PathBuf>,
 }
 
 /// Context paths supplied only when a manifest declares managed `FFmpeg` access.
@@ -287,6 +299,7 @@ pub struct AddonInvocation<'a> {
 #[derive(Debug)]
 pub(crate) struct ManagedAddonChild {
     child: Box<dyn ChildWrapper>,
+    tool_lease: Option<crate::addon_tool_gate::ToolLease>,
     terminate_on_drop: bool,
     #[cfg(unix)]
     process_group: nix::unistd::Pid,
@@ -319,6 +332,7 @@ impl ManagedAddonChild {
         };
         #[cfg(windows)]
         self.process_job.wait_for_exit().await?;
+        self.confirm_tool_cleanup()?;
         Ok(status)
     }
 
@@ -333,7 +347,19 @@ impl ManagedAddonChild {
         }
         #[cfg(windows)]
         self.process_job.wait_for_exit().await?;
+        self.confirm_tool_cleanup()?;
         Ok(())
+    }
+
+    fn confirm_tool_cleanup(&mut self) -> std::io::Result<()> {
+        if let Some(lease) = self.tool_lease.take() {
+            lease.confirm_cleanup()?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn retain_tool_lease(&mut self, lease: crate::addon_tool_gate::ToolLease) {
+        self.tool_lease = Some(lease);
     }
 
     /// Start terminating the managed process group/job without waiting.
@@ -417,6 +443,25 @@ impl Drop for ManagedAddonChild {
     fn drop(&mut self) {
         if self.terminate_on_drop {
             let _ = self.child.start_kill();
+        }
+        // Keep the gate owned while the drop fallback's process-group/job kill
+        // completes. A host crash or unconfirmed exit retains the durable receipt.
+        if let Some(lease) = self.tool_lease.take() {
+            if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+                #[cfg(unix)]
+                let group = self.process_group;
+                #[cfg(windows)]
+                let job = self.process_job.clone();
+                runtime.spawn(async move {
+                    #[cfg(unix)]
+                    let result = wait_for_process_group_exit(group).await;
+                    #[cfg(windows)]
+                    let result = job.wait_for_exit().await;
+                    if result.is_ok() {
+                        let _ = lease.confirm_cleanup();
+                    }
+                });
+            }
         }
     }
 }
@@ -2952,6 +2997,13 @@ fn added_permissions(previous: &AddonManifest, next: &AddonManifest) -> Option<S
     if next.permissions.managed_ffmpeg && !previous.permissions.managed_ffmpeg {
         added.push("managed FFmpeg access".to_owned());
     }
+    added.extend(
+        next.permissions
+            .tool_update
+            .iter()
+            .filter(|key| !previous.permissions.tool_update.contains(key))
+            .map(|key| format!("self-update executable {key}")),
+    );
     (!added.is_empty()).then(|| added.join(", "))
 }
 
@@ -3295,7 +3347,7 @@ async fn resolve_addon_command(
         ));
     }
     let settings = load_addon_settings(pool, addon_id).await?;
-    let environment = resolve_setting_environment(
+    let mut environment = resolve_setting_environment(
         &installation.manifest,
         &installation.data_namespace,
         &settings,
@@ -3303,6 +3355,9 @@ async fn resolve_addon_command(
     )?;
     let (program, mut args) = platform_command(entrypoint.kind, &executable)?;
     args.push(operation.to_owned());
+    let tool_paths =
+        tool_execution::resolve_tool_paths(&installation.manifest, &mut environment, &install_root)
+            .await?;
     Ok(ResolvedAddonCommand {
         addon_id: addon_id.to_owned(),
         program,
@@ -3310,34 +3365,40 @@ async fn resolve_addon_command(
         working_directory: install_root,
         environment,
         state_revision: installation.state_revision,
+        tool_paths,
     })
 }
 
 fn validate_supported_operation(capability: &str, operation: &str) -> Result<(), AddonError> {
     let supported = matches!(
         (capability, operation),
-        (
-            CAPABILITY_ADDON_CHECK_V1 | CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1,
-            "check",
-        ) | (
-            CAPABILITY_MEDIA_LIST_LIST_V1
-                | CAPABILITY_MEDIA_LIST_LIST_V2
-                | CAPABILITY_MEDIA_LIST_LIST_V3
-                | CAPABILITY_MEDIA_LIST_LIST_V4
-                | CAPABILITY_MEDIA_LIST_LIST_V5
-                | CAPABILITY_MEDIA_LIST_LIST_V6
-                | CAPABILITY_REMOTE_STREAM_LIST_V1
-                | CAPABILITY_REMOTE_STREAM_LIST_V2
-                | CAPABILITY_REMOTE_STREAM_LIST_V3
-                | CAPABILITY_REMOTE_STREAM_LIST_V4,
-            "list",
-        ) | (
-            CAPABILITY_REMOTE_STREAM_ITEM_V1 | CAPABILITY_REMOTE_STREAM_ITEM_V2,
-            "item"
-        ) | (
-            CAPABILITY_MEDIA_LIST_IMPORT_V1 | CAPABILITY_MEDIA_LIST_IMPORT_V2,
-            "discover" | "enrich",
-        ) | (CAPABILITY_MEDIA_LIST_ENRICH_V1, "enrich-options")
+        (CAPABILITY_TOOL_UPDATE_V1, "update")
+            | (
+                CAPABILITY_ADDON_CHECK_V1 | CAPABILITY_MEDIA_LIST_SOURCE_CHECK_V1,
+                "check",
+            )
+            | (
+                CAPABILITY_MEDIA_LIST_LIST_V1
+                    | CAPABILITY_MEDIA_LIST_LIST_V2
+                    | CAPABILITY_MEDIA_LIST_LIST_V3
+                    | CAPABILITY_MEDIA_LIST_LIST_V4
+                    | CAPABILITY_MEDIA_LIST_LIST_V5
+                    | CAPABILITY_MEDIA_LIST_LIST_V6
+                    | CAPABILITY_REMOTE_STREAM_LIST_V1
+                    | CAPABILITY_REMOTE_STREAM_LIST_V2
+                    | CAPABILITY_REMOTE_STREAM_LIST_V3
+                    | CAPABILITY_REMOTE_STREAM_LIST_V4,
+                "list",
+            )
+            | (
+                CAPABILITY_REMOTE_STREAM_ITEM_V1 | CAPABILITY_REMOTE_STREAM_ITEM_V2,
+                "item"
+            )
+            | (
+                CAPABILITY_MEDIA_LIST_IMPORT_V1 | CAPABILITY_MEDIA_LIST_IMPORT_V2,
+                "discover" | "enrich",
+            )
+            | (CAPABILITY_MEDIA_LIST_ENRICH_V1, "enrich-options")
             | (CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1, "test-access")
             | (CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1, "runtime-info")
             | (
@@ -3503,7 +3564,16 @@ async fn run_bounded_command(
     timeout: Duration,
     max_output_bytes: usize,
 ) -> Result<Vec<u8>, AddonError> {
-    run_bounded_command_inner(command, timeout, max_output_bytes, None, &[], None).await
+    run_bounded_command_inner(
+        command,
+        timeout,
+        max_output_bytes,
+        None,
+        &[],
+        None,
+        crate::addon_tool_gate::ToolLeaseMode::Use,
+    )
+    .await
 }
 
 pub(crate) async fn run_bounded_command_with_input(
@@ -3520,6 +3590,7 @@ pub(crate) async fn run_bounded_command_with_input(
         Some(input),
         sensitive_values,
         None,
+        crate::addon_tool_gate::ToolLeaseMode::Use,
     )
     .await
 }
@@ -3541,6 +3612,7 @@ pub(crate) async fn run_bounded_command_with_input_cancellable(
         Some(input),
         sensitive_values,
         Some(cancellation),
+        crate::addon_tool_gate::ToolLeaseMode::Use,
     )
     .await
 }
@@ -3551,23 +3623,19 @@ async fn run_bounded_command_inner(
     max_output_bytes: usize,
     input: Option<&[u8]>,
     sensitive_values: &[String],
-    cancellation: Option<tokio::sync::oneshot::Receiver<()>>,
+    mut cancellation: Option<tokio::sync::oneshot::Receiver<()>>,
+    lease_mode: crate::addon_tool_gate::ToolLeaseMode,
 ) -> Result<Vec<u8>, AddonError> {
-    let mut process = addon_process(command);
-    process
-        .current_dir(&command.working_directory)
-        .env_clear()
-        .envs(addon_process_environment())
-        .envs(&command.environment)
-        .stdin(if input.is_some() {
-            Stdio::piped()
-        } else {
-            Stdio::null()
-        })
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = spawn_managed_addon_process(process)
-        .map_err(|_| AddonError::Process("entrypoint could not be started".to_owned()))?;
+    if cancellation.as_mut().is_some_and(|cancellation| {
+        matches!(
+            cancellation.try_recv(),
+            Ok(()) | Err(tokio::sync::oneshot::error::TryRecvError::Closed)
+        )
+    }) {
+        return Err(AddonError::Process("entrypoint cancelled".to_owned()));
+    }
+    let mut child =
+        tool_execution::spawn_bounded_addon_process(command, input.is_some(), lease_mode)?;
     let stdout = child
         .stdout()
         .take()
@@ -3782,6 +3850,7 @@ pub(crate) fn spawn_managed_addon_process(process: Command) -> std::io::Result<M
         .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::InvalidData))?;
     Ok(ManagedAddonChild {
         child,
+        tool_lease: None,
         terminate_on_drop: true,
         #[cfg(unix)]
         process_group,
@@ -5586,6 +5655,7 @@ mod tests {
     #[test]
     fn windows_batch_arguments_keep_the_package_path_quoted() {
         let command = ResolvedAddonCommand {
+            tool_paths: Vec::new(),
             addon_id: "org.ersatzrs.addon.fixture".to_owned(),
             program: r"C:\Program Files\ErsatzRS Add-ons\addon.bat".to_owned(),
             args: vec!["check".to_owned()],
@@ -5751,6 +5821,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("temp directory");
         let marker = temp.path().join("orphan-marker");
         let command = ResolvedAddonCommand {
+            tool_paths: Vec::new(),
             addon_id: "org.ersatzrs.addon.fixture".to_owned(),
             program: "/bin/sh".to_owned(),
             args: vec![
@@ -5779,6 +5850,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("temp directory");
         let marker = temp.path().join("background-marker");
         let command = ResolvedAddonCommand {
+            tool_paths: Vec::new(),
             addon_id: "org.ersatzrs.addon.fixture".to_owned(),
             program: "/bin/sh".to_owned(),
             args: vec![
@@ -5809,6 +5881,7 @@ mod tests {
         let ready = temp.path().join("invocation-ready");
         let marker = temp.path().join("cancelled-marker");
         let command = ResolvedAddonCommand {
+            tool_paths: Vec::new(),
             addon_id: "org.ersatzrs.addon.fixture".to_owned(),
             program: "/bin/sh".to_owned(),
             args: vec![
@@ -5867,6 +5940,7 @@ mod tests {
         let marker = temp.path().join("aborted-marker");
         let ready = temp.path().join("invocation-ready");
         let command = ResolvedAddonCommand {
+            tool_paths: Vec::new(),
             addon_id: "org.ersatzrs.addon.fixture".to_owned(),
             program: "/bin/sh".to_owned(),
             args: vec![
@@ -6280,6 +6354,76 @@ mod tests {
         assert_eq!(
             added_permissions(&previous, &new_command).as_deref(),
             Some("external command ffmpeg, managed FFmpeg access")
+        );
+
+        let mut native_update = previous.clone();
+        native_update
+            .permissions
+            .tool_update
+            .push("YTDLP_PATH".to_owned());
+        assert_eq!(
+            added_permissions(&previous, &native_update).as_deref(),
+            Some("self-update executable YTDLP_PATH")
+        );
+        assert_eq!(
+            added_permissions(&native_update, &native_update.clone()),
+            None
+        );
+        assert_eq!(added_permissions(&native_update, &previous), None);
+    }
+
+    #[tokio::test]
+    async fn tool_resolution_binds_the_leased_executable_and_rejects_replacement_gaps() {
+        let temporary = tempfile::tempdir().unwrap();
+        let executable = temporary.path().join("configured-tool");
+        std::fs::write(&executable, b"fixture identity").unwrap();
+        let mut manifest = fixture_manifest("org.ersatzrs.addon.fixture");
+        manifest
+            .settings
+            .push(ersatzrs_addon_contract::AddonSettingDefinition {
+                key: "TOOL_PATH".to_owned(),
+                label: localized("Executable"),
+                kind: AddonSettingKind::Executable,
+                required: false,
+                default: None,
+                options: Vec::new(),
+                suggested_reference: None,
+            });
+        let key = "ERSATZRS_ADDON_SETTING_TOOL_PATH".to_owned();
+        let mut environment = BTreeMap::from([(key.clone(), "./configured-tool".to_owned())]);
+        let paths =
+            tool_execution::resolve_tool_paths(&manifest, &mut environment, temporary.path())
+                .await
+                .unwrap();
+        let expected = dunce::canonicalize(&executable).unwrap();
+        assert_eq!(paths, vec![expected.clone()]);
+        assert_eq!(environment.get(&key).unwrap(), expected.to_str().unwrap());
+        // A native updater may temporarily remove the executable. Never return
+        // an empty lease set and let the provider race its replacement.
+        std::fs::remove_file(executable).unwrap();
+        let error =
+            tool_execution::resolve_tool_paths(&manifest, &mut environment, temporary.path())
+                .await
+                .unwrap_err();
+        assert!(
+            matches!(&error, AddonError::Operation(operation) if operation.code == OPERATION_CODE_MISSING_SETTING)
+        );
+        assert!(!error
+            .to_string()
+            .contains(temporary.path().to_str().unwrap()));
+        environment.remove(&key);
+        assert!(
+            tool_execution::resolve_tool_paths(&manifest, &mut environment, temporary.path())
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        environment.insert(key, String::new());
+        assert!(
+            tool_execution::resolve_tool_paths(&manifest, &mut environment, temporary.path())
+                .await
+                .unwrap()
+                .is_empty()
         );
     }
 

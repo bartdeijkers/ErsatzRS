@@ -1322,6 +1322,7 @@ mod tests {
         let stream = ResolvedRemoteStream {
             source: RemoteStreamSource::Addon(crate::remote_stream::RemoteStreamCommand {
                 program: blocker.display().to_string(),
+                tool_paths: Vec::new(),
                 args: Vec::new(),
                 working_directory: temp.path().to_path_buf(),
                 environment: std::collections::BTreeMap::new(),

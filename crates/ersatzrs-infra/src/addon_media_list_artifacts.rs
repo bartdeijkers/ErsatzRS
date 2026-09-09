@@ -363,6 +363,7 @@ impl AddonMediaListArtifactStore {
             return Err(invalid().into());
         }
         let command = ResolvedAddonCommand {
+            tool_paths: Vec::new(),
             addon_id: job.input.addon_id()?.to_owned(),
             program: ffprobe_path.into(),
             args: crate::ffprobe::ffprobe_args(&file),

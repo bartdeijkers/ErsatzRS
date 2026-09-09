@@ -480,6 +480,25 @@ pub struct AddonSettingRead {
     pub reference: Option<String>,
 }
 
+/// Latest maintenance evidence safe for host-rendered administration.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonToolMaintenanceRead {
+    /// Declared executable setting, never its configured path.
+    pub tool_key: String,
+    /// Current durable queue state.
+    pub state: ersatzrs_domain::AddonToolMaintenanceState,
+    /// Latest terminal outcome, if execution has finished.
+    pub outcome: Option<ersatzrs_domain::AddonToolMaintenanceOutcome>,
+    /// Bounded machine diagnostic; provider prose is deliberately excluded.
+    pub diagnostic_code: Option<String>,
+    /// Observed versions, without executable identities or filesystem paths.
+    pub before_version: Option<String>,
+    /// Version observed after the native update, if readable.
+    pub after_version: Option<String>,
+    /// Time of the latest persisted status change.
+    pub updated_at: String,
+}
+
 /// One installed package and its host-rendered configuration state.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstalledAddonRead {
@@ -496,6 +515,8 @@ pub struct InstalledAddonRead {
     pub installed_at: String,
     pub updated_at: String,
     pub icon_url: Option<String>,
+    /// Only the latest attempt for each tool currently declared by the package.
+    pub tool_maintenance: Vec<AddonToolMaintenanceRead>,
 }
 
 /// Complete read model for the add-on settings page.

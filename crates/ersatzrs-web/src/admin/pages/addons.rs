@@ -20,7 +20,7 @@ use crate::admin::server_fns::addons::{
     save_addon_detail_wait_settings, scan_addon_repositories, set_default_remote_stream_addon,
     set_unverified_addon_sources, uninstall_addon_package, AddonDetail,
     AddonDetailWaitSettingsForm, AddonOverview, AddonRepositoryRow, AddonSettingEditor,
-    AddonSettingRow, AvailableAddonRow, InstalledAddonRow,
+    AddonSettingRow, AddonToolMaintenanceRow, AvailableAddonRow, InstalledAddonRow,
 };
 use crate::admin::ui::primitives::dialog::{DeleteDialog, Modal};
 use crate::admin::ui::primitives::resource_state::AdminErrorState;
@@ -1124,6 +1124,26 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
                 <h2>{tr(TextKey::Status)}</h2>
                 <p>{installed.as_ref().and_then(|item| item.last_check_message.clone()).unwrap_or_else(|| "—".to_owned())}</p>
                 <p class=style::muted>{installed.as_ref().and_then(|item| item.last_check_at.clone()).unwrap_or_default()}</p>
+                <div data-testid="addon-tool-maintenance" hidden=permissions.1.tool_update.is_empty()>
+                    <h3>{tr(TextKey::AddonToolMaintenance)}</h3>
+                    <p hidden=installed.as_ref().is_some_and(|item| !item.tool_maintenance.is_empty())>{tr(TextKey::AddonToolMaintenanceNone)}</p>
+                    {installed.as_ref().into_iter().flat_map(|item| &item.tool_maintenance).map(|attempt| {
+                        let status = addon_tool_maintenance_status(attempt);
+                        let remediation = crate::admin::i18n::addon_tool_maintenance_diagnostic(attempt.diagnostic_code.as_deref());
+                        view! {
+                            <article data-tool-key=attempt.tool_key.clone()>
+                                <h4>{attempt.tool_key.clone()}</h4>
+                                <p data-testid="addon-tool-maintenance-status">{tr(status)}</p>
+                                <p>{format!("{}: {} → {}", tr(TextKey::Version), attempt.before_version.as_deref().unwrap_or("—"), attempt.after_version.as_deref().unwrap_or("—"))}</p>
+                                <p class=style::muted>{attempt.updated_at.clone()}</p>
+                                <p data-testid="addon-tool-maintenance-remediation" hidden=remediation.is_none()>{remediation.map(tr).unwrap_or_default()}</p>
+                                <p hidden=attempt.diagnostic_code.as_deref().ne(&Some("tool-cleanup-required"))>
+                                    <code data-testid="addon-tool-offline-recovery-command">{crate::admin::i18n::ADDON_TOOL_OFFLINE_RECOVERY_COMMAND}</code>
+                                </p>
+                            </article>
+                        }
+                    }).collect_view()}
+                </div>
             </section>
 
             {panels.into_iter().map(panel_view).collect_view()}
@@ -1408,8 +1428,28 @@ fn permissions_view(capabilities: &[String], permissions: &AddonPermissions) -> 
             <p>{format!("{}: {}", tr(TextKey::MediaReadAccess), yes_no(permissions.media_read))}</p>
             <p>{format!("{}: {}", tr(TextKey::Ffmpeg), yes_no(permissions.managed_ffmpeg))}</p>
             <p>{format!("{}: {}", tr(TextKey::ExternalCommands), value_or_no(&permissions.external_commands))}</p>
+            <p data-testid="addon-tool-update-permission">{format!("{}: {}", tr(TextKey::AddonToolUpdatePermission), value_or_no(&permissions.tool_update))}</p>
         </div>
     }.into_any()
+}
+
+fn addon_tool_maintenance_status(attempt: &AddonToolMaintenanceRow) -> TextKey {
+    use ersatzrs_domain::{
+        AddonToolMaintenanceOutcome as Outcome, AddonToolMaintenanceState as State,
+    };
+    match attempt.state {
+        State::Queued => TextKey::AddonToolMaintenanceQueued,
+        State::Running => TextKey::AddonToolMaintenanceRunning,
+        State::WaitingToRetry => TextKey::AddonToolMaintenanceWaiting,
+        State::Failed => TextKey::Failed,
+        State::Completed => match attempt.outcome {
+            Some(Outcome::Updated) => TextKey::AddonToolUpdated,
+            Some(Outcome::AlreadyCurrent) => TextKey::AddonToolAlreadyCurrent,
+            Some(Outcome::ManualUpdateRequired) => TextKey::AddonToolManualUpdate,
+            Some(Outcome::Failed | Outcome::RolledBack) => TextKey::Failed,
+            None => TextKey::Completed,
+        },
+    }
 }
 
 fn value_or_no(values: &[String]) -> String {

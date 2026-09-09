@@ -16,9 +16,11 @@ mod media_list_subtitles;
 pub use media_list_subtitles::*;
 mod remote_stream_retained_play;
 pub use remote_stream_retained_play::*;
+mod tool_update;
+pub use tool_update::*;
 
 /// Current package-manifest schema. Schema v1 remains readable.
-pub const ADDON_MANIFEST_VERSION: u32 = 5;
+pub const ADDON_MANIFEST_VERSION: u32 = 6;
 /// Current repository-index schema. Schema v1 remains readable.
 pub const ADDON_REPOSITORY_SCHEMA_VERSION: u32 = 2;
 /// Current schema for an offline add-on repository checkout or bundle.
@@ -1740,6 +1742,7 @@ impl AddonManifest {
             }
         }
         self.validate_media_list_storage()?;
+        self.validate_tool_update_capability()?;
 
         self.validate_default_source_hosts()?;
 
@@ -1751,6 +1754,36 @@ impl AddonManifest {
             panel.validate()?;
             if !panel_ids.insert(panel.id.as_str()) {
                 return invalid("panels", "duplicate panel id");
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_tool_update_capability(&self) -> Result<(), ContractError> {
+        let capability = self.has_capability(CAPABILITY_TOOL_UPDATE_V1);
+        let permission = !self.permissions.tool_update.is_empty();
+        if (capability || permission) && self.manifest_version < 6 {
+            return invalid(
+                "permissions.tool_update",
+                "requires manifest schema version 6",
+            );
+        }
+        if capability != permission {
+            return invalid(
+                "permissions.tool_update",
+                "tool.update.v1 and executable update permissions must be declared together",
+            );
+        }
+        for key in &self.permissions.tool_update {
+            if !self
+                .settings
+                .iter()
+                .any(|setting| setting.key == *key && setting.kind == AddonSettingKind::Executable)
+            {
+                return invalid(
+                    "permissions.tool_update",
+                    "must name a declared executable setting",
+                );
             }
         }
         Ok(())
@@ -2514,6 +2547,10 @@ pub struct AddonPermissions {
     pub managed_ffmpeg: bool,
     /// External executable names expected by the package.
     pub external_commands: Vec<String>,
+    /// Executable-setting keys whose external tools may be updated by the package.
+    /// Empty declarations are omitted to preserve legacy permission fingerprints.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tool_update: Vec<String>,
 }
 
 impl AddonPermissions {
@@ -2525,6 +2562,18 @@ impl AddonPermissions {
     pub fn validate(&self) -> Result<(), ContractError> {
         if self.network_hosts.len() > 100 || self.external_commands.len() > 100 {
             return invalid("permissions", "too many declared permissions");
+        }
+        if self.tool_update.len() > MAX_TOOL_UPDATE_PERMISSIONS {
+            return invalid("permissions.tool_update", "too many executable settings");
+        }
+        let mut tool_keys = BTreeSet::new();
+        for key in &self.tool_update {
+            if !is_setting_key(key) || !tool_keys.insert(key.as_str()) {
+                return invalid(
+                    "permissions.tool_update",
+                    "invalid or duplicate setting key",
+                );
+            }
         }
         if !self
             .network_hosts
@@ -4346,6 +4395,57 @@ mod tests {
             choices: Vec::new(),
             requires_preparation: false,
         }
+    }
+
+    #[test]
+    fn tool_update_requires_v6_capability_permission_and_executable_setting() {
+        let mut manifest = valid_manifest();
+        manifest.manifest_version = 5;
+        manifest.validate().unwrap();
+        manifest.capabilities.push(AddonCapability {
+            id: CAPABILITY_TOOL_UPDATE_V1.to_owned(),
+            options: Vec::new(),
+        });
+        assert!(manifest.validate().is_err());
+        manifest.manifest_version = 6;
+        assert!(manifest.validate().is_err());
+        manifest.permissions.tool_update.push("TOOL_BIN".to_owned());
+        assert!(manifest.validate().is_err());
+        manifest.settings.push(AddonSettingDefinition {
+            key: "TOOL_BIN".to_owned(),
+            label: localized("Tool executable"),
+            kind: AddonSettingKind::String,
+            required: true,
+            default: None,
+            options: Vec::new(),
+            suggested_reference: None,
+        });
+        assert!(manifest.validate().is_err());
+        manifest.settings[0].kind = AddonSettingKind::Executable;
+        manifest.validate().unwrap();
+        manifest.manifest_version = 5;
+        assert!(manifest.validate().is_err());
+        manifest.manifest_version = 6;
+        manifest.capabilities.pop();
+        assert!(manifest.validate().is_err());
+    }
+
+    #[test]
+    fn tool_update_permissions_preserve_old_bytes_and_reject_duplicates_or_bad_keys() {
+        let old = r#"{"network_hosts":[],"media_read":false,"managed_ffmpeg":false,"external_commands":[]}"#;
+        let mut permissions: AddonPermissions = serde_json::from_str(old).unwrap();
+        assert_eq!(serde_json::to_string(&permissions).unwrap(), old);
+        permissions.tool_update = vec!["TOOL_BIN".to_owned()];
+        permissions.validate().unwrap();
+        assert_ne!(serde_json::to_string(&permissions).unwrap(), old);
+        permissions.tool_update.push("TOOL_BIN".to_owned());
+        assert!(permissions.validate().is_err());
+        permissions.tool_update = vec!["bin/tool".to_owned()];
+        assert!(permissions.validate().is_err());
+        permissions.tool_update = (0..=MAX_TOOL_UPDATE_PERMISSIONS)
+            .map(|index| format!("TOOL_{index}"))
+            .collect();
+        assert!(permissions.validate().is_err());
     }
 
     fn enum_option(key: &str) -> AddonMediaListOptionDefinition {

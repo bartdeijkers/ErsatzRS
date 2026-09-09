@@ -1,6 +1,19 @@
 const TOKIO_WORKER_STACK_SIZE: usize = 16 * 1024 * 1024;
 
 fn main() {
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|argument| argument == ersatzrs_web::host::tool_recovery::RECOVERY_ARGUMENT)
+    {
+        match ersatzrs_web::host::tool_recovery::run(std::env::args_os().skip(2)) {
+            Ok(count) => println!("Retired {count} selected tool receipt(s). No executable or media files were changed."),
+            Err(message) => {
+                eprintln!("{message}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     let preparation_worker = std::env::args_os().nth(1).is_some_and(|argument| {
         argument == ersatzrs_web::host::preparation_worker::PRIVATE_WORKER_ARGUMENT
     });

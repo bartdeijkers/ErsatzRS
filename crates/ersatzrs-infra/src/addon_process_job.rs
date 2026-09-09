@@ -150,12 +150,71 @@ mod tests {
 
     #[tokio::test]
     async fn managed_wait_terminates_descendants_after_successful_leader_exit() {
+        use crate::addon_tool_gate::{ToolLease, ToolLeaseMode};
+
+        let fixture = tempfile::tempdir().unwrap();
+        let tool = fixture.path().join("tool-identity");
+        std::fs::write(&tool, b"identity only").unwrap();
+        let tools = [tool];
+        let root = fixture.path().join("gate");
+        let lease = ToolLease::try_acquire(&root, &tools, ToolLeaseMode::Use)
+            .unwrap()
+            .unwrap();
         let mut child = crate::addons::spawn_managed_addon_process(descendant_command()).unwrap();
+        child.retain_tool_lease(lease);
+        assert!(ToolLease::try_acquire(&root, &tools, ToolLeaseMode::Update)
+            .unwrap()
+            .is_none());
         let status = tokio::time::timeout(Duration::from_secs(10), child.wait())
             .await
             .expect("must terminate the descendant rather than wait for its 30-second lifetime")
             .unwrap();
         assert!(status.success());
+        ToolLease::try_acquire(&root, &tools, ToolLeaseMode::Update)
+            .unwrap()
+            .expect("confirmed job cleanup permits maintenance without offline recovery")
+            .confirm_cleanup()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn managed_drop_retires_tool_receipt_after_descendant_job_cleanup() {
+        use crate::addon_tool_gate::{ToolLease, ToolLeaseMode};
+
+        let fixture = tempfile::tempdir().unwrap();
+        let tool = fixture.path().join("tool-identity");
+        std::fs::write(&tool, b"identity only").unwrap();
+        let tools = [tool];
+        let root = fixture.path().join("gate");
+        let lease = ToolLease::try_acquire(&root, &tools, ToolLeaseMode::Use)
+            .unwrap()
+            .unwrap();
+        let mut child = crate::addons::spawn_managed_addon_process(descendant_command()).unwrap();
+        child.retain_tool_lease(lease);
+        // The fixture leader exits only after starting its long-lived child.
+        // Awaiting only the leader leaves descendant cleanup to Drop.
+        let status = tokio::time::timeout(Duration::from_secs(10), child.inner_mut().wait())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(status.success());
+        assert!(ToolLease::try_acquire(&root, &tools, ToolLeaseMode::Update)
+            .unwrap()
+            .is_none());
+        drop(child);
+        tokio::time::timeout(Duration::from_secs(7), async {
+            loop {
+                if let Some(lease) =
+                    ToolLease::try_acquire(&root, &tools, ToolLeaseMode::Update).unwrap()
+                {
+                    lease.confirm_cleanup().unwrap();
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .expect("drop cleanup permits maintenance without offline recovery");
     }
 
     fn descendant_command() -> Command {

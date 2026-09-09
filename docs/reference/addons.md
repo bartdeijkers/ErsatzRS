@@ -10,6 +10,7 @@ retroactively.
 | Capability | Host behavior |
 |---|---|
 | `addon.check.v1` | Required for every executable package; reports readiness. |
+| `tool.update.v1` | Runs permission-reviewed native-tool self-update with bounded version evidence; manifest v6 is required. |
 | `remote-stream.list.v1` | Enumerates bounded Remote Stream playlist entries. |
 | `remote-stream.list.v2` | Adds stable provider identity, availability, content kind, and rich sidecar metadata. |
 | `remote-stream.list.v3` | Adds duration, artwork, and structured fragment parent/bounds fields. |

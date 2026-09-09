@@ -32,6 +32,8 @@ pub mod addon_preparation_worker;
 #[cfg(windows)]
 mod addon_process_job;
 pub mod addon_source_routing;
+pub mod addon_tool_gate;
+pub mod addon_tool_maintenance;
 pub mod addons;
 pub mod admin_libraries;
 pub mod admin_settings;

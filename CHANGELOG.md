@@ -15,6 +15,14 @@ release section when tagging a release.
 
 ### Added
 
+- Add permission-reviewed yt-dlp self-update: startup/daily jobs invoke the
+  configured `yt-dlp -U`, defer while the executable is busy without interrupting
+  playback, and show bounded version results and remediation in Add-ons/Health.
+  Uncertain process cleanup after an abrupt crash requires explicit tool-scoped
+  offline recovery after stopping all related processes; normal confirmed
+  shutdown/restart recovers automatically. Recovery does not repair executable
+  bytes; replacement validation and rollback remain a separate slice.
+
 - Enable opt-in Adaptive refresh in yt-dlp package 0.10.2 through a bounded,
   provider-neutral normalized-JSON probe. Matching source-bound validators avoid
   imports; changed samples enter the existing refresh workflow. Checks sample

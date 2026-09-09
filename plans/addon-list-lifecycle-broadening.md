@@ -519,9 +519,11 @@ Package-manager, immutable, and read-only installations skip backup and return
 One startup trigger is created on every host start while the add-on is enabled.
 A persisted daily trigger is also due no later than 24 hours after the last
 completed attempt. Claims coalesce only overlapping triggers; a later restart
-still performs its required startup attempt. A tool lease drains/blocks new
-yt-dlp work during replacement and does not terminate already running channel
-playback.
+still enqueues its required startup attempt. Under the approved playback-first
+exception, actual execution may remain pending beyond 24 hours while the tool
+is in use. Pending updates do not terminate playback or block new playback to
+drain existing work. Only an update that has acquired idle exclusive ownership
+blocks conflicting new invocations for its bounded replacement operation.
 
 Required manual-remediation copy is:
 
@@ -1099,6 +1101,26 @@ admission, ownership, recovery and playback behavior remain unchanged.
 
 ### AMM-N-01 — Startup and daily yt-dlp self-update
 
+- Approved crash limitation (2026-09-09): graceful shutdown/restart remains
+  automatic; uncertain cleanup after abrupt host death requires explicit
+  offline recovery for one tool, after operator confirmation that the host,
+  scanner and related providers stopped. Refuse held leases and retire only
+  validated owned cleanup markers, never executable/media bytes or history.
+  Do not add general process supervision or N-02 rollback to satisfy this.
+- Hydration map: `/settings/addons/:id` uses `AddonDetailPage` /
+  `AddonDetailIsland`, the existing overview server function and application
+  read DTO, and the native add-on runtime. Latest maintenance rows extend the
+  existing status section identically in SSR/no-JS and hydrated output;
+  permission review reuses `permissions_view`. No shared primitives or new
+  controls are introduced. `AddonPlatformHealthCheck` owns actionable notices;
+  focused Add-ons browser coverage owns the UI proof.
+- Approved implementation: reuse `AddonToolMaintenanceJob`, add an explicit
+  permission-reviewed `tool.update.v1` contract, and invoke only configured
+  native `yt-dlp -U` between bounded before/after version probes. No custom
+  update downloader, package-manager commands or forced channel switching.
+- Use playback-first idle acquisition as above; retain ownership through
+  confirmed process-tree cleanup. Latest status and manual remediation belong
+  in existing Add-ons/Health surfaces. N-02 owns rollback and history UI.
 - Add permission-reviewed `tool.update.v1`, startup/daily triggers, deduped
   claims, version evidence, and the per-tool execution lease.
 - Prove updated, already-current, manual-update-required, network failure,

@@ -13,17 +13,16 @@ engine; its mapper only translates full yt-dlp JSON. Existing imports can be
 republished as any supported library type
 without rerunning the provider; the snapshot, order, inclusion, and overrides
 remain the control plane while only the projection changes.
-Television drafts provide direct row editing plus atomic, provider-order
-numbering from any included item. Bounded or date-gap-detected assignments and
-responsive bulk media-kind/playback edits share one-step undo.
+Television drafts provide row editing, atomic provider-order numbering and
+bounded/date-gap assignments; bulk media-kind/playback edits share one-step undo.
 AMM-F implements ADR 0078: Remote Stream remains the live-or-on-demand type and
 one provider-neutral unknown/finite/live value now crosses the frozen add-on
 contract, provider and operator snapshots, Publish, refresh, generated
 definitions, scanner persistence, editor, scheduling, health, IPTV/HLS, and the
 cross-platform yt-dlp package. Unknown is never guessed as finite and live
 items are admitted only where a deterministic live boundary is available.
-AMM-G implements ADR 0079: resumable paginated overview discovery precedes
-publication; optional details use durable item jobs and one randomized
+AMM-G (ADR 0079): paginated discovery precedes publication; optional details
+use durable item jobs and one randomized
 provider-host limiter for manual and automatic work. Localized delay settings
 default to 2–16 seconds, apply without restart, and preserve existing cooldowns.
 The editor supports manual imports, per-item details, durable progress and
@@ -52,14 +51,23 @@ AMM-M-01A is Complete under ADRs 0087/0088; its milestone owns the options,
 real MPEG-TS/HLS cut and cancellation evidence. Native yt-dlp replaces the
 Range adapter and remains preferred in later slices. HDR/unmapped-subtitle refusals
 remain explicit; static startup-stage diagnostics remain non-blocking debt.
-M-01B completes the generic native list select: Stream, Download ahead, or
-Download ahead only for new videos first imported after enabling it. Its saved
-UTC cutoff is visible and renewed on re-enabling; published playback stays
-frozen. Existing videos stream and enabled SponsorBlock applies in every mode.
+M-01B completes the native Stream/Download ahead/New videos only select, with a
+visible UTC cutoff renewed on re-enabling. Published playback stays frozen;
+existing videos stream and enabled SponsorBlock applies in every mode.
 M-02 completes ADR 0052 manual primary/fallback captions, revision-pinned files
 and aligned MPEG-TS/transcoded HLS captions in both delivery modes. Its milestone
-owns evidence. M-03 completes disk warnings. AMM-N awaits.
+owns evidence. M-03 and N-01 are complete locally. N-01 adds permission-reviewed
+yt-dlp -U, playback-first deferral and explicit offline crash recovery.
+N-02 validation/rollback and N-03 integrated closeout remain open.
 '''
+
+[[debt]]
+id          = 'tool-maintenance-crash-recovery-admission'
+description = 'P1: Retained tool-use or update cleanup receipts have no safe retirement path after abrupt host death. They can permanently prevent future updates, or playback after an interrupted update. Resolve process-cleanup admission recovery without treating lease expiry as proof that descendants exited.'
+discovered  = '2026-09-08'
+resolved    = true
+adr         = '0085'
+evidence    = 'On 2026-09-09 the maintainer accepted explicit tool-scoped offline recovery after confirming the host, scanner and related provider/tool processes stopped. The packaged recovery action refuses held leases, validates owned receipts before retirement and preserves executables, media and other tools. POSIX and native Windows regressions cover abrupt owner death, retained receipts, live-lease refusal, missing executables and tool scope. Actual CLI dispatch, nine-culture Health guidance and four hydrated/no-JS Chromium/Firefox cases pass. Independent Astra review has no remaining P1/P2; milestone amm-n-01 owns the full acceptance evidence. This intentionally does not infer process exit from job or marker age and does not repair executable bytes.'
 
 [[debt]]
 id          = 'preparation-worker-wait-closes-liveness'

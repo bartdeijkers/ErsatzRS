@@ -3754,22 +3754,56 @@ No CI, push, full closeout or later-slice work has been run.
 id         = 'amm-n-01'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
 title      = 'Run controlled yt-dlp self-update on startup and daily'
-status     = 'Not started'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-01']
 acceptance = '''
 After permission review, every enabled tool.update.v1 package receives one
-startup attempt and at least one attempt per 24 running hours. The official
+startup trigger and a daily trigger at least every 24 running hours. Under the
+maintainer-approved playback-first exception, execution remains pending while
+the tool is in use, even beyond 24 hours. Pending maintenance neither terminates
+playback nor blocks new playback waiting for existing work to drain. The official
 package runs configured yt-dlp -U, probes before/after version, and returns
 updated, already-current, manual-update-required, or failed. Durable claims
 deduplicate overlaps, a tool lease prevents replacement during new invocations,
 non-maintenance commands keep --no-update, and Add-ons/Health show exact manual
 remediation for package-manager/read-only installations on Windows and POSIX.
+Normal shutdown/restart recovers automatically. The maintainer accepts explicit
+tool-scoped offline recovery after abrupt host death leaves uncertain process
+cleanup: require confirmation that the host, scanner and related provider
+processes have stopped before retiring only that tool's cleanup markers.
+Neither marker age nor expired job ownership proves process exit. Recovery must
+refuse a held tool lease and preserve executables, media and other tools.
 '''
 evidence = '''
-Not started. The official package currently documents operator-owned updates
-and passes --no-update on discovery, enrichment, and playback.
+Completed locally on 2026-09-09 with the approved native yt-dlp -U provider,
+manifest-v6 permission contract, durable coordinator, shared/exclusive runtime
+admission and latest-result Add-ons/Health integration. The maintainer accepted
+playback-first deferral and explicit tool-scoped offline crash recovery. Restart
+alone never clears uncertain-cleanup receipts; the offline action requires an
+operator stop confirmation, refuses live leases and preserves unrelated state.
+Five focused contract tests and eight POSIX synthetic native-updater tests pass.
+The native Windows updater fixture covers outcomes, arguments, privacy and
+deadline. No real installed tool was updated. Three sibling repository tests
+verify manifest, layout and bundle construction for the 0.11.0 package,
+committed locally in ErsatzRS-addons as 4f0e2c9.
+Final focused runtime evidence: 26 POSIX gate/process tests, 49 adjacent runtime
+tests including the isolated coordinator-to-package managed-FFmpeg regression,
+and 21 native Windows admission/process tests pass. Windows covers attached-lease
+wait/Drop cleanup, startup/daily admission, contention and process-death recovery.
+Three web tests cover recovery arguments/profile scope and all nine cultures'
+Health remediation privacy. The actual server binary rejects missing recovery
+confirmation and performs a confirmed no-op without starting normal services.
+Focused infra/web all-target Clippy, architecture lint and hydration lint pass.
+Playback smoke passes MPEG-TS and HLS against a temporary profile. Sequential
+Leptos server/frontend builds and four Chromium/Firefox hydrated/no-JS browser
+cases pass; browser artifacts are in test-results/amm-n01. Browser proof covers
+permission review, latest-only status, redaction and exact offline guidance.
+Independent Astra P1/P2 review is closed after correcting managed-tool context
+and browser-safe status DTO integration. Build/media gates ran serially with
+bounded concurrency. Rollback, quarantine, manual update button and history UI
+remain N-02 work. No CI, push or full closeout was run.
 '''
 
 [[milestone]]

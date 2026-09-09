@@ -1188,6 +1188,21 @@ pub enum TextKey {
     AddonMediaListSaveFailed,
     AddonMediaListSaved,
     AddonMediaLists,
+    AddonToolMaintenance,
+    AddonToolMaintenanceNone,
+    AddonToolUpdatePermission,
+    AddonToolMaintenanceQueued,
+    AddonToolMaintenanceRunning,
+    AddonToolMaintenanceWaiting,
+    AddonToolUpdated,
+    AddonToolAlreadyCurrent,
+    AddonToolManualUpdate,
+    AddonToolManualHelp,
+    AddonToolFailedHelp,
+    AddonToolVersionHelp,
+    AddonToolUnavailableHelp,
+    AddonToolBusyHelp,
+    AddonToolCleanupHelp,
     AddonListDiskWarnings,
     AddonListDiskWarningGb,
     AddonListsCombinedDiskWarningGb,
@@ -2998,6 +3013,21 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonMediaListSaveFailed,
     TextKey::AddonMediaListSaved,
     TextKey::AddonMediaLists,
+    TextKey::AddonToolMaintenance,
+    TextKey::AddonToolMaintenanceNone,
+    TextKey::AddonToolUpdatePermission,
+    TextKey::AddonToolMaintenanceQueued,
+    TextKey::AddonToolMaintenanceRunning,
+    TextKey::AddonToolMaintenanceWaiting,
+    TextKey::AddonToolUpdated,
+    TextKey::AddonToolAlreadyCurrent,
+    TextKey::AddonToolManualUpdate,
+    TextKey::AddonToolManualHelp,
+    TextKey::AddonToolFailedHelp,
+    TextKey::AddonToolVersionHelp,
+    TextKey::AddonToolUnavailableHelp,
+    TextKey::AddonToolBusyHelp,
+    TextKey::AddonToolCleanupHelp,
     TextKey::AddonListDiskWarnings,
     TextKey::AddonListDiskWarningGb,
     TextKey::AddonListsCombinedDiskWarningGb,
@@ -4169,6 +4199,21 @@ pub fn health_check_message(title: &str, message: &str, brief_message: &str) -> 
     health_check_message_text(use_i18n(), title, message, brief_message)
 }
 
+/// Offline recovery command template; the operator supplies the configured path.
+pub const ADDON_TOOL_OFFLINE_RECOVERY_COMMAND: &str = "./ersatzrs-web --recover-addon-tool --tool-path \"<absolute-executable-path>\" --confirm-all-processes-stopped";
+
+/// Static remediation for bounded maintenance diagnostics, never provider prose.
+pub fn addon_tool_maintenance_diagnostic(code: Option<&str>) -> Option<TextKey> {
+    code.map(|code| match code {
+        "unsupported_installation" => TextKey::AddonToolManualHelp,
+        "version_probe_failed" => TextKey::AddonToolVersionHelp,
+        "tool_unavailable" => TextKey::AddonToolUnavailableHelp,
+        "tool-busy" => TextKey::AddonToolBusyHelp,
+        "tool-cleanup-required" => TextKey::AddonToolCleanupHelp,
+        _ => TextKey::AddonToolFailedHelp,
+    })
+}
+
 fn addon_list_disk_usage_line(language: UiLanguage, line: &str) -> Option<String> {
     if line == "Add-on list disk usage could not be measured completely. Check storage access and retry the health check." {
         return Some(text(language, TextKey::AddonListDiskUsageUnavailable).to_owned());
@@ -4206,6 +4251,33 @@ fn addon_list_disk_usage_line(language: UiLanguage, line: &str) -> Option<String
     ))
 }
 
+fn tool_maintenance_health_message(language: UiLanguage, message: &str) -> String {
+    message
+        .split("; ")
+        .map(|part| {
+            let Some((tool, code)) = part
+                .strip_prefix("Tool maintenance ")
+                .and_then(|value| value.split_once(": "))
+            else {
+                return part.to_owned();
+            };
+            let key = addon_tool_maintenance_diagnostic(Some(code))
+                .unwrap_or(TextKey::AddonToolFailedHelp);
+            let instruction = format!(
+                "{} {tool}: {}",
+                text(language, TextKey::AddonToolMaintenance),
+                text(language, key)
+            );
+            if code == "tool-cleanup-required" {
+                format!("{instruction}\n{ADDON_TOOL_OFFLINE_RECOVERY_COMMAND}")
+            } else {
+                instruction
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 pub fn health_check_message_text(
     language: UiLanguage,
     title: &str,
@@ -4217,6 +4289,9 @@ pub fn health_check_message_text(
     } else {
         message
     };
+    if title == ADDONS_HEALTH_TITLE && displayed_message.contains("Tool maintenance ") {
+        return tool_maintenance_health_message(language, displayed_message);
+    }
     if title == "Add-on list disk usage" {
         if displayed_message == "Add-on list disk usage warning" {
             return text(language, TextKey::AddonListDiskUsageBrief).to_owned();
@@ -4800,6 +4875,42 @@ mod tests {
             assert_eq!(localized, text(language, TextKey::AutoPublicationHeld));
             if definition.code != UiLanguage::English.code() {
                 assert_ne!(localized, "Automatic publication needs review");
+            }
+        }
+    }
+
+    #[test]
+    fn tool_maintenance_health_remediation_is_localized_without_raw_diagnostics() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            for code in [
+                "unsupported_installation",
+                "update_failed",
+                "version_probe_failed",
+                "tool_unavailable",
+                "tool-busy",
+                "tool-cleanup-required",
+                "SYNTHETIC_PRIVATE_DIAGNOSTIC",
+            ] {
+                let message = format!("Tool maintenance org.example.fixture/YT_DLP_BIN: {code}");
+                let localized = health_check_message_text(language, "Add-ons", &message, "");
+                assert!(localized.contains("org.example.fixture/YT_DLP_BIN"));
+                assert!(!localized.contains(code));
+                assert!(localized.contains(text(
+                    language,
+                    addon_tool_maintenance_diagnostic(Some(code)).unwrap()
+                )));
+                if code == "tool-cleanup-required" {
+                    assert!(localized.contains(ADDON_TOOL_OFFLINE_RECOVERY_COMMAND));
+                    assert!(localized.contains("--state-dir"));
+                    assert!(localized.contains("ersatzrs-web.exe"));
+                    if language != UiLanguage::English {
+                        assert_ne!(
+                            text(language, TextKey::AddonToolCleanupHelp),
+                            text(UiLanguage::English, TextKey::AddonToolCleanupHelp)
+                        );
+                    }
+                }
             }
         }
     }

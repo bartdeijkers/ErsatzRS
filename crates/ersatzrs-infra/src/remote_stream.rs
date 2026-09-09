@@ -106,6 +106,8 @@ pub struct RemoteStreamDefinition {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteStreamCommand {
+    /// Configured add-on tools held against maintenance for the producer lifetime.
+    pub tool_paths: Vec<PathBuf>,
     pub program: String,
     pub args: Vec<String>,
     pub working_directory: PathBuf,
@@ -677,6 +679,7 @@ fn remote_stream_command_from_addon(
     }
     RemoteStreamCommand {
         program: resolved.program,
+        tool_paths: resolved.tool_paths,
         args: resolved.args,
         working_directory: resolved.working_directory,
         environment,
@@ -1098,8 +1101,25 @@ fn spawn_remote_stream_producer_with_stdin(
     if piped_stdin {
         process.stdin(Stdio::piped());
     }
-    spawn_managed_addon_process(process)
-        .map_err(|error| RemoteStreamError::Spawn(error.to_string()))
+    let lease = crate::addons::acquire_tool_lease(
+        &command.tool_paths,
+        crate::addon_tool_gate::ToolLeaseMode::Use,
+    )
+    .map_err(|error| RemoteStreamError::Spawn(error.to_string()))?;
+    match spawn_managed_addon_process(process) {
+        Ok(mut child) => {
+            if let Some(lease) = lease {
+                child.retain_tool_lease(lease);
+            }
+            Ok(child)
+        }
+        Err(error) => {
+            if let Some(lease) = lease {
+                let _ = lease.confirm_cleanup();
+            }
+            Err(RemoteStreamError::Spawn(error.to_string()))
+        }
+    }
 }
 
 /// Start ffmpeg and directly connect an optional producer to its standard input.
@@ -1724,6 +1744,7 @@ mod tests {
     fn producer_and_consumer() -> (RemoteStreamCommand, FfmpegCommand) {
         (
             RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "sh".to_owned(),
                 args: vec!["-c".to_owned(), "printf remote-bytes".to_owned()],
                 working_directory: PathBuf::from("."),
@@ -1741,6 +1762,7 @@ mod tests {
     fn stalled_producer_and_consumer() -> (RemoteStreamCommand, FfmpegCommand) {
         (
             RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "sh".to_owned(),
                 args: vec!["-c".to_owned(), "while :; do :; done".to_owned()],
                 working_directory: PathBuf::from("."),
@@ -1758,6 +1780,7 @@ mod tests {
     fn stalled_producer_and_consumer() -> (RemoteStreamCommand, FfmpegCommand) {
         (
             RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "cmd.exe".to_owned(),
                 args: vec![
                     "/D".to_owned(),
@@ -1785,6 +1808,7 @@ mod tests {
     fn producer_and_consumer() -> (RemoteStreamCommand, FfmpegCommand) {
         (
             RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "cmd.exe".to_owned(),
                 args: vec![
                     "/D".to_owned(),
@@ -1867,6 +1891,7 @@ content_rating: PG
     #[test]
     fn formats_windows_batch_command_as_raw_cmd_arguments() {
         let command = RemoteStreamCommand {
+            tool_paths: Vec::new(),
             program: r"C:\Program Files\ErsatzRS\Remote Producer.bat".to_owned(),
             args: vec![
                 "https://example.test/watch?id=1&x=2".to_owned(),
@@ -1886,6 +1911,7 @@ content_rating: PG
     #[test]
     fn seek_placeholder_moves_non_seekable_output_seek_to_producer() {
         let producer = RemoteStreamCommand {
+            tool_paths: Vec::new(),
             program: "producer".to_owned(),
             args: vec![
                 "https://example.test/watch".to_owned(),
@@ -1943,6 +1969,7 @@ content_rating: PG
             arguments: vec!["-i".to_owned(), "pipe:0".to_owned()],
         };
         let unmarked = RemoteStreamCommand {
+            tool_paths: Vec::new(),
             program: "producer".to_owned(),
             args: vec!["https://example.test/watch".to_owned()],
             working_directory: PathBuf::from("."),
@@ -1979,6 +2006,7 @@ content_rating: PG
     fn video_height_ceiling_is_applied_only_to_v2_addon_commands() {
         let v1 = ResolvedRemoteStream {
             source: RemoteStreamSource::Addon(RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "producer".to_owned(),
                 args: Vec::new(),
                 working_directory: PathBuf::from("."),
@@ -2014,6 +2042,7 @@ content_rating: PG
     #[test]
     fn add_on_seek_placeholder_is_projected_through_environment() {
         let command = RemoteStreamCommand {
+            tool_paths: Vec::new(),
             program: "producer".to_owned(),
             args: vec!["play".to_owned()],
             working_directory: PathBuf::from("."),
@@ -2048,6 +2077,7 @@ content_rating: PG
         )
         .expect("write batch producer");
         let command = RemoteStreamCommand {
+            tool_paths: Vec::new(),
             program: batch.to_string_lossy().into_owned(),
             args: vec![
                 "https://example.test/watch?id=1&x=2".to_owned(),
@@ -2145,6 +2175,7 @@ content_rating: PG
     fn add_on_input_uses_container_autodetection() {
         let stream = ResolvedRemoteStream {
             source: RemoteStreamSource::Addon(RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "producer".to_owned(),
                 args: Vec::new(),
                 working_directory: PathBuf::from("streams"),
@@ -2220,6 +2251,7 @@ content_rating: PG
     fn redacts_bare_add_on_environment_secrets_from_output() {
         let stream = ResolvedRemoteStream {
             source: RemoteStreamSource::Addon(RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "producer".to_owned(),
                 args: Vec::new(),
                 working_directory: PathBuf::from("streams"),
@@ -2258,6 +2290,7 @@ content_rating: PG
         let operation_url = "srt://user:secret@example.test:9000?token=hidden";
         let stream = ResolvedRemoteStream {
             source: RemoteStreamSource::Addon(RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "producer".to_owned(),
                 args: Vec::new(),
                 working_directory: PathBuf::from("streams"),
@@ -2279,6 +2312,7 @@ content_rating: PG
 
         let file_secret_stream = ResolvedRemoteStream {
             source: RemoteStreamSource::Addon(RemoteStreamCommand {
+                tool_paths: Vec::new(),
                 program: "producer".to_owned(),
                 args: Vec::new(),
                 working_directory: PathBuf::from("streams"),

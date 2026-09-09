@@ -29,7 +29,8 @@ setting values use these names:
 
 ## Operations
 
-The first positional argument is `check`, `list`, or `play`.
+The first positional argument selects the versioned capability's operation,
+including `check`, `list`, `play`, or the permission-reviewed `update`.
 `addon.check.v1` has a 30-second limit and a 64 KiB output limit. It emits one
 JSON object with `status` (`ready`, `warning`, or `unavailable`), a stable
 lowercase `code`, and a safe message.
@@ -48,6 +49,66 @@ published effective values explicitly.
 
 The provider-neutral list payload is defined by the
 [add-on media-list reference](addon-media-lists.md).
+
+### Native-tool self-update
+
+`tool.update.v1` invokes `update` with one JSON request on stdin:
+
+```json
+{"schema":"tool.update.v1","tool_key":"YT_DLP_BIN"}
+```
+
+The request is limited to 1 KiB and must name an approved executable setting.
+The result is one JSON object limited to 2 KiB with `schema`, `tool_key`, nullable
+`before_version` and `after_version`, `outcome`, and nullable `diagnostic_code`.
+Outcomes are `updated`, `already_current`, `manual_update_required`, or `failed`.
+Diagnostics are `unsupported_installation`, `update_failed`,
+`version_probe_failed`, or `tool_unavailable`; subprocess prose is not forwarded.
+
+The official yt-dlp package runs configured native `yt-dlp -U` between bounded
+version probes. The host does not download replacement bytes, run a package
+manager, or force a release channel. The total invocation deadline is 90 seconds.
+Normal operations retain `--no-update`.
+
+Startup and daily triggers coalesce in the existing durable maintenance queue.
+Daily work becomes eligible 24 hours after the previous completed attempt.
+An update acquires exclusive access only when its executable is idle; busy work
+is deferred without stopping playback or making new readers wait for a pending
+writer. Shared use covers discovery, readiness, item operations, preparation,
+and streaming. Ownership lasts through confirmed process-tree cleanup.
+Latest status appears in Add-ons, with actionable failures also shown in Health.
+Replacement rollback and the manual update/history interface belong to AMM-N-02.
+
+### Offline tool cleanup recovery
+
+The packaged server supports one explicit offline action before starting HTTP,
+background workers, the database runtime, or FFmpeg:
+
+```text
+ersatzrs-web --recover-addon-tool --tool-path <absolute-executable-path> --confirm-all-processes-stopped
+```
+
+On Windows the executable is `ersatzrs-web.exe`, not the tray launcher
+`ErsatzRS.exe`. An optional `--state-dir <absolute-profile-directory>` selects
+the profile whose markers are being recovered; without it, the normal
+`ERSATZRS_APP_STATE_DIR`/default state root applies.
+
+| Condition | Behavior |
+|---|---|
+| Missing confirmation or invalid arguments | Refuses recovery without starting the server. |
+| A related process still holds a tool lease | Refuses recovery. |
+| Valid owned markers for the selected executable | Retires only those markers under an exclusive lease. |
+| No markers remain | Successful no-op. |
+| Executable temporarily absent after replacement | Resolves the identity from its existing canonical parent and filename. |
+| Unsafe or unexpected marker storage | Refuses recovery without deleting unrelated entries. |
+
+The confirmation asserts that the server, scanner, and all related provider and
+tool processes have stopped. Exclusive lock acquisition alone does not prove
+that orphaned processes stopped. A machine reboot with automatic server startup
+disabled can establish the offline condition when process cleanup is uncertain.
+Recovery does not repair or replace the executable, delete media, remove job
+history, or clear another tool's markers. Restarting the server without recovery
+does not clear uncertain-cleanup markers.
 
 ### Operation diagnostics
 
