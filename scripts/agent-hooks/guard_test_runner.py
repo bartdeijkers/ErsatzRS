@@ -213,8 +213,8 @@ def main() -> int:
     print(
         "Blocked direct cargo test invocation. Use './run.sh test -p <crate> "
         "[filter]' for focused/local Rust tests or './run.sh test-closeout' "
-        "for the nextest plus doctest closeout gate. CI workflows retain their "
-        "direct cargo test command.",
+        "for the nextest plus doctest closeout gate. CI runs the same "
+        "nextest selection (ADR 0090).",
         file=sys.stderr,
     )
     return 2

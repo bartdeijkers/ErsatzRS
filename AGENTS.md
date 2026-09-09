@@ -132,7 +132,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 # retries, and reports tests that exceed 60 seconds. Agent hooks block direct
 # `cargo test` commands: use `./run.sh test-closeout` for the canonical local
 # gate, which runs nextest for unit/integration tests and Cargo only for
-# doctests. CI intentionally retains its direct Cargo test selection.
+# doctests. CI runs the same nextest selection under the `ci` profile and
+# uploads per-test durations as a JUnit artifact (ADR 0090).
 #   ./run.sh dev                     # build scanner companion, then Leptos watch
 # The full gate consists of clippy,
 # `./run.sh test-closeout`, `cargo leptos build`, and `cargo xtask parity-check`.

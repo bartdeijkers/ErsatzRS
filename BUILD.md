@@ -254,8 +254,11 @@ Nextest does not run doctests. `./run.sh test-closeout` therefore runs nextest
 for unit/integration/binary tests and then uses Cargo only for workspace
 doctests. Direct agent `cargo test` commands are blocked by the checked-in
 Codex/Claude hooks; use the wrappers so focused testing cannot drift back to
-Cargo. CI intentionally remains on its direct
-`cargo test --workspace --lib --bins --tests` selection.
+Cargo. CI runs the same nextest selection through the `ci` profile
+(`cargo nextest run --profile ci --workspace --lib --bins --tests`, ADR 0090),
+which additionally writes a JUnit report so per-test durations are available as
+a build artifact. Neither the local nor the CI selection runs doctests; only
+`./run.sh test-closeout` adds them.
 
 The closeout deliberately uses the sole supported SQLite graph. Historical
 dual-backend feature combinations are not part of current development or

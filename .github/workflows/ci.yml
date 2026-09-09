@@ -128,8 +128,25 @@ jobs:
           if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
             cargo install stylance-cli --version 0.8.2 --locked
           fi
+      - name: Install cargo-nextest
+        run: |
+          if ! command -v cargo-nextest >/dev/null 2>&1; then
+            cargo install cargo-nextest --version 0.9.140 --locked
+          fi
+      # Same target selection as the previous `cargo test --workspace --lib --bins
+      # --tests`: unit, binary and integration tests, no doctests. The `ci`
+      # profile adds a JUnit report so per-test durations land in an artifact;
+      # .config/nextest.toml reports anything slower than 60s in the summary.
       - name: Test
-        run: cargo test --workspace --lib --bins --tests
+        run: cargo nextest run --profile ci --workspace --lib --bins --tests
+      - name: Upload test timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-timings-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CARGO_TARGET_DIR }}/nextest/ci/junit.xml
+          if-no-files-found: warn
+          retention-days: 14
       - name: Validate progress index (docs/progress/)
         run: cargo xtask progress check
       - name: Validate architecture boundaries and debt ratchets
@@ -171,15 +188,23 @@ jobs:
           sudo apt-get install --no-install-recommends --yes lld
       - name: Install Stylance CLI
         run: cargo install stylance-cli --version 0.8.2 --locked
+      - name: Install cargo-nextest
+        run: |
+          if ! command -v cargo-nextest >/dev/null 2>&1; then
+            cargo install cargo-nextest --version 0.9.140 --locked
+          fi
       - name: Test remaining workspace
         if: matrix.shard == 'workspace-minus-web'
-        run: cargo test --workspace --exclude ersatzrs-web --lib --bins --tests
+        run: cargo nextest run --profile ci --workspace --exclude ersatzrs-web --lib --bins --tests
       - name: Test web library
         if: matrix.shard == 'web-lib'
-        run: cargo test -p ersatzrs-web --lib
-      - name: Test web binaries
+        run: cargo nextest run --profile ci -p ersatzrs-web --lib
+      # `--bins` alone left the ersatzrs-web integration targets (tests/*.rs)
+      # unrun on this path, while the self-hosted `test` job covers them
+      # through `--tests`. Keep the two paths equivalent.
+      - name: Test web binaries and integration tests
         if: matrix.shard == 'web-bins'
-        run: cargo test -p ersatzrs-web --bins
+        run: cargo nextest run --profile ci -p ersatzrs-web --bins --tests
       - name: Validate progress index (docs/progress/)
         if: matrix.shard == 'workspace-minus-web'
         run: cargo xtask progress check

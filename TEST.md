@@ -42,8 +42,10 @@ References:
   change crosses a gated path.
 - **Closeout**: use `./run.sh test-closeout`. It runs all workspace
   unit/integration/binary tests through nextest, then Cargo doctests because
-  nextest cannot execute them. CI remains on its existing direct Cargo test
-  selection.
+  nextest cannot execute them. CI runs the same nextest selection under the
+  `ci` profile and uploads a JUnit report with per-test durations (ADR 0090);
+  it does not run doctests, so the closeout gate remains the only path that
+  covers them.
 - **Hydration smoke**: prefer a runnable Playwright spec under `tests/e2e/` and
   run it with `E2E_BASE_URL=http://127.0.0.1:8409 npx playwright test ...`.
   For exploratory work, a browser probe through Playwright MCP or another

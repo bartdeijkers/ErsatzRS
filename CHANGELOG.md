@@ -188,6 +188,14 @@ release section when tagging a release.
 
 ### Changed
 
+- Run the CI test jobs through nextest with the same target selection as before
+  (ADR 0090), under a new `ci` profile that keeps the no-retry,
+  run-through-failures and slow-test-after-60s semantics and adds a JUnit
+  report. Per-test durations are uploaded as a build artifact, so growth in CI
+  test time is attributable to individual tests instead of one wall-clock
+  number. Doctest coverage is unchanged: neither selection ran them, and
+  `./run.sh test-closeout` remains the only path that adds them.
+
 - Move Settings to the bottom of the admin navigation drawer and collapse the
   expanded Support group into a single badged `Support` link beside it
   (ADR 0089). Health checks, Logs, and Troubleshooting now render as in-page
@@ -226,6 +234,11 @@ release section when tagging a release.
   across the MiniJinja 2.23 update.
 
 ### Fixed
+
+- Run the `ersatzrs-web` integration tests on the manual GitHub-hosted CI
+  fallback. Its `web-bins` shard ran only `--bins`, leaving the crate's
+  `tests/*.rs` targets unrun on that path while the self-hosted job covered
+  them through `--tests`.
 
 - Stop an add-on list from getting stuck in an endless publication recovery.
   The publication verification scan rewrites its own scanner sidecars inside the
