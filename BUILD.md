@@ -513,8 +513,8 @@ ERSATZRS_SITE_ROOT=target/site \
 ```
 
 For a deeper, browser-level check, normal CI runs the full Playwright admin E2E
-suite by default through `scripts/e2e/playwright-e2e.sh` (see
-[TEST.md](TEST.md)). The wrapper first regenerates `public/bundle.css` with the
+suite by default through `scripts/e2e/playwright-e2e.sh`, as one job per
+Playwright project (see [TEST.md](TEST.md)). The wrapper first regenerates `public/bundle.css` with the
 pinned Stylance CLI, because a clean checkout paired with a persistent Cargo
 target can reuse the web build-script result without recreating that generated
 file. After `cargo leptos build`, it synchronizes the complete authoritative

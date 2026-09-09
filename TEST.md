@@ -252,6 +252,22 @@ shared application state in its isolated test database. Set
 `ERSATZRS_E2E_WORKERS=<n>` or pass an explicit `--workers` argument only for
 spec subsets that are known to be independent.
 
+Because that single worker is a correctness requirement rather than a tuning
+choice, CI parallelises one level up instead: it runs the wrapper once per
+Playwright project (`chromium`, `firefox`) as two jobs. Each job invokes the
+wrapper separately, and the wrapper creates its own temporary database and web
+host per invocation, so the two projects cannot observe each other's state.
+Each job therefore needs its own port (`ERSATZRS_E2E_PORT`) and its own result
+directory (`ERSATZRS_E2E_RESULT_DIR`), because both CI runners share one
+machine. Splitting by project rather than by `--shard` also keeps every
+`test.describe.configure({ mode: 'serial' })` group whole inside one job.
+
+Run a single project locally the same way CI does:
+
+```bash
+ERSATZRS_E2E_PORT=18409 scripts/e2e/playwright-e2e.sh --project=chromium
+```
+
 On Windows, run the same wrapper from Git Bash. It keeps shell-owned paths in
 POSIX form while translating the temporary database, home, site, and fixture
 paths passed to native Windows processes into drive-letter form. The wrapper

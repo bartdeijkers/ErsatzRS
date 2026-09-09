@@ -188,6 +188,15 @@ release section when tagging a release.
 
 ### Changed
 
+- Run the Playwright admin E2E suite as one CI job per browser project
+  (`chromium`, `firefox`) instead of one job for both. The suite runs on a
+  single worker because it mutates shared application state, so per-project jobs
+  are the only available parallelism: each job boots its own temporary database
+  and web host. The two projects are evenly balanced (7.3 and 7.7 minutes of a
+  15.3-minute serial run), so the stage should drop from ~17.8 to roughly 10
+  minutes once each job's ~2.4 minutes of build and boot is counted. Same tests,
+  same projects, no coverage change.
+
 - Run the CI test jobs through nextest with the same target selection as before
   (ADR 0090), under a new `ci` profile that keeps the no-retry,
   run-through-failures and slow-test-after-60s semantics and adds a JUnit
