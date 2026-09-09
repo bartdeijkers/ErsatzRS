@@ -139,12 +139,30 @@ jobs:
       # .config/nextest.toml reports anything slower than 60s in the summary.
       - name: Test
         run: cargo nextest run --profile ci --workspace --lib --bins --tests
+      # nextest resolves its store directory from the workspace root, not from
+      # CARGO_TARGET_DIR, so the report lands in <workspace>/target/nextest even
+      # though build artifacts go to the persistent target-dir. Look in both and
+      # stage the report inside the workspace: upload-artifact cannot read paths
+      # outside it, and CARGO_TARGET_DIR points at the workspace's parent.
+      - name: Collect test timings
+        if: always()
+        run: |
+          mkdir -p ci-artifacts
+          report="$(find "$GITHUB_WORKSPACE/target/nextest" \
+            "$CARGO_TARGET_DIR/nextest" \
+            -type f -name junit.xml 2>/dev/null | head -n 1)"
+          if [ -n "$report" ]; then
+            cp "$report" ci-artifacts/junit.xml
+            echo "Collected $report"
+          else
+            echo "No nextest JUnit report found" >&2
+          fi
       - name: Upload test timings
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-timings-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ env.CARGO_TARGET_DIR }}/nextest/ci/junit.xml
+          path: ci-artifacts/junit.xml
           if-no-files-found: warn
           retention-days: 14
       - name: Validate progress index (docs/progress/)

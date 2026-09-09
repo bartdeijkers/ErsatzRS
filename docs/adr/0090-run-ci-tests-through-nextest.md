@@ -66,9 +66,25 @@ behave differently. This is low risk here because `./run.sh test-closeout`
 already runs the entire workspace under nextest as the canonical local gate, so
 the suite is known to pass under this runner.
 
-Process-per-test also changes the parallelism profile. Wall-clock time is
-expected to improve, but this ADR does not claim a number; the first runs after
-this change establish the new baseline.
+Process-per-test also changes the parallelism profile, and the first run
+established the new baseline. On the same self-hosted runner and the same test
+selection, executing 2747 tests took 37 seconds under nextest against roughly
+20.7 minutes previously, taking the whole `test` job from 26.6 to 7.4 minutes.
+The cause was not slow tests: `cargo test` ran 68 test binaries one after another,
+parallelising only within each binary, while nextest parallelises across all of
+them.
+
+That result also retires the working hypothesis that motivated the timing
+report. No test exceeds nextest's 60-second slow threshold; the slowest is 20.01s
+(`hardware_graph::tests::a_probe_that_hangs_is_denied_rather_than_blocking_start`,
+which deliberately exercises a hang), followed by 13.04s, and only two tests
+exceed 10 seconds. The `addon_media_list_*` family that log-timestamp triage had
+pointed at is not disproportionately slow. Compilation, at roughly 6.8 minutes,
+is now the dominant cost of the job.
+
+The JUnit report keeps its value regardless: it is what disproved the
+hypothesis, and it makes the next regression attributable without repeating
+that triage.
 
 The three documentation statements asserting the old behavior are updated, as
 is the agent guard hook's message, which told agents that CI retained the
