@@ -48,7 +48,11 @@ test.describe('support route-family parity', () => {
 
     await page.goto('/system/health');
     await expect(page.getByRole('heading', { name: 'Health Checks' })).toBeVisible();
-    await expect(page.getByText('Support')).toBeVisible();
+    // Scoped to the drawer: health-check rows can contain the word "unsupported",
+    // which an unscoped text match also resolves to.
+    await expect(
+      page.locator('#admin-navigation-drawer a[href="/system/health"]'),
+    ).toContainText('Support');
     await expect(page.locator('[data-health-error-badge]')).toHaveCount(1);
     await expect(page.locator('[data-health-warning-badge]')).toHaveCount(1);
     await page.screenshot({ path: screenshotPath(testInfo, 'support-health'), fullPage: true });
@@ -105,5 +109,48 @@ test.describe('support route-family parity', () => {
     await expect(page.getByText('Missing mediaItem query parameter')).toBeVisible();
 
     await expectNoRuntimeErrors(page, runtimeErrors);
+  });
+
+  // ADR 0089: the drawer exposes one badged Support destination and the three
+  // support pages navigate through in-page route tabs, mirroring Settings.
+  test('one drawer Support link drives the system route tabs', async ({ page }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'The navigation contract is language-independent; Chromium avoids repeating the global language write.',
+    );
+
+    await forceEnglish(page);
+    await page.goto('/system/health');
+
+    // One Support destination. The link is located by href, not by accessible
+    // name: the health badge count is part of the name whenever it is showing.
+    const drawer = page.locator('#admin-navigation-drawer');
+    const supportLink = drawer.locator('a[href="/system/health"]');
+    await expect(drawer.locator('a[href^="/system/"]')).toHaveCount(1);
+    await expect(supportLink).toContainText('Support');
+    // The health badge rides on the drawer link, not on a group header.
+    await expect(supportLink.locator('[data-health-badges]')).toHaveCount(1);
+
+    const tabs = page.locator('[data-system-route-tabs]');
+    await expect(tabs.getByRole('link')).toHaveCount(3);
+    await expect(tabs.getByRole('link', { name: 'Health Checks', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+
+    await tabs.getByRole('link', { name: 'Logs', exact: true }).click();
+    await expect(page).toHaveURL(/\/system\/logs$/);
+    await expect(
+      page.locator('[data-system-route-tabs]').getByRole('link', { name: 'Logs', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+    await expect(supportLink).toHaveClass(/nav-link-active/);
+
+    // Detail routes keep the tab strip and hold the Troubleshooting tab active.
+    await page.goto('/system/troubleshooting/block-playout');
+    await expect(
+      page
+        .locator('[data-system-route-tabs]')
+        .getByRole('link', { name: 'Troubleshooting', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
   });
 });
