@@ -56,8 +56,8 @@ visible UTC cutoff renewed on re-enabling. Published playback stays frozen;
 existing videos stream and enabled SponsorBlock applies in every mode.
 M-02 completes ADR 0052 manual primary/fallback captions, revision-pinned files
 and aligned MPEG-TS/transcoded HLS captions in both delivery modes. Its milestone
-owns evidence. M-03 and N-01 are complete locally. N-01 adds permission-reviewed
-yt-dlp -U, playback-first deferral and explicit offline crash recovery.
+owns evidence. M-03 is complete; N-01 is pushed with green CI (see milestone):
+permission-reviewed yt-dlp -U, playback-first deferral and offline crash recovery.
 N-02 validation/rollback and N-03 integrated closeout remain open.
 '''
 

@@ -114,23 +114,29 @@ tests, four matched Chromium/Firefox hydrated/no-JS cases, focused Clippy and
 static checks, with no remaining P1/P2 after independent Astra review.
 Seven-day retention, cleanup, eviction, new admission and concurrency controls
 are withdrawn, not deferred to N-03; existing runtime safeguards are unchanged.
-AMM-N-01 is Complete locally: permission-reviewed native yt-dlp -U startup/daily
+AMM-N-01 is Complete and pushed: permission-reviewed native yt-dlp -U startup/daily
 maintenance defers busy tools without interrupting or draining playback, even
 beyond 24 hours. On 2026-09-09 the maintainer accepted explicit tool-scoped offline
 recovery for uncertain cleanup after abrupt host death. Its milestone owns
 POSIX/native Windows process recovery, localized guidance, focused Clippy,
 playback smoke and four matched hydrated/no-JS browser cases; P1/P2 review is closed.
-Next concrete action: plan AMM-N-02 read-only for maintainer approval. Do not
-implement rollback/quarantine/manual controls before approval; no CI or closeout.
+Host e445ace3 and add-ons 5ddc031 have terminal exact-SHA green CI on 2026-09-09;
+milestone amm-n-01 owns run links, corrective evidence and the non-blocking
+add-on upload-action deprecation notice. No release was published.
+Work and subagents are paused at the maintainer's green-CI checkpoint.
+On explicit resume, plan AMM-N-02 read-only for maintainer approval. Do not
+implement rollback/quarantine/manual controls before approval.
 HLS Direct expansion is excluded; language changes may reprepare
-downloaded media. No CI, push, full closeout or later-slice implementation.
+downloaded media. Do not start further CI, pushes, full closeout or later-slice
+implementation while paused.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native
 yt-dlp executable capabilities; the removed custom Range adapter has no fallback.
 Keep existing HDR/unmapped-subtitle refusals and ordinary playback behavior intact.
 The non-blocking static startup-stage diagnostic debt remains visible in the
 owning parity file; do not invent new infrastructure to clear speculative cases.
 Run build/media checks serially with bounded concurrency after the prior WSL
-overload.
+overload. The generated local Cargo cache was cleaned under the over-40-GiB
+policy after CI; rebuild matched server/WASM assets before further browser work.
 
 M-01B reuses full-download preparation groundwork. Its provider-neutral
 native list select offers Stream (default),

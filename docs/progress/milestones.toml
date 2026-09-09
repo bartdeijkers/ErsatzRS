@@ -3803,7 +3803,30 @@ permission review, latest-only status, redaction and exact offline guidance.
 Independent Astra P1/P2 review is closed after correcting managed-tool context
 and browser-safe status DTO integration. Build/media gates ran serially with
 bounded concurrency. Rollback, quarantine, manual update button and history UI
-remain N-02 work. No CI, push or full closeout was run.
+remain N-02 work. Local feature acceptance did not run a full closeout.
+
+The maintainer subsequently authorized commit/push and CI on 2026-09-09.
+Host e445ace3980e6e16e110c4288020539c39ffddcc is pushed to main with terminal
+green CI: https://github.com/bartdeijkers/ErsatzRS/actions/runs/34327068496
+Format, Cargo deny, documentation checks, Clippy, Rust tests, progress and
+architecture validation pass. Playwright reports 316 passed and 28 skipped.
+The host run has no warning annotations.
+Initial add-on CI exposed missing stock yt-dlp/FFmpeg test dependencies and a
+Windows batch-wrapper command-length fixture failure. The pinned validator also
+rejected the current manifest in a local diagnostic. Correction 5ddc031 adds
+checksum-pinned temporary CI tools, preserves the large-stdin assertion without
+overflowing the Windows fake command, and refreshes the validator from the
+reviewed host contract. Independent Astra review finds no remaining P1/P2;
+13 focused local caption/request tests and manifest/checksum validation pass.
+Add-ons 5ddc0311318f412bede6f9b7facd3700df07e39a is pushed to main with terminal
+green Windows tests and Linux validation/bundle CI:
+https://github.com/bartdeijkers/ErsatzRS-addons/actions/runs/34331981542
+Both repositories' local HEAD, tracking main and live remote main matched their
+respective verified SHA at handoff. The add-on workflow retains a non-blocking
+actions/upload-artifact@v4 Node-runtime deprecation notice; release publication
+was intentionally skipped. No beta or N-02 implementation was started.
+Work and subagents paused after green CI as requested. On explicit resume,
+the next action is an N-02 implementation plan for maintainer review.
 '''
 
 [[milestone]]

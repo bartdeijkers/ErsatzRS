@@ -1101,6 +1101,11 @@ admission, ownership, recovery and playback behavior remain unchanged.
 
 ### AMM-N-01 — Startup and daily yt-dlp self-update
 
+Complete and pushed with green host/add-on CI on 2026-09-09. Canonical acceptance
+and exact-revision evidence live in milestone `amm-n-01` in
+[`docs/progress/milestones.toml`](../docs/progress/milestones.toml).
+Work is paused; N-02 planning requires explicit resume and implementation approval.
+
 - Approved crash limitation (2026-09-09): graceful shutdown/restart remains
   automatic; uncertain cleanup after abrupt host death requires explicit
   offline recovery for one tool, after operator confirmation that the host,
