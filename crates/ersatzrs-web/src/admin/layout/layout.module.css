@@ -176,6 +176,15 @@
     flex-direction: column;
     gap: 0.125rem;
     padding: 0.75rem 0.5rem;
+    flex: 1 0 auto;
+}
+
+/* Pins the settings link to the bottom of the drawer, separated from the
+   scrolling nav body above it. */
+.nav-footer {
+    margin-top: auto;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
 }
 
 .nav-group {
@@ -251,6 +260,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Right-aligns the health badge inside a nav link, matching the badge
+   placement the support group header used before it was collapsed. */
+.nav-link-trailing {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-left: auto;
 }
 
 .nav-badge-warning {

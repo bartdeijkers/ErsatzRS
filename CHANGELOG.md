@@ -188,6 +188,15 @@ release section when tagging a release.
 
 ### Changed
 
+- Move Settings to the bottom of the admin navigation drawer and collapse the
+  expanded Support group into a single badged `Support` link beside it
+  (ADR 0089). Health checks, Logs, and Troubleshooting now render as in-page
+  route tabs, reusing the pattern Settings already uses for its seven pages, so
+  the health warning/error badge stays visible no matter which drawer groups are
+  expanded. Every `/system/*` URL is unchanged; Logs and Troubleshooting cost one
+  extra click from the drawer, and the `/system/troubleshooting/*` detail pages
+  carry the same tab strip.
+
 - Defer the two preserved download-ahead browser acceptance tests to AMM-M-01B,
   where they must use its explicit delivery workflow; streaming acceptance and
   lower-level preparation tests remain active.

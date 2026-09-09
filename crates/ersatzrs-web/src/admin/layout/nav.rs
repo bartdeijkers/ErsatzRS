@@ -56,18 +56,22 @@ pub(super) fn NavDrawer() -> impl IntoView {
                     <NavLink href="/playouts" label=tr(TextKey::Playouts) icon=IconName::Play/>
                 </SchedulingNavGroup>
 
-                <NavLink
-                    href="/settings/ffmpeg"
-                    label=tr(TextKey::Settings)
-                    icon=IconName::Settings
-                    match_prefix="/settings/"
-                />
-
-                <SupportNavGroup>
-                    <NavLink href="/system/health" label=tr(TextKey::HealthChecks) icon=IconName::Check/>
-                    <NavLink href="/system/logs" label=tr(TextKey::Logging) icon=IconName::Info/>
-                    <NavLink href="/system/troubleshooting" label=tr(TextKey::Troubleshooting) icon=IconName::Warning/>
-                </SupportNavGroup>
+                <div class=style::nav_footer>
+                    <NavLink
+                        href="/system/health"
+                        label=tr(TextKey::Support)
+                        icon=IconName::Check
+                        match_prefix="/system/"
+                    >
+                        <HealthBadge/>
+                    </NavLink>
+                    <NavLink
+                        href="/settings/ffmpeg"
+                        label=tr(TextKey::Settings)
+                        icon=IconName::Settings
+                        match_prefix="/settings/"
+                    />
+                </div>
             </nav>
         </aside>
     }
@@ -81,26 +85,6 @@ fn SchedulingNavGroup(children: ChildrenFn) -> impl IntoView {
                 <div class=style::nav_group_header_left>
                     <span>{tr(TextKey::Scheduling)}</span>
                     <PlayoutWarningBadge/>
-                </div>
-                <span class=style::nav_group_chevron>
-                    <span style=icon_style(IconName::ChevronDown, "0.75rem") aria-hidden="true"></span>
-                </span>
-            </summary>
-            <div class=style::nav_group_children>
-                {children()}
-            </div>
-        </details>
-    }
-}
-
-#[component]
-fn SupportNavGroup(children: ChildrenFn) -> impl IntoView {
-    view! {
-        <details class=style::nav_group open data-nav-group="support">
-            <summary class=style::nav_group_header>
-                <div class=style::nav_group_header_left>
-                    <span>{tr(TextKey::Support)}</span>
-                    <HealthBadge/>
                 </div>
                 <span class=style::nav_group_chevron>
                     <span style=icon_style(IconName::ChevronDown, "0.75rem") aria-hidden="true"></span>
@@ -136,6 +120,7 @@ fn NavLink(
     label: &'static str,
     icon: IconName,
     #[prop(optional)] match_prefix: Option<&'static str>,
+    #[prop(optional)] children: Option<ChildrenFn>,
 ) -> impl IntoView {
     let location = use_location();
     let is_active = move || {
@@ -155,6 +140,9 @@ fn NavLink(
         <a href=href class=cls>
             <span style=icon_style(icon, "1rem") aria-hidden="true"></span>
             <span class=style::nav_link_text>{label}</span>
+            {children.map(|children| view! {
+                <span class=style::nav_link_trailing>{children()}</span>
+            })}
         </a>
     }
 }
@@ -166,5 +154,15 @@ mod tests {
         let prefix = "/settings/";
         assert!("/settings/logging".starts_with(prefix));
         assert!(!"/system/logs".starts_with(prefix));
+    }
+
+    #[test]
+    fn support_prefix_covers_every_page_the_support_group_used_to_list() {
+        let prefix = "/system/";
+        assert!("/system/health".starts_with(prefix));
+        assert!("/system/logs".starts_with(prefix));
+        assert!("/system/troubleshooting".starts_with(prefix));
+        assert!("/system/troubleshooting/playback".starts_with(prefix));
+        assert!(!"/settings/logging".starts_with(prefix));
     }
 }

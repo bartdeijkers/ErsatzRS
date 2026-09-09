@@ -9,6 +9,7 @@ use crate::admin::server_fns::layout::{
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
+use crate::admin::ui::primitives::system_navigation::SystemPageLayout;
 #[cfg(target_arch = "wasm32")]
 use crate::admin::ui::primitives::toast::ToastSeverity;
 use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
@@ -18,11 +19,13 @@ pub fn HealthPage() -> impl IntoView {
     let snapshot = Resource::new_blocking(|| (), |()| load_health_snapshot());
 
     view! {
-        <Suspense fallback=admin_loading_resource_view>
-            {move || snapshot.get().map(|result| admin_result_view(result, |initial_snapshot| {
-                view! { <HealthIsland initial_snapshot=initial_snapshot/> }.into_any()
-            }))}
-        </Suspense>
+        <SystemPageLayout>
+            <Suspense fallback=admin_loading_resource_view>
+                {move || snapshot.get().map(|result| admin_result_view(result, |initial_snapshot| {
+                    view! { <HealthIsland initial_snapshot=initial_snapshot/> }.into_any()
+                }))}
+            </Suspense>
+        </SystemPageLayout>
     }
 }
 

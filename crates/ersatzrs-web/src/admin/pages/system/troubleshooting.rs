@@ -15,6 +15,7 @@ use crate::admin::server_fns::troubleshooting::{
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
+use crate::admin::ui::primitives::system_navigation::SystemPageLayout;
 
 stylance::import_crate_style!(style, "src/admin/pages/system/troubleshooting.module.css");
 
@@ -23,18 +24,20 @@ pub fn TroubleshootingPage() -> impl IntoView {
     let report = Resource::new_blocking(|| (), |()| load_troubleshooting_report());
 
     view! {
-        <div class=style::page>
-            <header>
-                <h1 class=style::heading>
-                    {tr(TextKey::Troubleshooting)}
-                </h1>
-                <div class=style::divider></div>
-            </header>
+        <SystemPageLayout>
+            <div class=style::page>
+                <header>
+                    <h1 class=style::heading>
+                        {tr(TextKey::Troubleshooting)}
+                    </h1>
+                    <div class=style::divider></div>
+                </header>
 
-            <Suspense fallback=admin_loading_resource_view>
-                {move || report.get().map(|result| admin_result_view(result, render_report))}
-            </Suspense>
-        </div>
+                <Suspense fallback=admin_loading_resource_view>
+                    {move || report.get().map(|result| admin_result_view(result, render_report))}
+                </Suspense>
+            </div>
+        </SystemPageLayout>
     }
 }
 
@@ -176,22 +179,24 @@ pub fn MpegTroubleshootingPage() -> impl IntoView {
         );
 
     view! {
-        <div class=style::page>
-            <header>
-                <h1 class=style::heading>{tr(TextKey::MpegTsTroubleshooting)}</h1>
-                <div class=style::divider></div>
-            </header>
+        <SystemPageLayout>
+            <div class=style::page>
+                <header>
+                    <h1 class=style::heading>{tr(TextKey::MpegTsTroubleshooting)}</h1>
+                    <div class=style::divider></div>
+                </header>
 
-            <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
-                {move || match context.get() {
-                    Some(Ok(context)) => render_mpeg_troubleshooting(context),
-                    Some(Err(error)) => view! {
-                        <p class=style::empty>{error.to_string()}</p>
-                    }.into_any(),
-                    None => view! { <p>{tr(TextKey::Loading)}</p> }.into_any(),
-                }}
-            </Suspense>
-        </div>
+                <Suspense fallback=move || view! { <p>{tr(TextKey::Loading)}</p> }>
+                    {move || match context.get() {
+                        Some(Ok(context)) => render_mpeg_troubleshooting(context),
+                        Some(Err(error)) => view! {
+                            <p class=style::empty>{error.to_string()}</p>
+                        }.into_any(),
+                        None => view! { <p>{tr(TextKey::Loading)}</p> }.into_any(),
+                    }}
+                </Suspense>
+            </div>
+        </SystemPageLayout>
     }
 }
 
@@ -542,19 +547,21 @@ pub fn PlaybackTroubleshootingPage() -> impl IntoView {
         );
 
     view! {
-        <Suspense fallback=move || view! { <p>{tr(TextKey::LoadingMediaInfo)}</p> }>
-            {move || match context.get() {
-                Some(Ok(context)) => render_playback_troubleshooting(context),
-                Some(Err(error)) => view! {
-                    <div class=style::page>
-                        <p style="margin:0;color:var(--color-error,#f87171)">
-                            {unable_to_load_playback_troubleshooting(error)}
-                        </p>
-                    </div>
-                }.into_any(),
-                None => view! { <p>{tr(TextKey::LoadingMediaInfo)}</p> }.into_any(),
-            }}
-        </Suspense>
+        <SystemPageLayout>
+            <Suspense fallback=move || view! { <p>{tr(TextKey::LoadingMediaInfo)}</p> }>
+                {move || match context.get() {
+                    Some(Ok(context)) => render_playback_troubleshooting(context),
+                    Some(Err(error)) => view! {
+                        <div class=style::page>
+                            <p style="margin:0;color:var(--color-error,#f87171)">
+                                {unable_to_load_playback_troubleshooting(error)}
+                            </p>
+                        </div>
+                    }.into_any(),
+                    None => view! { <p>{tr(TextKey::LoadingMediaInfo)}</p> }.into_any(),
+                }}
+            </Suspense>
+        </SystemPageLayout>
     }
 }
 
@@ -775,38 +782,40 @@ pub fn SequentialScheduleValidationPage() -> impl IntoView {
     );
 
     view! {
-        <div class=style::page>
-            <header>
-                <h1 class=style::heading>{tr(TextKey::SequentialScheduleValidation)}</h1>
-                <div class=style::divider></div>
-            </header>
+        <SystemPageLayout>
+            <div class=style::page>
+                <header>
+                    <h1 class=style::heading>{tr(TextKey::SequentialScheduleValidation)}</h1>
+                    <div class=style::divider></div>
+                </header>
 
-            <form method="get" action="/system/troubleshooting/sequential-schedule" class=style::form>
-                <label class=style::field>
-                    <span>{tr(TextKey::YamlFile)}</span>
-                    <input
-                        class=style::input
-                        type="text"
-                        name="yamlFile"
-                        value=yaml_file()
-                    />
-                </label>
-                <label class=style::field>
-                    <span>{tr(TextKey::Schema)}</span>
-                    <select class=style::select name="isImport">
-                        <option value="false" selected=move || !is_import()>{tr(TextKey::Full)}</option>
-                        <option value="true" selected=is_import>{tr(TextKey::Import)}</option>
-                    </select>
-                </label>
-                <button type="submit" class=style::primaryButton>
-                    {tr(TextKey::Validate)}
-                </button>
-            </form>
+                <form method="get" action="/system/troubleshooting/sequential-schedule" class=style::form>
+                    <label class=style::field>
+                        <span>{tr(TextKey::YamlFile)}</span>
+                        <input
+                            class=style::input
+                            type="text"
+                            name="yamlFile"
+                            value=yaml_file()
+                        />
+                    </label>
+                    <label class=style::field>
+                        <span>{tr(TextKey::Schema)}</span>
+                        <select class=style::select name="isImport">
+                            <option value="false" selected=move || !is_import()>{tr(TextKey::Full)}</option>
+                            <option value="true" selected=is_import>{tr(TextKey::Import)}</option>
+                        </select>
+                    </label>
+                    <button type="submit" class=style::primaryButton>
+                        {tr(TextKey::Validate)}
+                    </button>
+                </form>
 
-            <Suspense fallback=admin_loading_resource_view>
-                {move || result.get().map(|result| admin_result_view(result, render_yaml_validation))}
-            </Suspense>
-        </div>
+                <Suspense fallback=admin_loading_resource_view>
+                    {move || result.get().map(|result| admin_result_view(result, render_yaml_validation))}
+                </Suspense>
+            </div>
+        </SystemPageLayout>
     }
 }
 
@@ -828,27 +837,29 @@ pub fn BlockPlayoutTroubleshootingPage() -> impl IntoView {
     let blocks = Resource::new_blocking(selected_playout, list_blocks_for_playout);
 
     view! {
-        <div class=style::page>
-            <header>
-                <h1 class=style::heading>{tr(TextKey::BlockPlayoutTroubleshooting)}</h1>
-                <div class=style::divider></div>
-            </header>
+        <SystemPageLayout>
+            <div class=style::page>
+                <header>
+                    <h1 class=style::heading>{tr(TextKey::BlockPlayoutTroubleshooting)}</h1>
+                    <div class=style::divider></div>
+                </header>
 
-            <Suspense fallback=admin_loading_resource_view>
-                {move || options.get().map(|result| admin_result_view(result, |items| {
-                    render_block_playout_selector(items, selected_playout(), &search())
-                }))}
-            </Suspense>
-
-            <section>
-                <h2 class=style::subheading>{tr(TextKey::Blocks)}</h2>
                 <Suspense fallback=admin_loading_resource_view>
-                    {move || blocks.get().map(|result| admin_result_view(result, |items| {
-                        render_blocks_table(items, selected_playout(), &search())
+                    {move || options.get().map(|result| admin_result_view(result, |items| {
+                        render_block_playout_selector(items, selected_playout(), &search())
                     }))}
                 </Suspense>
-            </section>
-        </div>
+
+                <section>
+                    <h2 class=style::subheading>{tr(TextKey::Blocks)}</h2>
+                    <Suspense fallback=admin_loading_resource_view>
+                        {move || blocks.get().map(|result| admin_result_view(result, |items| {
+                            render_blocks_table(items, selected_playout(), &search())
+                        }))}
+                    </Suspense>
+                </section>
+            </div>
+        </SystemPageLayout>
     }
 }
 
@@ -886,18 +897,20 @@ pub fn BlockPlayoutHistoryPage() -> impl IntoView {
     );
 
     view! {
-        <div class=style::page>
-            <header>
-                <h1 class=style::heading>{tr(TextKey::BlockPlayoutHistory)}</h1>
-                <div class=style::divider></div>
-            </header>
+        <SystemPageLayout>
+            <div class=style::page>
+                <header>
+                    <h1 class=style::heading>{tr(TextKey::BlockPlayoutHistory)}</h1>
+                    <div class=style::divider></div>
+                </header>
 
-            <Suspense fallback=admin_loading_resource_view>
-                {move || history.get().map(|result| admin_result_view(result, |items| {
-                    render_history(items, playout_id(), block_id(), history_id())
-                }))}
-            </Suspense>
-        </div>
+                <Suspense fallback=admin_loading_resource_view>
+                    {move || history.get().map(|result| admin_result_view(result, |items| {
+                        render_history(items, playout_id(), block_id(), history_id())
+                    }))}
+                </Suspense>
+            </div>
+        </SystemPageLayout>
     }
 }
 

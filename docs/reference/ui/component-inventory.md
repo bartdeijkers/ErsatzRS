@@ -13,6 +13,7 @@ every match has the same purpose or behavior.
 | Resource states | Resource-state symbols appear in 36 Rust files including the primitive definition | `resource_state.rs` | Implemented | Broad |
 | Navigation drawer | One global `AppShell` renders the primary admin drawer and one native button disclosure; no page-local drawer variants were found | `layout/mod.rs`, `layout/layout.module.css` | Implemented | Global shell |
 | Settings route tabs | One shared route inventory renders eight localized links across every top-level Settings route while the drawer exposes one Settings destination | `settings_navigation.rs` | Implemented | Broad across `/settings/*` |
+| System route tabs | One shared route inventory renders three localized links across the top-level Support routes while the drawer exposes one badged Support destination | `system_navigation.rs` | Implemented | Every `/system/*` page |
 
 The source paths in the table are under
 [`crates/ersatzrs-web/src/admin/ui/primitives/`](../../../crates/ersatzrs-web/src/admin/ui/primitives/).

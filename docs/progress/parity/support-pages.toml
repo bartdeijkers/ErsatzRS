@@ -2,7 +2,7 @@ feature    = 'Support pages (Health / Logs / Troubleshooting)'
 etv_source = '`ErsatzTV/Pages/Index.razor`, `ErsatzTV/Pages/Logs.razor`, `ErsatzTV/Pages/Troubleshooting/`'
 rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-web/src/admin/languages/`, `tests/e2e/support-pages.spec.ts`'
 status     = 'In progress'
-adr        = ['0013']
+adr        = ['0013', '0089']
 summary    = '''
 Ported: `/system/health` renders an ErsatzTV-style two-column health table from
 the live health service, filters `NotApplicable` rows, refreshes after scanner
@@ -24,6 +24,14 @@ the generated troubleshooting HLS session route serves the produced playlist
 and segments. Visible labels/statuses use the shared persisted-language i18n
 layer for `en-us`, `pl`, `pt-br`, and `nl`; focused Rust and e2e tests cover the
 health/logs/troubleshooting/sequential/block/playback route family.
+
+Navigation diverges from ErsatzTV per ADR 0089: the drawer's expanded Support
+group is collapsed into one badged `Support` link (`/system/health`, active
+across `/system/*`), and `/system/health`, `/system/logs`, and
+`/system/troubleshooting` render as in-page route tabs through
+`SystemRouteTabs` / `SystemPageLayout`, mirroring the existing Settings route
+tabs. The health warning/error badge moved from the group header onto the
+Support link and is now visible regardless of drawer scroll position.
 '''
 
 [[debt]]
@@ -46,4 +54,12 @@ id          = 'channel-stream-selector-folder-disagreement'
 description = 'The channel editor listed custom stream selectors from `<data>/scripts/channel-stream-selectors` while playback and playback troubleshooting read `<data>/channel-stream-selectors`, so a selector offered by the channel dropdown was never applied. The folder was also never created at startup, and the extracted troubleshooting runtime turned the resulting `NotFound` into a hard error that replaced the whole `/system/troubleshooting/playback` page with an error message.'
 discovered  = '2026-07-25'
 evidence    = 'Fixed 2026-07-25: `file_system_layout::channel_stream_selectors_folder` is now the single source of truth for all four call sites, matching `FileSystemLayout.ChannelStreamSelectorsFolder` (`ScriptsFolder/channel-stream-selectors`). `list_channel_stream_selectors` mirrors `LocalFileSystem.ListFiles` — files only, `._*` skipped, absent or unreadable folder yields an empty list — and both the channel editor and the troubleshooting page call it, so they cannot disagree. `host::bootstrap` creates the folder like `Startup.cs` does. Covered by `listing_channel_stream_selectors_treats_a_missing_folder_as_empty`, `listing_channel_stream_selectors_keeps_every_file_but_resource_forks`, and `channel_stream_selectors_folder_keeps_the_ersatztv_scripts_grouping`; regression seen in CI run 30132852456 (`support-pages.spec.ts`, `content-variants.spec.ts`).'
+resolved    = true
+
+[[debt]]
+id          = 'system-route-tabs-missing-on-troubleshooting-detail-pages'
+adr         = '0089'
+description = 'ADR 0089 removed Logs and Troubleshooting from the navigation drawer in favour of `SystemPageLayout` route tabs, but only the three top-level pages (`/system/health`, `/system/logs`, `/system/troubleshooting`) render the tab strip. The five `/system/troubleshooting/*` detail routes (mpeg, sequential-schedule, block-playout, block-playout/history, playback) do not, so a user deep-linked into one — for example from the media browser playback-troubleshooting links — has no in-page path to Logs and must go through the drawer Support link. The Settings section already implements the equivalent behavior for `/settings/addons/<id>` via `SettingsPageLayoutForPath`.'
+discovered  = '2026-09-09'
+evidence    = 'Fixed 2026-09-09: `SystemPageLayout` now wraps all eight system pages — `HealthPage`, `LogsPage`, `TroubleshootingPage`, `MpegTroubleshootingPage`, `SequentialScheduleValidationPage`, `BlockPlayoutTroubleshootingPage`, `BlockPlayoutHistoryPage`, and `PlaybackTroubleshootingPage`. Against the running dev host every one of the eight `/system/*` routes serves exactly one `data-system-route-tabs` strip with exactly one `aria-current="page"`, and `/system/troubleshooting/*` holds the Troubleshooting tab. Covered by `troubleshooting_detail_keeps_the_troubleshooting_tab_selected` and the `one drawer Support link drives the system route tabs` case in `tests/e2e/support-pages.spec.ts`.'
 resolved    = true

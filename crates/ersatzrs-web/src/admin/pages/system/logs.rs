@@ -9,6 +9,7 @@ use crate::admin::ui::primitives::pagination::PaginationControls;
 use crate::admin::ui::primitives::resource_state::{
     admin_loading_resource_view, admin_result_view,
 };
+use crate::admin::ui::primitives::system_navigation::SystemPageLayout;
 use crate::admin::ui::primitives::toast::{load_or_notify, use_toast};
 
 stylance::import_crate_style!(style, "src/admin/pages/system/logs.module.css");
@@ -32,19 +33,21 @@ pub fn LogsPage() -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=admin_loading_resource_view>
-            {move || {
-                initial.get().map(|result| admin_result_view(result, |(initial_page_size, initial_snapshot)| {
-                    view! {
-                        <LogsIsland
-                            initial_page_size=initial_page_size
-                            initial_snapshot=initial_snapshot
-                        />
-                    }
-                    .into_any()
-                }))
-            }}
-        </Suspense>
+        <SystemPageLayout>
+            <Suspense fallback=admin_loading_resource_view>
+                {move || {
+                    initial.get().map(|result| admin_result_view(result, |(initial_page_size, initial_snapshot)| {
+                        view! {
+                            <LogsIsland
+                                initial_page_size=initial_page_size
+                                initial_snapshot=initial_snapshot
+                            />
+                        }
+                        .into_any()
+                    }))
+                }}
+            </Suspense>
+        </SystemPageLayout>
     }
 }
 
