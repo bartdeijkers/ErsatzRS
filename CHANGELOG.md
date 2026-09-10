@@ -244,6 +244,14 @@ release section when tagging a release.
 
 ### Fixed
 
+- Stop the `ersatzrs-web` build script from failing when a Cargo target
+  directory is reused from a different checkout path. It read
+  `CARGO_MANIFEST_DIR` through `env!`, which bakes the checkout path into the
+  compiled build script; Cargo reuses that binary after the target directory
+  moves, so a CI runner whose work folder was relocated failed with
+  `read admin language directory: NotFound`. The path is now read when the build
+  script runs.
+
 - Run the `ersatzrs-web` integration tests on the manual GitHub-hosted CI
   fallback. Its `web-bins` shard ran only `--bins`, leaving the crate's
   `tests/*.rs` targets unrun on that path while the self-hosted job covered

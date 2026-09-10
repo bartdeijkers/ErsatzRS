@@ -10,12 +10,10 @@ fn main() {
     // Cross-compile and minimal-tooling builds (e.g. `cross build`) ship the
     // CSS bundle from the leptos host build instead of regenerating it here.
     // Warn and continue when stylance-cli is missing so those builds succeed.
+    // Read at run time, like OUT_DIR below: see write_language_registry.
     let status = match std::process::Command::new("stylance")
-        .args([
-            env!("CARGO_MANIFEST_DIR"),
-            "--output-file",
-            "public/bundle.css",
-        ])
+        .arg(std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+        .args(["--output-file", "public/bundle.css"])
         .status()
     {
         Ok(status) => status,
@@ -36,7 +34,13 @@ fn main() {
 fn write_language_registry() {
     use std::fmt::Write as _;
 
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    // Read CARGO_MANIFEST_DIR when the build script runs, not with env!. env!
+    // bakes the checkout path into the compiled build script, and Cargo reuses
+    // that binary when a target dir is moved to another checkout path, so the
+    // script would then read the old, missing checkout.
+    let manifest_dir = std::path::PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"),
+    );
     let languages_dir = manifest_dir.join("src/admin/languages");
     println!("cargo:rerun-if-changed={}", languages_dir.to_string_lossy());
 
