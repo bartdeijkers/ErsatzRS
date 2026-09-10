@@ -187,6 +187,7 @@ pub struct AddonMediaListItemAdminRow {
     pub chapter_input: String,
     /// Latest provider value, retained separately from the operator override.
     pub provider_chapter_input: String,
+    pub remote_stream_id: Option<i64>,
     pub projected_episode_id: Option<EntityId>,
     /// Descriptive classification of this entry.
     ///
@@ -822,6 +823,21 @@ pub trait AddonMediaListRepository: Send + Sync {
             }
         }
     }
+    /// Retain bounded image bytes without changing draft metadata or its revision.
+    async fn stage_editor_artwork(
+        &self,
+        list_id: EntityId,
+        item_id: Option<EntityId>,
+        role: AddonMediaListArtworkRole,
+        content_type: &str,
+        bytes: &[u8],
+    ) -> Result<String> {
+        let _ = (list_id, item_id, role, content_type, bytes);
+        Err(RepositoryError::unavailable(
+            "stage editor artwork",
+            "not implemented",
+        ))
+    }
     /// Store one bounded operator image and select it for a list or item role.
     async fn upload_artwork(
         &self,
@@ -964,6 +980,20 @@ pub trait AddonMediaListRepository: Send + Sync {
     /// Item identity is provider-scoped, so items enumerated by the new add-on
     /// replace the previous ones rather than being migrated.
     async fn change_addon(&self, id: EntityId, addon_id: &str) -> Result<()>;
+    /// Change provider only for the exact saved draft accepted in its impact preview.
+    async fn change_editor_addon(
+        &self,
+        id: EntityId,
+        addon_id: &str,
+        expected_revision: i32,
+    ) -> Result<()> {
+        let _ = (id, addon_id, expected_revision);
+        Err(RepositoryError::unavailable(
+            "change editor add-on",
+            "not implemented",
+        ))
+    }
+
     /// Update refresh cadence and generated-playlist settings.
     #[allow(clippy::too_many_arguments)] // The list settings are saved together under one publication fence.
     async fn update_settings(
@@ -990,6 +1020,14 @@ pub trait AddonMediaListRepository: Send + Sync {
         ))
     }
     /// Persist list-level descriptive metadata to `tvshow.nfo`.
+    /// Save a complete editor task without exposing intermediate revisions.
+    async fn save_editor_task(&self, _save: &super::AddonMediaListEditorSave) -> Result<i32> {
+        Err(RepositoryError::unavailable(
+            "save add-on list editing task",
+            "the repository does not support coherent editor saves",
+        ))
+    }
+
     async fn save_show_nfo(
         &self,
         id: EntityId,

@@ -2,13 +2,12 @@ feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'In progress'
-adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088']
+adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091']
 
 summary = '''
-ADR 0075 implements a provider-neutral metadata draft with generated parent
-NFOs, frozen contracts, provider/override snapshots, durable
-inclusion, atomic publication, the localized editor, artwork materialization,
-health, and both official providers. yt-dlp remains the updateable extraction
+ADR 0075 delivers provider-neutral drafts with parent NFOs, frozen contracts,
+provider/override snapshots, durable inclusion, atomic publication, localization,
+artwork, health and both official providers. yt-dlp remains the updateable extraction
 engine; its mapper only translates full yt-dlp JSON. Existing imports can be
 republished as any supported library type
 without rerunning the provider; the snapshot, order, inclusion, and overrides
@@ -58,8 +57,25 @@ M-02 completes ADR 0052 manual primary/fallback captions, revision-pinned files
 and aligned MPEG-TS/transcoded HLS captions in both delivery modes. Its milestone
 owns evidence. M-03 is complete; N-01 is pushed with green CI (see milestone):
 permission-reviewed yt-dlp -U, playback-first deferral and offline crash recovery.
-N-02 validation/rollback and N-03 integrated closeout remain open.
+N-01B is complete, including item-form corrections; its milestone owns evidence.
+N-02/N-03 remain open.
 '''
+
+[[debt]]
+id          = 'locked-item-form-comprehension'
+description = 'P2: Restore the locked item review hierarchy: separate editing from saved-item tools, shorten repeated option explanations, restore explicit episode position and First aired, and clarify action labels and disclosure boundaries.'
+discovered  = '2026-09-09'
+resolved    = true
+adr         = '0091'
+evidence    = 'Resolved locally on 2026-09-10. IF-01 through IF-06 restore the locked edit/tools hierarchy, concise option source/value, visible First aired, explicit native numbering, contextual tools and single-toggle metadata disclosure. Milestone amm-n-01b owns 642 native tests, 30 focused browser cases and six final matched-candidate cases, web Clippy/parity checks and both-theme mobile-to-4K visual evidence. All nine cultures and the unchanged 139-file design lock are verified. Existing persistence/playback evidence remains valid; no live server restart or publication is implied.'
+
+[[debt]]
+id          = 'locked-addon-list-task-design-production-adaptation'
+description = 'Adapt the locked admin-ux-organize artifact to real Add-on Lists: task routes, coherent Save/Publish and retained native-form drafts, complete conditional controls, responsive visuals and localized hydrated/no-JS behavior. The synthetic preview is not production acceptance.'
+discovered  = '2026-09-09'
+resolved    = true
+adr         = '0091'
+evidence    = 'Resolved locally on 2026-09-09 by AMM-N-01B. The six real task routes retain native drafts and use coherent revision/ETag-fenced saves, immutable artwork handles and existing durable jobs. Milestone amm-n-01b owns the complete evidence: 641 web tests, six app tests, 23 repository regressions, 20 migration tests, affected Clippy/parity lint, 94 Chromium/Firefox native/hydrated cases plus eight final affected cases, both-theme mobile-to-4K comparison, playback smoke and 64 applicable TSDuck checks. The frozen 139-file reference is unchanged. N-02/N-03 remain open; no publication is implied.'
 
 [[debt]]
 id          = 'tool-maintenance-crash-recovery-admission'

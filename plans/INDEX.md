@@ -211,6 +211,11 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Reference material kept alongside the plans
 
+- `amm-n-01b-addon-list-design-adaptation.md` — completed source/capability map
+  linked by the frozen add-on list reference. Milestone `amm-n-01b` owns current
+  acceptance, including the item-form correction; its finished focused plan is
+  pruned. ADR 0091 owns the unchanged design decision.
+
 These are not implementation plans and are not expected to be completed or
 pruned:
 

@@ -1888,7 +1888,7 @@ pub async fn list_addon_media_lists(
     query: ListAddonMediaLists,
     repository: &dyn AddonMediaListRepository,
 ) -> Result<(Vec<AddonMediaListAdminRow>, u64)> {
-    let page_size = query.page_size.max(1);
+    let page_size = query.page_size;
     repository.set_page_size(page_size).await?;
     repository
         .list_admin(

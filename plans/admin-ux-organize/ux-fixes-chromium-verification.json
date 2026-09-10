@@ -1,0 +1,198 @@
+{
+  "browser": "chromium",
+  "javaScriptEnabled": false,
+  "layouts": [
+    {
+      "theme": "dark",
+      "width": 320,
+      "overflow": 0,
+      "firstRowY": 782.140625,
+      "applyY": 729.140625,
+      "rowHeights": [
+        156,
+        156,
+        156,
+        185,
+        156,
+        159,
+        156,
+        156,
+        178
+      ]
+    },
+    {
+      "theme": "dark",
+      "width": 390,
+      "overflow": 0,
+      "firstRowY": 730.84375,
+      "applyY": 677.84375,
+      "rowHeights": [
+        156,
+        156,
+        156,
+        159,
+        156,
+        159,
+        156,
+        156,
+        156
+      ]
+    },
+    {
+      "theme": "dark",
+      "width": 720,
+      "overflow": 0,
+      "firstRowY": 697.109375,
+      "applyY": 644.109375,
+      "rowHeights": [
+        95,
+        113,
+        113,
+        113,
+        112,
+        113,
+        113,
+        112,
+        113
+      ]
+    },
+    {
+      "theme": "dark",
+      "width": 1024,
+      "overflow": 0,
+      "firstRowY": 669,
+      "applyY": 616,
+      "rowHeights": [
+        95,
+        113,
+        113,
+        113,
+        112,
+        113,
+        113,
+        112,
+        113
+      ]
+    },
+    {
+      "theme": "dark",
+      "width": 1440,
+      "overflow": 0,
+      "firstRowY": 656.59375,
+      "applyY": 564,
+      "rowHeights": [
+        78,
+        78,
+        78,
+        78,
+        78,
+        78,
+        78,
+        78,
+        78
+      ]
+    },
+    {
+      "theme": "light",
+      "width": 320,
+      "overflow": 0,
+      "firstRowY": 782.140625,
+      "applyY": 729.140625,
+      "rowHeights": [
+        156,
+        156,
+        156,
+        185,
+        156,
+        159,
+        156,
+        156,
+        178
+      ]
+    },
+    {
+      "theme": "light",
+      "width": 390,
+      "overflow": 0,
+      "firstRowY": 730.84375,
+      "applyY": 677.84375,
+      "rowHeights": [
+        156,
+        156,
+        156,
+        159,
+        156,
+        159,
+        156,
+        156,
+        156
+      ]
+    },
+    {
+      "theme": "light",
+      "width": 720,
+      "overflow": 0,
+      "firstRowY": 697.109375,
+      "applyY": 644.109375,
+      "rowHeights": [
+        95,
+        113,
+        113,
+        113,
+        112,
+        113,
+        113,
+        112,
+        113
+      ]
+    },
+    {
+      "theme": "light",
+      "width": 1024,
+      "overflow": 0,
+      "firstRowY": 669,
+      "applyY": 616,
+      "rowHeights": [
+        95,
+        113,
+        113,
+        113,
+        112,
+        113,
+        113,
+        112,
+        113
+      ]
+    },
+    {
+      "theme": "light",
+      "width": 1440,
+      "overflow": 0,
+      "firstRowY": 656.59375,
+      "applyY": 564,
+      "rowHeights": [
+        78,
+        78,
+        78,
+        78,
+        78,
+        78,
+        78,
+        78,
+        78
+      ]
+    }
+  ],
+  "workflows": [
+    "Keyboard row menu and focus return",
+    "Conflict: named summary, field association, focus, draft retention and successful correction",
+    "Single persistent Apply/Discard bar, no duplicate shortcuts, unobscured focus and contextual Undo",
+    "Previous/Next keep fixed horizontal slots at list boundaries",
+    "Disclosures: keyboard expand/collapse, responsive reflow, conditional fields and invalid-input recovery",
+    "Source tools preserve pending settings when opening a saved-source check",
+    "Default versus explicit equal-valued override remains distinct; invalid settings do not partly save; publishing saved changes retains newer unsaved numbering",
+    "Simplified bulk groups and visible settings: reflow, field visibility, metadata/options preview and package-default reset",
+    "Off-page and filtered conflict recovery retains edits and checked selection",
+    "Pagination sizes 10/25/50/100/All, next/previous, draft and selection retention"
+  ]
+}

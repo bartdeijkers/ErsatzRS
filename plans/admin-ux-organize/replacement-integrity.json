@@ -1,0 +1,12 @@
+{
+  "pages": 87,
+  "checks": [
+    "unique IDs",
+    "form ownership",
+    "labels and ARIA references",
+    "popover targets",
+    "no client scripts",
+    "Python syntax"
+  ],
+  "errors": []
+}

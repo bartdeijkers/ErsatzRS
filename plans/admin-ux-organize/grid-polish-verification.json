@@ -1,0 +1,1277 @@
+{
+  "checks": [
+    {
+      "passed": true,
+      "label": "chromium dark 320 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 855.90625,
+            "label": 852.90625
+          },
+          {
+            "input": 971.90625,
+            "label": 968.90625
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 320 checkbox first line",
+      "data": [
+        {
+          "input": 855.90625,
+          "label": 852.90625
+        },
+        {
+          "input": 971.90625,
+          "label": 968.90625
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 320 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 320 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          808.796875,
+          890.125,
+          938.125
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 320 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 320 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 320 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 768 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 868.9375,
+            "label": 865.9375
+          },
+          {
+            "input": 942.28125,
+            "label": 939.28125
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 768 checkbox first line",
+      "data": [
+        {
+          "input": 868.9375,
+          "label": 865.9375
+        },
+        {
+          "input": 942.28125,
+          "label": 939.28125
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 768 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 768 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          735.96875,
+          817.296875,
+          865.296875
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 768 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 768 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 768 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 1440 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 603,
+            "label": 600
+          },
+          {
+            "input": 676.34375,
+            "label": 673.34375
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 1440 checkbox first line",
+      "data": [
+        {
+          "input": 603,
+          "label": 600
+        },
+        {
+          "input": 676.34375,
+          "label": 673.34375
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 1440 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 1440 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          692.28125,
+          692.28125,
+          692.28125
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium dark compare button baseline",
+      "data": [
+        692.28125,
+        692.28125,
+        692.28125
+      ]
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 1440 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 1440 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium dark 1440 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium light 320 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 855.90625,
+            "label": 852.90625
+          },
+          {
+            "input": 971.90625,
+            "label": 968.90625
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium light 320 checkbox first line",
+      "data": [
+        {
+          "input": 855.90625,
+          "label": 852.90625
+        },
+        {
+          "input": 971.90625,
+          "label": 968.90625
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "chromium light 320 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium light 320 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          808.796875,
+          890.125,
+          938.125
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium light 320 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium light 320 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium light 320 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium light 768 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 868.9375,
+            "label": 865.9375
+          },
+          {
+            "input": 942.28125,
+            "label": 939.28125
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium light 768 checkbox first line",
+      "data": [
+        {
+          "input": 868.9375,
+          "label": 865.9375
+        },
+        {
+          "input": 942.28125,
+          "label": 939.28125
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "chromium light 768 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium light 768 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          735.96875,
+          817.296875,
+          865.296875
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium light 768 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium light 768 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium light 768 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium light 1440 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 603,
+            "label": 600
+          },
+          {
+            "input": 676.34375,
+            "label": 673.34375
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium light 1440 checkbox first line",
+      "data": [
+        {
+          "input": 603,
+          "label": 600
+        },
+        {
+          "input": 676.34375,
+          "label": 673.34375
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "chromium light 1440 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium light 1440 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          692.28125,
+          692.28125,
+          692.28125
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium light compare button baseline",
+      "data": [
+        692.28125,
+        692.28125,
+        692.28125
+      ]
+    },
+    {
+      "passed": true,
+      "label": "chromium light 1440 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "chromium light 1440 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "chromium light 1440 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 320 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 855.9000244140625,
+            "label": 852.9000244140625
+          },
+          {
+            "input": 971.933349609375,
+            "label": 968.933349609375
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 320 checkbox first line",
+      "data": [
+        {
+          "input": 855.9000244140625,
+          "label": 852.9000244140625
+        },
+        {
+          "input": 971.933349609375,
+          "label": 968.933349609375
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 320 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 320 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          809.2333374023438,
+          890.5499877929688,
+          938.5499877929688
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 320 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 320 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 320 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 768 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 868.9500122070312,
+            "label": 865.9500122070312
+          },
+          {
+            "input": 942.316650390625,
+            "label": 939.316650390625
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 768 checkbox first line",
+      "data": [
+        {
+          "input": 868.9500122070312,
+          "label": 865.9500122070312
+        },
+        {
+          "input": 942.316650390625,
+          "label": 939.316650390625
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 768 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 768 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          736.4000244140625,
+          817.7166748046875,
+          865.7166748046875
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 768 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 768 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 768 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 1440 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 603,
+            "label": 600
+          },
+          {
+            "input": 676.36669921875,
+            "label": 673.36669921875
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 1440 checkbox first line",
+      "data": [
+        {
+          "input": 603,
+          "label": 600
+        },
+        {
+          "input": 676.36669921875,
+          "label": 673.36669921875
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 1440 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 1440 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          692.7000122070312,
+          692.7000122070312,
+          692.7000122070312
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox dark compare button baseline",
+      "data": [
+        692.7000122070312,
+        692.7000122070312,
+        692.7000122070312
+      ]
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 1440 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 1440 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox dark 1440 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox light 320 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 855.9000244140625,
+            "label": 852.9000244140625
+          },
+          {
+            "input": 971.933349609375,
+            "label": 968.933349609375
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox light 320 checkbox first line",
+      "data": [
+        {
+          "input": 855.9000244140625,
+          "label": 852.9000244140625
+        },
+        {
+          "input": 971.933349609375,
+          "label": 968.933349609375
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "firefox light 320 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox light 320 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          809.2333374023438,
+          890.5499877929688,
+          938.5499877929688
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox light 320 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox light 320 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox light 320 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox light 768 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 868.9500122070312,
+            "label": 865.9500122070312
+          },
+          {
+            "input": 942.316650390625,
+            "label": 939.316650390625
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox light 768 checkbox first line",
+      "data": [
+        {
+          "input": 868.9500122070312,
+          "label": 865.9500122070312
+        },
+        {
+          "input": 942.316650390625,
+          "label": 939.316650390625
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "firefox light 768 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox light 768 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          736.4000244140625,
+          817.7166748046875,
+          865.7166748046875
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox light 768 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox light 768 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox light 768 artwork toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox light 1440 settings reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 603,
+            "label": 600
+          },
+          {
+            "input": 676.36669921875,
+            "label": 673.36669921875
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox light 1440 checkbox first line",
+      "data": [
+        {
+          "input": 603,
+          "label": 600
+        },
+        {
+          "input": 676.36669921875,
+          "label": 673.36669921875
+        }
+      ]
+    },
+    {
+      "passed": true,
+      "label": "firefox light 1440 settings toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox light 1440 activity reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [],
+        "compare": [
+          692.7000122070312,
+          692.7000122070312,
+          692.7000122070312
+        ]
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox light compare button baseline",
+      "data": [
+        692.7000122070312,
+        692.7000122070312,
+        692.7000122070312
+      ]
+    },
+    {
+      "passed": true,
+      "label": "firefox light 1440 activity toggled drawer"
+    },
+    {
+      "passed": true,
+      "label": "firefox light 1440 artwork reflow",
+      "data": {
+        "overflow": false,
+        "checkboxes": [
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          },
+          {
+            "input": 0
+          }
+        ],
+        "compare": []
+      }
+    },
+    {
+      "passed": true,
+      "label": "firefox light 1440 artwork toggled drawer"
+    }
+  ],
+  "failures": []
+}

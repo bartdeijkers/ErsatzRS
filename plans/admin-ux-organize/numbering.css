@@ -1,0 +1,149 @@
+/* Native form state; all selectors are confined to the proposed page content. */
+.design-main .numbering-heading {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin: 30px 0 22px;
+}
+.design-main .number-mark {
+  display: grid;
+  grid-template-columns: 18px 44px;
+  align-items: baseline;
+  flex: 0 0 auto;
+  padding: 15px 20px;
+  border: 1px solid #8598bd;
+  border-radius: 10px;
+  background: #2b3345;
+  color: #c7d9ff;
+  font-variant-numeric: tabular-nums;
+}
+.design-main .number-mark strong { font-size: 27px; line-height: 1.3; }
+.design-main .numbering-heading p { margin-bottom: 5px; }
+.design-main .numbering-form { margin-top: 28px; max-width: 1050px; }
+.design-main .number-step {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 18px;
+  padding: 25px 0;
+  border-top: 1px solid var(--color-table-line);
+}
+.design-main .step-index {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #8598bd;
+  color: #c7d9ff;
+  background: #2b3345;
+  font-weight: 650;
+}
+.design-main .step-content h2 { margin: 1px 0 20px; }
+.design-main .step-content > .field { max-width: 650px; }
+.design-main .season-method, .design-main .number-range {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+.design-main .season-method legend, .design-main .number-range legend {
+  font-size: 13px;
+  padding: 0 0 12px;
+  font-weight: 600;
+}
+.design-main .season-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.design-main .season-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.design-main .season-choice > input { position: absolute; top: 16px; right: 16px; }
+.design-main .season-choice:has(input:checked) { outline: 2px solid #a5bcea; outline-offset: -2px; background: #2b3345; }
+.design-main .season-choice:focus-within { outline: 3px solid var(--focus); outline-offset: 3px; }
+.design-main .season-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding-right: 18px; }
+.design-main .season-strip > :not(i) {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 34px;
+  padding: 0 5px;
+  border: 1px solid #8695b2;
+  background: #303d55;
+  color: #d8e5ff;
+  font: 600 13px/1.2 ui-monospace, monospace;
+  border-radius: 3px;
+}
+.design-main .season-strip > b { background: #b3c9f2; color: #18263b; }
+.design-main .season-strip i { font-style: normal; }
+.design-main .number-rule { margin-top: 22px; padding: 23px; border: 1px solid #8598bd; border-radius: 8px; background: var(--color-surface); }
+.design-main .episode-pair { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.design-main .episode-pair > .field { flex: 0 1 150px; min-width: 0; }
+.design-main .number-input { display: flex; align-items: center; border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; background: var(--color-bg); }
+.design-main .number-input > span { padding: 10px; font-size: 21px; color: #a5bcea; font-weight: 600; }
+.design-main .number-input > input { width: 100%; min-width: 0; border: 0; border-radius: 0; font-size: 23px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.design-main .number-input:focus-within { outline: 3px solid var(--focus); outline-offset: 3px; }
+.design-main .auto-reset { padding-top: 29px; flex: 1 1 200px; }
+.design-main .auto-reset p { font-size: 13px; margin-top: 5px; }
+.design-main .number-notice { padding: 14px 17px; background: #403728; border: 1px solid #a08d5b; border-radius: 6px; color: #efdcaf; font-size: 13px; margin-bottom: 0; }
+.design-main .number-rule .auto-only > .field { max-width: 360px; }
+.design-main .number-range .limited-only { max-width: 240px; margin: 10px 0 18px 32px; }
+.design-main .numbering-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 23px; background: #2b3345; border: 1px solid #8598bd; border-radius: 8px; margin: 6px 0 15px; }
+.design-main .numbering-actions p { font-size: 13px; margin: 4px 0 0; }
+.design-main .item-numbering { grid-column: 1 / -1; border: 1px solid #8598bd; border-radius: 8px; padding: 20px; min-width: 0; }
+.design-main .item-numbering legend { padding: 0 8px; font-weight: 600; }
+.design-main .numbering-kind { display: flex; flex-wrap: wrap; gap: 5px 24px; margin-bottom: 18px; }
+.design-main .item-unnumbered { margin: 0; }
+.design-main .numbering-launch { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin: 22px 0; padding: 24px; background: #2b3345; border: 1px solid #8598bd; border-radius: 8px; }
+.design-main .numbering-launch > div:nth-child(2) { flex: 1 1 220px; }
+.design-main .numbering-launch p { margin: 0; }
+.design-main .episode-code { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
+.design-main .episode-code.proposed { display: inline-block; padding: 4px 8px; border: 1px solid #8598bd; border-radius: 4px; color: #c7d9ff; background: #2b3345; }
+.design-main .number-preview-table { overflow-x: auto; margin: 22px 0; }
+.design-main .number-preview-table table { width: 100%; border-collapse: collapse; }
+.design-main .number-preview-table caption { text-align: left; padding-bottom: 12px; color: var(--color-text-secondary); }
+.design-main .number-preview-table td, .design-main .number-preview-table th { text-align: left; border-bottom: 1px solid var(--color-table-line); padding: 13px 10px; }
+.design-main .number-preview-table th[scope=row] { font-weight: 400; }
+/* Without :has(), all choices remain usable, with applicability notes. */
+@supports selector(:has(*)) {
+  .design-main .numbering-form:not(:has(#auto-season:checked)) .auto-only,
+  .design-main .numbering-form:has(#auto-season:checked) .manual-only,
+  .design-main .number-range:not(:has(#limited-range:checked)) .limited-only,
+  .design-main .item-numbering:has(#unnumbered:checked) .item-numbered,
+  .design-main .item-numbering:not(:has(#unnumbered:checked)) .item-unnumbered { display: none; }
+}
+@media (max-width: 850px) {
+  .design-main .season-methods { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .design-main .numbering-heading { align-items: flex-start; gap: 13px; }
+  .design-main .number-mark { padding: 10px; grid-template-columns: 13px 28px; }
+  .design-main .number-mark strong { font-size: 21px; }
+  .design-main .numbering-heading h1 { font-size: 24px; }
+  .design-main .number-step { grid-template-columns: 26px minmax(0,1fr); gap: 9px; }
+  .design-main .step-index { width: 25px; height: 25px; font-size: 13px; }
+  .design-main .number-rule { padding: 15px; }
+  .design-main .episode-pair { gap: 10px; }
+  .design-main .episode-pair > .field { flex: 1 1 80px; }
+  .design-main .number-input > input { padding-left: 4px; }
+  .design-main .numbering-actions { padding: 17px; }
+  .design-main .numbering-actions .button { width: 100%; }
+  .design-main .season-choice { padding: 18px; }
+  .design-main .number-preview-table td, .design-main .number-preview-table th { padding: 12px 4px; }
+}
+@media (prefers-color-scheme: light) {
+  .design-main .number-mark, .design-main .step-index,
+  .design-main .season-choice:has(input:checked),
+  .design-main .numbering-actions, .design-main .numbering-launch,
+  .design-main .episode-code.proposed { background: #e9effa; color: #293f65; }
+  .design-main .number-input > span { color: #3a5582; }
+  .design-main .number-notice { background: #fff3d8; color: #664915; }
+}
+@media (forced-colors: active) {
+  .design-main .season-choice:has(input:checked) { outline-color: Highlight; }
+  .design-main .number-input:focus-within { outline-color: Highlight; }
+}

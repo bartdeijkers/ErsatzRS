@@ -54,6 +54,7 @@ pub struct AddonMediaListImportCoordinator {
     pool: DbPool,
     provider: InstalledAddonMediaListProvider,
     scheduled_refresh: bool,
+    editor_revision: Option<i32>,
     delivery_mode: Option<ersatzrs_domain::AddonMediaListDeliveryMode>,
 }
 
@@ -64,8 +65,15 @@ impl AddonMediaListImportCoordinator {
             provider: InstalledAddonMediaListProvider::new(pool.clone()),
             pool,
             scheduled_refresh: false,
+            editor_revision: None,
             delivery_mode: None,
         }
+    }
+
+    #[must_use]
+    pub(crate) fn with_editor_revision(mut self, revision: i32) -> Self {
+        self.editor_revision = Some(revision);
+        self
     }
 
     pub(crate) fn for_scheduled_refresh(pool: DbPool) -> Self {
@@ -471,7 +479,7 @@ impl AddonMediaListImportCoordinator {
     pub async fn change_addon(&self, list_id: EntityId, addon_id: &str) -> Result<()> {
         let row = sqlx::query(
             r#"SELECT "AddonId", "SourceUrl", "ContentKindOverride", "ChapterInput",
-                      "DetailImportPolicy"
+                      "DetailImportPolicy", "DraftRevision"
                FROM "AddonMediaList" WHERE "Id" = ?"#,
         )
         .bind(list_id)
@@ -482,6 +490,15 @@ impl AddonMediaListImportCoordinator {
             kind: "add-on media list",
             id: list_id,
         })?;
+        let revision: i32 = row.try_get("DraftRevision").repository()?;
+        if self
+            .editor_revision
+            .is_some_and(|expected| expected != revision)
+        {
+            return Err(RepositoryError::Conflict(
+                "the saved draft changed before provider confirmation".into(),
+            ));
+        }
         let current_addon_id: String = row.try_get("AddonId").repository()?;
         let addon_id = addon_id.trim();
         if current_addon_id == addon_id {
@@ -502,6 +519,7 @@ impl AddonMediaListImportCoordinator {
         let context = self.provider.import_context(addon_id, &source_url).await?;
         let Some(context) = context.filter(|_| chapter_input.trim().is_empty()) else {
             AddonMediaListRemoteSynchronizer::new(self.pool.clone(), self.provider.clone())
+                .with_editor_revision(self.editor_revision)
                 .change_addon(list_id, addon_id)
                 .await?;
             let _ = self
@@ -551,7 +569,7 @@ impl AddonMediaListImportCoordinator {
                 )));
             }
             sqlx::query(
-                r#"SELECT "Id", "AddonId", "ReviewState", "PublicationJournalJson"
+                r#"SELECT "Id", "AddonId", "ReviewState", "PublicationJournalJson", "DraftRevision"
                    FROM "AddonMediaList" WHERE "Id" = ?"#,
             )
             .bind(list_id)
@@ -560,7 +578,7 @@ impl AddonMediaListImportCoordinator {
             .repository()?
         } else {
             sqlx::query(
-                r#"SELECT "Id", "AddonId", "ReviewState", "PublicationJournalJson" FROM "AddonMediaList"
+                r#"SELECT "Id", "AddonId", "ReviewState", "PublicationJournalJson", "DraftRevision" FROM "AddonMediaList"
                    WHERE "AddonId" = ? AND "SourceUrl" = ?
                    ORDER BY "Id" LIMIT 1"#,
             )
@@ -571,6 +589,15 @@ impl AddonMediaListImportCoordinator {
             .repository()?
         };
         let (list_id, same_addon) = if let Some(row) = existing {
+            let revision: i32 = row.try_get("DraftRevision").repository()?;
+            if self
+                .editor_revision
+                .is_some_and(|expected| expected != revision)
+            {
+                return Err(RepositoryError::Conflict(
+                    "the saved draft changed during provider validation".into(),
+                ));
+            }
             let id: EntityId = row.try_get("Id").repository()?;
             let previous_addon_id: String = row.try_get("AddonId").repository()?;
             let active_finalization: bool = sqlx::query_scalar(
@@ -3931,6 +3958,46 @@ mod tests {
             .expect("fixture add-on installation");
             let coordinator = AddonMediaListImportCoordinator::new(pool.clone());
             (temporary, pool, coordinator)
+        }
+
+        #[tokio::test]
+        async fn editor_provider_import_rechecks_revision_before_admitting_a_generation() {
+            let (_directory, pool, coordinator) = fixture().await;
+            let source = "https://example.invalid/editor-fence";
+            let id = queue(&coordinator, source, AddonMediaListDetailPolicy::ManualOnly).await;
+            let revision: i32 =
+                sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=?"#)
+                    .bind(id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            sqlx::query(
+                r#"UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=?"#,
+            )
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+            let result = coordinator
+                .with_editor_revision(revision)
+                .queue_import(
+                    "org.example.fixture",
+                    &context(source),
+                    None,
+                    AddonMediaListContentKind::TelevisionEpisode,
+                    AddonMediaListDetailPolicy::ManualOnly,
+                    Some(id),
+                )
+                .await;
+            assert!(matches!(result, Err(RepositoryError::Conflict(_))));
+            let jobs: i64 = sqlx::query_scalar(
+                r#"SELECT COUNT(*) FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=?"#,
+            )
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(jobs, 1);
         }
 
         fn context(source_url: &str) -> InstalledMediaListImportContext {

@@ -1,5 +1,7 @@
 #![allow(clippy::too_many_lines)]
 
+use crate::admin::pages::media::addon_lists::workspace::AddonListWorkspacePage;
+
 use leptos::prelude::*;
 use leptos_router::{
     components::{Route, Routes},
@@ -21,9 +23,7 @@ use crate::admin::pages::graphics_elements::{
     editor::GraphicsElementEditorPage, list::GraphicsElementsListPage,
 };
 use crate::admin::pages::libraries::LibrariesPage;
-use crate::admin::pages::media::addon_lists::{
-    AddAddonMediaListPage, AddonMediaListEditorPage, AddonMediaListItemPage, AddonMediaListsPage,
-};
+use crate::admin::pages::media::addon_lists::{AddAddonMediaListPage, AddonMediaListsPage};
 use crate::admin::pages::media::artists::{ArtistPage, ArtistsPage};
 use crate::admin::pages::media::collection_detail::CollectionDetailPage;
 use crate::admin::pages::media::collections::{CollectionEditorPage, CollectionsPage};
@@ -598,7 +598,7 @@ pub fn AdminRoutes() -> impl IntoView {
                     StaticSegment("items"),
                     ParamSegment("item_id"),
                 )
-                view=AddonMediaListItemPage
+                view=AddonListWorkspacePage
             />
             <Route
                 path=(
@@ -606,8 +606,13 @@ pub fn AdminRoutes() -> impl IntoView {
                     StaticSegment("addon-lists"),
                     ParamSegment("id"),
                 )
-                view=AddonMediaListEditorPage
+                view=AddonListWorkspacePage
             />
+
+            <Route path=(StaticSegment("media"), StaticSegment("addon-lists"), ParamSegment("id"), StaticSegment("settings")) view=AddonListWorkspacePage ssr=SsrMode::InOrder/>
+            <Route path=(StaticSegment("media"), StaticSegment("addon-lists"), ParamSegment("id"), StaticSegment("playback")) view=AddonListWorkspacePage ssr=SsrMode::InOrder/>
+            <Route path=(StaticSegment("media"), StaticSegment("addon-lists"), ParamSegment("id"), StaticSegment("activity")) view=AddonListWorkspacePage ssr=SsrMode::InOrder/>
+            <Route path=(StaticSegment("media"), StaticSegment("addon-lists"), ParamSegment("id"), StaticSegment("artwork")) view=AddonListWorkspacePage ssr=SsrMode::InOrder/>
 
             <Route
                 path=(StaticSegment("media"), StaticSegment("filler"), StaticSegment("presets"))

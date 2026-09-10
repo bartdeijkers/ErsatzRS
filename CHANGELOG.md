@@ -205,6 +205,20 @@ release section when tagging a release.
   number. Doctest coverage is unchanged: neither selection ran them, and
   `./run.sh test-closeout` remains the only path that adds them.
 
+- Adapt Add-on Lists to the locked task layout with separate item review,
+  settings, playback/access, activity and artwork pages. Native forms retain
+  unsaved edits and selection across navigation, and task saves use coherent
+  transactions with revision and metadata checks. Add 10/25/50/100/All paging,
+  exact bulk selection, fixed adjacent-item controls and vertically stacked
+  access settings on wide displays. Artwork uploads remain
+  attached to unsaved edits, and publishing keeps newer input unsaved.
+  Item review separates editable fields from saved-item tools, keeps First aired
+  visible, makes numbered/unnumbered choices explicit, and groups optional
+  metadata and replacement selection behind restrained disclosures. Shorter
+  option guidance, contextual action labels and clearer light-theme field edges
+  make the form easier to scan; existing dates and unsaved replacements are
+  preserved through native navigation and Save.
+
 - Move Settings to the bottom of the admin navigation drawer and collapse the
   expanded Support group into a single badged `Support` link beside it
   (ADR 0089). Health checks, Logs, and Troubleshooting now render as in-page

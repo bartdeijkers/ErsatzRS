@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'Phase 9A — Decide the teletext product and standards contract'
+current_focus = 'AMM-N-01B complete — next: AMM-N-02 planning for maintainer review'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -123,12 +123,20 @@ playback smoke and four matched hydrated/no-JS browser cases; P1/P2 review is cl
 Host e445ace3 and add-ons 5ddc031 have terminal exact-SHA green CI on 2026-09-09;
 milestone amm-n-01 owns run links, corrective evidence and the non-blocking
 add-on upload-action deprecation notice. No release was published.
-Work and subagents are paused at the maintainer's green-CI checkpoint.
-On explicit resume, plan AMM-N-02 read-only for maintainer approval. Do not
-implement rollback/quarantine/manual controls before approval.
+On 2026-09-09 the maintainer resumed design work, locked the reviewed artifact
+and inserted AMM-N-01B before N-02. ADR 0091 and the checksum-pinned artifact
+own the design; plans/amm-n-01b-addon-list-design-adaptation.md owns execution.
+N-01B is locally complete, including the 2026-09-10 authorized item-form
+correction: separate edit/tools regions, concise option guidance, explicit native
+numbering, visible First aired, preserved replacement drafts and clear actions.
+Its milestone owns 642 native tests, final web lint/parity checks, 30 focused
+browser cases and six final matched-candidate cases. The locked artifact remains
+unchanged. Prior persistence/playback proof is retained; N-02/N-03 remain open.
+After N-01B, plan AMM-N-02 read-only for maintainer approval. Do not implement
+rollback/quarantine/manual controls before that approval.
 HLS Direct expansion is excluded; language changes may reprepare
-downloaded media. Do not start further CI, pushes, full closeout or later-slice
-implementation while paused.
+downloaded media. This implementation request does not authorize CI, pushes,
+release or unrelated later-slice implementation.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native
 yt-dlp executable capabilities; the removed custom Range adapter has no fallback.
 Keep existing HDR/unmapped-subtitle refusals and ordinary playback behavior intact.

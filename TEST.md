@@ -62,6 +62,25 @@ References:
   short segmenter idle timeout, fetches a real HLS segment, waits for session
   cleanup, then repeats the cleanup proof through the `mode=ts` wrapper.
 
+## Add-on list task workspace
+
+AMM-N-01B task routes render populated native forms through
+`AddonListWorkspacePage`; the surrounding application shell hydrates. Run the
+six `addon-list-workspace`, `addon-list-workspace-visual`, `addon-list-item-form`,
+`addon-metadata-editor`, `addon-list-options` and `addon-list-disk-warnings`
+specs through
+`scripts/e2e/playwright-e2e.sh` against its isolated database/provider fixtures.
+The wrapper builds matched SSR/WASM/CSS assets. Functional specs exercise native
+and hydrated workflows in Chromium and Firefox; visual checks cover both themes,
+320–3840 CSS pixels and 200% zoom. Persistence assertions query the temporary
+database. The item-form spec also covers explicit numbering, noncanonical date
+preservation, credits, staged replacement save/discard, option-source labels,
+field contrast and inner-scroller captures. Numbering assertions use metadata
+overrides, and replacement assertions use `AddonMediaListItemReplacement`;
+provider overview columns are not the effective draft projection. The AMM-N-01B
+milestone owns acceptance and evidence; prototype reports cannot substitute for
+production checks.
+
 ## Hydration rules (read before writing islands)
 
 The hydration smoke layer exists because Leptos islands have sharp edges that

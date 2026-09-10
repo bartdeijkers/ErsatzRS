@@ -1,3 +1,6 @@
+mod editor;
+mod editor_artwork;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
@@ -510,8 +513,17 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         )
         .bind(sort_field)
         .bind(sort_direction)
-        .bind(i64::from(page_size))
-        .bind(i64::from(page) * i64::from(page_size))
+        .bind(if page_size == 0 {
+            -1
+        } else {
+            i64::from(page_size)
+        })
+        .bind(if page_size == 0 {
+            0
+        } else {
+            i64::from(page).min(total.saturating_sub(1) / i64::from(page_size))
+                * i64::from(page_size)
+        })
         .fetch_all(&self.0)
         .await
         .repository()?;
@@ -1944,6 +1956,21 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         tx.commit().await.repository()
     }
 
+    async fn stage_editor_artwork(
+        &self,
+        list_id: EntityId,
+        item_id: Option<EntityId>,
+        role: AddonMediaListArtworkRole,
+        content_type: &str,
+        bytes: &[u8],
+    ) -> Result<String> {
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        let url =
+            editor_artwork::stage(&mut tx, list_id, item_id, role, content_type, bytes).await?;
+        tx.commit().await.repository()?;
+        Ok(url)
+    }
+
     async fn upload_artwork(
         &self,
         list_id: EntityId,
@@ -1953,106 +1980,20 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         bytes: &[u8],
         expected_etag: &str,
     ) -> Result<AddonMediaListNfoForm> {
-        if role == AddonMediaListArtworkRole::Other {
-            return Err(RepositoryError::Conflict(
-                "uploaded artwork must be assigned as poster, fanart, or thumbnail".to_owned(),
-            ));
-        }
-        let (content_type, extension) = crate::addon_artwork::validate_image(content_type, bytes)
-            .map_err(RepositoryError::Conflict)?;
-        let current = match item_id {
-            Some(item_id) => load_item_metadata_form(&self.0, list_id, item_id).await?,
-            None => load_list_metadata_form(&self.0, list_id).await?,
-        };
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        crate::addon_media_list_sync::ensure_not_publishing_tx(&mut tx, list_id).await?;
+        let current = editor_artwork::metadata(&mut tx, list_id, item_id).await?;
         if current.etag != expected_etag {
             return Err(RepositoryError::Conflict(
-                "metadata changed since the editor was loaded".to_owned(),
+                "metadata changed since the editor was loaded".into(),
             ));
         }
-        let role_value = artwork_role_value(role);
-        let scope_item_id = item_id.unwrap_or(0);
-        let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
-        let sha256 = hex_hash(bytes);
-        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        if let Some(item_id) = item_id {
-            let owned: i64 = sqlx::query_scalar(
-                r#"SELECT COUNT(*) FROM "AddonMediaListItem"
-                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
-            )
-            .bind(item_id)
-            .bind(list_id)
-            .fetch_one(&mut *tx)
-            .await
-            .repository()?;
-            if owned == 0 {
-                return Err(RepositoryError::NotFound {
-                    kind: "add-on media list item",
-                    id: item_id,
-                });
-            }
-        }
-        let existing_id = sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT "Id" FROM "AddonMediaListArtworkUpload"
-               WHERE "AddonMediaListId" = ? AND "ScopeItemId" = ? AND "Role" = ?"#,
-        )
-        .bind(list_id)
-        .bind(scope_item_id)
-        .bind(role_value)
-        .fetch_optional(&mut *tx)
-        .await
-        .repository()?;
-        let upload_id = if let Some(upload_id) = existing_id {
-            sqlx::query(
-                r#"UPDATE "AddonMediaListArtworkUpload"
-                   SET "ContentType" = ?, "Extension" = ?, "Bytes" = ?, "Sha256" = ?,
-                       "UpdatedAt" = ?
-                   WHERE "Id" = ?"#,
-            )
-            .bind(content_type)
-            .bind(extension)
-            .bind(bytes)
-            .bind(&sha256)
-            .bind(&now)
-            .bind(upload_id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-            upload_id
-        } else {
-            sqlx::query(
-                r#"INSERT INTO "AddonMediaListArtworkUpload" (
-                       "AddonMediaListId", "AddonMediaListItemId", "ScopeItemId", "Role",
-                       "ContentType", "Extension", "Bytes", "Sha256", "CreatedAt", "UpdatedAt"
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-            )
-            .bind(list_id)
-            .bind(item_id)
-            .bind(scope_item_id)
-            .bind(role_value)
-            .bind(content_type)
-            .bind(extension)
-            .bind(bytes)
-            .bind(&sha256)
-            .bind(&now)
-            .bind(&now)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-            sqlx::query_scalar(
-                r#"SELECT "Id" FROM "AddonMediaListArtworkUpload"
-                   WHERE "AddonMediaListId" = ? AND "ScopeItemId" = ? AND "Role" = ?"#,
-            )
-            .bind(list_id)
-            .bind(scope_item_id)
-            .bind(role_value)
-            .fetch_one(&mut *tx)
-            .await
-            .repository()?
-        };
+        let url =
+            editor_artwork::stage(&mut tx, list_id, item_id, role, content_type, bytes).await?;
         let mut metadata = current.metadata;
         metadata.artwork.retain(|candidate| candidate.role != role);
         metadata.artwork.push(AddonMediaListArtwork {
-            url: format!("{}{}", crate::addon_artwork::UPLOAD_URL_PREFIX, upload_id),
+            url,
             role,
             width: None,
             height: None,
@@ -2206,6 +2147,20 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             .await
     }
 
+    async fn change_editor_addon(
+        &self,
+        id: EntityId,
+        addon_id: &str,
+        expected_revision: i32,
+    ) -> Result<()> {
+        let policy = crate::addon_media_list_delivery::load(&self.0, id).await?;
+        require_delivery_capability(&self.0, addon_id, policy.mode).await?;
+        crate::addon_media_list_import::AddonMediaListImportCoordinator::new(self.0.clone())
+            .with_editor_revision(expected_revision)
+            .change_addon(id, addon_id)
+            .await
+    }
+
     async fn update_settings(
         &self,
         id: EntityId,
@@ -2327,6 +2282,13 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         mark_list_ready_tx(&mut tx, id).await?;
         tx.commit().await.repository()?;
         Ok(())
+    }
+
+    async fn save_editor_task(
+        &self,
+        save: &ersatzrs_core::repositories::AddonMediaListEditorSave,
+    ) -> Result<i32> {
+        editor::save(&self.0, save).await
     }
 
     async fn save_show_nfo(
@@ -2470,7 +2432,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 .repository()?;
         Ok(value
             .and_then(|value| value.parse::<u32>().ok())
-            .filter(|value| *value > 0)
+            .filter(|value| [0, 10, 25, 50, 100].contains(value))
             .unwrap_or(10))
     }
 
@@ -6883,6 +6845,7 @@ impl SqliteAddonMediaListRepository {
                       "detail"."State" AS "DetailState",
                       "detail"."Diagnostic" AS "DetailDiagnostic",
                       "projection"."EpisodeId" AS "ProjectedEpisodeId",
+                      (SELECT "Id" FROM "RemoteStream" WHERE "Id" = "item"."MediaItemId") AS "RemoteStreamId",
                       "item"."Availability", "item"."AvailabilityReason",
                       "item"."AvailabilityReasonCode",
                       "replacement"."MediaItemId" AS "ReplacementMediaItemId",
@@ -7002,6 +6965,7 @@ impl SqliteAddonMediaListRepository {
                     .repository()?
                     .unwrap_or_default(),
                 projected_episode_id: row.try_get("ProjectedEpisodeId").repository()?,
+                remote_stream_id: row.try_get("RemoteStreamId").repository()?,
                 content_kind: crate::repositories::common::decode_enum_column(
                     "AddonMediaListContentKind",
                     &row,

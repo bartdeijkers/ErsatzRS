@@ -1,0 +1,1419 @@
+{
+  "date": "2026-09-09",
+  "browser": "151.0.7922.34",
+  "javaScriptEnabled": false,
+  "documents": [
+    {
+      "file": "activity.html",
+      "title": "Activity & recovery · Add-on list design · ErsatzRS",
+      "headings": [
+        "Activity & recovery",
+        "Latest publication",
+        "Published successfully",
+        "Revision history",
+        "Source checks & maintenance",
+        "Recovery & diagnostics"
+      ],
+      "forms": 6,
+      "inputs": 6,
+      "scripts": 0
+    },
+    {
+      "file": "artwork.html",
+      "title": "Artwork · Add-on list design · ErsatzRS",
+      "headings": [
+        "Artwork",
+        "Poster",
+        "Fanart",
+        "Thumbnail"
+      ],
+      "forms": 3,
+      "inputs": 9,
+      "scripts": 0
+    },
+    {
+      "file": "cookies.html",
+      "title": "Browser cookies · Add-on list design · ErsatzRS",
+      "headings": [
+        "Browser cookies",
+        "Browser cookies"
+      ],
+      "forms": 1,
+      "inputs": 1,
+      "scripts": 0
+    },
+    {
+      "file": "index.html",
+      "title": "The Screening Room · Add-on list design · ErsatzRS",
+      "headings": [
+        "The Screening Room",
+        "Your list is published",
+        "Items in this list",
+        "Episode order",
+        "Work with multiple items",
+        "Publish changes"
+      ],
+      "forms": 4,
+      "inputs": 38,
+      "scripts": 0
+    },
+    {
+      "file": "item-1.html",
+      "title": "Season one · Official trailer · Add-on list design · ErsatzRS",
+      "headings": [
+        "Season one · Official trailer",
+        "Review this item",
+        "Item tools",
+        "Provider overrides & access"
+      ],
+      "forms": 5,
+      "inputs": 13,
+      "scripts": 0
+    },
+    {
+      "file": "item-2.html",
+      "title": "The art of an opening scene · Add-on list design · ErsatzRS",
+      "headings": [
+        "The art of an opening scene",
+        "Review this item",
+        "Item tools",
+        "Provider overrides & access"
+      ],
+      "forms": 5,
+      "inputs": 13,
+      "scripts": 0
+    },
+    {
+      "file": "item-3.html",
+      "title": "A city after dark · Add-on list design · ErsatzRS",
+      "headings": [
+        "A city after dark",
+        "Review this item",
+        "Item tools",
+        "Provider overrides & access"
+      ],
+      "forms": 5,
+      "inputs": 13,
+      "scripts": 0
+    },
+    {
+      "file": "item-4.html",
+      "title": "Winter lights · Holiday special · Add-on list design · ErsatzRS",
+      "headings": [
+        "Winter lights · Holiday special",
+        "Review this item",
+        "Item tools",
+        "Provider overrides & access"
+      ],
+      "forms": 5,
+      "inputs": 13,
+      "scripts": 0
+    },
+    {
+      "file": "item-5.html",
+      "title": "Season two · First look · Add-on list design · ErsatzRS",
+      "headings": [
+        "Season two · First look",
+        "Review this item",
+        "Item tools",
+        "Provider overrides & access"
+      ],
+      "forms": 5,
+      "inputs": 13,
+      "scripts": 0
+    },
+    {
+      "file": "item-6.html",
+      "title": "The sound of suspense · Add-on list design · ErsatzRS",
+      "headings": [
+        "The sound of suspense",
+        "Review this item",
+        "Item tools",
+        "Provider overrides & access"
+      ],
+      "forms": 5,
+      "inputs": 13,
+      "scripts": 0
+    },
+    {
+      "file": "item-7.html",
+      "title": "Rediscovering the double feature · Add-on list design · ErsatzRS",
+      "headings": [
+        "Rediscovering the double feature",
+        "Review this item",
+        "Item tools",
+        "Provider overrides & access"
+      ],
+      "forms": 5,
+      "inputs": 13,
+      "scripts": 0
+    },
+    {
+      "file": "item-8.html",
+      "title": "Bloopers · Things that went wrong · Add-on list design · ErsatzRS",
+      "headings": [
+        "Bloopers · Things that went wrong",
+        "Review this item",
+        "Item tools",
+        "Provider overrides & access"
+      ],
+      "forms": 5,
+      "inputs": 13,
+      "scripts": 0
+    },
+    {
+      "file": "item-9.html",
+      "title": "Small screens, big stories · Add-on list design · ErsatzRS",
+      "headings": [
+        "Small screens, big stories",
+        "Review this item",
+        "Item tools",
+        "Provider overrides & access"
+      ],
+      "forms": 5,
+      "inputs": 13,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-1.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Number from here"
+      ],
+      "forms": 1,
+      "inputs": 42,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-2.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Number from here"
+      ],
+      "forms": 1,
+      "inputs": 42,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-3.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Number from here"
+      ],
+      "forms": 1,
+      "inputs": 42,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-4.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Number from here"
+      ],
+      "forms": 1,
+      "inputs": 42,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-5.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Number from here"
+      ],
+      "forms": 1,
+      "inputs": 42,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-6.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Number from here"
+      ],
+      "forms": 1,
+      "inputs": 42,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-7.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Number from here"
+      ],
+      "forms": 1,
+      "inputs": 42,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-8.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Number from here"
+      ],
+      "forms": 1,
+      "inputs": 42,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-9.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Number from here"
+      ],
+      "forms": 1,
+      "inputs": 42,
+      "scripts": 0
+    },
+    {
+      "file": "numbering-preview.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order"
+      ],
+      "forms": 2,
+      "inputs": 32,
+      "scripts": 0
+    },
+    {
+      "file": "numbering.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order"
+      ],
+      "forms": 1,
+      "inputs": 32,
+      "scripts": 0
+    },
+    {
+      "file": "options.html",
+      "title": "Playback & access · Add-on list design · ErsatzRS",
+      "headings": [
+        "Playback & access",
+        "Defaults for this list",
+        "Item overrides & access",
+        "Audio & subtitles",
+        "Disk usage warning"
+      ],
+      "forms": 4,
+      "inputs": 5,
+      "scripts": 0
+    },
+    {
+      "file": "response.html",
+      "title": "Interaction preview · Add-on list design · ErsatzRS",
+      "headings": [
+        "Interaction preview",
+        "No changes were saved"
+      ],
+      "forms": 0,
+      "inputs": 0,
+      "scripts": 0
+    },
+    {
+      "file": "selection-1.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Select a range"
+      ],
+      "forms": 1,
+      "inputs": 33,
+      "scripts": 0
+    },
+    {
+      "file": "selection-2.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Select a range"
+      ],
+      "forms": 1,
+      "inputs": 33,
+      "scripts": 0
+    },
+    {
+      "file": "selection-3.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Select a range"
+      ],
+      "forms": 1,
+      "inputs": 33,
+      "scripts": 0
+    },
+    {
+      "file": "selection-4.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Select a range"
+      ],
+      "forms": 1,
+      "inputs": 33,
+      "scripts": 0
+    },
+    {
+      "file": "selection-5.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Select a range"
+      ],
+      "forms": 1,
+      "inputs": 33,
+      "scripts": 0
+    },
+    {
+      "file": "selection-6.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Select a range"
+      ],
+      "forms": 1,
+      "inputs": 33,
+      "scripts": 0
+    },
+    {
+      "file": "selection-7.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Select a range"
+      ],
+      "forms": 1,
+      "inputs": 33,
+      "scripts": 0
+    },
+    {
+      "file": "selection-8.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Select a range"
+      ],
+      "forms": 1,
+      "inputs": 33,
+      "scripts": 0
+    },
+    {
+      "file": "selection-9.html",
+      "title": "Episode list editing · ErsatzRS design",
+      "headings": [
+        "Read the list. Put each item in its place.",
+        "Episode order",
+        "Select a range"
+      ],
+      "forms": 1,
+      "inputs": 33,
+      "scripts": 0
+    },
+    {
+      "file": "settings.html",
+      "title": "List settings · Add-on list design · ErsatzRS",
+      "headings": [
+        "List settings",
+        "Source & updates",
+        "Delivery & presentation",
+        "List metadata",
+        "Managed location"
+      ],
+      "forms": 1,
+      "inputs": 25,
+      "scripts": 0
+    },
+    {
+      "file": "sponsorblock.html",
+      "title": "Remove SponsorBlock segments · Add-on list design · ErsatzRS",
+      "headings": [
+        "Remove SponsorBlock segments",
+        "Remove SponsorBlock segments"
+      ],
+      "forms": 1,
+      "inputs": 1,
+      "scripts": 0
+    },
+    {
+      "file": "states.html",
+      "title": "Interaction states · Add-on list design · ErsatzRS",
+      "headings": [
+        "Interaction states",
+        "Publication readiness",
+        "Two items need attention",
+        "Saved changes are ready",
+        "Background work",
+        "Validation error",
+        "Check one setting",
+        "Recovery",
+        "Publication needs recovery",
+        "Empty, unavailable & mixed",
+        "No items match this review category",
+        "Media details"
+      ],
+      "forms": 5,
+      "inputs": 3,
+      "scripts": 0
+    }
+  ],
+  "layouts": [
+    {
+      "file": "index.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 4657,
+      "scrollWidth": 320,
+      "firstRowY": 1531.578125,
+      "firstEditableY": 1122.0625,
+      "rowHeight": 237.609375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "settings.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 4558,
+      "scrollWidth": 320,
+      "firstEditableY": 1277.28125,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "options.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 1756,
+      "scrollWidth": 320,
+      "firstEditableY": 559.390625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "activity.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 2909,
+      "scrollWidth": 320,
+      "firstEditableY": 1416.15625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "item-6.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 2909,
+      "scrollWidth": 320,
+      "firstEditableY": 667.421875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 2923,
+      "scrollWidth": 320,
+      "firstRowY": 773.9375,
+      "firstEditableY": 794.40625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering-6.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 3457,
+      "scrollWidth": 320,
+      "firstRowY": 773.9375,
+      "firstEditableY": 794.40625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "selection-6.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 3253,
+      "scrollWidth": 320,
+      "firstRowY": 773.9375,
+      "firstEditableY": 794.40625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering-preview.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 3601,
+      "scrollWidth": 320,
+      "firstRowY": 1389.234375,
+      "firstEditableY": 1114.265625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "artwork.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 1970,
+      "scrollWidth": 320,
+      "firstEditableY": 655.515625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "states.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 3528,
+      "scrollWidth": 320,
+      "firstEditableY": 1891.28125,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "cookies.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 1123,
+      "scrollWidth": 320,
+      "firstEditableY": 762.796875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "sponsorblock.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 1181,
+      "scrollWidth": 320,
+      "firstEditableY": 797.0625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "response.html",
+      "theme": "dark",
+      "width": 320,
+      "pageHeight": 905,
+      "scrollWidth": 320,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "index.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 4065,
+      "scrollWidth": 768,
+      "firstRowY": 1171.375,
+      "firstEditableY": 904.515625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "settings.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 3713,
+      "scrollWidth": 768,
+      "firstEditableY": 1138.9375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "options.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 1450,
+      "scrollWidth": 768,
+      "firstEditableY": 499.59375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "activity.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 2448,
+      "scrollWidth": 768,
+      "firstEditableY": 1179.984375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "item-6.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 2332,
+      "scrollWidth": 768,
+      "firstEditableY": 587.609375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 2770,
+      "scrollWidth": 768,
+      "firstRowY": 684.96875,
+      "firstEditableY": 705.4375,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering-6.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 3270,
+      "scrollWidth": 768,
+      "firstRowY": 684.96875,
+      "firstEditableY": 705.4375,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "selection-6.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 2991,
+      "scrollWidth": 768,
+      "firstRowY": 684.96875,
+      "firstEditableY": 705.4375,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering-preview.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 3184,
+      "scrollWidth": 768,
+      "firstRowY": 1035.90625,
+      "firstEditableY": 870.125,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "artwork.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 1923,
+      "scrollWidth": 768,
+      "firstEditableY": 587.609375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "states.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 3104,
+      "scrollWidth": 768,
+      "firstEditableY": 1632.109375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "cookies.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 918,
+      "scrollWidth": 768,
+      "firstEditableY": 665.296875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "sponsorblock.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 932,
+      "scrollWidth": 768,
+      "firstEditableY": 677.359375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "response.html",
+      "theme": "dark",
+      "width": 768,
+      "pageHeight": 900,
+      "scrollWidth": 768,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "index.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 2637,
+      "scrollWidth": 1440,
+      "firstRowY": 1004.25,
+      "firstEditableY": 766.671875,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "settings.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 3081,
+      "scrollWidth": 1440,
+      "firstEditableY": 878.140625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "options.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 1243,
+      "scrollWidth": 1440,
+      "firstEditableY": 431.703125,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "activity.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 2188,
+      "scrollWidth": 1440,
+      "firstEditableY": 1091.671875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "item-6.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 2287,
+      "scrollWidth": 1440,
+      "firstEditableY": 542.046875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 1400,
+      "scrollWidth": 1440,
+      "firstRowY": 554.84375,
+      "firstEditableY": 577.0625,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 3
+    },
+    {
+      "file": "numbering-6.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 1787,
+      "scrollWidth": 1440,
+      "firstRowY": 554.84375,
+      "firstEditableY": 577.0625,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 3
+    },
+    {
+      "file": "selection-6.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 1615,
+      "scrollWidth": 1440,
+      "firstRowY": 554.84375,
+      "firstEditableY": 577.0625,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 3
+    },
+    {
+      "file": "numbering-preview.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 1723,
+      "scrollWidth": 1440,
+      "firstRowY": 814.8125,
+      "firstEditableY": 678.171875,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "artwork.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 1878,
+      "scrollWidth": 1440,
+      "firstEditableY": 542.046875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "states.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 2810,
+      "scrollWidth": 1440,
+      "firstEditableY": 1447.53125,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "cookies.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 900,
+      "scrollWidth": 1440,
+      "firstEditableY": 619.734375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "sponsorblock.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 900,
+      "scrollWidth": 1440,
+      "firstEditableY": 593.40625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "response.html",
+      "theme": "dark",
+      "width": 1440,
+      "pageHeight": 900,
+      "scrollWidth": 1440,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "index.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 4657,
+      "scrollWidth": 320,
+      "firstRowY": 1531.578125,
+      "firstEditableY": 1122.0625,
+      "rowHeight": 237.609375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "settings.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 4558,
+      "scrollWidth": 320,
+      "firstEditableY": 1277.28125,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "options.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 1756,
+      "scrollWidth": 320,
+      "firstEditableY": 559.390625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "activity.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 2909,
+      "scrollWidth": 320,
+      "firstEditableY": 1416.15625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "item-6.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 2909,
+      "scrollWidth": 320,
+      "firstEditableY": 667.421875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 2923,
+      "scrollWidth": 320,
+      "firstRowY": 773.9375,
+      "firstEditableY": 794.40625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering-6.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 3457,
+      "scrollWidth": 320,
+      "firstRowY": 773.9375,
+      "firstEditableY": 794.40625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "selection-6.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 3253,
+      "scrollWidth": 320,
+      "firstRowY": 773.9375,
+      "firstEditableY": 794.40625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering-preview.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 3601,
+      "scrollWidth": 320,
+      "firstRowY": 1389.234375,
+      "firstEditableY": 1114.265625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "artwork.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 1970,
+      "scrollWidth": 320,
+      "firstEditableY": 655.515625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "states.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 3528,
+      "scrollWidth": 320,
+      "firstEditableY": 1891.28125,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "cookies.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 1123,
+      "scrollWidth": 320,
+      "firstEditableY": 762.796875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "sponsorblock.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 1181,
+      "scrollWidth": 320,
+      "firstEditableY": 797.0625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "response.html",
+      "theme": "light",
+      "width": 320,
+      "pageHeight": 905,
+      "scrollWidth": 320,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "index.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 4065,
+      "scrollWidth": 768,
+      "firstRowY": 1171.375,
+      "firstEditableY": 904.515625,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "settings.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 3713,
+      "scrollWidth": 768,
+      "firstEditableY": 1138.9375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "options.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 1450,
+      "scrollWidth": 768,
+      "firstEditableY": 499.59375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "activity.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 2448,
+      "scrollWidth": 768,
+      "firstEditableY": 1179.984375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "item-6.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 2332,
+      "scrollWidth": 768,
+      "firstEditableY": 587.609375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 2770,
+      "scrollWidth": 768,
+      "firstRowY": 684.96875,
+      "firstEditableY": 705.4375,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering-6.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 3270,
+      "scrollWidth": 768,
+      "firstRowY": 684.96875,
+      "firstEditableY": 705.4375,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "selection-6.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 2991,
+      "scrollWidth": 768,
+      "firstRowY": 684.96875,
+      "firstEditableY": 705.4375,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering-preview.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 3184,
+      "scrollWidth": 768,
+      "firstRowY": 1035.90625,
+      "firstEditableY": 870.125,
+      "rowHeight": 224.1875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "artwork.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 1923,
+      "scrollWidth": 768,
+      "firstEditableY": 587.609375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "states.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 3104,
+      "scrollWidth": 768,
+      "firstEditableY": 1632.109375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "cookies.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 918,
+      "scrollWidth": 768,
+      "firstEditableY": 665.296875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "sponsorblock.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 932,
+      "scrollWidth": 768,
+      "firstEditableY": 677.359375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "response.html",
+      "theme": "light",
+      "width": 768,
+      "pageHeight": 900,
+      "scrollWidth": 768,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "index.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 2637,
+      "scrollWidth": 1440,
+      "firstRowY": 1004.25,
+      "firstEditableY": 766.671875,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "settings.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 3081,
+      "scrollWidth": 1440,
+      "firstEditableY": 878.140625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "options.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 1243,
+      "scrollWidth": 1440,
+      "firstEditableY": 431.703125,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "activity.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 2188,
+      "scrollWidth": 1440,
+      "firstEditableY": 1091.671875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "item-6.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 2287,
+      "scrollWidth": 1440,
+      "firstEditableY": 542.046875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "numbering.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 1400,
+      "scrollWidth": 1440,
+      "firstRowY": 554.84375,
+      "firstEditableY": 577.0625,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 3
+    },
+    {
+      "file": "numbering-6.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 1787,
+      "scrollWidth": 1440,
+      "firstRowY": 554.84375,
+      "firstEditableY": 577.0625,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 3
+    },
+    {
+      "file": "selection-6.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 1615,
+      "scrollWidth": 1440,
+      "firstRowY": 554.84375,
+      "firstEditableY": 577.0625,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 3
+    },
+    {
+      "file": "numbering-preview.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 1723,
+      "scrollWidth": 1440,
+      "firstRowY": 814.8125,
+      "firstEditableY": 678.171875,
+      "rowHeight": 88.5,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "artwork.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 1878,
+      "scrollWidth": 1440,
+      "firstEditableY": 542.046875,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "states.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 2810,
+      "scrollWidth": 1440,
+      "firstEditableY": 1447.53125,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "cookies.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 900,
+      "scrollWidth": 1440,
+      "firstEditableY": 619.734375,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "sponsorblock.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 900,
+      "scrollWidth": 1440,
+      "firstEditableY": 593.40625,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    },
+    {
+      "file": "response.html",
+      "theme": "light",
+      "width": 1440,
+      "pageHeight": 900,
+      "scrollWidth": 1440,
+      "headerHeight": 56,
+      "initialFullyVisibleRows": 0
+    }
+  ],
+  "observations": {
+    "lightProposed": {
+      "background": "rgb(229, 240, 247)",
+      "titleColor": "rgb(30, 46, 36)",
+      "bodyColor": "rgb(30, 46, 36)"
+    },
+    "expandedSelection": {
+      "height": 488.65625,
+      "top": 64,
+      "viewport": 900
+    },
+    "cancel": {
+      "destination": "/numbering.html",
+      "neighborDraft": "1"
+    },
+    "mobileSelection": {
+      "top": -1606.84375,
+      "bottom": -1334.328125,
+      "scroll": 2305,
+      "viewport": 900
+    },
+    "disclosureMove": {
+      "before": {
+        "x": 252.484375,
+        "y": 616.984375,
+        "width": 53.515625,
+        "height": 44
+      },
+      "after": {
+        "x": 42,
+        "y": 662.984375,
+        "width": 264,
+        "height": 44
+      }
+    }
+  }
+}

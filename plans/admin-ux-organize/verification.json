@@ -1,0 +1,2401 @@
+{
+  "browsers": [
+    {
+      "name": "chromium",
+      "version": "151.0.7922.34"
+    },
+    {
+      "name": "firefox",
+      "version": "153.0"
+    }
+  ],
+  "layouts": [
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "index.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "settings.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "options.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "activity.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "item-1.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "states.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "artwork.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "cookies.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "sponsorblock.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "numbering.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "numbering-preview.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "numbering-6.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "file": "selection-6.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "index.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "settings.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "options.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "activity.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "item-1.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "states.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "artwork.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "cookies.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "sponsorblock.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "numbering.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "numbering-preview.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "numbering-6.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "file": "selection-6.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "index.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "settings.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "options.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "activity.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "item-1.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "states.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "artwork.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "cookies.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "sponsorblock.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "numbering.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "numbering-preview.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "numbering-6.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "file": "selection-6.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "index.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "settings.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "options.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "activity.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "item-1.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "states.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "artwork.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "cookies.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "sponsorblock.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "numbering.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "numbering-preview.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "numbering-6.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "file": "selection-6.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "index.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "settings.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "options.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "activity.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "item-1.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "states.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "artwork.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "cookies.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "sponsorblock.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "numbering.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "numbering-preview.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "numbering-6.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "file": "selection-6.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "index.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "settings.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "options.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "activity.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "item-1.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "states.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "artwork.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "cookies.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "sponsorblock.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "numbering.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "numbering-preview.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "numbering-6.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "file": "selection-6.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "index.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "settings.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "options.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "activity.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "item-1.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "states.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "artwork.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "cookies.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "sponsorblock.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "numbering.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "numbering-preview.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "numbering-6.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "file": "selection-6.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "index.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "settings.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "options.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "activity.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "item-1.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "states.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "artwork.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "cookies.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "sponsorblock.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "numbering.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "numbering-preview.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "numbering-6.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "file": "selection-6.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "index.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "settings.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "options.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "activity.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "item-1.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "states.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "artwork.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "cookies.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "sponsorblock.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "numbering.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "numbering-preview.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "numbering-6.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "file": "selection-6.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "index.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "settings.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "options.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "activity.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "item-1.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "states.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "artwork.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "cookies.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "sponsorblock.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "numbering.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "numbering-preview.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "numbering-6.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "file": "selection-6.html",
+      "scroll": 320,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "index.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "settings.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "options.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "activity.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "item-1.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "states.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "artwork.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "cookies.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "sponsorblock.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "numbering.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "numbering-preview.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "numbering-6.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "file": "selection-6.html",
+      "scroll": 768,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "index.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "settings.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "options.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "activity.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "item-1.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "states.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "artwork.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "cookies.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "sponsorblock.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "numbering.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "numbering-preview.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "numbering-6.html",
+      "scroll": 1440,
+      "header": 56
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "file": "selection-6.html",
+      "scroll": 1440,
+      "header": 56
+    }
+  ],
+  "checks": [
+    {
+      "label": "chromium: semantics activity.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics artwork.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics cookies.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics index.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics item-1.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics item-2.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics item-3.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics item-4.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics item-5.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics item-6.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics item-7.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics item-8.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics item-9.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-1.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-2.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-3.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-4.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-5.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-6.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-7.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-8.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-9.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering-preview.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics numbering.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics options.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics response.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics selection-1.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics selection-2.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics selection-3.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics selection-4.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics selection-5.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics selection-6.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics selection-7.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics selection-8.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics selection-9.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics settings.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics sponsorblock.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: semantics states.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 320 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 768 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: dark 1440 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 320 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 768 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: light 1440 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "chromium: keyboard drawer closes",
+      "passed": true
+    },
+    {
+      "label": "chromium: keyboard drawer opens",
+      "passed": true
+    },
+    {
+      "label": "chromium: keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "chromium: command popovers closed initially",
+      "passed": true
+    },
+    {
+      "label": "chromium: compact three-command popover contains no settings",
+      "passed": true
+    },
+    {
+      "label": "chromium: native Tab reaches first command",
+      "passed": true
+    },
+    {
+      "label": "chromium: Escape dismisses and returns focus",
+      "passed": true
+    },
+    {
+      "label": "chromium: opening another row dismisses previous popover",
+      "passed": true
+    },
+    {
+      "label": "chromium: command carries anchor and unrelated drafts",
+      "passed": true
+    },
+    {
+      "label": "chromium: only requested in-list editor opens",
+      "passed": true
+    },
+    {
+      "label": "chromium: original draft remains intact",
+      "passed": true
+    },
+    {
+      "label": "chromium: selected-row controls revealed",
+      "passed": true
+    },
+    {
+      "label": "chromium: selected episodes exclude trailers, special and bloopers",
+      "passed": true
+    },
+    {
+      "label": "chromium: native group payload contains exact checked IDs",
+      "passed": true
+    },
+    {
+      "label": "chromium: deselection hides group controls",
+      "passed": true
+    },
+    {
+      "label": "chromium: advanced automatic fields stay outside menu",
+      "passed": true
+    },
+    {
+      "label": "chromium: length bounds are optional and initially empty",
+      "passed": true
+    },
+    {
+      "label": "chromium: unknown lengths excluded by default with active bounds",
+      "passed": true
+    },
+    {
+      "label": "chromium: native preview payload preserves duration bounds and unknown choice",
+      "passed": true
+    },
+    {
+      "label": "chromium: focused editor, length bounds and advanced fields reflow at 320px",
+      "passed": true
+    },
+    {
+      "label": "chromium: mobile edge popover stays in viewport",
+      "passed": true
+    },
+    {
+      "label": "chromium: range selection shows endpoint only",
+      "passed": true
+    },
+    {
+      "label": "chromium: unnumbered pair hidden",
+      "passed": true
+    },
+    {
+      "label": "chromium: specials keep independent episode value",
+      "passed": true
+    },
+    {
+      "label": "chromium: required title validation and focus",
+      "passed": true
+    },
+    {
+      "label": "chromium: expanded settings and long labels at 320px",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics activity.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics artwork.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics cookies.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics index.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics item-1.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics item-2.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics item-3.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics item-4.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics item-5.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics item-6.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics item-7.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics item-8.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics item-9.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-1.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-2.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-3.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-4.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-5.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-6.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-7.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-8.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-9.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering-preview.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics numbering.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics options.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics response.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics selection-1.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics selection-2.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics selection-3.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics selection-4.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics selection-5.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics selection-6.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics selection-7.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics selection-8.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics selection-9.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics settings.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics sponsorblock.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: semantics states.html {\"scripts\":0,\"duplicates\":[],\"nested\":0,\"unlabelled\":[]}",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 320 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 768 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: dark 1440 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 320 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 768 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 index.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 settings.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 options.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 activity.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 item-1.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 states.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 artwork.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 cookies.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 sponsorblock.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 numbering.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 numbering-preview.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 numbering-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: light 1440 selection-6.html overflow/header",
+      "passed": true
+    },
+    {
+      "label": "firefox: keyboard drawer closes",
+      "passed": true
+    },
+    {
+      "label": "firefox: keyboard drawer opens",
+      "passed": true
+    },
+    {
+      "label": "firefox: keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "firefox: command popovers closed initially",
+      "passed": true
+    },
+    {
+      "label": "firefox: compact three-command popover contains no settings",
+      "passed": true
+    },
+    {
+      "label": "firefox: native Tab reaches first command",
+      "passed": true
+    },
+    {
+      "label": "firefox: Escape dismisses and returns focus",
+      "passed": true
+    },
+    {
+      "label": "firefox: opening another row dismisses previous popover",
+      "passed": true
+    },
+    {
+      "label": "firefox: command carries anchor and unrelated drafts",
+      "passed": true
+    },
+    {
+      "label": "firefox: only requested in-list editor opens",
+      "passed": true
+    },
+    {
+      "label": "firefox: original draft remains intact",
+      "passed": true
+    },
+    {
+      "label": "firefox: selected-row controls revealed",
+      "passed": true
+    },
+    {
+      "label": "firefox: selected episodes exclude trailers, special and bloopers",
+      "passed": true
+    },
+    {
+      "label": "firefox: native group payload contains exact checked IDs",
+      "passed": true
+    },
+    {
+      "label": "firefox: deselection hides group controls",
+      "passed": true
+    },
+    {
+      "label": "firefox: advanced automatic fields stay outside menu",
+      "passed": true
+    },
+    {
+      "label": "firefox: length bounds are optional and initially empty",
+      "passed": true
+    },
+    {
+      "label": "firefox: unknown lengths excluded by default with active bounds",
+      "passed": true
+    },
+    {
+      "label": "firefox: native preview payload preserves duration bounds and unknown choice",
+      "passed": true
+    },
+    {
+      "label": "firefox: focused editor, length bounds and advanced fields reflow at 320px",
+      "passed": true
+    },
+    {
+      "label": "firefox: mobile edge popover stays in viewport",
+      "passed": true
+    },
+    {
+      "label": "firefox: range selection shows endpoint only",
+      "passed": true
+    },
+    {
+      "label": "firefox: unnumbered pair hidden",
+      "passed": true
+    },
+    {
+      "label": "firefox: specials keep independent episode value",
+      "passed": true
+    },
+    {
+      "label": "firefox: required title validation and focus",
+      "passed": true
+    },
+    {
+      "label": "firefox: expanded settings and long labels at 320px",
+      "passed": true
+    }
+  ],
+  "failures": []
+}

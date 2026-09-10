@@ -2300,6 +2300,7 @@ mod incremental_rank_tests {
 pub struct AddonMediaListRemoteSynchronizer<P> {
     local: AddonMediaListSynchronizer,
     provider: P,
+    editor_revision: Option<i32>,
     delivery_mode: Option<ersatzrs_domain::AddonMediaListDeliveryMode>,
 }
 
@@ -2313,7 +2314,14 @@ where
             local: AddonMediaListSynchronizer::new(pool),
             provider,
             delivery_mode: None,
+            editor_revision: None,
         }
+    }
+
+    #[must_use]
+    pub(crate) fn with_editor_revision(mut self, revision: Option<i32>) -> Self {
+        self.editor_revision = revision;
+        self
     }
 
     /// Preserve refresh defaults unless the operator explicitly selected delivery.
@@ -2813,8 +2821,8 @@ where
         let mut tx = crate::db::begin_write(&self.local.pool)
             .await
             .repository()?;
-        let previous_addon_id = sqlx::query_scalar::<_, String>(
-            r#"SELECT "AddonId" FROM "AddonMediaList" WHERE "Id" = ?"#,
+        let previous = sqlx::query(
+            r#"SELECT "AddonId", "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#,
         )
         .bind(id)
         .fetch_optional(&mut *tx)
@@ -2824,6 +2832,16 @@ where
             kind: "add-on media list",
             id,
         })?;
+        let previous_addon_id: String = previous.try_get("AddonId").repository()?;
+        let revision: i32 = previous.try_get("DraftRevision").repository()?;
+        if self
+            .editor_revision
+            .is_some_and(|expected| expected != revision)
+        {
+            return Err(RepositoryError::Conflict(
+                "the saved draft changed during provider enumeration".into(),
+            ));
+        }
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaList" SET "AddonId" = ?, "ProviderId" = ?, "LastError" = NULL,
                       "DraftRevision" = "DraftRevision" + 1
@@ -4287,10 +4305,29 @@ mod generated_playlist_refresh_tests {
     }
 
     #[tokio::test]
-    async fn legacy_addon_switch_clears_only_draft_option_namespace() {
+    async fn legacy_addon_switch_clears_only_draft_option_namespace_with_editor_fence() {
         let pool = pool().await;
         seed_legacy_option_namespace(&pool).await;
 
+        let revision: i32 =
+            sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=?"#)
+                .bind(LIST_ID)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let before = draft_option_state(&pool).await;
+        let stale = AddonMediaListRemoteSynchronizer::new(
+            pool.clone(),
+            crate::addon_media_list::InstalledAddonMediaListProvider::new(pool.clone()),
+        )
+        .with_editor_revision(Some(revision + 1));
+        assert!(matches!(
+            stale
+                .update_addon_identity(LIST_ID, "org.example.new", "fixture")
+                .await,
+            Err(RepositoryError::Conflict(_))
+        ));
+        assert_eq!(draft_option_state(&pool).await, before);
         let synchronizer = AddonMediaListRemoteSynchronizer::new(
             pool.clone(),
             crate::addon_media_list::InstalledAddonMediaListProvider::new(pool.clone()),

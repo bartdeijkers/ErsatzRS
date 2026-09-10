@@ -20,6 +20,14 @@ The source paths in the table are under
 
 ## Interpretation
 
+The [section disclosure](components/disclosure.md) remains a shared-component candidate
+implemented locally in the add-on list task pages from the locked
+`plans/admin-ux-organize/` reference: bulk actions, publication details,
+and optional metadata use native details/summary semantics. Routine settings,
+storage thresholds and managed locations stay visible. Compact Help and
+row-command popovers remain distinct patterns. This
+does not change the production adoption counts above.
+
 - A raw-element count is a discovery queue. It does not require every match to
   migrate to one abstraction.
 - `Implemented` means a shared Rust/CSS surface exists. Adoption and quality

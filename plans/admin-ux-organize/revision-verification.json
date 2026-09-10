@@ -1,0 +1,2741 @@
+{
+  "checks": [
+    {
+      "label": "chromium access-result.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium access-running.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium activity.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium addon-impact.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium artwork.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium bulk-preview.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium change-addon.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium conflict.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium cookies.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium empty-numbering.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium index.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium invalid-numbering.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-1.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-10.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-11.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-12.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-13.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-14.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-15.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-16.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-17.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-18.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-19.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-2.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-20.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-21.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-22.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-23.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-24.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-25.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-26.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-27.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-28.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-29.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-3.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-30.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-31.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-32.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-33.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-34.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-35.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-36.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-4.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-5.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-6.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-7.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-8.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium item-9.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium long-list.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium media-details.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-1.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-2.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-3.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-4.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-5.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-6.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-7.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-8.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-9.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering-preview.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium options.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium paused.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium reconcile.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium recovery.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium replacement.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium reset-impact.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium response.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium restore-impact.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium revision-compare.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium running.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium selection-1.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium selection-2.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium selection-3.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium selection-4.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium selection-5.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium selection-6.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium selection-7.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium selection-8.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium selection-9.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium settings.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium source-check.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium sponsorblock.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium stale-preview.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium states.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "chromium grouped playback apply",
+      "passed": true
+    },
+    {
+      "label": "chromium reset is pending before Apply",
+      "passed": true
+    },
+    {
+      "label": "chromium grouped reset preserves other option",
+      "passed": true
+    },
+    {
+      "label": "chromium tab navigation retains settings draft",
+      "passed": true
+    },
+    {
+      "label": "chromium local Cancel retains unrelated draft and selection",
+      "passed": true
+    },
+    {
+      "label": "chromium explicit discard restores numbering",
+      "passed": true
+    },
+    {
+      "label": "chromium preview has one apply and no editable row inputs",
+      "passed": true
+    },
+    {
+      "label": "chromium min/max filter and unknown inclusion preserve mixed-list scope",
+      "passed": true
+    },
+    {
+      "label": "chromium reviewed numbering applies exact assignment",
+      "passed": true
+    },
+    {
+      "label": "chromium long list uses actual paging",
+      "passed": true
+    },
+    {
+      "label": "chromium cross-page selection remains exact",
+      "passed": true
+    },
+    {
+      "label": "chromium off-page proposed item remains visible in read-only review",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox access-result.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox access-running.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox activity.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox addon-impact.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox artwork.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox bulk-preview.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox change-addon.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox conflict.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox cookies.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox empty-numbering.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox index.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox invalid-numbering.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-1.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-10.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-11.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-12.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-13.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-14.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-15.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-16.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-17.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-18.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-19.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-2.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-20.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-21.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-22.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-23.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-24.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-25.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-26.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-27.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-28.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-29.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-3.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-30.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-31.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-32.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-33.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-34.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-35.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-36.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-4.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-5.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-6.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-7.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-8.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox item-9.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox long-list.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox media-details.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-1.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-2.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-3.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-4.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-5.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-6.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-7.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-8.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-9.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering-preview.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox options.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox paused.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox reconcile.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox recovery.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox replacement.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox reset-impact.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox response.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox restore-impact.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox revision-compare.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox running.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox selection-1.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox selection-2.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox selection-3.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox selection-4.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox selection-5.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox selection-6.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox selection-7.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox selection-8.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox selection-9.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox settings.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox source-check.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox sponsorblock.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox stale-preview.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox states.html semantics {\"scripts\":0,\"duplicate\":[],\"labels\":[],\"nested\":0}",
+      "passed": true
+    },
+    {
+      "label": "firefox grouped playback apply",
+      "passed": true
+    },
+    {
+      "label": "firefox reset is pending before Apply",
+      "passed": true
+    },
+    {
+      "label": "firefox grouped reset preserves other option",
+      "passed": true
+    },
+    {
+      "label": "firefox tab navigation retains settings draft",
+      "passed": true
+    },
+    {
+      "label": "firefox local Cancel retains unrelated draft and selection",
+      "passed": true
+    },
+    {
+      "label": "firefox explicit discard restores numbering",
+      "passed": true
+    },
+    {
+      "label": "firefox preview has one apply and no editable row inputs",
+      "passed": true
+    },
+    {
+      "label": "firefox min/max filter and unknown inclusion preserve mixed-list scope",
+      "passed": true
+    },
+    {
+      "label": "firefox reviewed numbering applies exact assignment",
+      "passed": true
+    },
+    {
+      "label": "firefox long list uses actual paging",
+      "passed": true
+    },
+    {
+      "label": "firefox cross-page selection remains exact",
+      "passed": true
+    },
+    {
+      "label": "firefox off-page proposed item remains visible in read-only review",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 recovery.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 index.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 settings.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 options.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 activity.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 numbering-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 numbering-preview.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 item-6.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 artwork.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 media-details.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 replacement.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 reset-impact.html reflow/shell",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 recovery.html reflow/shell",
+      "passed": true
+    }
+  ],
+  "layouts": [
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "index.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 654.25,
+      "visibleRows": 1
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "settings.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "options.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "activity.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "numbering-6.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 322.515625,
+      "visibleRows": 3
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "numbering-preview.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 462.515625,
+      "visibleRows": 2
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "item-6.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "artwork.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "media-details.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "replacement.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "reset-impact.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "name": "recovery.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "index.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 554.625,
+      "visibleRows": 1
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "settings.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "options.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "activity.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "numbering-6.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 315.40625,
+      "visibleRows": 3
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "numbering-preview.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 410.484375,
+      "visibleRows": 2
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "item-6.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "artwork.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "media-details.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "replacement.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "reset-impact.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "name": "recovery.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "index.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 504.984375,
+      "visibleRows": 5
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "settings.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "options.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "activity.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "numbering-6.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 309.765625,
+      "visibleRows": 5
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "numbering-preview.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 404.84375,
+      "visibleRows": 5
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "item-6.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "artwork.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "media-details.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "replacement.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "reset-impact.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "name": "recovery.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "index.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 654.25,
+      "visibleRows": 1
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "settings.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "options.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "activity.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "numbering-6.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 322.515625,
+      "visibleRows": 3
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "numbering-preview.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 462.515625,
+      "visibleRows": 2
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "item-6.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "artwork.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "media-details.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "replacement.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "reset-impact.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "name": "recovery.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "index.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 554.625,
+      "visibleRows": 1
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "settings.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "options.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "activity.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "numbering-6.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 315.40625,
+      "visibleRows": 3
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "numbering-preview.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 410.484375,
+      "visibleRows": 2
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "item-6.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "artwork.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "media-details.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "replacement.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "reset-impact.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "name": "recovery.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "index.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 504.984375,
+      "visibleRows": 5
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "settings.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "options.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "activity.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "numbering-6.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 309.765625,
+      "visibleRows": 5
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "numbering-preview.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 404.84375,
+      "visibleRows": 5
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "item-6.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "artwork.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "media-details.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "replacement.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "reset-impact.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "name": "recovery.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "index.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 654.7999877929688,
+      "visibleRows": 1
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "settings.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "options.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "activity.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "numbering-6.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 322.54998779296875,
+      "visibleRows": 3
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "numbering-preview.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 462.6000061035156,
+      "visibleRows": 2
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "item-6.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "artwork.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "media-details.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "replacement.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "reset-impact.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "name": "recovery.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "index.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 555.2000122070312,
+      "visibleRows": 1
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "settings.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "options.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "activity.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "numbering-6.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 315.45001220703125,
+      "visibleRows": 3
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "numbering-preview.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 410.54998779296875,
+      "visibleRows": 2
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "item-6.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "artwork.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "media-details.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "replacement.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "reset-impact.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "name": "recovery.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "index.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 505.54998779296875,
+      "visibleRows": 5
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "settings.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "options.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "activity.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "numbering-6.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 309.79998779296875,
+      "visibleRows": 5
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "numbering-preview.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 404.8999938964844,
+      "visibleRows": 5
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "item-6.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "artwork.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "media-details.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "replacement.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "reset-impact.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "name": "recovery.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "index.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 654.7999877929688,
+      "visibleRows": 1
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "settings.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "options.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "activity.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "numbering-6.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 322.54998779296875,
+      "visibleRows": 3
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "numbering-preview.html",
+      "scroll": 320,
+      "header": 56,
+      "row": 462.6000061035156,
+      "visibleRows": 2
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "item-6.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "artwork.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "media-details.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "replacement.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "reset-impact.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "name": "recovery.html",
+      "scroll": 320,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "index.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 555.2000122070312,
+      "visibleRows": 1
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "settings.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "options.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "activity.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "numbering-6.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 315.45001220703125,
+      "visibleRows": 3
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "numbering-preview.html",
+      "scroll": 768,
+      "header": 56,
+      "row": 410.54998779296875,
+      "visibleRows": 2
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "item-6.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "artwork.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "media-details.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "replacement.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "reset-impact.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "name": "recovery.html",
+      "scroll": 768,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "index.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 505.54998779296875,
+      "visibleRows": 5
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "settings.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "options.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "activity.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "numbering-6.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 309.79998779296875,
+      "visibleRows": 5
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "numbering-preview.html",
+      "scroll": 1440,
+      "header": 56,
+      "row": 404.8999938964844,
+      "visibleRows": 5
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "item-6.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "artwork.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "media-details.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "replacement.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "reset-impact.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "name": "recovery.html",
+      "scroll": 1440,
+      "header": 56,
+      "visibleRows": 0
+    }
+  ],
+  "failures": [],
+  "metrics": [
+    {
+      "browser": "chromium",
+      "width": 320,
+      "scroll": 320,
+      "header": 56,
+      "row": 654.25,
+      "visibleRows": 1
+    },
+    {
+      "browser": "chromium",
+      "width": 768,
+      "scroll": 768,
+      "header": 56,
+      "row": 554.625,
+      "visibleRows": 1
+    },
+    {
+      "browser": "chromium",
+      "width": 1440,
+      "scroll": 1440,
+      "header": 56,
+      "row": 504.984375,
+      "visibleRows": 5
+    },
+    {
+      "browser": "firefox",
+      "width": 320,
+      "scroll": 320,
+      "header": 56,
+      "row": 654.7999877929688,
+      "visibleRows": 1
+    },
+    {
+      "browser": "firefox",
+      "width": 768,
+      "scroll": 768,
+      "header": 56,
+      "row": 555.2000122070312,
+      "visibleRows": 1
+    },
+    {
+      "browser": "firefox",
+      "width": 1440,
+      "scroll": 1440,
+      "header": 56,
+      "row": 505.54998779296875,
+      "visibleRows": 5
+    }
+  ]
+}

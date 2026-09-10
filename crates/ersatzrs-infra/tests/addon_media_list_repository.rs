@@ -1,5 +1,8 @@
 mod common;
 
+#[path = "addon_media_list_repository/editor.rs"]
+mod editor;
+
 use ersatzrs_core::repositories::{
     AddonMediaListAdminSortDirection, AddonMediaListAdminSortField, AddonMediaListItemReviewEdit,
     AddonMediaListNfoMetadata, AddonMediaListPublicationBlockerKind, AddonMediaListRepository,

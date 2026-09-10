@@ -1,0 +1,623 @@
+{
+  "checks": [
+    {
+      "label": "chromium semantic controls",
+      "passed": true
+    },
+    {
+      "label": "chromium two plain rows",
+      "passed": true
+    },
+    {
+      "label": "chromium browser hidden while off",
+      "passed": true
+    },
+    {
+      "label": "chromium keyboard checkbox reveals browser",
+      "passed": true
+    },
+    {
+      "label": "chromium independent cookies payload",
+      "passed": true
+    },
+    {
+      "label": "chromium off payload needs documented inactive-browser adapter",
+      "passed": true
+    },
+    {
+      "label": "chromium enabled processing consequence visible",
+      "passed": true
+    },
+    {
+      "label": "chromium independent SponsorBlock payload",
+      "passed": true
+    },
+    {
+      "label": "chromium unchecked SponsorBlock native payload",
+      "passed": true
+    },
+    {
+      "label": "chromium browser-cookies keyboard details",
+      "passed": true
+    },
+    {
+      "label": "chromium browser-cookies scoped reset",
+      "passed": true
+    },
+    {
+      "label": "chromium sponsorblock keyboard details",
+      "passed": true
+    },
+    {
+      "label": "chromium sponsorblock scoped reset",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1024 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1024 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1024 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1024 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox semantic controls",
+      "passed": true
+    },
+    {
+      "label": "firefox two plain rows",
+      "passed": true
+    },
+    {
+      "label": "firefox browser hidden while off",
+      "passed": true
+    },
+    {
+      "label": "firefox keyboard checkbox reveals browser",
+      "passed": true
+    },
+    {
+      "label": "firefox independent cookies payload",
+      "passed": true
+    },
+    {
+      "label": "firefox off payload needs documented inactive-browser adapter",
+      "passed": true
+    },
+    {
+      "label": "firefox enabled processing consequence visible",
+      "passed": true
+    },
+    {
+      "label": "firefox independent SponsorBlock payload",
+      "passed": true
+    },
+    {
+      "label": "firefox unchecked SponsorBlock native payload",
+      "passed": true
+    },
+    {
+      "label": "firefox browser-cookies keyboard details",
+      "passed": true
+    },
+    {
+      "label": "firefox browser-cookies scoped reset",
+      "passed": true
+    },
+    {
+      "label": "firefox sponsorblock keyboard details",
+      "passed": true
+    },
+    {
+      "label": "firefox sponsorblock scoped reset",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1024 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1024 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1024 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1024 expanded fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 closed fits; shell unchanged",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 expanded fits; shell unchanged",
+      "passed": true
+    }
+  ],
+  "layouts": [
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "expanded": false,
+      "scroll": 320,
+      "header": 56,
+      "rows": [
+        131,
+        132
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 320,
+      "expanded": true,
+      "scroll": 320,
+      "header": 56,
+      "rows": [
+        445,
+        420
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "expanded": false,
+      "scroll": 768,
+      "header": 56,
+      "rows": [
+        100,
+        101
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 768,
+      "expanded": true,
+      "scroll": 768,
+      "header": 56,
+      "rows": [
+        327,
+        330
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1024,
+      "expanded": false,
+      "scroll": 1024,
+      "header": 56,
+      "rows": [
+        100,
+        101
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1024,
+      "expanded": true,
+      "scroll": 1024,
+      "header": 56,
+      "rows": [
+        307,
+        310
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "expanded": false,
+      "scroll": 1440,
+      "header": 56,
+      "rows": [
+        52,
+        53
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "dark",
+      "width": 1440,
+      "expanded": true,
+      "scroll": 1440,
+      "header": 56,
+      "rows": [
+        265,
+        268
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "expanded": false,
+      "scroll": 320,
+      "header": 56,
+      "rows": [
+        131,
+        132
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 320,
+      "expanded": true,
+      "scroll": 320,
+      "header": 56,
+      "rows": [
+        445,
+        420
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "expanded": false,
+      "scroll": 768,
+      "header": 56,
+      "rows": [
+        100,
+        101
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 768,
+      "expanded": true,
+      "scroll": 768,
+      "header": 56,
+      "rows": [
+        327,
+        330
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1024,
+      "expanded": false,
+      "scroll": 1024,
+      "header": 56,
+      "rows": [
+        100,
+        101
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1024,
+      "expanded": true,
+      "scroll": 1024,
+      "header": 56,
+      "rows": [
+        307,
+        310
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "expanded": false,
+      "scroll": 1440,
+      "header": 56,
+      "rows": [
+        52,
+        53
+      ]
+    },
+    {
+      "browser": "chromium",
+      "theme": "light",
+      "width": 1440,
+      "expanded": true,
+      "scroll": 1440,
+      "header": 56,
+      "rows": [
+        265,
+        268
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "expanded": false,
+      "scroll": 320,
+      "header": 56,
+      "rows": [
+        131,
+        132
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 320,
+      "expanded": true,
+      "scroll": 320,
+      "header": 56,
+      "rows": [
+        445,
+        420
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "expanded": false,
+      "scroll": 768,
+      "header": 56,
+      "rows": [
+        100,
+        101
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 768,
+      "expanded": true,
+      "scroll": 768,
+      "header": 56,
+      "rows": [
+        327,
+        330
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1024,
+      "expanded": false,
+      "scroll": 1024,
+      "header": 56,
+      "rows": [
+        100,
+        101
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1024,
+      "expanded": true,
+      "scroll": 1024,
+      "header": 56,
+      "rows": [
+        307,
+        310
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "expanded": false,
+      "scroll": 1440,
+      "header": 56,
+      "rows": [
+        52,
+        53
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "dark",
+      "width": 1440,
+      "expanded": true,
+      "scroll": 1440,
+      "header": 56,
+      "rows": [
+        265,
+        268
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "expanded": false,
+      "scroll": 320,
+      "header": 56,
+      "rows": [
+        131,
+        132
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 320,
+      "expanded": true,
+      "scroll": 320,
+      "header": 56,
+      "rows": [
+        445,
+        420
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "expanded": false,
+      "scroll": 768,
+      "header": 56,
+      "rows": [
+        100,
+        101
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 768,
+      "expanded": true,
+      "scroll": 768,
+      "header": 56,
+      "rows": [
+        327,
+        330
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1024,
+      "expanded": false,
+      "scroll": 1024,
+      "header": 56,
+      "rows": [
+        100,
+        101
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1024,
+      "expanded": true,
+      "scroll": 1024,
+      "header": 56,
+      "rows": [
+        307,
+        310
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "expanded": false,
+      "scroll": 1440,
+      "header": 56,
+      "rows": [
+        52,
+        53
+      ]
+    },
+    {
+      "browser": "firefox",
+      "theme": "light",
+      "width": 1440,
+      "expanded": true,
+      "scroll": 1440,
+      "header": 56,
+      "rows": [
+        265,
+        268
+      ]
+    }
+  ],
+  "failures": []
+}

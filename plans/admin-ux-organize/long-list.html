@@ -1,0 +1,2317 @@
+<!doctype html>
+
+
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta http-equiv="Content-Security-Policy" content="default-src &#x27;none&#x27;; style-src &#x27;self&#x27; &#x27;unsafe-inline&#x27;; img-src &#x27;self&#x27; data:; form-action &#x27;self&#x27;; base-uri &#x27;none&#x27;; script-src &#x27;none&#x27;">
+<title>The Screening Room · ErsatzRS design</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="shell.css">
+<link rel="icon" href="assets/ersatzrs.png">
+<link rel="stylesheet" href="visual.css">
+<link rel="stylesheet" href="numbering.css">
+<link rel="stylesheet" href="list-numbering.css">
+<link rel="stylesheet" href="row-actions.css">
+<link rel="stylesheet" href="organize.css">
+<link rel="stylesheet" href="alignment.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar-4ed76e9">
+<a href="http://127.0.0.1:8409/" class="logo-4ed76e9">
+<img src="assets/ersatzrs.png" alt="ErsatzRS" class="logo-image-4ed76e9">
+</a>
+<span class="toggle-space" aria-hidden="true">
+</span>
+<div class="flex-1-4ed76e9">
+</div>
+<form method="get" action="http://127.0.0.1:8409/search" role="search" class="search-form-4ed76e9">
+<span aria-hidden="true" class="search-icon-4ed76e9" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2021l-4.35-4.35M17%2011A6%206%200%201%201%205%2011a6%206%200%200%201%2012%200z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2021l-4.35-4.35M17%2011A6%206%200%201%201%205%2011a6%206%200%200%201%2012%200z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<input type="search" name="query" placeholder="Search" aria-label="Search media" autocomplete="off" class="search-input-4ed76e9">
+</form>
+<nav class="topbar-nav-4ed76e9">
+<a href="http://127.0.0.1:8409/iptv/channels.m3u" target="_blank" class="topbar-link-4ed76e9">M3U</a>
+<a href="http://127.0.0.1:8409/iptv/xmltv.xml" target="_blank" class="topbar-link-4ed76e9">XMLTV</a>
+</nav>
+</header>
+<details class="existing-navigation desktop-navigation" open>
+<summary class="hamburger-4ed76e9" id="nav-toggle" aria-label="Toggle navigation" title="Toggle navigation">
+<span aria-hidden="true" style="display:inline-block;width:1.25rem;height:1.25rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M3%2012h18M3%206h18M3%2018h18%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M3%2012h18M3%206h18M3%2018h18%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</summary>
+<aside id="admin-navigation-drawer" data-nav-drawer="" class="drawer-4ed76e9">
+<nav class="drawer-nav-4ed76e9">
+<a href="http://127.0.0.1:8409/channels" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Channels</span>
+</a>
+<a href="http://127.0.0.1:8409/epg" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%202v4M16%202v4M3%2010h18M5%204h14a2%202%200%200%201%202%202v14a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2V6a2%202%200%200%201%202-2z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%202v4M16%202v4M3%2010h18M5%204h14a2%202%200%200%201%202%202v14a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2V6a2%202%200%200%201%202-2z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">EPG Preview</span>
+</a>
+<a href="http://127.0.0.1:8409/ffmpeg" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M4%2021v-7M4%2010V3M12%2021v-9M12%208V3M20%2021v-5M20%2012V3M1%2014h6M9%208h6M17%2016h6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M4%2021v-7M4%2010V3M12%2021v-9M12%208V3M20%2021v-5M20%2012V3M1%2014h6M9%208h6M17%2016h6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">FFmpeg Profiles</span>
+</a>
+<a href="http://127.0.0.1:8409/watermarks" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Watermarks</span>
+</a>
+<a href="http://127.0.0.1:8409/graphics-elements" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Graphics Elements</span>
+</a>
+<details data-nav-group="media-sources" class="nav-group-4ed76e9">
+<summary class="nav-group-header-4ed76e9">
+<span>Media Sources</span>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="http://127.0.0.1:8409/media/sources/local" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Local</span>
+</a>
+<a href="http://127.0.0.1:8409/media/sources/emby" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Emby</span>
+</a>
+<a href="http://127.0.0.1:8409/media/sources/jellyfin" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Jellyfin</span>
+</a>
+<a href="http://127.0.0.1:8409/media/sources/plex" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Plex</span>
+</a>
+</div>
+</details>
+<details data-nav-group="media" class="nav-group-4ed76e9">
+<summary class="nav-group-header-4ed76e9">
+<span>Media</span>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="http://127.0.0.1:8409/media/libraries" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Libraries</span>
+</a>
+<a href="http://127.0.0.1:8409/media/trash" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M3%206h18M8%206V4h8v2M19%206l-1%2014H6L5%206%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M3%206h18M8%206V4h8v2M19%206l-1%2014H6L5%206%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Trash</span>
+</a>
+<a href="http://127.0.0.1:8409/media/tv/shows" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">TV Shows</span>
+</a>
+<a href="http://127.0.0.1:8409/media/movies" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Movies</span>
+</a>
+<a href="http://127.0.0.1:8409/media/music/artists" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Music</span>
+</a>
+<a href="http://127.0.0.1:8409/media/other/videos" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Other Videos</span>
+</a>
+<a href="http://127.0.0.1:8409/media/music/songs" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Songs</span>
+</a>
+<a href="http://127.0.0.1:8409/media/browser/images" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Images</span>
+</a>
+<a href="http://127.0.0.1:8409/media/remote/streams" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Remote Streams</span>
+</a>
+</div>
+</details>
+<details data-nav-group="lists" class="nav-group-4ed76e9" open="">
+<summary class="nav-group-header-4ed76e9">
+<span>Lists</span>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="index.html" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Add-on lists</span>
+</a>
+<a href="http://127.0.0.1:8409/media/collections" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Collections</span>
+</a>
+<a href="http://127.0.0.1:8409/media/smart-collections" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2021l-4.35-4.35M17%2011A6%206%200%201%201%205%2011a6%206%200%200%201%2012%200z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2021l-4.35-4.35M17%2011A6%206%200%201%201%205%2011a6%206%200%200%201%2012%200z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Smart Collections</span>
+</a>
+<a href="http://127.0.0.1:8409/media/multi-collections" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Multi Collections</span>
+</a>
+<a href="http://127.0.0.1:8409/media/rerun-collections" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M23%204v6h-6M1%2020v-6h6%20M3.51%209a9%209%200%200%201%2014.85-3.36L23%2010M1%2014l4.64%204.36A9%209%200%200%200%2020.49%2015%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M23%204v6h-6M1%2020v-6h6%20M3.51%209a9%209%200%200%201%2014.85-3.36L23%2010M1%2014l4.64%204.36A9%209%200%200%200%2020.49%2015%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Rerun Collections</span>
+</a>
+<a href="http://127.0.0.1:8409/media/playlists" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Playlists</span>
+</a>
+<a href="http://127.0.0.1:8409/media/filler/presets" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Filler Presets</span>
+</a>
+</div>
+</details>
+<details data-nav-group="scheduling" class="nav-group-4ed76e9">
+<summary class="nav-group-header-4ed76e9">
+<div class="nav-group-header-left-4ed76e9">
+<span>Scheduling</span>
+<span data-state="ready" style="display:contents;">
+<span data-playout-warning-badge="" class="nav-badge-warning-4ed76e9" style="display:none;">0</span>
+</span>
+</div>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="http://127.0.0.1:8409/schedules" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Schedules</span>
+</a>
+<a href="http://127.0.0.1:8409/blocks" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Blocks</span>
+</a>
+<a href="http://127.0.0.1:8409/templates" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Templates</span>
+</a>
+<a href="http://127.0.0.1:8409/decos" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M11%204H4a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h14a2%202%200%200%200%202-2v-7M18.5%202.5a2.121%202.121%200%200%201%203%203L12%2015l-4%201%201-4%209.5-9.5z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M11%204H4a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h14a2%202%200%200%200%202-2v-7M18.5%202.5a2.121%202.121%200%200%201%203%203L12%2015l-4%201%201-4%209.5-9.5z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Decorations</span>
+</a>
+<a href="http://127.0.0.1:8409/deco-templates" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Deco Templates</span>
+</a>
+<a href="http://127.0.0.1:8409/playouts" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Playouts</span>
+</a>
+</div>
+</details>
+<a href="http://127.0.0.1:8409/settings/ffmpeg" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Settings</span>
+</a>
+<details open="" data-nav-group="support" class="nav-group-4ed76e9">
+<summary class="nav-group-header-4ed76e9">
+<div class="nav-group-header-left-4ed76e9">
+<span>Support</span>
+<span data-health-badges="" data-state="ready" style="display:contents;">
+<span data-health-error-badge="" class="nav-badge-error-4ed76e9" style="display:none;">0</span>
+<span data-health-warning-badge="" class="nav-badge-warning-4ed76e9" style="display:inline-flex;">2</span>
+</span>
+</div>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="http://127.0.0.1:8409/system/health" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M20%206L9%2017l-5-5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M20%206L9%2017l-5-5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Health Checks</span>
+</a>
+<a href="http://127.0.0.1:8409/system/logs" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%202C6.48%202%202%206.48%202%2012s4.48%2010%2010%2010%2010-4.48%2010-10S17.52%202%2012%202zm1%2015h-2v-6h2v6zm0-8h-2V7h2v2z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%202C6.48%202%202%206.48%202%2012s4.48%2010%2010%2010%2010-4.48%2010-10S17.52%202%2012%202zm1%2015h-2v-6h2v6zm0-8h-2V7h2v2z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Logging</span>
+</a>
+<a href="http://127.0.0.1:8409/system/troubleshooting" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M10.29%203.86L1.82%2018a2%202%200%200%200%201.71%203h16.94a2%202%200%200%200%201.71-3L13.71%203.86a2%202%200%200%200-3.42%200zM12%209v4M12%2017h.01%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M10.29%203.86L1.82%2018a2%202%200%200%200%201.71%203h16.94a2%202%200%200%200%201.71-3L13.71%203.86a2%202%200%200%200-3.42%200zM12%209v4M12%2017h.01%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Troubleshooting</span>
+</a>
+</div>
+</details>
+</nav>
+</aside>
+</details>
+<details class="existing-navigation mobile-navigation">
+<summary class="hamburger-4ed76e9" id="mobile-nav-toggle" aria-label="Toggle navigation" title="Toggle navigation">
+<span aria-hidden="true" style="display:inline-block;width:1.25rem;height:1.25rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M3%2012h18M3%206h18M3%2018h18%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M3%2012h18M3%206h18M3%2018h18%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</summary>
+<aside id="mobile-navigation-drawer" data-nav-drawer="" class="drawer-4ed76e9">
+<nav class="drawer-nav-4ed76e9">
+<a href="http://127.0.0.1:8409/channels" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Channels</span>
+</a>
+<a href="http://127.0.0.1:8409/epg" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%202v4M16%202v4M3%2010h18M5%204h14a2%202%200%200%201%202%202v14a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2V6a2%202%200%200%201%202-2z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%202v4M16%202v4M3%2010h18M5%204h14a2%202%200%200%201%202%202v14a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2V6a2%202%200%200%201%202-2z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">EPG Preview</span>
+</a>
+<a href="http://127.0.0.1:8409/ffmpeg" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M4%2021v-7M4%2010V3M12%2021v-9M12%208V3M20%2021v-5M20%2012V3M1%2014h6M9%208h6M17%2016h6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M4%2021v-7M4%2010V3M12%2021v-9M12%208V3M20%2021v-5M20%2012V3M1%2014h6M9%208h6M17%2016h6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">FFmpeg Profiles</span>
+</a>
+<a href="http://127.0.0.1:8409/watermarks" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Watermarks</span>
+</a>
+<a href="http://127.0.0.1:8409/graphics-elements" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Graphics Elements</span>
+</a>
+<details data-nav-group="media-sources" class="nav-group-4ed76e9">
+<summary class="nav-group-header-4ed76e9">
+<span>Media Sources</span>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="http://127.0.0.1:8409/media/sources/local" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Local</span>
+</a>
+<a href="http://127.0.0.1:8409/media/sources/emby" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Emby</span>
+</a>
+<a href="http://127.0.0.1:8409/media/sources/jellyfin" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Jellyfin</span>
+</a>
+<a href="http://127.0.0.1:8409/media/sources/plex" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Plex</span>
+</a>
+</div>
+</details>
+<details data-nav-group="media" class="nav-group-4ed76e9">
+<summary class="nav-group-header-4ed76e9">
+<span>Media</span>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="http://127.0.0.1:8409/media/libraries" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Libraries</span>
+</a>
+<a href="http://127.0.0.1:8409/media/trash" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M3%206h18M8%206V4h8v2M19%206l-1%2014H6L5%206%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M3%206h18M8%206V4h8v2M19%206l-1%2014H6L5%206%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Trash</span>
+</a>
+<a href="http://127.0.0.1:8409/media/tv/shows" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">TV Shows</span>
+</a>
+<a href="http://127.0.0.1:8409/media/movies" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Movies</span>
+</a>
+<a href="http://127.0.0.1:8409/media/music/artists" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Music</span>
+</a>
+<a href="http://127.0.0.1:8409/media/other/videos" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Other Videos</span>
+</a>
+<a href="http://127.0.0.1:8409/media/music/songs" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Songs</span>
+</a>
+<a href="http://127.0.0.1:8409/media/browser/images" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M1%2012s4-8%2011-8%2011%208%2011%208-4%208-11%208-11-8-11-8z%20M12%209a3%203%200%201%200%200%206%203%203%200%200%200%200-6z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Images</span>
+</a>
+<a href="http://127.0.0.1:8409/media/remote/streams" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Remote Streams</span>
+</a>
+</div>
+</details>
+<details data-nav-group="lists" class="nav-group-4ed76e9" open="">
+<summary class="nav-group-header-4ed76e9">
+<span>Lists</span>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="index.html" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2015v4a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2v-4M7%2010l5%205%205-5M12%2015V3%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Add-on lists</span>
+</a>
+<a href="http://127.0.0.1:8409/media/collections" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Collections</span>
+</a>
+<a href="http://127.0.0.1:8409/media/smart-collections" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2021l-4.35-4.35M17%2011A6%206%200%201%201%205%2011a6%206%200%200%201%2012%200z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M21%2021l-4.35-4.35M17%2011A6%206%200%201%201%205%2011a6%206%200%200%201%2012%200z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Smart Collections</span>
+</a>
+<a href="http://127.0.0.1:8409/media/multi-collections" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Multi Collections</span>
+</a>
+<a href="http://127.0.0.1:8409/media/rerun-collections" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M23%204v6h-6M1%2020v-6h6%20M3.51%209a9%209%200%200%201%2014.85-3.36L23%2010M1%2014l4.64%204.36A9%209%200%200%200%2020.49%2015%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M23%204v6h-6M1%2020v-6h6%20M3.51%209a9%209%200%200%201%2014.85-3.36L23%2010M1%2014l4.64%204.36A9%209%200%200%200%2020.49%2015%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Rerun Collections</span>
+</a>
+<a href="http://127.0.0.1:8409/media/playlists" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Playlists</span>
+</a>
+<a href="http://127.0.0.1:8409/media/filler/presets" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Filler Presets</span>
+</a>
+</div>
+</details>
+<details data-nav-group="scheduling" class="nav-group-4ed76e9">
+<summary class="nav-group-header-4ed76e9">
+<div class="nav-group-header-left-4ed76e9">
+<span>Scheduling</span>
+<span data-state="ready" style="display:contents;">
+<span data-playout-warning-badge="" class="nav-badge-warning-4ed76e9" style="display:none;">0</span>
+</span>
+</div>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="http://127.0.0.1:8409/schedules" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Schedules</span>
+</a>
+<a href="http://127.0.0.1:8409/blocks" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Blocks</span>
+</a>
+<a href="http://127.0.0.1:8409/templates" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Templates</span>
+</a>
+<a href="http://127.0.0.1:8409/decos" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M11%204H4a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h14a2%202%200%200%200%202-2v-7M18.5%202.5a2.121%202.121%200%200%201%203%203L12%2015l-4%201%201-4%209.5-9.5z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M11%204H4a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h14a2%202%200%200%200%202-2v-7M18.5%202.5a2.121%202.121%200%200%201%203%203L12%2015l-4%201%201-4%209.5-9.5z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Decorations</span>
+</a>
+<a href="http://127.0.0.1:8409/deco-templates" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M8%204H6a2%202%200%200%200-2%202v14a2%202%200%200%200%202%202h12a2%202%200%200%200%202-2V8l-4-4h-6M14%202v4h4M8%2012h8M8%2016h5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Deco Templates</span>
+</a>
+<a href="http://127.0.0.1:8409/playouts" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M5%203l14%209-14%209V3z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Playouts</span>
+</a>
+</div>
+</details>
+<a href="http://127.0.0.1:8409/settings/ffmpeg" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%2015a3%203%200%201%200%200-6%203%203%200%200%200%200%206z%20M19.4%2015a1.65%201.65%200%200%200%20.33%201.82l.06.06a2%202%200%200%201-2.83%202.83l-.06-.06a1.65%201.65%200%200%200-1.82-.33%201.65%201.65%200%200%200-1%201.51V21a2%202%200%200%201-4%200v-.09A1.65%201.65%200%200%200%209%2019.4a1.65%201.65%200%200%200-1.82.33l-.06.06a2%202%200%200%201-2.83-2.83l.06-.06A1.65%201.65%200%200%200%204.68%2015a1.65%201.65%200%200%200-1.51-1H3a2%202%200%200%201%200-4h.09A1.65%201.65%200%200%200%204.6%209a1.65%201.65%200%200%200-.33-1.82l-.06-.06a2%202%200%200%201%202.83-2.83l.06.06A1.65%201.65%200%200%200%209%204.68a1.65%201.65%200%200%200%201-1.51V3a2%202%200%200%201%204%200v.09a1.65%201.65%200%200%200%201%201.51%201.65%201.65%200%200%200%201.82-.33l.06-.06a2%202%200%200%201%202.83%202.83l-.06.06A1.65%201.65%200%200%200%2019.4%209a1.65%201.65%200%200%200%201.51%201H21a2%202%200%200%201%200%204h-.09a1.65%201.65%200%200%200-1.51%201z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Settings</span>
+</a>
+<details open="" data-nav-group="support" class="nav-group-4ed76e9">
+<summary class="nav-group-header-4ed76e9">
+<div class="nav-group-header-left-4ed76e9">
+<span>Support</span>
+<span data-health-badges="" data-state="ready" style="display:contents;">
+<span data-health-error-badge="" class="nav-badge-error-4ed76e9" style="display:none;">0</span>
+<span data-health-warning-badge="" class="nav-badge-warning-4ed76e9" style="display:inline-flex;">2</span>
+</span>
+</div>
+<span class="nav-group-chevron-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:0.75rem;height:0.75rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%209l6%206%206-6%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+</span>
+</summary>
+<div class="nav-group-children-4ed76e9">
+<a href="http://127.0.0.1:8409/system/health" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M20%206L9%2017l-5-5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M20%206L9%2017l-5-5%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Health Checks</span>
+</a>
+<a href="http://127.0.0.1:8409/system/logs" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%202C6.48%202%202%206.48%202%2012s4.48%2010%2010%2010%2010-4.48%2010-10S17.52%202%2012%202zm1%2015h-2v-6h2v6zm0-8h-2V7h2v2z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%202C6.48%202%202%206.48%202%2012s4.48%2010%2010%2010%2010-4.48%2010-10S17.52%202%2012%202zm1%2015h-2v-6h2v6zm0-8h-2V7h2v2z%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Logging</span>
+</a>
+<a href="http://127.0.0.1:8409/system/troubleshooting" class="nav-link-4ed76e9">
+<span aria-hidden="true" style="display:inline-block;width:1rem;height:1rem;flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M10.29%203.86L1.82%2018a2%202%200%200%200%201.71%203h16.94a2%202%200%200%200%201.71-3L13.71%203.86a2%202%200%200%200-3.42%200zM12%209v4M12%2017h.01%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;-webkit-mask:url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M10.29%203.86L1.82%2018a2%202%200%200%200%201.71%203h16.94a2%202%200%200%200%201.71-3L13.71%203.86a2%202%200%200%200-3.42%200zM12%209v4M12%2017h.01%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E&quot;) center / contain no-repeat;">
+</span>
+<span class="nav-link-text-4ed76e9">Troubleshooting</span>
+</a>
+</div>
+</details>
+</nav>
+</aside>
+</details>
+<main id="main" class="design-main view-items">
+<div class="preview-bar" id="prototype-note"><strong>DESIGN PREVIEW</strong><span>Synthetic data · Changes stay in this preview</span><a href="states.html">Scenarios</a><a href="design.md">Notes</a></div>
+<div class="content-breadcrumb">
+<a href="index.html">Add-on lists</a>
+<span aria-hidden="true">/</span>
+<span>The Screening Room</span>
+</div>
+<nav class="content-navigation" aria-label="List sections"><button class="tab-link" aria-current="page" name="intent" value="nav:index.html" form="workspace-form" formnovalidate>Items &amp; review</button><button class="tab-link" name="intent" value="nav:settings.html" form="workspace-form" formnovalidate>List settings</button><button class="tab-link" name="intent" value="nav:options.html" form="workspace-form" formnovalidate>Playback &amp; access</button><button class="tab-link" name="intent" value="nav:activity.html" form="workspace-form" formnovalidate>Activity &amp; recovery</button></nav>
+<div class="page-heading media-masthead">
+<div class="cover-art">
+<img src="assets/cinema.svg" alt="">
+</div>
+<div>
+
+<h1>The Screening Room</h1>
+
+</div>
+
+</div>
+<div class="status-line">Mixed-list scenario · 36 items · 1 excluded special · 2 need review</div>
+<section class="panel" id="items">
+
+
+<div class="episode-editor" id="episode-editor">
+<form id="workspace-form" action="_preview" method="post" novalidate aria-describedby="prototype-note" data-draft="items"><div class="filter-row"><label class="compact-field">Show<select name="review_category"><option value="All items (9)">All items (9)</option><option value="Needs review (0)">Needs review (0)</option><option value="Unnumbered (3)">Unnumbered (3)</option><option value="Added (0)">Added (0)</option><option value="Metadata changed (0)">Metadata changed (0)</option><option value="Excluded (0)">Excluded (0)</option><option value="Unavailable (0)">Unavailable (0)</option><option value="Conflicted (0)">Conflicted (0)</option><option value="Pending removal (0)">Pending removal (0)</option><option value="Reappeared (0)">Reappeared (0)</option><option value="Removal candidates (0)">Removal candidates (0)</option></select></label><label class="compact-field">Find item<input name="item_query" type="text" value="" placeholder="Title"></label><button class="button secondary" name="intent" value="filter">Filter items</button></div>
+<input type="hidden" name="list_revision" value="29">
+<div class="editor-heading">
+<div>
+<h3>Episode order</h3>
+
+</div>
+<span class="order-note">Provider order · 9 items</span>
+</div>
+
+
+<div class="list-task-heading"><p id="numbering-help" class="numbering-guidance">Enter both numbers, or leave both blank. Season 0 is for specials.</p></div><details class="disclosure group-actions-disclosure" data-disclosure-kind="section" id="group-actions"><summary><span class="disclosure-label"><strong>Edit multiple items</strong></span><span class="disclosure-toggle" aria-hidden="true"></span></summary><div class="disclosure-body"><div class="selection-tools"><div class="bulk-scope-row"><label class="compact-field">Bulk scope<select name="bulk_scope"><option value="checked">Selected items</option><option value="page">This page</option><option value="filter">Current filter</option><option value="all">All items</option></select></label><div class="selection-label">No rows selected</div><button class="button secondary" name="intent" value="clear-selection">Clear selection</button><p class="bulk-scope-help">Select rows for bulk editing. Publication inclusion is set on each item.</p></div><div class="bulk-task-grid"><section class="bulk-task" aria-labelledby="bulk-numbering-title"><h3 id="bulk-numbering-title">Episode numbering</h3><div class="bulk-fields"><label class="compact-field">Season<input type="number" name="selected_season" min="0" max="2147483647" value="2">
+</label><label class="compact-field">First episode<input type="number" name="selected_first_episode" min="1" value="1">
+</label></div><details class="length-filter" data-disclosure-kind="controls">
+<summary><span class="disclosure-label">Filter by media length <span>Optional</span>
+</span><span class="disclosure-toggle" aria-hidden="true"></span></summary>
+<div class="length-fields">
+<label>Minimum length<input type="text" name="selected.minimum_length" placeholder="Unbounded" pattern="[0-9]+:[0-5][0-9]" aria-describedby="selected-length-help">
+</label>
+<label>Maximum length<input type="text" name="selected.maximum_length" placeholder="Unbounded" pattern="[0-9]+:[0-5][0-9]" aria-describedby="selected-length-help">
+</label>
+</div>
+
+<label class="check">
+<input type="checkbox" name="selected.include_unknown_length" value="true">
+<span>Also include items with unknown runtime</span>
+</label>
+
+<p id="selected-length-help">Minutes:seconds · Bounds include their endpoints; blank means unbounded. Applies to renumbering only.</p></details><div class="action-row"><button class="button primary" name="intent" value="preview-selected-numbering">Preview numbering</button><button class="button secondary" name="intent" value="set-selected-season">Save season only</button><button class="button secondary" name="intent" value="clear-selected-numbers">Make unnumbered</button></div></section><section class="bulk-task" aria-labelledby="bulk-metadata-title"><h3 id="bulk-metadata-title">Media and playback</h3><p class="hint">Only changed values are included in the preview.</p><div class="bulk-fields bulk-metadata-fields"><section class="bulk-option-group"><h3>Media kind and playback behavior</h3><label class="compact-field">Media kind<select name="bulk_kind"><option value="Keep current value">Keep current value</option><option value="Determine from the item">Determine from the item</option><option value="Television episode">Television episode</option><option value="Movie">Movie</option><option value="Music video">Music video</option><option value="Other video">Other video</option><option value="Song">Song</option><option value="Image">Image</option></select></label><label class="compact-field">Playback behavior<select name="bulk_behavior"><option value="Keep current value">Keep current value</option><option value="Use provider value">Use provider value</option><option value="Finite media">Finite media</option><option value="Live source">Live source</option></select></label></section><section class="bulk-option-group"><h3>Provider options</h3><label class="compact-field">Browser cookies<select name="bulk_cookies"><option value="Keep current value">Keep current value</option><option value="Inherit from list">Use list setting</option><option value="None">None</option><option value="Firefox">Firefox</option><option value="Chrome">Chrome</option><option value="Chromium">Chromium</option></select></label><label class="compact-field">SponsorBlock<select name="bulk_sponsor"><option value="Keep current value">Keep current value</option><option value="Inherit from list">Use list setting</option><option value="On">On</option><option value="Off">Off</option></select></label></section></div><div class="bulk-apply-row"><button class="button secondary" name="intent" value="preview-bulk">Preview metadata and option changes</button></div></section></div></div></div></details><div class="numbering-actions editor-savebar" aria-label="Apply or discard numbering edits"><button class="button primary" name="intent" value="apply-numbers">Save numbering</button><button class="button secondary" name="intent" value="discard" formnovalidate>Discard edits</button></div>
+<div class="episode-column-head" aria-hidden="true">
+<span>Select</span>
+<span>Title / details</span>
+<span>First aired / gap</span>
+<span>Runtime</span>
+<span>Season · episode</span>
+<span>Tools</span>
+</div>
+<ol class="episode-rows">
+<li class="episode-row  " id="episode-1">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="1" aria-label="Select item 1: Season one · Official trailer for bulk editing">
+<span aria-hidden="true">01</span>
+</label>
+<div class="episode-identity">
+<img src="assets/cinema.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-1.html" formnovalidate>Season one · Official trailer</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2025-02-01">01 Feb 2025</time>
+<small class="gap-note" aria-label="First item in provider order"></small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>1:48</span>
+
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 1</span>
+</span>
+<input type="number" name="items[1].season" min="0" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 1</span>
+</span>
+<input type="number" name="items[1].episode" min="1" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: Unnumbered</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-1" aria-label="Actions for item 1"><span>Actions</span></button>
+<div id="row-commands-1" class="row-commands" popover="auto" role="group" aria-label="Actions for item 1: Season one · Official trailer">
+<p class="command-context">#1 · Season one · Official trailer</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:1">Number from here</button>
+<button type="submit" name="intent" value="open-selection:1">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:1">Clear these numbers</button>
+</div>
+</div>
+</li>
+<li class="episode-row  " id="episode-2">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="2" aria-label="Select item 2: The art of an opening scene for bulk editing">
+<span aria-hidden="true">02</span>
+</label>
+<div class="episode-identity">
+<img src="assets/camera.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-2.html" formnovalidate>The art of an opening scene</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2025-02-08">08 Feb 2025</time>
+<small class="gap-note" aria-label="7 days after previous item">7d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>42:18</span>
+
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 2</span>
+</span>
+<input type="number" name="items[2].season" min="0" max="2147483647" value="1" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 2</span>
+</span>
+<input type="number" name="items[2].episode" min="1" max="2147483647" value="1" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S01 · E01</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-2" aria-label="Actions for item 2"><span>Actions</span></button>
+<div id="row-commands-2" class="row-commands" popover="auto" role="group" aria-label="Actions for item 2: The art of an opening scene">
+<p class="command-context">#2 · The art of an opening scene</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:2">Number from here</button>
+<button type="submit" name="intent" value="open-selection:2">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:2">Clear these numbers</button>
+</div>
+</div>
+</li>
+<li class="episode-row  " id="episode-3">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="3" aria-label="Select item 3: A city after dark for bulk editing">
+<span aria-hidden="true">03</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-3.html" formnovalidate>A city after dark</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2025-02-15">15 Feb 2025</time>
+<small class="gap-note" aria-label="7 days after previous item">7d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>43:07</span>
+
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 3</span>
+</span>
+<input type="number" name="items[3].season" min="0" max="2147483647" value="1" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 3</span>
+</span>
+<input type="number" name="items[3].episode" min="1" max="2147483647" value="2" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S01 · E02</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-3" aria-label="Actions for item 3"><span>Actions</span></button>
+<div id="row-commands-3" class="row-commands" popover="auto" role="group" aria-label="Actions for item 3: A city after dark">
+<p class="command-context">#3 · A city after dark</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:3">Number from here</button>
+<button type="submit" name="intent" value="open-selection:3">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:3">Clear these numbers</button>
+</div>
+</div>
+</li>
+<li class="episode-row date-break " id="episode-4">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="4" aria-label="Select item 4: Winter lights · Holiday special for bulk editing">
+<span aria-hidden="true">04</span>
+</label>
+<div class="episode-identity">
+<img src="assets/cinema.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-4.html" formnovalidate>Winter lights · Holiday special</button>
+
+</div>
+<small class="row-exception">Excluded special · Numbering retained</small></div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2025-12-24">24 Dec 2025</time>
+<small class="gap-note" aria-label="312 days after previous item">312d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>28:10</span>
+
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 4</span>
+</span>
+<input type="number" name="items[4].season" min="0" max="2147483647" value="0" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 4</span>
+</span>
+<input type="number" name="items[4].episode" min="1" max="2147483647" value="1" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S00 · E01</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-4" aria-label="Actions for item 4"><span>Actions</span></button>
+<div id="row-commands-4" class="row-commands" popover="auto" role="group" aria-label="Actions for item 4: Winter lights · Holiday special">
+<p class="command-context">#4 · Winter lights · Holiday special</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:4">Number from here</button>
+<button type="submit" name="intent" value="open-selection:4">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:4">Clear these numbers</button>
+</div>
+</div>
+</li>
+<li class="episode-row  " id="episode-5">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="5" aria-label="Select item 5: Season two · First look for bulk editing">
+<span aria-hidden="true">05</span>
+</label>
+<div class="episode-identity">
+<img src="assets/camera.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-5.html" formnovalidate>Season two · First look</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-01-10">10 Jan 2026</time>
+<small class="gap-note" aria-label="17 days after previous item">17d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>2:05</span>
+
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 5</span>
+</span>
+<input type="number" name="items[5].season" min="0" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 5</span>
+</span>
+<input type="number" name="items[5].episode" min="1" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: Unnumbered</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-5" aria-label="Actions for item 5"><span>Actions</span></button>
+<div id="row-commands-5" class="row-commands" popover="auto" role="group" aria-label="Actions for item 5: Season two · First look">
+<p class="command-context">#5 · Season two · First look</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:5">Number from here</button>
+<button type="submit" name="intent" value="open-selection:5">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:5">Clear these numbers</button>
+</div>
+</div>
+</li>
+<li class="episode-row date-break " id="episode-6">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="6" aria-label="Select item 6: The sound of suspense for bulk editing">
+<span aria-hidden="true">06</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-6.html" formnovalidate>The sound of suspense</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-04">04 Apr 2026</time>
+<small class="gap-note" aria-label="84 days after previous item">84d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>44:12</span>
+
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 6</span>
+</span>
+<input type="number" name="items[6].season" min="0" max="2147483647" value="1" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 6</span>
+</span>
+<input type="number" name="items[6].episode" min="1" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S01 · E03</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-6" aria-label="Actions for item 6"><span>Actions</span></button>
+<div id="row-commands-6" class="row-commands" popover="auto" role="group" aria-label="Actions for item 6: The sound of suspense">
+<p class="command-context">#6 · The sound of suspense</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:6">Number from here</button>
+<button type="submit" name="intent" value="open-selection:6">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:6">Clear these numbers</button>
+</div>
+</div>
+</li>
+<li class="episode-row  " id="episode-7">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="7" aria-label="Select item 7: Rediscovering the double feature for bulk editing">
+<span aria-hidden="true">07</span>
+</label>
+<div class="episode-identity">
+<img src="assets/cinema.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-7.html" formnovalidate>Rediscovering the double feature</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-11">11 Apr 2026</time>
+<small class="gap-note" aria-label="7 days after previous item">7d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>45:06</span>
+
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 7</span>
+</span>
+<input type="number" name="items[7].season" min="0" max="2147483647" value="1" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 7</span>
+</span>
+<input type="number" name="items[7].episode" min="1" max="2147483647" value="4" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S01 · E04</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-7" aria-label="Actions for item 7"><span>Actions</span></button>
+<div id="row-commands-7" class="row-commands" popover="auto" role="group" aria-label="Actions for item 7: Rediscovering the double feature">
+<p class="command-context">#7 · Rediscovering the double feature</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:7">Number from here</button>
+<button type="submit" name="intent" value="open-selection:7">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:7">Clear these numbers</button>
+</div>
+</div>
+</li>
+<li class="episode-row  " id="episode-8">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="8" aria-label="Select item 8: Bloopers · Things that went wrong for bulk editing">
+<span aria-hidden="true">08</span>
+</label>
+<div class="episode-identity">
+<img src="assets/camera.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-8.html" formnovalidate>Bloopers · Things that went wrong</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-12">12 Apr 2026</time>
+<small class="gap-note" aria-label="1 day after previous item">1d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>6:24</span>
+
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 8</span>
+</span>
+<input type="number" name="items[8].season" min="0" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 8</span>
+</span>
+<input type="number" name="items[8].episode" min="1" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: Unnumbered</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-8" aria-label="Actions for item 8"><span>Actions</span></button>
+<div id="row-commands-8" class="row-commands" popover="auto" role="group" aria-label="Actions for item 8: Bloopers · Things that went wrong">
+<p class="command-context">#8 · Bloopers · Things that went wrong</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:8">Number from here</button>
+<button type="submit" name="intent" value="open-selection:8">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:8">Clear these numbers</button>
+</div>
+</div>
+</li>
+<li class="episode-row  " id="episode-9">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="9" aria-label="Select item 9: Small screens, big stories for bulk editing">
+<span aria-hidden="true">09</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-9.html" formnovalidate>Small screens, big stories</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[9].season" min="0" max="2147483647" value="1" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[9].episode" min="1" max="2147483647" value="5" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S01 · E05</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-9" aria-label="Actions for item 9"><span>Actions</span></button>
+<div id="row-commands-9" class="row-commands" popover="auto" role="group" aria-label="Actions for item 9: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:9">Number from here</button>
+<button type="submit" name="intent" value="open-selection:9">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:9">Clear these numbers</button>
+</div>
+</div>
+</li>
+<li class="episode-row  " id="episode-10">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="10" aria-label="Select item 10: Small screens, big stories for bulk editing">
+<span aria-hidden="true">10</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-10.html" formnovalidate>Episode · Archive discussion 10</button>
+
+</div>
+<small class="row-exception">Unavailable · Retry details</small></div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[10].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[10].episode" min="1" max="2147483647" value="1" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E01</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-10" aria-label="Actions for item 10"><span>Actions</span></button>
+<div id="row-commands-10" class="row-commands" popover="auto" role="group" aria-label="Actions for item 10: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:10">Number from here</button>
+<button type="submit" name="intent" value="open-selection:10">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:10">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-11">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="11" aria-label="Select item 11: Small screens, big stories for bulk editing">
+<span aria-hidden="true">11</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-11.html" formnovalidate>Episode · Archive discussion 11</button>
+
+</div>
+<small class="row-exception">Live source · Length unknown</small></div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[11].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[11].episode" min="1" max="2147483647" value="2" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E02</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-11" aria-label="Actions for item 11"><span>Actions</span></button>
+<div id="row-commands-11" class="row-commands" popover="auto" role="group" aria-label="Actions for item 11: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:11">Number from here</button>
+<button type="submit" name="intent" value="open-selection:11">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:11">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-12">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="12" aria-label="Select item 12: Small screens, big stories for bulk editing">
+<span aria-hidden="true">12</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-12.html" formnovalidate>Episode · Archive discussion 12</button>
+
+</div>
+<small class="row-exception">Metadata conflict · Resolve</small><a href="conflict.html" class="button secondary">Resolve conflict</a></div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[12].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[12].episode" min="1" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E03</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-12" aria-label="Actions for item 12"><span>Actions</span></button>
+<div id="row-commands-12" class="row-commands" popover="auto" role="group" aria-label="Actions for item 12: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:12">Number from here</button>
+<button type="submit" name="intent" value="open-selection:12">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:12">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-13">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="13" aria-label="Select item 13: Small screens, big stories for bulk editing">
+<span aria-hidden="true">13</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-13.html" formnovalidate>Episode · Archive discussion 13</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[13].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[13].episode" min="1" max="2147483647" value="4" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E04</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-13" aria-label="Actions for item 13"><span>Actions</span></button>
+<div id="row-commands-13" class="row-commands" popover="auto" role="group" aria-label="Actions for item 13: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:13">Number from here</button>
+<button type="submit" name="intent" value="open-selection:13">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:13">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-14">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="14" aria-label="Select item 14: Small screens, big stories for bulk editing">
+<span aria-hidden="true">14</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-14.html" formnovalidate>Trailer · Archive discussion 14</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[14].season" min="0" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[14].episode" min="1" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: Unnumbered</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-14" aria-label="Actions for item 14"><span>Actions</span></button>
+<div id="row-commands-14" class="row-commands" popover="auto" role="group" aria-label="Actions for item 14: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:14">Number from here</button>
+<button type="submit" name="intent" value="open-selection:14">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:14">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-15">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="15" aria-label="Select item 15: Small screens, big stories for bulk editing">
+<span aria-hidden="true">15</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-15.html" formnovalidate>Episode · Archive discussion 15</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[15].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[15].episode" min="1" max="2147483647" value="6" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E06</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-15" aria-label="Actions for item 15"><span>Actions</span></button>
+<div id="row-commands-15" class="row-commands" popover="auto" role="group" aria-label="Actions for item 15: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:15">Number from here</button>
+<button type="submit" name="intent" value="open-selection:15">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:15">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-16">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="16" aria-label="Select item 16: Small screens, big stories for bulk editing">
+<span aria-hidden="true">16</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-16.html" formnovalidate>Episode · Archive discussion 16</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[16].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[16].episode" min="1" max="2147483647" value="7" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E07</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-16" aria-label="Actions for item 16"><span>Actions</span></button>
+<div id="row-commands-16" class="row-commands" popover="auto" role="group" aria-label="Actions for item 16: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:16">Number from here</button>
+<button type="submit" name="intent" value="open-selection:16">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:16">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-17">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="17" aria-label="Select item 17: Small screens, big stories for bulk editing">
+<span aria-hidden="true">17</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-17.html" formnovalidate>Episode · Archive discussion 17</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[17].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[17].episode" min="1" max="2147483647" value="8" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E08</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-17" aria-label="Actions for item 17"><span>Actions</span></button>
+<div id="row-commands-17" class="row-commands" popover="auto" role="group" aria-label="Actions for item 17: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:17">Number from here</button>
+<button type="submit" name="intent" value="open-selection:17">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:17">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-18">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="18" aria-label="Select item 18: Small screens, big stories for bulk editing">
+<span aria-hidden="true">18</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-18.html" formnovalidate>Episode · Archive discussion 18</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[18].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[18].episode" min="1" max="2147483647" value="9" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E09</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-18" aria-label="Actions for item 18"><span>Actions</span></button>
+<div id="row-commands-18" class="row-commands" popover="auto" role="group" aria-label="Actions for item 18: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:18">Number from here</button>
+<button type="submit" name="intent" value="open-selection:18">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:18">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-19">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="19" aria-label="Select item 19: Small screens, big stories for bulk editing">
+<span aria-hidden="true">19</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-19.html" formnovalidate>Episode · Archive discussion 19</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[19].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[19].episode" min="1" max="2147483647" value="10" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E10</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-19" aria-label="Actions for item 19"><span>Actions</span></button>
+<div id="row-commands-19" class="row-commands" popover="auto" role="group" aria-label="Actions for item 19: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:19">Number from here</button>
+<button type="submit" name="intent" value="open-selection:19">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:19">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-20">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="20" aria-label="Select item 20: Small screens, big stories for bulk editing">
+<span aria-hidden="true">20</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-20.html" formnovalidate>Episode · Archive discussion 20</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[20].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[20].episode" min="1" max="2147483647" value="11" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E11</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-20" aria-label="Actions for item 20"><span>Actions</span></button>
+<div id="row-commands-20" class="row-commands" popover="auto" role="group" aria-label="Actions for item 20: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:20">Number from here</button>
+<button type="submit" name="intent" value="open-selection:20">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:20">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-21">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="21" aria-label="Select item 21: Small screens, big stories for bulk editing">
+<span aria-hidden="true">21</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-21.html" formnovalidate>Trailer · Archive discussion 21</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[21].season" min="0" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[21].episode" min="1" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: Unnumbered</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-21" aria-label="Actions for item 21"><span>Actions</span></button>
+<div id="row-commands-21" class="row-commands" popover="auto" role="group" aria-label="Actions for item 21: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:21">Number from here</button>
+<button type="submit" name="intent" value="open-selection:21">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:21">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-22">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="22" aria-label="Select item 22: Small screens, big stories for bulk editing">
+<span aria-hidden="true">22</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-22.html" formnovalidate>Episode · Archive discussion 22</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[22].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[22].episode" min="1" max="2147483647" value="13" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E13</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-22" aria-label="Actions for item 22"><span>Actions</span></button>
+<div id="row-commands-22" class="row-commands" popover="auto" role="group" aria-label="Actions for item 22: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:22">Number from here</button>
+<button type="submit" name="intent" value="open-selection:22">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:22">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-23">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="23" aria-label="Select item 23: Small screens, big stories for bulk editing">
+<span aria-hidden="true">23</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-23.html" formnovalidate>Episode · Archive discussion 23</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[23].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[23].episode" min="1" max="2147483647" value="14" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E14</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-23" aria-label="Actions for item 23"><span>Actions</span></button>
+<div id="row-commands-23" class="row-commands" popover="auto" role="group" aria-label="Actions for item 23: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:23">Number from here</button>
+<button type="submit" name="intent" value="open-selection:23">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:23">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-24">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="24" aria-label="Select item 24: Small screens, big stories for bulk editing">
+<span aria-hidden="true">24</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-24.html" formnovalidate>Episode · Archive discussion 24</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[24].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[24].episode" min="1" max="2147483647" value="15" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E15</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-24" aria-label="Actions for item 24"><span>Actions</span></button>
+<div id="row-commands-24" class="row-commands" popover="auto" role="group" aria-label="Actions for item 24: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:24">Number from here</button>
+<button type="submit" name="intent" value="open-selection:24">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:24">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-25">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="25" aria-label="Select item 25: Small screens, big stories for bulk editing">
+<span aria-hidden="true">25</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-25.html" formnovalidate>Episode · Archive discussion 25</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[25].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[25].episode" min="1" max="2147483647" value="16" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E16</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-25" aria-label="Actions for item 25"><span>Actions</span></button>
+<div id="row-commands-25" class="row-commands" popover="auto" role="group" aria-label="Actions for item 25: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:25">Number from here</button>
+<button type="submit" name="intent" value="open-selection:25">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:25">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-26">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="26" aria-label="Select item 26: Small screens, big stories for bulk editing">
+<span aria-hidden="true">26</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-26.html" formnovalidate>Episode · Archive discussion 26</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[26].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[26].episode" min="1" max="2147483647" value="17" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E17</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-26" aria-label="Actions for item 26"><span>Actions</span></button>
+<div id="row-commands-26" class="row-commands" popover="auto" role="group" aria-label="Actions for item 26: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:26">Number from here</button>
+<button type="submit" name="intent" value="open-selection:26">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:26">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-27">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="27" aria-label="Select item 27: Small screens, big stories for bulk editing">
+<span aria-hidden="true">27</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-27.html" formnovalidate>Episode · Archive discussion 27</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[27].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[27].episode" min="1" max="2147483647" value="18" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E18</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-27" aria-label="Actions for item 27"><span>Actions</span></button>
+<div id="row-commands-27" class="row-commands" popover="auto" role="group" aria-label="Actions for item 27: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:27">Number from here</button>
+<button type="submit" name="intent" value="open-selection:27">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:27">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-28">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="28" aria-label="Select item 28: Small screens, big stories for bulk editing">
+<span aria-hidden="true">28</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-28.html" formnovalidate>Trailer · Archive discussion 28</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[28].season" min="0" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[28].episode" min="1" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: Unnumbered</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-28" aria-label="Actions for item 28"><span>Actions</span></button>
+<div id="row-commands-28" class="row-commands" popover="auto" role="group" aria-label="Actions for item 28: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:28">Number from here</button>
+<button type="submit" name="intent" value="open-selection:28">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:28">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-29">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="29" aria-label="Select item 29: Small screens, big stories for bulk editing">
+<span aria-hidden="true">29</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-29.html" formnovalidate>Episode · Archive discussion 29</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[29].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[29].episode" min="1" max="2147483647" value="20" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E20</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-29" aria-label="Actions for item 29"><span>Actions</span></button>
+<div id="row-commands-29" class="row-commands" popover="auto" role="group" aria-label="Actions for item 29: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:29">Number from here</button>
+<button type="submit" name="intent" value="open-selection:29">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:29">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-30">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="30" aria-label="Select item 30: Small screens, big stories for bulk editing">
+<span aria-hidden="true">30</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-30.html" formnovalidate>Episode · Archive discussion 30</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[30].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[30].episode" min="1" max="2147483647" value="21" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E21</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-30" aria-label="Actions for item 30"><span>Actions</span></button>
+<div id="row-commands-30" class="row-commands" popover="auto" role="group" aria-label="Actions for item 30: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:30">Number from here</button>
+<button type="submit" name="intent" value="open-selection:30">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:30">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-31">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="31" aria-label="Select item 31: Small screens, big stories for bulk editing">
+<span aria-hidden="true">31</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-31.html" formnovalidate>Episode · Archive discussion 31</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[31].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[31].episode" min="1" max="2147483647" value="22" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E22</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-31" aria-label="Actions for item 31"><span>Actions</span></button>
+<div id="row-commands-31" class="row-commands" popover="auto" role="group" aria-label="Actions for item 31: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:31">Number from here</button>
+<button type="submit" name="intent" value="open-selection:31">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:31">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-32">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="32" aria-label="Select item 32: Small screens, big stories for bulk editing">
+<span aria-hidden="true">32</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-32.html" formnovalidate>Episode · Archive discussion 32</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[32].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[32].episode" min="1" max="2147483647" value="23" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E23</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-32" aria-label="Actions for item 32"><span>Actions</span></button>
+<div id="row-commands-32" class="row-commands" popover="auto" role="group" aria-label="Actions for item 32: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:32">Number from here</button>
+<button type="submit" name="intent" value="open-selection:32">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:32">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-33">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="33" aria-label="Select item 33: Small screens, big stories for bulk editing">
+<span aria-hidden="true">33</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-33.html" formnovalidate>Episode · Archive discussion 33</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[33].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[33].episode" min="1" max="2147483647" value="24" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E24</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-33" aria-label="Actions for item 33"><span>Actions</span></button>
+<div id="row-commands-33" class="row-commands" popover="auto" role="group" aria-label="Actions for item 33: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:33">Number from here</button>
+<button type="submit" name="intent" value="open-selection:33">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:33">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-34">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="34" aria-label="Select item 34: Small screens, big stories for bulk editing">
+<span aria-hidden="true">34</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-34.html" formnovalidate>Episode · Archive discussion 34</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[34].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[34].episode" min="1" max="2147483647" value="25" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E25</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-34" aria-label="Actions for item 34"><span>Actions</span></button>
+<div id="row-commands-34" class="row-commands" popover="auto" role="group" aria-label="Actions for item 34: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:34">Number from here</button>
+<button type="submit" name="intent" value="open-selection:34">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:34">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-35">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="35" aria-label="Select item 35: Small screens, big stories for bulk editing">
+<span aria-hidden="true">35</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-35.html" formnovalidate>Trailer · Archive discussion 35</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[35].season" min="0" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[35].episode" min="1" max="2147483647" value="" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: Unnumbered</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-35" aria-label="Actions for item 35"><span>Actions</span></button>
+<div id="row-commands-35" class="row-commands" popover="auto" role="group" aria-label="Actions for item 35: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:35">Number from here</button>
+<button type="submit" name="intent" value="open-selection:35">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:35">Clear these numbers</button>
+</div>
+</div>
+</li><li class="episode-row  " id="episode-36">
+<label class="row-pick">
+<input type="checkbox" name="selected_ids" value="36" aria-label="Select item 36: Small screens, big stories for bulk editing">
+<span aria-hidden="true">36</span>
+</label>
+<div class="episode-identity">
+<img src="assets/reel.svg" alt="">
+<div>
+<button class="button row-title" name="intent" value="nav:item-36.html" formnovalidate>Episode · Archive discussion 36</button>
+
+</div>
+</div>
+<div class="episode-evidence"><div class="airdate">
+<span class="mobile-column">Aired</span>
+<time datetime="2026-04-18">18 Apr 2026</time>
+<small class="gap-note" aria-label="6 days after previous item">6d gap</small>
+</div>
+<div class="runtime">
+<span class="mobile-column">Runtime</span>
+<span>—</span>
+<small>Unknown</small>
+</div></div>
+<div class="row-numbering">
+<div class="inline-pair">
+<label>
+<span>S<span class="sr-only">eason for item 9</span>
+</span>
+<input type="number" name="items[36].season" min="0" max="2147483647" value="3" placeholder="—" aria-describedby="numbering-help">
+</label>
+<label>
+<span>E<span class="sr-only">pisode for item 9</span>
+</span>
+<input type="number" name="items[36].episode" min="1" max="2147483647" value="27" placeholder="—" aria-describedby="numbering-help">
+</label>
+
+</div>
+<small>Saved: S03 · E27</small>
+</div>
+<button class="row-command-trigger" type="button" popovertarget="row-commands-36" aria-label="Actions for item 36"><span>Actions</span></button>
+<div id="row-commands-36" class="row-commands" popover="auto" role="group" aria-label="Actions for item 36: Small screens, big stories">
+<p class="command-context">#9 · Small screens, big stories</p>
+<div class="command-list">
+<button type="submit" name="intent" value="open-numbering:36">Number from here</button>
+<button type="submit" name="intent" value="open-selection:36">Select range from here</button>
+<button type="submit" class="command-clear" name="intent" value="clear-row:36">Clear these numbers</button>
+</div>
+</div>
+</li></ol>
+
+<input type="hidden" name="draft_group" value="items"><input type="hidden" name="checkbox_names" value="selected_ids,selected.include_unknown_length"><nav class="pager" aria-label="Item pagination"><label class="compact-field">Items per page<select name="page_size"><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="All">All items</option></select></label><button class="button secondary" name="intent" value="page-size">Apply page size</button><span class="page-summary">36 sample items · Use the preview server for pagination</span><button class="button secondary" name="intent" value="previous-page" disabled>Previous page</button><button class="button secondary" name="intent" value="next-page">Next page</button></nav></form>
+</div>
+
+</section>
+
+
+
+</main>
+</body>
+</html>

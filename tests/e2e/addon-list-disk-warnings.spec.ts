@@ -65,12 +65,13 @@ INSERT INTO "AddonMediaList" (
 }
 
 async function save(page: Page, value: string): Promise<void> {
-  const form = page.getByTestId('addon-list-disk-warning-settings');
-  await form.locator('input[name="warning_gb"]').fill(value);
-  await form.locator('button[type="submit"]').click();
-  await expect(page.getByTestId('addon-disk-warning-saved')).toBeVisible();
+  const workspace=await page.locator('.addon-workspace').count()>0;
+  const form=workspace?page.locator('.storage-settings'):page.getByTestId('addon-list-disk-warning-settings');
+  await form.locator('input[type="number"]').fill(value);
+  await Promise.all([page.waitForEvent('framenavigated',f=>f===page.mainFrame()),workspace?page.locator('button[name="intent"][value="save"]').click():form.locator('button[type="submit"]').click()]);
+  await expect(page.locator('#workspace-errors')).toHaveCount(0);
   await page.reload();
-  await expect(form.locator('input[name="warning_gb"]')).toHaveValue(value);
+  await expect(form.locator('input[type="number"]')).toHaveValue(value);
 }
 
 test.describe('advisory add-on list disk warnings', () => {
@@ -98,9 +99,9 @@ test.describe('advisory add-on list disk warnings', () => {
           runtimeErrors.push(message.text());
         }
       });
-      const input = page.getByTestId('addon-list-disk-warning-settings').locator('input[name="warning_gb"]');
+      const input = page.locator('input[name="warning_gb"], input[name="disk_warning_gb"]');
       const visit = async (id?: number) => {
-        await page.goto(id ? `/media/addon-lists/${id}` : '/media/addon-lists');
+        await page.goto(id ? `/media/addon-lists/${id}/playback` : '/media/addon-lists');
         await expect(page.locator('[data-not-found]')).toHaveCount(0);
         await expect(input).toBeVisible();
         if (javaScriptEnabled) {
@@ -152,7 +153,7 @@ test.describe('advisory add-on list disk warnings', () => {
         expect(invalid.status()).toBe(303);
         expect(invalid.headers().location).toContain('disk_warning=error');
         await page.goto(invalid.headers().location);
-        await expect(page.getByTestId('addon-list-disk-warning-settings').getByRole('alert')).toBeVisible();
+        await expect(page.locator('#workspace-errors')).toBeVisible();
         await expect(input).toHaveValue('0');
         expect(sqlite(revisionSql)).toBe(before);
         expect(runtimeErrors).toEqual([]);

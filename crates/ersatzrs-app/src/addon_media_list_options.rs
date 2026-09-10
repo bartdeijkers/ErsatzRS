@@ -240,6 +240,93 @@ impl ApplicationServices {
         Ok(AddonListOptionPreview { edit, rows })
     }
 
+    /// Validate several visible controls without persisting intermediate values.
+    pub async fn prepare_addon_list_option_edits(
+        &self,
+        edits: Vec<AddonListOptionEdit>,
+    ) -> Result<(Option<AddonMediaListDraftOptions>, Vec<AddonListOptionUndo>)> {
+        let mut undo = Vec::new();
+        let mut prepared: Option<AddonMediaListDraftOptions> = None;
+        for edit in edits {
+            let (mut editor, items) = self.load_option_edit(&edit).await?;
+            let previous_schema = editor.draft.schema.clone();
+            if let Some(draft) = &prepared {
+                if draft.list_id != edit.list_id || draft.draft_revision != edit.expected_revision {
+                    return Err(conflict("option controls must share one list revision"));
+                }
+                editor.draft = draft.clone();
+            }
+            let (draft, rows) = prepare_edit(&editor, &items, &edit)?;
+            if !rows.iter().any(|row| row.applicable) {
+                return Err(conflict("the option does not apply to any selected item"));
+            }
+            self.ports()
+                .addon_media_list_lifecycle()
+                .register_option_schema(&editor.schema)
+                .await?;
+            undo.push(AddonListOptionUndo {
+                list_id: edit.list_id,
+                expected_revision: edit.expected_revision.saturating_add(1),
+                schema: edit.schema,
+                previous_schema,
+                key: edit.key,
+                previous: rows
+                    .into_iter()
+                    .filter(|r| r.applicable)
+                    .map(|r| AddonListOptionPreviousValue {
+                        item_id: r.item_id,
+                        value: r.before,
+                    })
+                    .collect(),
+            });
+            prepared = Some(draft);
+        }
+        Ok((prepared, undo))
+    }
+
+    /// Undo a coherent set of option controls once, including initial activation.
+    pub async fn undo_addon_list_option_task(
+        &self,
+        receipts: Vec<AddonListOptionUndo>,
+    ) -> Result<i32> {
+        let first = receipts
+            .first()
+            .ok_or_else(|| conflict("missing option undo receipt"))?;
+        let previous_schema = first.previous_schema.clone();
+        let mut prepared: Option<AddonMediaListDraftOptions> = None;
+        for receipt in &receipts {
+            if receipt.list_id != first.list_id
+                || receipt.expected_revision != first.expected_revision
+                || receipt.previous_schema != previous_schema
+                || receipt.schema != first.schema
+            {
+                return Err(conflict(
+                    "option undo receipts must share one task revision",
+                ));
+            }
+            let edit = undo_edit(receipt)?;
+            let (mut editor, items) = self.load_option_edit(&edit).await?;
+            if let Some(draft) = prepared {
+                editor.draft = draft;
+            }
+            let mut staged = receipt.clone();
+            staged.previous_schema = Some(receipt.schema.clone());
+            prepared = Some(prepare_undo(&editor, &items, &staged)?);
+        }
+        let mut draft = prepared.ok_or_else(|| conflict("missing option undo values"))?;
+        draft.schema = previous_schema;
+        if draft.schema.is_none()
+            && (!draft.list_values.is_empty() || !draft.item_values.is_empty())
+        {
+            return Err(conflict("option undo cannot leave values without a schema"));
+        }
+        self.ports()
+            .addon_media_list_lifecycle()
+            .save_draft_options(&draft)
+            .await
+            .map_err(Into::into)
+    }
+
     /// Apply an already-previewed command atomically; intervening edits fail closed.
     pub async fn apply_addon_list_option_edit(
         &self,

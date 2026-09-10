@@ -18,6 +18,7 @@ pub struct OptionField {
 }
 
 pub struct OptionEditor {
+    pub supports_access_check: bool,
     pub access: Option<ItemAccessEditor>,
     pub list_id: i64,
     pub provisional: bool,
@@ -145,6 +146,7 @@ pub async fn load_option_editor(
         });
     }
     Ok(Some(OptionEditor {
+        supports_access_check: editor.supports_access_check,
         access,
         list_id,
         provisional: editor.draft.schema.is_none(),

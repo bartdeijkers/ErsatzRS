@@ -606,6 +606,34 @@ impl ApplicationServices {
         commands::reset_addon_media_list(command, self.ports.managed_library_operations()).await
     }
 
+    /// Reset the exact saved draft reviewed by the native editor.
+    pub async fn reset_addon_media_list_editor(
+        &self,
+        command: commands::ResetAddonMediaList,
+        expected_revision: i32,
+    ) -> Result<commands::ResetAddonMediaListOutcome> {
+        if command.id <= 0 || expected_revision < 0 || command.confirmed_name.trim().is_empty() {
+            return Err(ApplicationError::Validation {
+                field: "addon_list_reset",
+                message: "requires the current name and saved revision".into(),
+            });
+        }
+        let enqueue = self
+            .ports
+            .managed_library_operations()
+            .enqueue_editor_reset_reload(
+                command.id,
+                command.confirmed_name.trim(),
+                expected_revision,
+            )
+            .await?;
+        Ok(commands::ResetAddonMediaListOutcome::Queued {
+            operation_id: enqueue.operation.id,
+            generation: enqueue.job.generation,
+            existing: enqueue.existing,
+        })
+    }
+
     /// Atomically enqueue or coalesce a non-destructive full-source reconcile.
     pub async fn reconcile_addon_media_list(
         &self,
@@ -765,6 +793,25 @@ impl ApplicationServices {
         commands::change_addon_media_list_addon(command, self.ports.addon_media_lists()).await
     }
 
+    /// Apply a provider change under the native impact preview's saved revision.
+    pub async fn change_addon_media_list_editor_addon(
+        &self,
+        command: commands::ChangeAddonMediaListAddon,
+        expected_revision: i32,
+    ) -> Result<()> {
+        if command.id <= 0 || expected_revision < 0 || command.addon_id.trim().is_empty() {
+            return Err(ApplicationError::Validation {
+                field: "addon_id",
+                message: "requires an add-on and the current saved revision".into(),
+            });
+        }
+        self.ports
+            .addon_media_lists()
+            .change_editor_addon(command.id, command.addon_id.trim(), expected_revision)
+            .await
+            .map_err(Into::into)
+    }
+
     /// Delete one Add-on media list.
     pub async fn delete_addon_media_list(
         &self,
@@ -788,6 +835,37 @@ impl ApplicationServices {
     ) -> Result<()> {
         commands::request_addon_media_list_presentation(command, self.ports.addon_media_lists())
             .await
+    }
+
+    /// Commit one operator editing task under its original saved-revision fence.
+    pub async fn save_addon_media_list_editor_task(
+        &self,
+        command: ersatzrs_core::repositories::AddonMediaListEditorSave,
+    ) -> Result<i32> {
+        let invalid_scope = command.list_id <= 0
+            || command.expected_revision < 0
+            || command.expected_revision == i32::MAX
+            || command.items.len() > 10_000;
+        let mut ids = std::collections::BTreeSet::new();
+        let invalid_items = command.items.iter().any(|item| {
+            let review = &item.review;
+            review.item_id <= 0
+                || !ids.insert(review.item_id)
+                || !matches!((review.season, review.episode), (None, None))
+                    && !matches!((review.season, review.episode), (Some(s), Some(e)) if s >= 0 && e >= 0)
+                || item.expected_review.is_some_and(|expected| expected.item_id != review.item_id)
+        });
+        if invalid_scope || invalid_items {
+            return Err(ApplicationError::Validation {
+                field: "addon_list_editing_task",
+                message: "requires one saved revision, at most 10000 distinct owned items, and paired non-negative season and episode numbers".into(),
+            });
+        }
+        self.ports
+            .addon_media_lists()
+            .save_editor_task(&command)
+            .await
+            .map_err(Into::into)
     }
 
     pub async fn save_addon_media_list_show_nfo(

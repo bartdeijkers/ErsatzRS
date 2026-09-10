@@ -1104,7 +1104,8 @@ admission, ownership, recovery and playback behavior remain unchanged.
 Complete and pushed with green host/add-on CI on 2026-09-09. Canonical acceptance
 and exact-revision evidence live in milestone `amm-n-01` in
 [`docs/progress/milestones.toml`](../docs/progress/milestones.toml).
-Work is paused; N-02 planning requires explicit resume and implementation approval.
+The maintainer subsequently inserted AMM-N-01B for the locked admin design.
+N-02 planning and its implementation-approval boundary follow N-01B.
 
 - Approved crash limitation (2026-09-09): graceful shutdown/restart remains
   automatic; uncertain cleanup after abrupt host death requires explicit
@@ -1132,6 +1133,16 @@ Work is paused; N-02 planning requires explicit resume and implementation approv
   read-only executable, restart, and concurrent playback/discovery behavior on
   Windows and POSIX.
 - Keep `--no-update` on every non-maintenance operation.
+
+### AMM-N-01B — Adapt the locked Add-on List task design
+
+The maintainer locked the reviewed artifact on 2026-09-09. Execute
+[the dedicated adaptation plan](amm-n-01b-addon-list-design-adaptation.md)
+after N-01 and before N-02. [ADR 0091](../docs/adr/0091-lock-addon-list-task-design.md)
+owns the decision; milestone `amm-n-01b` owns production acceptance. Preserve
+the real shell and complete existing capabilities while implementing the
+locked task layout, coherent saves, draft retention, localization and real-host
+visual/hydrated/no-JS proof. N-02 and N-03 acceptance remain unchanged.
 
 ### AMM-N-02 — Validate and roll back tool replacement
 

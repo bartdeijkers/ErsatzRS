@@ -122,7 +122,7 @@ routed  = true
 
 [[route]]
 nav     = '/media/addon-lists'
-backing = 'provider-neutral list + `:id` editor; URL-first add dialog whose optional add-on selection is resolved from the URL host, add/search/match/delete plus change-add-on actions with HTML POST fallbacks and persisted rows-per-page; the editor leads with URL and add-on, classifies each entry, and groups entries into counted non-playable/unknown/playable sections paged on their own'
+backing = 'provider-neutral overview and dedicated add page; provider-ordered Items/review plus settings, playback, activity, item and artwork task routes. Native POST forms retain unsaved task input and use coherent revision-fenced saves. Overview search/match/delete and schema-defined options remain available. AMM-N-01B local acceptance includes the corrected item edit/tools hierarchy, explicit native numbering and staged replacements; its milestone owns current functional and visual proof.'
 routed  = true
 
 [[route]]

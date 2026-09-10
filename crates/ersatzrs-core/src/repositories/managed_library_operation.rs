@@ -212,6 +212,20 @@ pub trait ManagedLibraryOperationRepository: Send + Sync {
         ))
     }
 
+    /// Admit reset only for the exact draft reviewed by a native editing task.
+    async fn enqueue_editor_reset_reload(
+        &self,
+        list_id: EntityId,
+        confirmed_name: &str,
+        expected_revision: i32,
+    ) -> Result<AddonMediaListResetEnqueue> {
+        let _ = (list_id, confirmed_name, expected_revision);
+        Err(super::RepositoryError::unavailable(
+            "enqueue fenced editor reset",
+            "not implemented",
+        ))
+    }
+
     /// Atomically create or coalesce one non-destructive reconcile generation.
     async fn enqueue_reconcile(&self, list_id: EntityId) -> Result<AddonMediaListReconcileEnqueue> {
         let _ = list_id;

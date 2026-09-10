@@ -1,0 +1,129 @@
+{
+  "browser": "firefox",
+  "javaScriptEnabled": false,
+  "workflows": [
+    "All four metadata editors retain drafts across Previous/Next, reject invalid chapters before applying metadata, apply, reload, and discard correctly.",
+    "Recovery remains visible outside diagnostics; retry eligibility, stale generation rejection, running and completion states preserve numbering drafts.",
+    "165 long-title items with unknown dates and runtimes: 10/25/50/100/All, filtering, first/last navigation, off-page selection, draft retention, Apply and reflow."
+  ],
+  "layouts": [
+    {
+      "page": "item",
+      "theme": "dark",
+      "width": 320,
+      "overflow": 0
+    },
+    {
+      "page": "item",
+      "theme": "dark",
+      "width": 390,
+      "overflow": 0
+    },
+    {
+      "page": "item",
+      "theme": "dark",
+      "width": 720,
+      "overflow": 0
+    },
+    {
+      "page": "item",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": 0
+    },
+    {
+      "page": "item",
+      "theme": "light",
+      "width": 320,
+      "overflow": 0
+    },
+    {
+      "page": "item",
+      "theme": "light",
+      "width": 390,
+      "overflow": 0
+    },
+    {
+      "page": "item",
+      "theme": "light",
+      "width": 720,
+      "overflow": 0
+    },
+    {
+      "page": "item",
+      "theme": "light",
+      "width": 1440,
+      "overflow": 0
+    },
+    {
+      "page": "large-list",
+      "theme": "dark",
+      "width": 320,
+      "overflow": 0,
+      "rows": 165
+    },
+    {
+      "page": "large-list",
+      "theme": "dark",
+      "width": 390,
+      "overflow": 0,
+      "rows": 165
+    },
+    {
+      "page": "large-list",
+      "theme": "dark",
+      "width": 720,
+      "overflow": 0,
+      "rows": 165
+    },
+    {
+      "page": "large-list",
+      "theme": "dark",
+      "width": 1024,
+      "overflow": 0,
+      "rows": 165
+    },
+    {
+      "page": "large-list",
+      "theme": "dark",
+      "width": 1440,
+      "overflow": 0,
+      "rows": 165
+    },
+    {
+      "page": "large-list",
+      "theme": "light",
+      "width": 320,
+      "overflow": 0,
+      "rows": 165
+    },
+    {
+      "page": "large-list",
+      "theme": "light",
+      "width": 390,
+      "overflow": 0,
+      "rows": 165
+    },
+    {
+      "page": "large-list",
+      "theme": "light",
+      "width": 720,
+      "overflow": 0,
+      "rows": 165
+    },
+    {
+      "page": "large-list",
+      "theme": "light",
+      "width": 1024,
+      "overflow": 0,
+      "rows": 165
+    },
+    {
+      "page": "large-list",
+      "theme": "light",
+      "width": 1440,
+      "overflow": 0,
+      "rows": 165
+    }
+  ]
+}

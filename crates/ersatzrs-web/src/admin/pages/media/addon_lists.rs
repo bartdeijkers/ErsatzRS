@@ -15,6 +15,8 @@ use ersatzrs_domain::{
     AddonMediaListPublicationState, AddonMediaListRecoveryAction, AddonMediaListRefreshCadence,
     AddonMediaListRefreshPublicationPolicy, AddonMediaListReviewState, RemoteStreamLiveness,
 };
+pub mod workspace;
+
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
@@ -1427,13 +1429,27 @@ pub fn AddonMediaListsPage() -> impl IntoView {
     let initial_sort_direction = query.with_untracked(|params| {
         addon_list_sort_direction(&params.get("direction").unwrap_or_default())
     });
+    let initial_page = query.with_untracked(|q| {
+        q.get("page")
+            .and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(0)
+    });
+    let requested_size = query.with_untracked(|q| {
+        q.get("page_size")
+            .and_then(|v| v.parse::<u32>().ok())
+            .filter(|n| [0, 10, 25, 50, 100].contains(n))
+    });
     let initial = Resource::new_blocking(
         || (),
         move |()| async move {
-            let page_size = get_addon_media_lists_page_size().await?;
-            let rows =
-                list_addon_media_lists(0, page_size, initial_sort_field, initial_sort_direction)
-                    .await?;
+            let page_size = requested_size.unwrap_or(get_addon_media_lists_page_size().await?);
+            let rows = list_addon_media_lists(
+                initial_page,
+                page_size,
+                initial_sort_field,
+                initial_sort_direction,
+            )
+            .await?;
             let providers = list_addon_media_list_providers().await?;
             Ok::<_, ServerFnError>((page_size, rows, providers))
         },
@@ -1448,6 +1464,7 @@ pub fn AddonMediaListsPage() -> impl IntoView {
                         <AddonMediaListsIsland
                             initial_error=error.clone()
                             initial_page_size=initial_page_size
+                            initial_page=initial_page
                             initial_rows=initial_rows
                             initial_total=initial_total
                             initial_sort_field=initial_sort_field
@@ -1515,13 +1532,22 @@ fn AddonListDiskWarningSettings(list_id: Option<i64>) -> impl IntoView {
 fn AddonMediaListsIsland(
     initial_error: String,
     initial_page_size: u32,
+    initial_page: u32,
     initial_rows: Vec<AddonMediaListRow>,
     initial_total: u64,
     initial_sort_field: AddonMediaListAdminSortField,
     initial_sort_direction: AddonMediaListAdminSortDirection,
     providers: Vec<AddonMediaListProviderRow>,
 ) -> impl IntoView {
-    let page = RwSignal::new(0u32);
+    let page = RwSignal::new(if initial_page_size == 0 {
+        0
+    } else {
+        initial_page.min(
+            u32::try_from(initial_total.div_ceil(u64::from(initial_page_size)))
+                .unwrap_or(u32::MAX)
+                .saturating_sub(1),
+        )
+    });
     let page_size = RwSignal::new(initial_page_size);
     let sort_field = RwSignal::new(initial_sort_field);
     let sort_direction = RwSignal::new(initial_sort_direction);
@@ -1910,13 +1936,21 @@ fn AddonMediaListsIsland(
                                         </tbody>
                                     </table>
                                 </div>
-                                <PaginationControls
+                                <noscript><crate::admin::ui::primitives::pagination::PaginationLinks
+                                    page=initial_page total=initial_total page_size=initial_page_size
+                                    previous_href=format!("?page={}&page_size={}&sort={}&direction={}",initial_page.saturating_sub(1),initial_page_size,match initial_sort_field {AddonMediaListAdminSortField::Name=>"name",AddonMediaListAdminSortField::Id=>"id"},addon_list_sort_direction_value(initial_sort_direction))
+                                    next_href=format!("?page={}&page_size={}&sort={}&direction={}",initial_page.saturating_add(1),initial_page_size,match initial_sort_field {AddonMediaListAdminSortField::Name=>"name",AddonMediaListAdminSortField::Id=>"id"},addon_list_sort_direction_value(initial_sort_direction))
+                                    page_size_fields=vec![crate::admin::ui::primitives::pagination::PaginationFormField{name:"sort".into(),value:match initial_sort_field {AddonMediaListAdminSortField::Name=>"name",AddonMediaListAdminSortField::Id=>"id"}.into()},crate::admin::ui::primitives::pagination::PaginationFormField{name:"direction".into(),value:addon_list_sort_direction_value(initial_sort_direction).into()}]
+                                    page_size_action="/media/addon-lists".into()
+                                    page_size_options=Some(vec![10,25,50,100,0])
+                                /></noscript>
+                                <div class=style::js_only><PaginationControls
                                     page=Signal::derive(move || page.get())
                                     total=Signal::derive(move || Some(total))
                                     page_size=Signal::derive(move || page_size.get())
-                                    page_size_options=Some(vec![10, 25, 50, 100])
+                                    page_size_options=Some(vec![10, 25, 50, 100, 0])
                                     on_page_size_change=Callback::new(move |value: u32| {
-                                        page_size.set(value.max(1));
+                                        page_size.set(value);
                                         page.set(0);
                                     })
                                     on_previous=Callback::new(move |()| {
@@ -1929,7 +1963,7 @@ fn AddonMediaListsIsland(
                                             .saturating_sub(1);
                                         page.update(|value| *value = value.saturating_add(1).min(max_page));
                                     })
-                                />
+                                /></div>
                             }.into_any()
                 }}
             </section>

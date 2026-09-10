@@ -423,92 +423,8 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     }
 
     async fn save_draft_options(&self, options: &AddonMediaListDraftOptions) -> Result<i32> {
-        let list_json = encode_option_values(&options.list_values)?;
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        crate::addon_media_list_sync::ensure_not_publishing_tx(&mut tx, options.list_id).await?;
-        let schema_binding =
-            resolve_schema(&mut tx, options.list_id, options.schema.as_ref()).await?;
-        validate_stored_values(schema_binding.as_ref(), &options.list_values, true)?;
-        for item in &options.item_values {
-            validate_stored_values(schema_binding.as_ref(), &item.values, false)?;
-        }
-        let schema_id = schema_binding.as_ref().map(|(id, _)| *id);
-
-        let mut item_ids = BTreeSet::new();
-        for item in &options.item_values {
-            let Some(item_id) = item.item_id else {
-                return Err(RepositoryError::Conflict(
-                    "draft item option values require a current item id".into(),
-                ));
-            };
-            if !item_ids.insert(item_id) {
-                return Err(RepositoryError::Conflict(
-                    "draft item option values contain a duplicate item identity".into(),
-                ));
-            }
-            let provider_id = sqlx::query_scalar::<_, String>(
-                r#"SELECT "ProviderId" FROM "AddonMediaListItem"
-                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
-            )
-            .bind(item_id)
-            .bind(options.list_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .repository()?
-            .ok_or(RepositoryError::NotFound {
-                kind: "add-on media list item",
-                id: item_id,
-            })?;
-            if provider_id != item.provider_id {
-                return Err(RepositoryError::Conflict(
-                    "draft item option identity does not match the saved provider identity".into(),
-                ));
-            }
-        }
-
-        let updated = sqlx::query(
-            r#"UPDATE "AddonMediaList"
-               SET "DraftOptionSchemaId" = ?, "DraftOptionValuesJson" = ?,
-                   "DraftRevision" = "DraftRevision" + 1
-               WHERE "Id" = ? AND "DraftRevision" = ?"#,
-        )
-        .bind(schema_id)
-        .bind(list_json)
-        .bind(options.list_id)
-        .bind(options.draft_revision)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        if updated.rows_affected() == 0 {
-            return Err(RepositoryError::Conflict(
-                "add-on media-list draft revision changed".into(),
-            ));
-        }
-
-        sqlx::query(
-            r#"UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson" = '{}'
-               WHERE "AddonMediaListId" = ?"#,
-        )
-        .bind(options.list_id)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        for item in options
-            .item_values
-            .iter()
-            .filter(|item| !item.values.is_empty())
-        {
-            sqlx::query(
-                r#"UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson" = ?
-                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
-            )
-            .bind(encode_option_values(&item.values)?)
-            .bind(item.item_id)
-            .bind(options.list_id)
-            .execute(&mut *tx)
-            .await
-            .repository()?;
-        }
+        save_draft_options_tx(&mut tx, options, true).await?;
         tx.commit().await.repository()?;
         Ok(options.draft_revision + 1)
     }
@@ -4610,4 +4526,98 @@ fn decode_u64(kind: &'static str, value: i64) -> Result<u64> {
         kind,
         value: value.to_string(),
     })
+}
+
+/// Share option validation and writes with a coherent editor transaction.
+pub(super) async fn save_draft_options_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    options: &AddonMediaListDraftOptions,
+    advance_revision: bool,
+) -> Result<()> {
+    let list_json = encode_option_values(&options.list_values)?;
+    crate::addon_media_list_sync::ensure_not_publishing_tx(tx, options.list_id).await?;
+    let schema_binding = resolve_schema(tx, options.list_id, options.schema.as_ref()).await?;
+    validate_stored_values(schema_binding.as_ref(), &options.list_values, true)?;
+    for item in &options.item_values {
+        validate_stored_values(schema_binding.as_ref(), &item.values, false)?;
+    }
+    let schema_id = schema_binding.as_ref().map(|(id, _)| *id);
+
+    let mut item_ids = BTreeSet::new();
+    for item in &options.item_values {
+        let Some(item_id) = item.item_id else {
+            return Err(RepositoryError::Conflict(
+                "draft item option values require a current item id".into(),
+            ));
+        };
+        if !item_ids.insert(item_id) {
+            return Err(RepositoryError::Conflict(
+                "draft item option values contain a duplicate item identity".into(),
+            ));
+        }
+        let provider_id = sqlx::query_scalar::<_, String>(
+            r#"SELECT "ProviderId" FROM "AddonMediaListItem"
+                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+        )
+        .bind(item_id)
+        .bind(options.list_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .repository()?
+        .ok_or(RepositoryError::NotFound {
+            kind: "add-on media list item",
+            id: item_id,
+        })?;
+        if provider_id != item.provider_id {
+            return Err(RepositoryError::Conflict(
+                "draft item option identity does not match the saved provider identity".into(),
+            ));
+        }
+    }
+
+    let updated = sqlx::query(
+        r#"UPDATE "AddonMediaList"
+               SET "DraftOptionSchemaId" = ?, "DraftOptionValuesJson" = ?,
+                   "DraftRevision" = "DraftRevision" + ?
+               WHERE "Id" = ? AND "DraftRevision" = ?"#,
+    )
+    .bind(schema_id)
+    .bind(list_json)
+    .bind(i32::from(advance_revision))
+    .bind(options.list_id)
+    .bind(options.draft_revision)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    if updated.rows_affected() == 0 {
+        return Err(RepositoryError::Conflict(
+            "add-on media-list draft revision changed".into(),
+        ));
+    }
+
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson" = '{}'
+               WHERE "AddonMediaListId" = ?"#,
+    )
+    .bind(options.list_id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    for item in options
+        .item_values
+        .iter()
+        .filter(|item| !item.values.is_empty())
+    {
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson" = ?
+                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+        )
+        .bind(encode_option_values(&item.values)?)
+        .bind(item.item_id)
+        .bind(options.list_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    }
+    Ok(())
 }

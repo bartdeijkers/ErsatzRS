@@ -3830,13 +3830,168 @@ the next action is an N-02 implementation plan for maintainer review.
 '''
 
 [[milestone]]
+id         = 'amm-n-01b'
+phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
+title      = 'Replace Add-on List editing with the locked task design'
+status     = 'Complete'
+feature    = 'addon-metadata-management'
+plan       = 'plans/amm-n-01b-addon-list-design-adaptation.md'
+depends_on = ['amm-n-01']
+acceptance = '''
+Strictly adapt the ADR 0091 locked artifact to real /media/addon-lists routes:
+Items/review, List settings, Playback/access, Activity/recovery, item review and
+artwork, with compatible overview/create and existing deep links. Preserve every
+current conditional capability, validation, provider-schema option and full
+media-detail destination. Keep the production shell and all supported cultures.
+Match the locked content structure, visual hierarchy and responsive geometry;
+retain restrained disclosures, visible routine settings, vertically stacked
+48rem access/segments, fixed visible Previous/Next slots, one numbering action
+bar and 10/25/50/100/All paging. No synthetic data/results or Python runtime ship.
+
+Native forms and hydrated actions share real application commands. Preserve
+unsaved values and selection through validation, paging/filtering, task/item/
+artwork navigation and publication. Save commits the entire named task coherently
+with ETag/revision checks and no partial save on validation or write failure;
+Discard affects only that task. Publish uses the exact saved revision and leaves
+newer input unsaved. Exact selected-ID, range and season-only numbering preserve
+unselected items; scope preview/undo, inherited versus explicit equal-to-default
+options, provider chapters and restore/derived-item restrictions remain correct.
+Source, diff, impact, revision restore, diagnostics and recovery use real durable
+state with all eligibility, generation, concurrency and redaction safeguards.
+
+Focused application/repository/native-form tests prove persistence, conflicts,
+grouped-write failures and replay safety. Chromium and Firefox on a matched
+SSR/WASM/CSS build pass hydrated and JavaScript-disabled workflows against
+temporary database/provider fixtures, including empty, importing, published,
+blocked, recovery, unknown-metadata, 165-item and larger-list states. Visual
+comparison covers both themes at 320/390/720/1024/1440/1920/3840 CSS pixels;
+keyboard, 200% zoom, error/focus behavior, principal 44px controls and WCAG 2.2 AA
+contrast/reflow/accessibility are verified. Record permitted real-data, language
+and shell differences; never overwrite locked references to excuse drift.
+Affected tests/Clippy, localization, hydration lint and final parity-check web
+pass; route/hydration/component records reflect the new surfaces. Close actionable
+review findings. Playback-sensitive command/persistence changes require smoke
+and applicable TSDuck proof. N-02 scope and N-03 integrated six-RID, Windows,
+playback and release gates remain unchanged; prototype reports cannot replace
+production acceptance.
+'''
+evidence = '''
+Item-form correction completed locally on 2026-09-10. The maintainer authorized
+restoring the locked item hierarchy after the live review reopened IF-01 through
+IF-06. Editing now ends with Save, followed by named saved-item tools; options
+have concise saved source/value lines, First aired is visible once, numbering has
+native numbered/unnumbered choices, replacement changes remain explicitly staged,
+fetch/navigation actions use contextual labels, and optional metadata has one
+disclosure toggle with plain credits subsections. Mobile visual and keyboard
+action order agree. All nine cultures are localized and all 139 locked files
+remain unchanged. No live server/database mutation, commit, push or release.
+
+Correction evidence:
+- test-results/amm-n-01b/item-correction-parity.log: 642 native web tests pass,
+  with six existing skips; formatting, progress, architecture and hydration lint
+  pass. The initial command stopped only on the item composition's line-count
+  lint. A local documented expectation preserves its declarative document order.
+- item-correction-parity-final.log in the same directory: final parity-check web
+  --skip-tests passes with warnings denied, reusing the 642-test proof because
+  only that lint annotation and scoped mobile CSS changed after the test run.
+  No test requirement was removed; no new hydration baseline suppression.
+- test-results/amm-n-01b-item-check2/playwright-results.json: four populated-item
+  cases pass across Chromium/Firefox, native and hydrated. They prove explicit
+  null numbering overrides, paired validation, credits and timestamp retention,
+  canonical-date input, option preview/navigation/save, empty replacement search,
+  exact media/version staging/save and discard without changing saved selection.
+- test-results/amm-n-01b-item-regression/playwright-results.json: 26 affected
+  cases pass (2.7 minutes), including inheritance/equal-default overrides, bulk
+  Undo, native import/publish/restore, active detail jobs, artwork navigation,
+  chapters, stale edits and six-route visual coverage. The initial broad run's
+  86 passing cases remain useful; its 12 outdated label/hidden-tool assertions
+  were corrected and the affected workflows rerun successfully.
+- test-results/amm-n-01b/item-correction-final-browser/playwright-results.json:
+  six final cases pass (1.5 minutes) on a fresh matched SSR/WASM/CSS build after
+  removing mobile CSS reordering. Populated-item workflows and six-route visual
+  checks pass in both browsers. They cover both themes, seven widths, 200% zoom,
+  German/French 320px labels, keyboard expansion/focus, principal 44px targets,
+  text contrast >=4.5:1 and measured field edges >=3:1. Final captures explicitly
+  include the inner main scroller's top/tools/open metadata, plus mobile and 4K.
+- item-form-reference/ and item-form-review.md in test-results/amm-n-01b record
+  fresh locked HTML renders and visual comparison. Production retains the real
+  shell, provider guidance, saved source/value, option preview and numbered data;
+  these account for height differences from the unnumbered artifact. The 64rem
+  reading cap, 48rem option stack, edit/tools boundary and restrained disclosure
+  hierarchy are preserved. This is scoped visual/browser proof, not a measured
+  human task study or assistive-technology certification.
+- item-correction-bundle.json identifies the final matched candidate; native
+  binary SHA-256: 48d9db32e3835c0cf22649f905c8ae805df967af9026606d3fa75f3815d1496c.
+
+The completed focused correction plan is pruned per plans/INDEX.md; this record,
+ADR 0091, TEST.md and the retained source map own the outcome and behavior.
+Prior application/repository/migration and playback evidence below is reused:
+the correction changes presentation and the native numbering adapter, without
+changing persistence commands, provider protocols or playback. N-02 and N-03
+remain open with their existing acceptance, including the HLS Direct limitation.
+
+Earlier local completion checkpoint (supplemented by the correction above):
+Completed locally on 2026-09-09 on feat/amm-n-01b-addon-list-redesign, based on
+PR 97 merge ab15bfc45b142d1ecdf55d85fa98ae29ff9401b3. No commit, push, CI or release
+is implied. The six production task routes use real native POST forms, sparse
+retained input/selection, coherent task saves and authoritative durable jobs.
+All nine supported cultures are covered by the existing localization boundary.
+The 139-file design lock remains unchanged; the execution plan records source
+mapping, browser capability ownership and permitted real-shell/data differences.
+
+Final evidence under test-results/amm-n-01b/:
+- amm-parity-final2.log: parity-check web passes, including progress, formatting,
+  architecture/hydration lint, 641 web tests (six existing skips) and web Clippy.
+- amm-clippy12.log and amm-clippy-review-final.log: affected app/infra/web Clippy
+  and the final presentation correction pass with warnings denied.
+- amm-app-final.log, amm-infra-tests7.log, amm-migration-tests.log and
+  amm-artwork-legacy-tests.log: six application option tests, 23 repository
+  regressions, 20 migration tests and the legacy immutable-artwork regression.
+  Repository proof includes injected rollback, ownership/ETag/revision fences,
+  retained-row conflicts, immutable upload handles, reset/provider admission,
+  chapter/reconcile atomicity, queued revision refresh and running-job refusal.
+- browser-94/playwright-results.json: all 94 Chromium/Firefox cases pass in
+  8.9 minutes, with zero skips, failures or retries. Native/hydrated workflows
+  cover navigation, save/discard, upload retention, chapters, numbering scopes,
+  option inheritance/Undo, source/provider changes, reset/recovery and real
+  publication/revision restore. All 1,001 items are rendered by All; its measured
+  native request is 455,388 bytes in all four contexts, below the 8 MiB bound.
+- browser-review/playwright-results.json: eight affected cases pass on the final
+  matched bundle after hiding revision comparison until two revisions exist,
+  distinguishing its labels and selecting different initial revisions. The
+  selection proves empty and single-revision states, native/hydrated comparison
+  and restore, plus six-route visual checks in both browsers. Unaffected runtime
+  and persistence evidence above is reused.
+- Browser captures and locked-reference/ cover both themes and seven widths
+  (320/390/720/1024/1440/1920/3840), OS/app theme independence, 200% zoom,
+  keyboard/focus/error behavior, 44px principal controls and contrast/reflow.
+  Actual browser/segment options are vertically aligned at 390 and 3840 in both
+  themes and both interaction modes. This is scoped automated/manual UI proof,
+  not an assistive-technology certification or an observed human task study.
+- amm-smoke-final.log: real MPEG-TS and HLS startup playback pass on a temporary
+  database. amm-tsduck-final.log: 64 checks, zero failures for MPEG-TS legacy/
+  hybrid and HLS segmenter, including continuity, timestamps and audio cadence.
+  This fixture produced no HLS Direct segments; no proof for that mode is claimed.
+- bundle-identity.json records the final matched SSR/WASM/CSS candidate. Its
+  native binary SHA-256 is
+  2fc9024f786f513756fb0e24b2ccb21309bcf3c292427ee64cde706bbf2cbef6.
+
+Review corrections include preview/post-save Undo ambiguity, accessible chapter
+errors, native section-disclosure markup, guarded paired metadata-fence refresh,
+empty revision controls and queued chapter reconciliation following later saves.
+Route/hydration/component records, TEST.md, ADR 0091 and changelog are updated.
+N-02 rollback and N-03 integrated six-RID, Windows/restart, real-channel/playback
+and release acceptance remain unchanged and open.
+'''
+
+[[milestone]]
 id         = 'amm-n-02'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
 title      = 'Validate and roll back yt-dlp replacement'
 status     = 'Not started'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
-depends_on = ['amm-n-01']
+depends_on = ['amm-n-01b']
 acceptance = '''
 For an accepted eligible regular executable, the update job records size and
 digest and stores one bounded private last-known-good copy before yt-dlp -U.
@@ -3862,7 +4017,7 @@ title      = 'Close the broadened lifecycle on all supported platforms'
 status     = 'Not started'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
-depends_on = ['amm-j-04', 'amm-k-04', 'amm-l-05', 'amm-m-03', 'amm-n-02']
+depends_on = ['amm-j-04', 'amm-k-04', 'amm-l-05', 'amm-m-03', 'amm-n-01b', 'amm-n-02']
 acceptance = '''
 Host and official-package contract suites, focused Rust/migration/health tests,
 localization, hydration lint, Chromium/Firefox, all six RID package checks,

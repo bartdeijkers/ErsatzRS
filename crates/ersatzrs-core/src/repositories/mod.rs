@@ -1,4 +1,5 @@
 mod addon_media_list;
+mod addon_media_list_editor;
 mod addon_media_list_lifecycle;
 mod addon_media_list_source_probe;
 mod admin_media;
@@ -40,6 +41,10 @@ pub use addon_media_list::{
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationContinuation,
     AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
     AddonMediaListRepository,
+};
+pub use addon_media_list_editor::{
+    AddonMediaListEditorItem, AddonMediaListEditorMetadata, AddonMediaListEditorSave,
+    AddonMediaListEditorSettings,
 };
 pub use addon_media_list_lifecycle::{
     AddonMediaListArtifact, AddonMediaListDraftDiff, AddonMediaListDraftOptions,

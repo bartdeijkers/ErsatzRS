@@ -49,7 +49,7 @@ pub fn AddonListOptions(list_id: i64, item_ids: Vec<i64>) -> impl IntoView {
 }
 
 #[cfg(feature = "ssr")]
-fn localized(values: &std::collections::BTreeMap<String, String>) -> String {
+pub(crate) fn localized(values: &std::collections::BTreeMap<String, String>) -> String {
     let language = use_i18n().code();
     let lookup = |wanted: &str| {
         values
@@ -66,7 +66,7 @@ fn localized(values: &std::collections::BTreeMap<String, String>) -> String {
 }
 
 #[cfg(feature = "ssr")]
-fn value_label(
+pub(crate) fn value_label(
     value: &ersatzrs_domain::AddonMediaListOptionValue,
     definition: &ersatzrs_addon_contract::AddonMediaListOptionDefinition,
 ) -> String {
@@ -166,7 +166,7 @@ pub fn editor_view(editor: crate::admin::server_fns::addon_list_options::OptionE
 }
 
 #[cfg(feature = "ssr")]
-fn access_state_key(state: ersatzrs_app::ports::AddonItemAccessState) -> TextKey {
+pub(crate) fn access_state_key(state: ersatzrs_app::ports::AddonItemAccessState) -> TextKey {
     use ersatzrs_app::ports::AddonItemAccessState as State;
     match state {
         State::Queued => TextKey::AddonAccessQueued,
@@ -180,7 +180,9 @@ fn access_state_key(state: ersatzrs_app::ports::AddonItemAccessState) -> TextKey
 }
 
 #[cfg(feature = "ssr")]
-fn access_outcome_key(outcome: ersatzrs_addon_contract::MediaListAccessCheckOutcome) -> TextKey {
+pub(crate) fn access_outcome_key(
+    outcome: ersatzrs_addon_contract::MediaListAccessCheckOutcome,
+) -> TextKey {
     use ersatzrs_addon_contract::MediaListAccessCheckOutcome as Outcome;
     match outcome {
         Outcome::Accessible => TextKey::AddonAccessAccessible,
@@ -334,6 +336,7 @@ mod tests {
 
     fn fixture(applicable: bool) -> OptionEditor {
         OptionEditor {
+            supports_access_check: false,
             access: None,
             list_id: 7,
             provisional: true,

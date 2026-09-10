@@ -1,0 +1,4017 @@
+/* ADR 0091: content rules ported from locked artifact revision 1.
+ * Stylance 0.8 passes @supports blocks through; their selectors therefore use
+ * the literal, page-scoped class names rather than :global() wrappers. */
+.workspace { min-width:0; --focus:var(--color-primary); }
+
+/* styles.css */
+:global(.addon-workspace) * {
+box-sizing:border-box
+}
+:global(.addon-workspace) a {
+color:inherit;
+text-underline-offset:4px
+}
+:global(.addon-workspace) button,
+:global(.addon-workspace) input,
+:global(.addon-workspace) select,
+:global(.addon-workspace) textarea {
+font:inherit
+}
+:global(.addon-workspace) button,
+:global(.addon-workspace) a,
+:global(.addon-workspace) summary {
+touch-action:manipulation
+}
+:global(.addon-workspace) :focus-visible {
+outline:3px solid var(--focus);
+outline-offset:4px
+}
+:global(.addon-workspace) h1,
+:global(.addon-workspace) h2,
+:global(.addon-workspace) h3,
+:global(.addon-workspace) p {
+margin-top:0
+}
+:global(.addon-workspace) h1 {
+font-size:clamp(1.75rem,2.6vw,2.45rem);
+line-height:1.2;
+letter-spacing:-.045em;
+margin-bottom:10px;
+font-weight:650
+}
+:global(.addon-workspace) h2 {
+font-size:1.25rem;
+line-height:1.35;
+letter-spacing:-.02em;
+margin-bottom:7px
+}
+:global(.addon-workspace) h3 {
+font-size:1rem;
+margin-bottom:5px
+}
+:global(.addon-workspace) p {
+margin-bottom:16px;
+color:var(--color-text-secondary)
+}
+:global(.addon-workspace) small,
+:global(.addon-workspace) :global(.hint),
+:global(.addon-workspace) :global(.muted) {
+color:var(--color-text-secondary);
+font-size:.86rem
+}
+:global(.addon-workspace) small {
+display:block
+}
+:global(.addon-workspace) code {
+overflow-wrap:anywhere
+}
+:global(.addon-workspace) :global(.skip) {
+position:absolute;
+top:-100px;
+left:16px;
+z-index:10;
+padding:14px 20px;
+background:var(--color-surface)
+}
+:global(.addon-workspace) :global(.skip):focus {
+top:10px
+}
+:global(.addon-workspace) :global(.app-header) {
+height:76px;
+display:flex;
+align-items:center;
+gap:48px;
+padding:0 32px;
+border-bottom:1px solid var(--color-table-line);
+background:var(--color-appbar)
+}
+:global(.addon-workspace) :global(.brand) {
+display:flex;
+align-items:center;
+gap:10px;
+text-decoration:none;
+font-size:1.5rem;
+font-weight:750;
+letter-spacing:-.05em
+}
+:global(.addon-workspace) :global(.brand-mark) {
+display:grid;
+place-items:center;
+width:34px;
+height:34px;
+background:#a7ddbc;
+color:#12251c;
+border-radius:9px;
+font-size:1.5rem;
+transform:rotate(-5deg)
+}
+:global(.addon-workspace) :global(.app-location) {
+font-size:.9rem;
+color:var(--color-text-secondary)
+}
+:global(.addon-workspace) :global(.app-location) span {
+margin:0 13px
+}
+:global(.addon-workspace) :global(.app-header)>:global(.text-link) {
+margin-left:auto;
+font-size:.85rem
+}
+:global(.addon-workspace) :global(.workspace) {
+max-width:1560px;
+margin:auto;
+display:grid;
+grid-template-columns:248px minmax(0,1fr)
+}
+:global(.addon-workspace) :global(.local-nav) {
+padding:28px 22px;
+border-right:1px solid var(--color-table-line);
+align-self:start;
+position:sticky;
+top:0
+}
+:global(.addon-workspace) :global(.back) {
+display:inline-block;
+text-decoration:none;
+font-size:.83rem;
+color:var(--color-text-secondary);
+padding:8px 0;
+margin-bottom:18px
+}
+:global(.addon-workspace) :global(.mini-art) {
+height:156px;
+padding:19px;
+color:#efe9d5;
+background:#293c35;
+position:relative;
+border:1px solid #526358;
+overflow:hidden;
+border-radius:7px;
+margin-bottom:19px
+}
+:global(.addon-workspace) :global(.mini-art)::after {
+content:"";
+position:absolute;
+width:130px;
+height:130px;
+border:1px solid #849889;
+border-radius:50%;
+right:-46px;
+top:35px;
+box-shadow:0 0 0 15px #34493d,0 0 0 16px #728676
+}
+:global(.addon-workspace) :global(.mini-art)>span:first-child {
+font-weight:800;
+font-size:1.3rem;
+letter-spacing:-.04em;
+line-height:1.08;
+position:relative;
+z-index:1
+}
+:global(.addon-workspace) :global(.art-rule) {
+display:block;
+width:48px;
+height:3px;
+background:#d2cf9d;
+margin-top:13px
+}
+:global(.addon-workspace) :global(.art-index) {
+position:absolute;
+left:19px;
+bottom:12px;
+font-size:.55rem;
+letter-spacing:.2em
+}
+:global(.addon-workspace) :global(.nav-title) {
+display:block;
+font-size:1rem;
+margin-bottom:3px
+}
+:global(.addon-workspace) :global(.local-nav) nav {
+display:grid;
+gap:5px;
+margin:25px -8px 0
+}
+:global(.addon-workspace) :global(.local-nav) nav a {
+display:flex;
+align-items:center;
+gap:12px;
+justify-content:space-between;
+text-decoration:none;
+padding:12px;
+min-height:44px;
+color:var(--color-text-secondary);
+border:1px solid transparent;
+border-radius:7px;
+font-size:.89rem
+}
+:global(.addon-workspace) :global(.local-nav) nav a:hover {
+background:var(--color-surface);
+color:var(--color-text-primary)
+}
+:global(.addon-workspace) :global(.local-nav) nav a[aria-current] {
+color:var(--color-success);
+background:var(--color-success-20);
+border-color:#42614e;
+font-weight:600
+}
+:global(.addon-workspace) :global(.count) {
+font-size:.8rem;
+border:1px solid #52745e;
+border-radius:5px;
+padding:0 7px
+}
+:global(.addon-workspace) :global(.nav-foot) {
+margin-top:35px;
+padding-top:24px;
+border-top:1px solid var(--color-table-line);
+font-size:.85rem
+}
+:global(.addon-workspace) :global(.nav-foot) small {
+margin-top:5px
+}
+:global(.addon-workspace) :global(.status-dot) {
+display:inline-block;
+width:7px;
+height:7px;
+border-radius:50%;
+background:var(--color-success);
+margin-right:6px
+}
+:global(.addon-workspace) main {
+min-width:0;
+padding:36px 44px 0
+}
+:global(.addon-workspace) :global(.page-heading) {
+display:flex;
+align-items:start;
+justify-content:space-between;
+gap:20px;
+margin-bottom:28px
+}
+:global(.addon-workspace) :global(.page-heading) p:last-child {
+margin-bottom:0
+}
+:global(.addon-workspace) :global(.eyebrow) {
+font-size:.69rem;
+font-weight:700;
+letter-spacing:.16em;
+color:var(--color-text-secondary);
+margin-bottom:10px
+}
+:global(.addon-workspace) :global(.badge) {
+display:inline-block;
+border-radius:20px;
+padding:6px 12px;
+font-size:.78rem;
+white-space:nowrap;
+margin-top:5px
+}
+:global(.addon-workspace) :global(.success) {
+color:var(--color-success);
+background:var(--color-success-20);
+border:1px solid #48654f
+}
+:global(.addon-workspace) :global(.panel),
+:global(.addon-workspace) :global(.readiness),
+:global(.addon-workspace) :global(.settings-form) {
+background:var(--color-surface);
+border:1px solid var(--color-table-line);
+border-radius:10px;
+margin-bottom:24px
+}
+:global(.addon-workspace) :global(.panel) {
+padding:26px
+}
+:global(.addon-workspace) :global(.section-heading) {
+margin-bottom:23px
+}
+:global(.addon-workspace) :global(.section-heading) p {
+font-size:.9rem;
+margin-bottom:0;
+max-width:78ch
+}
+:global(.addon-workspace) :global(.readiness) {
+border-color:#476451;
+background:#202c26
+}
+:global(.addon-workspace) :global(.readiness-top) {
+display:flex;
+align-items:center;
+gap:17px;
+padding:23px 26px 15px
+}
+:global(.addon-workspace) :global(.readiness-top) p {
+font-size:.9rem;
+margin:0
+}
+:global(.addon-workspace) :global(.check-circle) {
+display:grid;
+place-items:center;
+width:42px;
+height:42px;
+flex-shrink:0;
+border:1px solid #699677;
+border-radius:50%;
+color:#abe5be;
+font-size:1.3rem
+}
+:global(.addon-workspace) :global(.metric-grid) {
+display:grid;
+grid-template-columns:repeat(4,minmax(0,1fr));
+padding:12px 26px 23px
+}
+:global(.addon-workspace) :global(.metric-grid)>div {
+border-left:1px solid #46574b;
+padding-left:23px
+}
+:global(.addon-workspace) :global(.metric-grid)>div:first-child {
+border:0;
+padding-left:0
+}
+:global(.addon-workspace) :global(.metric-grid) strong {
+display:block;
+font-size:2rem;
+font-weight:550;
+letter-spacing:-.05em
+}
+:global(.addon-workspace) :global(.metric-grid) small {
+display:inline;
+font-size:1.1rem;
+letter-spacing:0;
+font-weight:400
+}
+:global(.addon-workspace) :global(.metric-grid) span {
+color:var(--color-text-secondary);
+font-size:.83rem
+}
+:global(.addon-workspace) :global(.readiness-bottom) {
+border-top:1px solid #42574a;
+padding:12px 26px;
+display:flex;
+flex-wrap:wrap;
+gap:10px 20px;
+justify-content:space-between;
+font-size:.8rem;
+color:var(--color-text-secondary)
+}
+:global(.addon-workspace) :global(.readiness-bottom) a {
+color:#c1e3cc;
+text-decoration:none
+}
+:global(.addon-workspace) :global(.button) {
+min-height:42px;
+display:inline-flex;
+align-items:center;
+justify-content:center;
+gap:7px;
+padding:9px 16px;
+font-size:.86rem;
+line-height:1.5;
+font-weight:600;
+border-radius:6px;
+border:1px solid transparent;
+cursor:pointer;
+text-decoration:none;
+text-align:center
+}
+:global(.addon-workspace) :global(.primary) {
+background:var(--color-primary);
+color:var(--color-on-primary)
+}
+:global(.addon-workspace) :global(.primary):hover {
+background:#006744
+}
+:global(.addon-workspace) :global(.secondary) {
+border-color:var(--color-border);
+background:transparent;
+color:var(--color-text-primary)
+}
+:global(.addon-workspace) :global(.secondary):hover:not(:disabled) {
+background:#35423c
+}
+:global(.addon-workspace) button:disabled {
+cursor:not-allowed;
+color:#a5afa9;
+border-color:#59645c;
+background:#2a302b
+}
+:global(.addon-workspace) :global(.text-link) {
+text-decoration:underline;
+font-size:.9rem;
+display:inline-block;
+padding:6px 0
+}
+:global(.addon-workspace) :global(.filter-grid) {
+display:grid;
+grid-template-columns:minmax(0,1fr) 150px auto;
+gap:13px;
+align-items:end;
+padding:0 0 23px
+}
+:global(.addon-workspace) :global(.field) {
+min-width:0;
+margin-bottom:18px
+}
+:global(.addon-workspace) :global(.field) label,
+:global(.addon-workspace) form>label:not(:global(.check)) {
+display:block;
+font-size:.9rem;
+font-weight:550;
+margin-bottom:7px
+}
+:global(.addon-workspace) input:not([type=checkbox]),
+:global(.addon-workspace) select,
+:global(.addon-workspace) textarea {
+display:block;
+width:100%;
+min-width:0;
+min-height:43px;
+padding:9px 11px;
+color:var(--color-text-primary);
+background:var(--color-bg);
+border:1px solid var(--color-border);
+border-radius:5px
+}
+:global(.addon-workspace) input[type=hidden] {
+display:none
+}
+:global(.addon-workspace) input[readonly] {
+border-style:dashed;
+color:var(--color-text-secondary)
+}
+:global(.addon-workspace) textarea {
+resize:vertical
+}
+:global(.addon-workspace) :global(.field) small {
+margin-top:7px;
+line-height:1.5
+}
+:global(.addon-workspace) :global(.filter-grid) :global(.field),
+:global(.addon-workspace) :global(.inline-form) :global(.field) {
+margin-bottom:0
+}
+:global(.addon-workspace) :global(.media-list) {
+list-style:none;
+margin:0 -26px;
+padding:0;
+border-top:1px solid var(--color-table-line)
+}
+:global(.addon-workspace) :global(.media-row) {
+display:grid;
+grid-template-columns:22px 72px minmax(0,1fr) 80px 72px;
+gap:16px;
+align-items:center;
+padding:19px 26px;
+border-bottom:1px solid var(--color-table-line)
+}
+:global(.addon-workspace) :global(.media-row):hover {
+background:#26302a
+}
+:global(.addon-workspace) :global(.row-number) {
+color:var(--color-text-secondary);
+font-variant-numeric:tabular-nums;
+font-size:.75rem
+}
+:global(.addon-workspace) :global(.thumb) {
+width:72px;
+height:58px;
+overflow:hidden;
+position:relative;
+display:flex;
+align-items:end;
+padding:5px 8px;
+font-size:1.4rem;
+font-weight:750;
+border-radius:5px
+}
+:global(.addon-workspace) :global(.thumb)::before {
+content:"";
+width:75px;
+height:75px;
+border:1px solid currentColor;
+position:absolute;
+border-radius:50%;
+right:-35px;
+top:-30px;
+opacity:.55
+}
+:global(.addon-workspace) :global(.art-0) {
+background:#4b3a31;
+color:#dbc6a1
+}
+:global(.addon-workspace) :global(.art-1) {
+background:#394b43;
+color:#d0dec2
+}
+:global(.addon-workspace) :global(.art-2) {
+background:#3f4454;
+color:#d2d3e7
+}
+:global(.addon-workspace) :global(.media-title) {
+min-width:0
+}
+:global(.addon-workspace) :global(.media-title)>a {
+font-weight:550;
+font-size:.99rem;
+text-decoration:none
+}
+:global(.addon-workspace) :global(.media-title)>a:hover {
+text-decoration:underline
+}
+:global(.addon-workspace) :global(.media-title) p {
+margin:5px 0 3px;
+font-size:.8rem
+}
+:global(.addon-workspace) :global(.media-title) p span {
+margin:0 4px
+}
+:global(.addon-workspace) :global(.media-title) small {
+font-size:.76rem
+}
+:global(.addon-workspace) :global(.included) {
+color:var(--color-success);
+font-size:.8rem;
+white-space:nowrap
+}
+:global(.addon-workspace) :global(.row-action) {
+padding:10px 0;
+font-size:.84rem;
+text-decoration:none;
+text-align:right
+}
+:global(.addon-workspace) :global(.list-footer) {
+display:flex;
+justify-content:space-between;
+gap:16px;
+padding-top:17px;
+color:var(--color-text-secondary);
+font-size:.78rem
+}
+:global(.addon-workspace) :global(.disclosure) {
+border:1px solid var(--color-table-line);
+border-radius:7px;
+margin:16px 0
+}
+:global(.addon-workspace) :global(.disclosure) summary {
+padding:15px 17px;
+cursor:pointer;
+list-style:none;
+display:flex;
+gap:15px;
+align-items:center
+}
+:global(.addon-workspace) :global(.disclosure) summary::-webkit-details-marker {
+display:none
+}
+:global(.addon-workspace) :global(.disclosure) summary::before {
+content:"+";
+color:var(--color-text-secondary);
+font-size:1.3rem;
+width:15px;
+flex-shrink:0
+}
+:global(.addon-workspace) :global(.disclosure)[open]>summary::before {
+content:"−"
+}
+:global(.addon-workspace) :global(.disclosure) summary strong {
+font-size:.94rem
+}
+:global(.addon-workspace) :global(.disclosure) summary small {
+margin-top:2px
+}
+:global(.addon-workspace) :global(.disclosure)[open]>summary {
+border-bottom:1px solid var(--color-table-line)
+}
+:global(.addon-workspace) :global(.disclosure-body) {
+padding:21px
+}
+:global(.addon-workspace) :global(.grid-2),
+:global(.addon-workspace) :global(.grid-3) {
+display:grid;
+gap:0 22px
+}
+:global(.addon-workspace) :global(.grid-2) {
+grid-template-columns:repeat(2,minmax(0,1fr))
+}
+:global(.addon-workspace) :global(.grid-3) {
+grid-template-columns:repeat(3,minmax(0,1fr))
+}
+:global(.addon-workspace) :global(.actions) {
+display:flex;
+flex-wrap:wrap;
+align-items:center;
+gap:12px;
+margin-top:16px
+}
+:global(.addon-workspace) :global(.actions) p {
+margin:0;
+font-size:.85rem
+}
+:global(.addon-workspace) :global(.check) {
+display:flex;
+align-items:flex-start;
+gap:11px;
+margin:18px 0;
+cursor:pointer
+}
+:global(.addon-workspace) :global(.check) input {
+width:18px;
+height:18px;
+flex-shrink:0;
+margin:3px 0 0;
+accent-color:var(--color-primary)
+}
+:global(.addon-workspace) :global(.check) small {
+margin-top:5px;
+max-width:70ch
+}
+:global(.addon-workspace) :global(.inline-form) {
+display:flex;
+align-items:end;
+gap:20px;
+margin:20px 0
+}
+:global(.addon-workspace) :global(.inline-form) :global(.field) {
+flex:1
+}
+:global(.addon-workspace) :global(.facts) {
+margin:20px 0;
+display:grid;
+grid-template-columns:repeat(3,minmax(0,1fr));
+gap:20px
+}
+:global(.addon-workspace) :global(.facts) dt {
+color:var(--color-text-secondary);
+font-size:.8rem;
+margin-bottom:4px
+}
+:global(.addon-workspace) :global(.facts) dd {
+margin:0;
+font-size:.92rem
+}
+:global(.addon-workspace) :global(.compact) {
+padding:15px 18px;
+background:var(--color-bg);
+border-radius:6px
+}
+:global(.addon-workspace) :global(.jump-nav) {
+display:flex;
+gap:20px;
+flex-wrap:wrap;
+margin-bottom:22px
+}
+:global(.addon-workspace) :global(.jump-nav) a {
+font-size:.86rem;
+padding:5px 0
+}
+:global(.addon-workspace) :global(.form-note) {
+padding:17px 20px;
+background:#27372e;
+border:1px solid #506350;
+border-radius:7px;
+color:var(--color-text-secondary);
+margin-bottom:20px
+}
+:global(.addon-workspace) :global(.form-note) strong {
+color:var(--color-text-primary)
+}
+:global(.addon-workspace) :global(.settings-form) {
+padding:26px
+}
+:global(.addon-workspace) :global(.form-section) {
+padding:15px 0 26px;
+margin-bottom:20px;
+border-bottom:1px solid var(--color-table-line)
+}
+:global(.addon-workspace) :global(.form-section) h2 {
+margin-bottom:25px
+}
+:global(.addon-workspace) :global(.save-bar) {
+display:flex;
+align-items:center;
+flex-wrap:wrap;
+gap:17px;
+padding-top:3px
+}
+:global(.addon-workspace) :global(.save-bar)>div {
+flex:1
+}
+:global(.addon-workspace) :global(.save-bar) small {
+margin-top:5px
+}
+:global(.addon-workspace) :global(.option-row) {
+display:grid;
+grid-template-columns:minmax(0,1fr) 145px auto;
+gap:22px;
+align-items:center;
+border-top:1px solid var(--color-table-line);
+padding:25px 0
+}
+:global(.addon-workspace) :global(.option-row):last-child {
+padding-bottom:0
+}
+:global(.addon-workspace) :global(.option-row) p {
+font-size:.9rem;
+margin-bottom:8px
+}
+:global(.addon-workspace) :global(.value-origin) {
+color:var(--color-text-secondary);
+font-size:.78rem
+}
+:global(.addon-workspace) :global(.option-value) {
+border-left:1px solid var(--color-table-line);
+padding-left:18px
+}
+:global(.addon-workspace) :global(.option-value) strong {
+font-size:1.1rem
+}
+:global(.addon-workspace) :global(.option-value) small {
+font-size:.75rem;
+margin-top:3px
+}
+:global(.addon-workspace) :global(.callout) {
+display:flex;
+align-items:center;
+justify-content:space-between;
+gap:20px;
+padding:20px;
+background:var(--color-bg);
+border-radius:7px
+}
+:global(.addon-workspace) :global(.callout) p {
+font-size:.86rem;
+margin:0
+}
+:global(.addon-workspace) :global(.history-result) {
+display:flex;
+align-items:center;
+gap:16px;
+margin:25px 0
+}
+:global(.addon-workspace) :global(.history-result) p {
+font-size:.85rem;
+margin:0
+}
+:global(.addon-workspace) :global(.history-result) :global(.badge) {
+margin-left:auto
+}
+:global(.addon-workspace) :global(.small-circle) {
+width:34px;
+height:34px;
+font-size:1rem
+}
+:global(.addon-workspace) :global(.timeline) {
+list-style:none;
+padding:0;
+margin:25px 0 0 5px
+}
+:global(.addon-workspace) :global(.timeline) li {
+display:flex;
+gap:20px;
+position:relative;
+padding-bottom:25px
+}
+:global(.addon-workspace) :global(.timeline) li::before {
+content:"";
+width:1px;
+background:var(--color-border);
+position:absolute;
+left:4px;
+top:8px;
+bottom:0
+}
+:global(.addon-workspace) :global(.timeline) li:last-child::before {
+display:none
+}
+:global(.addon-workspace) :global(.timeline-dot) {
+border-radius:50%;
+width:9px;
+height:9px;
+background:var(--color-success);
+position:relative;
+flex-shrink:0;
+margin-top:6px
+}
+:global(.addon-workspace) :global(.timeline) p {
+margin:3px 0;
+font-size:.8rem
+}
+:global(.addon-workspace) :global(.timeline) small {
+font-size:.75rem
+}
+:global(.addon-workspace) :global(.align-end) {
+display:flex;
+align-items:end;
+margin-bottom:18px
+}
+:global(.addon-workspace) :global(.danger-note),
+:global(.addon-workspace) :global(.warning-box) {
+padding:20px;
+background:#362c1e;
+border:1px solid #89704a;
+border-radius:7px;
+margin-bottom:20px
+}
+:global(.addon-workspace) :global(.danger-note) strong,
+:global(.addon-workspace) :global(.warning-box) h3 {
+color:#f3d398
+}
+:global(.addon-workspace) :global(.danger-note) p {
+margin-bottom:0
+}
+:global(.addon-workspace) :global(.error-text) {
+color:#ffb8b1
+}
+:global(.addon-workspace) input[aria-invalid=true] {
+border-color:#ffb8b1
+}
+:global(.addon-workspace) progress {
+width:100%;
+height:12px;
+display:block;
+accent-color:var(--color-primary);
+margin:12px 0
+}
+:global(.addon-workspace) fieldset {
+border:1px solid var(--color-border);
+border-radius:6px
+}
+:global(.addon-workspace) form+form {
+margin-top:25px
+}
+:global(.addon-workspace) :global(.page-footer) {
+display:flex;
+justify-content:space-between;
+padding:14px 0 28px;
+font-size:.75rem;
+color:var(--color-text-secondary);
+gap:20px
+}
+@media(max-width:1150px) {
+:global(.addon-workspace) :global(.workspace) {
+grid-template-columns:218px minmax(0,1fr)
+}
+:global(.addon-workspace) main {
+padding:30px 26px 0
+}
+:global(.addon-workspace) :global(.media-row) {
+grid-template-columns:18px 58px minmax(0,1fr) 66px;
+gap:12px
+}
+:global(.addon-workspace) :global(.thumb) {
+width:58px;
+height:52px
+}
+:global(.addon-workspace) :global(.included) {
+display:block;
+grid-column:3;
+margin-top:-9px
+}
+:global(.addon-workspace) :global(.row-action) {
+grid-column:4;
+grid-row:1 / span 2
+}
+:global(.addon-workspace) :global(.option-row) {
+grid-template-columns:minmax(0,1fr) auto
+}
+:global(.addon-workspace) :global(.option-value) {
+grid-column:1;
+border:0;
+padding:0
+}
+:global(.addon-workspace) :global(.option-row)>a {
+grid-column:2;
+grid-row:1 / span 2
+}
+}
+@media(max-width:800px) {
+:global(.addon-workspace) :global(.app-header) {
+height:66px;
+gap:20px;
+padding:0 20px
+}
+:global(.addon-workspace) :global(.app-location) {
+display:none
+}
+:global(.addon-workspace) :global(.workspace) {
+display:block
+}
+:global(.addon-workspace) :global(.local-nav) {
+position:static;
+padding:16px 20px;
+border-right:0;
+border-bottom:1px solid var(--color-table-line)
+}
+:global(.addon-workspace) :global(.back),
+:global(.addon-workspace) :global(.mini-art),
+:global(.addon-workspace) :global(.nav-title),
+:global(.addon-workspace) :global(.local-nav)>:global(.muted),
+:global(.addon-workspace) :global(.nav-foot) {
+display:none
+}
+:global(.addon-workspace) :global(.local-nav) nav {
+grid-template-columns:repeat(4,minmax(0,1fr));
+gap:7px;
+margin:0
+}
+:global(.addon-workspace) :global(.local-nav) nav a {
+padding:10px;
+justify-content:center;
+text-align:center;
+font-size:.82rem
+}
+:global(.addon-workspace) :global(.count) {
+display:none
+}
+:global(.addon-workspace) main {
+padding:28px 20px 0
+}
+:global(.addon-workspace) :global(.page-heading) {
+gap:12px
+}
+:global(.addon-workspace) :global(.page-heading) :global(.badge) {
+font-size:.72rem
+}
+:global(.addon-workspace) :global(.grid-3) {
+grid-template-columns:1fr
+}
+:global(.addon-workspace) :global(.facts) {
+grid-template-columns:repeat(2,minmax(0,1fr))
+}
+}
+@media(max-width:520px) {
+:global(.addon-workspace) :global(.app-header) {
+padding:0 16px
+}
+:global(.addon-workspace) :global(.brand) {
+font-size:1.35rem
+}
+:global(.addon-workspace) :global(.app-header)>:global(.text-link) {
+font-size:.74rem
+}
+:global(.addon-workspace) :global(.local-nav) {
+padding:12px 14px
+}
+:global(.addon-workspace) :global(.local-nav) nav {
+grid-template-columns:repeat(2,minmax(0,1fr))
+}
+:global(.addon-workspace) main {
+padding:25px 14px 0
+}
+:global(.addon-workspace) :global(.page-heading) {
+display:block;
+margin-bottom:20px
+}
+:global(.addon-workspace) :global(.page-heading) :global(.badge) {
+margin-top:14px
+}
+:global(.addon-workspace) :global(.panel),
+:global(.addon-workspace) :global(.settings-form) {
+padding:18px;
+margin-bottom:18px
+}
+:global(.addon-workspace) :global(.section-heading) {
+margin-bottom:19px
+}
+:global(.addon-workspace) :global(.readiness-top) {
+padding:20px 18px 12px;
+gap:12px;
+align-items:flex-start
+}
+:global(.addon-workspace) :global(.check-circle) {
+width:32px;
+height:32px;
+font-size:1rem
+}
+:global(.addon-workspace) :global(.readiness) h2 {
+font-size:1.12rem
+}
+:global(.addon-workspace) :global(.metric-grid) {
+grid-template-columns:repeat(2,minmax(0,1fr));
+padding:10px 18px 20px;
+gap:18px
+}
+:global(.addon-workspace) :global(.metric-grid)>div {
+padding-left:16px
+}
+:global(.addon-workspace) :global(.metric-grid)>div:nth-child(3) {
+border:0;
+padding-left:0
+}
+:global(.addon-workspace) :global(.metric-grid) strong {
+font-size:1.8rem
+}
+:global(.addon-workspace) :global(.metric-grid) span {
+font-size:.76rem
+}
+:global(.addon-workspace) :global(.readiness-bottom) {
+padding:12px 18px
+}
+:global(.addon-workspace) :global(.filter-grid) {
+grid-template-columns:minmax(0,1fr) auto
+}
+:global(.addon-workspace) :global(.filter-grid)>:global(.field):first-child {
+grid-column:1 / -1
+}
+:global(.addon-workspace) :global(.media-list) {
+margin:0 -18px
+}
+:global(.addon-workspace) :global(.media-row) {
+padding:17px 18px;
+grid-template-columns:44px minmax(0,1fr);
+gap:7px 12px
+}
+:global(.addon-workspace) :global(.row-number) {
+display:none
+}
+:global(.addon-workspace) :global(.thumb) {
+width:44px;
+height:49px;
+align-self:start;
+grid-row:1
+}
+:global(.addon-workspace) :global(.media-title) {
+grid-column:2
+}
+:global(.addon-workspace) :global(.media-title)>a {
+font-size:.98rem
+}
+:global(.addon-workspace) :global(.media-title) p {
+line-height:1.55
+}
+:global(.addon-workspace) :global(.included) {
+grid-column:2;
+grid-row:2;
+margin:0
+}
+:global(.addon-workspace) :global(.row-action) {
+grid-column:2;
+grid-row:3;
+text-align:left;
+padding:6px 0
+}
+:global(.addon-workspace) :global(.list-footer) {
+display:block
+}
+:global(.addon-workspace) :global(.list-footer) span {
+display:block;
+margin-top:4px
+}
+:global(.addon-workspace) :global(.grid-2),
+:global(.addon-workspace) :global(.facts) {
+grid-template-columns:minmax(0,1fr)
+}
+:global(.addon-workspace) :global(.inline-form),
+:global(.addon-workspace) :global(.callout),
+:global(.addon-workspace) :global(.history-result) {
+align-items:stretch;
+flex-direction:column
+}
+:global(.addon-workspace) :global(.inline-form) :global(.button) {
+align-self:start
+}
+:global(.addon-workspace) :global(.disclosure) summary {
+padding:14px
+}
+:global(.addon-workspace) :global(.disclosure-body) {
+padding:16px
+}
+:global(.addon-workspace) :global(.disclosure) small {
+font-size:.81rem
+}
+:global(.addon-workspace) :global(.jump-nav) {
+gap:5px 18px
+}
+:global(.addon-workspace) :global(.form-note) {
+padding:15px
+}
+:global(.addon-workspace) :global(.save-bar) {
+align-items:stretch;
+flex-direction:column
+}
+:global(.addon-workspace) :global(.option-row) {
+grid-template-columns:minmax(0,1fr);
+gap:13px
+}
+:global(.addon-workspace) :global(.option-row)>a {
+grid-row:auto;
+grid-column:1;
+justify-self:start
+}
+:global(.addon-workspace) :global(.option-value) {
+grid-column:1
+}
+:global(.addon-workspace) :global(.history-result) :global(.badge) {
+margin-left:0;
+align-self:start
+}
+:global(.addon-workspace) :global(.page-footer) {
+flex-wrap:wrap
+}
+}
+[data-theme="light"] :global(.addon-workspace) :global(.readiness) {
+
+background:#edf5eb;
+border-color:#9ab89d
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.check-circle) {
+
+color:#256638;
+border-color:#568760
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.metric-grid)>div,
+[data-theme="light"] :global(.addon-workspace) :global(.readiness-bottom) {
+
+border-color:#b8cfb8
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.readiness-bottom) a {
+
+color:#265d33
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.local-nav) nav a[aria-current] {
+
+border-color:#97b39a
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.form-note) {
+
+background:#edf5e9;
+border-color:#a8bea2
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.media-row):hover,
+[data-theme="light"] :global(.addon-workspace) :global(.secondary):hover:not(:disabled) {
+
+background:#edf3ec
+
+}
+[data-theme="light"] :global(.addon-workspace) button:disabled {
+
+background:#e8ede7;
+color:#5c675c;
+border-color:#98a496
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.count) {
+
+border-color:#97b39a
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.danger-note),
+[data-theme="light"] :global(.addon-workspace) :global(.warning-box) {
+
+background:#fff5dd
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.danger-note) strong,
+[data-theme="light"] :global(.addon-workspace) :global(.warning-box) h3 {
+
+color:#6b470a
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.error-text) {
+
+color:#a12c25
+
+}
+[data-theme="light"] :global(.addon-workspace) input[aria-invalid=true] {
+
+border-color:#a12c25
+
+}
+@media print {
+:global(.addon-workspace) :global(.app-header),
+:global(.addon-workspace) :global(.local-nav),
+:global(.addon-workspace) :global(.page-footer) {
+display:none
+}
+:global(.addon-workspace) :global(.workspace) {
+display:block
+}
+:global(.addon-workspace) main {
+padding:0
+}
+}
+
+/* visual.css */
+:global(.addon-workspace) {
+--section-accent: #a4d8b6;
+}
+:global(.addon-workspace):global(.view-settings) {
+--section-accent: #e4ba7e;
+}
+:global(.addon-workspace):global(.view-options) {
+--section-accent: #9ccded;
+}
+:global(.addon-workspace):global(.view-activity) {
+--section-accent: #ccb9e9;
+}
+:global(.addon-workspace) :global(.ui-symbol) {
+display: inline-block; width: 24px; height: 24px; flex: 0 0 24px; vertical-align: middle;
+}
+:global(.addon-workspace) :global(.content-navigation) :global(.ui-symbol) {
+width: 18px; height: 18px; flex-basis: 18px;
+}
+:global(.addon-workspace) :global(.content-navigation) > a[aria-current] {
+border-color: var(--section-accent); color: var(--section-accent); background: transparent;
+}
+:global(.addon-workspace) :global(.page-heading) {
+align-items: center; justify-content: flex-start;
+}
+:global(.addon-workspace) :global(.page-heading) > div:not(:global(.page-symbol)):not(:global(.cover-art)) {
+flex: 1;
+}
+:global(.addon-workspace) :global(.page-heading) > :global(.badge) {
+align-self: flex-start;
+}
+:global(.addon-workspace) :global(.page-symbol) {
+width: 72px; height: 72px; border: 1px solid currentColor; border-radius: 17px; color: var(--section-accent); display: grid; place-items: center; flex: 0 0 72px; background: #ffffff04;
+}
+:global(.addon-workspace) :global(.page-symbol) :global(.ui-symbol) {
+width: 38px; height: 38px;
+}
+:global(.addon-workspace) :global(.cover-art) {
+width: 154px; height: 109px; flex: 0 0 154px; overflow: hidden; border-radius: 7px; border: 1px solid #8d775a;
+}
+:global(.addon-workspace) :global(.cover-art) img {
+width: 100%; height: 100%; object-fit: cover;
+}
+:global(.addon-workspace) :global(.media-masthead) {
+gap: 25px; padding: 8px 0 12px;
+}
+:global(.addon-workspace) :global(.thumb) {
+width: 90px; height: 62px; padding: 0; border-radius: 5px;
+}
+:global(.addon-workspace) :global(.thumb)::before {
+display: none;
+}
+:global(.addon-workspace) :global(.thumb) img {
+display: block; width: 100%; height: 100%; object-fit: cover;
+}
+:global(.addon-workspace) :global(.media-row) {
+grid-template-columns: 22px 90px minmax(0,1fr) 80px 72px;
+}
+:global(.addon-workspace) :global(.section-heading) h2 > :global(.ui-symbol) {
+margin-right: 7px; color: var(--section-accent);
+}
+:global(.addon-workspace):global(.view-items) :global(.readiness) {
+background: #1e2922; border-width: 1px; border-radius: 8px;
+}
+:global(.addon-workspace):global(.view-items) :global(.readiness-top) {
+padding: 16px 23px 8px;
+}
+:global(.addon-workspace):global(.view-items) :global(.metric-grid) {
+padding: 5px 23px 15px;
+}
+:global(.addon-workspace):global(.view-items) :global(.metric-grid) strong {
+font-size: 26px;
+}
+:global(.addon-workspace):global(.view-items) :global(.readiness-bottom) {
+padding: 9px 23px;
+}
+:global(.addon-workspace):global(.view-items) :global(.item-tools) {
+border: 0; padding: 6px 0; background: transparent;
+}
+:global(.addon-workspace) :global(.task-map) {
+display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; margin-bottom: 28px;
+}
+:global(.addon-workspace) :global(.task-map) > a {
+display: flex; align-items: center; gap: 14px; text-decoration: none; padding: 20px 17px; background: #302c25; border-radius: 8px; border: 1px solid #6c5840;
+}
+:global(.addon-workspace) :global(.task-map) :global(.task-delivery) {
+background: #24313a; border-color: #4d6c80;
+}
+:global(.addon-workspace) :global(.task-map) :global(.task-metadata) {
+background: #312b36; border-color: #706078;
+}
+:global(.addon-workspace) :global(.task-symbol) {
+display: grid; place-items: center; color: #e4ba7e; width: 42px; height: 47px; flex: 0 0 42px;
+}
+:global(.addon-workspace) :global(.task-symbol) :global(.ui-symbol) {
+width: 36px; height: 36px;
+}
+:global(.addon-workspace) :global(.task-delivery) :global(.task-symbol) {
+color: #9ccded;
+}
+:global(.addon-workspace) :global(.task-metadata) :global(.task-symbol) {
+color: #ccb9e9;
+}
+:global(.addon-workspace) :global(.task-map) strong {
+display: block; font-size: 17px; line-height: 1.3; margin: 5px 0;
+}
+:global(.addon-workspace) :global(.task-map) small,
+:global(.addon-workspace) :global(.task-map) a > span > span {
+display: block; font-size: 11px; color: var(--color-text-secondary);
+}
+:global(.addon-workspace):global(.view-settings) :global(.settings-form) {
+border: 0; padding: 0; background: transparent;
+}
+:global(.addon-workspace):global(.view-settings) :global(.form-note) {
+background: transparent; border: 0; padding: 0 0 20px; font-size: 12px;
+}
+:global(.addon-workspace):global(.view-settings) :global(.form-section) {
+padding: 26px 30px; background: var(--color-surface); border: 1px solid var(--color-table-line); border-radius: 8px; margin-bottom: 24px;
+}
+:global(.addon-workspace):global(.view-settings) :global(.form-section) > :global(.eyebrow) {
+display: none;
+}
+:global(.addon-workspace) :global(.section-title) {
+display: flex; gap: 12px; align-items: center;
+}
+:global(.addon-workspace) #source :global(.section-title) {
+color: #e4ba7e;
+}
+:global(.addon-workspace) #delivery :global(.section-title) {
+color: #9ccded;
+}
+:global(.addon-workspace) #metadata :global(.section-title) {
+color: #ccb9e9;
+}
+:global(.addon-workspace) :global(.source-flow) {
+display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 15px; padding: 18px 0 22px; margin-bottom: 20px; border-bottom: 1px dashed #71624c;
+}
+:global(.addon-workspace) :global(.source-flow) > div {
+display: flex; align-items: center; gap: 10px; font-size: 13px;
+}
+:global(.addon-workspace) :global(.source-flow) > span {
+color: #bca277;
+}
+:global(.addon-workspace) :global(.source-flow) :global(.ui-symbol) {
+color: #d2b27d;
+}
+:global(.addon-workspace) :global(.delivery-layout) {
+display: block;
+}
+:global(.addon-workspace) :global(.delivery-choices) {
+padding: 0; border: 0; margin: 0 0 23px;
+}
+:global(.addon-workspace) :global(.delivery-choices) legend {
+font-size: 14px; font-weight: 600; padding-bottom: 13px;
+}
+:global(.addon-workspace) :global(.mode-grid) {
+display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 13px;
+}
+:global(.addon-workspace) :global(.mode-choice) {
+position: relative; display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--color-border); background: var(--color-bg); padding: 19px; border-radius: 8px; cursor: pointer;
+}
+:global(.addon-workspace) input[type=radio] {
+display: inline-block; width: 18px; height: 18px; min-height: 18px; padding: 0; accent-color: var(--color-primary);
+}
+:global(.addon-workspace) :global(.mode-choice) > input {
+position: absolute; right: 14px; top: 14px;
+}
+:global(.addon-workspace) :global(.mode-art) {
+display: flex; align-items: center; height: 43px; color: #9ccded;
+}
+:global(.addon-workspace) :global(.mode-art) :global(.ui-symbol) {
+width: 32px; height: 32px;
+}
+:global(.addon-workspace) :global(.mode-choice) strong {
+font-size: 15px;
+}
+:global(.addon-workspace) :global(.mode-choice) small {
+font-size: 12px;
+}
+:global(.addon-workspace) :global(.mode-choice):has(input:checked) {
+border: 2px solid #8abedd; padding: 18px; background: #263945;
+}
+:global(.addon-workspace) :global(.mode-choice):focus-within {
+outline: 2px solid var(--focus); outline-offset: 3px;
+}
+:global(.addon-workspace) :global(.saved-appearance) {
+display: flex; align-items: center; gap: 20px; padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--color-table-line);
+}
+:global(.addon-workspace) :global(.saved-appearance) img {
+width: 110px; height: 80px; object-fit: cover; border: 1px solid #786982; border-radius: 5px;
+}
+:global(.addon-workspace) :global(.saved-appearance) strong {
+font-size: 20px;
+}
+:global(.addon-workspace) :global(.saved-appearance) p {
+margin: 4px 0; font-size: 12px;
+}
+:global(.addon-workspace) :global(.saved-appearance) small {
+font-size: 11px;
+}
+:global(.addon-workspace):global(.view-options) :global(.panel) {
+padding: 18px 0; border: 0; border-radius: 0; background: transparent; margin-bottom: 0;
+}
+:global(.addon-workspace):global(.view-options) :global(.panel) + :global(.panel) {
+border-top: 1px solid var(--color-table-line);
+}
+:global(.addon-workspace):global(.view-options) :global(.section-heading) {
+margin-bottom: 12px;
+}
+:global(.addon-workspace):global(.view-options) :global(.page-heading) {
+margin-bottom: 6px;
+}
+:global(.addon-workspace):global(.view-options) :global(.compact-option) {
+display: grid; grid-template-columns: minmax(0,1fr) auto auto 72px; align-items: center; gap: 8px 16px; padding: 4px 0; margin: 0;
+}
+:global(.addon-workspace):global(.view-options) :global(.compact-option) + :global(.compact-option) {
+border-top: 1px solid var(--color-table-line);
+}
+:global(.addon-workspace):global(.view-options) :global(.option-leading) {
+display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-width: 0;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-toggle) {
+display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-weight: 550;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-toggle) input {
+width: 18px; height: 18px; flex: 0 0 18px; accent-color: var(--color-primary);
+}
+:global(.addon-workspace):global(.view-options) :global(.saved-option) {
+color: var(--color-text-secondary); font-size: 12px;
+}
+:global(.addon-workspace):global(.view-options) :global(.enabled-note) {
+flex-basis: 100%; margin-left: 28px; font-size: 12px; color: var(--color-text-secondary);
+}
+:global(.addon-workspace):global(.view-options) :global(.browser-choice) {
+display: flex; align-items: center; gap: 8px; font-size: 13px;
+}
+:global(.addon-workspace):global(.view-options) :global(.browser-choice) select {
+width: auto; max-width: 100%;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-help) {
+min-width: 0;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-help) summary {
+cursor: pointer; min-height: 44px; align-content: center; font-size: 13px;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-help)[open] {
+grid-column: 1 / -1; padding: 0 0 10px 28px;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-help) p {
+max-width: 80ch; margin: 4px 0 12px; font-size: 13px;
+}
+:global(.addon-workspace):global(.view-options) :global(.item-access-link) {
+margin: 0 0 12px;
+}
+:global(.addon-workspace):global(.view-options) :global(.inline-form) {
+display: grid; grid-template-columns: minmax(0,340px) auto; justify-content: start;
+}
+@supports selector(:has(*)) {
+.addon-workspace.view-options .compact-option:not(:has(#cookies-enabled:checked)) .browser-choice {
+display: none;
+}
+.addon-workspace.view-options #sponsorblock:not(:has(input[type=checkbox]:checked)) .enabled-note {
+display: none;
+}
+}
+@media(max-width:1050px) {
+:global(.addon-workspace):global(.view-options) :global(.compact-option) {
+grid-template-columns: minmax(0,1fr) auto 72px; gap: 4px 12px;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-leading) {
+grid-column: 1 / -1;
+}
+:global(.addon-workspace):global(.view-options) :global(.saved-option) {
+padding-left: 28px;
+}
+}
+@media(max-width:520px) {
+:global(.addon-workspace):global(.view-options) :global(.inline-form) {
+grid-template-columns: minmax(0,1fr);
+}
+:global(.addon-workspace):global(.view-options) :global(.compact-option) {
+grid-template-columns: minmax(0,1fr) auto; padding: 8px 0;
+}
+:global(.addon-workspace):global(.view-options) :global(.saved-option) {
+grid-column: 1 / -1;
+}
+:global(.addon-workspace):global(.view-options) :global(.compact-option) > button {
+justify-self: start; margin-left: 28px;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-help) {
+justify-self: start;
+}
+:global(.addon-workspace):global(.view-options) :global(.browser-choice) {
+flex-wrap: wrap; margin-left: 28px;
+}
+}
+:global(.addon-workspace):global(.view-activity) :global(.publication-ledger) {
+padding: 25px; border: 1px solid #695d7c; background: #292631;
+}
+:global(.addon-workspace) :global(.publication-journey) {
+display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); list-style: none; margin: 30px 0; padding: 0; position: relative;
+}
+:global(.addon-workspace) :global(.publication-journey)::before {
+content: ""; position: absolute; left: 16%; right: 16%; top: 25px; height: 2px; background: #786c8b;
+}
+:global(.addon-workspace) :global(.publication-journey) li {
+display: grid; justify-items: center; text-align: center; gap: 6px; position: relative;
+}
+:global(.addon-workspace) :global(.journey-symbol) {
+display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: #393145; border: 1px solid #a08dbb; color: #d5c3f1;
+}
+:global(.addon-workspace) :global(.publication-journey) small {
+color: #a6d9b6; font-size: 11px;
+}
+:global(.addon-workspace):global(.view-activity) :global(.history-result) {
+border-top: 1px solid #61566f; padding-top: 22px;
+}
+@media(max-width:1100px) {
+:global(.addon-workspace) :global(.task-map) {
+grid-template-columns: 1fr;
+}
+:global(.addon-workspace) :global(.task-map) a {
+padding: 13px 18px;
+}
+:global(.addon-workspace) :global(.task-map) a > span:last-child {
+display: grid; grid-template-columns: 170px 1fr; align-items: center; gap: 0 18px; flex: 1;
+}
+:global(.addon-workspace) :global(.task-map) a > span:last-child > span {
+grid-column: 2;
+}
+:global(.addon-workspace) :global(.task-map) strong {
+margin: 0;
+}
+:global(.addon-workspace) :global(.media-row) {
+grid-template-columns: 18px 76px minmax(0,1fr) 66px;
+}
+:global(.addon-workspace) :global(.thumb) {
+width: 76px; height: 56px;
+}
+:global(.addon-workspace) :global(.included) {
+grid-column: 3;
+}
+}
+@media(max-width:850px) {
+:global(.addon-workspace) :global(.mode-grid) {
+grid-template-columns: 1fr;
+}
+:global(.addon-workspace) :global(.mode-choice) {
+padding-left: 70px; min-height: 105px;
+}
+:global(.addon-workspace) :global(.mode-choice):has(input:checked) {
+padding-left: 69px;
+}
+:global(.addon-workspace) :global(.mode-art) {
+position: absolute; top: 20px; left: 20px;
+}
+:global(.addon-workspace) :global(.source-flow) {
+gap: 8px;
+}
+:global(.addon-workspace) :global(.source-flow) > div {
+flex-direction: column; text-align: center;
+}
+:global(.addon-workspace) :global(.page-heading) {
+flex-wrap: wrap;
+}
+}
+@media(max-width:520px) {
+:global(.addon-workspace) :global(.page-heading) {
+display: flex; gap: 14px; align-items: center;
+}
+:global(.addon-workspace) :global(.page-heading) > div:not(:global(.cover-art)):not(:global(.page-symbol)) {
+flex: 1 1 170px;
+}
+:global(.addon-workspace) :global(.page-symbol) {
+width: 56px; height: 56px; flex-basis: 56px; border-radius: 12px;
+}
+:global(.addon-workspace) :global(.page-symbol) :global(.ui-symbol) {
+width: 30px; height: 30px;
+}
+:global(.addon-workspace) :global(.cover-art) {
+width: 84px; height: 76px; flex-basis: 84px;
+}
+:global(.addon-workspace) :global(.page-heading) :global(.badge) {
+margin: 0;
+}
+:global(.addon-workspace) :global(.media-row) {
+grid-template-columns: 62px minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.thumb) {
+width: 62px; height: 52px;
+}
+:global(.addon-workspace) :global(.included),
+:global(.addon-workspace) :global(.row-action) {
+grid-column: 2;
+}
+:global(.addon-workspace) :global(.task-map) a > span:last-child {
+display: block;
+}
+:global(.addon-workspace) :global(.task-map) strong {
+margin: 3px 0;
+}
+:global(.addon-workspace):global(.view-settings) :global(.form-section) {
+padding: 20px;
+}
+:global(.addon-workspace) :global(.saved-appearance) {
+align-items: flex-start; gap: 13px;
+}
+:global(.addon-workspace) :global(.saved-appearance) img {
+width: 70px; height: 65px;
+}
+:global(.addon-workspace) :global(.saved-appearance) strong {
+font-size: 17px;
+}
+:global(.addon-workspace) :global(.content-navigation) :global(.ui-symbol) {
+width: 16px; height: 16px; flex-basis: 16px;
+}
+:global(.addon-workspace) :global(.content-navigation) a {
+gap: 6px;
+}
+}
+[data-theme="light"] :global(.addon-workspace):global(.view-settings) {
+
+--section-accent: #775219;
+
+}
+[data-theme="light"] :global(.addon-workspace):global(.view-options) {
+
+--section-accent: #255f7a;
+
+}
+[data-theme="light"] :global(.addon-workspace):global(.view-activity) {
+
+--section-accent: #6a4389;
+
+}
+[data-theme="light"] :global(.addon-workspace):global(.view-items) :global(.readiness) {
+
+background: #edf5eb;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.task-map) > a {
+
+background: #faf1df;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.task-map) :global(.task-delivery) {
+
+background: #eaf2f7;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.task-map) :global(.task-metadata) {
+
+background: #f1ecf7;
+
+}
+[data-theme="light"] :global(.addon-workspace) #source :global(.section-title),
+[data-theme="light"] :global(.addon-workspace) :global(.task-symbol) {
+
+color: #825619;
+
+}
+[data-theme="light"] :global(.addon-workspace) #delivery :global(.section-title),
+[data-theme="light"] :global(.addon-workspace) :global(.task-delivery) :global(.task-symbol) {
+
+color: #255f7a;
+
+}
+[data-theme="light"] :global(.addon-workspace) #metadata :global(.section-title),
+[data-theme="light"] :global(.addon-workspace) :global(.task-metadata) :global(.task-symbol) {
+
+color: #6a4389;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.mode-choice):has(input:checked) {
+
+background: #e1eff5; border-color: #346b83;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.mode-art),
+[data-theme="light"] :global(.addon-workspace) :global(.source-flow) :global(.ui-symbol) {
+
+color: #396578;
+
+}
+[data-theme="light"] :global(.addon-workspace):global(.view-activity) :global(.publication-ledger) {
+
+background: #f2edf7;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.journey-symbol) {
+
+background: #e8ddef; color: #6a4389;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.publication-journey) small {
+
+color: #246239;
+
+}
+
+/* numbering.css */
+:global(.addon-workspace) :global(.numbering-heading) {
+display: flex;
+  align-items: center;
+  gap: 24px;
+  margin: 30px 0 22px;
+}
+:global(.addon-workspace) :global(.number-mark) {
+display: grid;
+  grid-template-columns: 18px 44px;
+  align-items: baseline;
+  flex: 0 0 auto;
+  padding: 15px 20px;
+  border: 1px solid #8598bd;
+  border-radius: 10px;
+  background: #2b3345;
+  color: #c7d9ff;
+  font-variant-numeric: tabular-nums;
+}
+:global(.addon-workspace) :global(.number-mark) strong {
+font-size: 27px; line-height: 1.3;
+}
+:global(.addon-workspace) :global(.numbering-heading) p {
+margin-bottom: 5px;
+}
+:global(.addon-workspace) :global(.numbering-form) {
+margin-top: 28px; max-width: 1050px;
+}
+:global(.addon-workspace) :global(.number-step) {
+display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 18px;
+  padding: 25px 0;
+  border-top: 1px solid var(--color-table-line);
+}
+:global(.addon-workspace) :global(.step-index) {
+display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #8598bd;
+  color: #c7d9ff;
+  background: #2b3345;
+  font-weight: 650;
+}
+:global(.addon-workspace) :global(.step-content) h2 {
+margin: 1px 0 20px;
+}
+:global(.addon-workspace) :global(.step-content) > :global(.field) {
+max-width: 650px;
+}
+:global(.addon-workspace) :global(.season-method),
+:global(.addon-workspace) :global(.number-range) {
+padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
+}
+:global(.addon-workspace) :global(.season-method) legend,
+:global(.addon-workspace) :global(.number-range) legend {
+font-size: 13px;
+  padding: 0 0 12px;
+  font-weight: 600;
+}
+:global(.addon-workspace) :global(.season-methods) {
+display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+}
+:global(.addon-workspace) :global(.season-choice) {
+position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+:global(.addon-workspace) :global(.season-choice) > input {
+position: absolute; top: 16px; right: 16px;
+}
+:global(.addon-workspace) :global(.season-choice):has(input:checked) {
+outline: 2px solid #a5bcea; outline-offset: -2px; background: #2b3345;
+}
+:global(.addon-workspace) :global(.season-choice):focus-within {
+outline: 3px solid var(--focus); outline-offset: 3px;
+}
+:global(.addon-workspace) :global(.season-strip) {
+display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding-right: 18px;
+}
+:global(.addon-workspace) :global(.season-strip) > :not(i) {
+display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 34px;
+  padding: 0 5px;
+  border: 1px solid #8695b2;
+  background: #303d55;
+  color: #d8e5ff;
+  font: 600 13px/1.2 ui-monospace, monospace;
+  border-radius: 3px;
+}
+:global(.addon-workspace) :global(.season-strip) > b {
+background: #b3c9f2; color: #18263b;
+}
+:global(.addon-workspace) :global(.season-strip) i {
+font-style: normal;
+}
+:global(.addon-workspace) :global(.number-rule) {
+margin-top: 22px; padding: 23px; border: 1px solid #8598bd; border-radius: 8px; background: var(--color-surface);
+}
+:global(.addon-workspace) :global(.episode-pair) {
+display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap;
+}
+:global(.addon-workspace) :global(.episode-pair) > :global(.field) {
+flex: 0 1 150px; min-width: 0;
+}
+:global(.addon-workspace) :global(.number-input) {
+display: flex; align-items: center; border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; background: var(--color-bg);
+}
+:global(.addon-workspace) :global(.number-input) > span {
+padding: 10px; font-size: 21px; color: #a5bcea; font-weight: 600;
+}
+:global(.addon-workspace) :global(.number-input) > input {
+width: 100%; min-width: 0; border: 0; border-radius: 0; font-size: 23px; font-weight: 650; font-variant-numeric: tabular-nums;
+}
+:global(.addon-workspace) :global(.number-input):focus-within {
+outline: 3px solid var(--focus); outline-offset: 3px;
+}
+:global(.addon-workspace) :global(.auto-reset) {
+padding-top: 29px; flex: 1 1 200px;
+}
+:global(.addon-workspace) :global(.auto-reset) p {
+font-size: 13px; margin-top: 5px;
+}
+:global(.addon-workspace) :global(.number-notice) {
+padding: 14px 17px; background: #403728; border: 1px solid #a08d5b; border-radius: 6px; color: #efdcaf; font-size: 13px; margin-bottom: 0;
+}
+:global(.addon-workspace) :global(.number-rule) :global(.auto-only) > :global(.field) {
+max-width: 360px;
+}
+:global(.addon-workspace) :global(.number-range) :global(.limited-only) {
+max-width: 240px; margin: 10px 0 18px 32px;
+}
+:global(.addon-workspace) :global(.numbering-actions) {
+display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 23px; background: #2b3345; border: 1px solid #8598bd; border-radius: 8px; margin: 6px 0 15px;
+}
+:global(.addon-workspace) :global(.numbering-actions) p {
+font-size: 13px; margin: 4px 0 0;
+}
+:global(.addon-workspace) :global(.item-numbering) {
+grid-column: 1 / -1; border: 1px solid #8598bd; border-radius: 8px; padding: 20px; min-width: 0;
+}
+:global(.addon-workspace) :global(.item-numbering) legend {
+padding: 0 8px; font-weight: 600;
+}
+:global(.addon-workspace) :global(.numbering-kind) {
+display: flex; flex-wrap: wrap; gap: 5px 24px; margin-bottom: 18px;
+}
+:global(.addon-workspace) :global(.item-unnumbered) {
+margin: 0;
+}
+:global(.addon-workspace) :global(.numbering-launch) {
+display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin: 22px 0; padding: 24px; background: #2b3345; border: 1px solid #8598bd; border-radius: 8px;
+}
+:global(.addon-workspace) :global(.numbering-launch) > div:nth-child(2) {
+flex: 1 1 220px;
+}
+:global(.addon-workspace) :global(.numbering-launch) p {
+margin: 0;
+}
+:global(.addon-workspace) :global(.episode-code) {
+font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px;
+}
+:global(.addon-workspace) :global(.episode-code):global(.proposed) {
+display: inline-block; padding: 4px 8px; border: 1px solid #8598bd; border-radius: 4px; color: #c7d9ff; background: #2b3345;
+}
+:global(.addon-workspace) :global(.number-preview-table) {
+overflow-x: auto; margin: 22px 0;
+}
+:global(.addon-workspace) :global(.number-preview-table) table {
+width: 100%; border-collapse: collapse;
+}
+:global(.addon-workspace) :global(.number-preview-table) caption {
+text-align: left; padding-bottom: 12px; color: var(--color-text-secondary);
+}
+:global(.addon-workspace) :global(.number-preview-table) td,
+:global(.addon-workspace) :global(.number-preview-table) th {
+text-align: left; border-bottom: 1px solid var(--color-table-line); padding: 13px 10px;
+}
+:global(.addon-workspace) :global(.number-preview-table) th[scope=row] {
+font-weight: 400;
+}
+@supports selector(:has(*)) {
+.addon-workspace .numbering-form:not(:has(#auto-season:checked)) .auto-only,
+.addon-workspace .numbering-form:has(#auto-season:checked) .manual-only,
+.addon-workspace .number-range:not(:has(#limited-range:checked)) .limited-only,
+.addon-workspace .item-numbering:has(#unnumbered:checked) .item-numbered,
+.addon-workspace .item-numbering:not(:has(#unnumbered:checked)) .item-unnumbered {
+display: none;
+}
+}
+@media (max-width: 850px) {
+:global(.addon-workspace) :global(.season-methods) {
+grid-template-columns: 1fr;
+}
+}
+@media (max-width: 520px) {
+:global(.addon-workspace) :global(.numbering-heading) {
+align-items: flex-start; gap: 13px;
+}
+:global(.addon-workspace) :global(.number-mark) {
+padding: 10px; grid-template-columns: 13px 28px;
+}
+:global(.addon-workspace) :global(.number-mark) strong {
+font-size: 21px;
+}
+:global(.addon-workspace) :global(.numbering-heading) h1 {
+font-size: 24px;
+}
+:global(.addon-workspace) :global(.number-step) {
+grid-template-columns: 26px minmax(0,1fr); gap: 9px;
+}
+:global(.addon-workspace) :global(.step-index) {
+width: 25px; height: 25px; font-size: 13px;
+}
+:global(.addon-workspace) :global(.number-rule) {
+padding: 15px;
+}
+:global(.addon-workspace) :global(.episode-pair) {
+gap: 10px;
+}
+:global(.addon-workspace) :global(.episode-pair) > :global(.field) {
+flex: 1 1 80px;
+}
+:global(.addon-workspace) :global(.number-input) > input {
+padding-left: 4px;
+}
+:global(.addon-workspace) :global(.numbering-actions) {
+padding: 17px;
+}
+:global(.addon-workspace) :global(.numbering-actions) :global(.button) {
+width: 100%;
+}
+:global(.addon-workspace) :global(.season-choice) {
+padding: 18px;
+}
+:global(.addon-workspace) :global(.number-preview-table) td,
+:global(.addon-workspace) :global(.number-preview-table) th {
+padding: 12px 4px;
+}
+}
+[data-theme="light"] :global(.addon-workspace) :global(.number-mark),
+[data-theme="light"] :global(.addon-workspace) :global(.step-index),
+[data-theme="light"] :global(.addon-workspace) :global(.season-choice):has(input:checked),
+[data-theme="light"] :global(.addon-workspace) :global(.numbering-actions),
+[data-theme="light"] :global(.addon-workspace) :global(.numbering-launch),
+[data-theme="light"] :global(.addon-workspace) :global(.episode-code):global(.proposed) {
+
+background: #e9effa; color: #293f65;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.number-input) > span {
+
+color: #3a5582;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.number-notice) {
+
+background: #fff3d8; color: #664915;
+
+}
+@media (forced-colors: active) {
+:global(.addon-workspace) :global(.season-choice):has(input:checked) {
+outline-color: Highlight;
+}
+:global(.addon-workspace) :global(.number-input):focus-within {
+outline-color: Highlight;
+}
+}
+
+/* list-numbering.css */
+:global(.addon-workspace) :global(.sr-only) {
+position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+:global(.addon-workspace) :global(.list-study-heading) {
+display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; margin: 28px 0;
+}
+:global(.addon-workspace) :global(.list-study-heading) h1 {
+font-size: 28px;
+}
+:global(.addon-workspace) :global(.list-study-heading) > a {
+flex-shrink: 0;
+}
+:global(.addon-workspace) :global(.episode-editor) {
+container: episode-list / inline-size;
+}
+:global(.addon-workspace) #episode-edits {
+margin: 0;
+}
+:global(.addon-workspace) :global(.editor-heading) {
+display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 20px 0 10px;
+}
+:global(.addon-workspace) :global(.editor-heading) p {
+margin: 5px 0; font-size: 13px;
+}
+:global(.addon-workspace) :global(.order-note) {
+color: var(--color-text-secondary); font-size: 12px;
+}
+:global(.addon-workspace) :global(.editor-footnote) {
+font-size: 12px; margin: 12px 0 18px;
+}
+:global(.addon-workspace) :global(.selection-tools) {
+display: flex; align-items: center; flex-wrap: wrap; gap: 12px; background: #283b4a; border: 1px solid #87b3d6; border-radius: 6px; padding: 13px; margin: 10px 0;
+}
+:global(.addon-workspace) :global(.selection-label) {
+flex: 1 1 200px;
+}
+:global(.addon-workspace) :global(.selection-label) strong {
+color: #d1e8ff;
+}
+:global(.addon-workspace) :global(.selection-label) small {
+font-size: 11px;
+}
+:global(.addon-workspace) :global(.compact-field) {
+display: grid; gap: 4px; font-size: 12px; max-width: 150px;
+}
+:global(.addon-workspace) :global(.compact-field) input {
+max-width: 110px; min-height: 36px; padding: 5px 9px;
+}
+:global(.addon-workspace) :global(.selection-tools) > :global(.compact-field) {
+width: 76px;
+}
+:global(.addon-workspace) :global(.selection-tools) :global(.button) {
+min-height: 38px; font-size: 12px; padding: 8px 12px;
+}
+:global(.addon-workspace) :global(.selection-numbering) > summary {
+padding: 10px; border: 1px solid #87b3d6; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+:global(.addon-workspace) :global(.selection-numbering)[open] {
+flex: 1 1 100%;
+}
+:global(.addon-workspace) :global(.selection-fields) {
+display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding-top: 13px;
+}
+:global(.addon-workspace) :global(.selection-fields) p {
+flex: 1 1 280px; margin: 0; font-size: 12px;
+}
+:global(.addon-workspace) :global(.episode-column-head),
+:global(.addon-workspace) :global(.episode-row) {
+display: grid; grid-template-columns: 34px minmax(180px,1fr) 143px 66px 212px 58px; gap: 14px; align-items: center;
+}
+:global(.addon-workspace) :global(.episode-column-head) {
+font-size: 11px; color: var(--color-text-secondary); padding: 10px 12px; border-bottom: 1px solid var(--color-border);
+}
+:global(.addon-workspace) :global(.episode-rows) {
+list-style: none; margin: 0; padding: 0;
+}
+:global(.addon-workspace) :global(.episode-row) {
+position: relative; padding: 15px 12px; border-bottom: 1px solid var(--color-table-line); scroll-margin-top: 80px;
+}
+:global(.addon-workspace) :global(.episode-row):target {
+outline: 2px solid var(--focus); outline-offset: -2px;
+}
+:global(.addon-workspace) :global(.row-pick) {
+display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 7px; min-width: 30px; min-height: 52px; cursor: pointer;
+}
+:global(.addon-workspace) :global(.row-pick) input {
+width: 19px; height: 19px;
+}
+:global(.addon-workspace) :global(.row-pick) span {
+font-size: 11px; color: var(--color-text-secondary); font-variant-numeric: tabular-nums;
+}
+:global(.addon-workspace) :global(.episode-identity) {
+display: flex; gap: 12px; align-items: center; min-width: 0;
+}
+:global(.addon-workspace) :global(.episode-identity) > img {
+width: 52px; height: 42px; border-radius: 3px; object-fit: cover; flex-shrink: 0;
+}
+:global(.addon-workspace) :global(.episode-identity) > div {
+min-width: 0;
+}
+:global(.addon-workspace) :global(.episode-identity) a {
+text-decoration: none; font-size: 13px; font-weight: 600;
+}
+:global(.addon-workspace) :global(.episode-identity) small {
+margin-top: 5px; font-size: 11px;
+}
+:global(.addon-workspace) :global(.episode-identity) small a {
+font-size: inherit; font-weight: 400; text-decoration: underline;
+}
+:global(.addon-workspace) :global(.airdate),
+:global(.addon-workspace) :global(.runtime) {
+font-size: 12px; font-variant-numeric: tabular-nums;
+}
+:global(.addon-workspace) :global(.airdate) small,
+:global(.addon-workspace) :global(.runtime) small {
+font-size: 10px; margin-top: 5px;
+}
+:global(.addon-workspace) :global(.date-break) :global(.gap-note) {
+display: inline-block; padding: 3px 6px; color: #e6cb90; background: #3d3829; border: 1px solid #75684a; border-radius: 4px;
+}
+:global(.addon-workspace) :global(.runtime) > span:not(:global(.mobile-column)) {
+font-size: 14px;
+}
+:global(.addon-workspace) :global(.inline-pair) {
+display: flex; align-items: center; gap: 5px;
+}
+:global(.addon-workspace) :global(.inline-pair) label {
+display: flex; align-items: center; border: 1px solid var(--color-border); border-radius: 4px; min-width: 0; background: var(--color-bg);
+}
+:global(.addon-workspace) :global(.inline-pair) label > span {
+font-size: 11px; color: #bed4f6; padding-left: 7px;
+}
+:global(.addon-workspace) :global(.inline-pair) input {
+width: 57px; min-width: 0; min-height: 35px; padding: 5px 2px 5px 5px; border: 0; border-radius: 0; font-weight: 600; font-size: 14px;
+}
+:global(.addon-workspace) :global(.inline-pair) label:focus-within {
+outline: 2px solid var(--focus); outline-offset: 2px;
+}
+:global(.addon-workspace) :global(.save-number) {
+min-height: 35px; border: 1px solid var(--color-border); border-radius: 4px; background: transparent; color: var(--color-text-primary); padding: 4px 8px; font-size: 11px; cursor: pointer;
+}
+:global(.addon-workspace) :global(.row-numbering) > small {
+margin-top: 5px; font-size: 10px;
+}
+:global(.addon-workspace) :global(.row-tools) {
+display: contents;
+}
+:global(.addon-workspace) :global(.row-tools)[open]::details-content {
+display: contents;
+}
+:global(.addon-workspace) :global(.row-tools) > summary {
+display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 44px; gap: 0; padding: 4px; border: 1px solid transparent; border-radius: 5px; cursor: pointer; list-style: none;
+}
+:global(.addon-workspace) :global(.row-tools) > summary::-webkit-details-marker {
+display: none;
+}
+:global(.addon-workspace) :global(.row-tools) > summary span:first-child {
+letter-spacing: 2px; font-size: 15px;
+}
+:global(.addon-workspace) :global(.row-tools) > summary span:last-child {
+font-size: 10px;
+}
+:global(.addon-workspace) :global(.row-tools)[open] > summary {
+border-color: #87b3d6; background: #283b4a;
+}
+:global(.addon-workspace) :global(.row-tool-content) {
+grid-column: 2 / -1; background: #242f38; border: 1px solid #647e94; border-radius: 5px; padding: 17px;
+}
+:global(.addon-workspace) :global(.row-tool-heading) {
+display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 13px; margin-bottom: 16px;
+}
+:global(.addon-workspace) :global(.text-action) {
+background: transparent; color: var(--color-text-primary); border: 0; text-decoration: underline; text-underline-offset: 3px; padding: 8px 2px; cursor: pointer; font-size: 12px;
+}
+:global(.addon-workspace) :global(.range-controls) {
+display: flex; align-items: end; flex-wrap: wrap; gap: 12px;
+}
+:global(.addon-workspace) :global(.endpoint) {
+display: grid; gap: 5px; flex: 1 1 250px; font-size: 12px;
+}
+:global(.addon-workspace) :global(.endpoint) select {
+font-size: 12px;
+}
+:global(.addon-workspace) :global(.row-tool-content) p {
+margin: 12px 0; font-size: 12px;
+}
+:global(.addon-workspace) :global(.range-numbering) {
+border-top: 1px solid #647e94; margin-top: 17px; padding-top: 12px;
+}
+:global(.addon-workspace) :global(.range-numbering) > summary {
+cursor: pointer; padding: 8px 0; font-size: 13px;
+}
+:global(.addon-workspace) :global(.range-number-fields) {
+display: flex; flex-wrap: wrap; align-items: end; gap: 14px; padding: 12px 0;
+}
+:global(.addon-workspace) :global(.range-number-fields) :global(.check) {
+font-size: 12px; max-width: 250px; margin: 0;
+}
+:global(.addon-workspace) :global(.mobile-column) {
+display: none;
+}
+:global(.addon-workspace) :global(.inline-review) {
+background: #283b4a; border: 1px solid #87b3d6; padding: 18px; margin: 24px 0;
+}
+:global(.addon-workspace) :global(.inline-review) form {
+display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+}
+:global(.addon-workspace) :global(.proposed-number) {
+display: block; color: #b7e7c6; font-size: 11px; padding-top: 4px;
+}
+:global(.addon-workspace) :global(.proposed-row) {
+background: #29382f;
+}
+@supports selector(:has(*)) {
+.addon-workspace .episode-editor:not(:has(.row-pick input:checked)) .selection-tools {
+display: none;
+}
+.addon-workspace .episode-row:has(.row-pick input:checked) {
+background: #263944; outline: 1px solid #6f91a5; outline-offset: -1px;
+}
+.addon-workspace .row-tool-content:not(:has(.detect-dates:checked)) .date-field,
+.addon-workspace .row-tool-content:has(.detect-dates:checked) .manual-field {
+display: none;
+}
+}
+@container episode-list (max-width: 950px) {
+:global(.addon-workspace) :global(.episode-column-head) {
+display: none;
+}
+:global(.addon-workspace) :global(.episode-row) {
+grid-template-columns: 30px minmax(0,1fr) 100px 212px 48px; gap: 12px;
+}
+:global(.addon-workspace) :global(.episode-identity) {
+grid-column: 2 / 4;
+}
+:global(.addon-workspace) :global(.row-numbering) {
+grid-column: 4; grid-row: 1 / 3;
+}
+:global(.addon-workspace) :global(.airdate) {
+grid-column: 2; grid-row: 2;
+}
+:global(.addon-workspace) :global(.runtime) {
+grid-column: 3; grid-row: 2;
+}
+:global(.addon-workspace) :global(.row-tools) > summary {
+grid-column: 5; grid-row: 1 / 3;
+}
+:global(.addon-workspace) :global(.row-pick) {
+grid-row: 1 / 3;
+}
+:global(.addon-workspace) :global(.mobile-column) {
+display: inline; font-size: 10px; color: var(--color-text-secondary); margin-right: 6px;
+}
+}
+@container episode-list (max-width: 640px) {
+:global(.addon-workspace) :global(.episode-row) {
+grid-template-columns: 25px minmax(0,1fr) 60px; gap: 12px 8px; padding: 16px 7px;
+}
+:global(.addon-workspace) :global(.episode-identity) {
+grid-column: 2 / 4; grid-row: 1;
+}
+:global(.addon-workspace) :global(.episode-identity) > img {
+width: 40px; height: 34px;
+}
+:global(.addon-workspace) :global(.row-pick) {
+grid-row: 1;
+}
+:global(.addon-workspace) :global(.airdate) {
+grid-column: 2; grid-row: 2;
+}
+:global(.addon-workspace) :global(.runtime) {
+grid-column: 3; grid-row: 2;
+}
+:global(.addon-workspace) :global(.runtime) :global(.mobile-column) {
+display: block;
+}
+:global(.addon-workspace) :global(.row-numbering) {
+grid-column: 2; grid-row: 3;
+}
+:global(.addon-workspace) :global(.inline-pair) input {
+width: 41px;
+}
+:global(.addon-workspace) :global(.row-tools) > summary {
+grid-column: 3; grid-row: 3;
+}
+:global(.addon-workspace) :global(.row-tool-content) {
+grid-column: 1 / -1; padding: 12px;
+}
+:global(.addon-workspace) :global(.selection-tools) {
+padding: 12px; gap: 9px;
+}
+}
+@media(max-width: 700px) {
+:global(.addon-workspace) :global(.list-study-heading) {
+display: block;
+}
+}
+@media(min-width: 1000px) {
+:global(.addon-workspace) :global(.selection-tools) {
+position: sticky; top: 64px; z-index: 2;
+}
+:global(.addon-workspace) :global(.episode-row) {
+scroll-margin-top: 220px;
+}
+}
+@supports not selector(::details-content) {
+.addon-workspace .row-tools[open] {
+display: block; grid-column: 1 / -1;
+}
+.addon-workspace .row-tools[open] > summary {
+width: fit-content; margin-left: auto;
+}
+}
+[data-theme="light"] :global(.addon-workspace) :global(.content-navigation) > [aria-current] {
+
+color: #245d41;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.selection-tools),
+[data-theme="light"] :global(.addon-workspace) :global(.row-tools)[open] > summary,
+[data-theme="light"] :global(.addon-workspace) :global(.inline-review) {
+
+background: #e5f0f7;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.selection-label) strong {
+
+color: #29455d;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.row-tool-content) {
+
+background: #edf3f7;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.episode-row):has(:global(.row-pick) input:checked) {
+
+background: #e5f0f7; outline-color: #708fa5;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.inline-pair) label > span {
+
+color: #3a5582;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.date-break) :global(.gap-note) {
+
+color: #705014; border-color: #b69f73; background: #faf0d9;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.proposed-number) {
+
+color: #27683e;
+
+}
+@media(forced-colors: active) {
+:global(.addon-workspace) :global(.episode-row):has(:global(.row-pick) input:checked) {
+outline: 2px solid Highlight; outline-offset: -2px;
+}
+}
+
+/* row-actions.css */
+:global(.addon-workspace) :global(.row-command-trigger) {
+border: 1px solid transparent; border-radius: 4px; color: var(--color-text-primary); background: transparent; padding: 5px; min-height: 44px; cursor: pointer; display: flex; align-items: center; flex-direction: column; justify-content: center;
+}
+:global(.addon-workspace) :global(.row-command-trigger) span:first-child {
+letter-spacing: 2px; font-size: 15px;
+}
+:global(.addon-workspace) :global(.row-command-trigger) span:last-child {
+font-size: 10px;
+}
+:global(.addon-workspace) :global(.row-command-trigger):hover {
+background: var(--color-surface); border-color: var(--color-border);
+}
+:global(.addon-workspace) :global(.row-commands) {
+width: min(265px,calc(100vw - 24px)); max-height: calc(100dvh - 90px); overflow-y: auto; padding: 5px; border: 1px solid var(--color-border); border-radius: 6px; background: #303637; color: #edf2ef; box-shadow: 0 8px 24px #0007;
+}
+:global(.addon-workspace) :global(.row-commands):popover-open {
+display: block;
+}
+:global(.addon-workspace) :global(.command-context) {
+font-size: 11px; color: #c1cdca; padding: 9px 11px; margin: 0; border-bottom: 1px solid #55625e;
+}
+:global(.addon-workspace) :global(.command-list) {
+padding-top: 4px;
+}
+:global(.addon-workspace) :global(.command-list) button {
+display: block; width: 100%; min-height: 44px; text-align: left; background: transparent; color: inherit; border: 0; padding: 10px 12px; font-size: 13px; border-radius: 3px; cursor: pointer;
+}
+:global(.addon-workspace) :global(.command-list) button:hover,
+:global(.addon-workspace) :global(.command-list) button:focus-visible {
+background: #425551; outline-offset: -3px;
+}
+:global(.addon-workspace) :global(.command-list) :global(.command-clear) {
+margin-top: 5px; border-top: 1px solid #55625e; border-radius: 0;
+}
+@supports (position-area: bottom span-left) {
+.addon-workspace .row-commands {
+position: fixed; inset: auto; margin: 5px 0; position-area: bottom span-left; position-try-fallbacks: flip-block, flip-inline;
+}
+}
+:global(.addon-workspace) :global(.row-edit-surface) {
+grid-column: 2 / -1; padding: 18px; background: #25333a; border: 1px solid #647e8a; border-radius: 8px;
+}
+:global(.addon-workspace) :global(.context-heading) {
+display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px;
+}
+:global(.addon-workspace) :global(.context-heading) small {
+font-size: 10px; margin-bottom: 7px;
+}
+:global(.addon-workspace) :global(.context-heading) h3 {
+font-size: 17px; margin: 0;
+}
+:global(.addon-workspace) :global(.context-heading) a {
+font-size: 12px;
+}
+:global(.addon-workspace) :global(.context-fields) {
+display: flex; align-items: end; flex-wrap: wrap; gap: 14px;
+}
+:global(.addon-workspace) :global(.context-fields) :global(.endpoint) {
+flex: 1 1 250px;
+}
+:global(.addon-workspace) :global(.row-edit-surface) p {
+font-size: 12px; margin: 13px 0 0;
+}
+:global(.addon-workspace) :global(.row-edit-surface) > :global(.check) {
+margin: 14px 0; font-size: 12px;
+}
+:global(.addon-workspace) :global(.numbering-options) {
+margin-top: 14px;
+}
+:global(.addon-workspace) :global(.numbering-options) summary {
+padding: 10px 0; cursor: pointer; font-size: 12px;
+}
+:global(.addon-workspace) :global(.numbering-options) :global(.check) {
+font-size: 12px; max-width: 250px;
+}
+:global(.addon-workspace) :global(.context-footer) {
+display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px;
+}
+:global(.addon-workspace) :global(.context-footer) p {
+max-width: 600px; margin: 0;
+}
+:global(.addon-workspace) :global(.context-footer) :global(.button) {
+flex-shrink: 0;
+}
+:global(.addon-workspace) :global(.episode-row):hover {
+background-color: #29312e;
+}
+:global(.addon-workspace) :global(.length-filter) {
+flex: 1 1 100%; width: 100%; border-top: 1px solid var(--color-border); margin-top: 10px; padding-top: 6px;
+}
+:global(.addon-workspace) :global(.length-filter) > summary {
+cursor: pointer; font-size: 12px; padding: 9px 0;
+}
+:global(.addon-workspace) :global(.length-filter) > summary > span {
+color: var(--color-text-secondary); font-size: 11px; margin-left: 8px;
+}
+:global(.addon-workspace) :global(.length-fields) {
+display: flex; gap: 14px; flex-wrap: wrap; padding-top: 9px;
+}
+:global(.addon-workspace) :global(.length-fields) > label {
+display: grid; gap: 5px; font-size: 12px; flex: 0 1 150px; min-width: 0;
+}
+:global(.addon-workspace) :global(.length-fields) input {
+width: 100%; min-height: 38px; padding: 7px 10px;
+}
+:global(.addon-workspace) :global(.length-filter) p {
+font-size: 11px; margin: 10px 0;
+}
+:global(.addon-workspace) :global(.length-filter) :global(.check) {
+font-size: 12px; margin: 10px 0;
+}
+@supports selector(:has(*)) {
+.addon-workspace .row-edit-surface:not(:has(.detect-dates:checked)) .date-field,
+.addon-workspace .row-edit-surface:has(.detect-dates:checked) .manual-field {
+display: none;
+}
+}
+@container episode-list (max-width: 950px) {
+:global(.addon-workspace) :global(.row-command-trigger) {
+grid-column: 5; grid-row: 1 / 3;
+}
+}
+@container episode-list (max-width: 640px) {
+:global(.addon-workspace) :global(.row-command-trigger) {
+grid-column: 3; grid-row: 3;
+}
+:global(.addon-workspace) :global(.row-edit-surface) {
+grid-column: 1 / -1; padding: 13px;
+}
+:global(.addon-workspace) :global(.context-footer) {
+flex-direction: column; align-items: stretch;
+}
+}
+[data-theme="light"] :global(.addon-workspace) :global(.row-commands) {
+
+color: #1f2c2b; background: #fff;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.command-context) {
+
+color: #52645f; border-color: #acbdb6;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.command-list) button:hover,
+[data-theme="light"] :global(.addon-workspace) :global(.command-list) button:focus-visible {
+
+background: #e1ede7;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.command-list) :global(.command-clear) {
+
+border-color: #acbdb6;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.row-edit-surface) {
+
+background: #e6eff3;
+
+}
+[data-theme="light"] :global(.addon-workspace) :global(.episode-row):hover {
+
+background-color: #edf4f0;
+
+}
+
+/* organize.css */
+:global(.addon-workspace) {
+font-size:14px;
+}
+:global(.addon-workspace) :global(.content-breadcrumb) {
+margin-bottom:8px;
+}
+:global(.addon-workspace) :global(.content-navigation) {
+margin-bottom:14px; gap:4px;
+}
+:global(.addon-workspace) :global(.content-navigation) > * {
+padding:9px 12px; min-height:40px; font:inherit; border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; color:var(--color-text-primary); cursor:pointer;
+}
+:global(.addon-workspace) :global(.content-navigation) > [aria-current] {
+border-bottom-color:var(--color-primary); color:var(--color-primary);
+}
+:global(.addon-workspace) :global(.page-heading),
+:global(.addon-workspace) :global(.list-study-heading) {
+margin:8px 0 14px; gap:12px; align-items:center;
+}
+:global(.addon-workspace) :global(.page-heading) h1,
+:global(.addon-workspace) :global(.list-study-heading) h1 {
+font-size:24px; margin:0;
+}
+:global(.addon-workspace) :global(.cover-art) {
+width:56px; height:40px; flex-basis:56px;
+}
+:global(.addon-workspace) :global(.page-heading) :global(.badge) {
+align-self:center;
+}
+:global(.addon-workspace) :global(.panel),
+:global(.addon-workspace) :global(.work-section),
+:global(.addon-workspace):global(.view-settings) :global(.form-section) {
+padding:16px 0; margin:0; border:0; background:transparent; border-radius:0;
+}
+:global(.addon-workspace) :global(.work-section)+:global(.work-section),
+:global(.addon-workspace) :global(.panel)+:global(.panel),
+:global(.addon-workspace):global(.view-settings) :global(.form-section)+:global(.form-section) {
+border-top:1px solid var(--color-table-line);
+}
+:global(.addon-workspace) :global(.section-heading) {
+margin-bottom:12px;
+}
+:global(.addon-workspace) h2 {
+font-size:18px; margin:0 0 12px;
+}
+:global(.addon-workspace) h3 {
+font-size:15px; margin:0 0 8px;
+}
+:global(.addon-workspace) p {
+margin:6px 0 12px;
+}
+:global(.addon-workspace) :global(.status-line) {
+display:flex; flex-wrap:wrap; align-items:center; gap:8px 20px; padding:8px 0; border-bottom:1px solid var(--color-table-line); font-size:12px;
+}
+:global(.addon-workspace) :global(.status-line) form {
+display:flex; align-items:center; gap:8px; margin:0;
+}
+:global(.addon-workspace) :global(.publication-summary) {
+padding:4px 0 0; border-bottom:1px solid var(--color-table-line);
+}
+:global(.addon-workspace) :global(.publication-overview) {
+display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px 20px;
+}
+:global(.addon-workspace) :global(.publication-overview) form {
+margin:0;
+}
+:global(.addon-workspace) :global(.publication-state) {
+display:grid; gap:3px; font-size:12px;
+}
+:global(.addon-workspace) :global(.publication-state) strong {
+font-size:14px;
+}
+:global(.addon-workspace) :global(.publication-summary) :global(.publication-details) {
+margin:4px 0 0;
+}
+:global(.addon-workspace) :global(.publication-details) > summary {
+width:100%;
+}
+:global(.addon-workspace) :global(.publication-facts) {
+display:grid; gap:8px; margin:4px 0 12px; font-size:13px;
+}
+:global(.addon-workspace) :global(.publication-facts) > div {
+display:grid; grid-template-columns:110px minmax(0,1fr); gap:8px;
+}
+:global(.addon-workspace) :global(.publication-facts) dt {
+font-weight:600;
+}
+:global(.addon-workspace) :global(.publication-facts) dd {
+margin:0; overflow-wrap:anywhere;
+}
+:global(.addon-workspace) :global(.quiet-details) {
+margin:6px 0; border:0; background:transparent;
+}
+:global(.addon-workspace) :global(.quiet-details) > summary {
+cursor:pointer; min-height:32px; padding:6px 0; font-size:13px;
+}
+:global(.addon-workspace) :global(.quiet-details) > div {
+padding:4px 0 10px;
+}
+:global(.addon-workspace) :global(.quiet-details) p {
+max-width:85ch; font-size:13px;
+}
+:global(.addon-workspace) :global(.filter-row) {
+display:flex; flex-wrap:wrap; align-items:end; gap:8px; margin-bottom:10px;
+}
+:global(.addon-workspace) :global(.compact-field) {
+max-width:none; min-width:0; display:grid; gap:4px; font-size:12px;
+}
+:global(.addon-workspace) :global(.compact-field) input,
+:global(.addon-workspace) :global(.compact-field) select {
+max-width:none; min-height:36px; padding:6px 9px; width:100%;
+}
+:global(.addon-workspace) :global(.filter-row) :global(.compact-field):first-child {
+flex:1 1 200px;
+}
+:global(.addon-workspace) :global(.filter-row) :global(.compact-field):nth-child(2) {
+flex:1 1 150px;
+}
+:global(.addon-workspace) :global(.filter-row) :global(.compact-field):nth-child(3) {
+width:80px;
+}
+:global(.addon-workspace) :global(.button) {
+min-height:36px; padding:7px 12px; font-size:13px;
+}
+:global(.addon-workspace) :global(.editor-heading) {
+display:none;
+}
+:global(.addon-workspace) :global(.list-action-strip) {
+display:flex; justify-content:flex-end; align-items:center; gap:15px; margin:5px 0; font-size:12px;
+}
+:global(.addon-workspace) :global(.list-action-strip) span {
+margin-right:auto;
+}
+:global(.addon-workspace) #numbering-help {
+margin:0;
+}
+:global(.addon-workspace) :global(.episode-column-head),
+:global(.addon-workspace) :global(.episode-row) {
+grid-template-columns:30px minmax(180px,1fr) 118px 64px 142px 50px; gap:12px;
+}
+:global(.addon-workspace) :global(.episode-row) {
+padding:9px 4px; scroll-margin-top:72px;
+}
+:global(.addon-workspace) :global(.episode-identity) {
+flex-wrap:wrap; gap:6px 10px;
+}
+:global(.addon-workspace) :global(.episode-identity) > img {
+width:44px; height:34px;
+}
+:global(.addon-workspace) :global(.episode-identity) > div {
+flex:1;
+}
+:global(.addon-workspace) :global(.row-title) {
+background:transparent; border:0; text-align:left; color:var(--color-text-primary); padding:4px 0; font-weight:600; line-height:1.4; cursor:pointer;
+}
+:global(.addon-workspace) :global(.row-title):hover {
+text-decoration:underline;
+}
+:global(.addon-workspace) :global(.airdate) small {
+font-size:11px;
+}
+:global(.addon-workspace) :global(.runtime) {
+font-size:13px;
+}
+:global(.addon-workspace) :global(.inline-pair) input {
+width:48px;
+}
+:global(.addon-workspace) :global(.row-numbering) > small {
+font-size:11px;
+}
+:global(.addon-workspace) :global(.selection-tools) {
+position:static; margin:16px 0 8px; padding:12px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:5px; align-items:end;
+}
+:global(.addon-workspace) :global(.selection-label) {
+flex:1 1 160px; color:var(--color-text-primary);
+}
+:global(.addon-workspace) :global(.selection-tools) > :global(.compact-field) {
+width:auto; max-width:190px;
+}
+:global(.addon-workspace) :global(.selection-tools) :global(.quiet-details) {
+flex-basis:100%;
+}
+:global(.addon-workspace) :global(.selection-tools) :global(.quiet-details) > div {
+display:flex; gap:10px; flex-wrap:wrap; align-items:end;
+}
+:global(.addon-workspace) :global(.selection-numbering)[open] {
+flex-basis:100%;
+}
+:global(.addon-workspace) :global(.selection-fields) {
+align-items:end; gap:10px; padding-top:10px;
+}
+:global(.addon-workspace) :global(.selection-fields) :global(.compact-field) {
+max-width:140px;
+}
+:global(.addon-workspace) :global(.selection-numbering) > summary {
+min-height:36px; padding:7px 10px;
+}
+:global(.addon-workspace) :global(.length-filter) {
+margin:0; padding:0; border:0;
+}
+:global(.addon-workspace) :global(.length-filter) p {
+margin:5px 0;
+}
+:global(.addon-workspace) :global(.length-filter) :global(.check) {
+margin:5px 0;
+}
+:global(.addon-workspace) :global(.numbering-actions) {
+display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding:10px 0; border-top:1px solid var(--color-table-line);
+}
+:global(.addon-workspace) :global(.list-end) {
+display:flex; gap:16px; font-size:12px;
+}
+:global(.addon-workspace) :global(.row-edit-surface) {
+grid-column:1/-1; padding:12px; background:var(--color-surface);
+}
+:global(.addon-workspace) :global(.context-heading) {
+margin-bottom:10px;
+}
+:global(.addon-workspace) :global(.context-heading) button {
+margin-left:auto;
+}
+:global(.addon-workspace) :global(.context-fields) :global(.compact-field) {
+max-width:140px;
+}
+:global(.addon-workspace) :global(.context-fields) :global(.endpoint) {
+max-width:550px;
+}
+:global(.addon-workspace) :global(.context-footer) {
+margin-top:10px;
+}
+:global(.addon-workspace) :global(.apply-bar) {
+display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:14px 0; border-top:1px solid var(--color-table-line);
+}
+:global(.addon-workspace) :global(.apply-bar) small {
+color:var(--color-text-secondary);
+}
+:global(.addon-workspace) :global(.text-action) {
+background:transparent; border:0; text-decoration:underline; padding:7px 4px; font-size:13px;
+}
+:global(.addon-workspace) :global(.form-note) {
+display:none;
+}
+:global(.addon-workspace) :global(.field) {
+margin-bottom:12px;
+}
+:global(.addon-workspace) :global(.field) input,
+:global(.addon-workspace) :global(.field) select {
+min-height:36px; padding:6px 9px;
+}
+:global(.addon-workspace) :global(.facts) {
+padding:10px 0; margin:6px 0; background:transparent;
+}
+:global(.addon-workspace) :global(.check) {
+min-height:36px; margin:4px 0; align-items:center;
+}
+:global(.addon-workspace) :global(.check) input {
+flex-shrink:0;
+}
+:global(.addon-workspace) :global(.saved-appearance) {
+padding:0 0 12px; margin:0 0 12px;
+}
+:global(.addon-workspace) :global(.saved-appearance) img {
+width:56px; height:40px;
+}
+:global(.addon-workspace) :global(.saved-appearance) strong {
+font-size:15px;
+}
+:global(.addon-workspace) :global(.source-actions) {
+display:flex; flex-wrap:wrap; gap:12px;
+}
+:global(.addon-workspace) :global(.mode-grid) {
+display:flex; flex-direction:column; gap:0;
+}
+:global(.addon-workspace) :global(.mode-choice) {
+position:static; display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; gap:9px; padding:5px 0; min-height:36px; border:0; background:transparent;
+}
+:global(.addon-workspace) :global(.mode-choice):has(input:checked) {
+padding:5px 0; border:0; background:transparent;
+}
+:global(.addon-workspace) :global(.mode-choice) > input {
+position:static;
+}
+:global(.addon-workspace) :global(.mode-choice) small {
+font-size:13px;
+}
+:global(.addon-workspace) :global(.mode-art) {
+display:none;
+}
+:global(.addon-workspace) :global(.delivery-choices) {
+border:0; padding:0; margin:0;
+}
+:global(.addon-workspace) :global(.delivery-choices) legend {
+display:none;
+}
+:global(.addon-workspace) :global(.compact-option) {
+display:grid; grid-template-columns:minmax(200px,1fr) auto; gap:4px 12px; padding:5px 0; margin:0; border:0;
+}
+:global(.addon-workspace):global(.view-options) :global(.compact-option) {
+display:grid; grid-template-columns:minmax(200px,1fr) auto; padding:5px 0; margin:0;
+}
+:global(.addon-workspace) :global(.option-toggle) {
+display:flex; align-items:center; gap:9px; min-height:36px; cursor:pointer;
+}
+:global(.addon-workspace) :global(.option-toggle) input {
+width:18px; height:18px;
+}
+:global(.addon-workspace) :global(.compact-option) :global(.quiet-details),
+:global(.addon-workspace) :global(.compact-option) :global(.browser-choice),
+:global(.addon-workspace) :global(.sponsor-consequence) {
+grid-column:1/-1; margin-left:27px;
+}
+:global(.addon-workspace) :global(.compact-option) :global(.quiet-details) {
+margin-top:0; margin-bottom:0;
+}
+:global(.addon-workspace) :global(.compact-option) :global(.quiet-details) > summary {
+min-height:28px; padding:4px 0; font-size:12px;
+}
+:global(.addon-workspace) :global(.saved-option) {
+align-self:center; font-size:12px;
+}
+:global(.addon-workspace) :global(.browser-choice) :global(.compact-field) {
+max-width:220px;
+}
+:global(.addon-workspace) :global(.sponsor-consequence) {
+color:var(--color-text-secondary);
+}
+:global(.addon-workspace) #warning_gb,
+:global(.addon-workspace) input[name=warning_gb] {
+max-width:150px;
+}
+:global(.addon-workspace) :global(.item-numbering) {
+padding:10px; margin:0; grid-column:1/-1;
+}
+:global(.addon-workspace) :global(.item-numbering) :global(.episode-pair) {
+display:flex; gap:12px; margin:6px 0;
+}
+:global(.addon-workspace) :global(.item-numbering) :global(.field) {
+margin:0; max-width:100px;
+}
+:global(.addon-workspace) :global(.item-numbering) :global(.numbering-kind) {
+display:flex; gap:18px;
+}
+:global(.addon-workspace) :global(.number-input) input {
+font-size:16px;
+}
+:global(.addon-workspace) :global(.item-navigation) {
+display:flex; gap:12px; margin-bottom:10px; flex-wrap:wrap;
+}
+:global(.addon-workspace):global(.view-activity) :global(.publication-ledger) {
+padding:0; border:0; background:transparent;
+}
+:global(.addon-workspace) :global(.history-result) {
+padding:8px 0; border:0;
+}
+:global(.addon-workspace) :global(.artwork-link),
+:global(.addon-workspace) :global(.art-current) {
+display:flex; gap:12px; align-items:center;
+}
+:global(.addon-workspace) :global(.artwork-link) img,
+:global(.addon-workspace) :global(.art-current) img {
+width:85px; height:60px; object-fit:cover;
+}
+:global(.addon-workspace) :global(.art-source) {
+display:flex; flex-wrap:wrap; gap:6px 18px;
+}
+:global(.addon-workspace) :global(.art-url),
+:global(.addon-workspace) :global(.art-upload),
+:global(.addon-workspace) :global(.art-provider) {
+flex:1 1 100%;
+}
+:global(.addon-workspace) :global(.art-candidate) {
+display:inline-flex; flex-wrap:wrap; align-items:center; gap:10px; padding:8px; cursor:pointer;
+}
+:global(.addon-workspace) :global(.art-candidate) img {
+width:120px; height:85px;
+}
+:global(.addon-workspace) :global(.review-summary) {
+padding:10px 0;
+}
+:global(.addon-workspace) :global(.review-pair) {
+display:grid; gap:3px; font-size:12px;
+}
+:global(.addon-workspace) :global(.review-pair) strong {
+color:var(--color-success);
+}
+:global(.addon-workspace) :global(.proposed-row) {
+background:var(--color-surface);
+}
+:global(.addon-workspace) table {
+width:100%; border-collapse:collapse; font-size:13px;
+}
+:global(.addon-workspace) th,
+:global(.addon-workspace) td {
+padding:9px 10px; text-align:left; border-bottom:1px solid var(--color-table-line); vertical-align:top;
+}
+:global(.addon-workspace) :global(.table-scroll) {
+overflow-x:auto; max-width:100%;
+}
+:global(.addon-workspace) :global(.scenario-list) {
+display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; padding-left:20px;
+}
+:global(.addon-workspace) :global(.notice) {
+padding:12px; margin:10px 0; border:1px solid var(--color-border); border-radius:5px; background:var(--color-surface);
+}
+:global(.addon-workspace) :global(.notice)[role=alert] {
+border-color:#d88875;
+}
+:global(.addon-workspace) :global(.draft-state) {
+color:var(--color-text-secondary); font-size:12px;
+}
+:global(.addon-workspace) :global(.row-exception) {
+display:block; flex-basis:100%; color:var(--color-text-primary); font-size:12px;
+}
+:global(.addon-workspace) :global(.pager) {
+display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:10px 0;
+}
+:global(.addon-workspace) :is(button,a,input,select,textarea,summary):focus-visible {
+outline:2px solid var(--focus); outline-offset:3px;
+}
+@supports selector(:has(*)) {
+.addon-workspace .compact-option:not(:has(#cookies-enabled:checked)) .browser-choice {
+display:none;
+}
+.addon-workspace .compact-option:not(:has(#sponsor-enabled:checked)) .sponsor-consequence {
+display:none;
+}
+.addon-workspace form:not(:has(select[name=media_kind] option[value="Movie"]:checked)) .movie-only {
+display:none;
+}
+.addon-workspace .art-source:not(:has(input[value=url]:checked)) .art-url,
+.addon-workspace .art-source:not(:has(input[value=upload]:checked)) .art-upload,
+.addon-workspace .art-source:not(:has(input[value=provider]:checked)) .art-provider {
+display:none;
+}
+}
+@container episode-list (max-width:950px) {
+:global(.addon-workspace) :global(.episode-row) {
+grid-template-columns:26px minmax(0,1fr) 76px 136px 44px; gap:8px;
+}
+:global(.addon-workspace) :global(.episode-identity) {
+grid-column:2/4;
+}
+:global(.addon-workspace) :global(.row-numbering),
+:global(.addon-workspace) :global(.review-pair) {
+grid-column:4; grid-row:1/3;
+}
+}
+@container episode-list (max-width:640px) {
+:global(.addon-workspace) :global(.episode-row) {
+grid-template-columns:24px minmax(0,1fr) 64px; padding:9px 0; gap:6px;
+}
+:global(.addon-workspace) :global(.episode-identity) {
+grid-column:2/4;
+}
+:global(.addon-workspace) :global(.row-numbering),
+:global(.addon-workspace) :global(.review-pair) {
+grid-column:2; grid-row:3;
+}
+:global(.addon-workspace) :global(.inline-pair) input {
+width:42px;
+}
+:global(.addon-workspace) :global(.row-command-trigger) {
+grid-column:3; grid-row:3;
+}
+:global(.addon-workspace) :global(.row-edit-surface) {
+grid-column:1/-1;
+}
+:global(.addon-workspace) :global(.episode-identity) > img {
+display:none;
+}
+:global(.addon-workspace) :global(.mobile-column) {
+font-size:11px;
+}
+}
+@media(max-width:767px) {
+:global(.addon-workspace) {
+padding:12px 14px;
+}
+:global(.addon-workspace) :global(.content-navigation) {
+gap:0;
+}
+:global(.addon-workspace) :global(.content-navigation) > * {
+flex:1 1 45%; padding:7px 4px; font-size:12px;
+}
+:global(.addon-workspace) :global(.page-heading),
+:global(.addon-workspace) :global(.list-study-heading) {
+margin:8px 0;
+}
+:global(.addon-workspace) :global(.page-heading) h1,
+:global(.addon-workspace) :global(.list-study-heading) h1 {
+font-size:21px;
+}
+:global(.addon-workspace) :global(.page-heading) :global(.badge) {
+font-size:11px; padding:3px 7px;
+}
+:global(.addon-workspace) :global(.status-line) {
+gap:4px;
+}
+:global(.addon-workspace) :global(.status-line) form {
+flex-wrap:wrap;
+}
+:global(.addon-workspace) :global(.filter-row) :global(.compact-field):first-child {
+flex-basis:100%;
+}
+:global(.addon-workspace) :global(.filter-row) :global(.compact-field):nth-child(2) {
+flex-basis:130px;
+}
+:global(.addon-workspace) :global(.compact-option),
+:global(.addon-workspace):global(.view-options) :global(.compact-option) {
+grid-template-columns:1fr;
+}
+:global(.addon-workspace) :global(.saved-option) {
+padding-left:27px;
+}
+:global(.addon-workspace) :global(.compact-option) :global(.quiet-details),
+:global(.addon-workspace) :global(.compact-option) :global(.browser-choice) {
+grid-column:1;
+}
+:global(.addon-workspace) :global(.numbering-actions) {
+gap:7px;
+}
+:global(.addon-workspace) :global(.mode-choice) {
+display:grid; grid-template-columns:18px 1fr;
+}
+:global(.addon-workspace) :global(.mode-choice) small {
+grid-column:2;
+}
+:global(.addon-workspace) :global(.list-action-strip) {
+font-size:11px; gap:8px;
+}
+:global(.addon-workspace) :global(.table-scroll) table {
+min-width:420px;
+}
+}
+:global(.addon-workspace) :global(.episode-editor):not(:has(:global(.row-pick) input:checked)) :global(.selection-tools) {
+display:flex;
+}
+:global(.addon-workspace) :global(.numbering-actions) {
+background:transparent; border:0; border-top:1px solid var(--color-table-line); border-radius:0; box-shadow:none; justify-content:flex-start;
+}
+:global(.addon-workspace) :global(.disclosure) > summary {
+padding:10px 12px; min-height:36px;
+}
+:global(.addon-workspace) :global(.disclosure) > summary small {
+font-size:12px;
+}
+:global(.addon-workspace) :global(.content-navigation) > [aria-current] {
+color:var(--color-success); border-bottom-color:var(--color-success);
+}
+:global(.addon-workspace) :global(.content-navigation) > a[aria-current] {
+color:var(--color-success); border-bottom-color:var(--color-success);
+}
+:global(.addon-workspace):global(.view-options) :global(.compact-option) {
+grid-template-columns:minmax(180px,1fr) auto auto; align-items:center;
+}
+@supports selector(::details-content) {
+.addon-workspace.view-options .compact-option > .quiet-details {
+display:contents; margin:0;
+}
+.addon-workspace.view-options .compact-option > .quiet-details::details-content {
+display:contents;
+}
+.addon-workspace.view-options .compact-option > .quiet-details > summary {
+grid-column:3; grid-row:1; margin:0; min-height:36px;
+}
+.addon-workspace.view-options .compact-option > .quiet-details > div {
+grid-column:1/-1; padding-left:27px;
+}
+.addon-workspace.view-options .compact-option > .quiet-details:not([open]) > div {
+display:none;
+}
+}
+@media(max-width:767px) {
+:global(.addon-workspace):global(.view-options) :global(.compact-option) {
+grid-template-columns:1fr;
+}
+:global(.addon-workspace):global(.view-options) :global(.compact-option) > :global(.quiet-details) > summary {
+grid-column:1; grid-row:auto; margin-left:27px;
+}
+}
+:global(.addon-workspace) details[data-disclosure-kind] > summary {
+display:flex; align-items:center; gap:8px; list-style:none; cursor:pointer;
+ width:fit-content; max-width:100%; min-height:36px; padding:6px 10px;
+ border:1px solid var(--color-border); border-radius:4px;
+ background:var(--color-surface); color:var(--color-text-primary);
+ text-decoration:none; line-height:1.4; font-size:13px;
+}
+:global(.addon-workspace) details[data-disclosure-kind] > summary::-webkit-details-marker {
+display:none;
+}
+:global(.addon-workspace) details[data-disclosure-kind] > summary::marker {
+content:"";
+}
+:global(.addon-workspace) details[data-disclosure-kind] > summary::before,
+:global(.addon-workspace) details[data-disclosure-kind] > summary::after {
+content:none;
+}
+:global(.addon-workspace) details[data-disclosure-kind] > summary:hover {
+border-color:var(--color-text-primary);
+}
+:global(.addon-workspace) details[data-disclosure-kind][open] > summary {
+border-color:var(--color-success); background:var(--color-success-20);
+}
+:global(.addon-workspace) :global(.hint-symbol) {
+width:19px; height:19px; flex:0 0 19px;
+}
+:global(.addon-workspace) :global(.disclosure-label) {
+min-width:0; overflow-wrap:anywhere;
+}
+:global(.addon-workspace) :global(.disclosure-toggle) {
+position:relative; flex:0 0 16px; width:16px; height:16px; margin-left:auto;
+}
+:global(.addon-workspace) :global(.disclosure-toggle)::before,
+:global(.addon-workspace) :global(.disclosure-toggle)::after {
+content:""; position:absolute; background:currentColor; border-radius:1px;
+}
+:global(.addon-workspace) :global(.disclosure-toggle)::before {
+height:2px; width:12px; top:7px; left:2px;
+}
+:global(.addon-workspace) :global(.disclosure-toggle)::after {
+height:12px; width:2px; top:2px; left:7px;
+}
+:global(.addon-workspace) details[open] > summary :global(.disclosure-toggle)::after {
+display:none;
+}
+:global(.addon-workspace) details[data-disclosure-kind=section] > summary {
+width:100%; justify-content:space-between;
+}
+:global(.addon-workspace) :global(.disclosure)[data-disclosure-kind=section] > summary {
+border:0; border-radius:4px; padding:10px 12px;
+}
+:global(.addon-workspace) :global(.length-filter) > summary > :global(.disclosure-label) {
+color:inherit; margin:0; font-size:inherit;
+}
+:global(.addon-workspace) :global(.length-filter) > summary :global(.disclosure-label) > span {
+margin-left:6px; color:var(--color-text-secondary); font-size:11px;
+}
+:global(.addon-workspace):global(.view-options) :global(.compact-option) > :global(.quiet-details)[data-disclosure-kind] > summary {
+padding:6px 9px;
+}
+:global(.addon-workspace) :global(.publication-summary) :global(.publication-details) {
+margin:8px 0;
+}
+
+/* alignment.css */
+:global(.addon-workspace) {
+--layout-gap:16px;
+ --control-gap:8px;
+ --option-tracks:minmax(0,1fr) 17rem 10rem;
+ container:admin-layout / inline-size;
+}
+:global(.addon-workspace) :is(section,form,fieldset,:global(.field),:global(.compact-field),:global(.grid-2),:global(.grid-3)) {
+min-width:0;
+}
+:global(.addon-workspace) :is(:global(.field),:global(.compact-field)) {
+display:grid; align-content:start; gap:4px;
+}
+:global(.addon-workspace) :is(:global(.field),:global(.compact-field)) > :is(input,select,textarea) {
+width:100%; min-width:0;
+}
+:global(.addon-workspace) :global(.grid-2) {
+display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:var(--layout-gap);
+}
+:global(.addon-workspace) :global(.grid-3) {
+display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); column-gap:var(--layout-gap);
+}
+:global(.addon-workspace) :global(.grid-2) > :global(.full),
+:global(.addon-workspace) :global(.grid-3) > :global(.full) {
+grid-column:1/-1;
+}
+:global(.addon-workspace) :global(.grid-3) > :global(.align-end) {
+margin-bottom:12px;
+}
+:global(.addon-workspace) :global(.check) {
+display:grid; grid-template-columns:18px minmax(0,1fr); align-items:start; gap:9px;
+}
+:global(.addon-workspace) :global(.check) > input {
+margin:3px 0 0;
+}
+:global(.addon-workspace) :is(:global(.apply-bar),:global(.numbering-actions),:global(.action-row),:global(.source-actions),:global(.item-navigation),:global(.pager),:global(.bulk-apply-row)) {
+display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-start; gap:var(--control-gap) var(--layout-gap);
+}
+:global(.addon-workspace) :is(:global(.apply-bar),:global(.numbering-actions),:global(.action-row)) > :is(button,a) {
+margin:0;
+}
+:global(.addon-workspace) :is(:global(.apply-bar),:global(.numbering-actions)) :global(.text-action) {
+min-height:36px;
+}
+:global(.addon-workspace) :global(.publication-overview) {
+display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--layout-gap); align-items:center;
+}
+:global(.addon-workspace) :global(.publication-overview) > form {
+justify-self:end;
+}
+:global(.addon-workspace) :global(.filter-row) {
+display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; gap:var(--control-gap); align-items:end;
+}
+:global(.addon-workspace) :global(.pager) {
+align-items:end;
+}
+:global(.addon-workspace) :global(.pager) :global(.compact-field) {
+width:160px;
+}
+:global(.addon-workspace) :global(.pager) :global(.page-summary) {
+align-self:center;
+}
+:global(.addon-workspace) :global(.filter-row) > :global(.compact-field) {
+width:auto; max-width:none;
+}
+:global(.addon-workspace) :global(.filter-row) :global(.button) {
+margin:0;
+}
+:global(.addon-workspace) :global(.facts) {
+display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--control-gap) var(--layout-gap);
+}
+:global(.addon-workspace) :global(.facts) > div {
+min-width:0;
+}
+:global(.addon-workspace) :global(.facts) dd {
+margin:4px 0 0; overflow-wrap:anywhere;
+}
+:global(.addon-workspace) :global(.option-grid) {
+display:grid; grid-template-columns:var(--option-tracks); column-gap:var(--layout-gap);
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :global(.compact-option) {
+display:grid; grid-column:1/-1; grid-template-columns:var(--option-tracks);
+ column-gap:var(--layout-gap); row-gap:var(--control-gap); align-items:center;
+}
+:global(.addon-workspace) :global(.option-grid) :global(.option-toggle) {
+grid-column:1; grid-row:1;
+}
+:global(.addon-workspace) :global(.option-grid) :global(.saved-option) {
+grid-column:2; grid-row:1; padding:0; text-align:left;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :global(.compact-option) > :global(.quiet-details) > summary {
+grid-column:3; grid-row:1; width:100%; margin:0;
+}
+:global(.addon-workspace) :global(.option-grid) :is(:global(.browser-choice),:global(.sponsor-consequence)) {
+grid-column:1/-1; margin-left:27px;
+}
+:global(.addon-workspace) :global(.mode-grid) {
+display:grid; grid-template-columns:18px minmax(150px,12rem) minmax(0,1fr); column-gap:var(--layout-gap);
+}
+:global(.addon-workspace) :global(.mode-grid) :global(.mode-choice) {
+display:grid; grid-column:1/-1; grid-template-columns:18px minmax(150px,12rem) minmax(0,1fr);
+ column-gap:var(--layout-gap); row-gap:4px; align-items:center; margin:0;
+}
+:global(.addon-workspace) :global(.mode-choice) > input {
+grid-column:1; margin:0;
+}
+:global(.addon-workspace) :global(.mode-choice) > strong {
+grid-column:2;
+}
+:global(.addon-workspace) :global(.mode-choice) > small {
+grid-column:3; margin:0;
+}
+@supports (grid-template-columns:subgrid) {
+.addon-workspace.view-options .option-grid .compact-option,
+.addon-workspace .mode-grid .mode-choice {
+grid-template-columns:subgrid;
+}
+}
+:global(.addon-workspace) :is(:global(.episode-column-head),:global(.episode-row)) {
+--episode-tracks:30px minmax(180px,1fr) 118px 64px 142px 50px;
+ grid-template-columns:var(--episode-tracks); column-gap:12px; padding-inline:4px;
+}
+:global(.addon-workspace) :global(.episode-identity) {
+display:grid; grid-template-columns:44px minmax(0,1fr); align-items:center; gap:10px;
+}
+:global(.addon-workspace) :global(.row-exception) {
+grid-column:1/-1;
+}
+:global(.addon-workspace) :global(.episode-evidence) {
+display:contents;
+}
+:global(.addon-workspace) :global(.disclosure) {
+border:1px solid var(--color-table-line); border-radius:7px;
+}
+:global(.addon-workspace) :global(.disclosure) > :global(.disclosure-body) {
+padding:12px;
+}
+:global(.addon-workspace) :global(.group-actions-disclosure) {
+scroll-margin-top:72px;
+}
+:global(.addon-workspace) :global(.group-actions-disclosure) :global(.selection-tools) {
+border:0; padding:0; margin:0;
+}
+:global(.addon-workspace) :global(.group-actions-disclosure) :global(.bulk-settings-grid) {
+gap:8px;
+}
+:global(.addon-workspace) :global(.numbering-actions-top) {
+border-top:0; padding:6px 0 8px; margin:0;
+}
+:global(.addon-workspace) :global(.numbering-actions):global(.numbering-actions-top) > :global(.button) {
+width:auto; flex:0 1 auto;
+}
+:global(.addon-workspace) :global(.item-navigation) > :nth-child(-n+2) {
+min-width:7rem;
+}
+:global(.addon-workspace) :global(.item-navigation) > button:disabled {
+color:var(--color-text-secondary); opacity:.6; text-decoration:none; cursor:default;
+}
+:global(.addon-workspace) #error-summary {
+scroll-margin-top:72px;
+}
+:global(.addon-workspace) #error-summary li {
+margin:6px 0;
+}
+:global(.addon-workspace) #error-summary :is(a,button) {
+overflow-wrap:anywhere;
+}
+:global(.addon-workspace) input[aria-invalid=true] {
+outline:2px solid #d88875; outline-offset:-2px; scroll-margin-block:90px;
+}
+:global(.addon-workspace) :global(.numbering-error) {
+font-size:12px; line-height:1.4; margin:6px 0 0;
+}
+:global(.addon-workspace) :global(.numbering-error) a {
+display:inline-block; min-height:24px;
+}
+:global(.addon-workspace) :global(.button) {
+min-height:44px; font-size:14px; padding:10px 14px; line-height:1.4;
+}
+:global(.addon-workspace) :is(:global(.apply-bar),:global(.selection-tools),:global(.context-footer),:global(.pager),:global(.item-navigation),:global(.source-actions)) :global(.button) {
+min-height:44px; font-size:14px;
+}
+:global(.addon-workspace) details[data-disclosure-kind] > summary {
+min-height:44px; font-size:14px;
+}
+:global(.addon-workspace) :global(.numbering-history) {
+display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin:12px 0; font-size:14px;
+}
+:global(.addon-workspace) :global(.button):global(.secondary) {
+border:1px solid var(--color-border); background:var(--color-surface); color:var(--color-text-primary); text-decoration:none;
+}
+:global(.addon-workspace) :global(.button):disabled {
+opacity:.55; cursor:default;
+}
+:global(.addon-workspace) :global(.button):global(.row-title) {
+border:0; background:transparent; padding:2px 0; text-decoration:none; min-height:44px;
+}
+:global(.addon-workspace) :global(.button):global(.row-title):hover {
+text-decoration:underline;
+}
+:global(.addon-workspace) :global(.list-task-heading) {
+margin:8px 0;
+}
+:global(.addon-workspace) :global(.list-task-heading) h2 {
+margin:0 0 4px;
+}
+:global(.addon-workspace) :global(.numbering-guidance) {
+margin:0; font-size:13px; color:var(--color-text-secondary); max-width:75ch;
+}
+:global(.addon-workspace) :global(.group-actions-disclosure) {
+margin:8px 0;
+}
+:global(.addon-workspace) :global(.publication-overview) > form:has(button:disabled) {
+display:none;
+}
+:global(.addon-workspace) :global(.numbering-actions):global(.editor-savebar) {
+position:sticky; top:56px; z-index:10; display:flex; flex-flow:row wrap; gap:8px;
+ padding:8px 0; margin:0; border:0; border-bottom:1px solid var(--color-table-line);
+ background:var(--color-bg);
+}
+:global(.addon-workspace) :global(.editor-savebar) > :global(.button) {
+width:auto; flex:0 1 auto;
+}
+:global(.addon-workspace) :global(.editor-savebar) ~ :global(.episode-rows) :is(input,button),
+:global(.addon-workspace) :global(.episode-row) {
+scroll-margin-top:140px;
+}
+:global(.addon-workspace) :global(.source-actions) {
+display:flex; flex-wrap:wrap; gap:12px;
+}
+:global(.addon-workspace) :global(.row-command-trigger) {
+min-height:44px; padding:8px 5px; border:1px solid var(--color-border); background:var(--color-surface); border-radius:4px;
+}
+:global(.addon-workspace) :global(.row-command-trigger) span:first-child {
+font-size:13px; letter-spacing:normal;
+}
+:global(.addon-workspace) :global(.row-command-trigger) span:last-child {
+font-size:13px;
+}
+:global(.addon-workspace) :is(:global(.episode-column-head),:global(.episode-row)) {
+--episode-tracks:30px minmax(180px,1fr) 118px 64px 142px 76px;
+}
+:global(.addon-workspace) :global(.item-navigation) {
+align-items:center;
+}
+:global(.addon-workspace) #error-summary a {
+display:inline-flex; align-items:center; min-height:44px;
+}
+:global(.addon-workspace) :global(.context-fields) {
+display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1fr); gap:var(--layout-gap); align-items:end;
+}
+:global(.addon-workspace) :global(.context-fields) :is(:global(.compact-field),:global(.endpoint)) {
+width:100%; max-width:none;
+}
+:global(.addon-workspace) :global(.length-fields) {
+display:grid; grid-template-columns:repeat(2,minmax(0,150px)); gap:var(--layout-gap);
+}
+:global(.addon-workspace) :global(.length-fields) > label {
+min-width:0;
+}
+:global(.addon-workspace) :global(.selection-tools),
+:global(.addon-workspace) :global(.episode-editor):not(:has(:global(.row-pick) input:checked)) :global(.selection-tools) {
+display:grid; gap:var(--layout-gap);
+}
+:global(.addon-workspace) :global(.bulk-scope-row) {
+display:grid; grid-template-columns:minmax(140px,180px) minmax(0,1fr); gap:var(--layout-gap); align-items:end;
+}
+:global(.addon-workspace) :global(.bulk-scope-row) :global(.selection-label) {
+align-self:center; padding-top:18px;
+}
+:global(.addon-workspace) :global(.bulk-numbering-row) {
+display:grid; grid-template-columns:120px max-content minmax(180px,1fr) max-content max-content; gap:var(--control-gap) var(--layout-gap); align-items:end;
+}
+:global(.addon-workspace) :global(.bulk-numbering-row) :global(.compact-field) {
+max-width:none;
+}
+:global(.addon-workspace) :global(.bulk-numbering-row) :global(.selection-numbering) {
+min-width:0;
+}
+:global(.addon-workspace) :global(.bulk-settings-grid) {
+display:grid; grid-template-columns:minmax(0,1fr); gap:var(--layout-gap); align-items:start;
+}
+:global(.addon-workspace) :global(.bulk-settings-grid) > :global(.quiet-details) {
+margin:0;
+}
+:global(.addon-workspace) :global(.bulk-settings-grid) > :global(.quiet-details) > summary {
+width:100%;
+}
+:global(.addon-workspace) :global(.selection-tools) :global(.bulk-settings-grid) :global(.quiet-details) > div {
+display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--control-gap) var(--layout-gap);
+}
+:global(.addon-workspace) :global(.selection-fields) {
+display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--control-gap) var(--layout-gap);
+}
+:global(.addon-workspace) :global(.selection-fields) > :global(.length-filter) {
+grid-column:1/-1;
+}
+:global(.addon-workspace) :global(.selection-fields) > button {
+justify-self:start;
+}
+@supports selector(::details-content) {
+.addon-workspace .bulk-numbering-row > .selection-numbering,
+.addon-workspace .bulk-numbering-row > .selection-numbering::details-content {
+display:contents;
+}
+.addon-workspace .bulk-numbering-row > .selection-numbering > summary {
+grid-column:3; grid-row:1; width:100%;
+}
+.addon-workspace .bulk-numbering-row > .selection-numbering > .selection-fields {
+grid-column:1/-1; grid-row:2;
+}
+.addon-workspace .bulk-numbering-row > .selection-numbering:not([open]) > .selection-fields {
+display:none;
+}
+.addon-workspace .bulk-numbering-row > button {
+grid-row:1;
+}
+.addon-workspace .bulk-numbering-row > button[value=set-selected-season] {
+grid-column:2;
+}
+.addon-workspace .bulk-numbering-row > button[value=clear-selected-numbers] {
+grid-column:4;
+}
+.addon-workspace .bulk-numbering-row > button[value=clear-selection] {
+grid-column:5;
+}
+}
+:global(.addon-workspace) :global(.art-current) {
+display:grid; grid-template-columns:85px minmax(0,1fr); gap:var(--layout-gap);
+}
+:global(.addon-workspace) :global(.art-source) {
+display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--control-gap) var(--layout-gap);
+}
+:global(.addon-workspace) :global(.art-source) > :is(:global(.art-url),:global(.art-upload),:global(.art-provider)) {
+grid-column:1/-1;
+}
+:global(.addon-workspace) :global(.art-provider) {
+display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--layout-gap);
+}
+:global(.addon-workspace) :global(.art-provider) > p {
+grid-column:1/-1;
+}
+:global(.addon-workspace) :global(.art-candidate) {
+display:grid; grid-template-columns:18px 120px minmax(0,1fr); gap:var(--control-gap); margin:0;
+}
+:global(.addon-workspace) :global(.art-candidate) input {
+margin:0;
+}
+:global(.addon-workspace):global(.view-artwork) :global(.work-section) {
+display:grid; grid-template-columns:10rem minmax(0,1fr) 14rem; gap:var(--layout-gap); align-items:center;
+}
+:global(.addon-workspace):global(.view-artwork) :global(.work-section) > h2 {
+grid-column:1; grid-row:1; margin:0;
+}
+:global(.addon-workspace):global(.view-artwork) :global(.art-current) {
+grid-column:2; grid-row:1;
+}
+@supports selector(::details-content) {
+.addon-workspace.view-artwork .work-section > details,
+.addon-workspace.view-artwork .work-section > details::details-content {
+display:contents;
+}
+.addon-workspace.view-artwork .work-section > details > summary {
+grid-column:3; grid-row:1; width:100%;
+}
+.addon-workspace.view-artwork .work-section > details > div {
+grid-column:1/-1; grid-row:2;
+}
+.addon-workspace.view-artwork .work-section > details:not([open]) > div {
+display:none;
+}
+}
+@container admin-layout (max-width:850px) {
+:global(.addon-workspace):global(.view-artwork) :global(.work-section) {
+grid-template-columns:minmax(0,1fr) 12rem;
+}
+:global(.addon-workspace):global(.view-artwork) :global(.art-current) {
+grid-column:1; grid-row:2;
+}
+:global(.addon-workspace):global(.view-artwork) :global(.work-section) > details > summary {
+grid-column:2; grid-row:2;
+}
+:global(.addon-workspace):global(.view-artwork) :global(.work-section) > details > div {
+grid-row:3;
+}
+:global(.addon-workspace) :global(.option-grid) {
+--option-tracks:minmax(0,1fr) 14rem;
+}
+:global(.addon-workspace) :global(.option-grid) :global(.saved-option) {
+grid-column:1; grid-row:2; padding-left:27px;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :global(.compact-option) > :global(.quiet-details) > summary {
+grid-column:2; grid-row:1;
+}
+:global(.addon-workspace) :global(.bulk-numbering-row) {
+grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.bulk-numbering-row) > :global(.selection-numbering) > summary {
+grid-column:1; grid-row:2;
+}
+:global(.addon-workspace) :global(.bulk-numbering-row) > button[value=set-selected-season] {
+grid-column:2; grid-row:1;
+}
+:global(.addon-workspace) :global(.bulk-numbering-row) > button[value=clear-selected-numbers] {
+grid-column:2; grid-row:2;
+}
+:global(.addon-workspace) :global(.bulk-numbering-row) > button[value=clear-selection] {
+grid-column:1; grid-row:4; justify-self:start;
+}
+:global(.addon-workspace) :global(.bulk-numbering-row) > :global(.selection-numbering) > :global(.selection-fields) {
+grid-row:3;
+}
+:global(.addon-workspace) :global(.filter-row) {
+grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.filter-row) > button {
+grid-column:1/-1; justify-self:start;
+}
+:global(.addon-workspace) :global(.art-candidate) {
+grid-template-columns:18px minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.art-candidate) > span {
+grid-column:2;
+}
+}
+@container admin-layout (max-width:550px) {
+:global(.addon-workspace):global(.view-artwork) :global(.work-section) {
+grid-template-columns:minmax(0,1fr);
+}
+:global(.addon-workspace):global(.view-artwork) :global(.work-section) > details > summary {
+grid-column:1; grid-row:3;
+}
+:global(.addon-workspace):global(.view-artwork) :global(.work-section) > details > div {
+grid-column:1; grid-row:4;
+}
+:global(.addon-workspace) :is(:global(.grid-2),:global(.grid-3),:global(.facts),:global(.context-fields),:global(.bulk-scope-row),:global(.publication-overview)) {
+grid-template-columns:minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.publication-overview) > form {
+justify-self:start;
+}
+:global(.addon-workspace) :global(.filter-row) {
+grid-template-columns:minmax(0,1fr) auto;
+}
+:global(.addon-workspace) :global(.filter-row) > :global(.compact-field):first-child {
+grid-column:1/-1;
+}
+:global(.addon-workspace) :global(.filter-row) > button {
+grid-column:2; grid-row:2;
+}
+:global(.addon-workspace) :global(.mode-grid) {
+grid-template-columns:18px minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.mode-grid) :global(.mode-choice) {
+grid-template-columns:18px minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.mode-choice) > small {
+grid-column:2;
+}
+:global(.addon-workspace) :global(.option-grid) {
+--option-tracks:minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.option-grid) :global(.option-toggle) {
+grid-column:1; grid-row:1;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :global(.compact-option) > :global(.quiet-details) > summary {
+grid-column:1; grid-row:3; width:fit-content; margin-left:27px;
+}
+:global(.addon-workspace) :global(.bulk-scope-row) :global(.selection-label) {
+padding:0;
+}
+:global(.addon-workspace) :global(.art-source) {
+grid-template-columns:repeat(2,minmax(0,1fr));
+}
+:global(.addon-workspace) :global(.art-provider) {
+grid-template-columns:1fr;
+}
+:global(.addon-workspace) :global(.selection-fields) {
+grid-template-columns:minmax(0,1fr);
+}
+}
+@container episode-list (max-width:950px) {
+:global(.addon-workspace) :global(.episode-row) {
+--episode-tracks:26px minmax(0,1fr) 76px 136px 76px; column-gap:8px;
+}
+}
+@container episode-list (max-width:640px) {
+:global(.addon-workspace) :global(.episode-row) {
+--episode-tracks:24px minmax(0,1fr) 76px; gap:4px 6px; padding:8px 0;
+}
+:global(.addon-workspace) :global(.episode-identity) {
+grid-template-columns:minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.row-pick) {
+grid-row:1/3; min-height:28px; min-width:24px; gap:2px; align-self:start;
+}
+:global(.addon-workspace) :global(.row-title) {
+min-height:28px; padding:2px 0; font-size:14px;
+}
+:global(.addon-workspace) :global(.episode-evidence) {
+display:flex; grid-column:2/-1; grid-row:2; flex-wrap:wrap; align-items:baseline; gap:4px 14px;
+}
+:global(.addon-workspace) :is(:global(.airdate),:global(.runtime)) {
+display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 6px; font-size:12px;
+}
+:global(.addon-workspace) :is(:global(.airdate),:global(.runtime)) :global(.mobile-column) {
+display:inline; margin:0; font-size:12px;
+}
+:global(.addon-workspace) :is(:global(.airdate),:global(.runtime)) small {
+margin:0;
+}
+:global(.addon-workspace) :global(.airdate) time {
+white-space:nowrap;
+}
+:global(.addon-workspace) :global(.row-numbering) {
+min-width:0;
+}
+:global(.addon-workspace) :global(.inline-pair) input {
+min-height:44px;
+}
+:global(.addon-workspace) :global(.row-command-trigger) {
+align-self:start; min-height:44px;
+}
+:global(.addon-workspace) :global(.row-numbering) > small {
+margin-top:2px;
+}
+}
+:global(.addon-workspace) #item-metadata input,
+:global(.addon-workspace) #item-metadata textarea,
+:global(.addon-workspace) #item-chapters textarea {
+min-height: 44px;
+}
+:global(.addon-workspace) :global(.publication-recovery) h2 {
+margin: 0;
+  font-size: 1rem;
+}
+:global(.addon-workspace) :global(.publication-recovery) :global(.button) {
+max-width: 100%;
+  white-space: normal;
+}
+:global(.addon-workspace) :global(.bulk-task-grid) {
+display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:24px;
+}
+:global(.addon-workspace) :global(.bulk-task) {
+min-width:0; padding-top:12px; border-top:1px solid var(--color-table-line);
+}
+:global(.addon-workspace) :global(.bulk-task) h3 {
+margin:0 0 12px; font-size:16px;
+}
+:global(.addon-workspace) :global(.bulk-fields) {
+display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;
+}
+:global(.addon-workspace) :global(.bulk-metadata-fields) {
+grid-template-columns:minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.bulk-option-group) {
+min-width:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px;
+}
+:global(.addon-workspace) :global(.bulk-option-group) h3 {
+grid-column:1/-1; font-size:13px; font-weight:400; color:var(--color-text-secondary); margin:0;
+}
+:global(.addon-workspace) :global(.bulk-task) :global(.action-row),
+:global(.addon-workspace) :global(.bulk-task) :global(.bulk-apply-row) {
+margin-top:16px;
+}
+:global(.addon-workspace) :global(.bulk-task) :global(.length-filter) {
+margin-top:12px;
+}
+:global(.addon-workspace) :global(.bulk-task) :global(.length-filter) > summary {
+width:100%;
+}
+:global(.addon-workspace) :global(.bulk-scope-row) {
+grid-template-columns:minmax(140px,180px) minmax(0,1fr) auto; align-items:center;
+}
+:global(.addon-workspace) :global(.bulk-scope-row) :global(.selection-label) {
+padding:0;
+}
+:global(.addon-workspace) :global(.source-tool-group) {
+margin:16px 0;
+}
+:global(.addon-workspace) :global(.source-tool-group) h3,
+:global(.addon-workspace) :global(.managed-location) h3 {
+font-size:14px; margin:0 0 8px;
+}
+:global(.addon-workspace) :global(.managed-location) {
+margin:20px 0; color:var(--color-text-secondary);
+}
+:global(.addon-workspace) :global(.managed-location) :global(.section-heading) {
+margin:0;
+}
+:global(.addon-workspace) :global(.managed-location) p {
+margin:4px 0;
+}
+:global(.addon-workspace) :global(.cutoff-note) {
+margin:12px 0; font-size:13px; color:var(--color-text-secondary);
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) {
+display:grid; grid-template-columns:minmax(0,1fr); gap:24px; max-width:48rem;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :global(.compact-option) {
+display:grid; grid-template-columns:18px minmax(0,1fr); gap:8px 9px; align-items:start; padding:0; grid-column:auto;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :global(.compact-option) + :global(.compact-option) {
+border-top:1px solid var(--color-table-line); padding-top:20px;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :global(.compact-option) > * {
+grid-column:2; grid-row:auto; min-width:0;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :global(.compact-option) > :global(.option-toggle) {
+grid-column:1/-1; display:grid; grid-template-columns:18px minmax(0,1fr); gap:9px; min-height:44px;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :global(.saved-option) {
+align-self:start; justify-self:start; text-align:left;
+}
+:global(.addon-workspace) :global(.option-grid) :global(.saved-option) {
+padding:0; margin:0;
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) :is(:global(.browser-choice),:global(.sponsor-consequence)) {
+display:block; margin:0;
+}
+:global(.addon-workspace) :global(.option-explanation) {
+font-size:13px;
+}
+:global(.addon-workspace) :global(.option-explanation) p {
+margin:0 0 12px;
+}
+:global(.addon-workspace) :global(.option-explanation) :global(.check) {
+margin:0;
+}
+:global(.addon-workspace) :global(.storage-settings) > :global(.compact-field) {
+max-width:220px;
+}
+:global(.addon-workspace) :global(.storage-settings) > h3 {
+font-size:18px; margin:0 0 12px;
+}
+@container admin-layout (max-width:850px) {
+:global(.addon-workspace) :global(.bulk-task-grid) {
+grid-template-columns:minmax(0,1fr);
+}
+:global(.addon-workspace):global(.view-options) :global(.option-grid) {
+grid-template-columns:minmax(0,1fr);
+}
+}
+@container admin-layout (max-width:550px) {
+:global(.addon-workspace) :global(.bulk-scope-row) {
+grid-template-columns:minmax(0,1fr);
+}
+:global(.addon-workspace) :global(.bulk-scope-row) > button {
+justify-self:start;
+}
+:global(.addon-workspace) :global(.bulk-option-group) {
+grid-template-columns:minmax(0,1fr);
+}
+}
+:global(.addon-workspace) {
+--reading-width:64rem;
+}
+:global(.addon-workspace) :global(.page-heading) h1 {
+font-size:28px; line-height:1.25; letter-spacing:-.025em;
+}
+:global(.addon-workspace) :global(.content-navigation) {
+gap:8px;
+}
+:global(.addon-workspace) :global(.content-navigation) > * {
+padding-inline:10px;
+}
+:global(.addon-workspace) :is(:global(.settings-form),:global(.view-options-form)) {
+max-width:var(--reading-width);
+}
+:global(.addon-workspace):global(.view-options) #workspace-form,
+:global(.addon-workspace):global(.view-options) > :global(.work-section),
+:global(.addon-workspace):global(.view-detail) > :global(.panel) {
+max-width:var(--reading-width);
+}
+:global(.addon-workspace) :global(.field) > label {
+font-weight:600; font-size:13px;
+}
+:global(.addon-workspace) :is(input:not([type=checkbox]):not([type=radio]),select,textarea) {
+border-radius:6px;
+}
+:global(.addon-workspace) :global(.button) {
+border-radius:6px; font-weight:600;
+}
+:global(.addon-workspace) :global(.button):global(.secondary) {
+background:transparent; border-color:var(--color-table-line);
+}
+:global(.addon-workspace) :global(.button):global(.secondary):hover {
+background:var(--color-surface); border-color:var(--color-border);
+}
+:global(.addon-workspace) :global(.publication-summary) {
+border-bottom:0;
+}
+:global(.addon-workspace) :global(.publication-state) strong {
+font-size:16px; font-weight:600;
+}
+:global(.addon-workspace) :global(.publication-state) span {
+font-size:13px; color:var(--color-text-secondary);
+}
+:global(.addon-workspace) :global(.disclosure) {
+border-color:var(--color-table-line);
+}
+:global(.addon-workspace) :global(.disclosure) > summary {
+background:transparent;
+}
+:global(.addon-workspace) :global(.disclosure)[open] > summary {
+background:var(--color-surface);
+}
+:global(.addon-workspace) :global(.group-actions-disclosure) {
+background:transparent;
+}
+:global(.addon-workspace) :global(.group-actions-disclosure) :global(.selection-tools) {
+background:transparent;
+}
+:global(.addon-workspace) :global(.bulk-scope-help) {
+grid-column:1/-1; color:var(--color-text-secondary); font-size:13px; margin:0;
+}
+:global(.addon-workspace) :global(.bulk-task) h3 {
+letter-spacing:-.01em;
+}
+:global(.addon-workspace) :global(.episode-row):not(:has(input:checked)):hover {
+background:var(--color-surface);
+}
+:global(.addon-workspace) :global(.episode-row) {
+border-bottom-color:var(--color-table-line);
+}
+:global(.addon-workspace) :global(.episode-column-head) {
+font-size:12px; color:var(--color-text-secondary);
+}
+:global(.addon-workspace) :global(.row-command-trigger) {
+border-color:var(--color-table-line); background:transparent;
+}
+:global(.addon-workspace) :global(.row-command-trigger):hover {
+border-color:var(--color-border);
+}
+:global(.addon-workspace) :global(.apply-bar) {
+margin-top:12px; gap:12px;
+}
+:global(.addon-workspace) :global(.apply-bar) small {
+font-size:13px;
+}
+:global(.addon-workspace) :global(.notice) {
+padding:12px 16px; border-color:var(--color-table-line); border-left:3px solid var(--color-success);
+}
+:global(.addon-workspace) :global(.notice)[role=alert] {
+border-left-color:#d88875;
+}
+:global(.addon-workspace) :global(.option-grid) :global(.access-setting) {
+display:grid; gap:8px; min-width:0;
+}
+:global(.addon-workspace) :global(.access-setting) + :global(.access-setting) {
+border-top:1px solid var(--color-table-line); padding-top:24px;
+}
+:global(.addon-workspace) :global(.access-setting) h3 {
+font-size:16px; margin:0 0 4px;
+}
+:global(.addon-workspace) :global(.access-setting) > label {
+font-size:13px; font-weight:600;
+}
+:global(.addon-workspace) :global(.access-setting) select {
+width:100%; max-width:24rem; min-height:44px;
+}
+:global(.addon-workspace) :global(.access-setting) p {
+font-size:13px; line-height:1.6; margin:0; max-width:65ch;
+}
+:global(.addon-workspace) :global(.access-setting) small {
+font-size:12px;
+}
+:global(.addon-workspace) :global(.cutoff-note) {
+max-width:65ch;
+}
+@container admin-layout (max-width:550px) {
+:global(.addon-workspace) :global(.page-heading) h1 {
+font-size:24px;
+}
+:global(.addon-workspace) :global(.content-navigation) {
+gap:4px;
+}
+}
+:global(.addon-workspace) #workspace-form:not(:has(input[name="delivery_mode"][value="Download ahead — new videos only"]:checked)) :global(.cutoff-note):not([data-has-cutoff]) {
+display:none;
+}
+
+:global(.addon-workspace) { padding: 12px 8px 32px; max-width: none; }
+:global(.addon-workspace .settings-layout) { max-width: 64rem; }
+:global(.addon-workspace .access-stack) { display:grid; grid-template-columns:minmax(0,1fr); max-width:48rem; }
+:global(.addon-workspace .option-setting) { display:grid; gap:6px; margin-block:16px; }
+:global(.addon-workspace .option-setting select) { width:100%; min-height:44px; }
+:global(.addon-workspace .option-setting p) { margin:0; }
+:global(.addon-workspace .item-adjacent) { width:7rem; flex:none; }
+:global(.addon-workspace .numbering-save-bar) { position:sticky; top:56px; z-index:5; display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px; background:var(--color-surface); border-block:1px solid var(--color-border); }
+:global(.addon-workspace .row-command) { min-width:40px; }
+:global(.addon-workspace .bulk-task-grid) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+:global(.addon-workspace .episode-identity small) { display:block; }
+:global(.addon-workspace .cover-art) { display:grid; place-items:center; }
+@media(max-width:700px) { :global(.addon-workspace .bulk-task-grid) { grid-template-columns:minmax(0,1fr); } }
+:global(.addon-workspace) :global(.artwork-preview) { display:block; max-width:20rem; max-height:15rem; object-fit:contain; margin-block:1rem; }
+:global(.addon-workspace) :global(.artwork-row) { padding-block:1.25rem; border-bottom:1px solid var(--color-border); }
+:global(.addon-workspace) :global(.facts) { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr)); gap:1rem; }
+:global(.addon-workspace) :global(.facts) dt { color:var(--color-text-secondary); font-size:.875rem; }
+:global(.addon-workspace) :global(.facts) dd { margin:0; overflow-wrap:anywhere; }
+:global(.addon-workspace) :global(.settings-section) { margin-block:1.5rem; }
+:global(.addon-workspace) :global(.action-row) { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem; margin-block:1rem; }
+:global(.addon-workspace) [aria-invalid="true"] { border-color:var(--color-error); }
+:global(.addon-workspace) [hidden] { display:none !important; }
+/* Content navigation originally shares a file with the prototype shell. */
+:global(.addon-workspace) :global(.content-breadcrumb) { display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--color-text-secondary); }
+:global(.addon-workspace) :global(.content-navigation) { display:flex; flex-wrap:wrap; border-bottom:1px solid var(--color-border); }
+:global(.addon-workspace) :global(.tab-link) { min-height:44px; }
+/* Retain the application accent while meeting normal-text contrast on buttons. */
+:global(.addon-workspace) :global(.button.primary) { background:color-mix(in srgb,var(--color-primary) 90%,#000); color:var(--color-on-primary); }
+:global(.addon-workspace) :global(.filter-row) > :global(.field) { flex:1 1 16rem; min-width:0; }
+:global(.addon-workspace) :global(.row-art-placeholder) { width:44px; height:44px; flex:0 0 44px; }
+@media (max-width:720px) {
+  :global(.addon-workspace) :global(.content-navigation) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  :global(.addon-workspace) :global(.content-navigation) > * { justify-content:center; text-align:center; min-width:0; }
+}
+
+:global(.addon-workspace) details[data-disclosure-kind="section"] > summary { min-height:44px; }
+:global(.addon-workspace) :global(.storage-settings) > :global(.field) { max-width:220px; }
+
+/* Item review follows the locked edit/tools hierarchy, including open sections. */
+:global(.addon-workspace .item-review .item-navigation) { align-items:flex-start; gap:12px; }
+:global(.addon-workspace .item-review .item-adjacent) { min-height:44px; width:7rem; }
+:global(.addon-workspace .item-access-trigger) { display:grid; gap:8px; max-width:24rem; }
+:global(.addon-workspace .item-access-trigger small) { max-width:32ch; }
+:global(.addon-workspace .item-edit) { padding-block:16px 24px; }
+:global(.addon-workspace .item-tools) { padding-block:24px; border-top:1px solid var(--color-border); }
+:global(.addon-workspace .item-review .section-heading) { margin-bottom:16px; }
+:global(.addon-workspace .item-status) { color:var(--color-text-secondary); line-height:1.6; }
+:global(.addon-workspace .item-review .item-numbering) { margin:16px 0; padding:16px; border:1px solid var(--color-border); border-radius:6px; }
+:global(.addon-workspace .item-numbering legend) { padding-inline:8px; font-weight:600; }
+:global(.addon-workspace .item-review .numbering-kind) { display:flex; flex-wrap:wrap; gap:16px; margin-bottom:12px; }
+:global(.addon-workspace .item-review .episode-pair) { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; max-width:14rem; margin-bottom:8px; }
+:global(.addon-workspace .item-review .numbering-kind .check) { min-height:44px; }
+:global(.addon-workspace .item-review .item-options) { margin-block:24px; }
+:global(.addon-workspace .item-review .option-setting) { border:0; margin:0 0 16px; padding:0; gap:8px; }
+:global(.addon-workspace .item-review .option-setting select) { max-width:none; }
+:global(.addon-workspace .item-review .option-effective) { color:var(--color-text-secondary); }
+:global(.addon-workspace .item-review .disclosure[open] > summary)::before,
+:global(.addon-workspace .item-review .disclosure > summary)::before { content:none; }
+:global(.addon-workspace .item-review .disclosure[open] > summary) { background:var(--color-surface); border-color:var(--color-border); }
+:global(.addon-workspace .item-review .disclosure-label small) { display:block; color:var(--color-text-secondary); }
+:global(.addon-workspace .item-review .disclosure-body) { padding:16px; }
+:global(.addon-workspace .item-review .metadata-credits) { padding-top:16px; margin-top:16px; border-top:1px solid var(--color-border); }
+:global(.addon-workspace .item-review .replacement-result) { display:grid; gap:8px; padding-block:16px; border-top:1px solid var(--color-border); overflow-wrap:anywhere; }
+:global(.addon-workspace .item-review .replacement-result button) { justify-self:start; }
+:global(.addon-workspace .item-review #item-save) { scroll-margin-top:72px; }
+:global(.addon-workspace .item-review .option-help) { max-width:65ch; }
+@media(max-width:550px) {
+  :global(.addon-workspace .item-review .item-basics) { grid-template-columns:minmax(0,1fr); }
+  :global(.addon-workspace .item-access-trigger) { max-width:100%; }
+}
+
+/* Native radio state controls presentation; the POST adapter also normalizes
+   Unnumbered, so stale number inputs cannot become an accidental edit. */
+:global(.addon-workspace) :global(.item-numbering):has(input[name="numbering_mode"][value="none"]:checked) :global(.episode-pair),
+:global(.addon-workspace) :global(.item-numbering):has(input[name="numbering_mode"][value="none"]:checked) :global(.numbered-help),
+:global(.addon-workspace) :global(.item-numbering):has(input[name="numbering_mode"][value="numbered"]:checked) :global(.unnumbered-help) { display:none; }
+:global(.addon-workspace .item-review .item-numbering .field) { max-width:none; }
+
+:global(.addon-workspace .item-review) { color-scheme:dark; }
+[data-theme="light"] :global(.addon-workspace .item-review) { color-scheme:light; }
+/* Light-theme field edges must remain distinguishable from the page surface. */
+[data-theme="light"] :global(.addon-workspace .item-review) :is(input,select,textarea):not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([aria-invalid="true"]) { border-color:var(--color-muted); }

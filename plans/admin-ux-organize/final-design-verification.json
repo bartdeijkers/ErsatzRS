@@ -1,0 +1,2007 @@
+{
+  "checks": [
+    {
+      "label": "chromium dark 320 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 320 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 14,
+          "y": 312.59375,
+          "width": 292,
+          "height": 87.28125
+        },
+        "now": {
+          "x": 14,
+          "y": 312.59375,
+          "width": 292,
+          "height": 87.28125
+        }
+      }
+    },
+    {
+      "label": "chromium dark 320 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 768 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 244,
+          "y": 322.015625,
+          "width": 504,
+          "height": 43.28125
+        },
+        "now": {
+          "x": 244,
+          "y": 322.015625,
+          "width": 504,
+          "height": 43.28125
+        }
+      }
+    },
+    {
+      "label": "chromium dark 768 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "chromium dark 1440 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 254,
+          "y": 278.328125,
+          "width": 1156,
+          "height": 43.28125
+        },
+        "now": {
+          "x": 254,
+          "y": 278.328125,
+          "width": 1156,
+          "height": 43.28125
+        }
+      }
+    },
+    {
+      "label": "chromium dark 1440 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "chromium light 320 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 14,
+          "y": 312.59375,
+          "width": 292,
+          "height": 87.28125
+        },
+        "now": {
+          "x": 14,
+          "y": 312.59375,
+          "width": 292,
+          "height": 87.28125
+        }
+      }
+    },
+    {
+      "label": "chromium light 320 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "chromium light 768 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 244,
+          "y": 322.015625,
+          "width": 504,
+          "height": 43.28125
+        },
+        "now": {
+          "x": 244,
+          "y": 322.015625,
+          "width": 504,
+          "height": 43.28125
+        }
+      }
+    },
+    {
+      "label": "chromium light 768 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "chromium light 1440 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 254,
+          "y": 278.328125,
+          "width": 1156,
+          "height": 43.28125
+        },
+        "now": {
+          "x": 254,
+          "y": 278.328125,
+          "width": 1156,
+          "height": 43.28125
+        }
+      }
+    },
+    {
+      "label": "chromium light 1440 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "chromium no changes publication disabled",
+      "passed": true
+    },
+    {
+      "label": "chromium applied and published states distinct",
+      "passed": true
+    },
+    {
+      "label": "chromium synthetic publish advances snapshot",
+      "passed": true
+    },
+    {
+      "label": "chromium undo retains unrelated draft",
+      "passed": true
+    },
+    {
+      "label": "chromium item editor shares pending numbering",
+      "passed": true
+    },
+    {
+      "label": "chromium item navigation retains shared numbering",
+      "passed": true
+    },
+    {
+      "label": "chromium item editor rejects duplicate pair",
+      "passed": true
+    },
+    {
+      "label": "chromium invalid artwork does not trap navigation",
+      "passed": true
+    },
+    {
+      "label": "chromium inactive invalid artwork branch does not block Apply",
+      "passed": true
+    },
+    {
+      "label": "chromium Unavailable filter shows matching evidence",
+      "passed": true
+    },
+    {
+      "label": "chromium Conflicted filter shows matching evidence",
+      "passed": true
+    },
+    {
+      "label": "chromium numbering uses explicit filter scope",
+      "passed": true
+    },
+    {
+      "label": "chromium invalid playback draft permits navigation",
+      "passed": true
+    },
+    {
+      "label": "chromium invalid playback draft retained",
+      "passed": true
+    },
+    {
+      "label": "chromium replacement retains originating item",
+      "passed": true
+    },
+    {
+      "label": "chromium replacement returns to originating item",
+      "passed": true
+    },
+    {
+      "label": "chromium recovery has correct section context",
+      "passed": true
+    },
+    {
+      "label": "chromium row commands open with keyboard",
+      "passed": true
+    },
+    {
+      "label": "chromium Escape closes row commands",
+      "passed": true
+    },
+    {
+      "label": "chromium long setting labels reflow with drawer open",
+      "passed": true
+    },
+    {
+      "label": "chromium access-result.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium access-running.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium activity.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium addon-impact.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium artwork.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium bulk-preview.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium change-addon.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium conflict.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium cookies.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium empty-numbering.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium index.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium invalid-numbering.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-1.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-10.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-11.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-12.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-13.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-14.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-15.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-16.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-17.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-18.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-19.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-2.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-20.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-21.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-22.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-23.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-24.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-25.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-26.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-27.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-28.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-29.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-3.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-30.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-31.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-32.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-33.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-34.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-35.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-36.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-4.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-5.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-6.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-7.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-8.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium item-9.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium long-list.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium media-details.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-1.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-2.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-3.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-4.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-5.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-6.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-7.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-8.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-9.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering-preview.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium numbering.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium options.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium paused.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium reconcile.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium recovery.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium replacement.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium reset-impact.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium response.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium restore-impact.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium revision-compare.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium running.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium selection-1.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium selection-2.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium selection-3.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium selection-4.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium selection-5.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium selection-6.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium selection-7.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium selection-8.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium selection-9.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium settings.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium source-check.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium sponsorblock.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium stale-preview.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "chromium states.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox dark 320 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 320 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 14,
+          "y": 312.6000061035156,
+          "width": 292,
+          "height": 87.30001831054688
+        },
+        "now": {
+          "x": 14,
+          "y": 312.6000061035156,
+          "width": 292,
+          "height": 87.30001831054688
+        }
+      }
+    },
+    {
+      "label": "firefox dark 320 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 768 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 244,
+          "y": 322.04998779296875,
+          "width": 504,
+          "height": 43.29998779296875
+        },
+        "now": {
+          "x": 244,
+          "y": 322.04998779296875,
+          "width": 504,
+          "height": 43.29998779296875
+        }
+      }
+    },
+    {
+      "label": "firefox dark 768 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "firefox dark 1440 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 254,
+          "y": 278.3500061035156,
+          "width": 1156,
+          "height": 43.29998779296875
+        },
+        "now": {
+          "x": 254,
+          "y": 278.3500061035156,
+          "width": 1156,
+          "height": 43.29998779296875
+        }
+      }
+    },
+    {
+      "label": "firefox dark 1440 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "firefox light 320 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 14,
+          "y": 312.6000061035156,
+          "width": 292,
+          "height": 87.30001831054688
+        },
+        "now": {
+          "x": 14,
+          "y": 312.6000061035156,
+          "width": 292,
+          "height": 87.30001831054688
+        }
+      }
+    },
+    {
+      "label": "firefox light 320 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "firefox light 768 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 244,
+          "y": 322.04998779296875,
+          "width": 504,
+          "height": 43.29998779296875
+        },
+        "now": {
+          "x": 244,
+          "y": 322.04998779296875,
+          "width": 504,
+          "height": 43.29998779296875
+        }
+      }
+    },
+    {
+      "label": "firefox light 768 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 keyboard disclosure",
+      "passed": true
+    },
+    {
+      "label": "firefox light 1440 publication peers remain stable",
+      "passed": true,
+      "data": {
+        "rect": {
+          "x": 254,
+          "y": 278.3500061035156,
+          "width": 1156,
+          "height": 43.29998779296875
+        },
+        "now": {
+          "x": 254,
+          "y": 278.3500061035156,
+          "width": 1156,
+          "height": 43.29998779296875
+        }
+      }
+    },
+    {
+      "label": "firefox light 1440 expanded publication reflow",
+      "passed": true
+    },
+    {
+      "label": "firefox no changes publication disabled",
+      "passed": true
+    },
+    {
+      "label": "firefox applied and published states distinct",
+      "passed": true
+    },
+    {
+      "label": "firefox synthetic publish advances snapshot",
+      "passed": true
+    },
+    {
+      "label": "firefox undo retains unrelated draft",
+      "passed": true
+    },
+    {
+      "label": "firefox item editor shares pending numbering",
+      "passed": true
+    },
+    {
+      "label": "firefox item navigation retains shared numbering",
+      "passed": true
+    },
+    {
+      "label": "firefox item editor rejects duplicate pair",
+      "passed": true
+    },
+    {
+      "label": "firefox invalid artwork does not trap navigation",
+      "passed": true
+    },
+    {
+      "label": "firefox inactive invalid artwork branch does not block Apply",
+      "passed": true
+    },
+    {
+      "label": "firefox Unavailable filter shows matching evidence",
+      "passed": true
+    },
+    {
+      "label": "firefox Conflicted filter shows matching evidence",
+      "passed": true
+    },
+    {
+      "label": "firefox numbering uses explicit filter scope",
+      "passed": true
+    },
+    {
+      "label": "firefox invalid playback draft permits navigation",
+      "passed": true
+    },
+    {
+      "label": "firefox invalid playback draft retained",
+      "passed": true
+    },
+    {
+      "label": "firefox replacement retains originating item",
+      "passed": true
+    },
+    {
+      "label": "firefox replacement returns to originating item",
+      "passed": true
+    },
+    {
+      "label": "firefox recovery has correct section context",
+      "passed": true
+    },
+    {
+      "label": "firefox row commands open with keyboard",
+      "passed": true
+    },
+    {
+      "label": "firefox Escape closes row commands",
+      "passed": true
+    },
+    {
+      "label": "firefox long setting labels reflow with drawer open",
+      "passed": true
+    },
+    {
+      "label": "firefox access-result.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox access-running.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox activity.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox addon-impact.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox artwork.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox bulk-preview.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox change-addon.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox conflict.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox cookies.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox empty-numbering.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox index.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox invalid-numbering.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-1.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-10.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-11.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-12.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-13.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-14.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-15.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-16.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-17.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-18.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-19.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-2.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-20.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-21.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-22.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-23.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-24.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-25.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-26.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-27.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-28.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-29.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-3.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-30.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-31.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-32.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-33.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-34.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-35.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-36.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-4.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-5.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-6.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-7.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-8.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox item-9.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox long-list.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox media-details.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-1.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-2.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-3.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-4.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-5.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-6.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-7.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-8.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-9.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering-preview.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox numbering.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox options.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox paused.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox reconcile.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox recovery.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox replacement.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox reset-impact.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox response.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox restore-impact.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox revision-compare.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox running.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox selection-1.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox selection-2.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox selection-3.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox selection-4.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox selection-5.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox selection-6.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox selection-7.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox selection-8.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox selection-9.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox settings.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox source-check.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox sponsorblock.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox stale-preview.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    },
+    {
+      "label": "firefox states.html expanded narrow / references / form ownership",
+      "passed": true,
+      "data": {
+        "overflow": false,
+        "refs": [],
+        "orphanButtons": []
+      }
+    }
+  ],
+  "failures": []
+}
