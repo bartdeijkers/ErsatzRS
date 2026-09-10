@@ -7,3 +7,17 @@ retries = 0
 # A string threshold reports slow tests but does not terminate them.
 slow-timeout = "60s"
 final-status-level = "slow"
+
+# CI reuses the default semantics (no retries, run through failures, slow
+# tests reported after 60s) and adds a JUnit report. The report carries a
+# duration per test, which is what makes CI runtime regressions attributable
+# to individual tests instead of a single wall-clock number.
+[profile.ci]
+fail-fast = false
+retries = 0
+slow-timeout = "60s"
+final-status-level = "slow"
+failure-output = "immediate-final"
+
+[profile.ci.junit]
+path = "junit.xml"
