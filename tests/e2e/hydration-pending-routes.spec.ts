@@ -748,7 +748,16 @@ SELECT "ContentKindOverride" || ',' || "RefreshCadence" FROM "AddonMediaList"
 WHERE "AddonId" = '${sqlEscape(seed.addonId)}'
   AND "ProviderId" = '${sqlEscape(seed.importProviderId)}';
 `)).toBe('2,0');
+    await expect.poll(() => sqlite(`
+SELECT job."State" FROM "AddonMediaListImportJob" job
+JOIN "AddonMediaList" list ON list."Id" = job."AddonMediaListId"
+WHERE list."AddonId" = '${sqlEscape(seed.addonId)}'
+  AND list."ProviderId" = '${sqlEscape(seed.importProviderId)}'
+ORDER BY job."Generation" DESC LIMIT 1;
+`), { timeout: 30_000 }).toBe('3');
     await page.reload();
+    await waitForHydration(page);
+    await page.locator('button[formaction$="/settings"]').click();
     await waitForHydration(page);
     await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue(seed.importListName);
 
@@ -790,28 +799,33 @@ SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = ${seed.deleteListId};
     sqlite(`
 UPDATE "AddonMediaList" SET "RefreshCadence" = 5 WHERE "Id" = ${seed.editorListId};
 `);
-    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    await expect(page.locator('form[action="/api/addon-lists/save"]')).toBeVisible();
+    const listRoute = `/media/addon-lists/${seed.editorListId}`;
+    const itemRoute = `${listRoute}/items/${seed.editorItemId}`;
+    const submitTask = async (intent: string) => {
+      await Promise.all([
+        page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+        page.locator(`button[name="intent"][value="${intent}"]`).first().click(),
+      ]);
+      await waitForHydration(page);
+      await expect(page.locator('#workspace-errors')).toHaveCount(0);
+    };
+    await gotoHydrated(page, `${listRoute}/settings`);
+    await expect(page.locator('form#addon-list-workspace')).toHaveCount(1);
     await page.getByLabel('Collection Type', { exact: true }).selectOption('other_videos');
     const refreshCadence = page.getByRole('combobox', { name: 'Automatic Refresh' });
     await expect(refreshCadence).toHaveValue('adaptive');
     await expect(refreshCadence.locator('option[value="adaptive"]')).toBeEnabled();
-    await expect(page.getByTestId('adaptive-refresh-unavailable')).toBeVisible();
+    await expect(page.getByText(/^Adaptive refresh is unavailable because/)).toBeVisible();
     await refreshCadence.selectOption('weekly');
-    await expect(page.getByTestId('addon-list-refresh-status')).toContainText(
-      'Last successful refresh',
-    );
-    await page.locator('input[name="generate_playlist"]').uncheck();
-    const saveNavigation = page.waitForEvent('framenavigated');
-    await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
-    await saveNavigation;
-    await expect(page).toHaveURL(new RegExp(`/media/addon-lists/${seed.editorListId}$`));
-    await waitForHydration(page);
+    await expect(page.locator('#source dt').filter({ hasText: 'Last successful refresh' })).toBeVisible();
+    await page.locator('input[type="checkbox"][name="generate_playlist"]').uncheck();
+    await submitTask('save');
+    await expect(page).toHaveURL(new RegExp(`${listRoute}/settings$`));
 
     expect(sqlite(`
-SELECT "RefreshCadence" || ',' || "GeneratePlaylist" || ',' || "ContentKindOverride"
+SELECT "RefreshCadence" || ',' || "GeneratePlaylist" || ',' || "RequestedPresentationKind"
 FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
-`)).toBe('1,0,4');
+`)).toBe('1,0,5');
     // Saving edits the review draft but leaves the published playlist intact.
     expect(sqlite(`
 SELECT COALESCE("PlaylistId", '') FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
@@ -820,45 +834,41 @@ SELECT COALESCE("PlaylistId", '') FROM "AddonMediaList" WHERE "Id" = ${seed.edit
 SELECT COUNT(*) FROM "Playlist" WHERE "Id" = ${generatedPlaylistId};
 `)).toBe('1');
 
-    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    // The shared metadata editor keeps every provider-ordered entry in one
-    // review table; availability is a row status rather than a second hierarchy.
-    const replacementRow = () =>
-      page
-        .getByTestId('addon-metadata-items')
-        .locator('li[data-item-id]')
-        .filter({ hasText: seed.replacementTitle })
-        .first();
-    let itemRow = replacementRow();
-    await expect(itemRow).toBeVisible();
-    // The entry owns its classification, so the row carries its own selector.
-    await expect(itemRow.getByRole('combobox', { name: 'Media Kind' })).toBeVisible();
-    await itemRow.getByRole('button', { name: /^replace$/i }).click();
-    const replacementPicker = page
-      .locator('div[class*="picker-panel"]')
-      .filter({ has: page.locator('input[type="search"]') })
-      .last();
-    const candidateRow = replacementPicker
-      .locator('tr')
-      .filter({ hasText: seed.replacementTitle });
-    await expect(candidateRow).toBeVisible();
-    await candidateRow.getByRole('button', { name: /^replace$/i }).click();
+    await gotoHydrated(page, listRoute);
+    await page.locator(`#item-${seed.editorItemId} .row-title`).click();
+    await waitForHydration(page);
+    await expect(page).toHaveURL(itemRoute);
+    // Classification and replacement now belong to the dedicated item task.
+    await expect(page.getByRole('combobox', { name: 'Media Kind' })).toBeVisible();
+    const chooseReplacement = async () => {
+      const disclosure = page.locator('#item-replacement');
+      if (await disclosure.getAttribute('open') === null) {
+        await disclosure.locator('summary').click();
+      }
+      await page.getByLabel('Search local media', { exact: true }).fill(seed.replacementTitle);
+      await submitTask('replacement-search');
+      await expect(page.locator('.replacement-result').filter({ hasText: seed.replacementTitle })).toBeVisible();
+      await submitTask(`replacement:${seed.replacementMediaItemId}:${seed.replacementMediaVersionId}`);
+      await expect(disclosure).toContainText('Replacement change is unsaved.');
+      expect(sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemReplacement" WHERE "AddonMediaListItemId" = ${seed.editorItemId};`)).toBe('0');
+      await submitTask('save');
+    };
+    await chooseReplacement();
     await expect.poll(() => sqlite(`
 SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
 WHERE "AddonMediaListItemId" = ${seed.editorItemId}
   AND "MediaItemId" = ${seed.replacementMediaItemId}
   AND "MediaVersionId" = ${seed.replacementMediaVersionId};
 `)).toBe('1');
-    itemRow = replacementRow();
-    await expect(itemRow.locator('[data-replacement-state="valid"]')).toBeVisible();
+    await expect(page.locator('#item-replacement summary')).toContainText(seed.replacementTitle);
+    await expect(page.getByText('Invalid replacement', { exact: true })).toBeHidden();
 
     sqlite(`DELETE FROM "MediaStream" WHERE "Id" = ${seed.replacementMediaStreamId};`);
-    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    itemRow = replacementRow();
-    await expect(itemRow.locator('[data-replacement-state="invalid"]')).toContainText(
-      'Invalid replacement',
-    );
-    await itemRow.getByRole('button', { name: /^clear$/i }).click();
+    await gotoHydrated(page, itemRoute);
+    await expect(page.getByText('Invalid replacement', { exact: true })).toBeVisible();
+    await submitTask('replacement-clear');
+    expect(sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemReplacement" WHERE "AddonMediaListItemId" = ${seed.editorItemId};`)).toBe('1');
+    await submitTask('save');
     await expect.poll(() => sqlite(`
 SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
 WHERE "AddonMediaListItemId" = ${seed.editorItemId};
@@ -873,17 +883,8 @@ INSERT INTO "MediaStream" (
   ${seed.replacementMediaVersionId}, 0
 );
 `);
-    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    itemRow = replacementRow();
-    await itemRow.getByRole('button', { name: /^replace$/i }).click();
-    const recoveredCandidateRow = page
-      .locator('div[class*="picker-panel"]')
-      .filter({ has: page.locator('input[type="search"]') })
-      .last()
-      .locator('tr')
-      .filter({ hasText: seed.replacementTitle });
-    await expect(recoveredCandidateRow).toBeVisible();
-    await recoveredCandidateRow.getByRole('button', { name: /^replace$/i }).click();
+    await gotoHydrated(page, itemRoute);
+    await chooseReplacement();
     await expect.poll(() => sqlite(`
 SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
 WHERE "AddonMediaListItemId" = ${seed.editorItemId};
@@ -891,8 +892,8 @@ WHERE "AddonMediaListItemId" = ${seed.editorItemId};
 
     writeFileSync(seed.recoveryFlagPath, 'recovered\n');
     await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
-    await expect(page.getByText('Empty import needs retry', { exact: true })).toBeVisible();
-    await expect(page.getByText(/completed import contains no items/i)).toBeVisible();
+    await page.locator('.publication-summary details > summary').click();
+    await expect(page.getByRole('heading', { name: 'Empty import needs retry', exact: true })).toBeVisible();
     await page.getByRole('button', { name: /^retry import now$/i }).click();
     // Manual retry still respects the shared provider cooldown.
     await expect.poll(() => sqlite(`
@@ -910,12 +911,11 @@ SELECT COUNT(*) FROM "AddonMediaListItemReplacement"
 WHERE "AddonMediaListItemId" = ${seed.editorItemId};
 `)).toBe('1');
 
-    await gotoHydrated(page, `/media/addon-lists/${seed.editorListId}`);
+    await gotoHydrated(page, itemRoute);
     // Recovery updates the same row in place and removes its review status.
-    itemRow = replacementRow();
-    await expect(itemRow).toBeVisible();
-    await expect(itemRow).toContainText('Available');
-    await expect(itemRow.locator('[data-replacement-state="valid"]')).toBeVisible();
+    await expect(page.locator('.item-status')).toContainText('Available');
+    await expect(page.locator('#item-replacement summary')).toContainText(seed.replacementTitle);
+    await expect(page.getByText('Invalid replacement', { exact: true })).toBeHidden();
     expect(runtimeErrors).toEqual([]);
   });
 
