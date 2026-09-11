@@ -1186,9 +1186,52 @@ expanded history and new retry infrastructure are withdrawn, not N-03 work.
 
 ### AMM-N-03 — Cross-platform and release acceptance
 
+#### Authorized gate execution (2026-09-11)
+
+The maintainer explicitly rejected the proposed local review/fix checkpoint and
+authorized proceeding directly to gates, CI and push. Codex owns execution.
+Milestone `amm-n-03` owns acceptance and current evidence. This slice integrates
+the accepted lifecycle; it does not add a transport, updater, storage manager,
+test framework or new product controls.
+
+1. Map each acceptance clause to an existing test/capture and its candidate
+   revision. Inspect retained artifacts before reusing them. Recover missing
+   evidence where possible; a narrative completion record alone is not proof.
+   Keep each new browser run's output in its own directory so it cannot clear
+   other acceptance captures.
+2. Run the required gates and address credible P1/P2 failures. Reuse existing
+   contract, migration, publication/recovery, refresh, warning and browser
+   suites. Change code or add a targeted regression only for a demonstrated
+   failure or uncovered explicit requirement; review the smallest correction.
+3. Preserve the required packaged Windows scan/Publish/disconnect/restart/UI
+   recovery scenario. Existing seeded recovery and preparation-worker restart
+   tests do not substitute for it. Use an isolated candidate and synthetic
+   media; never fault a production database or use a personal browser profile.
+   The real browser-profile guidance check requires a disposable profile and
+   appropriate maintainer coordination.
+4. Validate the exact provider bundle's six RID entrypoints, imported helpers,
+   permissions and host contract. Distinguish static bundle validation from
+   native platform execution. Reuse existing Linux/Windows tests and packaging
+   tools; report unavailable platform evidence instead of claiming it passed.
+5. Retain scheduled real-provider SponsorBlock MPEG-TS/HLS acceptance and actual
+   primary/fallback human-subtitle viewing. Reuse valid captures when available;
+   otherwise repeat only the missing required proof, preserving the approved
+   ten-second target/twenty-second maximum and uninterrupted cuts. Synthetic
+   subtitle proof and container-only TSDuck proof answer different requirements.
+6. Commit and push the scoped candidate, observe exact-SHA CI and fix demonstrated
+   failures. Reuse applicable passing results and rerun affected failing parts.
+   Keep N-03 open until its remaining integrated acceptance actually passes;
+   a green CI run alone is not proof of manual playback or Windows dogfood.
+
+The new authorization supersedes the earlier checkpoint/approval sequencing,
+not the acceptance requirements. Run build/media operations
+serially with bounded concurrency and coordinate with other terminals. Do not
+change release workflows or add missing platform infrastructure merely to make
+the checklist easier to satisfy; raise the evidence/access gap first.
+
 Release follow-through requested by the maintainer: after M-01 through N-03
-are complete and N-03 review feedback is fixed, retain the approval checkpoint
-before making CI green and pushing. Once authorized and CI is green for the
+are complete and N-03 review feedback is fixed, use the explicit 2026-09-11
+authorization for gates, CI and push. Once CI is green for the
 exact final commit, create a new beta release containing only the Windows
 package (`win-x64`). Verify the published Windows archive and its build identity;
 do not publish Linux or macOS packages for this beta. This limited release asset
@@ -1206,7 +1249,8 @@ once those conditions hold; no second release-approval prompt is required.
   and a SponsorBlock-prepared item.
 - Prove source/diff/reset-impact/history UX, shared dialog/table accessibility,
   reordered early-stop fallback, two-observation reconciliation,
-  additions-only publication, cache quotas/pins, and the N-02 failed-and-stale
+  additions-only publication, advisory disk-usage warnings and existing pin
+  safeguards, and the N-02 failed-and-stale
   add-on health warning. Withdrawn updater recovery/administration is excluded.
 - Repeat the original overlap shape: scheduled scan active, Publish submitted,
   browser disconnected, host restarted, recovery completed in the UI, one

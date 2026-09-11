@@ -4079,7 +4079,7 @@ push was run. N-03 owns integrated acceptance.
 id         = 'amm-n-03'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
 title      = 'Close the broadened lifecycle on all supported platforms'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-j-04', 'amm-k-04', 'amm-l-05', 'amm-m-03', 'amm-n-01b', 'amm-n-02']
@@ -4091,21 +4091,41 @@ playback gates pass. The original overlap is repeated with a scheduled scan,
 Publish, browser disconnect, restart, UI recovery, and one exact final revision
 with distinct causal diagnostics, no stranded journal, and no manual database/
 filesystem repair. Reordered incremental discovery, two-observation reconcile,
-source/diff/impact/history UX, accessibility, quota/LRU pins, the N-02
+source/diff/impact/history UX, accessibility, advisory disk-usage warnings and
+existing pin safeguards, the N-02
 stale-after-failed-update add-on health warning, and additions-only publication
 pass. Tool-update backup, rollback, quarantine and administration withdrawn by
 the 2026-09-11 amendment are not integrated-closeout requirements. A real channel proves
 SponsorBlock-processed video and default/fallback human subtitles.
 '''
 evidence = '''
-Not started. This milestone is the only completion boundary for the combined
-AMM-J through AMM-N contract; individual argv or UI tests are insufficient.
+Reserved by Codex on 2026-09-11. Planning and independent plan review are complete.
+The maintainer explicitly rejected a local review/fix checkpoint and authorized
+direct gates, CI and push. The live plan now follows that instruction. N-03
+remains open until all acceptance is proven; CI does not replace manual gates.
+This milestone is the only completion boundary for the combined AMM-J through
+AMM-N contract; individual argv or UI tests are insufficient.
+Current inspection: existing browser tests cover seeded publication recovery
+and actual preparation-worker host death separately, not the complete packaged
+Windows scan/Publish/disconnect/restart/UI recovery scenario. Prior M-01A,
+M-02 and N-01B results are recorded in their milestones, but their cited local
+test-results capture directories are absent at planning time. Locate retained
+copies before proposing repeats; summaries alone do not re-establish proof.
+The provider's one architecture-neutral ZIP declares six RID entrypoints;
+Linux/Windows synthetic tests and static manifest/ZIP checks do not establish
+native execution on every platform or real browser-profile behavior. The local
+provider bundle predates N-02 and cannot prove final-candidate packaging.
+The host release workflow currently omits macOS archives; unavailable native
+platform evidence remains a gap, not authorization for workflow expansion.
+Removed stale quota/LRU wording under the already-approved M-03 amendment:
+advisory usage warnings and existing pin safeguards remain; no new eviction,
+retention or quota administration is restored by N-03.
 AMM-L-05 scoped lint exposed earlier-slice Clippy debt, including the independent
 AddonMediaListReferencePins Boolean fields and source-probe/lifecycle/test lints.
 Retain this cleanup for the requested integrated CI-green stage; do not treat
 the focused slice test results as full closeout evidence.
-After N-03 completion and review fixes, ask for the previously required approval
-to make CI green and push. The maintainer additionally requested a new beta
+On 2026-09-11 the maintainer explicitly authorized gates, CI and push without
+another local-checkpoint approval. The maintainer additionally requested a new beta
 release once CI is green for the final commit, publishing only the Windows
 win-x64 package, and explicitly pre-approved that conditional beta publication.
 No second release-approval prompt is required. This follow-through is recorded

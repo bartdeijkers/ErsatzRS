@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-N-02 complete; plan AMM-N-03 integrated acceptance from current evidence'
+current_focus = 'AMM-N-03 gates, CI and push explicitly authorized; Codex owns serialized execution'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -142,16 +142,17 @@ behind the latest release for its native update channel, not merely old by
 date. N-02 is complete with native release evidence, negotiated provider-supplied
 program/versions, generic localized health text and focused provider, Rust and
 hydrated/no-JS browser proof. The milestone owns the evidence and review fixes.
-Next plan N-03 integrated acceptance, reusing valid evidence and identifying any
-obsolete requirements before running gates. An unknown latest
+N-03 is reserved to Codex. The maintainer explicitly rejected a local review/fix
+checkpoint and authorized direct gates, CI and push on 2026-09-11. Do not mark
+N-03 complete before all its gates pass. Reuse valid evidence and recover
+missing captures before proposing repeats. An unknown latest
 version is not proof of staleness. Backup, rollback, quarantine, extra validation,
 manual-update controls, expanded history and new retry infrastructure are
 withdrawn, including their N-03 follow-through. Preserve N-01 safety behavior.
 HLS Direct expansion is excluded; language changes may reprepare
-downloaded media. The active workflow authorizes scoped local commits but no
-CI/full closeout or push during slice work. After N-03 review fixes, pause and
-ask before making CI green and pushing; the conditional Windows beta follows
-only after its recorded acceptance gates.
+downloaded media. Direct gates, CI and push are now authorized; no additional
+local-checkpoint approval is needed. The conditional Windows beta follows
+only after its recorded acceptance gates and exact-candidate green CI.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native
 yt-dlp executable capabilities; the removed custom Range adapter has no fallback.
 Keep existing HDR/unmapped-subtitle refusals and ordinary playback behavior intact.
