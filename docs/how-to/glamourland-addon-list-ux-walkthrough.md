@@ -1,5 +1,9 @@
 # Evaluate the Glamourland add-on-list import UX
 
+Historical evidence only: Beeld & Geluid was retired on 2026-09-11 under
+[ADR 0092](../adr/0092-retire-official-beeld-en-geluid-addon.md). Do not repeat
+this service-backed walkthrough; generic admin UX regressions remain relevant.
+
 This walkthrough records a visual Windows dogfood session of the Beeld &
 Geluid add-on and the Glamourland add-on-list import. It is intended as input
 for a later UX/UI expert review, not as an automated acceptance test.

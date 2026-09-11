@@ -2,7 +2,7 @@ feature    = 'Local add-on repository platform'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-backed extension equivalent'
 rs_target  = '`crates/ersatzrs-addon-contract`, `crates/ersatzrs-app`, `crates/ersatzrs-infra/src/addons.rs`, `crates/ersatzrs-infra/src/health/checks/addon_platform.rs`, `crates/ersatzrs-web/src/admin/pages/addons.rs`, and the separate official add-ons repository'
 status     = 'In progress'
-adr        = ['0051', '0066', '0067', '0072', '0074', '0079', '0081']
+adr        = ['0051', '0066', '0067', '0072', '0074', '0079', '0081', '0092']
 
 summary = '''
 ADR 0081 supersedes the active HTTPS catalog and signing model from ADR 0066.
@@ -23,8 +23,9 @@ an explicit adoption confirmation can bind one to a local offer while
 preserving settings and its data namespace.
 
 The separate private official repository is itself the complete local source
-for standalone Beeld & Geluid and operator-supplied yt-dlp adapters on all six
-release RIDs. Its CI validates manifests and publishes an offline bundle
+for the operator-supplied yt-dlp adapter on all six release RIDs. Beeld & Geluid
+is retired under ADR 0092; prior evidence below is historical, not current
+support. Its CI validates manifests and publishes an offline bundle
 artifact without a signing key, public catalog, or GitHub Pages deployment.
 
 The host still provides bounded safe ZIP extraction, immutable package/content

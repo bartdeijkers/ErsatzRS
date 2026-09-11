@@ -4,6 +4,13 @@ An add-on package is a ZIP archive whose root contains `addon.toml`. The
 manifest is parsed strictly; unknown fields and invalid cross-field
 combinations are rejected.
 
+## Official package availability
+
+The official repository currently offers yt-dlp only. Beeld & Geluid
+(`org.ersatzrs.addon.beeldengeluid`) is retired and unsupported. Existing
+operator-managed package snapshots and saved media are not automatically
+removed. Provider-neutral add-on contracts remain available.
+
 ## Rust contract crate
 
 The distribution mechanism for Rust add-ons is the independently versioned
@@ -155,8 +162,8 @@ than the original input, preventing the host and add-on from interpreting
 different authorities around parser-sensitive characters.
 
 `network_hosts` states what a package is *permitted to contact*. It is not a
-claim to handle a source: the Beeld & Geluid package permits its media CDN as
-well as its site, and a package may legally permit `*`. Schema-v4
+claim to handle a source: a package may contact a media CDN as well as its
+source site, and the schema permits `*`. Schema-v4
 `default_source_hosts` is the separate, narrower statement that the package
 offers to process sources on those hosts, and it is what ErsatzRS uses to select
 an add-on for an operator-supplied URL automatically. Host-pattern syntax and

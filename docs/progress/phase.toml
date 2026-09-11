@@ -156,6 +156,11 @@ playback acceptance and final release bookkeeping/candidate CI. No tag
 or draft has been created, and N-03 remains In progress.
 Candidate v1.0.33-beta release-note bookkeeping is prepared. The canonical
 local test-closeout passes (2,773 tests plus workspace doctests; 37 skips).
+The maintainer has since retired Beeld & Geluid and approved tag/candidate
+dates for beta changelog headings. Codex owns the documentation/progress
+amendment under ADR 0092; do not run the withdrawn provider's acceptance.
+Anamorphic fixture/profile locations remain required. CI 34645267213 passed
+for 1b1e3224, but the amended candidate needs its own exact-SHA CI before tagging.
 Codex next owns candidate push and exact-SHA CI; no local heavy work may
 overlap that run. Packaged acceptance remains open.
 Reuse valid evidence and recover

@@ -29,6 +29,13 @@ semantics.
 
 ## Decision
 
+### Amendment: retire the official provider (2026-09-11)
+
+[ADR 0092](0092-retire-official-beeld-en-geluid-addon.md) withdraws the official
+Beeld & Geluid integration and its live acceptance obligations. The provider
+behavior below is historical; provider-neutral chapter and metadata contracts
+remain active.
+
 ### Amendment: keep source grammar in the add-on (2026-08-17)
 
 The package now owns Schatkamer URL recognition and normalization on both

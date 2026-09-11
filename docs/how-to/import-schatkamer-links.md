@@ -1,52 +1,10 @@
-# Import Schatkamer links and chapters
+# Beeld & Geluid integration retired
 
-Use the official Beeld & Geluid add-on to turn a public Schatkamer hyperlink
-into synchronized Remote Stream media.
+The official Beeld & Geluid add-on was retired on 2026-09-11. This former
+Schatkamer import guide is no longer an active procedure; do not access the
+service for development or acceptance.
 
-## Prerequisites
-
-- Install and enable `org.ersatzrs.addon.beeldengeluid` under **Settings > Add-ons**.
-- Make the Schatkamer list or episode publicly accessible without a signed-in browser session.
-
-## Import a link
-
-1. Open **Media Sources > Add-on Lists**.
-2. Paste one of these Schatkamer links into **Add-on list URL**: a personal
-   `/lijst/<uuid>` link, a `/serie/` or `/programma/` link, one
-   `/aflevering/<id>` link, or a `/zoeken` link with filters.
-3. Leave **Add-on** on *Determine from the URL*. ErsatzRS selects **Beeld &
-   Geluid** because the package declares `schatkamer.beeldengeluid.nl` as a host
-   it handles. Override the selection only when you want a different package.
-4. Leave **Media kind** on automatic detection unless every result needs the
-   same override.
-5. Optionally choose a storage-folder name, then select **Add**.
-
-ErsatzRS normalizes the URL, preserves search sorting and filters, traverses
-every result page, and queues the managed Remote Streams library scan. A failed
-page fails the synchronization; it does not silently replace the last complete
-result with a partial list.
-
-## Add chapters to one episode
-
-For an individual episode URL, enter one timecode and title per line in
-**Chapters**:
-
-```text
-0:00 Introduction
-1:35 First topic
-4:12 Demonstration
-10:08 Common mistakes
-15:42 Conclusion
-```
-
-Use `M:SS`, `MM:SS`, or `H:MM:SS`. Starts must be unique and increasing and
-must fall before the known episode duration. Saving valid input keeps the full
-episode and creates one independently selectable fragment per line. Clearing
-the field removes the fragments on synchronization while keeping the full
-episode.
-
-If validation fails, correct the reported line before saving. ErsatzRS does
-not apply a partially valid chapter set.
-
-See the [add-on media-list contract](../reference/addon-media-lists.md) for the
-stored identity and fragment fields.
+See [official package availability](../reference/addon-packages.md#official-package-availability)
+for current support. Existing operator-managed packages and saved media are
+not automatically deleted. Generic metadata, chapter and publication features
+remain available to supported add-ons.

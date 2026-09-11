@@ -2,16 +2,16 @@ feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'In progress'
-adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091']
+adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091', '0092']
 
 summary = '''
 ADR 0075 delivers provider-neutral drafts with parent NFOs, frozen contracts,
 provider/override snapshots, durable inclusion, atomic publication, localization,
-artwork, health and both official providers. yt-dlp remains the updateable extraction
-engine; its mapper only translates full yt-dlp JSON. Existing imports can be
-republished as any supported library type
-without rerunning the provider; the snapshot, order, inclusion, and overrides
-remain the control plane while only the projection changes.
+artwork and health. ADR 0092 retired Beeld & Geluid; prior results are historical.
+yt-dlp remains the updateable extraction engine; its mapper translates full
+yt-dlp JSON. Saved drafts can be republished across supported library types
+without provider reruns; projection changes preserve snapshots, order,
+inclusion and overrides.
 Television drafts provide row editing, atomic provider-order numbering and
 bounded/date-gap assignments; bulk media-kind/playback edits share one-step undo.
 AMM-F implements ADR 0078: Remote Stream remains the live-or-on-demand type and

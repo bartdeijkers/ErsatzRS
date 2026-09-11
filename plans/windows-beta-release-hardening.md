@@ -23,9 +23,10 @@ exact-SHA CI, and independent archive verification all agree.
 
 The draft-first candidate path, candidate/beta bundle-consistency gate, and
 the mandatory acceptance section are blockers for the next beta. Action pinning,
-policy decisions, parser hardening, and dependency hygiene remain important
+policy decisions and dependency hygiene remain important
 maintainer debt but do not independently block a beta whose exact candidate
-passes the mandatory gates.
+passes the mandatory gates. The maintainer withdrew Beeld & Geluid support
+and its acceptance on 2026-09-11 under ADR 0092; do not access that service.
 
 ## Workstream A: draft-first candidate archive
 
@@ -63,8 +64,8 @@ digest checks live in
 Record each decision in its canonical documentation instead of only checking a
 box here:
 
-- Choose the changelog date convention for releases whose UTC and maintainer
-  local dates differ.
+- The maintainer approved the tag/candidate date for draft-first betas;
+  [RELEASING.md](../RELEASING.md#release-checklist) owns that convention.
 - Decide whether GitHub release bodies must reproduce the curated changelog
   summary or may use generated notes. Align `RELEASING.md` with the chosen
   source of truth.
@@ -76,10 +77,7 @@ box here:
 
 ## Workstream D: extractor and operator preflight
 
-- Make the Windows Beeld & Geluid RSC parser byte-accurate. RSC chunk lengths
-  are byte counts, so scan the raw response bytes and UTF-8-decode only the
-  selected chunk. Add offline fixtures with non-ASCII text before and inside a
-  signed-URL chunk.
+- Beeld & Geluid parser work is withdrawn under ADR 0092, not deferred.
 - Reconcile any configured finite-source duration with the current provider
   manifest. Record an intentional trim explicitly; otherwise correct the
   private definition before candidate acceptance.
@@ -108,26 +106,21 @@ workflow, local commit and live remote ref identify the intended candidate.
 Run these gates against that independently downloaded draft archive and its
 managed Windows FFmpeg runtime (retaining valid evidence where applicable):
 
-1. Exercise the shipped Beeld & Geluid wrapper from source start and a
-   substantial producer-side seek. Require prompt, sustained, decodable audio
-   and video and byte-for-byte wrapper/template identity with the candidate.
-   Confirm that the configured duration either matches the current manifest or
-   records an intentional trim.
-2. Stream the maintainer-provided anamorphic regression source through a
+1. Stream the maintainer-provided anamorphic regression source through a
    disposable channel using a clone of the real persisted profile values.
    Check start, midpoint tune, segment transition, restart, decoded colours,
    audio/video continuity, fallback behavior, and bounded supervisor retries.
-3. Exercise a finite YouTube definition near its midpoint with the optional
+2. Exercise a finite YouTube definition near its midpoint with the optional
    manual extractor. Prove producer-side seek, prompt valid output, quiet
    success, a concise failing diagnostic, and candidate/deployed wrapper
    identity.
-4. Re-run direct IPTV and segmenter HLS smoke after the temporary live setup.
-5. Complete the current milestone's integrated Windows acceptance, including
+3. Re-run direct IPTV and segmenter HLS smoke after the temporary live setup.
+4. Complete the current milestone's integrated Windows acceptance, including
    native add-on process containment tests for the candidate's dependencies.
-6. Re-download the draft asset and require its digest to equal the accepted
+5. Re-download the draft asset and require its digest to equal the accepted
    ZIP. With no release workflow running, publish that same draft; do not
    rebuild or upload another asset.
-7. Independently download the published ZIP, require the accepted digest, and
+6. Independently download the published ZIP, require the accepted digest, and
    confirm prerelease status and the intended immutable tag/source identity.
 
 ## Completion
@@ -136,7 +129,7 @@ This plan can be pruned when:
 
 - the draft-first candidate path and beta web-bundle gate are implemented;
 - release policy and signing expectations are documented;
-- the parser and dependency-hygiene items are closed or moved to narrower
+- the remaining dependency-hygiene items are closed or moved to narrower
   canonical owners;
 - every mandatory live gate passes against one exact candidate; and
 - the resulting beta archive has independent publication evidence.

@@ -196,6 +196,8 @@ separate changelog section.
   to overwrite a published beta. Exact-SHA green CI remains required before
   tagging, and failed candidates consume their beta version.
   Windows beta compilation is limited to two Cargo jobs on the shared runner.
+  Changelog headings keep the immutable tag/candidate date when publication
+  follows later.
 
 - Dependencies updated: quick-xml 0.42, process-wrap 10 and jsonschema 0.52,
   plus minor and patch updates to uuid, mlua, flate2, base64, futures-util,
@@ -402,6 +404,10 @@ separate changelog section.
   convergence.
 
 ### Removed
+
+- Retire official Beeld & Geluid support and its live acceptance requirements.
+  Current packages offer yt-dlp only; existing operator-managed installations,
+  saved media and provider-neutral add-on features are not automatically removed.
 
 - Remove the remaining hard-coded Trakt assumptions from the core playlist and
   add-on-list admin pages. Provider-specific list discovery and parsing remain

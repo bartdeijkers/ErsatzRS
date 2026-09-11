@@ -27,6 +27,10 @@ git push origin v0.1.0
 
 ## Release Checklist
 
+For draft-first betas, the changelog heading records the immutable tag's
+creation date in UTC (the candidate date). Keep it when the draft is published
+later; publication alone must not change the tested commit or archive.
+
 1. Confirm CI is green.
 2. Confirm `docs/progress/` reflects the release contents.
 3. Move `[Unreleased]` entries in `CHANGELOG.md` into a dated version section.

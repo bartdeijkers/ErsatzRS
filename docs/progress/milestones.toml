@@ -4100,9 +4100,33 @@ the 2026-09-11 amendment are not integrated-closeout requirements. A real channe
 SponsorBlock-processed video and default/fallback human subtitles.
 Per the 2026-09-11 maintainer amendment, other platform verification is deferred
 for this closeout, not claimed passed. Declared platform support is unchanged.
+The maintainer also withdrew Beeld & Geluid support and live acceptance under
+ADR 0092. Do not access that service; withdrawn checks are not passed checks.
+yt-dlp, anamorphic playback and the other Windows release gates remain required.
 '''
 evidence = '''
 Reserved by Codex on 2026-09-11. Planning and independent plan review are complete.
+The maintainer's Beeld & Geluid withdrawal and tag/candidate-date choice are
+recorded in ADR 0092 and RELEASING.md. Current tracked host and provider
+packages contain no Beeld & Geluid implementation; active usage instructions
+and package availability claims are corrected, while generic tests, historical
+evidence and operator data remain intact. The Windows checklist removes only
+the withdrawn provider's scenario and parser work. Anamorphic fixture/profile
+locations remain requested. This contract amendment requires a new host
+candidate commit and exact-SHA CI before tagging; 1b1e3224 is not the final
+candidate for the amended scope.
+That checkpoint has terminal green CI 34645267213 for full SHA
+1b1e32240791f0021557b4d53ef70695c29bccb0: 2,773 Rust tests pass with 37 skips,
+Chromium 195 pass/four opt-in skips and Firefox 172 pass/27 skips. All required
+Rust, policy, documentation, progress and architecture gates executed and
+passed. The Windows-only opt-in probe is skipped, not native acceptance.
+The withdrawal/date amendment changes only documentation and progress;
+Claude review confirmed the six remaining release checks retain their text.
+The date-clock ambiguity is corrected to UTC, and stale architecture wording
+is marked historical. Progress validation is warning-free and all 95 local
+link targets in changed Markdown files exist. Official repository runtime
+inputs (addons/ and repository.toml) are unchanged, so the verified provider
+bundle remains applicable without another package build.
 The maintainer subsequently narrowed N-03 verification to Linux x64 and Windows
 x64 for now. ARM/macOS runner work and its proposed cost analysis are not part
 of this closeout. Existing six-RID static bundle evidence is retained as such;

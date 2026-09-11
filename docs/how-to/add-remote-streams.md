@@ -75,34 +75,6 @@ bytes; streamable MP4, WebM, and MPEG-TS are supported. For finite playback,
 the host supplies the current playout offset so the add-on can seek the source
 instead of forcing the consumer to discard the start of a non-seekable pipe.
 
-The Beeld & Geluid package follows the same contract for one Schatkamer episode:
-
-```yaml
-url: https://schatkamer.beeldengeluid.nl/serie/<series-id>/<series-slug>/aflevering/<episode-id>
-addon: org.ersatzrs.addon.beeldengeluid
-is_live: false
-title: Episode title
-```
-
-It can also synchronize an anonymously accessible, user-made Schatkamer list.
-Use the public share URL as the manifest URL and retain upstream ordering:
-
-```yaml
-name: Example shared list
-url: https://schatkamer.beeldengeluid.nl/lijst/<list-uuid>
-addon: org.ersatzrs.addon.beeldengeluid
-folder: shared-list
-sync:
-  interval: 24h
-  order: upstream
-  on_removed: trash
-create_playlist: true
-```
-
-Duplicate programmes keep their first position. Programmes that Schatkamer
-marks unavailable are skipped with a bounded diagnostic. Private lists that
-require a signed-in browser session are not supported.
-
 A Remote Stream definition without `addon:` is always played directly by
 FFmpeg. The default remote stream processor under **Settings > Add-ons >
 Sources** does not change that; it only supplies the add-on when you add an
