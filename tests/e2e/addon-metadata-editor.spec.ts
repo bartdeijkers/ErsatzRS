@@ -160,6 +160,12 @@ function seedPublicationRecovery(
   const secretMarker = 'session_cookie=must-not-reach-operator-output';
   const operationState = state === 'expired' ? 1 : 4;
   const phase = state === 'expired' ? 3 : 4;
+  // Keep the expired fixture available for operator recovery instead of letting
+  // a background worker claim its deliberately incomplete journal first.
+  // Explicit Retry clears this scheduling deadline; the lease stays expired.
+  const nextEligibleAt = state === 'expired'
+    ? "strftime('%Y-%m-%d %H:%M:%f', 'now', '+1 hour')"
+    : 'NULL';
   sqlite(`
 UPDATE "AddonMediaList"
 SET "ReviewState" = 3, "PublicationJournalJson" = '{}',
@@ -167,12 +173,12 @@ SET "ReviewState" = 3, "PublicationJournalJson" = '{}',
 WHERE "Id" = ${seed.listId};
 INSERT INTO "ManagedLibraryOperation" (
   "Id", "LibraryId", "OwnerToken", "Kind", "State", "AttemptCount",
-  "LeaseOwner", "LeaseExpiresAt", "DiagnosticCode", "Diagnostic", "CreatedAt", "UpdatedAt"
+  "LeaseOwner", "LeaseExpiresAt", "NextEligibleAt", "DiagnosticCode", "Diagnostic", "CreatedAt", "UpdatedAt"
 ) VALUES (
   ${operationId},
   (SELECT "LibraryId" FROM "AddonMediaListLibrary" WHERE "AddonMediaListId" = ${seed.listId}),
   'e2e-recovery-owner', 1, ${operationState}, 2,
-  'expired-worker', '2026-09-03T12:01:00Z', 'sharing_violation',
+  'expired-worker', '2026-09-03T12:01:00Z', ${nextEligibleAt}, 'sharing_violation',
   '${secretMarker}', '2026-09-03T12:00:00Z', '2026-09-03T12:02:00Z'
 );
 INSERT INTO "AddonMediaListPublicationJob" (
@@ -871,6 +877,7 @@ WHERE "AddonMediaListId" = ${seed.listId};
     const alert = page.getByTestId('addon-publication-recovery');
     await expect(page.locator('button[name="intent"][value="publish"]')).toBeDisabled();
     await expect(alert).toContainText('Committing');
+    await expect(alert).toContainText('Expired');
     await expect(alert).toContainText('2');
     await expect(alert).toContainText('sharing_violation');
     await expect(alert).not.toContainText(recovery.secretMarker);
