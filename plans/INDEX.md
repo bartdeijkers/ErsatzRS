@@ -156,8 +156,10 @@ changelog, and git history for evidence. The authoritative live state is always
   Remote Stream details, fixed and cadence-aware adaptive refresh, observable
   safe yt-dlp archive early stop and rich headers, inherited/bulk
   cookies/SponsorBlock/subtitles,
-  artifact budgets, and validated startup/daily yt-dlp maintenance with
-  rollback. ADR 0088 requires native yt-dlp capability preference across these
+  disk-usage warnings, and native startup/daily yt-dlp maintenance with a
+  warning when updating fails and a newer release is confirmed. ADR 0085's
+  2026-09-11 amendment withdraws updater backup/rollback/quarantine and expanded
+  administration. ADR 0088 requires native yt-dlp capability preference across these
   slices and yt-dlp-owned media transfer, without a custom host Range adapter.
 - `playout-refresh-and-addon-tv-deduplication.md` — corrective Windows-dogfood
   plan for real Classic Refresh checkpoints, dependency-scoped scan

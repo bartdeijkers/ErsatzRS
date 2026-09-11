@@ -24,7 +24,7 @@ overview/create functionality and align its controls and navigation without
 inventing a dashboard or wizard.
 
 Exclude global shell redesign, new frameworks, shipping Python, production
-fixtures, provider-protocol or playback-algorithm changes, N-02 tool rollback,
+fixtures, provider-protocol or playback-algorithm changes, tool rollback,
 HLS Direct expansion and the withdrawn retention/eviction/admission/concurrency
 program. Preserve native yt-dlp, frozen publication, human subtitle selection and
 Health signals. This plan does not authorize push, CI publication or release.

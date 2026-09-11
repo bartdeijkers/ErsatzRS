@@ -21,7 +21,12 @@ release section when tagging a release.
   Uncertain process cleanup after an abrupt crash requires explicit tool-scoped
   offline recovery after stopping all related processes; normal confirmed
   shutdown/restart recovers automatically. Recovery does not repair executable
-  bytes; replacement validation and rollback remain a separate slice.
+  bytes; a broken executable may require manual repair. Add-on readiness warns
+  when native updating failed and a newer release for the configured channel is
+  confirmed, naming the program and installed/latest versions through generic
+  localized text with manual-update guidance. Unknown latest versions do
+  not count as stale. Replacement backup/rollback, quarantine and new manual
+  update/history controls are withdrawn from scope.
 
 - Enable opt-in Adaptive refresh in yt-dlp package 0.10.2 through a bounded,
   provider-neutral normalized-JSON probe. Matching source-bound validators avoid

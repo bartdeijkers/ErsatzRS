@@ -1872,6 +1872,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonToolManualUpdate => "Manual update required",
         TextKey::AddonToolManualHelp => "Update the configured tool manually using its original installation method, then check the add-on.",
         TextKey::AddonToolFailedHelp => "The tool update failed. Check tool availability and network access; automatic maintenance will retry later.",
+        TextKey::AddonToolUpdateFailedStale => "The program could not be updated and a newer release is available. Automatic maintenance will retry. To update it now, use its original installation method, then check the add-on.",
+        TextKey::AddonToolUpdateVersions => "{program}: installed {installed}, latest {latest}.",
         TextKey::AddonToolVersionHelp => "The tool version could not be read. Check the configured executable and its permissions.",
         TextKey::AddonToolUnavailableHelp => "The configured tool is unavailable. Check the executable setting and installation.",
         TextKey::AddonToolBusyHelp => "Waiting for the tool to become idle; active playback is not interrupted.",

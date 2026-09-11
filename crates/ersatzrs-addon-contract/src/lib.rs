@@ -3062,6 +3062,54 @@ pub struct AddonCheckResult {
     pub status: AddonCheckStatus,
     pub code: String,
     pub message: String,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_check_tool_update"
+    )]
+    pub tool_update: Option<AddonToolUpdateWarning>,
+}
+
+/// Bounded display context for a stale-tool update warning.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AddonToolUpdateWarning {
+    pub program: String,
+    pub installed_version: String,
+    pub latest_version: String,
+}
+
+impl AddonToolUpdateWarning {
+    /// Validate display-only identifiers without paths or diagnostic separators.
+    /// # Errors
+    /// Rejects empty, oversized or unsafe program names and versions.
+    pub fn validate(&self) -> Result<(), ContractError> {
+        if self.program.trim().is_empty()
+            || self.program != self.program.trim()
+            || self.program.len() > 80
+            || !self
+                .program
+                .chars()
+                .all(|c| c.is_alphanumeric() || " -_.+()".contains(c))
+        {
+            return invalid("tool update program", "requires a bounded display name");
+        }
+        validate_tool_version(&self.installed_version)?;
+        validate_tool_version(&self.latest_version)
+    }
+}
+
+// Invalid optional context must not discard an otherwise valid readiness result.
+fn deserialize_check_tool_update<'de, D>(
+    deserializer: D,
+) -> Result<Option<AddonToolUpdateWarning>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value::<AddonToolUpdateWarning>(value)
+        .ok()
+        .filter(|context| context.validate().is_ok()))
 }
 
 /// One bounded structured failure emitted as the final stderr line by `list`
@@ -4331,6 +4379,56 @@ fn invalid<T>(field: &'static str, message: impl Into<String>) -> Result<T, Cont
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn check_tool_update_context_preserves_legacy_and_rejects_invalid_details() {
+        let legacy =
+            r#"{"status":"warning","code":"tool-update-failed-stale","message":"still usable"}"#;
+        let result: AddonCheckResult = serde_json::from_str(legacy).unwrap();
+        assert!(result.tool_update.is_none());
+        assert_eq!(serde_json::to_string(&result).unwrap(), legacy);
+        let context = AddonToolUpdateWarning {
+            program: "Example Tool (+)".to_owned(),
+            installed_version: "2026.01.01".to_owned(),
+            latest_version: "2026.09.01".to_owned(),
+        };
+        assert!(context.validate().is_ok());
+        let mut extended = result.clone();
+        extended.tool_update = Some(context.clone());
+        assert_eq!(
+            serde_json::from_str::<AddonCheckResult>(&serde_json::to_string(&extended).unwrap())
+                .unwrap(),
+            extended
+        );
+        for invalid in [
+            serde_json::json!(42),
+            serde_json::json!({"program":"missing versions"}),
+            serde_json::json!({"program":"tool; other warning", "installed_version":"1", "latest_version":"2"}),
+        ] {
+            let mut value = serde_json::to_value(&result).unwrap();
+            value["tool_update"] = invalid;
+            assert_eq!(
+                serde_json::from_value::<AddonCheckResult>(value).unwrap(),
+                result
+            );
+        }
+        for program in [
+            "",
+            " tool",
+            "tool ",
+            "tool/path",
+            "tool:bad",
+            "tool; bad",
+            "tool\nname",
+        ] {
+            let mut invalid = context.clone();
+            invalid.program = program.to_owned();
+            assert!(invalid.validate().is_err());
+        }
+        let mut invalid = context;
+        invalid.latest_version = "2; injected".to_owned();
+        assert!(invalid.validate().is_err());
+    }
 
     fn localized(value: &str) -> BTreeMap<String, String> {
         BTreeMap::from([("en-US".to_owned(), value.to_owned())])

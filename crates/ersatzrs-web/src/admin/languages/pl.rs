@@ -2631,6 +2631,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonToolManualUpdate => "Wymagana ręczna aktualizacja",
         TextKey::AddonToolManualHelp => "Zaktualizuj skonfigurowane narzędzie ręcznie przy użyciu pierwotnej metody instalacji, a następnie sprawdź dodatek.",
         TextKey::AddonToolFailedHelp => "Aktualizacja nie powiodła się. Sprawdź dostępność narzędzia i dostęp do sieci; automatyczna konserwacja spróbuje później.",
+        TextKey::AddonToolUpdateFailedStale => "Nie udało się zaktualizować programu, a dostępna jest nowsza wersja. Automatyczna konserwacja spróbuje później. Aby zaktualizować go teraz, użyj pierwotnej metody instalacji, a następnie sprawdź dodatek.",
+        TextKey::AddonToolUpdateVersions => "{program}: zainstalowana wersja {installed}, najnowsza wersja {latest}.",
         TextKey::AddonToolVersionHelp => "Nie udało się odczytać wersji narzędzia. Sprawdź skonfigurowany program i jego uprawnienia.",
         TextKey::AddonToolUnavailableHelp => "Skonfigurowane narzędzie jest niedostępne. Sprawdź ustawienie programu i instalację.",
         TextKey::AddonToolBusyHelp => "Oczekiwanie na zwolnienie narzędzia; aktywne odtwarzanie nie jest przerywane.",

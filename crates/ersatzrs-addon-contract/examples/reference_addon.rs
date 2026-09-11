@@ -21,6 +21,7 @@ fn run(output: &mut impl io::Write) -> io::Result<()> {
                 status: AddonCheckStatus::Ready,
                 code: "ready".to_owned(),
                 message: "Reference add-on is ready.".to_owned(),
+                tool_update: None,
             },
         ),
         Some("list") => {

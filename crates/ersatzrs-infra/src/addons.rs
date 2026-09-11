@@ -20,8 +20,8 @@ use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
 use ersatzrs_addon_contract::{
     sanitize_addon_diagnostic_code, validate_addon_id, AddonCheckResult, AddonCheckStatus,
     AddonEntrypointKind, AddonIconMediaType, AddonManifest, AddonOperationError,
-    AddonRepositoryIndex, AddonSettingKind, AddonTrustTier, CatalogAddon, CatalogPackage,
-    LocalRepositoryManifest, RepositoryManifest, CAPABILITY_ADDON_CHECK_V1,
+    AddonRepositoryIndex, AddonSettingKind, AddonToolUpdateWarning, AddonTrustTier, CatalogAddon,
+    CatalogPackage, LocalRepositoryManifest, RepositoryManifest, CAPABILITY_ADDON_CHECK_V1,
     CAPABILITY_MEDIA_LIST_ACCESS_CHECK_V1, CAPABILITY_MEDIA_LIST_ENRICH_V1,
     CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_IMPORT_V2,
     CAPABILITY_MEDIA_LIST_INTERVAL_METADATA_V1, CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1,
@@ -220,6 +220,7 @@ pub struct InstalledAddon {
     pub state_revision: String,
     pub last_check_code: Option<String>,
     pub last_check_message: Option<String>,
+    pub last_check_tool_update: Option<AddonToolUpdateWarning>,
     pub last_check_at: Option<String>,
 }
 
@@ -1936,7 +1937,7 @@ async fn persist_local_addon(
                    "ContentSha256" = ?, "ManifestJson" = ?, "InstallPath" = ?,
                    "DataNamespace" = ?, "UpdatedAt" = ?, "StateRevision" = ?,
                    "LastCheckCode" = NULL, "LastCheckMessage" = NULL,
-                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL
+                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL, "LastCheckToolUpdateJson" = NULL
                WHERE "AddonId" = ? AND "StateRevision" = ?
                  AND EXISTS (SELECT 1 FROM "AddonSource" WHERE "Id" = ? AND "StateRevision" = ?)"#,
         )
@@ -2373,7 +2374,7 @@ async fn persist_staged_addon(
                    "PackageSha256" = ?, "ContentSha256" = ?, "ManifestJson" = ?,
                    "InstallPath" = ?, "DataNamespace" = ?, "UpdatedAt" = ?, "StateRevision" = ?,
                    "LastCheckCode" = NULL, "LastCheckMessage" = NULL,
-                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL
+                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL, "LastCheckToolUpdateJson" = NULL
                WHERE "AddonId" = ? AND "RepositoryId" = ? AND "Version" = ?
                  AND "StateRevision" = ?
                  AND EXISTS (
@@ -2472,7 +2473,7 @@ async fn persist_sideloaded_addon(
                    "Enabled" = 0, "PackageSha256" = ?, "ContentSha256" = ?,
                    "ManifestJson" = ?, "InstallPath" = ?, "DataNamespace" = 'sideload',
                    "UpdatedAt" = ?, "StateRevision" = ?, "LastCheckCode" = NULL,
-                   "LastCheckMessage" = NULL, "LastCheckStatus" = NULL, "LastCheckAt" = NULL
+                   "LastCheckMessage" = NULL, "LastCheckStatus" = NULL, "LastCheckAt" = NULL, "LastCheckToolUpdateJson" = NULL
                WHERE "AddonId" = ? AND "TrustTier" = 'sideloaded' AND "Version" = ?
                  AND "StateRevision" = ?"#,
         )
@@ -2649,7 +2650,7 @@ pub async fn list_installed_addons(pool: &DbPool) -> Result<Vec<InstalledAddon>,
     let rows = sqlx::query(
         r#"SELECT "AddonId", "RepositoryId", "SourceId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
-                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
+                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt", "LastCheckToolUpdateJson"
            FROM "AddonInstallation" ORDER BY "AddonId""#,
     )
     .fetch_all(pool)
@@ -2670,7 +2671,7 @@ pub async fn load_installed_addon(
     let row = sqlx::query(
         r#"SELECT "AddonId", "RepositoryId", "SourceId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
-                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
+                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt", "LastCheckToolUpdateJson"
            FROM "AddonInstallation" WHERE "AddonId" = ?"#,
     )
     .bind(addon_id)
@@ -2704,7 +2705,7 @@ async fn load_installed_addon_in_transaction(
     let row = sqlx::query(
         r#"SELECT "AddonId", "RepositoryId", "SourceId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
-                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
+                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt", "LastCheckToolUpdateJson"
            FROM "AddonInstallation" WHERE "AddonId" = ?"#,
     )
     .bind(addon_id)
@@ -2720,7 +2721,7 @@ async fn list_installed_addons_in_transaction(
     let rows = sqlx::query(
         r#"SELECT "AddonId", "RepositoryId", "SourceId", "TrustTier", "Version", "Enabled", "PackageSha256", "ContentSha256",
                   "ManifestJson", "InstallPath", "DataNamespace", "InstalledAt", "UpdatedAt",
-                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt"
+                  "StateRevision", "LastCheckCode", "LastCheckMessage", "LastCheckAt", "LastCheckToolUpdateJson"
            FROM "AddonInstallation" ORDER BY "AddonId""#,
     )
     .fetch_all(&mut **transaction)
@@ -2808,7 +2809,7 @@ pub async fn save_addon_setting(
         r#"UPDATE "AddonInstallation"
            SET "Enabled" = 0, "UpdatedAt" = ?, "StateRevision" = ?,
                "LastCheckCode" = NULL, "LastCheckMessage" = NULL,
-                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL
+                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL, "LastCheckToolUpdateJson" = NULL
            WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
     .bind(now)
@@ -2884,16 +2885,28 @@ async fn check_addon_with_revision(
         "invalid-check-code".clone_into(&mut result.code);
     }
     result.message = redact_and_bound(&result.message, &command.environment, 1_024);
+    result.tool_update = result.tool_update.filter(|context| {
+        result.status == AddonCheckStatus::Warning
+            && result.code == "tool-update-failed-stale"
+            && check_tool_update_is_safe(context, &command.environment)
+    });
+    let tool_update_json = result
+        .tool_update
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|_| AddonError::Process("invalid tool update context".to_owned()))?;
     sqlx::query(
         r#"UPDATE "AddonInstallation"
            SET "LastCheckCode" = ?, "LastCheckMessage" = ?, "LastCheckStatus" = ?,
-               "LastCheckAt" = ?
+               "LastCheckAt" = ?, "LastCheckToolUpdateJson" = ?
            WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
     .bind(&result.code)
     .bind(&result.message)
     .bind(result.status.as_str())
     .bind(Utc::now().to_rfc3339())
+    .bind(tool_update_json)
     .bind(addon_id)
     .bind(&command.state_revision)
     .execute(pool)
@@ -3098,7 +3111,7 @@ pub async fn disable_addon(pool: &DbPool, addon_id: &str) -> Result<(), AddonErr
         r#"UPDATE "AddonInstallation"
            SET "Enabled" = 0, "StateRevision" = ?,
                "LastCheckCode" = NULL, "LastCheckMessage" = NULL,
-                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL
+                   "LastCheckStatus" = NULL, "LastCheckAt" = NULL, "LastCheckToolUpdateJson" = NULL
            WHERE "AddonId" = ? AND "StateRevision" = ?"#,
     )
     .bind(next_revision)
@@ -4174,6 +4187,10 @@ fn resolve_setting_environment(
         .map(|setting| (setting.key.as_str(), setting))
         .collect::<BTreeMap<_, _>>();
     let mut environment = BTreeMap::from([
+        (
+            "ERSATZRS_ADDON_CHECK_CONTEXT_VERSION".to_owned(),
+            "1".to_owned(),
+        ),
         ("ERSATZRS_ADDON_ID".to_owned(), manifest.id.clone()),
         (
             "ERSATZRS_ADDON_VERSION".to_owned(),
@@ -4758,6 +4775,10 @@ fn installed_from_row(row: &DbRow) -> Result<InstalledAddon, AddonError> {
             .map_err(repository_error)?,
         last_check_message: decode_optional_string_column(row, "LastCheckMessage")
             .map_err(repository_error)?,
+        last_check_tool_update: decode_optional_string_column(row, "LastCheckToolUpdateJson")
+            .map_err(repository_error)?
+            .and_then(|json| serde_json::from_str::<AddonToolUpdateWarning>(&json).ok())
+            .filter(|context| context.validate().is_ok()),
         last_check_at: decode_optional_string_column(row, "LastCheckAt")
             .map_err(repository_error)?,
     })
@@ -5207,6 +5228,20 @@ fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
     output
 }
 
+fn check_tool_update_is_safe(
+    context: &AddonToolUpdateWarning,
+    environment: &BTreeMap<String, String>,
+) -> bool {
+    context.validate().is_ok()
+        && [
+            &context.program,
+            &context.installed_version,
+            &context.latest_version,
+        ]
+        .iter()
+        .all(|value| redact_and_bound(value, environment, 128) == **value)
+}
+
 fn redact_and_bound(value: &str, environment: &BTreeMap<String, String>, limit: usize) -> String {
     redact_and_bound_with_values(value, environment, &[], limit)
 }
@@ -5296,6 +5331,64 @@ mod tests {
 
     fn localized(value: &str) -> BTreeMap<String, String> {
         BTreeMap::from([("en-US".to_owned(), value.to_owned())])
+    }
+
+    #[test]
+    fn check_tool_update_context_respects_diagnostic_redaction() {
+        let context = AddonToolUpdateWarning {
+            program: "Example Tool".to_owned(),
+            installed_version: "1.0".to_owned(),
+            latest_version: "2.0".to_owned(),
+        };
+        assert!(check_tool_update_is_safe(&context, &BTreeMap::new()));
+        for (key, value) in [
+            ("ERSATZRS_ADDON_SECRET_fixture", "Example"),
+            ("ERSATZRS_ADDON_SECRET_fixture", "1.0"),
+            (
+                "ERSATZRS_ADDON_SECRET_FILE_fixture",
+                "fixture-secret-reference",
+            ),
+            ("ERSATZRS_ADDON_DATA_DIR", "Example"),
+        ] {
+            let environment = BTreeMap::from([(key.to_owned(), value.to_owned())]);
+            assert!(!check_tool_update_is_safe(&context, &environment));
+        }
+    }
+
+    // POSIX fixture entrypoints intentionally run only on Unix.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn check_tool_update_context_persists_and_clears_with_readiness() {
+        let temp = tempfile::tempdir().unwrap();
+        let pool = crate::db::init(&format!(
+            "sqlite:{}",
+            temp.path().join("addons.db").display()
+        ))
+        .await
+        .unwrap();
+        let package = temp.path().join("package");
+        std::fs::create_dir(&package).unwrap();
+        std::fs::write(package.join("addon.sh"), br#"test "$ERSATZRS_ADDON_CHECK_CONTEXT_VERSION" = "1" || exit 1
+printf '%s' '{"status":"warning","code":"tool-update-failed-stale","message":"Still usable","tool_update":{"program":"Example Tool","installed_version":"1.0","latest_version":"2.0"}}'
+"#).unwrap();
+        let manifest = fixture_manifest("org.ersatzrs.addon.fixture");
+        insert_package_installation(&pool, &manifest, &package, false).await;
+        let result = check_addon(&pool, &manifest.id, &AddonRuntimeContext::default())
+            .await
+            .unwrap();
+        assert!(result.tool_update.is_some());
+        let installation = load_installed_addon(&pool, &manifest.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(installation.last_check_tool_update, result.tool_update);
+        disable_addon(&pool, &manifest.id).await.unwrap();
+        let installation = load_installed_addon(&pool, &manifest.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(installation.last_check_tool_update.is_none());
+        assert!(installation.last_check_code.is_none());
     }
 
     fn fixture_manifest(id: &str) -> AddonManifest {

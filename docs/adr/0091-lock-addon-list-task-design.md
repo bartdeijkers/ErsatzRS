@@ -71,8 +71,10 @@ Production has an objective reference but needs real draft retention, coherent
 grouped saves and native adapters. Existing item saves write metadata and chapters
 separately; their consistency must be proven before completing Save item.
 
-AMM-N-01B runs after N-01 and before N-02. N-02's rollback scope and N-03's
-integrated platform/playback/release acceptance remain intact. The owning parity
+AMM-N-01B runs after N-01 and before N-02. This decision did not change N-02 or
+N-03 acceptance. The later 2026-09-11 amendment in ADR 0085 replaces N-02's
+rollback scope with a failed-and-stale tool warning; it does not change this
+locked UI design. N-03 retains its remaining integrated acceptance. The owning parity
 debt stays open until production acceptance. Prototype reports do not prove
 persistence, hydration, localization or runtime parity.
 

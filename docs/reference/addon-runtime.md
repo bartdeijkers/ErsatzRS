@@ -77,7 +77,33 @@ is deferred without stopping playback or making new readers wait for a pending
 writer. Shared use covers discovery, readiness, item operations, preparation,
 and streaming. Ownership lasts through confirmed process-tree cleanup.
 Latest status appears in Add-ons, with actionable failures also shown in Health.
-Replacement rollback and the manual update/history interface belong to AMM-N-02.
+AMM-N-02 adds only an advisory add-on health warning when a native update failed
+and confirmed release evidence shows the executable is behind its configured
+channel's latest release. Unknown latest-version information is not proof of
+staleness. Backup, rollback, quarantine, and manual update/history controls were
+withdrawn from scope; a broken executable may require manual repair.
+
+The readiness code `tool-update-failed-stale` is advisory: automatic maintenance
+keeps its normal schedule and playback is not blocked. Release evidence belongs
+to the provider. The official yt-dlp package uses same-channel version labels
+from its native update attempt, not a separate release API, and stores one
+bounded current record in `ERSATZRS_ADDON_DATA_DIR`. A subsequent successful,
+current, or unknown-result attempt clears that evidence; a normal readiness
+check can also recognize a manually changed local version.
+
+Hosts advertising `ERSATZRS_ADDON_CHECK_CONTEXT_VERSION=1` accept an optional
+`tool_update` object on that warning, with `program`, `installed_version` and
+`latest_version` strings. Add-ons omit it for older hosts. The host validates
+and redacts these structured values before storing or rendering them; it does
+not parse provider prose. Program names are limited to 80 UTF-8 bytes of letters,
+digits, spaces and `-_.+()`; versions use the existing bounded 128-byte ASCII
+version-identifier contract. Invalid or missing details retain the generic
+warning. A nullable field stores only the latest details alongside the existing
+readiness result; configuration changes and new checks clear it together with
+that result. There is no additional update history.
+The existing conservative file-secret diagnostic policy also suppresses these
+optional details when a check receives a secret-file reference; the generic
+warning remains available.
 
 ### Offline tool cleanup recovery
 

@@ -1269,6 +1269,8 @@ pub enum TextKey {
     AddonToolManualUpdate,
     AddonToolManualHelp,
     AddonToolFailedHelp,
+    AddonToolUpdateFailedStale,
+    AddonToolUpdateVersions,
     AddonToolVersionHelp,
     AddonToolUnavailableHelp,
     AddonToolBusyHelp,
@@ -3161,6 +3163,8 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonToolManualUpdate,
     TextKey::AddonToolManualHelp,
     TextKey::AddonToolFailedHelp,
+    TextKey::AddonToolUpdateFailedStale,
+    TextKey::AddonToolUpdateVersions,
     TextKey::AddonToolVersionHelp,
     TextKey::AddonToolUnavailableHelp,
     TextKey::AddonToolBusyHelp,
@@ -4351,8 +4355,42 @@ pub fn addon_tool_maintenance_diagnostic(code: Option<&str>) -> Option<TextKey> 
     })
 }
 
+/// Localize a provider-owned readiness warning without inspecting provider prose.
+pub fn addon_check_message(
+    code: Option<&str>,
+    message: &str,
+    tool_update: Option<&ersatzrs_addon_contract::AddonToolUpdateWarning>,
+) -> String {
+    addon_check_message_text(use_i18n(), code, message, tool_update)
+}
+
+fn addon_check_message_text(
+    language: UiLanguage,
+    code: Option<&str>,
+    message: &str,
+    tool_update: Option<&ersatzrs_addon_contract::AddonToolUpdateWarning>,
+) -> String {
+    if code == Some("tool-update-failed-stale") {
+        let warning = text(language, TextKey::AddonToolUpdateFailedStale);
+        match tool_update.filter(|details| details.validate().is_ok()) {
+            Some(details) => format!(
+                "{} {warning}",
+                text(language, TextKey::AddonToolUpdateVersions)
+                    .replace("{program}", &details.program)
+                    .replace("{installed}", &details.installed_version)
+                    .replace("{latest}", &details.latest_version)
+            ),
+            None => warning.to_owned(),
+        }
+    } else {
+        message.to_owned()
+    }
+}
+
 fn addon_list_disk_usage_line(language: UiLanguage, line: &str) -> Option<String> {
-    if line == "Add-on list disk usage could not be measured completely. Check storage access and retry the health check." {
+    if line
+        == "Add-on list disk usage could not be measured completely. Check storage access and retry the health check."
+    {
         return Some(text(language, TextKey::AddonListDiskUsageUnavailable).to_owned());
     }
     if line == "Add-on list disk usage could not be measured." {
@@ -4392,6 +4430,34 @@ fn tool_maintenance_health_message(language: UiLanguage, message: &str) -> Strin
     message
         .split("; ")
         .map(|part| {
+            // This is host-authored framing around validated structured fields,
+            // never a parser for provider diagnostic prose.
+            if let Some((addon, details)) =
+                part.split_once(" last reported warning readiness (tool-update-failed-stale): ")
+            {
+                let details =
+                    serde_json::from_str::<ersatzrs_addon_contract::AddonToolUpdateWarning>(
+                        details,
+                    )
+                    .ok();
+                return format!(
+                    "{addon}: {}",
+                    addon_check_message_text(
+                        language,
+                        Some("tool-update-failed-stale"),
+                        "",
+                        details.as_ref()
+                    )
+                );
+            }
+            if let Some(addon) =
+                part.strip_suffix(" last reported warning readiness (tool-update-failed-stale)")
+            {
+                return format!(
+                    "{addon}: {}",
+                    text(language, TextKey::AddonToolUpdateFailedStale)
+                );
+            }
             let Some((tool, code)) = part
                 .strip_prefix("Tool maintenance ")
                 .and_then(|value| value.split_once(": "))
@@ -4426,7 +4492,7 @@ pub fn health_check_message_text(
     } else {
         message
     };
-    if title == ADDONS_HEALTH_TITLE && displayed_message.contains("Tool maintenance ") {
+    if title == ADDONS_HEALTH_TITLE {
         return tool_maintenance_health_message(language, displayed_message);
     }
     if title == "Add-on list disk usage" {
@@ -5017,6 +5083,79 @@ mod tests {
     }
 
     #[test]
+    fn structured_tool_warning_names_program_and_versions_in_every_language() {
+        let details = ersatzrs_addon_contract::AddonToolUpdateWarning {
+            program: "Example Player".to_owned(),
+            installed_version: "1.0".to_owned(),
+            latest_version: "1.2".to_owned(),
+        };
+        let code = Some("tool-update-failed-stale");
+        let raw = "SYNTHETIC_PRIVATE_PROVIDER_PROSE";
+        let health = format!(
+            "org.example.fixture last reported warning readiness (tool-update-failed-stale): {}",
+            serde_json::to_string(&details).unwrap()
+        );
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let localized = addon_check_message_text(language, code, raw, Some(&details));
+            for value in ["Example Player", "1.0", "1.2"] {
+                assert!(localized.contains(value));
+            }
+            assert!(!localized.contains('{'));
+            assert!(!localized.contains(raw));
+            assert_eq!(
+                health_check_message_text(language, "Add-ons", &health, ""),
+                format!("org.example.fixture: {localized}")
+            );
+            let invalid = ersatzrs_addon_contract::AddonToolUpdateWarning {
+                program: "SYNTHETIC_PRIVATE/path".to_owned(),
+                ..details.clone()
+            };
+            assert_eq!(
+                addon_check_message_text(language, code, raw, Some(&invalid)),
+                text(language, TextKey::AddonToolUpdateFailedStale)
+            );
+            assert_eq!(
+                addon_check_message_text(language, Some("ready"), "Ready", Some(&details)),
+                "Ready"
+            );
+        }
+    }
+
+    #[test]
+    fn failed_stale_readiness_is_localized_without_changing_other_findings() {
+        let warning =
+            "org.example.fixture last reported warning readiness (tool-update-failed-stale)";
+        let other = "org.example.other last reported unavailable readiness (missing-command)";
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let expected = text(language, TextKey::AddonToolUpdateFailedStale);
+            assert_eq!(
+                health_check_message_text(language, "Add-ons", warning, ""),
+                format!("org.example.fixture: {expected}")
+            );
+            let combined = format!(
+                "Tool maintenance org.example.fixture/YT_DLP_BIN: update_failed; {warning}; {other}"
+            );
+            let localized = health_check_message_text(language, "Add-ons", &combined, "");
+            assert!(localized.contains(expected));
+            assert!(localized.contains(text(language, TextKey::AddonToolFailedHelp)));
+            assert!(localized.ends_with(other));
+            assert!(!localized.contains("tool-update-failed-stale"));
+            assert_eq!(
+                health_check_message_text(language, "Add-ons", other, ""),
+                other
+            );
+            if language != UiLanguage::English {
+                assert_ne!(
+                    expected,
+                    text(UiLanguage::English, TextKey::AddonToolUpdateFailedStale)
+                );
+            }
+        }
+    }
+
+    #[test]
     fn tool_maintenance_health_remediation_is_localized_without_raw_diagnostics() {
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);
@@ -5059,11 +5198,20 @@ mod tests {
         for definition in crate::admin::languages::LANGUAGES {
             let language = UiLanguage::from_config(definition.code);
             for (diagnostic, key) in [
-                ("Add-on list disk usage could not be measured completely. Check storage access and retry the health check.", TextKey::AddonListDiskUsageUnavailable),
-                ("Add-on list disk usage could not be measured.", TextKey::AddonListDiskUsageUnavailableBrief),
+                (
+                    "Add-on list disk usage could not be measured completely. Check storage access and retry the health check.",
+                    TextKey::AddonListDiskUsageUnavailable,
+                ),
+                (
+                    "Add-on list disk usage could not be measured.",
+                    TextKey::AddonListDiskUsageUnavailableBrief,
+                ),
             ] {
                 for (full, brief) in [(diagnostic, ""), ("", diagnostic)] {
-                    assert_eq!(health_check_message_text(language, title, full, brief), text(language, key));
+                    assert_eq!(
+                        health_check_message_text(language, title, full, brief),
+                        text(language, key)
+                    );
                 }
             }
             assert_eq!(

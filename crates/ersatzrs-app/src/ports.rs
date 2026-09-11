@@ -511,6 +511,7 @@ pub struct InstalledAddonRead {
     pub settings: Vec<AddonSettingRead>,
     pub last_check_code: Option<String>,
     pub last_check_message: Option<String>,
+    pub last_check_tool_update: Option<ersatzrs_addon_contract::AddonToolUpdateWarning>,
     pub last_check_at: Option<String>,
     pub installed_at: String,
     pub updated_at: String,

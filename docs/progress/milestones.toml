@@ -3802,8 +3802,9 @@ cases pass; browser artifacts are in test-results/amm-n01. Browser proof covers
 permission review, latest-only status, redaction and exact offline guidance.
 Independent Astra P1/P2 review is closed after correcting managed-tool context
 and browser-safe status DTO integration. Build/media gates ran serially with
-bounded concurrency. Rollback, quarantine, manual update button and history UI
-remain N-02 work. Local feature acceptance did not run a full closeout.
+bounded concurrency. At this checkpoint rollback, quarantine, a manual update
+button and history UI remained N-02 work; the later 2026-09-11 ADR 0085 amendment
+withdraws those requirements. Local feature acceptance did not run a full closeout.
 
 The maintainer subsequently authorized commit/push and CI on 2026-09-09.
 Host e445ace3980e6e16e110c4288020539c39ffddcc is pushed to main with terminal
@@ -4018,34 +4019,60 @@ Review corrections include preview/post-save Undo ambiguity, accessible chapter
 errors, native section-disclosure markup, guarded paired metadata-fence refresh,
 empty revision controls and queued chapter reconciliation following later saves.
 Route/hydration/component records, TEST.md, ADR 0091 and changelog are updated.
-N-02 rollback and N-03 integrated six-RID, Windows/restart, real-channel/playback
-and release acceptance remain unchanged and open.
+N-02 and N-03 remained open at this checkpoint. The subsequent 2026-09-11
+maintainer amendment narrows N-02 to the stale-after-failed-update add-on
+health warning; the owning milestone below records the current scope.
 '''
 
 [[milestone]]
 id         = 'amm-n-02'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
-title      = 'Validate and roll back yt-dlp replacement'
-status     = 'Not started'
+title      = 'Warn when yt-dlp could not update and is behind the latest release'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-n-01b']
 acceptance = '''
-For an accepted eligible regular executable, the update job records size and
-digest and stores one bounded private last-known-good copy before yt-dlp -U.
-Startup, reported version, and extractor-registry loading validate before the
-tool lease releases. Failed validation atomically restores exact prior bytes
-and returns rolled_back; failed restore quarantines the tool with exact
-remediation. Package-manager, immutable, and read-only installations are never
-mutated. Check for update now and a bounded redacted update history share the
-same lease, Retry-After, backoff, and next eligibility. Windows/POSIX tests
-cover success, no-op, validation failure, rollback, quarantine, concurrent
-operations, process death, and restart.
+Only add a warning through the official yt-dlp add-on health check when the
+configured yt-dlp could not update and is confirmed behind the latest release
+for its configured native update channel. Staleness is a confirmed newer
+release, not an age threshold. Prefer evidence from native yt-dlp capabilities;
+do not introduce a host-owned release lookup or updater. An unavailable latest
+version is unknown, not proof of staleness. Previously confirmed newer-version
+evidence may establish staleness while an update fails.
+The localized, redacted warning identifies the add-on, program and installed/latest
+versions and explains manual update remediation without blocking playback. Focused provider/host health
+tests cover failed-and-stale, failed-but-current, unknown latest version,
+successful/current updates, and clearance after successful or manual repair.
+Existing N-01 update scheduling, execution leases, version checks, process
+cleanup and failure reporting remain unchanged. Automatic backup, rollback,
+quarantine, extra replacement-validation probes, manual update controls, expanded history,
+and new retry/Retry-After infrastructure are withdrawn, not deferred to N-03.
 '''
 evidence = '''
-Not started. A serialized -U invocation prevents concurrent replacement but
-does not prove that the resulting executable is usable or provide a known-good
-rollback and operator-visible attempt history.
+Completed 2026-09-11 under the maintainer's warning-only ADR 0085 amendment.
+Any confirmed newer native-channel release is stale, not the proposed 90-day
+cutoff. The maintainer explicitly confirmed program and installed/latest versions.
+The provider retains one bounded native-update evidence record, negotiates
+optional structured check context and recognizes manual repair. The host stores
+validated context beside readiness and localizes generic Add-ons/Health wording
+in all nine cultures. Native -U protocol and N-01 safety behavior are retained.
+Provider proof: 16 updater tests, 15 existing source-check tests, Deno type checks
+and the actual Windows synthetic native fixture passed. No real -U was run.
+Provider implementation is committed locally as ErsatzRS-addons a2cf772.
+Review corrected initial data-directory creation and read-only evidence access.
+Host proof: 39 focused contract/infra/web tests passed (nextest run
+196f4da6-3a1f-4ed5-beb9-b53d3e73703c), covering migration, invalid/legacy context,
+redaction, persisted warning/clearance, failed readiness after durable update
+completion, canonical Health projection and every localization. Affected-crate
+all-target Clippy passed, including web after the browser-boundary correction.
+The first browser run demonstrated unused provider prose in island props;
+production DTO conversion now omits it and the whole-page assertion is unchanged.
+Matched final SSR/WASM builds and all four Chromium/Firefox hydrated/no-JS cases
+passed: test-results/amm-n02-rerun/playwright-results.json and ersatzrs-web.log.
+Independent provider/host review found no remaining P1/P2. Focused evidence only;
+format, hydration lint and progress validation pass. No CI, full closeout or
+push was run. N-03 owns integrated acceptance.
 '''
 
 [[milestone]]
@@ -4064,8 +4091,10 @@ playback gates pass. The original overlap is repeated with a scheduled scan,
 Publish, browser disconnect, restart, UI recovery, and one exact final revision
 with distinct causal diagnostics, no stranded journal, and no manual database/
 filesystem repair. Reordered incremental discovery, two-observation reconcile,
-source/diff/impact/history UX, accessibility, quota/LRU pins, validated update
-rollback, and additions-only publication pass. A real channel proves
+source/diff/impact/history UX, accessibility, quota/LRU pins, the N-02
+stale-after-failed-update add-on health warning, and additions-only publication
+pass. Tool-update backup, rollback, quarantine and administration withdrawn by
+the 2026-09-11 amendment are not integrated-closeout requirements. A real channel proves
 SponsorBlock-processed video and default/fallback human subtitles.
 '''
 evidence = '''

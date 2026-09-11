@@ -1944,6 +1944,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonToolManualUpdate => "Manuelles Update erforderlich",
         TextKey::AddonToolManualHelp => "Aktualisieren Sie das konfigurierte Programm manuell mit der ursprünglichen Installationsmethode und prüfen Sie danach das Add-on.",
         TextKey::AddonToolFailedHelp => "Das Programmupdate ist fehlgeschlagen. Prüfen Sie Programmverfügbarkeit und Netzwerkzugriff; die automatische Wartung versucht es später erneut.",
+        TextKey::AddonToolUpdateFailedStale => "Das Programm konnte nicht aktualisiert werden und eine neuere Version ist verfügbar. Die automatische Wartung versucht es später erneut. Verwenden Sie zur sofortigen Aktualisierung die ursprüngliche Installationsmethode und prüfen Sie anschließend das Add-on.",
+        TextKey::AddonToolUpdateVersions => "{program}: installiert {installed}, neueste Version {latest}.",
         TextKey::AddonToolVersionHelp => "Die Programmversion konnte nicht gelesen werden. Prüfen Sie das konfigurierte Programm und seine Berechtigungen.",
         TextKey::AddonToolUnavailableHelp => "Das konfigurierte Programm ist nicht verfügbar. Prüfen Sie die Programmeinstellung und Installation.",
         TextKey::AddonToolBusyHelp => "Wartet, bis das Programm frei ist; die laufende Wiedergabe wird nicht unterbrochen.",

@@ -41,8 +41,8 @@ official yt-dlp package one complete operator workflow:
 9. operators can preview source, publication, reset, and downstream impact,
    compare or restore bounded publication history, and inspect a redacted
    causal operation timeline; and
-10. inherited/bulk item options, cache budgets, and transactional tool-update
-    rollback keep the broadened workflow usable for large lists.
+10. inherited/bulk item options, disk-usage warnings, and a stale-after-failed-
+    update add-on health warning keep the broadened workflow usable.
 
 The host remains provider-neutral. No Rust branch may compare an add-on ID to
 the official yt-dlp identifier. Exact provider commands, output mapping, and
@@ -131,7 +131,7 @@ It does not:
 | `/search?query=addon_list:{id}` | Browse published members | Every Remote Stream card links to its canonical details route. |
 | `/media/remote/streams/:id` | Understand and use a stream | Show metadata, artwork, duration/liveness, subtitle tracks, owning list, published options, availability, playback health, and channel/watch actions. |
 | `/settings/ffmpeg` | Choose subtitle language intent | Existing default/fallback values remain canonical; the add-on-list page links here when neither is set. |
-| `/settings/addons/:id` | Understand yt-dlp maintenance | Show update history, before/after version/digest, rollback state, next daily attempt, typed outcome, and Check for update now. M-03 warning thresholds belong with add-on-list settings, not tool maintenance. |
+| `/settings/addons/:id` | Understand yt-dlp maintenance | Preserve N-01 latest status and remediation; N-02 adds only the official add-on health warning for a failed update with confirmed latest-release staleness. No new controls or history UI. |
 
 ### Publication action state machine
 
@@ -507,14 +507,10 @@ self-update permission. The official package runs the configured executable as
 an argv array with `-U`, probes `--version` before and after, and maps output to
 typed outcomes. The host never invokes a shell and never parses yt-dlp text.
 
-For an accepted regular self-updating executable, the host records the size
-and digest and stores one bounded private last-known-good copy before launch.
-After `-U`, the package validates executable startup, the reported version, and
-extractor-registry loading before the host releases the lease. Validation
-failure restores the prior bytes atomically and returns `rolled_back`; failed
-restore quarantines the tool and blocks invocations with exact remediation.
-Package-manager, immutable, and read-only installations skip backup and return
-`manual_update_required` without mutation.
+The 2026-09-11 ADR 0085 amendment withdraws host-owned executable backup,
+rollback, quarantine and extra validation probes. Native yt-dlp retains update
+and installation eligibility ownership; existing N-01 before/after version
+checks remain. Manual repair after a bad update is an accepted limitation.
 
 One startup trigger is created on every host start while the add-on is enabled.
 A persisted daily trigger is also due no later than 24 hours after the last
@@ -529,16 +525,15 @@ Required manual-remediation copy is:
 
 > yt-dlp could not update itself because this executable is read-only or is
 > managed by another package manager. Update that installation with its package
-> manager, or select an official standalone yt-dlp executable, then choose
-> Retry update.
+> manager, or select an official standalone yt-dlp executable.
 
 Health distinguishes stale version, update failure, and manual-update-required
 without treating an already-current outcome as an error.
 
-**Check for update now** enqueues the same durable command and does not bypass
-the shared lease, `Retry-After`, failure backoff, or next eligibility. A bounded
-redacted update history records startup/daily/manual trigger, before/after
-version and digest, validation, rollback, outcome, and next attempt.
+N-02 adds only the official add-on health warning when updating failed and a
+newer release is confirmed for the configured native channel. Latest-version
+lookup failure is unknown, not proof of staleness. No manual update control,
+expanded history or new retry/Retry-After infrastructure is required.
 
 ## Provider-neutral capability map
 
@@ -549,7 +544,7 @@ version and digest, validation, rollback, outcome, and next attempt.
 | `media-list.import.v2` | Own generation, strategy counters, checkpoint promotion, delta merge, reconcile tombstones, leases, bounds, and reset. | Produce bounded header/delta/full records, declare safe early-stop strategy, and operate yt-dlp archive arguments. |
 | `media-list.artifacts.v1` | Create scratch root, validate manifest/files, publish atomically, project tracks. | Fetch only requested human subtitles and describe returned artifacts. |
 | `remote-stream.play.v3` | Pass published option snapshot and own cancellation/output limits. | Apply browser cookies and select direct or prepared media behavior. |
-| `tool.update.v1` | Schedule, lease, back up eligible executables, bound, validate, roll back/quarantine, persist history, show health, and enforce permission review. | Run `-U`, validate startup/version/extractor registry, and normalize the result. |
+| `tool.update.v1` | Preserve N-01 scheduling, leases, bounded execution, latest status and permission review; project the N-02 add-on health warning. | Run native `-U` with existing version probes; own release evidence and the failed-and-stale health diagnostic. |
 
 Frozen capability versions remain accepted. A package gains no new behavior
 until it declares the corresponding version.
@@ -1126,7 +1121,7 @@ N-02 planning and its implementation-approval boundary follow N-01B.
   update downloader, package-manager commands or forced channel switching.
 - Use playback-first idle acquisition as above; retain ownership through
   confirmed process-tree cleanup. Latest status and manual remediation belong
-  in existing Add-ons/Health surfaces. N-02 owns rollback and history UI.
+  in existing Add-ons/Health surfaces. N-02 adds only the failed-and-stale warning.
 - Add permission-reviewed `tool.update.v1`, startup/daily triggers, deduped
   claims, version evidence, and the per-tool execution lease.
 - Prove updated, already-current, manual-update-required, network failure,
@@ -1142,18 +1137,52 @@ after N-01 and before N-02. [ADR 0091](../docs/adr/0091-lock-addon-list-task-des
 owns the decision; milestone `amm-n-01b` owns production acceptance. Preserve
 the real shell and complete existing capabilities while implementing the
 locked task layout, coherent saves, draft retention, localization and real-host
-visual/hydrated/no-JS proof. N-02 and N-03 acceptance remain unchanged.
+visual/hydrated/no-JS proof. The subsequent 2026-09-11 N-02 amendment below
+does not change N-01B acceptance.
 
-### AMM-N-02 — Validate and roll back tool replacement
+### AMM-N-02 — Warn about a failed update when yt-dlp is behind the latest release
 
-- Store one bounded last-known-good copy for an eligible accepted executable,
-  record before/after version and digest, and validate startup, version, and
-  extractor-registry loading before releasing the tool lease.
-- Restore exact prior bytes on failed validation, quarantine with exact
-  remediation if restore fails, and never mutate package-manager/immutable/
-  read-only installations.
-- Add Check for update now plus bounded redacted update history using the same
-  lease, Retry-After, backoff, and next-eligibility state as automatic attempts.
+The maintainer narrowed this slice on 2026-09-11. Milestone `amm-n-02` owns
+acceptance; ADR 0085 owns the decision. Implement only the official yt-dlp
+add-on health warning, without expanding host update administration.
+
+1. Map latest-release evidence from native yt-dlp and existing update outcomes
+   into the provider health path. Any confirmed newer release for the configured
+   channel is stale; an unknown latest version is not, and age is not a proxy.
+2. Report a localized, redacted warning only when the tool could not update
+   and remains stale. Reuse existing health/status presentation and include
+   provider-supplied program name, installed/latest versions and manual update
+   guidance; do not block playback or run updates from Health. The host owns
+   generic localized wording, not provider-specific names.
+3. Add focused provider/host tests for both conditions, current and unknown
+   versions, and warning clearance after successful or manual repair. Preserve
+   N-01 lease, process-cleanup, permission and scheduling behavior.
+4. Review and fix concrete P1/P2 findings, update evidence, and quick-commit
+   the accepted slice locally. Do not run CI/full closeout or push here.
+
+Backup, rollback, quarantine, extra replacement validation, manual update controls,
+expanded history and new retry infrastructure are withdrawn, not N-03 work.
+
+#### N-02 source and hydration map
+
+- Product extension: no ErsatzTV native add-on updater counterpart. Reuse the
+  accepted N-01 coordinator and official provider's native `-U` invocation.
+- Provider: `libexec/tool-update.ts` records bounded release evidence in the
+  existing `ERSATZRS_ADDON_DATA_DIR`; `addon.check.v1` owns the warning.
+- Host: `addon_tool_maintenance.rs` refreshes the existing bounded readiness
+  check after recording a completed update attempt; `AddonPlatformHealthCheck`
+  projects persisted `LastCheckStatus`, `LastCheckCode` and optional validated
+  warning details in one nullable `LastCheckToolUpdateJson` column. The host
+  advertises `ERSATZRS_ADDON_CHECK_CONTEXT_VERSION=1`; older hosts retain the
+  three-field provider check response. No update-result wire change.
+- Route `/settings/addons/:id`: existing `AddonDetailPage` SSR wrapper and
+  `AddonDetailIsland`; `last_check_code`/`last_check_message` and the optional
+  `last_check_tool_update` DTO field drive localized text in the existing
+  status paragraph. No new endpoint,
+  server function, control, DOM subtree, CSS, or shared primitive.
+- The same status text is server-rendered without JavaScript. Health uses its
+  existing message localization path. Browser proof target:
+  `tests/e2e/addon-tool-maintenance.spec.ts` (hydrated and no-JS).
 
 ### AMM-N-03 — Cross-platform and release acceptance
 
@@ -1177,7 +1206,8 @@ once those conditions hold; no second release-approval prompt is required.
   and a SponsorBlock-prepared item.
 - Prove source/diff/reset-impact/history UX, shared dialog/table accessibility,
   reordered early-stop fallback, two-observation reconciliation,
-  additions-only publication, cache quotas/pins, and update rollback/quarantine.
+  additions-only publication, cache quotas/pins, and the N-02 failed-and-stale
+  add-on health warning. Withdrawn updater recovery/administration is excluded.
 - Repeat the original overlap shape: scheduled scan active, Publish submitted,
   browser disconnected, host restarted, recovery completed in the UI, one
   exact revision published, distinct causal diagnostics, no stranded journal,
@@ -1209,7 +1239,7 @@ once those conditions hold; no second release-approval prompt is required.
 | Review-by-default and additions-only automatic publication | `amm-l-05` |
 | Inherited/bulk item options and browser access preflight | `amm-m-01a` |
 | Per-list and combined disk-usage health warnings | `amm-m-03` |
-| Validated yt-dlp update rollback and history | `amm-n-02`, `amm-n-03` |
+| yt-dlp add-on health warning after a failed update with confirmed staleness | `amm-n-02`, `amm-n-03` |
 | Dialog focus containment and accessible table sorting | `amm-k-04` |
 
 ## Required verification evidence
@@ -1234,8 +1264,8 @@ complete only when all of the following exist:
 - matched SSR/WASM hydration and localization completeness;
 - actual subtitle selection and SponsorBlock-removed channel playback, not
   merely command construction;
-- existing admission/pin regressions, disk-usage health warnings, update validation, atomic rollback,
-  quarantine, and bounded history; and
+- existing admission/pin regressions, disk-usage health warnings, and the
+  failed-and-stale yt-dlp add-on health warning; and
 - packaged Windows dogfood reproducing and clearing the original overlap
   scenario entirely through the admin UI.
 

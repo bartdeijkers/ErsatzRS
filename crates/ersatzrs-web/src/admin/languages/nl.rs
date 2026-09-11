@@ -2626,6 +2626,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonToolManualUpdate => "Handmatige update nodig",
         TextKey::AddonToolManualHelp => "Werk het ingestelde programma handmatig bij via de oorspronkelijke installatiemethode en controleer daarna de add-on.",
         TextKey::AddonToolFailedHelp => "De programma-update is mislukt. Controleer de beschikbaarheid en netwerktoegang; automatisch onderhoud probeert het later opnieuw.",
+        TextKey::AddonToolUpdateFailedStale => "Het programma kon niet worden bijgewerkt en er is een nieuwere versie beschikbaar. Automatisch onderhoud probeert het later opnieuw. Werk het programma desgewenst nu bij via de oorspronkelijke installatiemethode en controleer daarna de add-on.",
+        TextKey::AddonToolUpdateVersions => "{program}: geïnstalleerd {installed}, nieuwste {latest}.",
         TextKey::AddonToolVersionHelp => "De programmaversie kon niet worden gelezen. Controleer het ingestelde programma en de rechten.",
         TextKey::AddonToolUnavailableHelp => "Het ingestelde programma is niet beschikbaar. Controleer de programma-instelling en installatie.",
         TextKey::AddonToolBusyHelp => "Wacht tot het programma vrij is; actieve weergave wordt niet onderbroken.",

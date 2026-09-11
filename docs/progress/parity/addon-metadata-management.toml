@@ -348,11 +348,12 @@ resolved    = false
 
 [[debt]]
 id          = 'enabled-yt-dlp-tool-is-not-maintained-by-ersatzrs'
-description = 'Run one controlled yt-dlp self-update at every ErsatzRS start and at least daily while its add-on is enabled, with permission review, durable leases, before/after version and digest, post-update validation, last-known-good rollback/quarantine, bounded history, health, and exact manual remediation for installations that cannot self-update.'
+description = 'Preserve completed N-01 native yt-dlp startup/daily maintenance and add only the N-02 official add-on health warning when updating failed and the executable is confirmed behind the latest release for its configured update channel.'
 discovered  = '2026-09-01'
 adr         = '0085'
-evidence    = 'The official package tells the operator to update yt-dlp and passes --no-update on discovery, enrichment, and playback. AMM-K-01 adds provider-neutral permission and durable attempt/lease/version/digest/validation/rollback history contracts with actionable aggregate diagnostics, but no startup/daily executor, replacement, quarantine, or manual action exists yet. Tracked by AMM-N and plans/addon-list-lifecycle-broadening.md.'
-resolved    = false
+evidence    = 'Milestone amm-n-01 owns native -U, permission, playback-first lease, version and offline process-recovery evidence. Completed amm-n-02 owns the localized redacted warning with provider-supplied program and installed/latest versions, confirmed newer native-channel release evidence, warning clearance, compatibility and focused Linux/Windows/browser proof. The 2026-09-11 ADR 0085 amendment withdraws backup, rollback, quarantine, extra validation, manual controls, expanded history and new retry infrastructure rather than deferring them.'
+resolved    = true
+resolution  = 'The official provider reports confirmed stale-after-failed-update readiness through the existing host health path without owning release lookup in the host or blocking playback; milestone amm-n-02 records acceptance evidence.'
 
 [[debt]]
 id          = 'addon-list-import-review-ux-obscures-state-and-mobile-actions'

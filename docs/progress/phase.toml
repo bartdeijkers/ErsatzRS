@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-N-01B locally complete — exact-commit CI delivery, then N-02 planning'
+current_focus = 'AMM-N-02 complete; plan AMM-N-03 integrated acceptance from current evidence'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -51,10 +51,12 @@ and keeps unsafe changes in review with localized Activity/Health notices.
 ADR 0085 broadens the remaining corrective program through AMM-K operator
 lifecycle/navigation, AMM-L cadenced incremental
 refresh/reconciliation, AMM-M inherited yt-dlp access/SponsorBlock/subtitles
-with bounded artifact storage, and AMM-N validated yt-dlp maintenance plus
+with bounded artifact storage, and AMM-N native yt-dlp maintenance plus
 cross-platform closeout. The widened acceptance also requires causal operation
 history, source/change/impact preview, bounded revision restore, safe ordered
-early stop, additions-only automatic publication, and updater rollback.
+early stop, additions-only automatic publication, and the N-02 stale-after-
+failed-update add-on health warning. The 2026-09-11 amendment withdraws updater
+backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
@@ -133,13 +135,23 @@ numbering, visible First aired, preserved replacement drafts and clear actions.
 Its milestone owns the final 643-test web parity gate, 38 Chromium/Firefox
 workspace/visual cases, three playback/restart cases and synthetic subtitle
 TS/HLS acceptance, retaining prior item-form evidence. The locked artifact remains
-unchanged. Prior persistence/playback proof is retained; N-02/N-03 remain open.
-After N-01B, plan AMM-N-02 read-only for maintainer approval. Do not implement
-rollback/quarantine/manual controls before that approval.
+unchanged. Prior persistence/playback proof is retained; N-03 remains open.
+On 2026-09-11 the maintainer narrowed AMM-N-02 to a warning in the official
+yt-dlp add-on health check only: the tool could not update and is confirmed
+behind the latest release for its native update channel, not merely old by
+date. N-02 is complete with native release evidence, negotiated provider-supplied
+program/versions, generic localized health text and focused provider, Rust and
+hydrated/no-JS browser proof. The milestone owns the evidence and review fixes.
+Next plan N-03 integrated acceptance, reusing valid evidence and identifying any
+obsolete requirements before running gates. An unknown latest
+version is not proof of staleness. Backup, rollback, quarantine, extra validation,
+manual-update controls, expanded history and new retry infrastructure are
+withdrawn, including their N-03 follow-through. Preserve N-01 safety behavior.
 HLS Direct expansion is excluded; language changes may reprepare
-downloaded media. The subsequent maintainer request authorizes commit, push and
-exact-commit CI; merge, release and unrelated later-slice implementation remain
-outside this delivery.
+downloaded media. The active workflow authorizes scoped local commits but no
+CI/full closeout or push during slice work. After N-03 review fixes, pause and
+ask before making CI green and pushing; the conditional Windows beta follows
+only after its recorded acceptance gates.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native
 yt-dlp executable capabilities; the removed custom Range adapter has no fallback.
 Keep existing HDR/unmapped-subtitle refusals and ordinary playback behavior intact.

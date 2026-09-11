@@ -1122,7 +1122,7 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
 
             <section id="status" class=style::detail_section>
                 <h2>{tr(TextKey::Status)}</h2>
-                <p>{installed.as_ref().and_then(|item| item.last_check_message.clone()).unwrap_or_else(|| "—".to_owned())}</p>
+                <p>{installed.as_ref().map_or_else(|| "—".to_owned(), |item| crate::admin::i18n::addon_check_message(item.last_check_code.as_deref(), item.last_check_message.as_deref().unwrap_or("—"), item.last_check_tool_update.as_ref()))}</p>
                 <p class=style::muted>{installed.as_ref().and_then(|item| item.last_check_at.clone()).unwrap_or_default()}</p>
                 <div data-testid="addon-tool-maintenance" hidden=permissions.1.tool_update.is_empty()>
                     <h3>{tr(TextKey::AddonToolMaintenance)}</h3>

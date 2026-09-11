@@ -3,7 +3,7 @@ use super::super::{
     Row,
 };
 use crate::db::DbRow;
-use ersatzrs_addon_contract::{AddonCheckStatus, AddonManifest};
+use ersatzrs_addon_contract::{AddonCheckStatus, AddonManifest, AddonToolUpdateWarning};
 use ersatzrs_core::repositories::AddonMediaListLifecycleRepository;
 use semver::Version;
 
@@ -32,7 +32,7 @@ impl HealthCheck for AddonPlatformHealthCheck {
         .await
         .map_err(sqlx_error)?;
         let installations = sqlx::query(
-            r#"SELECT "AddonId", "SourceId", "RepositoryId", "Enabled", "TrustTier", "ManifestJson", "InstallPath", "ContentSha256", "LastCheckCode", "LastCheckStatus"
+            r#"SELECT "AddonId", "SourceId", "RepositoryId", "Enabled", "TrustTier", "ManifestJson", "InstallPath", "ContentSha256", "LastCheckCode", "LastCheckStatus", "LastCheckToolUpdateJson"
                FROM "AddonInstallation" ORDER BY "AddonId""#,
         )
         .fetch_all(&self.pool)
@@ -285,11 +285,27 @@ async fn installation_findings(
             Some(AddonCheckStatus::Warning | AddonCheckStatus::Unavailable)
         ) {
         let status = readiness_status.unwrap_or(AddonCheckStatus::Unavailable);
-        Some(format!(
+        let mut warning = format!(
             "{id} last reported {} readiness ({})",
             status.as_str(),
             last_check_code.as_deref().unwrap_or("no code")
-        ))
+        );
+        if status == AddonCheckStatus::Warning
+            && last_check_code.as_deref() == Some("tool-update-failed-stale")
+        {
+            if let Some(json) = row
+                .try_get::<Option<String>, _>("LastCheckToolUpdateJson")
+                .ok()
+                .flatten()
+                .and_then(|json| serde_json::from_str::<AddonToolUpdateWarning>(&json).ok())
+                .filter(|context| context.validate().is_ok())
+                .and_then(|context| serde_json::to_string(&context).ok())
+            {
+                warning.push_str(": ");
+                warning.push_str(&json);
+            }
+        }
+        Some(warning)
     } else if enabled
         && row
             .try_get::<Option<String>, _>("SourceId")
@@ -318,6 +334,76 @@ async fn installation_findings(
 #[cfg(test)]
 mod tool_maintenance_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn readiness_health_emits_validated_tool_context_and_preserves_legacy_fallback() {
+        let temp = tempfile::tempdir().unwrap();
+        let pool = crate::db::init(&format!(
+            "sqlite:{}",
+            temp.path().join("health.db").display()
+        ))
+        .await
+        .unwrap();
+        let package = temp.path().join("package");
+        std::fs::create_dir(&package).unwrap();
+        // The health check validates package content without executing this fixture.
+        std::fs::write(package.join("fixture"), b"health fixture").unwrap();
+        let content_sha256 = crate::addons::calculate_addon_content_sha256(&package)
+            .await
+            .unwrap();
+        let manifest: AddonManifest = serde_json::from_value(serde_json::json!({
+            "manifest_version": 6, "id": "org.example.readiness", "version": "1.0.0",
+            "name": {"en-US": "Fixture"}, "summary": {"en-US": "Health fixture"},
+            "license": "MIT", "source_url": "https://example.test/readiness", "host_version": "*",
+            "capabilities": [{"id": "addon.check.v1"}],
+            "entrypoints": {"any": {"path": "fixture", "kind": "native"}}
+        }))
+        .unwrap();
+        manifest.validate().unwrap();
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation"
+               ("AddonId", "Version", "Enabled", "TrustTier", "PackageSha256", "ContentSha256",
+                "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt", "LastCheckCode", "LastCheckStatus")
+               VALUES (?, '1.0.0', 1, 'verified', 'fixture', ?, ?, ?, 'now', 'now',
+                       'tool-update-failed-stale', 'warning')"#,
+        )
+        .bind(&manifest.id)
+        .bind(content_sha256)
+        .bind(serde_json::to_string(&manifest).unwrap())
+        .bind(package.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+        let canonical =
+            r#"{"program":"Example Tool","installed_version":"1.0","latest_version":"2.0"}"#;
+        let frame =
+            "org.example.readiness last reported warning readiness (tool-update-failed-stale)";
+        for (context, expected) in [
+            (
+                Some(
+                    r#"{"latest_version":"2.0","program":"Example Tool","installed_version":"1.0"}"#,
+                ),
+                format!("{frame}: {canonical}"),
+            ),
+            (None, frame.to_owned()),
+            (
+                Some(
+                    r#"{"program":"injected; warning","installed_version":"1.0","latest_version":"2.0"}"#,
+                ),
+                frame.to_owned(),
+            ),
+            (Some("malformed JSON"), frame.to_owned()),
+        ] {
+            sqlx::query(r#"UPDATE "AddonInstallation" SET "LastCheckToolUpdateJson" = ? WHERE "AddonId" = ?"#)
+                .bind(context).bind(&manifest.id).execute(&pool).await.unwrap();
+            let result = AddonPlatformHealthCheck::new(pool.clone())
+                .check()
+                .await
+                .unwrap();
+            assert_eq!(result.status, HealthCheckStatus::Warning);
+            assert_eq!(result.message, expected);
+        }
+    }
 
     #[tokio::test]
     async fn maintenance_health_uses_latest_attempt_and_projects_only_actionable_status() {

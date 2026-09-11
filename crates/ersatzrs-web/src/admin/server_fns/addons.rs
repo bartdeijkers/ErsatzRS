@@ -52,6 +52,7 @@ pub struct InstalledAddonRow {
     pub settings: Vec<AddonSettingRow>,
     pub last_check_code: Option<String>,
     pub last_check_message: Option<String>,
+    pub last_check_tool_update: Option<ersatzrs_addon_contract::AddonToolUpdateWarning>,
     pub last_check_at: Option<String>,
     pub installed_at: String,
     pub updated_at: String,
@@ -361,8 +362,14 @@ impl From<ersatzrs_app::AddonOverviewRead> for AddonOverview {
                             reference: setting.reference,
                         })
                         .collect(),
+                    // This warning uses host-localized text and structured
+                    // context; do not serialize unused provider prose into
+                    // island props, where it would still reach the browser.
+                    last_check_message: item.last_check_message.filter(|_| {
+                        item.last_check_code.as_deref() != Some("tool-update-failed-stale")
+                    }),
                     last_check_code: item.last_check_code,
-                    last_check_message: item.last_check_message,
+                    last_check_tool_update: item.last_check_tool_update,
                     last_check_at: item.last_check_at,
                     installed_at: item.installed_at,
                     updated_at: item.updated_at,

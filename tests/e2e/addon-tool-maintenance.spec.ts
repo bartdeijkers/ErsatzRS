@@ -70,6 +70,23 @@ for (const javaScriptEnabled of [true, false]) {
           await expect(page.getByTestId('addon-tool-offline-recovery-command')).toContainText('--recover-addon-tool --tool-path "<absolute-executable-path>" --confirm-all-processes-stopped');
         }
       }
+      db.prepare('UPDATE "AddonInstallation" SET "LastCheckStatus" = ?, "LastCheckCode" = ?, "LastCheckMessage" = ? WHERE "AddonId" = ?')
+        .run('warning', 'tool-update-failed-stale', 'SYNTHETIC_PRIVATE_PROVIDER_PROSE', addonId);
+      await visit();
+      await expect(page.locator('#status')).toContainText('The program could not be updated and a newer release is available.');
+      await expect(page.locator('#status')).toContainText('original installation method');
+      expect(await page.content()).not.toContain('SYNTHETIC_PRIVATE_PROVIDER_PROSE');
+      db.prepare('UPDATE "AddonInstallation" SET "LastCheckToolUpdateJson" = ? WHERE "AddonId" = ?')
+        .run(JSON.stringify({ program: 'Example Player', installed_version: '1.0', latest_version: '1.2' }), addonId);
+      await visit();
+      await expect(page.locator('#status')).toContainText('Example Player: installed 1.0, latest 1.2.');
+      await expect(page.locator('#status')).toContainText('Automatic maintenance will retry.');
+      expect(await page.content()).not.toContain('SYNTHETIC_PRIVATE_PROVIDER_PROSE');
+      db.prepare('UPDATE "AddonInstallation" SET "LastCheckStatus" = ?, "LastCheckCode" = NULL, "LastCheckMessage" = ?, "LastCheckToolUpdateJson" = NULL WHERE "AddonId" = ?')
+        .run('ready', 'Synthetic add-on ready', addonId);
+      await visit();
+      await expect(page.locator('#status')).toContainText('Synthetic add-on ready');
+      await expect(page.locator('#status')).not.toContainText('a newer release is available');
       expect(db.prepare('SELECT "Enabled" FROM "AddonInstallation" WHERE "AddonId" = ?').get(addonId)?.Enabled).toBe(0);
       expect(db.prepare('SELECT COUNT(*) AS n FROM "AddonToolMaintenanceJob" WHERE "AddonId" = ?').get(addonId)?.n).toBe(2);
       expect(errors).toEqual([]);

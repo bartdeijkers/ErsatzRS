@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-09-01), amended (2026-09-04, 2026-09-08)
+Accepted (2026-09-01), amended (2026-09-04, 2026-09-08, 2026-09-11)
 
 The mandatory SponsorBlock processed-video preparation decision is superseded
 by [ADR 0087](0087-stream-sponsorblock-intervals-without-playback-underruns.md)
@@ -17,6 +17,17 @@ LRU reclamation, Clear unused cache and quota/concurrency administration are
 withdrawn, not postponed to integrated closeout. Existing implemented admission
 and ownership safeguards remain unchanged. The owning AMM-M-03 milestone
 records warning settings and Health acceptance evidence.
+
+The 2026-09-11 maintainer amendment limits AMM-N-02 to an official yt-dlp
+add-on health warning when updating failed and the configured executable is
+confirmed behind the latest release for its native update channel. Any newer
+release counts; there is no 90-day age threshold. Unknown latest-version state
+is not evidence of staleness. Automatic executable backup, rollback, quarantine,
+additional validation probes, manual update controls, expanded history and new
+retry infrastructure are withdrawn, not deferred to AMM-N-03. Existing N-01
+native updates, version checks, execution exclusion, failure reporting and
+offline cleanup remain intact. A broken executable may require manual repair;
+the host does not promise automatic repair after a bad update.
 
 ## Implementation
 
@@ -339,14 +350,10 @@ outcome: updated, already current, manual update required, or failed. The host
 records before/after version, timestamps, and a bounded redacted diagnostic.
 It does not parse provider prose or install a replacement itself.
 
-For a regular self-updating executable whose permission has been accepted,
-the update job records its size and digest and stores one bounded private
-last-known-good copy before invoking `-U`. It then proves the replacement can
-run, reports a version, and loads its extractor registry before releasing the
-tool lease. Failed validation restores the exact previous bytes atomically and
-returns `rolled_back`; failure to restore quarantines the tool and blocks new
-invocations with exact remediation. Package-manager, immutable, and read-only
-installations never enter this backup path.
+The host does not back up or restore the executable. Native yt-dlp owns
+replacement and installation eligibility. Preserve N-01 before/after version
+probes and bounded process ownership; no extractor-registry validation or
+automatic quarantine is added by N-02.
 
 Every ErsatzRS start enqueues one update attempt for the enabled package. A
 separate daily schedule makes maintenance due at least once per 24 hours while
@@ -365,7 +372,7 @@ related provider processes stopped, refuses a held executable lease, and retires
 only the selected tool's validated cleanup markers. It does not infer exit from
 marker age or a database lease expiry, repair an executable, or delete media.
 N-01 does not add general process supervision for automatic crash recovery;
-replacement validation, backup and rollback remain N-02 work.
+the N-02 amendment does not add executable repair to that recovery action.
 
 When `-U` reports an immutable, unpackaged, read-only, or package-manager-owned
 installation, Health and Add-ons show **Manual update required** with the
@@ -373,10 +380,12 @@ unambiguous instruction to update that installation through its owning package
 manager or select an official self-updating standalone executable. It is not
 retried continuously between the required startup and daily attempts.
 
-The Add-ons page provides **Check for update now** and a redacted bounded
-history of attempt source, before/after version and digest, validation,
-rollback, outcome, and next eligibility. Manual attempts share the same lease,
-backoff, and fair-use state and cannot bypass a persisted cooldown.
+N-02 adds only a localized, redacted warning through the official yt-dlp
+add-on health check when an update could not complete and a newer release is
+confirmed. Prefer native release evidence without host-owned release lookup.
+The warning explains manual remediation, does not block playback, and clears
+when the current executable no longer satisfies both conditions. Existing
+latest-attempt status remains; no new update button or history UI is required.
 
 ### Make metadata, numbering, and navigation direct
 
@@ -480,9 +489,10 @@ sortable Name/Id table headers use keyboard-operable controls plus `aria-sort`.
 - Let the host replace yt-dlp from a release URL: rejected because the request
   is specifically for yt-dlp's supported self-update operation and the host
   must not silently take ownership of package-manager installations.
-- Trust a successful `-U` exit without validation or rollback: rejected because
-  a newly replaced executable can still be unusable and otherwise break every
-  list and channel that depends on it.
+- Add automatic post-update backup/rollback/quarantine: originally selected,
+  withdrawn by the 2026-09-11 amendment because the maintainer prefers native
+  update ownership and warning-only scope. Existing version probes remain;
+  manual executable repair is the accepted recovery limitation.
 - Retain unlimited job events, revisions, or processed media: rejected because
   operational recovery must not become an unbounded database or disk consumer.
 

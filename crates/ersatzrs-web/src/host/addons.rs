@@ -280,7 +280,6 @@ impl AddonRuntime for NativeAddonRuntime {
             )
             .map_err(runtime_error)?;
             let is_legacy = value.source_id.is_none() && value.repository_id.is_some();
-            let provenance_id = value.source_id.clone().or(value.repository_id);
             let lifecycle =
                 ersatzrs_infra::repositories::SqliteAddonMediaListRepository(self.pool.clone());
             let tool_maintenance = latest_tool_maintenance(
@@ -296,7 +295,7 @@ impl AddonRuntime for NativeAddonRuntime {
                     .as_ref()
                     .map(|_| format!("/api/addons/installed-icon/{}", value.addon_id)),
                 addon_id: value.addon_id,
-                repository_id: provenance_id,
+                repository_id: value.source_id.or(value.repository_id),
                 version: value.version.to_string(),
                 enabled: value.enabled,
                 trust_tier: if is_legacy {
@@ -308,6 +307,7 @@ impl AddonRuntime for NativeAddonRuntime {
                 settings,
                 last_check_code: value.last_check_code,
                 last_check_message: value.last_check_message,
+                last_check_tool_update: value.last_check_tool_update,
                 last_check_at: value.last_check_at,
                 installed_at: value.installed_at,
                 updated_at: value.updated_at,

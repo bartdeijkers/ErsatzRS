@@ -1932,6 +1932,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonToolManualUpdate => "Mise à jour manuelle requise",
         TextKey::AddonToolManualHelp => "Mettez à jour manuellement l’outil configuré avec sa méthode d’installation d’origine, puis vérifiez l’extension.",
         TextKey::AddonToolFailedHelp => "La mise à jour a échoué. Vérifiez la disponibilité de l’outil et l’accès réseau ; la maintenance automatique réessaiera plus tard.",
+        TextKey::AddonToolUpdateFailedStale => "Le programme n’a pas pu être mis à jour et une version plus récente est disponible. La maintenance automatique réessaiera plus tard. Pour le mettre à jour maintenant, utilisez sa méthode d’installation d’origine, puis vérifiez l’extension.",
+        TextKey::AddonToolUpdateVersions => "{program} : version installée {installed}, dernière version {latest}.",
         TextKey::AddonToolVersionHelp => "La version de l’outil n’a pas pu être lue. Vérifiez le programme configuré et ses autorisations.",
         TextKey::AddonToolUnavailableHelp => "L’outil configuré est indisponible. Vérifiez le paramètre du programme et son installation.",
         TextKey::AddonToolBusyHelp => "En attente de la disponibilité de l’outil ; la lecture en cours n’est pas interrompue.",

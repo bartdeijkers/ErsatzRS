@@ -16,7 +16,7 @@ use sqlx::Row as _;
 use tokio::sync::{oneshot, Mutex};
 use uuid::Uuid;
 
-use crate::addons::{invoke_tool_update, AddonError, AddonRuntimeContext};
+use crate::addons::{check_addon, invoke_tool_update, AddonError, AddonRuntimeContext};
 use crate::db::DbPool;
 use crate::repositories::common::{encode_datetime, encode_enum};
 use crate::repositories::SqlxResultExt as _;
@@ -94,19 +94,32 @@ impl AddonToolMaintenanceCoordinator {
         let Some(claim) = self.claim(logical_now(now, started)).await? else {
             return Ok(false);
         };
+        let runtime = AddonRuntimeContext {
+            ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
+            ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),
+        };
         let outcome = invoke_tool_update(
             &self.pool,
             &claim.addon_id,
             &claim.tool_key,
-            &AddonRuntimeContext {
-                ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
-                ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),
-            },
+            &runtime,
             cancellation,
         )
         .await;
+        let refresh_readiness = outcome.is_ok();
         self.record(&claim, logical_now(now, started), outcome)
             .await?;
+        // The provider can now observe its completed native maintenance result.
+        // Refresh only after confirmed updater cleanup and durable completion:
+        // readiness acquires an ordinary shared tool lease, not the update lease.
+        // Its bounded failure must not change the recorded maintenance outcome.
+        if refresh_readiness
+            && check_addon(&self.pool, &claim.addon_id, &runtime)
+                .await
+                .is_err()
+        {
+            tracing::warn!("add-on readiness refresh after tool maintenance failed");
+        }
         Ok(true)
     }
 
@@ -620,6 +633,7 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     #[ignore = "subprocess fixture invoked with an isolated application state directory"]
+    #[allow(clippy::too_many_lines)] // One isolated setup exercises the update/readiness lifecycle.
     async fn scheduled_update_managed_ffmpeg_fixture() {
         let isolated_state =
             crate::startup_config::environment_variable("ERSATZRS_TOOL_MAINTENANCE_TEST_PROFILE")
@@ -632,7 +646,7 @@ mod tests {
         let package = temporary.path().join("package");
         std::fs::create_dir(&package).unwrap();
         let tool = temporary.path().join("tool-identity");
-        std::fs::write(&tool, b"fixture identity; never executed").unwrap();
+        std::fs::write(&tool, b"updated").unwrap();
         let mut manifest = manifest();
         manifest["permissions"]["managed_ffmpeg"] = serde_json::json!(true);
         manifest["settings"][0]["default"] = serde_json::json!(tool.to_str().unwrap());
@@ -646,10 +660,28 @@ mod tests {
         .unwrap();
         std::fs::write(
             package.join("addon.sh"),
-            r#"test "$1" = update || exit 1
-test -n "$FFMPEG_BIN" && test -n "$FFPROBE_BIN" || exit 1
-read -r request
-printf '%s\n' '{"schema":"tool.update.v1","tool_key":"TOOL_BIN","before_version":"1.0","after_version":"1.1","outcome":"updated","diagnostic_code":null}'
+            r#"test -n "$FFMPEG_BIN" && test -n "$FFPROBE_BIN" || exit 1
+test "$ERSATZRS_ADDON_CHECK_CONTEXT_VERSION" = 1 || exit 1
+mode=$(cat "$ERSATZRS_ADDON_SETTING_TOOL_BIN") || exit 1
+case "$1" in
+  update)
+    read -r request
+    if test "$mode" = failed; then
+      printf '%s\n' '{"schema":"tool.update.v1","tool_key":"TOOL_BIN","before_version":"1.0","after_version":"1.0","outcome":"failed","diagnostic_code":"update_failed"}'
+    else
+      printf '%s\n' '{"schema":"tool.update.v1","tool_key":"TOOL_BIN","before_version":"1.0","after_version":"1.1","outcome":"updated","diagnostic_code":null}'
+    fi
+    ;;
+  check)
+    test "$mode" != check-fails || exit 1
+    if test "$mode" = failed; then
+      printf '%s\n' '{"status":"warning","code":"tool-update-failed-stale","message":"A newer release is available.","tool_update":{"program":"Fixture Tool","installed_version":"1.0","latest_version":"1.1"}}'
+    else
+      printf '%s\n' '{"status":"ready","code":"ready","message":"Synthetic tool ready."}'
+    fi
+    ;;
+  *) exit 1 ;;
+esac
 "#,
         )
         .unwrap();
@@ -693,5 +725,44 @@ printf '%s\n' '{"schema":"tool.update.v1","tool_key":"TOOL_BIN","before_version"
         assert_eq!(row.get::<i32, _>("Outcome"), 0);
         assert_eq!(row.get::<String, _>("BeforeVersion"), "1.0");
         assert_eq!(row.get::<String, _>("AfterVersion"), "1.1");
+        for (day, mode, status, code, outcome) in [
+            (1, "failed", "warning", "tool-update-failed-stale", 4),
+            (2, "updated", "ready", "ready", 0),
+            // A subsequent readiness failure cannot rewrite a completed update
+            // or fabricate a new readiness result.
+            (3, "check-fails", "ready", "ready", 0),
+        ] {
+            std::fs::write(&tool, mode).unwrap();
+            let (_cancel, cancellation) = oneshot::channel();
+            assert!(coordinator
+                .process_one(now() + TimeDelta::days(day * 2), cancellation)
+                .await
+                .unwrap());
+            let readiness = sqlx::query(
+                r#"SELECT "LastCheckStatus", "LastCheckCode", "LastCheckToolUpdateJson" FROM "AddonInstallation""#,
+            )
+            .fetch_one(&coordinator.pool)
+            .await
+            .unwrap();
+            assert_eq!(readiness.get::<String, _>("LastCheckStatus"), status);
+            assert_eq!(readiness.get::<String, _>("LastCheckCode"), code);
+            let details = readiness.get::<Option<String>, _>("LastCheckToolUpdateJson");
+            if status == "warning" {
+                let details: ersatzrs_addon_contract::AddonToolUpdateWarning =
+                    serde_json::from_str(details.as_deref().unwrap()).unwrap();
+                assert_eq!(details.program, "Fixture Tool");
+                assert_eq!(details.installed_version, "1.0");
+                assert_eq!(details.latest_version, "1.1");
+            } else {
+                assert!(details.is_none());
+            }
+            let recorded: i32 = sqlx::query_scalar(
+                r#"SELECT "Outcome" FROM "AddonToolMaintenanceJob" ORDER BY "Id" DESC LIMIT 1"#,
+            )
+            .fetch_one(&coordinator.pool)
+            .await
+            .unwrap();
+            assert_eq!(recorded, outcome);
+        }
     }
 }
