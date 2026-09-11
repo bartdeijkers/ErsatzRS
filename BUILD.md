@@ -146,24 +146,48 @@ the GitHub Actions job environment and never touches `.cargo/config.toml`.
 ## Release-candidate CI gate
 
 Before creating any alpha, beta, or normal release tag, push the exact
-candidate commit and wait for its automatic `CI` workflow to complete
-successfully. Local closeout checks and focused Playwright regressions are
-useful before the push, but they do not replace this pre-tag gate.
+candidate commit and verify completed, successful CI evidence for that SHA.
+Local closeout checks and focused Playwright regressions are useful before the
+push, but they do not replace this pre-tag gate.
 
 ```bash
 candidate=$(git rev-parse HEAD)
 git push origin HEAD
-gh run list --workflow ci.yml --event push --commit "$candidate" --limit 1 \
-  --json databaseId,headSha,status,conclusion,url
+# Every CI run for the exact SHA, any event. No --limit 1: the newest run is
+# not always the one that executed the gate (see below).
+gh run list --workflow ci.yml --commit "$candidate" \
+  --json databaseId,event,headSha,status,conclusion,url
 gh run watch <run-id> --exit-status
 gh run view <run-id> --json headSha,status,conclusion,url
+# Per-job results: a Preflight-skipped run shows its gate jobs as skipped.
+gh run view <run-id> --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
 ```
 
-Create the release tag only when the final `gh run view` output reports the
-same full `headSha`, `status: completed`, and `conclusion: success`. A failed,
-cancelled, queued, or in-progress run is not release evidence. Any commit or
-amend after the successful run creates a new candidate SHA and requires a new
-successful CI run before tagging.
+Create the release tag only when the evidence run reports the same full
+`headSha`, `status: completed`, and `conclusion: success`, **and** its job
+list shows `success` for `Format`, `Clippy`, the `Test` job(s) for its runner
+configuration, both `Playwright E2E` projects, `Cargo deny`, and
+`Documentation links`. A green workflow conclusion alone is not enough,
+because skipped jobs do not fail a run. A failed, cancelled, queued, or
+in-progress run is not release evidence. Any commit or amend after the
+successful run creates a new candidate SHA and requires new CI evidence before
+tagging.
+
+### Preflight-skipped runs are a pointer, not evidence
+
+The `Preflight` job skips the gate when a pushed SHA already has a successful
+CI run, so a direct fast-forward merge to `main` does not retest an identical
+tree. Such a run still reports `conclusion: success` and is usually the newest
+run for that SHA, so a recipe that takes the latest successful run can record
+skipped jobs as newly passed tests.
+
+When the automatic push run was skipped this way, record both runs: the push
+run as provenance and the original full-gate run as the evidence. The push
+run's `Preflight` job logs a notice listing every earlier successful run for
+this exact SHA, which can include other skipped runs. Follow those links to
+one that executed every required job above (often a `workflow_dispatch` run on
+the feature branch) and verify it there. The exact-candidate full-gate
+requirement is unchanged; only the run you cite moves.
 
 ## Windows development
 

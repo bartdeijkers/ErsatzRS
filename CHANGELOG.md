@@ -203,7 +203,10 @@ release section when tagging a release.
   gate when it does, so a direct fast-forward merge to `main` stops rerunning
   the feature branch's green run on an identical tree. Pull requests and manual
   dispatches always run in full, and a PR merge commit is a new SHA, so neither
-  is ever skipped.
+  is ever skipped. The release-candidate gate in `BUILD.md` now cites the run
+  that executed the gate: a skipped push run is recorded as provenance, and the
+  tag requires every gate job to report success rather than a green workflow
+  alone.
 - CI skips docs-only pull requests, matching the non-code `paths-ignore` that
   already applied to `main` pushes. This is safe only while the repository has
   no branch protection; if required status checks are ever enabled, docs-only
