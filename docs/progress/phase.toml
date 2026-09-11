@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-N-03 gates, CI and push explicitly authorized; Codex owns serialized execution'
+current_focus = 'AMM-N-03 final candidate closeout; Codex owns serialized execution'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -147,6 +147,17 @@ checkpoint and authorized direct gates, CI and push on 2026-09-11. Do not mark
 N-03 complete before all its gates pass. The maintainer now limits its platform
 verification to Linux x64 and Windows x64; ARM/macOS verification is deferred,
 not claimed passed, and declared platform support stays unchanged.
+Checkpoint 47e7589b has terminal exact-SHA green CI; the milestone owns the
+evidence. Native provider Firefox failure guidance now passes with corrected
+provider e2b06cb, green Windows/Linux CI and a verified bundle. Independent
+source-content correlation passes for retained SponsorBlock TS/HLS captures.
+Next are integrated packaged Windows recovery/profile verification, remaining
+playback acceptance and final release bookkeeping/candidate CI. No tag
+or draft has been created, and N-03 remains In progress.
+Candidate v1.0.33-beta release-note bookkeeping is prepared. The canonical
+local test-closeout passes (2,773 tests plus workspace doctests; 37 skips).
+Codex next owns candidate push and exact-SHA CI; no local heavy work may
+overlap that run. Packaged acceptance remains open.
 Reuse valid evidence and recover
 missing captures before proposing repeats. An unknown latest
 version is not proof of staleness. Backup, rollback, quarantine, extra validation,

@@ -16,6 +16,8 @@ jobs:
       contents: write
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target
+      # The Windows runner shares a machine with WSL; bound compiler memory.
+      CARGO_BUILD_JOBS: "2"
       LEPTOS_HASH_FILES: "false"
     steps:
       - uses: actions/checkout@v7

@@ -13,6 +13,11 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.33-beta] - 2026-09-11
+
+This section also records the changes shipped in `1.0.32-beta`, which had no
+separate changelog section.
+
 ### Added
 
 - Add permission-reviewed yt-dlp self-update: startup/daily jobs invoke the
@@ -73,20 +78,13 @@ release section when tagging a release.
   the publication lease, shows localized progress with and without JavaScript,
   and preserves pending attempts on repeated clicks. Managed add-on cleanup now
   checks process-group/job membership separately from leader exit before releasing
-  preparation resources. AMM-M-01A streaming acceptance is complete;
-  preserved full-download groundwork belongs to the unfinished AMM-M-01B.
-  ADR 0087 supersedes the mandatory processed-video design with a streaming-first
-  proof requiring uninterrupted SponsorBlock cuts. The existing preparation work
-  is preserved for the planned generic list-level HTML select, independent of
-  SponsorBlock and gated by add-on delivery support: Stream (default),
-  Download ahead, or Download ahead only for new videos. The last choice applies
-  only to videos first imported after enabling it; existing videos keep streaming.
-  Enabled SponsorBlock must be honored in all three modes, including both
-  streamed and downloaded videos in the new-videos-only mode.
+  preparation resources. Streaming and Download ahead both honor enabled
+  SponsorBlock removal; the list's delivery selector is independent of
+  SponsorBlock. New-videos-only applies Download ahead only to videos first
+  imported after its visible cutoff; existing videos stream after publication.
   Shared timeline/input generation and immutable interval-plan storage are in
   place. Scanning uses the frozen edited duration, including milliseconds, and
-  rejects conflicting or corrupt playback selections. The generic delivery-mode
-  selector is not implemented yet. Publication-only
+  rejects conflicting or corrupt playback selections. Publication-only
   playback selections no longer mark an unchanged saved draft as edited. A small,
   bounded initial startup delay is permitted to establish continuity reserve,
   targeting ten seconds with a twenty-second maximum, including source opening
@@ -197,6 +195,7 @@ release section when tagging a release.
   acceptance. Publication promotes that same tested ZIP; workflow reruns refuse
   to overwrite a published beta. Exact-SHA green CI remains required before
   tagging, and failed candidates consume their beta version.
+  Windows beta compilation is limited to two Cargo jobs on the shared runner.
 
 - Dependencies updated: quick-xml 0.42, process-wrap 10 and jsonschema 0.52,
   plus minor and patch updates to uuid, mlua, flate2, base64, futures-util,
@@ -212,7 +211,9 @@ release section when tagging a release.
   instead of side by side. Both self-hosted runners share one machine, so
   overlapping browser suites competed for its CPU and memory. A run takes
   roughly ten minutes longer; the second suite still runs when the first
-  fails. Separate concurrent workflow runs can still overlap.
+  fails. Each project has its own result, temporary database and web host,
+  with one worker per suite because scenarios share application state.
+  Separate concurrent workflow runs can still overlap.
 - CI no longer retests a commit it has already proved. A `Preflight` job asks
   the API whether the pushed SHA already has a successful CI run and skips the
   gate when it does, so a direct fast-forward merge to `main` stops rerunning
@@ -226,15 +227,6 @@ release section when tagging a release.
   already applied to `main` pushes. This is safe only while the repository has
   no branch protection; if required status checks are ever enabled, docs-only
   PRs need a sentinel job reporting under the required names instead.
-
-- Run the Playwright admin E2E suite as one CI job per browser project
-  (`chromium`, `firefox`) instead of one job for both. The suite runs on a
-  single worker because it mutates shared application state, so per-project jobs
-  are the only available parallelism: each job boots its own temporary database
-  and web host. The two projects are evenly balanced (7.3 and 7.7 minutes of a
-  15.3-minute serial run), so the stage should drop from ~17.8 to roughly 10
-  minutes once each job's ~2.4 minutes of build and boot is counted. Same tests,
-  same projects, no coverage change.
 
 - Run the CI test jobs through nextest with the same target selection as before
   (ADR 0090), under a new `ci` profile that keeps the no-retry,
@@ -268,10 +260,6 @@ release section when tagging a release.
   extra click from the drawer, and the `/system/troubleshooting/*` detail pages
   carry the same tab strip.
 
-- Defer the two preserved download-ahead browser acceptance tests to AMM-M-01B,
-  where they must use its explicit delivery workflow; streaming acceptance and
-  lower-level preparation tests remain active.
-
 - Reopen the add-on-list atomic-publication contract after Windows dogfood
   showed that a failed post-scan directory rollback can leave an otherwise
   valid recovery journal permanently blocked. AMM-J now owns durable restart
@@ -286,10 +274,11 @@ release section when tagging a release.
   preview source/change/downstream impact, compare/restore bounded revisions,
   reconcile without erasing edits, expose inline metadata and Remote Stream
   details, add fixed and opt-in cadence-aware adaptive refresh plus observable
-  safe yt-dlp archive early stop, carry inherited/bulk
+  safe yt-dlp incremental discovery, carry inherited/bulk
   browser-cookie/SponsorBlock/subtitle behavior into
-  playback under artifact budgets, and run permission-reviewed, validated,
-  rollback-safe yt-dlp maintenance at startup and daily.
+  playback with advisory storage warnings, and run permission-reviewed native
+  `yt-dlp -U` at startup and daily. Replacement backup, rollback, quarantine,
+  retention policies and expanded update administration are outside this scope.
 
 - Refresh the dependency rollup, including `base64` 0.23 and
   `ed25519-dalek` 3.0 for signed add-on repositories, while preserving the
@@ -2943,7 +2932,8 @@ release section when tagging a release.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.28-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.33-beta...HEAD
+[1.0.33-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.32-beta...v1.0.33-beta
 [1.0.28-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.27-beta...v1.0.28-beta
 [1.0.27-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.26-beta...v1.0.27-beta
 [1.0.26-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.25-beta...v1.0.26-beta

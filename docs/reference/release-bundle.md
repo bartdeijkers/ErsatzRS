@@ -59,7 +59,6 @@ Third-party tools such as `yt-dlp` are not bundled. Their add-on packages can be
 installed independently from operator-managed checkouts or offline repository
 bundles through **Settings > Add-ons** in builds that contain the add-on host,
 while operators install any manifest-declared external executable separately.
-The currently published beta predates that host.
 
 See the [configuration reference](configuration.md) for offline overrides.
 

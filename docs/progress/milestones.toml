@@ -4128,6 +4128,56 @@ suspended assignment, duplicate attachment, descendant tracking after leader
 exit, successful wait cleanup, and drop/receipt retirement. The run used two
 compiler jobs with incremental compilation disabled for the existing UNC
 checkout; no local build or CI overlapped it.
+Host checkpoint 47e7589b05bb2c45d7a4956080a7c18609b1c755 now has terminal
+exact-SHA green CI: https://github.com/bartdeijkers/ErsatzRS/actions/runs/34637376313.
+Format, Clippy, Test, Cargo deny, Documentation links and both Playwright
+projects all executed and passed; progress and architecture validation also
+pass. Chromium completed in 12m56s and Firefox in 14m26s, sequentially. Local
+HEAD, tracking main and live remote main agree. This is engineering-checkpoint
+evidence, not completion of the remaining native/profile/package or independent
+source-content acceptance at that checkpoint. Release bookkeeping must precede the final
+candidate's exact-SHA CI. No tag or draft has been created.
+Release-note bookkeeping is now prepared for the unused v1.0.33-beta tag.
+The Windows beta job is capped at two Cargo jobs on the shared machine,
+without changing release optimization. Workflow lint passes with only the
+pre-existing custom-runner-label and SC2129 exclusions. Independent Astra
+review found no P1/P2 in the preserved Windows publication-restart probe;
+Playwright lists both projects successfully, but native execution is still
+pending the exact draft archive. The canonical local test-closeout now passes:
+nextest 4dd2d273-524a-4e36-9b57-45e2faf89c0c ran 2,773 tests, all passed with
+37 skips, followed by successful workspace doctests. The retained log is
+test-results/n03-final-closeout.log. Compilation took 11m11s and nextest took
+217.584 seconds at two compiler/test jobs. The two large web compilers briefly
+used 17.6 GiB combined RSS; both finished before a guarded resource-safety stop
+could act, so the original run completed without termination or restart. No
+OOM or concurrent CI/media gate occurred. Future cold local workspace test
+builds should use one compiler job. The existing proc-macro-error2 future-
+compatibility warning remains the release plan's non-blocking dependency debt.
+Earlier private release
+regression fixture locations have been requested; those scenarios are not
+silently waived or treated as covered by N-03's synthetic probes.
+Native profile acceptance exposed and corrected a provider classification P2:
+an installed Firefox created a fresh disposable profile against a loopback
+fixture, then an owned exclusive NTFS handle blocked its cookie database.
+Pinned native yt-dlp 2026.08.19 returned Errno 13 Permission denied; the helper
+incorrectly reported failed. Provider e2b06cb narrowly maps cookie-database
+permission diagnostics to the existing profile_locked result. The focused
+synthetic regression passes, including unrelated permission failures remaining
+generic. Repeating the real native probe with a new Firefox-created profile
+now returns profile_locked; the missing-profile control returns
+profile_unavailable and both cases make zero media requests. Sanitized
+before/after proof is retained under test-results/n03-native-profile; no personal
+profile or cookie contents were read. This proves native provider classification,
+not the still-required packaged-host allowlist and localized UI scenario.
+Corrected provider e2b06cb5c457eb3dc10b4cd9a45e1ba86437bb01 has terminal green
+Windows/Linux CI 34641800793. Both platforms ran 139 tests, with 79 Windows
+and 36 Linux skips; publication was skipped on this manual verification run.
+Independently downloaded artifact 10280406867 passes ZIP integrity and all
+20 packaged files match the clean provider commit byte-for-byte. Bundle
+SHA-256 is 089a9270372213a31b1f10a018edffeaaa3efb88da499552957609ecf0228123.
+Six RID mappings and POSIX executable permission remain intact. This supersedes
+the older 8560299 bundle for subsequent integrated acceptance, without claiming
+unrun native ARM/macOS proof or invalidating unchanged playback evidence.
 Current inspection: existing browser tests cover seeded publication recovery
 and actual preparation-worker host death separately, not the complete packaged
 Windows scan/Publish/disconnect/restart/UI recovery scenario. Prior M-01A,
@@ -4211,10 +4261,33 @@ product build. Evidence is under test-results/n03-subtitles-drain, including
 individual-frames for visually readable samples. All eight inspected pairs
 show MANUAL BEFORE on retained red and MANUAL AFTER on retained blue; sampled
 caption visibility and frozen-cut transitions agree with their proof JSON.
+All eight retained captures subsequently pass strict FFmpeg 9 audio/video
+decoding plus the existing TSDuck structural, continuity and PCR checks:
+160 assertions, zero failures. No thresholds were relaxed; PCR jitter uses
+the existing informational VBR policy. Analyzer JSON and PCR evidence are
+retained under test-results/n03-subtitles-drain/tsduck. This completes the
+subtitle/processed-item retained-capture transport checks without another host
+run or replacing the still-required integrated packaged Windows scenario.
 No excluded green or capacity slate is accepted. Four native range calls,
 one subtitle operation and one preparation operation are asserted; no raw
 provider play call is accepted. This is actual-host synthetic-media viewing,
 not independent real-provider source correlation or subsecond visual proof.
+Independent source correlation is now available for the retained real-provider
+MPEG-TS and HLS captures. Native yt-dlp acquired only two reference windows
+(939.460-946.460 and 1031.640-1037.640 seconds), without the provider cut path or
+a full download. Decoded pre/post retained frames correlate above 0.994 and
+0.4-second audio windows above 0.872 in both captures. Four excluded source
+controls remain below 0.875 video and 0.459 audio correlation. After subtracting
+the frozen 90.180-second exclusion, all retained audio coordinate offsets agree
+within 5.5 milliseconds in each capture; native reference timestamp rounding
+still limits absolute boundary precision. This supplies independent sampled
+content/timeline evidence alongside the existing uninterrupted transport and
+38 TSDuck checks, not subjective listening or an exact-frame visual claim.
+Reference/capture digests, per-sample results and asserted control thresholds
+are retained in test-results/n03-sponsorblock/source-reference-distinct/correlation.json.
+The first temporary reference command used a missing section_number field,
+colliding filenames; its output is preserved but not used as acceptance. Using
+distinct section_start filenames produced the two independently verified clips.
 The disposable host shut down cleanly and its port closed. The other terminal
 now owns the heavy slot for its separately approved CI work; the verified
 subtitle/progress changes remain uncommitted until that coordinated handoff.

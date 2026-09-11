@@ -546,6 +546,22 @@ No personal profile, cookie value or environment dump was inspected.
 '''
 
 [[debt]]
+id          = 'firefox-cookie-sharing-denial-classification'
+description = 'Native Firefox cookie-database sharing denial was reported as a generic access failure instead of the existing locked-profile guidance.'
+discovered  = '2026-09-11'
+adr         = '0085'
+resolved    = true
+evidence    = '''
+AMM-N-03 records the native reproduction and corrected disposable-profile
+verification. Provider e2b06cb recognizes cookie-database permission diagnostics
+without classifying unrelated permission errors as profile locks. The focused
+synthetic regression and repeated native Firefox/yt-dlp check pass; neither
+the missing-profile nor locked-profile case requests media. Sanitized evidence
+is retained under test-results/n03-native-profile. Packaged-host discovery and
+localized UI acceptance remain separately owned by the existing Windows debt.
+'''
+
+[[debt]]
 id          = 'package-gate-inherits-operator-state'
 description = 'The package verification gate can inherit a higher-priority operator database setting and does not fully isolate application state and logs.'
 discovered  = '2026-09-11'
