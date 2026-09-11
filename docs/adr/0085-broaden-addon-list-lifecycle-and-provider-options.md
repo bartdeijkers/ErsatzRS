@@ -29,6 +29,11 @@ native updates, version checks, execution exclusion, failure reporting and
 offline cleanup remain intact. A broken executable may require manual repair;
 the host does not promise automatic repair after a bad update.
 
+A further 2026-09-11 maintainer amendment scopes AMM-N-03 platform verification
+to Linux x64 and Windows x64 for now. Verification on other supported platforms
+is deferred for this closeout, not claimed passed; declared platform support
+is unchanged. The owning milestone records acceptance and evidence.
+
 ## Implementation
 
 Partial — AMM-J-01 through AMM-J-04 and the AMM-K-01 provider-neutral
@@ -453,7 +458,7 @@ sortable Name/Id table headers use keyboard-operable controls plus `aria-sort`.
   Supported executable replacement is validated and rolls back to one known-
   good copy before normal invocations resume.
 - The contract, schema, coordinator, scanner, admin UI, health checks, official
-  package, and six-platform acceptance all require changes; acceptance is
+  package, and platform acceptance all require changes; acceptance is
   therefore split across AMM-J through AMM-N.
 
 ## Alternatives Considered

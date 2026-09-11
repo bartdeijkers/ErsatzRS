@@ -198,6 +198,11 @@ release section when tagging a release.
   minijinja, open and syn. NFO and XMLTV guide parsing adapt to quick-xml's
   string-based element names; Windows add-on job tracking keeps its spawn
   ordering under process-wrap 10.
+
+- Scope this add-on lifecycle closeout's platform verification to Linux x64
+  and Windows x64. ARM/macOS verification is deferred; declared platform
+  support is unchanged.
+
 - CI runs the Chromium and Firefox Playwright suites one after the other
   instead of side by side. Both self-hosted runners share one machine, so
   overlapping browser suites competed for its CPU and memory. A run takes

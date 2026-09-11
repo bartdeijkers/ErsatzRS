@@ -560,7 +560,7 @@ until it declares the corresponding version.
 | Admin UX | add-on-list pages/CSS/server functions, operation timeline, source/diff/impact/history views, shared dialog/table fixes, search cards, new Remote Stream details route, every language module |
 | Subtitle playback | scanner metadata projection, infra playback selection, IPTV/HLS transport and FFmpeg argv snapshots |
 | yt-dlp behavior | official add-ons repository manifest, Deno adapters, POSIX/Windows entrypoints, provider fixtures |
-| Acceptance | focused Rust tests, contract validator, hydration lint, Chromium/Firefox, six-RID package tests, Windows packaged dogfood, smoke/TSDuck where playback changes |
+| Acceptance | focused Rust tests, contract validator, hydration lint, Chromium/Firefox, platform checks scoped by `amm-n-03`, Windows packaged dogfood, smoke/TSDuck where playback changes |
 
 ## AMM-J — Crash-safe publication recovery
 
@@ -991,7 +991,7 @@ Implementation plan (approved choices, 2026-09-04; delivery remains in progress)
   behavior; quota refusal; cancellation/restart and stale completion; and a
   focused publication-to-channel fixture that actually plays processed media.
   Review and fix P1/P2 before the slice's local commit. Subtitles acquisition,
-  updater lifecycle, integrated six-RID/browser/TSDuck closeout and CI remain
+  updater lifecycle, integrated platform/browser/TSDuck closeout and CI remain
   their named later slices. Do not mark M-01 complete with runtime wiring absent.
 
 - Render list defaults plus nullable item overrides for the exact browser enum
@@ -1209,10 +1209,13 @@ test framework or new product controls.
    media; never fault a production database or use a personal browser profile.
    The real browser-profile guidance check requires a disposable profile and
    appropriate maintainer coordination.
-4. Validate the exact provider bundle's six RID entrypoints, imported helpers,
-   permissions and host contract. Distinguish static bundle validation from
+4. Validate the exact provider bundle's Linux x64 and Windows x64 entrypoints,
+   imported helpers, permissions and host contract. Distinguish static bundle validation from
    native platform execution. Reuse existing Linux/Windows tests and packaging
-   tools; report unavailable platform evidence instead of claiming it passed.
+   tools. The maintainer's 2026-09-11 amendment defers other platform
+   verification for this closeout; do not add ARM/macOS runners or claim those
+   platforms passed. Declared platform support and existing bundle mappings
+   remain unchanged.
 5. Retain scheduled real-provider SponsorBlock MPEG-TS/HLS acceptance and actual
    primary/fallback human-subtitle viewing. Reuse valid captures when available;
    otherwise repeat only the missing required proof, preserving the approved
@@ -1235,7 +1238,7 @@ authorization for gates, CI and push. Once CI is green for the
 exact final commit, create a new beta release containing only the Windows
 package (`win-x64`). Verify the published Windows archive and its build identity;
 do not publish Linux or macOS packages for this beta. This limited release asset
-selection does not weaken N-03's six-platform verification requirement.
+selection does not waive N-03's amended Linux x64/Windows x64 verification.
 The maintainer has explicitly pre-approved creating and publishing this beta
 once those conditions hold; no second release-approval prompt is required.
 
@@ -1243,7 +1246,7 @@ once those conditions hold; no second release-approval prompt is required.
   add-ons repositories.
 - Pass focused Rust, migration, health, hydration, localization, Chromium, and
   Firefox tests.
-- Pass native/package checks for all six supported RIDs, with real Windows
+- Pass native/package checks for Linux x64 and Windows x64, with real Windows
   browser-profile failure guidance and NTFS recovery fault injection.
 - Run channel MPEG-TS/HLS smoke and TSDuck playback proof for a subtitle item
   and a SponsorBlock-prepared item.

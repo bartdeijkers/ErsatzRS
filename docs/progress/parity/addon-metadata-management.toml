@@ -32,7 +32,6 @@ operator state while replacing only an incomplete generation. NSF live browser
 acceptance covers publication, scheduling, playout, MPEG-TS and HLS.
 AMM-H closes Windows television-cardinality regressions with canonical artwork,
 deterministic reads, restart-safe exact-duplicate repairs and aggregate health.
-Its milestone owns the 27-episode browser and runtime-audit evidence.
 AMM-I closes the import/review UX gaps under `amm-i-01`.
 After Windows dogfood exposed a stranded journal, AMM-J-01 adds restart-safe
 exact-revision jobs, shared managed-library leases, and legacy-journal adoption.
@@ -58,7 +57,8 @@ and aligned MPEG-TS/transcoded HLS captions in both delivery modes. Its mileston
 owns evidence. M-03 is complete; N-01 is pushed with green CI (see milestone):
 permission-reviewed yt-dlp -U, playback-first deferral and offline crash recovery.
 N-01B is locally complete, including live publication; its milestone owns evidence.
-N-02/N-03 remain open.
+N-02 is complete; N-03 remains open with Linux x64/Windows x64 verification
+scoped by its milestone.
 '''
 
 [[debt]]

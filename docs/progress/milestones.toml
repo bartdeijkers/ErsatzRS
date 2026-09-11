@@ -4078,15 +4078,16 @@ push was run. N-03 owns integrated acceptance.
 [[milestone]]
 id         = 'amm-n-03'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
-title      = 'Close the broadened lifecycle on all supported platforms'
+title      = 'Close the broadened lifecycle on Linux x64 and Windows x64'
 status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-j-04', 'amm-k-04', 'amm-l-05', 'amm-m-03', 'amm-n-01b', 'amm-n-02']
 acceptance = '''
 Host and official-package contract suites, focused Rust/migration/health tests,
-localization, hydration lint, Chromium/Firefox, all six RID package checks,
-Windows NTFS/browser-profile dogfood, runtime smoke, and applicable TSDuck
+localization, hydration lint, Chromium/Firefox, Linux x64 and Windows x64
+native/package checks, Windows NTFS/browser-profile dogfood, runtime smoke,
+and applicable TSDuck
 playback gates pass. The original overlap is repeated with a scheduled scan,
 Publish, browser disconnect, restart, UI recovery, and one exact final revision
 with distinct causal diagnostics, no stranded journal, and no manual database/
@@ -4097,9 +4098,15 @@ stale-after-failed-update add-on health warning, and additions-only publication
 pass. Tool-update backup, rollback, quarantine and administration withdrawn by
 the 2026-09-11 amendment are not integrated-closeout requirements. A real channel proves
 SponsorBlock-processed video and default/fallback human subtitles.
+Per the 2026-09-11 maintainer amendment, other platform verification is deferred
+for this closeout, not claimed passed. Declared platform support is unchanged.
 '''
 evidence = '''
 Reserved by Codex on 2026-09-11. Planning and independent plan review are complete.
+The maintainer subsequently narrowed N-03 verification to Linux x64 and Windows
+x64 for now. ARM/macOS runner work and its proposed cost analysis are not part
+of this closeout. Existing six-RID static bundle evidence is retained as such;
+unrun native platforms are not acceptance blockers or claimed verified.
 The maintainer explicitly rejected a local review/fix checkpoint and authorized
 direct gates, CI and push. The live plan now follows that instruction. N-03
 remains open until all acceptance is proven; CI does not replace manual gates.
@@ -4270,8 +4277,8 @@ have exited; the heavy slot is released to the other terminal's agreed CI run.
 The tested corrections and subtitle probe form an engineering checkpoint,
 not N-03 acceptance. The unexecuted Windows restart probe stays local pending
 an isolated candidate run; no beta tag or release is created.
-The host release workflow currently omits macOS archives; unavailable native
-platform evidence remains a gap, not authorization for workflow expansion.
+The host release workflow currently omits macOS archives. Their verification
+is outside the amended N-03 scope; no new platform workflow is authorized.
 Removed stale quota/LRU wording under the already-approved M-03 amendment:
 advisory usage warnings and existing pin safeguards remain; no new eviction,
 retention or quota administration is restored by N-03.
@@ -4284,8 +4291,7 @@ another local-checkpoint approval. The maintainer additionally requested a new b
 release once CI is green for the final commit, publishing only the Windows
 win-x64 package, and explicitly pre-approved that conditional beta publication.
 No second release-approval prompt is required. This follow-through is recorded
-in the live plan and does not
-reduce the six-RID verification acceptance above.
+in the live plan; the amended Linux x64/Windows x64 acceptance above still applies.
 '''
 
 [[milestone]]

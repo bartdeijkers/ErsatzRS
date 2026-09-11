@@ -144,7 +144,10 @@ program/versions, generic localized health text and focused provider, Rust and
 hydrated/no-JS browser proof. The milestone owns the evidence and review fixes.
 N-03 is reserved to Codex. The maintainer explicitly rejected a local review/fix
 checkpoint and authorized direct gates, CI and push on 2026-09-11. Do not mark
-N-03 complete before all its gates pass. Reuse valid evidence and recover
+N-03 complete before all its gates pass. The maintainer now limits its platform
+verification to Linux x64 and Windows x64; ARM/macOS verification is deferred,
+not claimed passed, and declared platform support stays unchanged.
+Reuse valid evidence and recover
 missing captures before proposing repeats. An unknown latest
 version is not proof of staleness. Backup, rollback, quarantine, extra validation,
 manual-update controls, expanded history and new retry infrastructure are
