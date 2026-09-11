@@ -696,21 +696,11 @@ fn extract_root_fragment(input: &str, root: &str) -> Option<String> {
     loop {
         let before = usize::try_from(reader.buffer_position()).ok()?;
         match reader.read_event() {
-            Ok(Event::Empty(element))
-                if element
-                    .name()
-                    .as_ref()
-                    .eq_ignore_ascii_case(root.as_bytes()) =>
-            {
+            Ok(Event::Empty(element)) if element.name().as_ref().eq_ignore_ascii_case(root) => {
                 let end = usize::try_from(reader.buffer_position()).ok()?;
                 return input.get(before..end).map(str::to_owned);
             }
-            Ok(Event::Start(element))
-                if element
-                    .name()
-                    .as_ref()
-                    .eq_ignore_ascii_case(root.as_bytes()) =>
-            {
+            Ok(Event::Start(element)) if element.name().as_ref().eq_ignore_ascii_case(root) => {
                 if start.is_none() {
                     start = Some(before);
                     depth = 1;
@@ -719,11 +709,7 @@ fn extract_root_fragment(input: &str, root: &str) -> Option<String> {
                 depth = depth.saturating_add(1);
             }
             Ok(Event::End(element))
-                if start.is_some()
-                    && element
-                        .name()
-                        .as_ref()
-                        .eq_ignore_ascii_case(root.as_bytes()) =>
+                if start.is_some() && element.name().as_ref().eq_ignore_ascii_case(root) =>
             {
                 depth = depth.saturating_sub(1);
                 if depth == 0 {

@@ -17,8 +17,8 @@ impl TrackedJob {
     /// Attach after registering `JobObject` and before spawning. That wrapper
     /// creates the child suspended and resumes it only after `post_spawn`.
     pub(crate) fn attach(command: &mut CommandWrap) -> io::Result<Self> {
-        // process-wrap 9.1 drains its wrapper map before running hooks, so this
-        // prerequisite must be checked here rather than through a hook's core.
+        // Check the prerequisite at attach time so a misordered registration
+        // fails before spawning instead of inside a spawn hook.
         if !command.has_wrap::<JobObject>() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -76,7 +76,7 @@ impl CommandWrapper for AssignTrackingJob {
         child: &mut Child,
         _core: &CommandWrap,
     ) -> io::Result<()> {
-        // process-wrap 9.1 runs every post_spawn before any wrap_child hook.
+        // process-wrap 10 runs every post_spawn before any wrap_child hook.
         // Assign the parent job before JobObject creates its nested job and
         // resumes the child; no descendant can escape through a spawn race.
         let handle = child

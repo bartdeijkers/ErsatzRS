@@ -193,6 +193,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Dependencies updated: quick-xml 0.42, process-wrap 10 and jsonschema 0.52,
+  plus minor and patch updates to uuid, mlua, flate2, base64, futures-util,
+  minijinja, open and syn. NFO and XMLTV guide parsing adapt to quick-xml's
+  string-based element names; Windows add-on job tracking keeps its spawn
+  ordering under process-wrap 10.
 - CI runs the Chromium and Firefox Playwright suites one after the other
   instead of side by side. Both self-hosted runners share one machine, so
   overlapping browser suites competed for its CPU and memory. A run takes

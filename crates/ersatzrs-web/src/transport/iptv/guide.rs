@@ -283,26 +283,19 @@ fn append_fragment(
     loop {
         let event = reader.read_event()?;
         match &event {
-            Event::Start(start) => open_elements.push(start.name().as_ref().to_vec()),
+            Event::Start(start) => open_elements.push(start.name().as_ref().to_owned()),
             Event::End(end) => {
-                let found = String::from_utf8_lossy(end.name().as_ref()).into_owned();
+                let found = end.name().as_ref().to_owned();
                 let Some(expected) = open_elements.pop() else {
                     return Err(IllFormedError::UnmatchedEndTag(found).into());
                 };
-                if expected != end.name().as_ref() {
-                    return Err(IllFormedError::MismatchedEndTag {
-                        expected: String::from_utf8_lossy(&expected).into_owned(),
-                        found,
-                    }
-                    .into());
+                if expected != found {
+                    return Err(IllFormedError::MismatchedEndTag { expected, found }.into());
                 }
             }
             Event::Eof => {
                 if let Some(expected) = open_elements.last() {
-                    return Err(IllFormedError::MissingEndTag(
-                        String::from_utf8_lossy(expected).into_owned(),
-                    )
-                    .into());
+                    return Err(IllFormedError::MissingEndTag(expected.clone()).into());
                 }
                 break;
             }
