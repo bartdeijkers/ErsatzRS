@@ -277,13 +277,15 @@ shared application state in its isolated test database. Set
 spec subsets that are known to be independent.
 
 Because that single worker is a correctness requirement rather than a tuning
-choice, CI parallelises one level up instead: it runs the wrapper once per
-Playwright project (`chromium`, `firefox`) as two jobs. Each job invokes the
-wrapper separately, and the wrapper creates its own temporary database and web
-host per invocation, so the two projects cannot observe each other's state.
-Each job therefore needs its own port (`ERSATZRS_E2E_PORT`) and its own result
-directory (`ERSATZRS_E2E_RESULT_DIR`), because both CI runners share one
-machine. Splitting by project rather than by `--shard` also keeps every
+choice, CI runs the wrapper once per Playwright project (`chromium`,
+`firefox`) as two jobs, one after the other. Each job invokes the wrapper
+separately, and the wrapper creates its own temporary database and web host
+per invocation, so the two projects cannot observe each other's state. The
+jobs do not overlap: both CI runners share one machine, and two suites
+building and driving browsers side by side compete for its CPU and memory.
+Each job still keeps its own port (`ERSATZRS_E2E_PORT`) and result directory
+(`ERSATZRS_E2E_RESULT_DIR`), so either runner can take it. Splitting by
+project rather than by `--shard` also keeps every
 `test.describe.configure({ mode: 'serial' })` group whole inside one job.
 
 Run a single project locally the same way CI does:

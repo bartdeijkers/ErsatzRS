@@ -193,6 +193,11 @@ release section when tagging a release.
 
 ### Changed
 
+- CI runs the Chromium and Firefox Playwright suites one after the other
+  instead of side by side. Both self-hosted runners share one machine, so
+  overlapping browser suites competed for its CPU and memory. A run takes
+  roughly ten minutes longer; the second suite still runs when the first
+  fails. Separate concurrent workflow runs can still overlap.
 - CI no longer retests a commit it has already proved. A `Preflight` job asks
   the API whether the pushed SHA already has a successful CI run and skips the
   gate when it does, so a direct fast-forward merge to `main` stops rerunning

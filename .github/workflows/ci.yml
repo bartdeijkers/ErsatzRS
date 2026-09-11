@@ -303,15 +303,25 @@ jobs:
     # E2E build.
     needs: fmt
     # One job per Playwright project. The suite runs on a single worker because
-    # it mutates shared application state in its test database (TEST.md), so
-    # splitting by project is the only parallelism available: each job runs
-    # scripts/e2e/playwright-e2e.sh separately, and that script creates its own
-    # temporary database and web host per invocation, so the two projects
-    # cannot see each other's state. Splitting by project rather than by
-    # `--shard` also keeps every `mode: 'serial'` group whole inside one job.
-    # The two runners share this machine, so each project needs its own port.
+    # it mutates shared application state in its test database (TEST.md): each
+    # job runs scripts/e2e/playwright-e2e.sh separately, and that script
+    # creates its own temporary database and web host per invocation, so the
+    # two projects cannot see each other's state. Splitting by project rather
+    # than by `--shard` also keeps every `mode: 'serial'` group whole inside
+    # one job.
+    #
+    # The projects run one after the other, not side by side. Both self-hosted
+    # runners share one machine, so two suites building ersatzrs-web and
+    # driving browsers at once compete for its CPU and memory; an otherwise
+    # unexplained Chromium hydration timeout occurred while both overlapped.
+    # `max-parallel: 1` removes that contention at the cost of roughly ten
+    # minutes of wall time; `fail-fast: false` still runs the second project
+    # when the first fails. It only serializes within one workflow run: a
+    # second concurrent run can still overlap. Each project keeps its own port
+    # so either runner can take either job.
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - project: chromium
