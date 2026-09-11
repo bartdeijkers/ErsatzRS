@@ -125,10 +125,12 @@ untouched. The full test selection remains intact, and self-hosted CI retains
 the single canonical workspace Test job. This path remains an explicit
 fallback rather than the default.
 
-Because the self-hosted runner is a single physical machine, every job in
-`ci.yml` queues and runs serially on it — there is no wall-clock parallelism
-to lose by sharing build output across jobs. `ci.yml` sets a workflow-level
-`CARGO_TARGET_DIR` pointing at `github.workspace`'s parent directory, which
+Two self-hosted runners share one physical machine. Each runner runs its jobs
+serially in its own workspace, so sharing build output across that runner's
+jobs loses no wall-clock parallelism; the two runners do run jobs at the same
+time, which is why the Playwright suites are serialized. `ci.yml` sets a
+workflow-level `CARGO_TARGET_DIR` pointing at `github.workspace`'s parent
+directory, which
 the runner creates once per repo and `actions/checkout`'s default `git clean
 -ffdx` never touches (it only cleans inside the checkout itself). This lets
 `target/` persist across every self-hosted job and run instead of being wiped

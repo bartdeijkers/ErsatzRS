@@ -66,9 +66,9 @@ concurrency:
 permissions:
   contents: read
 
-# The self-hosted runner is a single persistent machine: every job in this
-# workflow queues and runs serially on it, so there is no wall-clock
-# parallelism to lose by sharing build output across jobs. Point
+# Two self-hosted runners share one persistent machine. Each runner runs its
+# jobs serially in its own workspace, so sharing build output across that
+# runner's jobs loses no wall-clock parallelism. Point
 # CARGO_TARGET_DIR at github.workspace's parent, which the runner creates
 # once per repo and actions/checkout's default `git clean -ffdx` does not
 # touch (it only cleans inside the checkout itself) — so target/ now
@@ -90,9 +90,9 @@ jobs:
   # manual dispatch is an explicit request to re-run. A PR merge commit is a
   # new SHA, so this never skips one.
   #
-  # Pinned to a hosted runner on purpose: the self-hosted pool is a single
-  # machine whose jobs run serially, and adding a gate job there would charge
-  # every run its queue time to save a duplicate that is comparatively rare.
+  # Pinned to a hosted runner on purpose: the self-hosted pool is one machine
+  # with two runners, and adding a gate job there would charge every run
+  # queue time to save a duplicate that is comparatively rare.
   preflight:
     name: Preflight
     runs-on: ubuntu-24.04
