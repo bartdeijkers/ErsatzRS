@@ -5,8 +5,8 @@ need to build the `win-x64` archive locally, push the tag, and attach the archiv
 to the GitHub release.
 
 This guide assumes you are intentionally producing only the Windows archive.
-Use a beta tag (`v*.*.*-beta.*`) when the active Windows runner should publish
-the archive: that tag runs the Windows-only prerelease workflow and does not
+Use a beta tag (`v*.*.*-beta.*`) when the active Windows runner should build
+the archive: that tag runs the Windows-only draft-prerelease workflow and does not
 produce Linux archives or a Docker image.
 
 This fallback does not replace the normal multi-platform release workflow. Do
@@ -89,7 +89,7 @@ Copy the web assets and repository assets:
 
 ```powershell
 Copy-Item -Recurse "$TargetRoot\site" $Stage\site
-Copy-Item -Recurse crates\ersatzrs-web\public $Stage\public
+Copy-Item -Recurse -Force crates\ersatzrs-web\public\* $Stage\site
 Copy-Item -Recurse assets $Stage\assets
 Copy-Item LICENSE $Stage\
 Copy-Item README.md $Stage\
@@ -127,22 +127,17 @@ git tag -a $Tag -m $Tag
 git push origin $Tag
 ```
 
-The tag push starts the release workflow. If the workflow creates the release,
-upload the local archive to that release:
+The tag push starts the release workflow. Wait for it to finish before any
+fallback upload; never race the runner. For a beta, prefer the runner's draft
+archive. Only use the local archive if the workflow could not produce one.
+Verify it follows the same bundle-consistency and exact-source acceptance
+requirements. Stage it through the same guard used by the beta workflow:
 
 ```powershell
-gh release upload $Tag "$Stage.zip" --clobber
+./scripts/release/stage-beta-draft.ps1 -Repository '<owner>/<repo>' -Tag $Tag -Archive "$Stage.zip"
 ```
 
-If the workflow did not create a release, create it from the pushed tag and
-attach the archive:
-
-```powershell
-gh release create $Tag "$Stage.zip" --generate-notes --verify-tag
-```
-
-Verify the published release includes the local archive:
-
-```powershell
-gh release view $Tag --json tagName,assets,url
-```
+The guard creates only a draft prerelease and refuses to overwrite a published
+release. Replacing a draft ZIP invalidates previous package acceptance. Follow
+[Accept and publish a Windows beta draft](publish-release.md#accept-and-publish-a-windows-beta-draft)
+to download, test, and publish those exact bytes without another upload.

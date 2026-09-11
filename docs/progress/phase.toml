@@ -156,6 +156,9 @@ HLS Direct expansion is excluded; language changes may reprepare
 downloaded media. Direct gates, CI and push are now authorized; no additional
 local-checkpoint approval is needed. The conditional Windows beta follows
 only after its recorded acceptance gates and exact-candidate green CI.
+The approved draft-first workflow may create an unpublished Windows beta after
+exact-SHA green CI and tagging, before manual package acceptance. Publish that
+same tested ZIP only after N-03 passes; no separate candidate dispatcher.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native
 yt-dlp executable capabilities; the removed custom Range adapter has no fallback.
 Keep existing HDR/unmapped-subtitle refusals and ordinary playback behavior intact.

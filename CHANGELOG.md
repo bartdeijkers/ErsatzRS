@@ -193,6 +193,11 @@ release section when tagging a release.
 
 ### Changed
 
+- Windows beta tags now create an unpublished draft for exact-archive
+  acceptance. Publication promotes that same tested ZIP; workflow reruns refuse
+  to overwrite a published beta. Exact-SHA green CI remains required before
+  tagging, and failed candidates consume their beta version.
+
 - Dependencies updated: quick-xml 0.42, process-wrap 10 and jsonschema 0.52,
   plus minor and patch updates to uuid, mlua, flate2, base64, futures-util,
   minijinja, open and syn. NFO and XMLTV guide parsing adapt to quick-xml's

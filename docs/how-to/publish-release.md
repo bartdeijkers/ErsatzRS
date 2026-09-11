@@ -18,9 +18,10 @@ matrix entries only in a future macOS-targeted release.
 
 Beta tags (`v*.*.*-beta` or `v*.*.*-beta.*`) intentionally take a separate
 Windows-only path.
-They run only on `[self-hosted, ersatzrs-windows-release]`, publish the
-`ersatzrs-<tag>-win-x64.zip` prerelease, and do not create Linux archives or a
-Docker/GHCR image. This keeps beta validation tied to the active Windows runner.
+They run only on `[self-hosted, ersatzrs-windows-release]`, stage the
+`ersatzrs-<tag>-win-x64.zip` in an unpublished draft prerelease, and do not create
+Linux archives or a Docker/GHCR image. Follow the beta acceptance and publication
+steps below; a successful beta build does not publish the package.
 
 Do not use `./run.ps1 build` for release packaging. That command is a local dev
 one-shot: it builds Leptos assets and starts `ersatzrs-web`. It does not create a
@@ -55,10 +56,14 @@ git tag -a "$tag" -m "$tag"
 git push origin "$tag"
 ```
 
-The tag push is the release command. It starts `.github/workflows/release.yml`,
+For non-beta tags, the tag push is the release command. It starts `.github/workflows/release.yml`,
 which creates the GitHub release, builds the web assets once, builds each active
 platform archive, uploads the archives, and publishes the multi-arch Docker
 image to GHCR.
+
+For a beta, push a new immutable annotated beta tag only after exact-SHA CI is
+green. The tag is visible before manual package acceptance; the release remains
+a draft. Failed candidates consume their beta version: never move or reuse a tag.
 
 ## Watch the workflow
 
@@ -76,7 +81,41 @@ watch that run explicitly:
 gh run watch <run-id>
 ```
 
-## Verify the published release
+## Accept and publish a Windows beta draft
+
+Wait for the exact tag's Windows release job to finish successfully. Confirm
+its commit matches the green CI candidate, then download the draft asset into
+a fresh temporary directory:
+
+```bash
+gh release view "$tag" --json tagName,isDraft,isPrerelease,assets
+candidate_dir=$(mktemp -d)
+gh release download "$tag" --pattern "ersatzrs-$tag-win-x64.zip" --dir "$candidate_dir"
+sha256sum "$candidate_dir/ersatzrs-$tag-win-x64.zip"
+```
+
+Require `isDraft` and `isPrerelease` to be true. Record the ZIP digest, verify
+its [bundle contents](../reference/release-bundle.md), extract it, and complete
+the [Windows acceptance checklist](../../plans/windows-beta-release-hardening.md#mandatory-acceptance-for-the-next-beta)
+and current milestone acceptance against those exact bytes. Native Windows
+process tests must also cover that source revision. CI alone is not this proof.
+
+Do not publish while the release workflow or a rerun is active. Rerunning it may
+replace a draft asset and invalidates acceptance of the previous ZIP. Immediately
+before publication, download the asset again into another fresh directory and
+require its SHA-256 to match the tested ZIP. Confirm the tag still resolves to
+the intended commit and the release is still a draft. Only after every required
+gate passes, publish the existing draft:
+
+```bash
+gh release edit "$tag" --draft=false
+```
+
+Do not rebuild or upload an archive during publication. Re-download the public
+asset and require the same digest; verify the release is a prerelease and no
+longer a draft. The beta workflow refuses to overwrite published release assets.
+
+## Verify the published non-beta release
 
 Confirm the release has the active binary archives:
 

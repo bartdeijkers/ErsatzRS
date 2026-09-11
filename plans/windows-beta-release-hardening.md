@@ -21,36 +21,33 @@ exact-SHA CI, and independent archive verification all agree.
 
 ## Release-blocker boundary
 
-The non-publishing candidate path, candidate/beta bundle-consistency gate, and
+The draft-first candidate path, candidate/beta bundle-consistency gate, and
 the mandatory acceptance section are blockers for the next beta. Action pinning,
 policy decisions, parser hardening, and dependency hygiene remain important
 maintainer debt but do not independently block a beta whose exact candidate
 passes the mandatory gates.
 
-## Workstream A: non-publishing candidate archive
+## Workstream A: draft-first candidate archive
 
-The current Windows beta archive is built only after an immutable beta tag is
-pushed. Add a manually dispatched candidate path that:
+The maintainer approved draft-first staging on 2026-09-11, superseding the
+separate manually dispatched candidate path. Require exact-SHA green CI, then
+push a new immutable beta tag. The existing Windows beta job builds once,
+checks the web bundle and archive contents, and stages an unpublished draft
+prerelease. Download and accept that ZIP, then publish the same draft without
+rebuilding or replacing its asset. The tag is visible before manual acceptance;
+a failed candidate consumes its beta version. Never move or reuse the tag.
 
-1. accepts an explicit commit SHA and checks out exactly that revision;
-2. runs on the Windows release runner without creating or moving a tag;
-3. uses the same build, staging, and validation implementation as the beta
-   release job rather than maintaining a second packaging recipe;
-4. uploads a short-lived artifact whose name and metadata identify the full
-   source SHA;
-5. requires only read/artifact permissions and cannot create a GitHub release;
-6. proves the four executables and non-empty CSS, JavaScript, and WebAssembly
-   assets are present; and
-7. runs `scripts/release/verify-web-bundle.sh` against the assembled candidate.
-
-Acceptance requires the downloaded candidate archive to reproduce the workflow
-SHA and pass the same integrity and content checks used after publication.
+The beta job must refuse to overwrite published releases and stop on API or
+upload failure. Draft replacements invalidate prior archive acceptance; do not
+publish while a workflow rerun is active. The canonical command sequence and
+digest checks live in
+[the publication guide](../docs/how-to/publish-release.md#accept-and-publish-a-windows-beta-draft).
 
 ## Workstream B: harden the publishing workflow
 
-- Run the structural web-bundle consistency gate in the Windows beta job before
-  `gh release create`. Static file-presence checks do not prove that the SSR
-  executable and hydration bundle belong to one build.
+- Retain the structural web-bundle consistency gate already present in the
+  Windows beta job before draft creation. Static file-presence checks alone do
+  not prove that the SSR executable and hydration bundle belong to one build.
 - Pin third-party reusable actions to reviewed full commit SHAs, prioritizing
   jobs with `contents: write`, `packages: write`, or OIDC permissions. Retain a
   readable version comment beside each pin and define an update cadence.
@@ -101,8 +98,15 @@ archive before treating any playback result as release evidence.
 
 ## Mandatory acceptance for the next beta
 
-Run these gates against the independently downloaded candidate archive and its
-managed Windows FFmpeg runtime:
+First run the repository closeout gates, push the exact candidate SHA, and
+require terminal successful CI for that SHA. Then create and push a new
+annotated beta tag and wait for the Windows draft build. Download its ZIP into
+a fresh temporary directory; verify its digest, ZIP integrity, four executables,
+web/extractor assets, and excluded build/private trees. Check that the tag,
+workflow, local commit and live remote ref identify the intended candidate.
+
+Run these gates against that independently downloaded draft archive and its
+managed Windows FFmpeg runtime (retaining valid evidence where applicable):
 
 1. Exercise the shipped Beeld & Geluid wrapper from source start and a
    substantial producer-side seek. Require prompt, sustained, decodable audio
@@ -118,20 +122,19 @@ managed Windows FFmpeg runtime:
    success, a concise failing diagnostic, and candidate/deployed wrapper
    identity.
 4. Re-run direct IPTV and segmenter HLS smoke after the temporary live setup.
-5. Run the repository closeout gates and push the exact candidate SHA. Require
-   terminal CI success for that SHA.
-6. Build or select the Windows archive for that same SHA, download it into a
-   fresh temporary directory, and verify its digest, ZIP integrity, four
-   executables, web assets, extractor assets, and excluded build/private trees.
-7. Only then create and push a new annotated beta tag. Confirm the tag, release
-   workflow, release asset, local commit, tracking ref, and live remote ref all
-   identify the intended immutable candidate.
+5. Complete the current milestone's integrated Windows acceptance, including
+   native add-on process containment tests for the candidate's dependencies.
+6. Re-download the draft asset and require its digest to equal the accepted
+   ZIP. With no release workflow running, publish that same draft; do not
+   rebuild or upload another asset.
+7. Independently download the published ZIP, require the accepted digest, and
+   confirm prerelease status and the intended immutable tag/source identity.
 
 ## Completion
 
 This plan can be pruned when:
 
-- the non-publishing candidate path and beta web-bundle gate are implemented;
+- the draft-first candidate path and beta web-bundle gate are implemented;
 - release policy and signing expectations are documented;
 - the parser and dependency-hygiene items are closed or moved to narrower
   canonical owners;

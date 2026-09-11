@@ -36,7 +36,12 @@ git push origin v0.1.0
 7. Let the release workflow create the artifacts for the selected release
    type: Windows-only for a beta, or Linux and Windows archives plus the GHCR
    image for a non-beta release.
-8. Verify the GitHub release notes match the changelog, which is the canonical
+8. For a beta, the workflow creates an unpublished draft. Complete the
+   [exact-ZIP acceptance and publication procedure](docs/how-to/publish-release.md#accept-and-publish-a-windows-beta-draft)
+   before publishing that same draft; do not rebuild or replace the accepted
+   asset. Exact-SHA green CI is required before tagging, while manual package
+   acceptance follows the draft build. Failed candidates consume their tag.
+9. Verify the GitHub release notes match the changelog, which is the canonical
    release overview.
 
 For the command sequence, see [Publish a full release](docs/how-to/publish-release.md).

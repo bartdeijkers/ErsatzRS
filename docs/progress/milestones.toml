@@ -4112,6 +4112,22 @@ direct gates, CI and push. The live plan now follows that instruction. N-03
 remains open until all acceptance is proven; CI does not replace manual gates.
 This milestone is the only completion boundary for the combined AMM-J through
 AMM-N contract; individual argv or UI tests are insufficient.
+The maintainer approved draft-first Windows beta staging: exact-SHA CI precedes
+the immutable beta tag, then the existing beta job stages an unpublished draft.
+Manual acceptance precedes public publication of that same tested ZIP. No
+separate candidate dispatcher is required; failed candidates consume their tag.
+The publication guide and Windows beta hardening plan own this sequence.
+The draft guard passes nine offline native PowerShell scenarios, including
+published-release refusal and query/create/upload failures, under the Actions
+exit-code wrapper. Workflow lint passes excluding only pre-existing custom
+runner-label and unrelated SC2129 diagnostics. No tag or draft is created yet.
+After rebasing onto the approved dependency update edba0813, all five native
+Windows addon_process_job tests pass against process-wrap 10 (nextest run
+7e54494a-7457-4bef-a501-49ffd82fe05e, 749 unrelated tests skipped). They cover
+suspended assignment, duplicate attachment, descendant tracking after leader
+exit, successful wait cleanup, and drop/receipt retirement. The run used two
+compiler jobs with incremental compilation disabled for the existing UNC
+checkout; no local build or CI overlapped it.
 Current inspection: existing browser tests cover seeded publication recovery
 and actual preparation-worker host death separately, not the complete packaged
 Windows scan/Publish/disconnect/restart/UI recovery scenario. Prior M-01A,
