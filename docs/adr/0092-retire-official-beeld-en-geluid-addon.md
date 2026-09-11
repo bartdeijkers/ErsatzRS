@@ -36,8 +36,10 @@ A future official integration requires a new explicit maintainer decision.
 
 - The official repository offers yt-dlp only.
 - AMM-N-03 and the next Windows beta no longer require Beeld & Geluid evidence.
-- Anamorphic playback, yt-dlp, native recovery and other accepted release
-  checks remain required.
+- yt-dlp, native recovery and other accepted release checks remain required.
+  A subsequent maintainer decision on 2026-09-11 also withdrew the manual
+  anamorphic regression-source check; see the Windows release checklist.
+  That withdrawal does not claim the check passed or remove automated coverage.
 - Already installed snapshots are not remotely revoked or automatically
   removed; operators retain control of their configuration and data.
 

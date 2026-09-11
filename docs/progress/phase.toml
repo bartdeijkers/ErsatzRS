@@ -152,17 +152,18 @@ evidence. Native provider Firefox failure guidance now passes with corrected
 provider e2b06cb, green Windows/Linux CI and a verified bundle. Independent
 source-content correlation passes for retained SponsorBlock TS/HLS captures.
 Next are integrated packaged Windows recovery/profile verification, remaining
-playback acceptance and final release bookkeeping/candidate CI. No tag
-or draft has been created, and N-03 remains In progress.
-Candidate v1.0.33-beta release-note bookkeeping is prepared. The canonical
-local test-closeout passes (2,773 tests plus workspace doctests; 37 skips).
-The maintainer has since retired Beeld & Geluid and approved tag/candidate
-dates for beta changelog headings. Codex owns the documentation/progress
-amendment under ADR 0092; do not run the withdrawn provider's acceptance.
-Anamorphic fixture/profile locations remain required. CI 34645267213 passed
-for 1b1e3224, but the amended candidate needs its own exact-SHA CI before tagging.
-Codex next owns candidate push and exact-SHA CI; no local heavy work may
-overlap that run. Packaged acceptance remains open.
+playback acceptance and exact-ZIP verification; N-03 remains In progress.
+Immutable v1.0.33-beta is pushed on 0fe8be29 with terminal exact-SHA green
+CI 34648235359. Windows-only draft build 34650816336 owns the heavy slot;
+Claude monitors it. The maintainer approved the overnight build window until
+2026-09-12 09:00 local, not public promotion. No local heavy work may overlap.
+The milestone owns candidate identity and prior local closeout evidence.
+Beeld & Geluid is retired under ADR 0092; do not run its withdrawn acceptance.
+The maintainer subsequently withdrew the manual anamorphic regression-source
+check, not claimed passed; no fixture/profile locations are needed. Its
+automated command-level regression remains, not real GPU-output evidence.
+This post-tag documentation update does not change the immutable candidate.
+Packaged acceptance and publication remain open.
 Reuse valid evidence and recover
 missing captures before proposing repeats. An unknown latest
 version is not proof of staleness. Backup, rollback, quarantine, extra validation,

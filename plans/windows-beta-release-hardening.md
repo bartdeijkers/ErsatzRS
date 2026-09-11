@@ -106,21 +106,24 @@ workflow, local commit and live remote ref identify the intended candidate.
 Run these gates against that independently downloaded draft archive and its
 managed Windows FFmpeg runtime (retaining valid evidence where applicable):
 
-1. Stream the maintainer-provided anamorphic regression source through a
-   disposable channel using a clone of the real persisted profile values.
-   Check start, midpoint tune, segment transition, restart, decoded colours,
-   audio/video continuity, fallback behavior, and bounded supervisor retries.
-2. Exercise a finite YouTube definition near its midpoint with the optional
+The maintainer withdrew the manual anamorphic regression-source check on
+2026-09-11; it is not passed and no fixture/profile locations are required.
+The existing
+`nvenc_pipeline_anamorphic_source_scales_directly_to_square_pixels_snapshot`
+in `crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs` remains command-level
+coverage, not proof of decoded native GPU output.
+
+1. Exercise a finite YouTube definition near its midpoint with the optional
    manual extractor. Prove producer-side seek, prompt valid output, quiet
    success, a concise failing diagnostic, and candidate/deployed wrapper
    identity.
-3. Re-run direct IPTV and segmenter HLS smoke after the temporary live setup.
-4. Complete the current milestone's integrated Windows acceptance, including
+2. Re-run direct IPTV and segmenter HLS smoke after the temporary live setup.
+3. Complete the current milestone's integrated Windows acceptance, including
    native add-on process containment tests for the candidate's dependencies.
-5. Re-download the draft asset and require its digest to equal the accepted
+4. Re-download the draft asset and require its digest to equal the accepted
    ZIP. With no release workflow running, publish that same draft; do not
    rebuild or upload another asset.
-6. Independently download the published ZIP, require the accepted digest, and
+5. Independently download the published ZIP, require the accepted digest, and
    confirm prerelease status and the intended immutable tag/source identity.
 
 ## Completion

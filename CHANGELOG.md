@@ -13,6 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Withdraw the manual anamorphic regression-source release check by maintainer
+  decision; retain automated NVENC command-level regression coverage and all
+  other accepted Windows package gates.
+
 ## [1.0.33-beta] - 2026-09-11
 
 This section also records the changes shipped in `1.0.32-beta`, which had no
