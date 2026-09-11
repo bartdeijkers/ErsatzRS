@@ -6,6 +6,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(feature = "ssr")]
 pub mod actions;
+/// Not `ssr`-gated: the publication island must be compiled into the WASM
+/// bundle for `hydrate_islands()` to attach it.
+pub mod publication;
 #[cfg(feature = "ssr")]
 mod views;
 

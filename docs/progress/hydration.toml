@@ -228,7 +228,7 @@ notes  = '2026-08-22: `tests/e2e/addon-metadata-editor.spec.ts` proves the hydra
 name   = 'AddonListWorkspacePage'
 status = '✅'
 routes = ['/media/addon-lists/:id', '/media/addon-lists/:id/settings', '/media/addon-lists/:id/playback', '/media/addon-lists/:id/activity', '/media/addon-lists/:id/items/:item_id', '/media/addon-lists/:id/artwork']
-notes  = '2026-09-10 AMM-N-01B: populated task forms remain SSR with the existing hydrated shell; no item island added. Native POST forms retain sparse drafts and use coherent saves. The corrected item form preserves date/credits, explicit numbering, option sources, chapters, saved-item access/detail actions and staged replacement Save/Discard. Chromium/Firefox native and hydrated workflows, mobile-to-4K themes, zoom, focus, targets and contrast pass. Milestone amm-n-01b owns current evidence and limits.'
+notes  = '2026-09-11 AMM-N-01B: populated task forms remain SSR; no item island added. The Items publication summary uses PublicationOverviewIsland, seeded from resolved SSR data, to poll readiness and update its native submit without replacing unsaved inputs. Prepared playback proves live Prepare-to-Publish; 38 Chromium/Firefox native, hydrated and mobile-to-4K visual cases pass. Native POST forms retain sparse drafts and coherent saves, including date/credits, explicit numbering, option sources, chapters, saved-item tools and staged replacement Save/Discard. Milestone amm-n-01b owns evidence and limits.'
 
 [[page]]
 name   = 'FillerPresetsPage'

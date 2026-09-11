@@ -81,6 +81,11 @@ provider overview columns are not the effective draft projection. The AMM-N-01B
 milestone owns acceptance and evidence; prototype reports cannot substitute for
 production checks.
 
+The prepared-playback regression also requires the publication action to become
+enabled after background preparation without reloading or replacing unsaved form
+input. Restart, NSF live, subtitle and SponsorBlock workflows use the same native
+task routes and retain their persistence and actual-media assertions.
+
 ## Hydration rules (read before writing islands)
 
 The hydration smoke layer exists because Leptos islands have sharp edges that

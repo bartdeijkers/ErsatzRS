@@ -69,19 +69,25 @@ test('prepared publication pins its generated file and plays it instead of raw p
   const listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
   expect(listId).toBeGreaterThan(0);
   await expect.poll(() => sqlite(`SELECT "State"||'|'||"DiscoveredCount" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60000 }).toBe('3|1');
-  await hydrated(page, `/media/addon-lists/${listId}`);
-  const option = page.locator('form[data-option-key="processed"]');
-  await option.getByRole('checkbox').check();
-  const saved = page.waitForResponse(response => response.url().includes('/api/addon-lists/options/change') && response.request().method() === 'POST');
-  await option.getByRole('button', { name: 'Save Changes', exact: true }).click();
-  expect((await saved).ok()).toBe(true);
+  await hydrated(page, `/media/addon-lists/${listId}/playback`);
+  await page.locator('[data-option-key="processed"] select').selectOption('true');
+  await Promise.all([
+    page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+    page.getByRole('button', { name: 'Save settings', exact: true }).click(),
+  ]);
+  await hydrated(page);
+  await expect(page.locator('#workspace-errors')).toHaveCount(0);
   await hydrated(page, `/media/addon-lists/${listId}`);
   await expect(page.getByRole('button', { name: 'Prepare publication', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
+  await hydrated(page);
+  const unsavedFilter = page.getByRole('searchbox', { name: 'Search', exact: true });
+  await unsavedFilter.fill('Unsubmitted filter');
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${listId} AND "Kind"=1 AND "State"=2;`), { timeout: 90000 }).toBe('1');
-  // Do not reload: this proves the live preparation poll changes the CTA back to Publish.
-  const publish = page.getByRole('button', { name: 'Publish list', exact: true });
-  await expect(publish).toBeVisible({ timeout: 20000 });
+  // Do not reload: preparation must update the action without losing draft input.
+  const publish = page.getByRole('button', { name: 'Publish saved changes', exact: true });
+  await expect(publish).toBeEnabled({ timeout: 20000 });
+  await expect(unsavedFilter).toHaveValue('Unsubmitted filter');
   await publish.click();
   // PublishedRevision advances before verification; wait for retained completion.
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListRevision" r
@@ -100,11 +106,11 @@ AND r."Revision"=(SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${
   expect(sqlite(`SELECT "Duration" FROM "RemoteStream" WHERE "Id"=(SELECT "MediaItemId" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId});`)).toMatch(/^00:01:00(?:\.0+)?$/);
 
   // A saved delivery change must leave the published file pinned and playable.
-  await hydrated(page, `/media/addon-lists/${listId}`);
-  await page.getByLabel('Delivery', { exact: true }).selectOption('stream');
+  await hydrated(page, `/media/addon-lists/${listId}/playback`);
+  await page.locator('input[name="delivery_mode"][value="stream"]').check();
   await Promise.all([
     page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
-    page.locator('button[form="addon_media_lists-list-editor-form"]:visible').filter({ hasText: 'Save Changes' }).click(),
+    page.getByRole('button', { name: 'Save settings', exact: true }).click(),
   ]);
   await expect.poll(() => sqlite(`SELECT "DeliveryMode" || '|' || "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe('0|1');
   expect(sqlite(`SELECT COUNT(*) ${pinned} AND a."State"=2;`)).toBe('1');

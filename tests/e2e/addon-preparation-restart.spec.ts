@@ -116,12 +116,14 @@ test('actual host death drains preparation before one safe restart', async ({ br
     const listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
     expect(listId).toBeGreaterThan(0);
     await expect.poll(() => sql(`SELECT "State" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60000 }).toBe('3');
-    await hydrated(page, `/media/addon-lists/${listId}`);
-    const option = page.locator('form[data-option-key="processed"]');
-    await option.getByRole('checkbox').check();
-    const saved = page.waitForResponse(response => response.url().includes('/api/addon-lists/options/change') && response.request().method() === 'POST');
-    await option.getByRole('button', { name: 'Save Changes', exact: true }).click();
-    expect((await saved).ok()).toBe(true);
+    await hydrated(page, `/media/addon-lists/${listId}/playback`);
+    await page.locator('[data-option-key="processed"] select').selectOption('true');
+    await Promise.all([
+      page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+      page.getByRole('button', { name: 'Save settings', exact: true }).click(),
+    ]);
+    await hydrated(page);
+    await expect(page.locator('#workspace-errors')).toHaveCount(0);
     await hydrated(page, `/media/addon-lists/${listId}`);
     await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
     await expect.poll(() => calls().filter(call => call.command === 'paused').length, { timeout: 60000 }).toBe(1);
@@ -147,7 +149,8 @@ test('actual host death drains preparation before one safe restart', async ({ br
     expect(sql('SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "State"=2 AND "DurationMilliseconds"=60000;')).toBe('1');
     expect(sql('SELECT COALESCE(SUM("ReservedBytes"),0) FROM "AddonMediaListArtifact";')).toBe('0');
     await hydrated(page, `/media/addon-lists/${listId}`);
-    await page.getByRole('button', { name: 'Publish list', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Publish saved changes', exact: true }).click();
     await expect.poll(() => sql(`SELECT COUNT(*) FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=${listId} AND "Revision"=1 AND "CompletedAt" IS NOT NULL;`), { timeout: 90000 }).toBe('1');
     expect(sql('SELECT COUNT(*) FROM "AddonMediaListRevisionArtifact";')).toBe('1');
     expect(calls().filter(call => call.command === 'prepare')).toHaveLength(2);

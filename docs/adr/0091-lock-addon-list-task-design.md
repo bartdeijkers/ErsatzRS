@@ -7,7 +7,8 @@ its strict adaptation under AMM-N-01B.
 
 ## Implementation
 
-Implemented locally — production task routes, native draft retention,
+Implemented locally — live publication readiness is restored under AMM-N-01B
+without reloading or replacing unsaved inputs. Production task routes, native draft retention,
 transactional saves and immutable artwork retain their functional evidence. The
 2026-09-10 item-form correction restores the locked editing/tools hierarchy,
 explicit numbering, concise option guidance and restrained disclosure boundaries.

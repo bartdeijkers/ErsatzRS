@@ -165,17 +165,25 @@ test('manual real SponsorBlock publication streams across its frozen late cut', 
   listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
   expect(listId).toBeGreaterThan(0);
   await expect.poll(() => sqlite(`SELECT "State"||'|'||"DiscoveredCount" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60_000 }).toBe('3|1');
-  await hydrated(page, `/media/addon-lists/${listId}`);
-  await expect(page.locator('form[data-option-key="cookies_from_browser"] select')).toHaveValue(JSON.stringify('none'));
-  const option = page.locator('form[data-option-key="sponsorblock_remove"]');
-  await option.getByRole('checkbox').check();
-  const saved = page.waitForResponse(response => response.url().includes('/api/addon-lists/options/change') && response.request().method() === 'POST');
-  await option.getByRole('button', { name: 'Save Changes', exact: true }).click();
-  expect((await saved).ok()).toBe(true);
+  await hydrated(page, `/media/addon-lists/${listId}/playback`);
+  await expect(page.locator('[data-option-key="cookies_from_browser"] select')).toHaveValue('');
+  const cookieOption = page.locator('[data-option-key="cookies_from_browser"]');
+  const noneLabel = await cookieOption.locator('select').evaluate((select: HTMLSelectElement) =>
+    Array.from(select.options).find(option => option.value === JSON.stringify('none'))?.label ?? '');
+  expect(noneLabel).not.toBe('');
+  await expect(cookieOption.locator('.option-effective')).toContainText(noneLabel);
+  await page.locator('[data-option-key="sponsorblock_remove"] select').selectOption('true');
+  await Promise.all([
+    page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+    page.getByRole('button', { name: 'Save settings', exact: true }).click(),
+  ]);
+  await hydrated(page);
+  await expect(page.locator('#workspace-errors')).toHaveCount(0);
   await hydrated(page, `/media/addon-lists/${listId}`);
   await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${listId} AND "Kind"=2 AND "State"=2;`), { timeout: 90_000 }).toBe('1');
-  await page.getByRole('button', { name: 'Publish list', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeEnabled({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Publish saved changes', exact: true }).click();
   }
   expect(sqlite(`SELECT "AddonId" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe(addonId);
   expect(sqlite(`SELECT "SourceUrl" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId};`)).toBe(sourceUrl);

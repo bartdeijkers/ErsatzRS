@@ -1,8 +1,7 @@
 use super::super::{
     artwork_value, content_kind_value, detail_state_text_key, format_progress_timestamp,
     icon_style, import_can_retry, import_discovery_summary, parse_first_aired, people_lines,
-    presentation_icon, presentation_text_key, publication_blocker_group_label,
-    publication_blocker_groups, publication_phase_text_key, publication_primary_action,
+    presentation_icon, presentation_text_key, publication_phase_text_key,
     publication_state_text_key, revision_can_restore, tr, AddonMediaListArtworkRole,
     AddonMediaListContentKind, AddonMediaListDeliveryMode, AddonMediaListDetailPolicy,
     AddonMediaListDraftDiffRow, AddonMediaListForm, AddonMediaListImportState,
@@ -10,9 +9,9 @@ use super::super::{
     AddonMediaListPresentationKind, AddonMediaListProviderRow, AddonMediaListPublicationHistoryRow,
     AddonMediaListPublicationReadiness, AddonMediaListRefreshCadence,
     AddonMediaListRefreshPublicationPolicy, AddonMediaListResetImpactRow,
-    AddonMediaListReviewState, AddonMediaListRevisionDiffRow, AddonMediaListRevisionSummaryRow,
+    AddonMediaListRevisionDiffRow, AddonMediaListRevisionSummaryRow,
     AddonMediaListSourceProbeOutcome, AddonMediaListSourceProbeRow, AddonMediaListSourceProbeState,
-    IconName, MetadataConflictSummary, PublicationActivity, PublicationPrimaryAction, TextKey,
+    IconName, MetadataConflictSummary, PublicationActivity, TextKey,
 };
 use leptos::prelude::*;
 mod bulk;
@@ -227,16 +226,12 @@ fn items(w: &Workspace) -> AnyView {
         .filter(|row| d.selected.contains(&row.id))
         .count();
     let r = &w.readiness;
-    let published = r.review_state == AddonMediaListReviewState::Published;
     view! {
         <section class="publication-summary" aria-label=tr(TextKey::PublicationReadiness)>
-            <div class="publication-overview"><div class="publication-state"><strong>{tr(if published {TextKey::AddonWorkspacePublished} else if !r.blockers.is_empty() {TextKey::PublicationBlocked} else {TextKey::AddonWorkspacePending})}</strong><span>{format!("{} {} · {} {}",r.included_count,tr(TextKey::IncludeInPublication),r.blockers.len(),tr(TextKey::PublicationBlockers))}</span></div>
-                <button class="button primary" form=FORM name="intent" value="publish" disabled={!matches!(publication_primary_action(false,r),PublicationPrimaryAction::Prepare | PublicationPrimaryAction::Publish)} formnovalidate>{tr(if matches!(publication_primary_action(false,r),PublicationPrimaryAction::Prepare) {TextKey::PreparePublication} else {TextKey::AddonWorkspacePublish})}</button>
-            </div>
+            <super::publication::PublicationOverviewIsland list_id=w.form.id initial=r.clone()/>
             <details class="disclosure quiet-details" data-disclosure-kind="section"><summary><span class="disclosure-label">{tr(TextKey::PublicationReadiness)}</span><span class="disclosure-toggle" aria-hidden="true"></span></summary><div class="disclosure-body"><dl class="facts"><div><dt>{tr(TextKey::SavedRevision)}</dt><dd>{w.form.draft_revision}</dd></div><div><dt>{tr(TextKey::Published)}</dt><dd>{w.form.published_revision}</dd></div></dl>
                 {detail::import_progress(w)}
             </div></details>
-            {publication_blocker_groups(&r.blockers).iter().map(|group| view! { <p class="notice error">{publication_blocker_group_label(group)}</p> }).collect_view()}
             <p hidden={r.restricted_excluded_count==0}>{tr(TextKey::RestrictedItemsExcluded)}": "{r.restricted_excluded_count}</p>
             {recovery(w)}
         </section>

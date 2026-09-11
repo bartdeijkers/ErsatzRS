@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-N-01B complete — next: AMM-N-02 planning for maintainer review'
+current_focus = 'AMM-N-01B locally complete — exact-commit CI delivery, then N-02 planning'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -126,17 +126,20 @@ add-on upload-action deprecation notice. No release was published.
 On 2026-09-09 the maintainer resumed design work, locked the reviewed artifact
 and inserted AMM-N-01B before N-02. ADR 0091 and the checksum-pinned artifact
 own the design; plans/amm-n-01b-addon-list-design-adaptation.md owns execution.
-N-01B is locally complete, including the 2026-09-10 authorized item-form
+N-01B is locally complete, including live publication readiness restored on
+2026-09-11 without losing unsaved input, and the 2026-09-10 authorized item-form
 correction: separate edit/tools regions, concise option guidance, explicit native
 numbering, visible First aired, preserved replacement drafts and clear actions.
-Its milestone owns 642 native tests, final web lint/parity checks, 30 focused
-browser cases and six final matched-candidate cases. The locked artifact remains
+Its milestone owns the final 643-test web parity gate, 38 Chromium/Firefox
+workspace/visual cases, three playback/restart cases and synthetic subtitle
+TS/HLS acceptance, retaining prior item-form evidence. The locked artifact remains
 unchanged. Prior persistence/playback proof is retained; N-02/N-03 remain open.
 After N-01B, plan AMM-N-02 read-only for maintainer approval. Do not implement
 rollback/quarantine/manual controls before that approval.
 HLS Direct expansion is excluded; language changes may reprepare
-downloaded media. This implementation request does not authorize CI, pushes,
-release or unrelated later-slice implementation.
+downloaded media. The subsequent maintainer request authorizes commit, push and
+exact-commit CI; merge, release and unrelated later-slice implementation remain
+outside this delivery.
 Do not duplicate or reopen M-01A. Across all remaining AMM slices, prefer native
 yt-dlp executable capabilities; the removed custom Range adapter has no fallback.
 Keep existing HDR/unmapped-subtitle refusals and ordinary playback behavior intact.

@@ -28,16 +28,19 @@ async function publish(page: Page, delivery: 'stream' | 'download_ahead'): Promi
   const id = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
   expect(id).toBeGreaterThan(0);
   await expect.poll(() => sqlite(`SELECT "State" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${id} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60000 }).toBe('3');
-  await hydrated(page, `/media/addon-lists/${id}`);
-  const option = page.locator('form[data-option-key="processed"]');
-  await option.getByRole('checkbox').check();
-  const saved = page.waitForResponse(response => response.url().includes('/api/addon-lists/options/change') && response.request().method() === 'POST');
-  await option.getByRole('button', { name: 'Save Changes', exact: true }).click();
-  expect((await saved).ok()).toBe(true);
+  await hydrated(page, `/media/addon-lists/${id}/playback`);
+  await page.locator('[data-option-key="processed"] select').selectOption('true');
+  await Promise.all([
+    page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+    page.getByRole('button', { name: 'Save settings', exact: true }).click(),
+  ]);
+  await hydrated(page);
+  await expect(page.locator('#workspace-errors')).toHaveCount(0);
   await hydrated(page, `/media/addon-lists/${id}`);
   await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Publish list', exact: true })).toBeVisible({ timeout: 90000 });
-  await page.getByRole('button', { name: 'Publish list', exact: true }).click();
+  await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${id} AND "Kind" IN (1,2) AND "State"=2;`), { timeout: 90000 }).toBe('1');
+  await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeEnabled({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Publish saved changes', exact: true }).click();
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListRevision" r JOIN "AddonMediaList" l
     ON l."Id"=r."AddonMediaListId" AND l."PublishedRevision"=r."Revision"
     WHERE l."Id"=${id} AND r."CompletedAt" IS NOT NULL;`), { timeout: 90000 }).toBe('1');

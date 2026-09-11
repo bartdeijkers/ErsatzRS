@@ -217,7 +217,8 @@ release section when tagging a release.
   metadata and replacement selection behind restrained disclosures. Shorter
   option guidance, contextual action labels and clearer light-theme field edges
   make the form easier to scan; existing dates and unsaved replacements are
-  preserved through native navigation and Save.
+  preserved through native navigation and Save. Publication readiness updates
+  after background preparation without reloading the page or losing unsaved input.
 
 - Move Settings to the bottom of the admin navigation drawer and collapse the
   expanded Support group into a single badged `Support` link beside it

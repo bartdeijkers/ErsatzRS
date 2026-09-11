@@ -57,9 +57,17 @@ M-02 completes ADR 0052 manual primary/fallback captions, revision-pinned files
 and aligned MPEG-TS/transcoded HLS captions in both delivery modes. Its milestone
 owns evidence. M-03 is complete; N-01 is pushed with green CI (see milestone):
 permission-reviewed yt-dlp -U, playback-first deferral and offline crash recovery.
-N-01B is complete, including item-form corrections; its milestone owns evidence.
+N-01B is locally complete, including live publication; its milestone owns evidence.
 N-02/N-03 remain open.
 '''
+
+[[debt]]
+id          = 'locked-workspace-live-publication'
+description = 'P2: The native task workspace stopped updating the Prepare/Publish action after durable background preparation. Preserve the previous no-reload behavior without replacing unsaved form input, and adapt legacy restart/playback browser workflows to the current task controls.'
+discovered  = '2026-09-11'
+resolved    = true
+adr         = '0091'
+evidence    = 'Resolved on 2026-09-11 by a narrow readiness island preserving native saved-revision submission and unsaved input. Final parity-check web passes with 643 tests; 38 Chromium/Firefox workspace cases, three playback/restart cases and synthetic subtitle TS/HLS acceptance pass. Milestone amm-n-01b owns evidence; exact-commit CI remains the separate publication gate.'
 
 [[debt]]
 id          = 'locked-item-form-comprehension'

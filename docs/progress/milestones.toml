@@ -3876,6 +3876,44 @@ playback and release gates remain unchanged; prototype reports cannot replace
 production acceptance.
 '''
 evidence = '''
+The 2026-09-11 integration correction restores live publication readiness after
+review exposed the native workspace's static action. A narrow island updates the
+state, counts, blockers and native Prepare/Publish submit from resolved readiness;
+it preserves inputs outside the island, cancels after disposal and backs off on
+errors. Background blockers remain eligible for polling until work settles.
+Existing preparation, restart, NSF live, subtitle and SponsorBlock browser paths
+now use the real Playback/access task controls. No acceptance was weakened.
+
+Correction evidence:
+- test-results/amm-ci-closeout/live-publication.log: a matched SSR/WASM build and
+  three Chromium cases pass (1.1 minutes): NSF live publication/scheduled TS/HLS,
+  actual-host-death preparation restart, and prepared-artifact playback. The
+  prepared case proves enabled Publish without reload and retains an unsubmitted
+  search value; published delivery remains pinned after a saved delivery change.
+- test-results/amm-ci-workspace/playwright-results.json: 38 Chromium/Firefox
+  native and hydrated cases pass (3.6 minutes), covering task persistence,
+  conflicts, navigation, numbering, artwork, chapters and large-list pagination.
+  Both themes, all seven acceptance widths, 200% zoom, principal target geometry,
+  contrast and reflow pass. Inspected desktop/mobile publication captures retain
+  the locked geometry.
+- test-results/amm-ci-subtitles/playwright-results.json: the opt-in synthetic
+  subtitle acceptance passes (3.2 minutes). All four decoded frame sheets were
+  inspected: MANUAL BEFORE on retained red frames and MANUAL AFTER on blue frames
+  after the cut, in Stream and Download ahead over MPEG-TS/HLS. Artifact ownership,
+  publication completion and timing assertions remain intact.
+- test-results/amm-ci-closeout/parity.log: final parity-check web passes, including
+  643 native tests (six existing skips), the new blocker/preparation transition
+  regression, formatting, progress, architecture/hydration lint and Clippy with
+  warnings denied. No new hydration baseline suppression.
+- test-results/amm-ci-closeout/bundle.sha256 and review.md identify the candidate
+  and inspected evidence. All 139 locked files still pass verify_lock.py. The
+  real-provider SponsorBlock path was adapted and source-reviewed, not rerun;
+  existing external-provider acceptance is not replaced by synthetic proof.
+
+Prior evidence below remains applicable to unchanged behavior. Commit/push and
+terminal exact-commit CI are a separate authorized delivery gate; merge/release
+and N-02/N-03 acceptance are not implied by these local results.
+
 Item-form correction completed locally on 2026-09-10. The maintainer authorized
 restoring the locked item hierarchy after the live review reopened IF-01 through
 IF-06. Editing now ends with Save, followed by named saved-item tools; options

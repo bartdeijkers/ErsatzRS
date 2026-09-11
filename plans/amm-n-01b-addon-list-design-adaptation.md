@@ -6,7 +6,7 @@ slice. [ADR 0091](../docs/adr/0091-lock-addon-list-task-design.md) owns the deci
 `amm-n-01b` in [milestones.toml](../docs/progress/milestones.toml) owns status,
 acceptance and evidence. This plan owns source mapping and implementation order.
 
-Implementation and the subsequent item-form correction are locally complete.
+Implementation, item-form correction and live publication restoration are locally complete.
 This source/capability map remains linked by the frozen reference; milestone
 `amm-n-01b` owns current acceptance and evidence. The completed focused correction
 plan has been pruned. No publication or N-02/N-03 completion is implied.
@@ -267,3 +267,21 @@ inputs so browsers cannot silently clear them. Replacement selection remains
 an unsaved edit until Save item, with its own pending notice and Save anchor.
 Provider descriptions stay visible because the schema cannot classify security
 prerequisites separately from optional prose. No new island or shared primitive.
+
+### Live publication readiness boundary
+
+The subsequent publication correction keeps `AddonListWorkspacePage` as the SSR
+wrapper. Its resolved workspace data seeds `PublicationOverviewIsland` in
+`workspace/publication.rs` before island emission; no unresolved `Suspense`
+boundary carries these props. Only the Items task publication heading, counts,
+blocker messages and action update from the existing
+`get_addon_media_list_publication_readiness` server function. The native
+`addon-list-workspace` form and `intent=publish` submission still invoke the same
+saved-revision command, including without JavaScript. Inputs outside the island
+stay mounted and retain unsaved values. No shared primitive changes.
+
+`addon-prepared-playback.spec.ts` owns the real background Prepare-to-Publish
+proof without a reload and with unsubmitted input preserved. Workspace native,
+hydrated and visual suites cover both browsers; playback/restart/caption suites
+retain their persistence and decoded-media guarantees through the new task
+controls. Milestone `amm-n-01b` owns the results and remaining acceptance.
