@@ -5,6 +5,20 @@ on:
     # Do not add `labeled`: dependency automation applies several routine
     # labels, and each label event would start another full CI run.
     types: [opened, synchronize, reopened]
+    # Same non-code skip as `push` below. Safe here only because this
+    # repository has no branch protection, so no required status check can be
+    # left unreported by a skipped run. If branch protection is ever enabled,
+    # do NOT drop this list: add a sentinel job that reports success under the
+    # required check names instead, or docs-only PRs become unmergeable.
+    paths-ignore:
+      - 'docs/**'
+      - 'plans/**'
+      - '.claude/**'
+      - '.codex/**'
+      - '*.md'
+      - '**/*.md'
+      - '*.png'
+      - '**/*.png'
   push:
     branches: [main]
     # Skip the Rust CI gate when a push touches only non-code paths (docs,
@@ -67,8 +81,60 @@ env:
   CARGO_TARGET_DIR: ${{ github.workspace }}/../ci-target
 
 jobs:
+  # A direct fast-forward merge gives main the exact commit a feature-branch
+  # run already proved green, so the push-triggered run recompiles and retests
+  # a byte-identical tree. Ask the API whether this SHA already has a
+  # successful CI run and skip the gate if it does.
+  #
+  # Push only. A pull_request must be evaluated on its own merge result, and a
+  # manual dispatch is an explicit request to re-run. A PR merge commit is a
+  # new SHA, so this never skips one.
+  #
+  # Pinned to a hosted runner on purpose: the self-hosted pool is a single
+  # machine whose jobs run serially, and adding a gate job there would charge
+  # every run its queue time to save a duplicate that is comparatively rare.
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+    outputs:
+      skip: ${{ steps.duplicate.outputs.skip }}
+    steps:
+      - id: duplicate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== 'push') {
+              core.setOutput('skip', 'false');
+              core.info(`${context.eventName} always runs the full gate.`);
+              return;
+            }
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRuns,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'ci.yml',
+                head_sha: context.sha,
+                per_page: 100,
+              },
+            );
+            const proven = runs.filter(
+              (run) => run.id !== context.runId && run.conclusion === 'success',
+            );
+            core.setOutput('skip', proven.length > 0 ? 'true' : 'false');
+            if (proven.length > 0) {
+              const links = proven.map((run) => run.html_url).join(', ');
+              core.notice(
+                `${context.sha} already passed CI (${links}); skipping this duplicate run.`,
+              );
+            }
+
   fmt:
     name: Format
+    needs: preflight
+    if: needs.preflight.outputs.skip != 'true'
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
@@ -312,6 +378,8 @@ jobs:
 
   deny:
     name: Cargo deny
+    needs: preflight
+    if: needs.preflight.outputs.skip != 'true'
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7
@@ -374,6 +442,8 @@ jobs:
 
   docs:
     name: Documentation links
+    needs: preflight
+    if: needs.preflight.outputs.skip != 'true'
     runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux"]') }}
     steps:
       - uses: actions/checkout@v7

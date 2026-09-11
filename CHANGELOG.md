@@ -188,6 +188,17 @@ release section when tagging a release.
 
 ### Changed
 
+- CI no longer retests a commit it has already proved. A `Preflight` job asks
+  the API whether the pushed SHA already has a successful CI run and skips the
+  gate when it does, so a direct fast-forward merge to `main` stops rerunning
+  the feature branch's green run on an identical tree. Pull requests and manual
+  dispatches always run in full, and a PR merge commit is a new SHA, so neither
+  is ever skipped.
+- CI skips docs-only pull requests, matching the non-code `paths-ignore` that
+  already applied to `main` pushes. This is safe only while the repository has
+  no branch protection; if required status checks are ever enabled, docs-only
+  PRs need a sentinel job reporting under the required names instead.
+
 - Run the Playwright admin E2E suite as one CI job per browser project
   (`chromium`, `firefox`) instead of one job for both. The suite runs on a
   single worker because it mutates shared application state, so per-project jobs
