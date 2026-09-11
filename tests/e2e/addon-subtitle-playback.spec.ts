@@ -38,7 +38,10 @@ async function publish(page: Page, delivery: 'stream' | 'download_ahead'): Promi
   await expect(page.locator('#workspace-errors')).toHaveCount(0);
   await hydrated(page, `/media/addon-lists/${id}`);
   await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
-  await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${id} AND "Kind" IN (1,2) AND "State"=2;`), { timeout: 90000 }).toBe('1');
+  // Streaming needs both interval metadata and captions. They share the provider
+  // lease, so a queued caption job can outlive the first operation's completion.
+  const completedKinds = delivery === 'stream' ? '2,3' : '1';
+  await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${id} AND "Kind" IN (${completedKinds}) AND "State"=2;`), { timeout: 120000 }).toBe(delivery === 'stream' ? '2' : '1');
   await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeEnabled({ timeout: 20000 });
   await page.getByRole('button', { name: 'Publish saved changes', exact: true }).click();
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListRevision" r JOIN "AddonMediaList" l
@@ -75,7 +78,7 @@ function assertCaptionOwnership(listId: number, prepared: boolean): number {
   return itemId;
 }
 
-function schedule(itemId: number): { number: string; started: number } {
+function schedule(itemId: number, fallback: boolean): { number: string; started: number } {
   const number = sqlite('SELECT MAX(890000,COALESCE(MAX(CAST("Number" AS INTEGER)),0))+1 FROM "Channel";');
   const resolution = Number(sqlite('SELECT "Id" FROM "Resolution" WHERE "Width"=320 AND "Height"=180 LIMIT 1;') ||
     sqlite('INSERT INTO "Resolution" ("Width","Height") VALUES(320,180); SELECT last_insert_rowid();'));
@@ -92,9 +95,9 @@ function schedule(itemId: number): { number: string; started: number } {
     FROM "FFmpegProfile" ORDER BY "Id" LIMIT 1; SELECT last_insert_rowid();`));
   sqlite(`BEGIN IMMEDIATE;
     INSERT INTO "Channel" ("UniqueId","Number","SortNumber","Name","Group","FFmpegProfileId",
-    "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode","IdleBehavior",
+    "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode","IdleBehavior","PreferredSubtitleLanguageCode",
     "MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg")
-    VALUES (${quote(randomUUID())},'${number}',${Number(number)},'M02 subtitles','E2E',${profile},5,0,0,0,0,0,0,0,3,1,1);
+    VALUES (${quote(randomUUID())},'${number}',${Number(number)},'M02 subtitles','E2E',${profile},5,0,0,0,0,0,${fallback ? "'nld'" : 'NULL'},0,0,3,1,1);
     INSERT INTO "Playout" ("ChannelId","ScheduleKind","Seed") VALUES(last_insert_rowid(),20,1);
     INSERT INTO "PlayoutItem" ("DisableWatermarks","FillerKind","Finish","GuideGroup","InPoint","MediaItemId","OutPoint","PlayoutId","Start")
     VALUES(1,0,strftime('%Y-%m-%d %H:%M:%f','now','+81 seconds'),0,'00:00:05',${itemId},'00:01:26',last_insert_rowid(),strftime('%Y-%m-%d %H:%M:%f','now'));
@@ -140,48 +143,60 @@ function captionFrames(capture: string): { visibleSeconds: number[]; blueStartsA
   return { visibleSeconds, blueStartsAtSample, frameSheet };
 }
 
-test('manual synthetic subtitles survive worker publication and scheduled TS/HLS cut playback', async ({ page, baseURL }, info) => {
+test('manual primary and fallback subtitles survive worker publication and scheduled TS/HLS cut playback', async ({ page, baseURL }, info) => {
   test.skip(process.env.E2E_SUBTITLE_PLAYBACK !== '1', 'Opt-in decoded media acceptance');
   test.skip(info.project.name !== 'chromium', 'One serial shared database acceptance');
   test.setTimeout(600000);
   const hostLog = process.env.E2E_SPONSORBLOCK_HOST_LOG;
   if (!dbPath || !baseURL || !hostLog) throw new Error('Isolated database, base URL and bounded host log are required');
   const fixture = installPreparedFixture(dbPath, false, true);
-  sqlite(`INSERT INTO "ConfigElement" ("Key","Value") VALUES('ffmpeg.preferred_subtitle_language_code','eng'),('ffmpeg.fallback_subtitle_language_code','')
+  // Both preferences request the same English artifact once. Fallback channels
+  // override the primary to unavailable Dutch, so visible English proves fallback.
+  sqlite(`INSERT INTO "ConfigElement" ("Key","Value") VALUES('ffmpeg.preferred_subtitle_language_code','eng'),('ffmpeg.fallback_subtitle_language_code','eng')
     ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value";`);
   await page.request.post('/api/settings/ui/save', { form: { is_dark_mode:'true',language:'en-us' }, maxRedirects:0 });
   for (const delivery of ['stream','download_ahead'] as const) {
     const list = await publish(page, delivery);
     const item = assertCaptionOwnership(list, delivery === 'download_ahead');
-    for (const transport of ['ts','hls'] as const) {
-      const channel = schedule(item);
-      const output = info.outputPath(`${delivery}-${transport}.ts`);
-      const finishLog = beginHostLogWindow(hostLog);
-      let cutoff: number | undefined;
-      let failure: unknown;
-      try {
-        if (transport === 'ts') {
-          const result = await captureTs(new URL(`/iptv/channel/${channel.number}.ts?mode=ts-legacy`,baseURL),output);
-          cutoff = result.intentionalCutoffWallMilliseconds;
-        } else await captureHls(page,baseURL,channel.number,output,35,channel.started);
-      } catch (error) { failure = error; }
-      const log = finishLog(cutoff);
-      writeFileSync(`${output}.host-log.json`,JSON.stringify(log,null,2));
-      if (failure) throw failure;
-      expect(log.error).toBeUndefined();
-      expect(log.failures).toEqual([]);
-      const frames = captionFrames(output);
-      await info.attach(`${delivery}-${transport}-caption-frames`,{path:frames.frameSheet,contentType:'image/png'});
-      writeFileSync(`${output}.subtitle-proof.json`,JSON.stringify({delivery,transport,...frames,
-        expectedText:['MANUAL BEFORE','MANUAL AFTER'],forbiddenText:'REMOVED CUE',
-        exactTextAndCutTiming:'Requires inspection of attached decoded frame sheet; pixel test proves visibility only'},null,2));
+    for (const selection of ['primary','fallback'] as const) {
+      for (const transport of ['ts','hls'] as const) {
+        // A stopped HLS player can leave its server session in the watch window.
+        // Await real reservation release before starting the next short playout;
+        // otherwise the capture measures a capacity slate instead of subtitles.
+        await expect.poll(async () => {
+          const response = await page.request.get('/settings/ffmpeg');
+          expect(response.ok()).toBe(true);
+          return /Streams in use: 0 \//.test(await response.text());
+        }, { timeout: 90_000, intervals: [1_000] }).toBe(true);
+        const channel = schedule(item, selection === 'fallback');
+        const output = info.outputPath(`${delivery}-${selection}-${transport}.ts`);
+        const finishLog = beginHostLogWindow(hostLog);
+        let cutoff: number | undefined;
+        let failure: unknown;
+        try {
+          if (transport === 'ts') {
+            const result = await captureTs(new URL(`/iptv/channel/${channel.number}.ts?mode=ts-legacy`,baseURL),output);
+            cutoff = result.intentionalCutoffWallMilliseconds;
+          } else await captureHls(page,baseURL,channel.number,output,35,channel.started);
+        } catch (error) { failure = error; }
+        const log = finishLog(cutoff);
+        writeFileSync(`${output}.host-log.json`,JSON.stringify(log,null,2));
+        if (failure) throw failure;
+        expect(log.error).toBeUndefined();
+        expect(log.failures).toEqual([]);
+        const frames = captionFrames(output);
+        await info.attach(`${delivery}-${selection}-${transport}-caption-frames`,{path:frames.frameSheet,contentType:'image/png'});
+        writeFileSync(`${output}.subtitle-proof.json`,JSON.stringify({delivery,selection,transport,...frames,
+          expectedText:['MANUAL BEFORE','MANUAL AFTER'],forbiddenText:'REMOVED CUE',
+          exactTextAndCutTiming:'Requires inspection of attached decoded frame sheet; pixel test proves visibility only'},null,2));
+      }
     }
   }
   const calls = readFileSync(fixture.invocationLog,'utf8').trim().split('\n').map(line => JSON.parse(line));
   expect(calls.filter(call => call.command === 'subtitles')).toHaveLength(1);
   expect(calls.filter(call => call.command === 'prepare')).toHaveLength(1);
   const ranges = calls.filter(call => call.command === 'ranges');
-  expect(ranges).toHaveLength(2);
+  expect(ranges).toHaveLength(4);
   for (const call of ranges) {
     expect(call.ranges[0].start).toBeGreaterThanOrEqual(5000);
     expect(call.ranges[0].end).toBe(40000);

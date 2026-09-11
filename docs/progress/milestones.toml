@@ -4140,9 +4140,136 @@ Independent review found no P1/P2. All ten focused Chromium/Firefox cases pass,
 including hydrated/no-JS cutoff preservation, keyboard-safe mobile navigation,
 durable detail progress and item review/edit flows. Captures are retained under
 test-results/n03-native-navigation. The runner reused the matched N-02 assets
-after host CI finished; no Rust or product changes were needed. Corrective
-exact-SHA host CI remains required. No local heavy gate runs concurrently with
-host CI; the other terminal continues holding its build slot.
+after host CI finished; no Rust or product changes were needed.
+Corrective host ed489c70bea3c6886807aae257dcd5f9680170ab now has terminal green
+CI: https://github.com/bartdeijkers/ErsatzRS/actions/runs/34612501361.
+Chromium passes (195 passed, three opt-in skips); Firefox passes (172 passed,
+26 skips); Rust passes (2772 passed, 37 skips). Format, Clippy, dependency policy,
+documentation links, hydration lint, progress and architecture checks pass.
+The existing real-provider scheduled SponsorBlock TS/HLS probe also passes
+after CI, with no concurrent build: one Chromium case in 1.9 minutes. It used
+the verified provider bundle, unchanged matched N-02 product assets, a private
+yt-dlp executable copy and disposable host/database; no operator profile was
+used. Publication retained the required late excluded interval (943460 through
+1033640 milliseconds) without a prepared full-download artifact. MPEG-TS first
+bytes arrived at 8.032 seconds; first decoded video/audio at 12.573/12.573
+seconds. HLS first presented frame was 10.641 seconds. Both satisfy the approved
+20-second maximum, not the aspirational ten-second decoded/presented target.
+There were no post-start HLS waiting/stalled/seeking events; maximum frame gap
+was 66.7 milliseconds, and maximum TS decoded delivery gaps were 110.6/110.4
+milliseconds. Both bounded host-log windows contain no inner playback failure.
+Captures and timing JSON are retained under test-results/n03-sponsorblock.
+Both captures subsequently pass strict audio/video decoding and all 38 existing
+TSDuck structure/continuity checks; analysis JSON/PCR evidence is retained in
+that directory's tsduck subdirectory. This proves transport timing/cadence and
+structure across the frozen cut, not yet independent decoded source-content
+correlation, audible continuity, subtitle viewing or the packaged Windows
+recovery/profile scenario.
+The existing opt-in subtitle probe lacked fallback-language viewing. Its
+test-only extension retains primary captures and adds channel-primary Dutch
+with English fallback for Stream/Download ahead and TS/HLS. Independent source
+review confirms language ordering and filtering genuinely exercise fallback.
+The first run stopped before playback: interval metadata was complete, but
+the caption job was unattempted and deferred to the shared provider lease's
+expiry, beyond the test's twenty-second publication-readiness expectation.
+The probe now waits for both required streaming operations (or the combined
+download preparation) before checking the unchanged live Publish control.
+This test synchronization correction preserves provider pacing and product
+readiness. Retained first-run evidence is indexed by test-results/n03-subtitles.
+The second run completed publication and passed primary Stream TS/HLS pixel
+checks, but fallback TS captured the all-streams-in-use slate while the prior
+HLS session was being reclaimed. Retained captures, frame sheets and logs are
+under test-results/n03-subtitles-rerun. The probe now awaits zero active
+reservations through the existing settings readout before scheduling each
+short playout, preserving the configured capacity and slate assertions. The
+corrected probe passes in 7.1 minutes: all eight Stream/Download ahead x
+primary/fallback x MPEG-TS/HLS captures pass against the unchanged matched
+product build. Evidence is under test-results/n03-subtitles-drain, including
+individual-frames for visually readable samples. All eight inspected pairs
+show MANUAL BEFORE on retained red and MANUAL AFTER on retained blue; sampled
+caption visibility and frozen-cut transitions agree with their proof JSON.
+No excluded green or capacity slate is accepted. Four native range calls,
+one subtitle operation and one preparation operation are asserted; no raw
+provider play call is accepted. This is actual-host synthetic-media viewing,
+not independent real-provider source correlation or subsecond visual proof.
+The disposable host shut down cleanly and its port closed. The other terminal
+now owns the heavy slot for its separately approved CI work; the verified
+subtitle/progress changes remain uncommitted until that coordinated handoff.
+PR CI 34617064389 also exposed a separate
+expired-recovery fixture race: the real worker could claim its deliberately
+incomplete journal before Retry. A test-only future NextEligibleAt now keeps
+the expired lease operator-recoverable until explicit Retry clears the
+deadline, with an explicit Expired assertion. All four focused Chromium/Firefox
+hydrated Retry and no-JS Restore cases pass against the matched product build
+(test-results/n03-recovery-fixture). Test-only correction d32ba5eb is committed
+and pushed; local main, tracking main and live remote main agree. Exact-SHA CI
+34622173023 attempt 1 passed Test, Firefox, Clippy, formatting, deny and docs;
+Chromium passed the recovery cases but failed only the delayed-mirror editor's
+initial fifteen-second hydration wait (194 passed, three skipped). Its trace
+has no console/page panic or failed HTTP response; WASM transfer completion
+is absent at timeout. Contention is a hypothesis, not a proven root cause.
+After all sibling jobs finished, only failed Chromium was rerun on unchanged
+d32ba5eb without another active browser/build job. Attempt 2 is terminal green
+for d32ba5eb4a774d76c6eeb45bd9a9aac64d652a2f, with successful siblings reused;
+no timeout, editor or workflow change was made to obtain it. This supports,
+but does not prove, contention as the original hydration-timeout cause. The
+Test job records 2,772 passes and 37 skips; Chromium has 195 passes and three
+opt-in skips, with passing progress validation and architecture lint. Local,
+tracking and live remote main agree with the
+CI head SHA: https://github.com/bartdeijkers/ErsatzRS/actions/runs/34622173023.
+N-03 remains In progress. No local heavy gate runs concurrently with CI or
+the other terminal's reserved build slot.
+Read-only Windows preparation found a concrete browser-discovery P2: the host
+strips APPDATA and LOCALAPPDATA before the official package launches yt-dlp.
+The pinned 2026.08.19 native discovery implementation needs those directory
+locations; no later host/provider environment restores them. The pending
+correction adds only those two Windows allowlist entries and a synthetic
+environment-filtering regression, without reading profiles or cookie values.
+After coordinated handoff, 15 focused infrastructure tests pass, including the
+synthetic environment regression and existing startup-alias/layout/logging
+tests (nextest 0597e548-76ed-4530-8556-e360cae7ae2f). The Windows-native
+allowlist regression also passes (nextest 03056218-ab04-4f46-967b-722579d93cd2:
+one passed, 753 skipped), exercising both directory variables and unrelated
+environment filtering. Native builds use the existing configured target root,
+two build jobs and command-local CARGO_INCREMENTAL=0 because the WSL UNC
+filesystem rejected rustc's incremental lock. Real disposable-browser profile
+guidance is still unverified; this synthetic regression does not replace it.
+Owning debt: windows-addon-browser-profile-locations-stripped.
+Package-gate preparation also found inherited database/state leakage: its
+fallback DATABASE_URL could be superseded by either repository alias, and
+HOME does not isolate the native Windows application roots. The pending
+correction sets all database aliases and both existing application overrides,
+routes logs through the same data-root resolver, and asserts disposable
+database/log-directory creation. Default production paths stay unchanged.
+Shell syntax and the matched Leptos build pass. The Linux package gate then
+passes with both inherited repository database aliases deliberately invalid:
+its disposable database and log directory are created, both JS/WASM assets
+return 200, cleanup exits zero and port 18459 closes. This proves the inherited
+alias isolation correction on Linux; native packaged Windows remains pending.
+Owning debt: package-gate-inherits-operator-state. No release workflow was changed.
+Independent read-only review found no P1/P2 in these two corrections; the
+launcher's separate log path still ignores the data override and is not changed
+by this server/gate correction. Native profile guidance remains unproven.
+The separately approved CI-serialization change is now on main at e3c4c077,
+with full-gate evidence in PR run 34626581867 (all required jobs successful).
+Push run 34629318517 is successful provenance only: Preflight reused that exact
+SHA and skipped duplicate gates. The root checkout fast-forwarded without
+overwriting N-03 changes. A new opt-in Windows publication-restart spec now
+composes actual scheduled scan/Publish contention, held-handle sharing failure,
+disconnect/restart/UI Retry and exact generation/journal assertions. It is
+source-reviewed but unexecuted; packaged launcher identity remains separate.
+The separate native NTFS rollback checks pass on the corrected working tree:
+windows_held_handle_reports_a_retryable_restore_error and
+windows_publication_restore_retries_until_a_held_handle_drains, nextest
+6efb6cfb-13c8-401c-8b18-a57f92a594bc (two passed, 752 skipped). They exercise
+the original held-handle rename/restore boundary and successful bounded retry.
+The integrated browser probe instead faults post-scan cleanup of an already
+committed revision; neither kind of proof is substituted for the other.
+Formatting, shell syntax and progress validation pass. The native test processes
+have exited; the heavy slot is released to the other terminal's agreed CI run.
+The tested corrections and subtitle probe form an engineering checkpoint,
+not N-03 acceptance. The unexecuted Windows restart probe stays local pending
+an isolated candidate run; no beta tag or release is created.
 The host release workflow currently omits macOS archives; unavailable native
 platform evidence remains a gap, not authorization for workflow expansion.
 Removed stale quota/LRU wording under the already-approved M-03 amendment:

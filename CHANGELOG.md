@@ -288,6 +288,15 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve the Windows application-data locations needed by yt-dlp to find
+  the selected browser profile, without forwarding unrelated environment
+  values or handling cookie contents in ErsatzRS.
+
+- Isolate package verification from inherited database settings and application
+  state. Application logs now honor the existing application-data override,
+  keeping disposable verification logs with the rest of its test data; normal
+  default log locations are unchanged.
+
 - Stop the `ersatzrs-web` build script from failing when a Cargo target
   directory is reused from a different checkout path. It read
   `CARGO_MANIFEST_DIR` through `env!`, which bakes the checkout path into the

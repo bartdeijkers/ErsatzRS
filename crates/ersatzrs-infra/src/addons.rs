@@ -3911,6 +3911,12 @@ fn windows_addon_raw_arguments(command: &ResolvedAddonCommand) -> String {
 }
 
 pub(crate) fn addon_process_environment() -> BTreeMap<String, String> {
+    addon_process_environment_with(crate::startup_config::environment_variable)
+}
+
+fn addon_process_environment_with(
+    mut lookup: impl FnMut(&str) -> Option<std::ffi::OsString>,
+) -> BTreeMap<String, String> {
     #[cfg(windows)]
     const ALLOWED_NAMES: &[&str] = &[
         "PATH",
@@ -3920,6 +3926,10 @@ pub(crate) fn addon_process_environment() -> BTreeMap<String, String> {
         "COMSPEC",
         "TEMP",
         "TMP",
+        // Native browser discovery uses these locations (ADR 0085). Cookie
+        // extraction remains owned by the explicitly selected provider option.
+        "APPDATA",
+        "LOCALAPPDATA",
     ];
     #[cfg(not(windows))]
     const ALLOWED_NAMES: &[&str] = &["PATH", "LANG", "LC_ALL", "TMPDIR"];
@@ -3927,7 +3937,7 @@ pub(crate) fn addon_process_environment() -> BTreeMap<String, String> {
     ALLOWED_NAMES
         .iter()
         .filter_map(|name| {
-            crate::startup_config::environment_variable(name)
+            lookup(name)
                 .and_then(|value| value.into_string().ok())
                 .map(|value| ((*name).to_owned(), value))
         })
@@ -5761,6 +5771,40 @@ printf '%s' '{"status":"warning","code":"tool-update-failed-stale","message":"St
             windows_addon_raw_arguments(&command),
             r#"/D /S /C ""C:\Program Files\ErsatzRS Add-ons\addon.bat" "check"""#
         );
+    }
+
+    #[test]
+    fn addon_process_environment_preserves_only_platform_allowlisted_values() {
+        // Synthetic values avoid inspecting profiles or mutating process-global
+        // environment while other tests run.
+        let variables = BTreeMap::from([
+            ("PATH", "fixture-bin"),
+            ("APPDATA", "fixture-roaming"),
+            ("LOCALAPPDATA", "fixture-local"),
+            ("UNDECLARED_FIXTURE_VALUE", "must-not-reach-the-addon"),
+        ]);
+        let environment = addon_process_environment_with(|name| {
+            variables.get(name).copied().map(std::ffi::OsString::from)
+        });
+        assert_eq!(
+            environment.get("PATH").map(String::as_str),
+            Some("fixture-bin")
+        );
+        assert!(!environment.contains_key("UNDECLARED_FIXTURE_VALUE"));
+        #[cfg(windows)]
+        {
+            assert_eq!(
+                environment.get("APPDATA").map(String::as_str),
+                Some("fixture-roaming")
+            );
+            assert_eq!(
+                environment.get("LOCALAPPDATA").map(String::as_str),
+                Some("fixture-local")
+            );
+            assert_eq!(environment.len(), 3);
+        }
+        #[cfg(not(windows))]
+        assert_eq!(environment.len(), 1);
     }
 
     #[test]

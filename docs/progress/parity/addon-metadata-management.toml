@@ -503,6 +503,71 @@ evidence    = 'Resolved by live Beeld & Geluid and yt-dlp runs on native Linux, 
 resolved    = true
 
 [[debt]]
+id          = 'provider-lease-release-retains-unstarted-operation-delay'
+description = 'A queued caption operation can retain the former provider lease deadline after early release, delaying publication readiness beyond the actual provider cooldown.'
+discovered  = '2026-09-11'
+adr         = '0085'
+resolved    = false
+evidence    = '''
+AMM-N-03 owns the retained subtitle-probe evidence and its synchronization fix.
+Interval metadata completed while the unattempted caption operation remained
+queued until the original 90-second provider lease deadline; the released
+provider-host cooldown was only six seconds. Source review confirms that
+defer_unstarted persists the admission deadline and early provider release does
+not shorten it. This is bounded, user-visible preparation latency, not a failed
+operation or a playback interruption. Record it as non-blocking follow-up rather
+than claiming the longer test wait removes the delay. Any correction must retain
+actual provider cooldowns, Retry-After deadlines and execution fencing; it must
+not indiscriminately reset deferred work to run immediately. No production
+scheduling change is included in the N-03 acceptance-probe correction.
+'''
+
+[[debt]]
+id          = 'windows-addon-browser-profile-locations-stripped'
+description = 'Windows add-on execution strips the directory-location variables required by native yt-dlp browser-profile discovery.'
+discovered  = '2026-09-11'
+adr         = '0085'
+resolved    = false
+evidence    = '''
+AMM-N-03 owns correction and native acceptance. The host clears the child
+environment and omits APPDATA and LOCALAPPDATA; neither resolved settings nor
+the official Deno entrypoint restores them. yt-dlp 2026.08.19 uses these two
+variables to locate Firefox, Chrome and Chromium profiles on Windows. Selected
+browser access therefore searches unresolved locations, independently of real
+profile-lock or decryption failures. The pending correction preserves only
+these two Windows directory variables and adds a synthetic allowlist regression;
+the non-Windows environment and undeclared-variable filtering stay unchanged.
+The synthetic regression passes on Linux with the existing startup/layout/logging
+tests (15 passes). The Windows-native allowlist regression also passes,
+including both directory variables and unrelated-variable filtering. AMM-N-03
+records the exact nextest evidence and build constraints. Disposable native
+profile guidance remains unverified; synthetic coverage does not replace it.
+No personal profile, cookie value or environment dump was inspected.
+'''
+
+[[debt]]
+id          = 'package-gate-inherits-operator-state'
+description = 'The package verification gate can inherit a higher-priority operator database setting and does not fully isolate application state and logs.'
+discovered  = '2026-09-11'
+adr         = '0085'
+resolved    = false
+evidence    = '''
+Found while preparing the required AMM-N-03 disposable Windows acceptance.
+verify-web-bundle.sh sets only DATABASE_URL, while StartupConfig prefers the
+repository database aliases. Its HOME override also does not establish native
+Windows application roots. The pending correction explicitly sets every
+database alias and the existing state/data overrides. Logging now reuses the
+same application-data resolver instead of bypassing its configured root;
+unconfigured paths are unchanged. The gate asserts that the disposable
+database and log directory exist before accepting hydration assets. Shell
+syntax, diff checks and the matched Leptos build pass. The Linux executable gate
+passes with both inherited repository database aliases deliberately invalid;
+the disposable database/log directory and JS/WASM assets are verified, followed
+by clean shutdown. Packaged Windows execution remains pending. No operator
+database or profile was used to reproduce this source-proven isolation defect.
+'''
+
+[[debt]]
 id          = 'yt-dlp-adaptive-source-check'
 description = 'Enable the existing opt-in Adaptive cadence for the official yt-dlp package using a provider-neutral, bounded normalized-JSON sample instead of provider-specific feeds or unsafe ordering assumptions.'
 discovered  = '2026-09-08'

@@ -168,7 +168,7 @@ async fn list_channel_stream_selectors_in(folder: &Path) -> Vec<String> {
 /// Application data root, matching `logging::default_log_dir`'s base
 /// (`data_local_dir()/ErsatzRS`), falling back to `./` when no home directory
 /// is available.
-fn app_data_folder() -> PathBuf {
+pub(crate) fn app_data_folder() -> PathBuf {
     if let Some(path) = configured_directory(APP_DATA_DIR_ENV_VAR) {
         return path;
     }

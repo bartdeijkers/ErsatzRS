@@ -1,8 +1,7 @@
 //! Persisted logging-level configuration.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use directories::BaseDirs;
 use ersatzrs_domain::{
     CONFIG_KEY_MINIMUM_LOG_LEVEL, CONFIG_KEY_MINIMUM_LOG_LEVEL_HTTP,
     CONFIG_KEY_MINIMUM_LOG_LEVEL_SCANNING, CONFIG_KEY_MINIMUM_LOG_LEVEL_SCHEDULING,
@@ -129,13 +128,10 @@ pub fn default_filter() -> &'static str {
     DEFAULT_LEVEL
 }
 
-/// Default application log folder, matching `ErsatzRS`' `SQLite` app data folder.
+/// Application log folder below the configured application data root.
 #[must_use]
 pub fn default_log_dir() -> PathBuf {
-    BaseDirs::new().map_or_else(
-        || Path::new(".").join("logs"),
-        |base_dirs| base_dirs.data_local_dir().join("ErsatzRS").join("logs"),
-    )
+    crate::file_system_layout::app_data_folder().join("logs")
 }
 
 /// Default file shown by the admin `/system/logs` page.

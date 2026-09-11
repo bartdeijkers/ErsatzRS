@@ -119,10 +119,15 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # Build the full server env in one array (never empty, so `"${SRV_ENV[@]}"` is
-# safe under `set -u` on older bash / Git Bash).
+# safe under `set -u` on older bash / Git Bash). Override every database alias
+# and both application roots; inherited operator settings must never escape
+# this disposable gate, including on Windows where HOME is not the state root.
 declare -a SRV_ENV=(
-  "HOME=$TMP_ROOT_ENV"
   "DATABASE_URL=sqlite:$TMP_ROOT_ENV/verify.db"
+  "ErsatzRS_DATABASE__URL=sqlite:$TMP_ROOT_ENV/verify.db"
+  "ERSATZRS_DATABASE__URL=sqlite:$TMP_ROOT_ENV/verify.db"
+  "ERSATZRS_APP_STATE_DIR=$TMP_ROOT_ENV/state"
+  "ERSATZRS_APP_DATA_DIR=$TMP_ROOT_ENV/cache"
   "LEPTOS_SITE_ROOT=$SITE_ROOT_ENV"
   "LEPTOS_OUTPUT_NAME=ersatzrs-web"
   "LEPTOS_SITE_ADDR=127.0.0.1:$PORT"
@@ -152,6 +157,13 @@ for _ in $(seq 1 120); do
   sleep 1
 done
 curl -fsS -m 2 "$BASE_URL/healthz" >/dev/null 2>&1 || { err "/healthz never came up:"; tail -n 30 "$LOG_PATH" >&2; exit 1; }
+
+# Confirm the running candidate used the disposable roots, not inherited
+# operator database or logging configuration.
+[[ -f "$TMP_ROOT/verify.db" && -d "$TMP_ROOT/cache/logs" ]] || {
+  err "candidate did not create its database and log directory in the disposable gate root"
+  exit 1
+}
 
 # --- Extract every /pkg asset the shell HTML references and verify each loads.
 SHELL_HTML="$(curl -fsS "$BASE_URL/" 2>/dev/null || true)"
