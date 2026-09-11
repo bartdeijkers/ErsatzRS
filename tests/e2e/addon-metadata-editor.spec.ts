@@ -137,7 +137,16 @@ async function waitUntilHydrated(page: Page): Promise<void> {
 async function workspaceSubmit(page: Page, intent: string, hydrated = true): Promise<void> {
   if(hydrated) await waitUntilHydrated(page);
   const selector = `button[name="intent"][value="${intent}"]${intent === 'navigate' ? ':not([formaction])' : ''}`;
-  await Promise.all([page.waitForEvent('framenavigated',f=>f===page.mainFrame()),page.locator(selector).first().click()]);
+  await nativeNavigate(page, () => page.locator(selector).first().click(), hydrated);
+}
+
+async function nativeNavigate(page: Page, action: () => Promise<void>, hydrated = true): Promise<void> {
+  // Native forms replace the document. Observe navigation before polling the
+  // new shell, rather than reading the old document's hydration flag.
+  await Promise.all([
+    page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+    action(),
+  ]);
   await page.waitForLoadState('load');
   if(hydrated) await waitUntilHydrated(page);
 }
@@ -315,8 +324,7 @@ WHERE "Id" = ${seed.listId};
         expect(Date.parse((await page.getByTestId('addon-delivery-cutoff').locator('time').getAttribute('datetime'))!)).toBe(Date.parse(previousCutoff));
 
         // Saving another setting must preserve the new-only selection and its cutoff.
-        await page.locator('button[formaction$="/settings"]').click();
-        if(javaScriptEnabled)await waitUntilHydrated(page);
+        await nativeNavigate(page, () => page.locator('button[formaction$="/settings"]').click(), javaScriptEnabled);
         await page.getByRole('combobox', { name: 'Automatic Refresh', exact: true }).selectOption('weekly');
         await save();
         await expect.poll(() => sqlite(`SELECT "RefreshCadence" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('1');
@@ -967,14 +975,15 @@ WHERE "Id" = ${seed.listId};
     const first=collection.locator('.episode-row').first();
     for(const label of ['First aired','Duration'])await expect(first.getByText(label,{exact:true})).toBeVisible();
     const review=first.locator('button.row-title');await expect(review).toBeVisible();
-    await review.focus();await page.keyboard.press('Enter');await waitUntilHydrated(page);
+    await review.focus();
+    await nativeNavigate(page, () => page.keyboard.press('Enter'));
     await expect(page.locator('.item-adjacent')).toHaveCount(2);
     await expect(page.locator('.item-adjacent').first()).toBeDisabled();
     for(const width of [320,390,900,1440,1920,2560,3840]) {
       await page.setViewportSize({width,height:900});
       expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1)).toBe(true);
     }
-    await page.locator('button[formaction$="/settings"]').click();await waitUntilHydrated(page);
+    await nativeNavigate(page, () => page.locator('button[formaction$="/settings"]').click());
     await expect(page.locator('[name="metadata_plot"]')).toHaveValue(longDescription);
     await expect(page.locator('section[aria-label="Metadata conflicts"]')).toBeVisible();
     expect(await contrastAgainstPageBackground(page,'section[aria-label="Metadata conflicts"]')).toBeGreaterThanOrEqual(4.5);
@@ -1008,7 +1017,7 @@ WHERE "Id" = ${seed.listId};
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}/items/${seed.firstItemId}`);
     await expect(page.locator('button[value="fetch-details"]')).toBeDisabled();
     await expect(page.locator('button[value="fetch-details"]')).toHaveAttribute('aria-busy','true');
-    await page.locator('.item-adjacent').last().click();await waitUntilHydrated(page);
+    await nativeNavigate(page, () => page.locator('.item-adjacent').last().click());
     await page.locator('#item-information > summary').click();
     await workspaceSubmit(page,'fetch-details');
     await expect.poll(()=>sqlite(`SELECT "State" || ',' || "ManualPriority" FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId"=${seed.secondItemId}`)).toMatch(/^[12],1$/);
@@ -1262,7 +1271,7 @@ WHERE "Id" = ${seed.secondItemId};
     await expect(page.locator('[name="metadata_title"]')).toHaveValue('Operator draft');
     await expect(page.getByText('Provider original')).toBeVisible();
     await expect(page.getByText('Provider refreshed')).toBeVisible();
-    await page.locator(`button[formaction="/media/addon-lists/${seed.listId}"]`).click();await waitUntilHydrated(page);
+    await nativeNavigate(page, () => page.locator(`button[formaction="/media/addon-lists/${seed.listId}"]`).click());
     await page.locator('[name="category"]').selectOption('review');await workspaceSubmit(page,'filter');
     const itemsTable=page.locator('.episode-editor');
     await expect(itemsTable).toContainText(seed.secondTitle);
@@ -1279,7 +1288,7 @@ UPDATE "AddonMediaListItem"
 SET "MetadataConflictJson" = '${sqlEscape(itemConflict)}'
 WHERE "Id" = ${seed.secondItemId};
 `);
-    await page.locator(`button[formaction$="/items/${seed.secondItemId}"]`).click();await waitUntilHydrated(page);
+    await nativeNavigate(page, () => page.locator(`button[formaction$="/items/${seed.secondItemId}"]`).click());
     const itemEditor=page.locator('.item-review'),itemMetadata=itemEditor;
     const expandMetadata=async()=>{
       const outer=itemEditor.locator('#item-metadata');

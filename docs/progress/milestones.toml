@@ -4113,8 +4113,36 @@ test-results capture directories are absent at planning time. Locate retained
 copies before proposing repeats; summaries alone do not re-establish proof.
 The provider's one architecture-neutral ZIP declares six RID entrypoints;
 Linux/Windows synthetic tests and static manifest/ZIP checks do not establish
-native execution on every platform or real browser-profile behavior. The local
-provider bundle predates N-02 and cannot prove final-candidate packaging.
+native execution on every platform or real browser-profile behavior.
+Provider exact-SHA CI is now green at 856029916d1b39325ab9860b42018c5ea29dbff0:
+https://github.com/bartdeijkers/ErsatzRS-addons/actions/runs/34610181153.
+Windows ran 139 tests with 79 platform/provider skips; Linux ran 139 with 36
+skips. Both suites pass, including native offline merge/conversion/caption cuts.
+The first run failed one POSIX readiness fixture that supplied an exit-only
+fake Deno. A test-only correction uses installed Deno; both affected readiness
+tests pass locally, independent review found no P1/P2, and corrected CI passes.
+Independently downloaded artifact 10268346889 passes ZIP integrity. Bundle
+SHA-256 is 7c5f73cf0b4dde318b3babf50c186780bc2238cddd25f7679c8fdb01a682cbae;
+every tracked packaged file matches the provider candidate byte-for-byte.
+All six RID mappings, POSIX execute permission and both new health/update
+helpers are present. This replaces the stale pre-N-02 local bundle as package
+evidence, without claiming unrun native ARM/macOS or real-profile acceptance.
+Host d65e1dcc9a5fdbb32d499191df40e699dfbe8a49 CI run 34609513946 is terminal:
+Format, Clippy, dependency policy and documentation checks pass. Rust tests
+pass (2772 passed, 37 skipped), including progress and architecture validation;
+Firefox passes (172 passed, 26 skipped).
+Chromium has 194 passes, three opt-in skips and one failed mobile-navigation
+test: hydration was polled in a document being replaced by native form navigation.
+Its retained trace confirms the race. The test-only correction registers the
+main-frame navigation wait before six direct native submissions, then waits for load
+and hydration; keyboard/layout/accessibility assertions are unchanged.
+Independent review found no P1/P2. All ten focused Chromium/Firefox cases pass,
+including hydrated/no-JS cutoff preservation, keyboard-safe mobile navigation,
+durable detail progress and item review/edit flows. Captures are retained under
+test-results/n03-native-navigation. The runner reused the matched N-02 assets
+after host CI finished; no Rust or product changes were needed. Corrective
+exact-SHA host CI remains required. No local heavy gate runs concurrently with
+host CI; the other terminal continues holding its build slot.
 The host release workflow currently omits macOS archives; unavailable native
 platform evidence remains a gap, not authorization for workflow expansion.
 Removed stale quota/LRU wording under the already-approved M-03 amendment:
