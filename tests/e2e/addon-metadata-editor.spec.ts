@@ -510,10 +510,12 @@ INSERT INTO "AddonMediaListImportJob" (
 `);
     await forceEnglish(page);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
-    await page.locator('.quiet-details > summary').click();
-    await expect(page.locator('#addon-list-import-progress')).toHaveAttribute('data-import-state','Discovering');
+    const landing = page.getByTestId('addon-import-landing');
+    await expect(landing).toBeVisible();
+    await expect(landing.getByRole('heading')).toHaveText('Importing list…');
+    await expect(landing.getByRole('link', { name: 'Refresh', exact: true })).toBeVisible();
     const collection = page.locator('.episode-editor');
-    await expect(collection.locator('.episode-row')).toHaveCount(0);
+    await expect(collection).toHaveCount(0);
 
     sqlite(`
 INSERT INTO "AddonMediaListItem" (
@@ -539,7 +541,9 @@ SET "State" = 3, "DiscoveredCount" = 2, "TotalHint" = 2, "OverviewComplete" = 1,
 WHERE "AddonMediaListId" = ${seed.listId};
 `);
 
-    await workspaceSubmit(page,'navigate');
+    // Discovery completion must replace the landing without a manual navigation.
+    await expect(landing).toHaveCount(0, { timeout: 30_000 });
+    await waitUntilHydrated(page);
     await expect(collection.locator('.episode-row')).toHaveCount(2);
     await expect(collection.getByRole('button',{name:seed.firstTitle,exact:true})).toBeVisible();
     await expect(collection.getByRole('button',{name:seed.secondTitle,exact:true})).toBeVisible();

@@ -100,6 +100,12 @@ for each browser/scenario. Use `addons.spec.ts` for the existing declarative
 normal/secret-reference settings regressions; Save now waits for persistent
 feedback rather than a document reload.
 
+The exact-overview case in `addon-metadata-editor.spec.ts` starts on the import
+landing with no editable collection. Complete the seeded discovery, then await
+automatic landing removal and hydration before asserting the exact item IDs,
+order and title. Do not restore a manual navigation that hides a broken import
+completion transition.
+
 ## Hydration rules (read before writing islands)
 
 The hydration smoke layer exists because Leptos islands have sharp edges that

@@ -66,6 +66,13 @@ the commit/push and exact-SHA CI watch; Claude remains non-writing. Preserve the
 unrelated Windows publication-restart test edits outside this commit. Reuse
 valid local verification; fix demonstrated CI failures and retest affected gates.
 No release, deployment or next-slice implementation is authorized by this request.
+Checkpoint 6968f243 is pushed. CI run 34697087448 passes all non-browser gates;
+both browsers fail only the legacy exact-overview test, which expects the old
+empty editor during import. Its test-only correction now asserts the importing
+landing and automatic completion while retaining exact IDs/order/title. Claude
+reviewed it; the two focused Chromium/Firefox cases pass in10.3s using the same
+verified matched bundle, without rebuilding. No application behavior changed.
+One corrective push follows; terminal exact-SHA CI remains required before handoff.
 
 2026-09-12 corrective checkpoint: the authorized confirmed walkthrough fixes
 pass selected native tests, scoped Clippy, progress/format/architecture/hydration

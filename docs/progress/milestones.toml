@@ -3579,6 +3579,15 @@ download hypotheses are withdrawn after evidence; W28-W31 and other small UX
 improvements remain recorded, not silently implemented. No new exhaustive
 zoom/contrast/screen-reader or seven-width certification is claimed. Browser
 released and isolated host/worker stopped at13:32UTC; evidence/profile retained.
+Publication checkpoint 6968f243: CI run34697087448 passes non-browser gates,
+but both browsers fail only the old exact-overview test expecting an empty editor
+during active import. The test-only correction uses the new landing and waits
+for automatic completion, retaining exact IDs/order/title. Independent Claude
+review and both focused browser cases pass in10.3s, reusing the unchanged matched
+bundle: test-results/ci-import-landing-fix/playwright-results.json. No product
+regression or new milestone gap is inferred from that obsolete test expectation.
+The corrective commit still requires terminal exact-SHA CI before publication
+handoff; the failed run is not reported as green.
 Independent review traces the ordering to durable-recovery commit 24ad93a9,
 not the delivery-mode change; M-01B is reopened because its publication outcome
 is affected, not because its mode implementation introduced the defect.
