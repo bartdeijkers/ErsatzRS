@@ -1320,14 +1320,59 @@ pub async fn list_addon_media_lists_with_state(
     sort_field: AddonMediaListAdminSortField,
     sort_direction: AddonMediaListAdminSortDirection,
 ) -> ersatzrs_app::Result<(Vec<AddonMediaListRow>, u64)> {
+    list_addon_media_lists_by_visibility_with_state(
+        state,
+        page,
+        page_size,
+        sort_field,
+        sort_direction,
+        false,
+    )
+    .await
+}
+
+/// Browse visible or hidden lists without changing their publication state.
+#[server]
+pub async fn list_addon_media_lists_by_visibility(
+    page: u32,
+    page_size: u32,
+    sort_field: AddonMediaListAdminSortField,
+    sort_direction: AddonMediaListAdminSortDirection,
+    hidden: bool,
+) -> Result<(Vec<AddonMediaListRow>, u64), ServerFnError> {
+    let state = expect_context::<crate::host::state::AppState>();
+    list_addon_media_lists_by_visibility_with_state(
+        &state,
+        page,
+        page_size,
+        sort_field,
+        sort_direction,
+        hidden,
+    )
+    .await
+    .map_err(ServerFnError::new)
+}
+
+#[cfg(feature = "ssr")]
+async fn list_addon_media_lists_by_visibility_with_state(
+    state: &crate::host::state::AppState,
+    page: u32,
+    page_size: u32,
+    sort_field: AddonMediaListAdminSortField,
+    sort_direction: AddonMediaListAdminSortDirection,
+    hidden: bool,
+) -> ersatzrs_app::Result<(Vec<AddonMediaListRow>, u64)> {
     let (rows, total) = state
         .application
-        .list_addon_media_lists(ersatzrs_app::queries::ListAddonMediaLists {
-            page,
-            page_size,
-            sort_field: sort_field.into(),
-            sort_direction: sort_direction.into(),
-        })
+        .list_addon_media_lists_by_visibility(
+            ersatzrs_app::queries::ListAddonMediaLists {
+                page,
+                page_size,
+                sort_field: sort_field.into(),
+                sort_direction: sort_direction.into(),
+            },
+            hidden,
+        )
         .await?;
     Ok((
         rows.into_iter()
@@ -2362,6 +2407,16 @@ pub async fn delete_addon_media_list(id: i64) -> Result<(), ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
+/// Change admin visibility only; playback and background work remain active.
+#[server]
+pub async fn set_addon_media_list_admin_hidden(id: i64, hidden: bool) -> Result<(), ServerFnError> {
+    expect_context::<crate::host::state::AppState>()
+        .application
+        .set_addon_media_list_admin_hidden(id, hidden)
+        .await
+        .map_err(ServerFnError::new)
+}
+
 /// Record a failed add-on media list operation with its provider diagnostic.
 ///
 /// The admin UI surfaces the same message to the operator, and add-on
@@ -2575,9 +2630,9 @@ pub async fn delete_addon_media_list_with_state(
 ) -> ersatzrs_app::Result<()> {
     state
         .application
-        .delete_addon_media_list(ersatzrs_app::commands::DeleteAddonMediaList { id })
+        .set_addon_media_list_admin_hidden(id, true)
         .await
-        .inspect_err(|error| log_addon_media_list_failure("delete", None, Some(id), error))
+        .inspect_err(|error| log_addon_media_list_failure("hide", None, Some(id), error))
 }
 
 #[cfg(test)]

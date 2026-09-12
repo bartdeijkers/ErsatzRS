@@ -6,7 +6,7 @@
 id         = 'amm-o-01'
 phase      = 'AMM-O — portable file-backed add-on lists'
 title      = 'Rebuild add-on lists from authoritative saved folders'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-m-01b']
@@ -25,9 +25,14 @@ current playback. Removing a list in admin retains its folder and files but
 hides the list in the admin UI; repeat ordinary/scheduled scans must not make
 it visible again. Hiding is installation-local: copying a folder does not
 transfer the sender's hidden state, and a newly discovered list is visible on
-the receiving installation. Resolve copied draft/publication handling and
-revealing hidden lists in the focused plan
-before implementation. Local job/process ownership is not portable;
+the receiving installation. Preserve copied saved drafts and last-published
+content separately; scanning must not publish newer draft edits. Validated
+last-published content becomes active automatically on the receiving
+installation; missing Download ahead media requires local preparation without
+silently changing its delivery mode. The existing
+list page provides a Hidden lists filter and Show list action. Hiding changes
+admin visibility only, preserving published media, scheduled playback and refresh.
+Local job/process ownership is not portable;
 copied artifact pins and ownership sidecars do not confer execution/deletion
 authority. Preserve the installed/enabled add-on boundary.
 Prove a saved-folder copy into a fresh database/profile, visible reconstructed
@@ -39,6 +44,50 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-12 visibility engineering checkpoint: implemented the additive local
+AdminHidden flag, filtered counts/pagination, native and hydrated Hide/Show,
+legacy removal-to-hide compatibility and all nine cultures. No publication,
+playlist, library, refresh or saved-content mutation is part of hiding.
+Native proof: 2/2 infra visibility regressions retain complete compared list,
+item, library, mapping, playlist and playlist-item rows except AdminHidden;
+13/13 focused web addon_media_lists tests pass.
+Infra/app/web all-targets Clippy with -D warnings passes. A matched SSR/WASM/CSS
+build passes. Browser run1 proves the existing import/overrides/recovery workflow
+in both browsers; the new fixture exposed a duplicate group name, corrected with
+unique names and atomic setup. Run2 passes all four new Chromium/Firefox
+hydrated/no-JS cases in 22.3s, including retained content, legacy removal, error
+feedback, filter/paging and desktop action visibility/mobile reachability.
+Final run3 passes all four cases in 21.9s after a CSS-only minimum-width
+correction prevents excessive mobile row height; it reuses the unchanged matched
+server/WASM and regenerates CSS. Retained evidence:
+logs/evidence/o01-visibility-20260912/o01-visibility-run3-20260912/playwright-results.json
+and the new spec's hidden-lists browser captures under that same evidence root.
+This gitignored local copy is outside temporary profiles and Playwright cleanup.
+Claude independently reviewed the final desktop/mobile captures and confirmed
+no remaining P1/P2 visibility finding. Earlier run1/run2 results were observed
+in the command output; their files were cleared by Playwright's output cleanup,
+so those old artifact directories are not retained evidence. Root and Claude
+found desktop action clipping and corrected route-local sizing/provider-ID
+wrapping before the passing reruns.
+These are local Linux checkpoint results, not full O-01, Windows package, CI or
+release acceptance. Portable saved-content durability, discovery, validation,
+automatic published-state restoration and independent-profile reconstruction
+remain unimplemented and required. No acceptance item is waived.
+2026-09-12 22:56 Amsterdam: maintainer explicitly authorizes proceeding after
+green-CI correction de14a03c and asks for a reviewed local commit before midnight.
+Codex reserves AMM-O-01 and the serialized build/test loop. Two Astra explorers
+inventory storage and scan/hide paths read-only; Claude reviews the focused
+boundary. The maintainer subsequently confirmed preserving copied saved drafts
+and last-published content separately, without automatic publication of newer
+draft edits or importing machine-local jobs, IDs or credentials. The maintainer
+also confirmed the existing-page Hidden lists filter and Show list action, with
+visibility-only hiding and unchanged publication, playback and refresh. The first
+engineering checkpoint implements that coherent local visibility boundary;
+portable saved-content reconstruction remains required before O-01 completion.
+The maintainer also confirmed automatic activation of validated copied
+last-published content, preserving unpublished draft edits and requiring local
+preparation for missing Download ahead media without a streaming fallback.
+No push, CI, workflow or transport changes.
 2026-09-12: maintainer accepted folder-first portability and explicitly ordered
 it after the current slice completes. ADR 0093 is Accepted / Not implemented.
 The maintainer subsequently confirmed retained files with the list hidden in
@@ -3601,8 +3650,16 @@ body, not a hydration exception. The settings helper now uses the neighboring
 add-on specs' 15-second readiness bound without changing the overall timeout
 or assertions. Independent Astra review approves; all twelve focused settings
 cases pass in18.4s against the unchanged matched bundle without rebuilding:
-test-results/ci-addons-hydration-wait/playwright-results.json. Terminal CI for
-the new test-only corrective commit remains pending; no product change is made.
+test-results/ci-addons-hydration-wait/playwright-results.json. No product change
+is made. Corrective commit de14a03c6f22f226a322ba7e8dc23ffafd219129 is pushed
+and passes terminal CI run34706497560:
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/34706497560
+Chromium205 passed/four skipped; Firefox182 passed/27 skipped; Preflight,
+Format, Documentation links, Cargo deny, Clippy and Test all succeed. Commit
+lint and the unused hosted-test matrix are skipped by the existing push/self-
+hosted workflow, not represented as new test evidence. Local/tracking/live
+remote main match the tested SHA. This closes the authorized correction's
+commit/push/CI handoff, not AMM-N-03 packaged acceptance or later-slice scope.
 Independent review traces the ordering to durable-recovery commit 24ad93a9,
 not the delivery-mode change; M-01B is reopened because its publication outcome
 is affected, not because its mode implementation introduced the defect.

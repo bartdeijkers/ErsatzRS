@@ -347,8 +347,13 @@ is retained after the current provider ranks with `unavailable` and reason
 `omitted_by_provider`. Its replacement mapping remains intact. Returning the
 same provider ID updates that row in place and restores provider playback.
 
-Deleting a media list also deletes its generated system playlist. Uninstalling
-an add-on is blocked while it owns media lists through the normal administration
+Hide list on the add-on lists page changes only admin visibility. Its saved
+files, published media, generated playlist, scheduled playback and refresh
+remain intact. Use the Hidden lists filter on the same page and Show list to
+make it visible again. Ordinary scans do not reveal hidden lists.
+
+Uninstalling an add-on is blocked while it owns media lists, including hidden
+lists, through the normal administration
 flow. A forced uninstall deletes those list snapshots and their generated
 system playlists, while leaving unrelated user playlists intact.
 
@@ -379,16 +384,15 @@ recovery path.
 
 Portable subfolder layout does not currently guarantee reconstruction of
 Add-on List drafts/settings in a fresh SQLite database from copied folders.
-Automatic folder-first reconstruction is planned, not yet implemented. Its
-planned removal behavior retains saved files but hides the list in admin,
-without subsequent scans automatically making it visible again. This planned
-hiding is installation-local: newly discovered shared copies appear normally
-on the receiving installation.
+Automatic folder-first reconstruction is planned, not yet implemented. Hiding
+is installation-local and is not stored in the saved folder. The planned copy
+workflow must discover shared lists as visible on the receiving installation
+and preserve saved drafts separately from last-published content.
 
 Changing the configured root while the add-on is disabled causes the host to
 repoint its managed libraries on the next enable/startup. Old files are retained.
-Deleting a list unregisters its library but also retains the folder: ErsatzRS
-does not recursively delete content below an operator-configurable path.
+Hiding a list retains its library registration and folder: ErsatzRS does not
+recursively delete content below an operator-configurable path.
 
 ## Unavailable items and local replacements
 

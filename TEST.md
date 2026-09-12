@@ -108,6 +108,13 @@ automatic landing removal and hydration before asserting the exact item IDs,
 order and title. Do not restore a manual navigation that hides a broken import
 completion transition.
 
+`addon-list-visibility.spec.ts` covers the existing list page's hidden filter,
+native/hydrated hide and reveal, legacy removal compatibility, failure feedback,
+retained content and desktop/mobile action visibility. Its unique synthetic
+fixtures do not run a provider. Browser comparisons exclude the unrelated
+background match timestamp; isolated native tests retain the full-row invariant.
+Folder-first reconstruction is separate O-01 acceptance, not proven by this spec.
+
 ## Hydration rules (read before writing islands)
 
 The hydration smoke layer exists because Leptos islands have sharp edges that

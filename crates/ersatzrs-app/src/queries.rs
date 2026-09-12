@@ -1888,14 +1888,24 @@ pub async fn list_addon_media_lists(
     query: ListAddonMediaLists,
     repository: &dyn AddonMediaListRepository,
 ) -> Result<(Vec<AddonMediaListAdminRow>, u64)> {
+    list_addon_media_lists_by_visibility(query, false, repository).await
+}
+
+/// List visible or hidden add-on lists, preserving the page-size preference.
+pub async fn list_addon_media_lists_by_visibility(
+    query: ListAddonMediaLists,
+    hidden: bool,
+    repository: &dyn AddonMediaListRepository,
+) -> Result<(Vec<AddonMediaListAdminRow>, u64)> {
     let page_size = query.page_size;
     repository.set_page_size(page_size).await?;
     repository
-        .list_admin(
+        .list_admin_visibility(
             query.page,
             page_size,
             query.sort_field,
             query.sort_direction,
+            hidden,
         )
         .await
         .map_err(Into::into)

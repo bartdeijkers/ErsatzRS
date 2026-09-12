@@ -20,34 +20,33 @@ pub mod workspace;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_params_map, use_query_map};
 
-use crate::admin::i18n::{
-    addon_media_list_error_message, delete_failed, match_status, save_failed, tr, TextKey,
-};
+use crate::admin::i18n::{addon_media_list_error_message, match_status, save_failed, tr, TextKey};
 use crate::admin::server_fns::addon_media_lists::get_addon_media_list_show_nfo;
 use crate::admin::server_fns::addon_media_lists::{
     add_addon_media_list, apply_addon_media_list_content_kind,
     apply_addon_media_list_item_review_edits, change_addon_media_list_addon,
     compare_addon_media_list_revisions, confirm_addon_media_list_removal,
-    control_addon_media_list_import, delete_addon_media_list, get_addon_media_list_form,
-    get_addon_media_list_item, get_addon_media_list_publication_history,
-    get_addon_media_list_publication_readiness, get_addon_media_list_reset_impact,
-    get_addon_media_list_revision_history, get_addon_media_list_saved_draft_diff,
-    get_addon_media_list_source_probe, get_addon_media_lists_page_size,
-    list_addon_media_list_items, list_addon_media_list_providers, list_addon_media_lists,
-    match_addon_media_list, publish_addon_media_list, reconcile_addon_media_list,
-    recover_addon_media_list_publication, redacted_publication_diagnostics_json,
-    request_addon_media_list_item_details, request_addon_media_list_presentation,
-    reset_addon_media_list, resolve_addon_media_list_provider, restore_addon_media_list_revision,
+    control_addon_media_list_import, get_addon_media_list_form, get_addon_media_list_item,
+    get_addon_media_list_publication_history, get_addon_media_list_publication_readiness,
+    get_addon_media_list_reset_impact, get_addon_media_list_revision_history,
+    get_addon_media_list_saved_draft_diff, get_addon_media_list_source_probe,
+    get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_providers,
+    list_addon_media_lists_by_visibility, match_addon_media_list, publish_addon_media_list,
+    reconcile_addon_media_list, recover_addon_media_list_publication,
+    redacted_publication_diagnostics_json, request_addon_media_list_item_details,
+    request_addon_media_list_presentation, reset_addon_media_list,
+    resolve_addon_media_list_provider, restore_addon_media_list_revision,
     save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
-    search_addon_media_list_replacements, set_addon_media_list_item_replacement,
-    set_addon_media_list_item_role, test_addon_media_list_source, update_addon_media_list,
-    update_addon_media_list_item_chapters, validate_addon_media_list_item_chapters,
-    AddonMediaListAdminSortDirection, AddonMediaListAdminSortField, AddonMediaListArtwork,
-    AddonMediaListArtworkRole, AddonMediaListAutoPublicationHoldRow, AddonMediaListDraftDiffRow,
-    AddonMediaListForm, AddonMediaListImportAction, AddonMediaListImportProgressRow,
-    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListItemRow,
-    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
-    AddonMediaListNfoPerson, AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
+    search_addon_media_list_replacements, set_addon_media_list_admin_hidden,
+    set_addon_media_list_item_replacement, set_addon_media_list_item_role,
+    test_addon_media_list_source, update_addon_media_list, update_addon_media_list_item_chapters,
+    validate_addon_media_list_item_chapters, AddonMediaListAdminSortDirection,
+    AddonMediaListAdminSortField, AddonMediaListArtwork, AddonMediaListArtworkRole,
+    AddonMediaListAutoPublicationHoldRow, AddonMediaListDraftDiffRow, AddonMediaListForm,
+    AddonMediaListImportAction, AddonMediaListImportProgressRow, AddonMediaListItemDetail,
+    AddonMediaListItemReviewEdit, AddonMediaListItemRow, AddonMediaListMetadataConflict,
+    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
+    AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationEventRow,
     AddonMediaListPublicationHistoryJobRow, AddonMediaListPublicationHistoryRow,
     AddonMediaListPublicationReadiness, AddonMediaListPublicationStatus,
@@ -58,7 +57,7 @@ use crate::admin::server_fns::addon_media_lists::{
 };
 use crate::admin::ui::primitives::{
     button::{Button, ButtonVariant},
-    dialog::{DeleteDialog, Modal},
+    dialog::Modal,
     icon::{icon_style, IconName},
     pagination::PaginationControls,
     resource_state::{admin_loading_resource_view, admin_result_view},
@@ -1423,6 +1422,7 @@ fn MetadataConflictSummary(
 #[component]
 pub fn AddonMediaListsPage() -> impl IntoView {
     let query = use_query_map();
+    let hidden = query.with_untracked(|params| params.get("hidden").as_deref() == Some("true"));
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
     let initial_sort_field = query
         .with_untracked(|params| addon_list_sort_field(&params.get("sort").unwrap_or_default()));
@@ -1443,11 +1443,12 @@ pub fn AddonMediaListsPage() -> impl IntoView {
         || (),
         move |()| async move {
             let page_size = requested_size.unwrap_or(get_addon_media_lists_page_size().await?);
-            let rows = list_addon_media_lists(
+            let rows = list_addon_media_lists_by_visibility(
                 initial_page,
                 page_size,
                 initial_sort_field,
                 initial_sort_direction,
+                hidden,
             )
             .await?;
             let providers = list_addon_media_list_providers().await?;
@@ -1463,6 +1464,7 @@ pub fn AddonMediaListsPage() -> impl IntoView {
                     view! {
                         <AddonMediaListsIsland
                             initial_error=error.clone()
+                            hidden=hidden
                             initial_page_size=initial_page_size
                             initial_page=initial_page
                             initial_rows=initial_rows
@@ -1531,6 +1533,7 @@ fn AddonListDiskWarningSettings(list_id: Option<i64>) -> impl IntoView {
 #[island]
 fn AddonMediaListsIsland(
     initial_error: String,
+    hidden: bool,
     initial_page_size: u32,
     initial_page: u32,
     initial_rows: Vec<AddonMediaListRow>,
@@ -1579,13 +1582,24 @@ fn AddonMediaListsIsland(
         let direction = sort_direction.get();
         async move {
             load_or_notify(
-                list_addon_media_lists(p, size, field, direction).await,
+                list_addon_media_lists_by_visibility(p, size, field, direction, hidden).await,
                 toast,
             )
         }
     });
     Effect::new(move |_| {
         if let Some(next_data) = data.get() {
+            let size = page_size.get_untracked();
+            let max_page = if size == 0 {
+                0
+            } else {
+                u32::try_from(next_data.1.div_ceil(u64::from(size)))
+                    .unwrap_or(u32::MAX)
+                    .saturating_sub(1)
+            };
+            if page.get_untracked() > max_page {
+                page.set(max_page);
+            }
             current_data.set(next_data);
         }
     });
@@ -1623,10 +1637,8 @@ fn AddonMediaListsIsland(
         },
     );
     let match_action = Action::new(|id: &i64| match_addon_media_list(*id));
-    let delete_action = Action::new(|id: &i64| delete_addon_media_list(*id));
-
-    let delete_target: RwSignal<Option<AddonMediaListRow>> = RwSignal::new(None);
-    let delete_open = RwSignal::new(false);
+    let visibility_action =
+        Action::new(move |id: &i64| set_addon_media_list_admin_hidden(*id, !hidden));
 
     Effect::new(move |_| {
         if let Some(result) = add_action.value().get() {
@@ -1680,22 +1692,25 @@ fn AddonMediaListsIsland(
     });
 
     Effect::new(move |_| {
-        if let Some(result) = delete_action.value().get() {
+        if let Some(result) = visibility_action.value().get() {
             match result {
                 Ok(()) => {
                     toast.push(
-                        tr(TextKey::AddonMediaListDeleted).to_string(),
+                        tr(if hidden {
+                            TextKey::AddonMediaListShown
+                        } else {
+                            TextKey::AddonMediaListHidden
+                        })
+                        .to_string(),
                         ToastSeverity::Success,
                     );
                     data.refetch();
                 }
                 Err(error) => toast.push(
-                    delete_failed(addon_media_list_error_message(error)),
+                    save_failed(addon_media_list_error_message(error)),
                     ToastSeverity::Error,
                 ),
             }
-            delete_open.set(false);
-            delete_target.set(None);
         }
     });
 
@@ -1714,12 +1729,24 @@ fn AddonMediaListsIsland(
                     </a>
                 </header>
                 <div class=style::divider/>
-                <p class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
+                <form method="get" action="/media/addon-lists" class=style::visibility_filter>
+                    <label for="addon-list-visibility">{tr(TextKey::AddonMediaListVisibility)}</label>
+                    <select id="addon-list-visibility" name="hidden" class=style::text_input>
+                        <option value="false" selected=!hidden>{tr(TextKey::VisibleAddonMediaLists)}</option>
+                        <option value="true" selected=hidden>{tr(TextKey::HiddenAddonMediaLists)}</option>
+                    </select>
+                    <input type="hidden" name="sort" value=move || match sort_field.get() { AddonMediaListAdminSortField::Name => "name", AddonMediaListAdminSortField::Id => "id" }/>
+                    <input type="hidden" name="direction" value=move || addon_list_sort_direction_value(sort_direction.get())/>
+                    <input type="hidden" name="page_size" value=move || page_size.get().to_string()/>
+                    <button type="submit" class=style::btn_cancel>{tr(TextKey::Apply)}</button>
+                </form>
+                <p class=style::row_note>{tr(TextKey::AddonMediaListVisibilityHelp)}</p>
+                <p role="alert" class=style::empty style:display=move || if has_initial_error { "" } else { "none" }>
                     {initial_error_message}
                 </p>
                 <div class=style::empty_state style:display=move || if current_data.with(|(rows, _)| rows.is_empty()) { "grid" } else { "none" }>
-                    <p>{tr(TextKey::NoAddonMediaListsYet)}</p>
-                    <a class=style::btn_add href="/media/addon-lists/add">
+                    <p>{tr(if hidden { TextKey::NoHiddenAddonMediaLists } else { TextKey::NoVisibleAddonMediaLists })}</p>
+                    <a class=style::btn_add href="/media/addon-lists/add" style:display=if hidden { "none" } else { "inline-flex" }>
                         <span style=icon_style(IconName::Add, "1.125rem") aria-hidden="true"></span>
                         <span>{tr(TextKey::AddAddonMediaList)}</span>
                     </a>
@@ -1761,6 +1788,8 @@ fn AddonMediaListsIsland(
                                                     )
                                                 >
                                                     <form method="get" action="/media/addon-lists">
+                                                        <input type="hidden" name="hidden" value=hidden.to_string()/>
+                                                        <input type="hidden" name="page_size" value=move || page_size.get().to_string()/>
                                                         <input type="hidden" name="sort" value="name"/>
                                                         <input
                                                             type="hidden"
@@ -1803,6 +1832,8 @@ fn AddonMediaListsIsland(
                                                     )
                                                 >
                                                     <form method="get" action="/media/addon-lists">
+                                                        <input type="hidden" name="hidden" value=hidden.to_string()/>
+                                                        <input type="hidden" name="page_size" value=move || page_size.get().to_string()/>
                                                         <input type="hidden" name="sort" value="id"/>
                                                         <input
                                                             type="hidden"
@@ -1867,7 +1898,6 @@ fn AddonMediaListsIsland(
                                                         )
                                                     });
                                                     let has_import_summary = !import_summary.is_empty();
-                                                    let row_for_delete = row.clone();
                                                     view! {
                                                         <tr>
                                                             <td>
@@ -1877,7 +1907,7 @@ fn AddonMediaListsIsland(
                                                                 >{name}</a>
                                                                 <small class=style::row_note style:display=if has_import_summary { "block" } else { "none" }>{import_summary}</small>
                                                             </td>
-                                                            <td>{format!("{addon_id} / {provider_id}")}</td>
+                                                            <td class=style::provider_identity>{format!("{addon_id} / {provider_id}")}</td>
                                                             <td>{match_status}</td>
                                                             <td>
                                                                 <div class=style::row_actions>
@@ -1912,20 +1942,20 @@ fn AddonMediaListsIsland(
                                                                             <span style=icon_style(IconName::Refresh, "1.25rem") aria-hidden="true"></span>
                                                                         </button>
                                                                     </form>
-                                                                    <form method="post" action="/api/addon-lists/delete">
+                                                                    <form method="post" action="/api/addon-lists/visibility">
                                                                         <input type="hidden" name="id" value=id.to_string()/>
+                                                                        <input type="hidden" name="hidden" value=(!hidden).to_string()/>
+                                                                        <input type="hidden" name="return_hidden" value=hidden.to_string()/>
                                                                         <button
                                                                             type="submit"
-                                                                            class=style::icon_button
-                                                                            title=tr(TextKey::DeleteAddonMediaList)
-                                                                            aria-label=tr(TextKey::DeleteAddonMediaList)
+                                                                            class=style::btn_cancel
+                                                                            disabled=move || visibility_action.pending().get()
                                                                             on:click=move |event| {
                                                                                 event.prevent_default();
-                                                                                delete_target.set(Some(row_for_delete.clone()));
-                                                                                delete_open.set(true);
+                                                                                visibility_action.dispatch(id);
                                                                             }
                                                                         >
-                                                                            <span style=icon_style(IconName::Delete, "1.25rem") aria-hidden="true"></span>
+                                                                            {tr(if hidden { TextKey::ShowAddonMediaList } else { TextKey::HideAddonMediaList })}
                                                                         </button>
                                                                     </form>
                                                                 </div>
@@ -1938,9 +1968,9 @@ fn AddonMediaListsIsland(
                                 </div>
                                 <noscript><crate::admin::ui::primitives::pagination::PaginationLinks
                                     page=initial_page total=initial_total page_size=initial_page_size
-                                    previous_href=format!("?page={}&page_size={}&sort={}&direction={}",initial_page.saturating_sub(1),initial_page_size,match initial_sort_field {AddonMediaListAdminSortField::Name=>"name",AddonMediaListAdminSortField::Id=>"id"},addon_list_sort_direction_value(initial_sort_direction))
-                                    next_href=format!("?page={}&page_size={}&sort={}&direction={}",initial_page.saturating_add(1),initial_page_size,match initial_sort_field {AddonMediaListAdminSortField::Name=>"name",AddonMediaListAdminSortField::Id=>"id"},addon_list_sort_direction_value(initial_sort_direction))
-                                    page_size_fields=vec![crate::admin::ui::primitives::pagination::PaginationFormField{name:"sort".into(),value:match initial_sort_field {AddonMediaListAdminSortField::Name=>"name",AddonMediaListAdminSortField::Id=>"id"}.into()},crate::admin::ui::primitives::pagination::PaginationFormField{name:"direction".into(),value:addon_list_sort_direction_value(initial_sort_direction).into()}]
+                                    previous_href=format!("?page={}&page_size={}&sort={}&direction={}&hidden={hidden}",initial_page.saturating_sub(1),initial_page_size,match initial_sort_field {AddonMediaListAdminSortField::Name=>"name",AddonMediaListAdminSortField::Id=>"id"},addon_list_sort_direction_value(initial_sort_direction))
+                                    next_href=format!("?page={}&page_size={}&sort={}&direction={}&hidden={hidden}",initial_page.saturating_add(1),initial_page_size,match initial_sort_field {AddonMediaListAdminSortField::Name=>"name",AddonMediaListAdminSortField::Id=>"id"},addon_list_sort_direction_value(initial_sort_direction))
+                                    page_size_fields=vec![crate::admin::ui::primitives::pagination::PaginationFormField{name:"sort".into(),value:match initial_sort_field {AddonMediaListAdminSortField::Name=>"name",AddonMediaListAdminSortField::Id=>"id"}.into()},crate::admin::ui::primitives::pagination::PaginationFormField{name:"direction".into(),value:addon_list_sort_direction_value(initial_sort_direction).into()},crate::admin::ui::primitives::pagination::PaginationFormField{name:"hidden".into(),value:hidden.to_string()}]
                                     page_size_action="/media/addon-lists".into()
                                     page_size_options=Some(vec![10,25,50,100,0])
                                 /></noscript>
@@ -1980,24 +2010,6 @@ fn AddonMediaListsIsland(
                 providers=providers
                 on_submit=Callback::new(move |value: (String, String, String, AddonMediaListContentKind, AddonMediaListRefreshCadence, bool)| {
                     add_action.dispatch(value);
-                })
-            />
-            <DeleteDialog
-                dialog_id="addon-media-list-delete-dialog"
-                open=delete_open
-                entity_name=Signal::derive(move || {
-                    delete_target.get().map(|row| row.name).unwrap_or_default()
-                })
-                on_confirm=Callback::new(move |confirmed: bool| {
-                    if confirmed {
-                        if let Some(row) = delete_target.get_untracked() {
-                            delete_action.dispatch(row.id);
-                        } else {
-                            delete_open.set(false);
-                        }
-                    } else {
-                        delete_open.set(false);
-                    }
                 })
             />
         </div>

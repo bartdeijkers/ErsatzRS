@@ -1270,7 +1270,41 @@ tbody tr:hover {
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    min-width: max-content;
     gap: 0;
+}
+
+.row-actions > * {
+    flex-shrink: 0;
+}
+
+.row-actions button {
+    white-space: nowrap;
+}
+
+.provider-identity {
+    min-width: 12rem;
+    overflow-wrap: anywhere;
+}
+
+.visibility-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.visibility-filter select {
+    width: auto;
+    max-width: 100%;
+    min-height: 2.75rem;
+}
+
+.visibility-filter button:focus-visible,
+.visibility-filter select:focus-visible,
+.row-actions button:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
 }
 
 .row-actions form {

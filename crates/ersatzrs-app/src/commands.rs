@@ -5264,6 +5264,19 @@ pub async fn change_addon_media_list_addon(
         .map_err(Into::into)
 }
 
+/// Change only administrative visibility, retaining content and runtime state.
+pub async fn set_addon_media_list_admin_hidden(
+    id: EntityId,
+    hidden: bool,
+    repository: &dyn AddonMediaListRepository,
+) -> crate::Result<()> {
+    validate_positive_id(id, "addon_media_list_id")?;
+    repository
+        .set_admin_hidden(id, hidden)
+        .await
+        .map_err(Into::into)
+}
+
 /// Delete one Add-on media list.
 pub async fn delete_addon_media_list(
     command: DeleteAddonMediaList,

@@ -446,6 +446,10 @@ pub fn build_app(app_state: AppState) -> Router {
                 post(api::addon_media_lists::delete_addon_media_list_form),
             )
             .route(
+                "/api/addon-lists/visibility",
+                post(api::addon_media_lists::set_addon_media_list_visibility_form),
+            )
+            .route(
                 "/api/media-sources/local/save",
                 post(api::media_sources::save_local_library_form),
             )

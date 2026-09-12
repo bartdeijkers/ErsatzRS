@@ -930,8 +930,35 @@ pub async fn delete_addon_media_list_form(
     match delete_addon_media_list_with_state(&state, input.id).await {
         Ok(()) => Redirect::to("/media/addon-lists"),
         Err(error) => {
-            tracing::error!(%error, addon_media_list_id = input.id, "failed to delete add-on media list from HTML form");
+            tracing::error!(%error, addon_media_list_id = input.id, "failed to hide add-on media list from legacy HTML form");
             Redirect::to("/media/addon-lists?error=delete")
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddonMediaListVisibilityForm {
+    id: i64,
+    hidden: bool,
+    #[serde(default)]
+    return_hidden: bool,
+}
+
+/// Change only installation-local admin visibility; retain playback and refresh.
+pub async fn set_addon_media_list_visibility_form(
+    State(state): State<AppState>,
+    Form(input): Form<AddonMediaListVisibilityForm>,
+) -> Redirect {
+    let target = format!("/media/addon-lists?hidden={}", input.return_hidden);
+    match state
+        .application
+        .set_addon_media_list_admin_hidden(input.id, input.hidden)
+        .await
+    {
+        Ok(()) => Redirect::to(&target),
+        Err(error) => {
+            tracing::error!(%error, addon_media_list_id = input.id, "failed to change add-on list visibility from HTML form");
+            Redirect::to(&format!("{target}&error=visibility"))
         }
     }
 }
@@ -1065,6 +1092,21 @@ mod tests {
     use axum::body::Bytes;
 
     use super::*;
+
+    #[test]
+    fn visibility_form_requires_explicit_action_and_preserves_hidden_return_view() {
+        let show: AddonMediaListVisibilityForm =
+            serde_urlencoded::from_str("id=42&hidden=false&return_hidden=true").unwrap();
+        assert_eq!(show.id, 42);
+        assert!(!show.hidden);
+        assert!(show.return_hidden);
+
+        let hide: AddonMediaListVisibilityForm =
+            serde_urlencoded::from_str("id=42&hidden=true").unwrap();
+        assert!(hide.hidden);
+        assert!(!hide.return_hidden);
+        assert!(serde_urlencoded::from_str::<AddonMediaListVisibilityForm>("id=42").is_err());
+    }
 
     #[test]
     fn unchanged_people_form_preserves_provider_fields() {

@@ -19,8 +19,17 @@ release section when tagging a release.
   folders must reconstruct their SQLite projection after copying to another
   installation; admin removal must retain files and keep the list hidden across
   rescans on that installation, without hiding newly discovered shared copies
-  elsewhere. Implementation is planned for the next slice, not included
-  in the current beta or the active publishing corrections.
+  elsewhere. Copied saved drafts and last-published content remain separate;
+  scans must not publish newer draft edits or import machine-local credentials
+  and execution state. Validated copied publications become active automatically;
+  missing Download ahead media still needs local preparation. Folder-first
+  reconstruction remains planned, not included in the current beta.
+
+- Replace destructive add-on-list removal in admin with reversible Hide list
+  and Show list actions and a Hidden lists filter on the existing page. Hiding
+  changes only local admin visibility: saved files, published media, playlists,
+  scheduled playback and refreshes remain intact. Folder-first reconstruction
+  is still unfinished.
 
 - Withdraw the manual anamorphic regression-source release check by maintainer
   decision; retain automated NVENC command-level regression coverage and all

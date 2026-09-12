@@ -1,5 +1,7 @@
 mod editor;
 mod editor_artwork;
+#[cfg(test)]
+mod visibility_tests;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -460,10 +462,24 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         sort_field: AddonMediaListAdminSortField,
         sort_direction: AddonMediaListAdminSortDirection,
     ) -> Result<(Vec<AddonMediaListAdminRow>, u64)> {
-        let total: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaList""#)
-            .fetch_one(&self.0)
+        self.list_admin_visibility(page, page_size, sort_field, sort_direction, false)
             .await
-            .repository()?;
+    }
+
+    async fn list_admin_visibility(
+        &self,
+        page: u32,
+        page_size: u32,
+        sort_field: AddonMediaListAdminSortField,
+        sort_direction: AddonMediaListAdminSortDirection,
+        hidden: bool,
+    ) -> Result<(Vec<AddonMediaListAdminRow>, u64)> {
+        let total: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaList" WHERE "AdminHidden" = ?"#)
+                .bind(hidden)
+                .fetch_one(&self.0)
+                .await
+                .repository()?;
         let sort_field = match sort_field {
             AddonMediaListAdminSortField::Name => 0_i32,
             AddonMediaListAdminSortField::Id => 1_i32,
@@ -488,6 +504,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                LEFT JOIN "AddonMediaListItem" AS "matched"
                  ON "matched"."AddonMediaListId" = "list"."Id"
                 AND "matched"."MediaItemId" IS NOT NULL
+               WHERE "list"."AdminHidden" = ?5
                GROUP BY "list"."Id", "list"."AddonId", "list"."ProviderId",
                         "list"."SourceUrl", "list"."Name", "list"."ItemCount",
                         "list"."RefreshCadence", "list"."GeneratePlaylist",
@@ -524,6 +541,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             i64::from(page).min(total.saturating_sub(1) / i64::from(page_size))
                 * i64::from(page_size)
         })
+        .bind(hidden)
         .fetch_all(&self.0)
         .await
         .repository()?;
@@ -2414,6 +2432,23 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "",
             )
             .await?;
+        Ok(())
+    }
+
+    async fn set_admin_hidden(&self, id: EntityId, hidden: bool) -> Result<()> {
+        let updated =
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "AdminHidden" = ? WHERE "Id" = ?"#)
+                .bind(hidden)
+                .bind(id)
+                .execute(&self.0)
+                .await
+                .repository()?;
+        if updated.rows_affected() == 0 {
+            return Err(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            });
+        }
         Ok(())
     }
 

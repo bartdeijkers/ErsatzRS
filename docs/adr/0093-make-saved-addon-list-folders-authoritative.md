@@ -6,8 +6,10 @@ Accepted (2026-09-12)
 
 ## Implementation
 
-Not implemented — milestone `amm-o-01` is next after the locally verified
-A01-A05 corrections. Registration did not expand that corrective slice.
+Partial — milestone `amm-o-01` is in progress after the verified A01-A05
+corrections. The first engineering checkpoint implements and locally verifies
+visibility-only hide/reveal. File authority and portable reconstruction remain
+unimplemented; the milestone owns detailed acceptance and evidence.
 
 ## Context
 
@@ -43,8 +45,16 @@ normally `<profile>/yt-dlp_media/`. The host behavior remains provider-neutral.
   derived indexes. Copying content does not copy active process ownership or
   install/authorize an add-on executable.
 - Preserve explicit Save/Publish separation and current published playback.
-  The focused implementation plan must define copied draft/publication handling
-  and reconciliation with local unsaved work before changing those boundaries.
+  Copied folders preserve both the saved draft and last-published content as
+  separate states (maintainer confirmation, 2026-09-12). Scanning must not
+  automatically publish newer draft edits. Machine-local jobs, identifiers and
+  credentials are not imported. Reconciliation with local unsaved work must
+  preserve these boundaries.
+  After receiving-installation validation, scanning automatically restores the
+  copied last-published content as its active published state (maintainer
+  confirmation, 2026-09-12); this does not publish newer saved draft edits.
+  Missing Download ahead media requires local preparation. Preserve the saved
+  delivery mode rather than silently falling back to streaming.
 - Keep the existing per-list subfolder and `list.playlist.yml` model. Removing
   a list in the admin UI retains its saved folder and files but hides the list
   in the admin UI (maintainer decision, 2026-09-12). Subsequent ordinary or
@@ -52,9 +62,12 @@ normally `<profile>/yt-dlp_media/`. The host behavior remains provider-neutral.
   Hiding is installation-local, not portable list content: sharing a folder
   does not transfer the sender's hidden state, so a newly discovered copy is
   visible on the receiving installation (maintainer confirmation, 2026-09-12).
-  This decision concerns retention and visibility; it does not authorize new
-  playback or unloading behavior. The focused plan must still settle how an
-  operator can reveal a hidden list. No persistence mechanism is chosen here.
+  Hiding changes admin visibility only: published media, scheduled playback
+  and refresh behavior remain intact (maintainer confirmation, 2026-09-12).
+  The existing add-on lists page offers a Hidden lists filter and a Show list
+  action. This replaces that admin action's former destructive projection
+  removal; it does not turn hiding into unloading. No persistence mechanism
+  is chosen here.
 
 This supersedes database-only ownership of saved portable list content, not
 the publication safety requirements of ADR 0075 or durable coordination in

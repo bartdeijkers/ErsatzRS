@@ -186,7 +186,15 @@ description = 'Saved list files/folders must be authoritative over SQLite: copie
 discovered  = '2026-09-12'
 resolved    = false
 adr         = '0093'
-evidence    = 'Maintainer explicitly accepted this requirement and ordered amm-o-01 immediately after verified completion of the current A01-A05 slice. Existing NFO/YAML precedence and portable-subfolder wording do not prove independent-database list reconstruction. The milestone owns acceptance; no implementation claimed.'
+evidence    = 'AMM-O-01 owns acceptance and current evidence. Its first local checkpoint implements visibility-only hide/reveal with native and browser retention proof; folder authority and independent-database reconstruction remain unimplemented. The maintainer confirmed separate saved/published content, automatic activation after receiving-installation validation, and local preparation for missing Download ahead media without changing modes. This debt remains open until full copied-folder acceptance passes.'
+
+[[debt]]
+id          = 'addon-list-mobile-row-action-discoverability'
+description = 'Low UX follow-up: add-on-list row actions require horizontal scrolling within the bounded table at narrow widths. Consider a visible scroll cue or a compact action placement when revisiting the list layout; do not change visibility or playback semantics.'
+discovered  = '2026-09-12'
+resolved    = false
+adr         = '0091'
+evidence    = 'O-01 visibility final run3 dark-theme captures at 390 pixels retain a bounded horizontal table. The browser proves keyboard focus/scroll reaches the complete Show list action without page-level overflow or excessive fixture row height. This is discoverability polish, not a failed functional gate or authorization for a table redesign; the O-01 milestone owns retained evidence.'
 
 [[debt]]
 id          = 'retained-option-schema-evolution'

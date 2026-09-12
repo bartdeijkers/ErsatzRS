@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'Publish verified add-on walkthrough fixes to main and verify exact-commit CI; amm-o-01 remains next, not started'
+current_focus = 'AMM-O-01: visibility-only hide/reveal verified locally; next implement portable saved-content durability and reconstruction'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -60,6 +60,18 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-12 22:56 Amsterdam: maintainer confirms the20:03 WSL interruption was
+the WSL update and explicitly resumes AMM-O-01. Codex owns implementation and
+the only build/test loop. Copied draft/published content separation and the
+existing-page Hidden lists filter/Show list with visibility-only effects are
+confirmed. Separate Astra backend/UI workers completed the first visibility
+checkpoint; Claude cross-reviews and the external test agent owns its isolated
+browser regression. Portable saved-content reconstruction is not implemented.
+The maintainer subsequently withdrew midnight as a target: quality takes priority.
+Commit only a reviewed, verified local checkpoint without claiming the unfinished
+slice complete. No push,
+CI, release, workflow changes or later UX expansion in this request.
+
 2026-09-12 publication authorization: the maintainer requests commit, push to
 main and terminal green CI for the verified walkthrough corrections. Codex owns
 the commit/push and exact-SHA CI watch; Claude remains non-writing. Preserve the
@@ -83,8 +95,12 @@ the neighboring add-on specs' 15-second readiness bound, retaining the overall
 timeout and all interaction/persistence assertions. Independent Astra review
 and all twelve focused settings cases pass in18.4s without a rebuild; five
 serial cases skipped after the CI failure are exercised by this focused run.
-One reviewed corrective push follows; terminal exact-SHA CI remains required
-before handoff. The outage removes the
+Corrective commit de14a03c is pushed; CI run34706497560 completes successfully
+on that exact SHA, with both browsers and all required non-browser gates green.
+Local, tracking and live remote main match. Pause at this delivery checkpoint;
+no next-slice implementation, workflow change or release is performed. The
+post-CI evidence update remains local for the next authorized coherent commit,
+preserving the tested remote SHA. The outage removes the
 temporary walkthrough profiles; screenshots and test-results remain available.
 
 2026-09-12 corrective checkpoint: the authorized confirmed walkthrough fixes

@@ -73,11 +73,108 @@ reuse existing file formats and scan coordination. Review the smallest plan
 with Claude. Removal now has an accepted outcome: retain saved files, hide the
 list in admin, and do not automatically reveal it on subsequent scans. Hiding
 is installation-local; a newly discovered shared copy appears normally on the
-receiving installation. Resolve copied draft/publication behavior and how the
-operator reveals hidden lists with the maintainer;
+receiving installation. Follow the confirmed copied draft/publication separation
+and hidden-list visibility behavior recorded in ADR 0093;
 then implement and prove independent-profile reconstruction and idempotence.
 The milestone owns scope and acceptance; no new transport, updater, ZIP service,
 or broad backup framework is requested.
+
+#### AMM-O-01 focused implementation sequence (2026-09-12)
+
+The maintainer authorized this slice after corrective commit `de14a03c` passed
+CI. Codex owns implementation and the serialized verification loop; Claude
+cross-reviews the plan, implementation and tests. The maintainer withdrew the
+initial midnight target; complete verification takes priority over timing.
+
+Source map (ADR 0093 extension, no ErsatzTV add-on-list draft equivalent):
+
+- `addon_media_storage::{reconcile_enabled_sources,reconcile_list_libraries,
+  ensure_list_library}` owns root/library registration. Existing reconciliation
+  rewrites manifests from SQLite and must not overwrite authoritative files.
+- `repositories/addon_media_list/editor::save`, the remaining list/item setters,
+  lifecycle option/settings writes and provider-result persistence currently
+  change saved content in SQLite. Inventory each content writer before switching
+  authority; runtime job/lease writes remain database-local.
+- `maintenance::dispatch_due_library_refreshes` enumerates existing libraries;
+  scanner `scan_local_library_with_progress_once` requires existing paths.
+  Fresh-folder admission must therefore precede library enumeration, reusing
+  enabled `AddonMediaSource` roots and existing managed-library operations.
+- Publication stage/commit/restore and `addon_publication_fs` own folder swaps,
+  verification and rollback. The saved-content document must survive these
+  operations without restoring an older draft or regenerating file authority
+  from stale SQLite.
+- The current admin Remove path reaches `addon_media_list_sync::delete_list`,
+  which retains files but deletes list/library/playlist rows. Visibility-only
+  hiding is a different operation, not a flag added after destructive deletion.
+
+Sequence:
+
+1. Copied draft/publication behavior is confirmed in ADR 0093: preserve both
+   states separately without publishing newer draft edits or importing local
+   execution identities and credentials. The maintainer also confirmed the
+   existing page's Hidden lists filter and Show list action, with hiding
+   changing admin visibility only and leaving publication, playback and refresh
+   intact. No product decisions remain open for this checkpoint.
+   Receiving-installation activation is also confirmed: after validation, scans
+   restore copied last-published content as active without publishing newer
+   drafts. Missing Download ahead media needs local preparation; do not change
+   the saved delivery mode to make the copy appear playable.
+2. Define one versioned portable saved-content document alongside the existing
+   YAML/NFO content. `list.playlist.yml` rejects unknown fields, so do not embed
+   an incompatible extension there. Preserve complete saved items, including
+   excluded/unpublished items, provider identities and operator decisions;
+   discovery must not require provider enumeration to reconstruct saved content.
+   Reuse existing metadata/options types where portable, but do not serialize
+   revision snapshots wholesale with their SQLite/artifact/process identities.
+3. Define the atomic saved-file/projection boundary and its interaction with
+   whole-folder publication swaps before wiring writers. An acknowledged Save
+   must already be durable on disk; a best-effort post-database-commit export is
+   insufficient. Reuse managed-file writes, current revision fences and existing
+   operation ownership. Reject stale concurrent saves; report genuine conflicts.
+   Do not add a general synchronization service or unrelated job framework.
+4. Admit validated folders from enabled installed add-on roots, allocate local
+   identities, then project through existing scan coordination. Repeat scans are
+   no-ops for unchanged content, preserve local hiding and do not import sender
+   leases, artifact pins, deletion ownership or credential bindings. Invalid or
+   incomplete content leaves the previous usable state and files intact.
+5. Wire every saved-content writer and the agreed native/hydrated hide/reveal
+   path. Keep runtime coordination local, localized UI in all supported cultures,
+   existing published playback and explicit Save/Publish boundaries intact.
+6. Prove the milestone's independent-profile copy, stale-projection reconciliation,
+   repeat-scan idempotence, save/scan conflict, incomplete-file refusal, hidden-state
+   locality and Linux/Windows path cases. Include real admin reconstruction and
+   hide/reveal browser proof after one matched build; cross-review with Claude.
+   Keep `amm-o-01` In progress until this complete acceptance passes, even when a
+   smaller reviewed engineering checkpoint is committed earlier.
+
+Excluded: transport/updater changes, new ZIP services, whole-database backup,
+unrelated UX fixes, workflow changes and new platform infrastructure. Focused
+verification is serialized with bounded Cargo jobs; no push or CI is requested.
+
+First engineering checkpoint: deliver installation-local visibility-only
+hide/reveal as a coherent subset of O-01, without enabling partial folder
+authority. A database-only visibility flag must never be exported, clear
+projections, or change provider/scheduler queries. The broader milestone stays
+open for complete portable draft/publication persistence and reconstruction.
+
+Hydration source map for this checkpoint:
+
+- Route and SSR wrapper: `/media/addon-lists`, `AddonMediaListsPage`.
+- Island: existing `AddonMediaListsIsland`; no new island boundary.
+- Data boundary: app query and repository visibility-filtered count/rows.
+- Actions and no-JS fallback: existing list action server functions plus native
+  POST forms; Hide and Show are reversible and need no destructive dialog.
+- Shared primitives: reuse existing paging, button and resource-state patterns.
+- Browser proof: hide, hidden filter, Show, pagination/filter retention and
+  unchanged saved/publication state, with and without JavaScript.
+
+Claude's demonstrated persistence hazards remain mandatory for the subsequent
+portable-content checkpoint: use a non-YAML document to avoid remote-stream
+collection; preserve it through Reset; exclude it from publication fingerprints;
+fence operator saves and provider/detail merges against publication tree swaps.
+Test save/reset and save/failed-publication/restore preservation. Reconcile an
+existing provider identity in its mapped folder without clearing local hiding;
+report conflicting duplicate folders instead of creating duplicate ownership.
 
 ### Operator outcome
 
