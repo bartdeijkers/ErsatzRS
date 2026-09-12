@@ -44,6 +44,7 @@ pub(crate) fn mark_provider_process_recovery_required() {
     PREPARATION_CLEANUP_UNCONFIRMED.store(true, std::sync::atomic::Ordering::Release);
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum PreparationAttemptFailure {
     Failed(ItemOperationFailure),
     TerminationUnconfirmed,
@@ -64,6 +65,18 @@ impl Drop for PreparationProcessGuard {
 impl From<ItemOperationFailure> for PreparationAttemptFailure {
     fn from(failure: ItemOperationFailure) -> Self {
         Self::Failed(failure)
+    }
+}
+
+impl From<ItemRuntimeError> for PreparationAttemptFailure {
+    fn from(error: ItemRuntimeError) -> Self {
+        match error {
+            ItemRuntimeError::TerminationUnconfirmed => Self::TerminationUnconfirmed,
+            ItemRuntimeError::InvalidRequest => ItemOperationFailure::InvalidRequest.into(),
+            ItemRuntimeError::PackageChanged => ItemOperationFailure::InputChanged.into(),
+            ItemRuntimeError::Unsupported => ItemOperationFailure::Unsupported.into(),
+            _ => ItemOperationFailure::Failed.into(),
+        }
     }
 }
 
@@ -669,7 +682,7 @@ impl AddonMediaListItemCoordinator {
     ) -> std::result::Result<Option<i64>, PreparationAttemptFailure> {
         let request = reservation
             .prepare_request(job)
-            .map_err(|_| ItemOperationFailure::InputChanged)?;
+            .map_err(|_| ItemOperationFailure::InvalidRequest)?;
         let result = {
             // An externally dropped worker cannot asynchronously reap its child. Keep
             // subsequent preparation disabled. A restart still requires independent
@@ -728,16 +741,7 @@ impl AddonMediaListItemCoordinator {
                     }
             }
         }; // Drop the managed provider owner before touching its staging directory.
-        let result = result.map_err(|error| match error {
-            ItemRuntimeError::TerminationUnconfirmed => {
-                PreparationAttemptFailure::TerminationUnconfirmed
-            }
-            ItemRuntimeError::PackageChanged | ItemRuntimeError::InvalidRequest => {
-                ItemOperationFailure::InputChanged.into()
-            }
-            ItemRuntimeError::Unsupported => ItemOperationFailure::Unsupported.into(),
-            _ => ItemOperationFailure::Failed.into(),
-        })?;
+        let result = result.map_err(PreparationAttemptFailure::from)?;
         self.promote_reserved(
             job,
             store,
@@ -1008,6 +1012,59 @@ pub(crate) mod tests {
                 .unwrap()
                 .state,
             0
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_schema_less_preparation_job_persists_invalid_request_before_transfer() {
+        let temporary = tempfile::tempdir().unwrap();
+        let pool = fixture(&temporary.path().join("package")).await;
+        let original: String =
+            sqlx::query_scalar(r#"SELECT "ManifestJson" FROM "AddonInstallation" LIMIT 1"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let mut manifest: serde_json::Value = serde_json::from_str(&original).unwrap();
+        manifest["capabilities"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"id":"media-list.prepare.v2"}));
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson"=?"#)
+            .bind(manifest.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        // Reproduce a job created by the old host, not the corrected draft-adoption path.
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "DeliveryMode"=1,
+            "DraftOptionSchemaId"=NULL,"DraftOptionValuesJson"='{}' WHERE "Id"=1"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let coordinator = AddonMediaListItemCoordinator::new(pool.clone());
+        let id = coordinator.queue_preparation(1, 10, 0, None).await.unwrap();
+        assert!(coordinator
+            .process_one_preparation(&temporary.path().join("artifacts"))
+            .await
+            .unwrap());
+        let status = coordinator
+            .queue
+            .status(id, Utc::now())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(status.state, 3);
+        assert_eq!(
+            status.completion,
+            Some(ItemOperationCompletion::Failed(
+                ItemOperationFailure::InvalidRequest
+            ))
+        );
+        assert_eq!(
+            std::fs::read_to_string(temporary.path().join("preparation-invocations")).unwrap(),
+            "runtime-info\nruntime-info\n",
+            "the provider transfer must not run"
         );
     }
 
@@ -1409,5 +1466,51 @@ pub(crate) mod tests {
             .await
             .unwrap();
         assert_eq!(artifacts, 0);
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::*;
+
+    #[test]
+    fn preparation_runtime_failures_keep_invalid_requests_distinct() {
+        for (runtime, failure) in [
+            (
+                ItemRuntimeError::InvalidRequest,
+                ItemOperationFailure::InvalidRequest,
+            ),
+            (
+                ItemRuntimeError::PackageChanged,
+                ItemOperationFailure::InputChanged,
+            ),
+            (ItemRuntimeError::Failed, ItemOperationFailure::Failed),
+            (
+                ItemRuntimeError::Unsupported,
+                ItemOperationFailure::Unsupported,
+            ),
+        ] {
+            assert_eq!(
+                PreparationAttemptFailure::from(runtime),
+                PreparationAttemptFailure::Failed(failure)
+            );
+            let completion = ItemOperationCompletion::Failed(failure);
+            let json = serde_json::to_string(&completion).unwrap();
+            assert_eq!(
+                serde_json::from_str::<ItemOperationCompletion>(&json).unwrap(),
+                completion
+            );
+        }
+        assert_eq!(
+            PreparationAttemptFailure::from(ItemRuntimeError::TerminationUnconfirmed),
+            PreparationAttemptFailure::TerminationUnconfirmed
+        );
+        assert_eq!(
+            serde_json::to_string(&ItemOperationCompletion::Failed(
+                ItemOperationFailure::InputChanged
+            ))
+            .unwrap(),
+            r#"{"Failed":"InputChanged"}"#
+        );
     }
 }

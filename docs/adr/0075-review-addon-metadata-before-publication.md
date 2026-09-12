@@ -4,6 +4,10 @@
 
 Accepted (2026-08-21)
 
+ADR 0093 supersedes database-only ownership of saved portable list content;
+its folder-first reconstruction remains unimplemented. The explicit review,
+publication and current-playback safety requirements here remain in force.
+
 ## Implementation
 
 Partial — initial implementation landed in c8d877b5 (2026-08-22).

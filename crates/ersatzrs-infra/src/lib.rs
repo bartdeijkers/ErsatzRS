@@ -16,6 +16,7 @@ pub mod addon_media_list_item_runtime;
 pub mod addon_media_list_options;
 pub mod addon_media_list_playback;
 mod addon_media_list_preparation;
+mod addon_media_list_preparation_status;
 mod addon_media_list_prepared_selection;
 mod addon_media_list_publication_preparation;
 pub mod addon_media_list_refresh;

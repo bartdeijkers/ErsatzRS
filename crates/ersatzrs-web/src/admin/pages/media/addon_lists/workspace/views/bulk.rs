@@ -13,6 +13,7 @@ pub(super) fn preview(w: &Workspace) -> AnyView {
     let after = d.groups.get("items").unwrap_or(&empty);
     let rows = w.items.iter().filter_map(|row| {
         let fields = [
+            ("included",TextKey::IncludeInPublication,row.included.to_string()),
             ("season",TextKey::Season,row.season.map(|n|n.to_string()).unwrap_or_default()),
             ("episode",TextKey::Episode,row.episode.map(|n|n.to_string()).unwrap_or_default()),
             ("kind",TextKey::MediaKind,content_kind_value(row.content_kind).into()),
@@ -43,6 +44,8 @@ fn display_value(field: &str, value: &str) -> String {
         };
     }
     tr(match value {
+        "true" => TextKey::Yes,
+        "false" => TextKey::No,
         "auto" => TextKey::AddonAutoDetect,
         "television_episode" => TextKey::Episode,
         "movie" => TextKey::Movie,

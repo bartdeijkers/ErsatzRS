@@ -729,7 +729,12 @@ impl AddonMediaListImportCoordinator {
             .execute(&mut *tx)
             .await
             .repository()?;
-            (inserted_id(&mut tx, result).await.repository()?, false)
+            let id = inserted_id(&mut tx, result).await.repository()?;
+            crate::repositories::SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(
+                &mut tx, id,
+            )
+            .await?;
+            (id, false)
         };
 
         if let Some(mode) = self.delivery_mode {

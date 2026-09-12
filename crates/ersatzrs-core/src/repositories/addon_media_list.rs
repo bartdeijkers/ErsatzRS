@@ -304,6 +304,13 @@ pub struct AddonMediaListPublicationReadiness {
     /// Required playback-processing evidence with an admitted pending attempt.
     #[serde(default)]
     pub required_prepared_media_pending: u64,
+    /// Missing required processing whose latest attempt failed at this revision.
+    #[serde(default)]
+    pub required_prepared_media_failed: u64,
+    /// Latest failed attempts for still-missing processing, grouped without provider text.
+    /// Earlier saved revisions are diagnostic history, never additional blockers.
+    #[serde(default)]
+    pub prepared_media_failures: Vec<AddonMediaListPreparationFailure>,
     pub optional_detail_total: u64,
     pub optional_detail_complete: u64,
     pub optional_detail_pending: u64,
@@ -311,6 +318,29 @@ pub struct AddonMediaListPublicationReadiness {
     pub review_state: AddonMediaListReviewState,
     /// Newest durable job, with live versus expired ownership classified.
     pub publication: Option<super::AddonMediaListPublicationStatus>,
+}
+
+/// Safe, closed durable item-operation failure categories; never provider stderr.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum AddonMediaListPreparationFailureReason {
+    Failed,
+    InputChanged,
+    /// The request does not satisfy the retained or installed option schema.
+    InvalidRequest,
+    Cancelled,
+    AttemptsExhausted,
+    StorageFull,
+    /// An unfinished reservation needs independently confirmed process cleanup.
+    ProcessRecoveryRequired,
+    Unsupported,
+}
+
+/// Aggregate preparation diagnostics for one saved revision and failure category.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPreparationFailure {
+    pub saved_revision: i32,
+    pub reason: AddonMediaListPreparationFailureReason,
+    pub count: u64,
 }
 
 impl AddonMediaListPublicationReadiness {

@@ -292,6 +292,38 @@ pub fn reconcile_generated(path: &Path, generated: &[u8]) -> Result<Vec<u8>> {
     Ok(generated.to_vec())
 }
 
+/// Whether changing the authoritative path would bypass externally owned metadata.
+/// This inspection never changes the file or its ownership state. Empty,
+/// untracked placeholders and unchanged generated documents need no preservation.
+///
+/// # Errors
+/// Returns an error when the document or its ownership state cannot be read.
+pub(crate) fn requires_preservation(path: &Path, generated: &[u8]) -> Result<bool> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let state = load_state(parent)?;
+    let key = file_key(path)?;
+    let record = state.files.get(&key);
+    let current = match fs::read(path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(AddonMediaNfoError::Read(error.to_string())),
+    };
+    let Some(current) = current else {
+        return Ok(record.is_some_and(|record| {
+            matches!(
+                record.ownership,
+                AddonMediaListNfoOwnership::User | AddonMediaListNfoOwnership::Invalid
+            )
+        }));
+    };
+    if current.is_empty() && record.is_none() {
+        return Ok(false);
+    }
+    Ok(record.map_or(current != generated, |record| {
+        record.ownership != AddonMediaListNfoOwnership::Generated || record.sha256 != hash(&current)
+    }))
+}
+
 /// Register a current managed file during a cache-hit scan. A hash difference
 /// from the last host generation is a user edit and is validated before it is
 /// allowed to become authoritative.
@@ -844,6 +876,42 @@ mod tests {
             "fanart must be nested in Kodi's fanart container: {xml}"
         );
         assert_eq!(parse(&encoded).expect("parse artwork NFO"), metadata);
+    }
+
+    #[test]
+    fn preservation_inspection_is_read_only_and_respects_ownership() {
+        let temp = tempfile::TempDir::new().expect("temp dir");
+        let path = temp.path().join("tvshow.nfo");
+        let state_path = temp.path().join(STATE_FILE);
+        let generated = serialize(
+            "tvshow",
+            &AddonMediaListNfoMetadata {
+                title: "Generated".to_owned(),
+                ..AddonMediaListNfoMetadata::default()
+            },
+        )
+        .expect("generated NFO");
+        assert!(!requires_preservation(&path, &generated).expect("absent"));
+        fs::write(&path, []).expect("placeholder");
+        assert!(!requires_preservation(&path, &generated).expect("empty"));
+        fs::write(&path, &generated).expect("untracked generated");
+        assert!(!requires_preservation(&path, &generated).expect("identical"));
+        assert!(!state_path.exists());
+        reconcile_generated(&path, &generated).expect("record generated ownership");
+        assert!(!requires_preservation(&path, b"different generation").expect("known generated"));
+        let state = fs::read(&state_path).expect("ownership state");
+        for changed in [
+            b"<tvshow><title>User</title></tvshow>".as_slice(),
+            b"<broken",
+        ] {
+            fs::write(&path, changed).expect("external edit");
+            assert!(requires_preservation(&path, &generated).expect("changed"));
+            assert_eq!(fs::read(&path).expect("unchanged file"), changed);
+            assert_eq!(fs::read(&state_path).expect("unchanged state"), state);
+        }
+        assert!(reconcile_generated(&path, &generated).is_err());
+        fs::remove_file(&path).expect("remove invalid owned fixture");
+        assert!(requires_preservation(&path, &generated).expect("missing owned file"));
     }
 
     #[test]

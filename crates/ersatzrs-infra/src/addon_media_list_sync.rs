@@ -12,7 +12,8 @@ use ersatzrs_core::addon_media_list::{
 use ersatzrs_core::repositories::{AddonMediaListMetadataConflict, RepositoryError, Result};
 use ersatzrs_domain::{
     AddonMediaList, AddonMediaListItemAvailability, AddonMediaListItemKind, EntityId,
-    RemoteStreamLiveness, ScanPlayoutRefresh, ScanPlayoutRefreshReason,
+    ManagedLibraryOperationState, RemoteStreamLiveness, ScanPlayoutRefresh,
+    ScanPlayoutRefreshReason,
 };
 use sqlx::{Pool, Row, Transaction};
 
@@ -266,6 +267,15 @@ impl AddonMediaListSynchronizer {
         self.match_list_items_with_report_inner(list_id, true)
             .await
             .map(|_| ())
+    }
+
+    /// Bind scanned sources before publication builds its typed media projection.
+    /// The coordinator checks its lease before and after this operation. Playlist
+    /// selection and refresh intents must wait until projection has completed.
+    pub(crate) async fn bind_list_items_for_publication(&self, list_id: EntityId) -> Result<()> {
+        let list = self.load_list(list_id).await?;
+        self.match_persisted_items(&list, false, true).await?;
+        Ok(())
     }
 
     /// Rebuild a restored system playlist even when the current draft has
@@ -1102,15 +1112,9 @@ impl AddonMediaListSynchronizer {
             .bind(&provider_metadata)
             .bind(conflicts)
             .bind(id)
-            .bind(encode_enum(
-                ersatzrs_domain::ManagedLibraryOperationState::Queued,
-            ))
-            .bind(encode_enum(
-                ersatzrs_domain::ManagedLibraryOperationState::Running,
-            ))
-            .bind(encode_enum(
-                ersatzrs_domain::ManagedLibraryOperationState::WaitingToRetry,
-            ))
+            .bind(encode_enum(ManagedLibraryOperationState::Queued))
+            .bind(encode_enum(ManagedLibraryOperationState::Running))
+            .bind(encode_enum(ManagedLibraryOperationState::WaitingToRetry))
             .execute(&self.pool)
             .await
             .repository()?;
@@ -1141,6 +1145,11 @@ impl AddonMediaListSynchronizer {
             .await
             .repository()?;
             let id = inserted_id(&mut transaction, result).await.repository()?;
+            crate::repositories::SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(
+                &mut transaction,
+                id,
+            )
+            .await?;
             transaction.commit().await.repository()?;
             Ok(id)
         }
@@ -3014,7 +3023,10 @@ pub(crate) async fn reconcile_changed_addon_state_in_tx(
         .execute(&mut **tx)
         .await
         .repository()?;
-    Ok(())
+    crate::repositories::SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(
+        tx, list_id,
+    )
+    .await
 }
 
 pub(crate) async fn unlink_revision_artifacts_for_list_in_tx(

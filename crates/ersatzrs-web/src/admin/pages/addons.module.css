@@ -276,6 +276,8 @@
 .file-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
 .file-row-label { min-width: 11rem; color: var(--color-gray-300); font-size: 0.85rem; }
 .file-name { color: var(--color-muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+.action-feedback { margin: 0; overflow-wrap: anywhere; }
+.empty-setup { margin: 0 0 1.5rem; text-align: center; }
 .file-button { border-color: var(--color-border); color: var(--color-on-surface); }
 .file-button[aria-disabled="true"] { opacity: 0.5; }
 
@@ -308,7 +310,8 @@
 
 .setting { display: grid; grid-template-columns: minmax(10rem, 1fr) minmax(12rem, 2fr) auto; gap: 0.6rem; align-items: end; }
 .setting label span { font-size: 0.7rem; }
-.setting-secret { display: grid; grid-template-columns: minmax(8rem, 0.8fr) minmax(10rem, 1.2fr); gap: 0.5rem; }
+.setting-secret { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+.setting-feedback { grid-column: 1 / -1; margin: 0; overflow-wrap: anywhere; }
 
 .muted { color: var(--color-muted); overflow-wrap: anywhere; }
 .error { color: var(--color-error); overflow-wrap: anywhere; }

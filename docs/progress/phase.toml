@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-N-03 final candidate closeout; Codex owns serialized execution'
+current_focus = 'Publish verified add-on walkthrough fixes to main and verify exact-commit CI; amm-o-01 remains next, not started'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -60,6 +60,69 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-12 publication authorization: the maintainer requests commit, push to
+main and terminal green CI for the verified walkthrough corrections. Codex owns
+the commit/push and exact-SHA CI watch; Claude remains non-writing. Preserve the
+unrelated Windows publication-restart test edits outside this commit. Reuse
+valid local verification; fix demonstrated CI failures and retest affected gates.
+No release, deployment or next-slice implementation is authorized by this request.
+
+2026-09-12 corrective checkpoint: the authorized confirmed walkthrough fixes
+pass selected native tests, scoped Clippy, progress/format/architecture/hydration
+checks and matched Chromium/Firefox workflows. Failed browser cases were fixed
+and rerun, not waived. Claude independently repeats real setup/import, bulk
+exclusion to one item, preparation and successful first default-TV publication.
+M-01B and dependency-only M-02/M-03 return to Complete; owning milestones/parity
+records retain exact evidence. The original failed walkthrough below is historical.
+Claude completes independent desktop/narrow, light/dark and keyboard checks with
+no blocking finding for this correction. After review-gated provider details change
+the saved draft, one new exact-revision preparation receipt reuses the SAME artifact
+in about1.1s, with unchanged bytes/hash/mtime and no duplicate download. The
+focus-loss hypothesis is withdrawn after next-Tab testing. Source remains frozen;
+Astra is non-writing, browsers are released and the isolated host/worker are stopped.
+No build/test/media operation remains from this task. Remaining UX
+follow-ups are recorded separately, not a reason to weaken exact-revision admission.
+N-01B full responsive/accessibility closeout stays open. No commit/push, deployment,
+live Windows mutation, unresolved design decision or folder-first O-01 work is
+authorized by this correction. O-01 remains the next slice, not started.
+
+2026-09-12: maintainer requested a visual first-time add-on/list walkthrough
+with Claude and a running list of shortcomings with suggested improvements.
+Audit uses one disposable local host and the existing matched A01-A05 build;
+no production mutation or additional implementation. Record confirmed defects
+in addon-platform and addon-metadata-management debt, distinguish polish and
+withdrawn suspicions, and cross-review findings. This audit does not pull later
+UX implementation into amm-o-01. Preparation passed on one real included item,
+but first publication with default TV Shows failed at commit and recovery
+restored the unpublished state. M-01B is reopened for W25a/W25b; M-02/M-03 are
+In progress only because of that dependency, with their earlier evidence valid
+and no new subtitle/disk-warning defect. O-01 remains Not started; review the
+minimal publication correction with the maintainer before implementation.
+The disposable host and browser are stopped; evidence is retained.
+
+2026-09-12: the approved A01-A05 corrective checkpoint is complete locally.
+Codex and Claude cross-reviewed each other's source and corrections. Native
+app/infra tests, web tests, Clippy and all eight focused Chromium/Firefox cases
+pass, including retained publication with untouched defaults in both modes.
+The owning M-01B/N-01B milestones hold evidence. At that checkpoint M-01B and
+dependency-only M-02/M-03 were restored to Complete; the later W25 walkthrough
+reopened them as described above. Their valid earlier evidence is retained.
+N-01B and N-02 remain open for recorded A06-A10 UX/accessibility acceptance;
+that does not authorize extra work before amm-o-01. N-03/release acceptance
+remain open. The packaged installation and personal database were untouched;
+no current commit, push or deployment is authorized. Keep heavy work serialized.
+
+Next implementation slice, now that A01-A05 is completed and verified:
+amm-o-01, folder-first add-on list portability (ADR 0093, accepted 2026-09-12).
+Saved list files/folders lead over SQLite; the next ordinary or scheduled scan
+must discover copied folders and reconstruct/update list information without
+transferring a database or re-adding URLs. The decision is registered but not
+implemented. Removal must retain saved files and hide the list in admin across
+rescans. Hiding is installation-local; newly discovered shared copies appear
+normally elsewhere. First settle copied draft/publication handling and revealing
+hidden lists in its focused plan. Review each other's work with Claude. This next
+slice takes priority over later UX expansion and further N-03 closeout work.
+
 AMM-M-01A is Complete. The maintainer approved the accumulated 122-file host
 commit scope, including preserved M-01B groundwork and excluding the separate
 workflow-maintenance edits. The host and official add-on commits are pushed
@@ -128,7 +191,7 @@ add-on upload-action deprecation notice. No release was published.
 On 2026-09-09 the maintainer resumed design work, locked the reviewed artifact
 and inserted AMM-N-01B before N-02. ADR 0091 and the checksum-pinned artifact
 own the design; plans/amm-n-01b-addon-list-design-adaptation.md owns execution.
-N-01B is locally complete, including live publication readiness restored on
+At that checkpoint, N-01B was locally complete, including live publication readiness restored on
 2026-09-11 without losing unsaved input, and the 2026-09-10 authorized item-form
 correction: separate edit/tools regions, concise option guidance, explicit native
 numbering, visible First aired, preserved replacement drafts and clear actions.
@@ -151,19 +214,22 @@ Checkpoint 47e7589b has terminal exact-SHA green CI; the milestone owns the
 evidence. Native provider Firefox failure guidance now passes with corrected
 provider e2b06cb, green Windows/Linux CI and a verified bundle. Independent
 source-content correlation passes for retained SponsorBlock TS/HLS captures.
-Next are integrated packaged Windows recovery/profile verification, remaining
-playback acceptance and exact-ZIP verification; N-03 remains In progress.
+N-03 remains In progress; its milestone owns completed native ZIP, launcher,
+real Download ahead TS/HLS and integrated publication/recovery evidence.
 Immutable v1.0.33-beta is pushed on 0fe8be29 with terminal exact-SHA green
-CI 34648235359. Windows-only draft build 34650816336 owns the heavy slot;
-Claude monitors it. The maintainer approved the overnight build window until
-2026-09-12 09:00 local, not public promotion. No local heavy work may overlap.
-The milestone owns candidate identity and prior local closeout evidence.
+CI 34648235359. Windows-only draft build 34650816336 succeeded; independently
+downloaded exact-ZIP checks passed before 02:00 on 2026-09-12. The approved
+overnight checks completed with candidate processes stopped and all subagents
+non-writing for the 09:00 handoff. That monitoring-only window has ended;
+the 2026-09-12 corrective focus above now governs work. Integrated packaged browser-profile guidance
+and remaining release acceptance stay open. No public promotion is authorized
+under this overnight scope. The milestone owns identity and detailed evidence.
 Beeld & Geluid is retired under ADR 0092; do not run its withdrawn acceptance.
 The maintainer subsequently withdrew the manual anamorphic regression-source
 check, not claimed passed; no fixture/profile locations are needed. Its
 automated command-level regression remains, not real GPU-output evidence.
 This post-tag documentation update does not change the immutable candidate.
-Packaged acceptance and publication remain open.
+Remaining packaged acceptance and publication stay open; do not repeat passed gates.
 Reuse valid evidence and recover
 missing captures before proposing repeats. An unknown latest
 version is not proof of staleness. Backup, rollback, quarantine, extra validation,

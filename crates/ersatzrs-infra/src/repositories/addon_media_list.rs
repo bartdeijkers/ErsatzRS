@@ -2634,7 +2634,26 @@ async fn commit_staged_publication_impl(
     if let Some(fence) = fence {
         ensure_current_publication_claim(&repository.0, id, fence, true).await?;
     }
+    if matches!(
+        effective_presentation,
+        AddonMediaListPresentationKind::TelevisionShow
+            | AddonMediaListPresentationKind::MusicVideos
+            | AddonMediaListPresentationKind::Movies
+            | AddonMediaListPresentationKind::OtherVideos
+            | AddonMediaListPresentationKind::Songs
+            | AddonMediaListPresentationKind::Images
+    ) {
+        // A first publication has scanned sources but ordinary matching is frozen
+        // by its journal. Bind before choosing parent and item NFO paths: scanned
+        // streams may live in a subfolder of the list manifest's directory.
+        synchronizer.bind_list_items_for_publication(id).await?;
+        if let Some(fence) = fence {
+            ensure_current_publication_claim(&repository.0, id, fence, true).await?;
+        }
+    }
     if parent_nfo_for(effective_presentation).is_some() {
+        ensure_parent_nfo_path_preserves_metadata(&repository.0, id, effective_presentation)
+            .await?;
         ensure_generated_parent_nfo(&repository.0, id, effective_presentation, None).await?;
         if let Some(fence) = fence {
             ensure_current_publication_claim(&repository.0, id, fence, true).await?;
@@ -5707,6 +5726,31 @@ async fn addon_media_list_publication_readiness(
             .iter()
             .filter(|item| item.artifact_id.is_none() && item.pending)
             .count() as u64;
+    let missing_processing = downloads
+        .iter()
+        .filter(|item| item.artifact_id.is_none() && !item.pending)
+        .map(|item| (item.item_id, 1))
+        .chain(
+            preparation
+                .iter()
+                .filter(|item| item.plan.is_none() && !item.pending)
+                .map(|item| (item.item_id, 2)),
+        )
+        .chain(
+            subtitles
+                .iter()
+                .filter(|item| item.artifacts.is_none() && !item.pending)
+                .map(|item| (item.item_id, 3)),
+        )
+        .collect();
+    let (required_prepared_media_failed, prepared_media_failures) =
+        crate::addon_media_list_preparation_status::preparation_failures(
+            pool,
+            list_id,
+            form.draft_revision,
+            &missing_processing,
+        )
+        .await?;
     for item in &included {
         if access_restricted_without_replacement(item) {
             item_classification.restricted_excluded_count = item_classification
@@ -5736,6 +5780,8 @@ async fn addon_media_list_publication_readiness(
         required_playback_detail_pending: item_classification.required_playback_detail_pending,
         required_prepared_media_count,
         required_prepared_media_pending,
+        required_prepared_media_failed,
+        prepared_media_failures,
         optional_detail_total: progress.map_or(0, |progress| progress.detail_total),
         optional_detail_complete: progress.map_or(0, |progress| progress.detail_complete),
         optional_detail_pending: progress.map_or(0, |progress| progress.detail_pending),
@@ -7067,6 +7113,72 @@ async fn ensure_generated_parent_nfo(
         .ok_or_else(|| {
             RepositoryError::Conflict("managed list storage is unavailable".to_owned())
         })?;
+    let mut metadata = generated_parent_metadata(pool, id, file_name, title_override).await?;
+    materialize_parent_artwork(pool, id, &path, &mut metadata).await?;
+    let generated = crate::addon_media_nfo::serialize(root, &metadata).map_err(map_nfo_error)?;
+    crate::addon_media_nfo::reconcile_generated(&path, &generated).map_err(map_nfo_error)?;
+    Ok(())
+}
+
+async fn ensure_parent_nfo_path_preserves_metadata(
+    pool: &Pool<crate::db::Db>,
+    id: EntityId,
+    presentation: AddonMediaListPresentationKind,
+) -> Result<()> {
+    let Some((file_name, root)) = parent_nfo_for(presentation) else {
+        return Ok(());
+    };
+    let selected = parent_nfo_path_for(pool, id, file_name).await?;
+    let manifest: Option<String> = sqlx::query_scalar(
+        r#"SELECT "ManifestPath" FROM "AddonMediaListLibrary" WHERE "AddonMediaListId"=?"#,
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await
+    .repository()?;
+    let fallback = manifest
+        .as_deref()
+        .and_then(|path| Path::new(path).parent())
+        .map(|folder| folder.join(file_name));
+    let (Some(fallback), Some(selected)) = (fallback, selected) else {
+        return Ok(());
+    };
+    if fallback == selected {
+        return Ok(());
+    }
+    // Existing directories may have different lexical spellings (for example
+    // a manifest path containing `..`) without changing metadata authority.
+    if let (Some(fallback_parent), Some(selected_parent)) = (fallback.parent(), selected.parent()) {
+        if let (Ok(fallback_parent), Ok(selected_parent)) = (
+            std::fs::canonicalize(fallback_parent),
+            std::fs::canonicalize(selected_parent),
+        ) {
+            if fallback_parent == selected_parent {
+                return Ok(());
+            }
+        }
+    }
+    // Compare on every commit, including retries after bindings were persisted.
+    // Do not download or materialize artwork merely to prove an untracked file
+    // generated: uncertain materialized artwork is conservatively preserved.
+    let metadata = generated_parent_metadata(pool, id, file_name, None).await?;
+    let generated = crate::addon_media_nfo::serialize(root, &metadata).map_err(map_nfo_error)?;
+    if crate::addon_media_nfo::requires_preservation(&fallback, &generated)
+        .map_err(map_nfo_error)?
+    {
+        return Err(RepositoryError::Conflict(
+            "parent_nfo_preservation_required".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+async fn generated_parent_metadata(
+    pool: &Pool<crate::db::Db>,
+    id: EntityId,
+    file_name: &str,
+    title_override: Option<&str>,
+) -> Result<AddonMediaListNfoMetadata> {
     let row = sqlx::query(
         r#"SELECT COALESCE("Name", '') AS "Name", "Description", "ProviderMetadataJson",
                   "MetadataOverrideJson"
@@ -7106,10 +7218,7 @@ async fn ensure_generated_parent_nfo(
     if metadata.plot.is_none() {
         metadata.plot = row.try_get("Description").repository()?;
     }
-    materialize_parent_artwork(pool, id, &path, &mut metadata).await?;
-    let generated = crate::addon_media_nfo::serialize(root, &metadata).map_err(map_nfo_error)?;
-    crate::addon_media_nfo::reconcile_generated(&path, &generated).map_err(map_nfo_error)?;
-    Ok(())
+    Ok(metadata)
 }
 
 #[allow(clippy::too_many_lines)]

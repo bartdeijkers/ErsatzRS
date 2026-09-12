@@ -1,0 +1,372 @@
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { existsSync, readFileSync } from 'fs';
+import {
+  sourceUrl, hydrated, installPreparedFixture, preparedInvocationLog, preparedSqlite,
+  type PreparedFixtureVariant,
+} from './addon-prepared-fixture';
+
+// Regressions for the 2026-09-12 joint add-on list walkthrough. Run through
+// scripts/e2e/playwright-e2e.sh with serial workers on its own wrapper
+// database. Every fixture discovery returns the same provider list, and lists
+// are unique per add-on and provider list, so each scenario, mode and browser
+// project installs its own package identity. No network is used.
+const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
+
+function sqlite(sql: string): string {
+  if (!dbPath) throw new Error('The isolated E2E database is required');
+  return preparedSqlite(dbPath, sql);
+}
+
+/** One isolated package identity; installed once per database. */
+function scenario(
+  info: TestInfo, name: string, processedDefault: boolean, extra: Omit<PreparedFixtureVariant, 'addonId' | 'processedDefault'> = {},
+): PreparedFixtureVariant {
+  const variant = { ...extra, addonId: `org.ersatzrs.e2e-walkthrough.${info.project.name}-${name}`, processedDefault };
+  if (sqlite(`SELECT COUNT(*) FROM "AddonInstallation" WHERE "AddonId"='${variant.addonId}';`) === '0') {
+    installPreparedFixture(dbPath!, false, false, variant);
+  }
+  return variant;
+}
+
+function prepareInvocations(variant: PreparedFixtureVariant): number {
+  const log = preparedInvocationLog(dbPath!, variant);
+  if (!existsSync(log)) return 0;
+  return readFileSync(log, 'utf8').split('\n')
+    .filter(line => line && JSON.parse(line).command === 'prepare').length;
+}
+
+function watchErrors(page: Page): string[] {
+  const errors: string[] = [];
+  page.on('pageerror', error => { if (error.name !== 'AbortError') errors.push(error.message); });
+  page.on('console', message => {
+    if (message.type() === 'error' && /hydration|failed_to_cast_marker_node|rust_panic/i.test(message.text())) errors.push(message.text());
+  });
+  return errors;
+}
+
+/**
+ * Fill Add like a first-time operator: only the URL, provider and delivery.
+ * `presentation` is set only where a scenario must not depend on the
+ * television projection; otherwise Add's default stays untouched.
+ */
+async function fillAdd(page: Page, variant: PreparedFixtureVariant, mode: string, presentation?: string): Promise<void> {
+  const name = variant.addonId!.split('.').pop()!;
+  await hydrated(page, '/media/addon-lists/add');
+  await page.getByLabel('Add-on list URL').fill(`${sourceUrl}/${name}`);
+  await page.getByLabel('Add-on', { exact: true }).selectOption(variant.addonId!);
+  // The reported failure used Add's default presentation.
+  await expect(page.getByLabel('Collection Type', { exact: true })).toHaveValue('television_show');
+  if (presentation) await page.getByLabel('Collection Type', { exact: true }).selectOption(presentation);
+  await page.getByLabel('Delivery', { exact: true }).selectOption(mode);
+  await page.getByLabel('Storage folder').fill(`walkthrough-${name}`);
+  await page.getByRole('combobox', { name: 'Automatic Refresh' }).selectOption('never');
+  await page.getByRole('checkbox', { name: 'Load item details automatically' }).uncheck();
+}
+
+async function importList(page: Page, variant: PreparedFixtureVariant, mode: string, presentation?: string): Promise<number> {
+  await fillAdd(page, variant, mode, presentation);
+  await page.getByRole('button', { name: 'Import overview' }).click();
+  await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
+  const listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
+  expect(listId).toBeGreaterThan(0);
+  await expect.poll(() => sqlite(`SELECT "State"||'|'||"DiscoveredCount" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60000 }).toBe(`3|${variant.itemCount ?? 1}`);
+  return listId;
+}
+
+/** PublishedRevision, ReviewState, cleared journal and a completed retained revision. */
+function publicationState(listId: number): string {
+  return sqlite(`SELECT list."PublishedRevision"||','||list."ReviewState"||','||(list."PublicationJournalJson" IS NULL)||','||COUNT(r."Id")
+FROM "AddonMediaList" list
+LEFT JOIN "AddonMediaListRevision" r ON r."AddonMediaListId"=list."Id" AND r."Revision"=list."PublishedRevision" AND r."CompletedAt" IS NOT NULL
+WHERE list."Id"=${listId};`);
+}
+
+/** Show and episode rows owned by this list's television projection. */
+function televisionProjection(listId: number): string {
+  return sqlite(`SELECT
+ (SELECT COUNT(*) FROM "AddonMediaListTelevisionShow" WHERE "AddonMediaListId"=${listId})||','||
+ (SELECT COUNT(*) FROM "AddonMediaListItemEpisode" ie JOIN "AddonMediaListItem" i ON i."Id"=ie."AddonMediaListItemId" WHERE i."AddonMediaListId"=${listId})||','||
+ (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId} AND "Published"=1 AND "MediaItemId" IS NOT NULL);`);
+}
+
+function includedItems(listId: number): string {
+  return sqlite(`SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId} AND "Included"=1;`);
+}
+
+function publishedItems(listId: number): string {
+  return sqlite(`SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId} AND "Published"=1;`);
+}
+
+async function publishAndWait(page: Page, listId: number, revision: number): Promise<void> {
+  const publish = page.getByRole('button', { name: 'Publish saved changes', exact: true });
+  await expect(publish).toBeEnabled({ timeout: 30000 });
+  await publish.click();
+  await expect.poll(() => publicationState(listId), { timeout: 120000 }).toBe(`${revision},2,1,1`);
+  await hydrated(page, `/media/addon-lists/${listId}`);
+}
+
+/** Bulk commands live in the Edit multiple items disclosure. */
+async function bulkCommand(page: Page, name: string): Promise<void> {
+  const command = page.getByRole('button', { name, exact: true });
+  if (!(await command.isVisible())) await page.locator('.bulk-tools > summary').click();
+  await command.click();
+  await hydrated(page);
+}
+
+test.beforeEach(async ({ page }) => {
+  test.skip(!dbPath, 'Requires the wrapper-owned isolated E2E database');
+  await page.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+});
+
+test('a new list first publishes with the default TV Shows presentation', async ({ page }, info) => {
+  test.setTimeout(600000);
+  const errors = watchErrors(page);
+  // Stream publishes straight away; Download ahead mirrors the walkthrough,
+  // where real preparation succeeded and the first commit then failed.
+  for (const [mode, preparesMedia] of [['stream', false], ['download_ahead_new_videos', true]] as const) {
+    const variant = scenario(info, `first-tv-${mode.replace(/_/g, '-')}`, preparesMedia);
+    const listId = await importList(page, variant, mode);
+    // No projection may exist before the first publication.
+    expect(televisionProjection(listId)).toBe('0,0,0');
+
+    await hydrated(page, `/media/addon-lists/${listId}`);
+    if (preparesMedia) {
+      await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
+      await hydrated(page);
+      await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${listId} AND "Kind"=1 AND "State"=2;`), { timeout: 180000 }).toBe('1');
+      expect(prepareInvocations(variant)).toBeGreaterThan(0);
+    }
+    const publish = page.getByRole('button', { name: 'Publish saved changes', exact: true });
+    await expect(publish).toBeEnabled({ timeout: 30000 });
+    await publish.click();
+
+    await expect.poll(() => publicationState(listId), { timeout: 120000 }).toBe('1,2,1,1');
+    expect(sqlite(`SELECT COUNT(*) FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId"=${listId} AND "OriginalFailureCode" IS NOT NULL;`)).toBe('0');
+    expect(televisionProjection(listId)).toBe('1,1,1');
+    // The operator sees the published state on a fresh render.
+    await hydrated(page, `/media/addon-lists/${listId}`);
+    await expect(page.getByText('Published list is up to date', { exact: true })).toBeVisible();
+  }
+  expect(errors).toEqual([]);
+});
+
+test('the import landing page shows the imported list without a manual reload', async ({ page }, info) => {
+  test.setTimeout(240000);
+  const errors = watchErrors(page);
+  // Discovery finishes several seconds after the landing page has rendered.
+  const variant = scenario(info, 'landing-delayed', false, { discoverDelayMs: 8000, itemCount: 2 });
+  await fillAdd(page, variant, 'stream', 'remote_streams');
+  await page.getByRole('button', { name: 'Import overview' }).click();
+  await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
+  const listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
+  await hydrated(page);
+  const importState = () => sqlite(`SELECT "State"||'|'||"DiscoveredCount" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`);
+  expect(importState(), 'the landing page must render before discovery completes').not.toBe('3|2');
+  // While discovery is in flight the landing page shows progress, not an empty editable list.
+  await expect(page.getByText('No items.', { exact: true })).toHaveCount(0);
+  await expect(page.locator('button[name="intent"][value="save"]')).toHaveCount(0);
+
+  // No reload or navigation by the test: the page itself must catch up.
+  await expect(page.getByRole('heading', { level: 1, name: 'Prepared playback fixture' })).toBeVisible({ timeout: 60000 });
+  expect(importState()).toBe('3|2');
+  await expect(page.getByRole('button', { name: 'Prepared calibration 2', exact: true })).toBeVisible();
+  // The workspace keeps a hidden empty-state paragraph for a stable DOM shape.
+  await expect(page.getByText('No items.', { exact: true })).toBeHidden();
+  await expect(page.locator('select[name="category"] option').first()).toHaveText('All (2)');
+  expect(errors).toEqual([]);
+});
+
+test('bulk exclude and include change only the saved draft until publication', async ({ page }, info) => {
+  test.setTimeout(480000);
+  const errors = watchErrors(page);
+  const variant = scenario(info, 'bulk-inclusion', false, { itemCount: 3 });
+  // A Remote Streams presentation keeps this scenario independent of the
+  // television projection covered above.
+  const listId = await importList(page, variant, 'stream', 'remote_streams');
+  await hydrated(page, `/media/addon-lists/${listId}`);
+  await publishAndWait(page, listId, 1);
+  expect(publishedItems(listId)).toBe('3');
+
+  const selectFor = (title: string) => page.getByRole('checkbox', { name: `Selected for editing: ${title}`, exact: true });
+  for (const title of ['Prepared calibration 2', 'Prepared calibration 3']) await selectFor(title).check();
+  const draftRevision = Number(sqlite(`SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`));
+
+  await bulkCommand(page, 'Exclude selected items');
+  // The command changes retained input only; nothing is saved or published yet.
+  expect(includedItems(listId)).toBe('3');
+  await page.locator('button[name="intent"][value="save"]').first().click();
+  await hydrated(page);
+  await expect(page.locator('#workspace-errors')).toHaveCount(0);
+  expect(includedItems(listId)).toBe('1');
+  expect(Number(sqlite(`SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`))).toBeGreaterThan(draftRevision);
+  // Selection is editing state and survives the save.
+  await expect(selectFor('Prepared calibration 2')).toBeChecked();
+  await expect(selectFor('Prepared calibration 3')).toBeChecked();
+  await expect(selectFor('Prepared calibration')).not.toBeChecked();
+  // The published revision is untouched until the operator publishes.
+  expect(sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe('1');
+  expect(publishedItems(listId)).toBe('3');
+
+  await publishAndWait(page, listId, 2);
+  expect(publishedItems(listId)).toBe('1');
+
+  for (const title of ['Prepared calibration 2', 'Prepared calibration 3']) {
+    if (!(await selectFor(title).isChecked())) await selectFor(title).check();
+  }
+  await bulkCommand(page, 'Include selected items');
+  await page.locator('button[name="intent"][value="save"]').first().click();
+  await hydrated(page);
+  await expect(page.locator('#workspace-errors')).toHaveCount(0);
+  expect(includedItems(listId)).toBe('3');
+  expect(publishedItems(listId)).toBe('1');
+  await publishAndWait(page, listId, 3);
+  expect(publishedItems(listId)).toBe('3');
+  expect(errors).toEqual([]);
+});
+
+test('a restored publication failure stays visible as a failure on fresh renders', async ({ page }, info) => {
+  test.setTimeout(240000);
+  const errors = watchErrors(page);
+  const variant = scenario(info, 'restored-failure', false);
+  const listId = await importList(page, variant, 'stream', 'remote_streams');
+  expect(Number(sqlite(`SELECT COUNT(*) FROM "Library";`))).toBeGreaterThan(0);
+  // State-only fixture matching the walkthrough rows: a completed publication
+  // operation whose commit failed and restored the previous (empty) revision.
+  // publication_status does not join Library, so any existing library satisfies the key.
+  sqlite(`INSERT INTO "ManagedLibraryOperation" ("LibraryId","OwnerToken","Kind","State","AttemptCount","CreatedAt","UpdatedAt","CompletedAt")
+VALUES ((SELECT "Id" FROM "Library" ORDER BY "Id" DESC LIMIT 1),'e2e-restored-failure',3,3,1,'2026-09-12T11:22:26Z','2026-09-12T11:22:27Z','2026-09-12T11:22:27Z');
+INSERT INTO "AddonMediaListPublicationJob" ("OperationId","AddonMediaListId","Generation","SavedRevision","TargetPublishedRevision","Phase","OriginalFailureCode","Outcome","CreatedAt","UpdatedAt","CompletedAt")
+VALUES (last_insert_rowid(),${listId},1,(SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=${listId}),1,7,'publication_commit_failed',1,'2026-09-12T11:22:26Z','2026-09-12T11:22:27Z','2026-09-12T11:22:27Z');`);
+
+  const expectFailure = async () => {
+    const recovery = page.getByTestId('addon-publication-recovery');
+    await expect(recovery).toBeVisible();
+    await expect(recovery).toHaveClass(/\berror\b/);
+    await expect(recovery.getByText('Publication failed', { exact: true })).toBeVisible();
+    await expect(recovery.getByText('Completed', { exact: true })).toHaveCount(0);
+    await expect(recovery.locator('a, button').filter({ hasText: /Activity/ })).not.toHaveCount(0);
+  };
+
+  await hydrated(page, `/media/addon-lists/${listId}`);
+  await expectFailure();
+  const overview = page.locator('.publication-overview');
+  await expect(overview).toContainText('Publication failed');
+  await expect(page.getByText('Saved changes ready to publish', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Published list is up to date', { exact: true })).toHaveCount(0);
+  // The live readiness poll must not turn the failure back into success.
+  await page.waitForTimeout(7000);
+  await expect(overview).toContainText('Publication failed');
+  await expect(page.getByText('Saved changes ready to publish', { exact: true })).toHaveCount(0);
+
+  const preservation = 'Publication stopped to preserve edited or invalid tvshow.nfo / artist.nfo metadata in the list folder.';
+  await hydrated(page, `/media/addon-lists/${listId}/activity`);
+  await expectFailure();
+  await expect(page.getByTestId('addon-publication-recovery').getByText(preservation)).toBeHidden();
+
+  // The closed preservation marker adds contextual guidance on both fresh renders.
+  sqlite(`UPDATE "AddonMediaListPublicationJob" SET "OriginalFailureCode"='parent_nfo_preservation_required' WHERE "AddonMediaListId"=${listId};`);
+  for (const path of [`/media/addon-lists/${listId}`, `/media/addon-lists/${listId}/activity`]) {
+    await hydrated(page, path);
+    await expectFailure();
+    const guidance = page.getByTestId('addon-publication-recovery').getByText(preservation);
+    await expect(guidance).toBeVisible();
+    await expect(guidance).toContainText('Keep a backup');
+  }
+  expect(errors).toEqual([]);
+});
+
+test('add-on settings show Check results live and ask for a new check after a saved change', async ({ page }, info) => {
+  test.setTimeout(180000);
+  const errors = watchErrors(page);
+  const variant = scenario(info, 'manager', false, { extraSetting: true });
+
+  // Manager filters carry programmatic names.
+  await hydrated(page, '/settings/addons');
+  await expect(page.getByRole('searchbox', { name: 'Search', exact: true })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeVisible();
+  await expect(page.locator('main main')).toHaveCount(0);
+
+  await hydrated(page, `/settings/addons/${variant.addonId}`);
+  await expect(page.locator('main main')).toHaveCount(0);
+  const storageRow = page.getByTestId('addon-setting-row').filter({ hasText: 'Media storage location' });
+  const storage = storageRow.getByRole('textbox', { name: /Media storage location/ });
+  await expect(storage).toBeVisible();
+
+  let loads = 0;
+  page.on('load', () => { loads += 1; });
+  const status = page.locator('#status [role="status"]');
+  await expect(status).toHaveText('—');
+  await page.getByRole('button', { name: 'Check', exact: true }).click();
+  // The persisted result appears in place, with a readable UTC time.
+  await expect(status).not.toHaveText('—', { timeout: 30000 });
+  await expect(status).not.toHaveText('Checking add-on…');
+  const checked = (await status.textContent())?.trim() ?? '';
+  await expect(page.locator('#status .muted, #status p').filter({ hasText: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/ })).toHaveCount(1);
+  expect(loads, 'Check must not reload the page').toBe(0);
+  expect(sqlite(`SELECT "LastCheckAt" IS NOT NULL FROM "AddonInstallation" WHERE "AddonId"='${variant.addonId}';`)).toBe('1');
+  await hydrated(page, `/settings/addons/${variant.addonId}`);
+  await expect(page.locator('#status [role="status"]')).toHaveText(checked);
+
+  // Saving configuration disables the add-on and asks for a new check, in place,
+  // without discarding an unsaved edit in a sibling setting.
+  loads = 0;
+  const noteRow = page.getByTestId('addon-setting-row').filter({ hasText: 'Display note' });
+  const note = noteRow.getByRole('textbox', { name: /Display note/ });
+  await note.fill('Unsaved sibling edit');
+  const edited = `${await storage.inputValue()}-edited`;
+  await storage.fill(edited);
+  await storageRow.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(storageRow.getByRole('status')).toHaveText('Saved. The add-on is disabled until you check and enable it again.', { timeout: 30000 });
+  await expect(page.locator('#status [role="status"]')).toHaveText('Configuration changed. Check the add-on again before enabling it.');
+  await expect(storage).toHaveValue(edited);
+  await expect(storage).toBeEnabled();
+  await expect(note).toHaveValue('Unsaved sibling edit');
+  await expect(noteRow.getByRole('status')).toHaveText('');
+  expect(sqlite(`SELECT COUNT(*) FROM "AddonSetting" WHERE "AddonId"='${variant.addonId}' AND "Key"='DISPLAY_NOTE';`)).toBe('0');
+  expect(loads, 'Save must not reload the page').toBe(0);
+  await expect.poll(() => sqlite(`SELECT "Value" FROM "AddonSetting" WHERE "AddonId"='${variant.addonId}' AND "Key"='MEDIA_STORAGE_PATH';`)).toBe(edited);
+  expect(errors).toEqual([]);
+});
+
+test('bulk exclusion can be discarded or saved without JavaScript', async ({ page, browser, baseURL }, info) => {
+  test.setTimeout(240000);
+  if (!baseURL) throw new Error('Playwright baseURL is required');
+  const variant = scenario(info, 'bulk-no-js', false, { itemCount: 2 });
+  const listId = await importList(page, variant, 'stream', 'remote_streams');
+  const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
+  try {
+    const plain = await context.newPage();
+    expect((await plain.goto(`/media/addon-lists/${listId}`))?.status()).toBe(200);
+    const submit = async (locator: ReturnType<typeof plain.locator>) => {
+      await Promise.all([plain.waitForEvent('framenavigated', frame => frame === plain.mainFrame()), locator.click()]);
+    };
+    const selected = () => plain.getByRole('checkbox', { name: 'Selected for editing: Prepared calibration 2', exact: true });
+    const openBulk = async () => {
+      if (!(await plain.getByRole('button', { name: 'Exclude selected items', exact: true }).isVisible())) {
+        await plain.locator('.bulk-tools > summary').click();
+      }
+    };
+    await selected().check();
+    await openBulk();
+    await submit(plain.getByRole('button', { name: 'Exclude selected items', exact: true }));
+    // Retained input only: the row shows the pending exclusion, nothing is saved.
+    await expect(plain.getByText('Excluded from publication', { exact: true })).toHaveCount(1);
+    expect(includedItems(listId)).toBe('2');
+    await expect(selected()).toBeChecked();
+
+    await submit(plain.locator('button[name="intent"][value="discard"]').first());
+    await expect(plain.getByText('Excluded from publication', { exact: true })).toHaveCount(0);
+    expect(includedItems(listId)).toBe('2');
+    await expect(selected()).toBeChecked();
+
+    await openBulk();
+    await submit(plain.getByRole('button', { name: 'Exclude selected items', exact: true }));
+    await submit(plain.locator('button[name="intent"][value="save"]').first());
+    await expect(plain.locator('#workspace-errors')).toHaveCount(0);
+    expect(includedItems(listId)).toBe('1');
+    await expect(plain.getByText('Excluded from publication', { exact: true })).toHaveCount(1);
+    await expect(selected()).toBeChecked();
+  } finally {
+    await context.close();
+  }
+});

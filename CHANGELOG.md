@@ -15,9 +15,40 @@ release section when tagging a release.
 
 ### Changed
 
+- Record the accepted folder-first add-on-list portability contract: saved
+  folders must reconstruct their SQLite projection after copying to another
+  installation; admin removal must retain files and keep the list hidden across
+  rescans on that installation, without hiding newly discovered shared copies
+  elsewhere. Implementation is planned for the next slice, not included
+  in the current beta or the active publishing corrections.
+
 - Withdraw the manual anamorphic regression-source release check by maintainer
   decision; retain automated NVENC command-level regression coverage and all
   other accepted Windows package gates.
+
+### Fixed
+
+- Bind scanned items before a new add-on list's first typed-media publication,
+  prevent parent metadata edits from being silently bypassed when storage paths differ,
+  and distinguish a failed publication with successful recovery from a
+  successful publication in the live overview and Activity.
+- Avoid stale generated-file scan work when republishing exclusions, and allow
+  recovery verification after the original scan has terminally failed.
+- Show first-import progress until the list is ready for review, add bulk
+  inclusion/exclusion through the existing Save/Discard workflow, and clarify
+  Add guidance, validation links and accessible item evidence labels.
+- Clarify empty add-on setup and repository-versus-add-on ZIP installation;
+  label admin controls and retain Check/Save feedback without discarding edits
+  in another setting.
+
+- Retain add-on option defaults when creating a list, so Download ahead works
+  without first changing a playback option. Explicit Prepare/Publish also binds
+  defaults for older unbound drafts in every delivery mode; automatic refresh
+  does not adopt them, and published revisions remain unchanged.
+- Align the add-on-list publication heading with required preparation, show
+  safe failure reasons and retries in the overview and Activity, and distinguish
+  invalid preparation requests from changed inputs. A settings failure after
+  adding a list now opens the created list with recovery guidance.
 
 ## [1.0.33-beta] - 2026-09-11
 

@@ -3101,6 +3101,7 @@ display:none;
 content:"";
 }
 :global(.addon-workspace) details[data-disclosure-kind] > summary::before,
+:global(.addon-workspace) details[data-disclosure-kind][open] > summary::before,
 :global(.addon-workspace) details[data-disclosure-kind] > summary::after {
 content:none;
 }

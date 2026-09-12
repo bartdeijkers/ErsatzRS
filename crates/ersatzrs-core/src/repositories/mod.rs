@@ -37,10 +37,11 @@ pub use addon_media_list::{
     AddonMediaListImportProgress, AddonMediaListItemAdminRow, AddonMediaListItemCounts,
     AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListMetadataConflict,
     AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoOwnership,
-    AddonMediaListNfoPerson, AddonMediaListPublication, AddonMediaListPublicationBlocker,
-    AddonMediaListPublicationBlockerKind, AddonMediaListPublicationContinuation,
-    AddonMediaListPublicationReadiness, AddonMediaListReplacementCandidate,
-    AddonMediaListRepository,
+    AddonMediaListNfoPerson, AddonMediaListPreparationFailure,
+    AddonMediaListPreparationFailureReason, AddonMediaListPublication,
+    AddonMediaListPublicationBlocker, AddonMediaListPublicationBlockerKind,
+    AddonMediaListPublicationContinuation, AddonMediaListPublicationReadiness,
+    AddonMediaListReplacementCandidate, AddonMediaListRepository,
 };
 pub use addon_media_list_editor::{
     AddonMediaListEditorItem, AddonMediaListEditorMetadata, AddonMediaListEditorSave,

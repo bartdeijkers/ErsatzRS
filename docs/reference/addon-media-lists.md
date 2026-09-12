@@ -377,6 +377,14 @@ so no permanent video download or separate interpreter is introduced. A scan is
 queued immediately after import; the normal scheduled scanner remains the
 recovery path.
 
+Portable subfolder layout does not currently guarantee reconstruction of
+Add-on List drafts/settings in a fresh SQLite database from copied folders.
+Automatic folder-first reconstruction is planned, not yet implemented. Its
+planned removal behavior retains saved files but hides the list in admin,
+without subsequent scans automatically making it visible again. This planned
+hiding is installation-local: newly discovered shared copies appear normally
+on the receiving installation.
+
 Changing the configured root while the add-on is disabled causes the host to
 repoint its managed libraries on the next enable/startup. Old files are retained.
 Deleting a list unregisters its library but also retains the folder: ErsatzRS

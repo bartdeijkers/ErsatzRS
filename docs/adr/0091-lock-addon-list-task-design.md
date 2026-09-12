@@ -7,7 +7,16 @@ its strict adaptation under AMM-N-01B.
 
 ## Implementation
 
-Implemented locally — live publication readiness is restored under AMM-N-01B
+Partial — reopened on 2026-09-12 for contradictory preparation readiness,
+hidden preparation failures and misleading post-create failure navigation.
+Those A02/A03/A05 defects and the subsequently authorized A06-A10 guidance,
+validation-label and accessibility corrections are now verified locally.
+The focused joint walkthrough also fixes stale import landing, bulk inclusion
+and recovered-failure feedback. Narrow filter readability, retained-versus-saved
+bulk feedback and detail-progress labelling remain recorded UX follow-ups;
+full responsive/accessibility closeout is not inferred from the focused pass.
+The accepted design remains unchanged; the owning parity debts track repair.
+Previously, live publication readiness was restored under AMM-N-01B
 without reloading or replacing unsaved inputs. Production task routes, native draft retention,
 transactional saves and immutable artwork retain their functional evidence. The
 2026-09-10 item-form correction restores the locked editing/tools hierarchy,

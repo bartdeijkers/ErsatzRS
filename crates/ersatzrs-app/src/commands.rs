@@ -4541,9 +4541,15 @@ pub struct ConfirmAddonMediaListRemoval {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PublishAddonMediaListOutcome {
     /// Required playback details were queued before the revision can publish.
-    Preparing { pending_details: u64 },
+    Preparing {
+        pending_details: u64,
+        saved_revision: i32,
+    },
     /// Required processed media was queued before publication takes its lease.
-    PreparingMedia { pending_items: u64 },
+    PreparingMedia {
+        pending_items: u64,
+        saved_revision: i32,
+    },
     /// One durable generation is queued or already active.
     Queued {
         operation_id: EntityId,
@@ -4780,12 +4786,12 @@ pub async fn test_addon_media_list_source(
         .map_err(Into::into)
 }
 
-/// Persist one exact reviewed snapshot for background publication.
-pub async fn publish_addon_media_list(
-    command: PublishAddonMediaList,
+/// Validate a saved snapshot before preparation or draft-default activation.
+pub(crate) async fn validate_addon_media_list_publication(
+    command: &PublishAddonMediaList,
     repository: &dyn AddonMediaListRepository,
     managed_operations: &dyn ManagedLibraryOperationRepository,
-) -> crate::Result<PublishAddonMediaListOutcome> {
+) -> crate::Result<bool> {
     validate_positive_id(command.id, "addon_media_list_id")?;
     let readiness = crate::queries::addon_media_list_publication_readiness(
         command.id,
@@ -4822,16 +4828,31 @@ pub async fn publish_addon_media_list(
             "the saved add-on media-list revision changed; reload before publishing",
         );
     }
-    if readiness.blockers.is_empty() {
+    Ok(readiness.blockers.is_empty())
+}
+
+/// Prepare and enqueue an already saved snapshot; application services activate defaults.
+pub async fn publish_addon_media_list(
+    command: PublishAddonMediaList,
+    repository: &dyn AddonMediaListRepository,
+    managed_operations: &dyn ManagedLibraryOperationRepository,
+) -> crate::Result<PublishAddonMediaListOutcome> {
+    if validate_addon_media_list_publication(&command, repository, managed_operations).await? {
         let pending_details = repository.prepare_publication_details(command.id).await?;
         if pending_details > 0 {
-            return Ok(PublishAddonMediaListOutcome::Preparing { pending_details });
+            return Ok(PublishAddonMediaListOutcome::Preparing {
+                pending_details,
+                saved_revision: command.saved_revision,
+            });
         }
         let pending_items = repository
             .prepare_publication_media(command.id, command.saved_revision)
             .await?;
         if pending_items > 0 {
-            return Ok(PublishAddonMediaListOutcome::PreparingMedia { pending_items });
+            return Ok(PublishAddonMediaListOutcome::PreparingMedia {
+                pending_items,
+                saved_revision: command.saved_revision,
+            });
         }
     }
     let form = repository
@@ -6871,6 +6892,8 @@ mod tests {
             Ok(AddonMediaListPublicationReadiness {
                 required_playback_detail_count: self.pending_publication_details,
                 required_prepared_media_count: self.pending_publication_media,
+                required_prepared_media_failed: 0,
+                prepared_media_failures: Vec::new(),
                 saved_revision: 5,
                 review_state: ersatzrs_domain::AddonMediaListReviewState::Ready,
                 ..AddonMediaListPublicationReadiness::default()
@@ -8508,7 +8531,10 @@ mod tests {
 
         assert_eq!(
             outcome,
-            PublishAddonMediaListOutcome::Preparing { pending_details: 3 }
+            PublishAddonMediaListOutcome::Preparing {
+                pending_details: 3,
+                saved_revision: 5
+            }
         );
         assert!(events.lock().expect("publication events").is_empty());
         assert!(managed
@@ -8536,7 +8562,10 @@ mod tests {
             )
             .await
             .expect("queue media preparation"),
-            PublishAddonMediaListOutcome::PreparingMedia { pending_items: 2 }
+            PublishAddonMediaListOutcome::PreparingMedia {
+                pending_items: 2,
+                saved_revision: 5
+            }
         );
         assert!(managed.publication_calls.lock().unwrap().is_empty());
         assert!(repository.publication_events.lock().unwrap().is_empty());

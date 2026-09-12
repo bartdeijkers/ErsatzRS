@@ -370,11 +370,8 @@ test('renders declarative panels and persists normal and secret-reference settin
     .getByTestId('addon-setting-row')
     .filter({ hasText: 'Display label' });
   await labelSetting.locator('input').fill('Configured value');
-  await Promise.all([
-    page.waitForEvent('load'),
-    labelSetting.getByRole('button', { name: 'Save' }).click(),
-  ]);
-  await waitForHydration(page);
+  await labelSetting.getByRole('button', { name: 'Save' }).click();
+  await expect(labelSetting.getByRole('status')).toContainText('Saved.');
 
   await expect
     .poll(() => {
@@ -394,10 +391,8 @@ test('renders declarative panels and persists normal and secret-reference settin
     .filter({ hasText: 'API token reference' });
   await secretSetting.getByRole('combobox').selectOption('environment');
   await secretSetting.locator('input').fill('EXAMPLE_ADDON_TOKEN');
-  await Promise.all([
-    page.waitForEvent('load'),
-    secretSetting.getByRole('button', { name: 'Save' }).click(),
-  ]);
+  await secretSetting.getByRole('button', { name: 'Save' }).click();
+  await expect(secretSetting.getByRole('status')).toContainText('Saved.');
 
   await expect
     .poll(() => {

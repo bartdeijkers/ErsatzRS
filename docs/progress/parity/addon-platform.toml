@@ -61,6 +61,54 @@ frozen compatibility path.
 '''
 
 [[debt]]
+id          = 'addon-empty-installation-guidance'
+description = 'P2: unfiltered empty Installed and Browse pages imply a filter miss and do not direct a first-time operator to the existing source/package installation path.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Native empty-state tests distinguish setup from real filters. Claude completed a fresh-profile UI-only repository/add-on install using the new setup link; Codex independently reviewed the screenshots. Link emphasis remains low-priority polish. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+evidence    = 'Joint visual walkthrough W02/W05 on a fresh disposable profile: both views show No add-ons match these filters before any source/install exists. Codex independently reviewed the screenshot and addons.rs:534/540. Suggested correction: truthful empty-setup text and a link to Sources/Install from file; retain real empty-search wording. Verify a fresh-profile UI-only install path. Correction is implemented under the maintainer-approved walkthrough scope; focused tests and independent Claude visual verification are in progress.'
+
+[[debt]]
+id          = 'addon-upload-package-type-guidance'
+description = 'P2: package/repository ZIP upload rows lack explanatory guidance, and submitting a repository ZIP to the first row produces technical toast-only feedback without directing the operator to the correct row.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Both ZIP rows have localized explanations and persistent contextual feedback; wrong-root errors direct the operator to the other row. Native package-type error tests pass. Claude visually verified the two upload rows and real repository installation; Codex reviewed the screenshot. Success-to-Browse guidance remains polish. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+evidence    = 'Joint walkthrough W06/W09: repository bundle submitted to Add-on package returns HTTP 422 and package has no root addon.toml; correct Repository package upload succeeds. Both agents reviewed rendered evidence and addons.rs:614-655. Preserve validation and trust controls; explain package types and show persistent contextual recovery. Correction is implemented under the maintainer-approved walkthrough scope; focused tests and independent Claude visual verification are in progress.'
+
+[[debt]]
+id          = 'addon-admin-control-labels'
+description = 'P2: the add-on manager state filter and manifest-rendered configuration inputs lack programmatically associated labels.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Manager Search/Status and manifest setting controls have stable associated labels, including compound controls. Matched Chromium/Firefox manager tests and independent Claude DOM/visual checks pass on the real installation. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+evidence    = 'Walkthrough W05/W14: filter select has no accessible name; Codex independently verified configuration inputs with empty IDs, zero associated labels and no aria-label/labelledby in the real detail page. addons.rs:432 and setting_editor render the gap. Associate existing visible labels with stable control IDs and verify rendered accessible names. Correction is implemented under the maintainer-approved walkthrough scope; focused tests and independent Claude visual verification are in progress.'
+
+[[debt]]
+id          = 'addon-admin-nested-main-landmarks'
+description = 'P2: Add-ons settings and add-on detail render a main landmark nested inside the admin shell main.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Inner manager/detail main elements are sections. Claude independently verified one main on both hydrated routes; matched manager browser tests pass. Shared labelled dialogs are preserved. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+evidence    = 'Walkthrough W04: Claude found two main elements on settings; Codex independently found two on add-on detail. addons.rs:237/1050 owns the inner containers. Keep the shell main and replace inner containers with sections without changing layout. Verify one main after hydration. The shared dialog label suspicion was withdrawn after DOM verification and is not part of this debt.'
+
+[[debt]]
+id          = 'addon-check-result-stale-until-reload'
+description = 'P2: a completed add-on Check does not refresh the visible Status, leaving the operator to reload to see the persisted result.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Check refreshes the existing persistent detail result in place, with pending state and a formatted UTC timestamp. Native formatting tests, Chromium/Firefox manager cases and Claude real UI verification pass. The real check was too fast to observe pending manually; no tool-update claim is inferred. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+evidence    = 'W15 reproduced twice in the joint walkthrough: disabled add-on checks persisted ready at 11:07:53Z and 11:09:33Z, while the page retained a dash until reload. The effect only pushes a toast and Status uses the initial detail prop (addons.rs:951/1125); toast absence before the first screenshot is unproven. Show progress and refresh persistent result in place. Do not confuse Check with tool maintenance or preserve checks invalidated by configuration changes. Correction is implemented under the maintainer-approved walkthrough scope; focused tests and independent Claude visual verification are in progress.'
+
+[[debt]]
+id          = 'addon-configuration-save-feedback'
+description = 'P2: configuration Save provides no durable confirmation and presents invalidated readiness as an unexplained dash.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Per-setting Save shows durable feedback, preserves unsaved sibling values, and explains the existing disable/recheck safety behavior without reload. Both browsers pass the manager and existing configuration persistence cases; Claude independently confirmed these states on the real add-on. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+evidence    = 'W16: UI saved an isolated executable path, verified by read-only database and reload, but the field looked indistinguishable from unsaved input and no persistent result appeared. Configuration correctly disables the add-on and clears readiness (infra/addons.rs:2809). Keep that safety behavior; show saved/failed feedback and explain the required new check. Correction is implemented under the maintainer-approved walkthrough scope; focused tests and independent Claude visual verification are in progress.'
+
+[[debt]]
 id          = 'offline-repository-bundle-cannot-be-removed-in-admin'
 description = 'Let an administrator undo importing an offline repository ZIP from the Sources view. After explicit confirmation, remove the local bundle source, its discovered offers, scan state, and managed staged bundle without uninstalling independently installed add-on snapshots or deleting their settings and data. The action must be localized, support the no-JS fallback, reject checkout/deployment-owned sources, and leave no stale source or health rows.'
 discovered  = '2026-08-31'

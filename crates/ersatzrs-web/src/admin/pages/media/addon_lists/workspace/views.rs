@@ -1,8 +1,7 @@
 use super::super::{
     artwork_value, content_kind_value, detail_state_text_key, format_progress_timestamp,
     icon_style, import_can_retry, import_discovery_summary, parse_first_aired, people_lines,
-    presentation_icon, presentation_text_key, publication_phase_text_key,
-    publication_state_text_key, revision_can_restore, tr, AddonMediaListArtworkRole,
+    presentation_icon, presentation_text_key, revision_can_restore, tr, AddonMediaListArtworkRole,
     AddonMediaListContentKind, AddonMediaListDeliveryMode, AddonMediaListDetailPolicy,
     AddonMediaListDraftDiffRow, AddonMediaListForm, AddonMediaListImportState,
     AddonMediaListItemRole, AddonMediaListItemRow, AddonMediaListNfoForm,
@@ -18,7 +17,7 @@ mod bulk;
 mod detail;
 mod settings;
 use super::{Draft, Submission, FORM};
-use detail::{activity, artwork, item, recovery};
+use detail::{activity, artwork, item};
 use settings::{metadata_fields, option_controls, playback, settings};
 
 pub(super) struct Workspace {
@@ -69,10 +68,24 @@ pub(super) fn render(w: &Workspace) -> AnyView {
                 "metadata_title" => TextKey::Title,
                 "metadata_year" => TextKey::Year,
                 "chapter_input" => TextKey::UseChaptersAsMediaItems,
-                "season" | "bulk_season" => TextKey::Season,
+                value
+                    if value == "season"
+                        || value == "bulk_season"
+                        || value.starts_with("season_") =>
+                {
+                    TextKey::Season
+                }
                 _ => TextKey::Episode,
             };
-            view! {<li><a href=format!("#workspace-{name}")>{tr(label)}</a></li>}
+            let item = name
+                .rsplit_once('_')
+                .and_then(|(_, id)| id.parse::<i64>().ok())
+                .and_then(|id| w.items.iter().find(|row| row.id == id));
+            let label = item.map_or_else(
+                || tr(label).to_owned(),
+                |row| format!("{}: {}", tr(label), row.display_title),
+            );
+            view! {<li><a href=format!("#workspace-{name}")>{label}</a></li>}
         })
         .collect_view();
     let task_view = match w.task.as_str() {
@@ -81,6 +94,15 @@ pub(super) fn render(w: &Workspace) -> AnyView {
         "activity" => activity(w),
         _ if w.task.starts_with("artwork") => artwork(w),
         _ if w.item_id.is_some() => item(w),
+        _ if w.form.published_revision == 0
+            && w.submission.draft.groups.is_empty()
+            && w.form
+                .import_progress
+                .as_ref()
+                .is_some_and(|p| super::import::active(p.state)) =>
+        {
+            view! { <super::import::ImportLandingIsland list_id=w.form.id/> }.into_any()
+        }
         _ => items(w),
     };
     let view_class = match w.task.split(':').next().unwrap_or("items") {
@@ -102,6 +124,7 @@ pub(super) fn render(w: &Workspace) -> AnyView {
                 }).collect_view()}
             </nav>
             <div class=if w.task=="items" {"page-heading media-masthead"} else {"page-heading"}>{(w.task=="items").then(||view!{<div class="cover-art"><span aria-hidden="true" style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span></div>})}<div><h1>{heading}</h1></div></div>
+            {w.submission.arrival_error.map(|key| view! { <div class="notice error" role="alert" data-testid="addon-list-arrival-error"><p>{tr(key)}</p><button class="button secondary" form=FORM name="intent" value="navigate" formaction=format!("{base}/settings") formnovalidate>{tr(TextKey::AddonWorkspaceSettings)}</button></div> })}
             {w.submission.error.clone().map(|error| view! { <div class="notice error" role="alert" tabindex="-1" autofocus id="workspace-errors"><strong>{tr(TextKey::AddonWorkspaceRetained)}</strong><p>{error}</p><ul>{error_links}</ul>{button("review-current",TextKey::AddonWorkspaceReviewLatest,false)}</div> })}
             {w.submission.notice.map(|key| view! { <p class="notice success" role="status">{tr(key)}</p> })}
             {detail::confirmation(w)}
@@ -233,7 +256,6 @@ fn items(w: &Workspace) -> AnyView {
                 {detail::import_progress(w)}
             </div></details>
             <p hidden={r.restricted_excluded_count==0}>{tr(TextKey::RestrictedItemsExcluded)}": "{r.restricted_excluded_count}</p>
-            {recovery(w)}
         </section>
         <section class="panel episode-editor" aria-label=tr(TextKey::AddonWorkspaceItems)>
             <div class="filter-row">
@@ -243,6 +265,8 @@ fn items(w: &Workspace) -> AnyView {
             </div>
             <details class="disclosure group-actions-disclosure bulk-tools" data-disclosure-kind="section" open=d.expanded_bulk>
                 <summary><span class="disclosure-label">{tr(TextKey::AddonWorkspaceBulk)}</span><span class="disclosure-toggle" aria-hidden="true"></span></summary><div class="disclosure-body">
+                    <div class="action-row">{button("include-selected",TextKey::AddonWorkspaceIncludeSelected,false)}{button("exclude-selected",TextKey::AddonWorkspaceExcludeSelected,false)}</div>
+                    <p>{tr(TextKey::AddonWorkspaceInclusionHelp)}</p>
                     {button("clear-selection",TextKey::ClearSelection,false)}<div class="bulk-task-grid"><section><h3>{tr(TextKey::NumberEpisodes)}</h3>
                         {select("bulk_scope",TextKey::Scope,d.field("items","bulk_scope","selected"),vec![("selected".into(),tr(TextKey::AddonWorkspaceSelected).to_owned()),("page".into(),tr(TextKey::AddonWorkspacePage).to_owned()),("matching".into(),tr(TextKey::AddonWorkspaceMatching).to_owned()),("all".into(),tr(TextKey::All).to_owned())])}
                         <div class="grid-3">{input("bulk_season",TextKey::Season,d.field("items","bulk_season","1"),"number")}{input("bulk_episode",TextKey::Episode,d.field("items","bulk_episode","1"),"number")}{input("bulk_count",TextKey::Count,d.field("items","bulk_count",""),"number")}</div>
@@ -262,7 +286,7 @@ fn items(w: &Workspace) -> AnyView {
                 </div>
             </details>
             {bulk::preview(w)}
-            <div class="numbering-actions editor-savebar numbering-save-bar">{d.undo.as_ref().map(|_|button("undo",TextKey::UndoLastChange,false))}{d.saved_review_undo.as_ref().filter(|u|d.undo.is_none() && u.expected_revision==d.revision).map(|_|button("undo-saved-review",TextKey::UndoLastChange,false))}{button("save",TextKey::AddonWorkspaceSaveNumbering,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<span>{format!("{}: {} · {}: {}",tr(TextKey::AddonWorkspaceSelection),d.selected.len(),tr(TextKey::AddonWorkspaceOffPage),d.selected.len().saturating_sub(selected_here))}</span></div>
+            <div class="numbering-actions editor-savebar numbering-save-bar">{d.undo.as_ref().map(|_|button("undo",TextKey::UndoLastChange,false))}{d.saved_review_undo.as_ref().filter(|u|d.undo.is_none() && u.expected_revision==d.revision).map(|_|button("undo-saved-review",TextKey::UndoLastChange,false))}{button("save",TextKey::SaveChanges,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<span>{format!("{}: {} · {}: {}",tr(TextKey::AddonWorkspaceSelection),d.selected.len(),tr(TextKey::AddonWorkspaceOffPage),d.selected.len().saturating_sub(selected_here))}</span></div>
             <div class="episode-list"><div class="episode-column-head" aria-hidden="true"><span></span><span>{tr(TextKey::Name)}</span><span>{tr(TextKey::FirstAired)}</span><span>{tr(TextKey::Duration)}</span><span>{tr(TextKey::Season)}" / "{tr(TextKey::Episode)}</span><span></span></div>
                 <ol class="episode-rows">{visible.iter().map(|row| item_row(w,row)).collect_view()}</ol>
                 <p hidden=!rows.is_empty()>{tr(TextKey::NoItems)}</p>
@@ -295,14 +319,14 @@ fn item_row(w: &Workspace, row: &AddonMediaListItemRow) -> AnyView {
         <label class="row-pick"><input type="hidden" form=FORM name=select_name.clone() value="false"/><input type="checkbox" form=FORM name=select_name value="true" checked=d.selected.contains(&id) aria-label=format!("{}: {title}",tr(TextKey::AddonWorkspaceSelection))/><span aria-hidden="true">{format!("{:02}",rank+1)}</span></label>
         <div class="episode-identity">{row.thumbnail_url.clone().map_or_else(||view!{<span class="row-art-placeholder" style=icon_style(presentation_icon(w.form.presentation_kind),"2rem") aria-hidden="true"></span>}.into_any(),|url|view!{<img src=url alt="" loading="lazy"/>}.into_any())}<div>
             <button class="button row-title" form=FORM name="intent" value="navigate" formaction=format!("/media/addon-lists/{}/items/{id}",w.form.id) formnovalidate>{title}</button>
-            {(!row.included).then(||view!{<small>{tr(TextKey::ExcludedItems)}</small>})}
+            <small>{tr(if d.field("items", &format!("included_{id}"), row.included.to_string()) == "true" {TextKey::IncludeInPublication} else {TextKey::AddonWorkspaceExcluded})}</small>
             {(row.metadata_conflict_count>0 || row.liveness_conflict).then(||view!{<small>{tr(TextKey::Conflicts)}</small>})}
         </div></div>
-        <div class="episode-evidence"><div class="airdate"><span class="mobile-column">{tr(TextKey::FirstAired)}</span><time datetime=row.first_aired.clone()>{row.first_aired.clone().unwrap_or_else(||tr(TextKey::UnknownAvailability).into())}</time>{gap.map(|days|view!{<small class="gap-note">{format!("{days} d")}</small>})}</div>
-        <div class="runtime"><span class="mobile-column">{tr(TextKey::Duration)}</span><span>{row.duration_seconds.map_or_else(||"—".into(),|n|format!("{}:{:02}",n/60,n%60))}</span>{row.duration_seconds.is_none().then(||view!{<small>{tr(TextKey::UnknownAvailability)}</small>})}</div></div>
+        <div class="episode-evidence"><div class="airdate"><span class="mobile-column" aria-hidden="true">{tr(TextKey::FirstAired)}</span><span class="sr-only">{tr(TextKey::FirstAired)}": "</span><time datetime=row.first_aired.clone()>{row.first_aired.clone().unwrap_or_else(||tr(TextKey::UnknownAvailability).into())}</time>{gap.map(|days|view!{<small class="gap-note">{format!("{days} d")}</small>})}</div>
+        <div class="runtime"><span class="mobile-column" aria-hidden="true">{tr(TextKey::Duration)}</span><span class="sr-only">{tr(TextKey::Duration)}": "</span><span>{row.duration_seconds.map_or_else(||"—".into(),|n|format!("{}:{:02}",n/60,n%60))}</span>{row.duration_seconds.is_none().then(||view!{<small>{tr(TextKey::UnknownAvailability)}</small>})}</div></div>
         <div class="row-numbering"><div class="inline-pair">
             {[("season",TextKey::Season,row.season),("episode",TextKey::Episode,row.episode)].into_iter().map(|(name,key,saved)|view!{<label>{baseline(&format!("{name}_{id}"),&d.field("items",&format!("{name}_{id}"),saved.map(|n|n.to_string()).unwrap_or_default()))}<span aria-hidden="true">{tr(key).chars().next().map(|c|c.to_string())}</span><input id=format!("workspace-{name}_{id}") type="number" min="0" max="2147483647" form=FORM name=format!("{name}_{id}") value=d.field("items",&format!("{name}_{id}"),saved.map(|n|n.to_string()).unwrap_or_default()) placeholder="—" aria-invalid=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("true") aria-describedby=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("workspace-errors") aria-label=format!("{}: {}",tr(key),row.display_title)/></label>}).collect_view()}
-        </div><small>{tr(TextKey::Saved)}": "{match (row.season,row.episode){(Some(s),Some(e))=>format!("{s} · {e}"),_=>tr(TextKey::Unnumbered).into()}}</small></div>
+        </div><small>{tr(TextKey::ItemSavedValue)}": "{match (row.season,row.episode){(Some(s),Some(e))=>format!("S{s:02}E{e:02}"),_=>tr(TextKey::Unnumbered).into()}}</small></div>
         <button class="row-command-trigger" type="button" popovertarget=menu.clone() aria-label=format!("{}: {}",tr(TextKey::Actions),row.display_title)>{tr(TextKey::Actions)}</button>
         <div id=menu class="row-commands" popover="auto" role="group" aria-label=tr(TextKey::Actions)><p class="command-context">{row.display_title.clone()}</p><div class="command-list">
             {button(&format!("start:{id}"),TextKey::StartHere,false)}

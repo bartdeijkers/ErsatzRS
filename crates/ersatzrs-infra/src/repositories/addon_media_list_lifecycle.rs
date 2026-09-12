@@ -283,55 +283,8 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     }
 
     async fn register_option_schema(&self, schema: &AddonMediaListOptionSchema) -> Result<()> {
-        decode_and_validate_schema(schema)?;
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        let installed: bool = sqlx::query_scalar(
-            r#"SELECT EXISTS (
-                   SELECT 1 FROM "AddonInstallation" WHERE "AddonId" = ?
-               )"#,
-        )
-        .bind(&schema.schema.addon_id)
-        .fetch_one(&mut *tx)
-        .await
-        .repository()?;
-        if !installed {
-            return Err(RepositoryError::Conflict(
-                "option schemas can only be registered for an installed add-on".into(),
-            ));
-        }
-        let existing = sqlx::query(
-            r#"SELECT "SchemaDigest", "DefinitionJson"
-               FROM "AddonMediaListOptionSchema"
-               WHERE "AddonId" = ? AND "CapabilityId" = ?"#,
-        )
-        .bind(&schema.schema.addon_id)
-        .bind(&schema.schema.capability_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .repository()?;
-        if let Some(existing) = existing {
-            let digest: String = existing.try_get("SchemaDigest").repository()?;
-            let definition: String = existing.try_get("DefinitionJson").repository()?;
-            if digest == schema.schema.schema_digest && definition == schema.definition_json {
-                tx.commit().await.repository()?;
-                return Ok(());
-            }
-            return Err(RepositoryError::Conflict(OPTION_SCHEMA_MISMATCH.into()));
-        }
-
-        sqlx::query(
-            r#"INSERT INTO "AddonMediaListOptionSchema" (
-                  "AddonId", "CapabilityId", "SchemaDigest", "DefinitionJson", "CreatedAt"
-               ) VALUES (?, ?, ?, ?, ?)"#,
-        )
-        .bind(&schema.schema.addon_id)
-        .bind(&schema.schema.capability_id)
-        .bind(&schema.schema.schema_digest)
-        .bind(&schema.definition_json)
-        .bind(encode_datetime(schema.created_at))
-        .execute(&mut *tx)
-        .await
-        .repository()?;
+        register_option_schema_in_tx(&mut tx, schema).await?;
         tx.commit().await.repository()
     }
 
@@ -4160,6 +4113,136 @@ fn decode_required_datetime(
     decode_datetime(kind, value.as_ref())
 }
 
+/// Register and bind defaults as part of creating a list or changing its provider.
+/// Existing unbound drafts are adopted only by explicit application preparation.
+impl SqliteAddonMediaListRepository {
+    pub(crate) async fn initialize_option_defaults_in_tx(
+        tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+        list_id: EntityId,
+    ) -> Result<()> {
+        // Only the schema declaration is needed; schema-less legacy installations
+        // need no binding and retain their existing preparation contract.
+        #[derive(serde::Deserialize)]
+        struct Declaration {
+            #[serde(default)]
+            capabilities: Vec<AddonCapability>,
+        }
+
+        let mut draft = load_draft_options_in_tx(tx, list_id, None).await?.ok_or(
+            RepositoryError::NotFound {
+                kind: "add-on media list",
+                id: list_id,
+            },
+        )?;
+        if draft.schema.is_some() {
+            return Ok(());
+        }
+        let installed = sqlx::query(
+            r#"SELECT "addon"."AddonId", "addon"."ManifestJson"
+               FROM "AddonInstallation" AS "addon"
+               JOIN "AddonMediaList" AS "list" ON "list"."AddonId" = "addon"."AddonId"
+               WHERE "list"."Id" = ? AND "addon"."Enabled" = 1"#,
+        )
+        .bind(list_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .repository()?;
+        let Some(installed) = installed else {
+            return Ok(());
+        };
+        let declaration: Declaration = serde_json::from_str(
+            &installed
+                .try_get::<String, _>("ManifestJson")
+                .repository()?,
+        )
+        .map_err(|_| RepositoryError::Conflict("invalid installed option declaration".into()))?;
+        let Some(definition) = declaration.capabilities.into_iter().find(|capability| {
+            capability.id == ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_OPTIONS_V1
+        }) else {
+            return Ok(());
+        };
+        if !draft.list_values.is_empty() || !draft.item_values.is_empty() {
+            return Err(RepositoryError::Conflict(
+                "unbound draft options cannot be adopted as defaults".into(),
+            ));
+        }
+        let definition_json = serde_json::to_string(&definition).map_err(|_| {
+            RepositoryError::Conflict("invalid installed option declaration".into())
+        })?;
+        let schema = AddonMediaListOptionSchema {
+            schema: AddonMediaListOptionSchemaRef {
+                addon_id: installed.try_get("AddonId").repository()?,
+                capability_id: definition.id,
+                schema_digest: sha256_hex(definition_json.as_bytes()),
+            },
+            definition_json,
+            created_at: chrono::Utc::now(),
+        };
+        match register_option_schema_in_tx(tx, &schema).await {
+            // Keep imports usable after an incompatible package schema update.
+            // Never replace a retained schema or bind the new draft to old defaults;
+            // explicit option saving/preparation reports the existing conflict.
+            Err(RepositoryError::Conflict(reason)) if reason == OPTION_SCHEMA_MISMATCH => {
+                return Ok(());
+            }
+            result => result?,
+        }
+        draft.schema = Some(schema.schema);
+        // Creation/provider-change owns the revision increment in this transaction.
+        save_draft_options_tx(tx, &draft, false).await
+    }
+}
+
+async fn register_option_schema_in_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    schema: &AddonMediaListOptionSchema,
+) -> Result<()> {
+    decode_and_validate_schema(schema)?;
+    let installed: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (SELECT 1 FROM "AddonInstallation" WHERE "AddonId" = ?)"#,
+    )
+    .bind(&schema.schema.addon_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if !installed {
+        return Err(RepositoryError::Conflict(
+            "option schemas can only be registered for an installed add-on".into(),
+        ));
+    }
+    let existing = sqlx::query(
+        r#"SELECT "SchemaDigest", "DefinitionJson" FROM "AddonMediaListOptionSchema"
+           WHERE "AddonId" = ? AND "CapabilityId" = ?"#,
+    )
+    .bind(&schema.schema.addon_id)
+    .bind(&schema.schema.capability_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .repository()?;
+    if let Some(existing) = existing {
+        let digest: String = existing.try_get("SchemaDigest").repository()?;
+        let definition: String = existing.try_get("DefinitionJson").repository()?;
+        if digest == schema.schema.schema_digest && definition == schema.definition_json {
+            return Ok(());
+        }
+        return Err(RepositoryError::Conflict(OPTION_SCHEMA_MISMATCH.into()));
+    }
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListOptionSchema" (
+           "AddonId", "CapabilityId", "SchemaDigest", "DefinitionJson", "CreatedAt"
+           ) VALUES (?, ?, ?, ?, ?)"#,
+    )
+    .bind(&schema.schema.addon_id)
+    .bind(&schema.schema.capability_id)
+    .bind(&schema.schema.schema_digest)
+    .bind(&schema.definition_json)
+    .bind(encode_datetime(schema.created_at))
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    Ok(())
+}
+
 async fn load_draft_options_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -4620,4 +4703,217 @@ pub(super) async fn save_draft_options_tx(
         .repository()?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod default_binding_tests {
+    use super::*;
+
+    async fn fixture(mode: i32, declares_schema: bool) -> crate::db::DbPool {
+        let pool = crate::db::init("sqlite::memory:").await.unwrap();
+        let capabilities = if declares_schema {
+            serde_json::json!([{
+                "id": "media-list.options.v1",
+                "options": [{
+                    "key": "enabled", "kind": "boolean", "scope": "both",
+                    "label": {"en-US": "Enabled"},
+                    "description": {"en-US": "Prepare finite media"},
+                    "default": true, "operation_targets": ["preparation"],
+                    "applicability": "finite_only", "requires_preparation": true
+                }]
+            }])
+        } else {
+            serde_json::json!([])
+        };
+        sqlx::query(
+            r#"INSERT INTO "AddonInstallation" (
+            "AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
+            "ManifestJson", "InstallPath", "InstalledAt", "UpdatedAt"
+            ) VALUES ('org.example.options','1',1,'package','content',?,'fixture',
+            '2026-09-01 00:00:00','2026-09-01 00:00:00')"#,
+        )
+        .bind(serde_json::json!({"capabilities": capabilities}).to_string())
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+            "Id","AddonId","ProviderId","SourceUrl","Name","DeliveryMode","DraftRevision",
+            "DeliveryCutoffAt","DeliveryCutoffIdentityId")
+            VALUES (1,'org.example.options','list','https://example.test/list','Fixture',?,4,
+                CASE WHEN ?=2 THEN '2026-09-01 00:00:00' END, CASE WHEN ?=2 THEN 0 END)"#,
+        )
+        .bind(mode)
+        .bind(mode)
+        .bind(mode)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItem" (
+            "Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title",
+            "SourceUrl","ProviderLiveness") VALUES
+            (10,1,'item','Fixture',4,0,'Fixture','https://example.test/item',1)"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool
+    }
+
+    #[tokio::test]
+    async fn creation_defaults_resolve_in_both_delivery_modes_without_editing_publications() {
+        for mode in [1, 2] {
+            let pool = fixture(mode, true).await;
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListRevision" (
+                "AddonMediaListId","Revision","SourceDraftRevision","CompletedAt")
+                VALUES (1,1,3,'2026-09-01 00:00:00')"#,
+            )
+            .execute(&pool)
+            .await
+            .unwrap();
+            let mut tx = crate::db::begin_write(&pool).await.unwrap();
+            SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(&mut tx, 1)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            let repository = SqliteAddonMediaListRepository(pool.clone());
+            let draft = repository.draft_options(1, None).await.unwrap().unwrap();
+            assert!(draft.schema.is_some());
+            assert_eq!(draft.draft_revision, 4);
+            assert!(draft.list_values.is_empty());
+            assert!(draft.item_values.is_empty());
+            let effective = crate::addon_media_list_options::load_draft_item_options(&pool, 1, 10)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(effective.requires_preparation(RemoteStreamLiveness::Finite));
+            assert!(!effective.requires_preparation(RemoteStreamLiveness::Live));
+            let retained: Option<i64> = sqlx::query_scalar(
+                r#"SELECT "OptionSchemaId" FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=1"#,
+            ).fetch_one(&pool).await.unwrap();
+            assert!(retained.is_none());
+            let mut tx = crate::db::begin_write(&pool).await.unwrap();
+            SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(&mut tx, 1)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            assert_eq!(
+                repository.draft_options(1, None).await.unwrap().unwrap(),
+                draft
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn default_initialization_keeps_schema_less_and_saved_custom_options_unchanged() {
+        let pool = fixture(1, false).await;
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(&mut tx, 1)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert!(
+            crate::addon_media_list_options::load_draft_item_options(&pool, 1, 10)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        let pool = fixture(1, true).await;
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(&mut tx, 1)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let repository = SqliteAddonMediaListRepository(pool.clone());
+        let mut draft = repository.draft_options(1, None).await.unwrap().unwrap();
+        draft.list_values.insert(
+            "enabled".into(),
+            ersatzrs_domain::AddonMediaListOptionValue::Boolean(false),
+        );
+        draft.draft_revision = repository.save_draft_options(&draft).await.unwrap();
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(&mut tx, 1)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert_eq!(
+            repository.draft_options(1, None).await.unwrap().unwrap(),
+            draft
+        );
+    }
+
+    #[tokio::test]
+    async fn default_binding_schema_change_preserves_import_and_retained_schema() {
+        let pool = fixture(1, true).await;
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(&mut tx, 1)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let repository = SqliteAddonMediaListRepository(pool.clone());
+        let retained = repository.draft_options(1, None).await.unwrap().unwrap();
+        let original: String = sqlx::query_scalar(
+            r#"SELECT "ManifestJson" FROM "AddonInstallation" WHERE "AddonId"='org.example.options'"#,
+        ).fetch_one(&pool).await.unwrap();
+        let mut updated: serde_json::Value = serde_json::from_str(&original).unwrap();
+        updated["capabilities"][0]["options"][0]["default"] = false.into();
+        sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson"=?"#)
+            .bind(updated.to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+            "Id","AddonId","ProviderId","SourceUrl","Name") VALUES
+            (2,'org.example.options','new-list','https://example.test/new-list','New fixture')"#,
+        )
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(&mut tx, 2)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert!(repository
+            .draft_options(2, None)
+            .await
+            .unwrap()
+            .unwrap()
+            .schema
+            .is_none());
+        assert_eq!(
+            repository.draft_options(1, None).await.unwrap().unwrap(),
+            retained
+        );
+        let effective = crate::addon_media_list_options::load_draft_item_options(&pool, 1, 10)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(effective.requires_preparation(RemoteStreamLiveness::Finite));
+    }
+
+    #[tokio::test]
+    async fn explicit_default_binding_advances_once_and_rejects_stale_reuse() {
+        let pool = fixture(1, true).await;
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(&mut tx, 1)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let repository = SqliteAddonMediaListRepository(pool.clone());
+        let draft = repository.draft_options(1, None).await.unwrap().unwrap();
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "DraftOptionSchemaId"=NULL WHERE "Id"=1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(repository.save_draft_options(&draft).await.unwrap(), 5);
+        assert!(repository.save_draft_options(&draft).await.is_err());
+        let saved = repository.draft_options(1, None).await.unwrap().unwrap();
+        assert_eq!(saved.draft_revision, 5);
+        assert_eq!(saved.schema, draft.schema);
+    }
 }

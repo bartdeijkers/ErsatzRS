@@ -1,7 +1,8 @@
 //! ADR 0085 option editing: sparse inheritance, exact-revision bulk apply and undo.
 //!
-//! Preview is read-only. Only an explicit apply binds provisional package defaults
-//! to a legacy draft; published options are never written by these commands.
+//! Preview is read-only. Explicit option edits or publication/preparation bind
+//! provisional package defaults to a legacy draft; published options are never
+//! written by these commands. Automatic refresh does not adopt legacy defaults.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -86,6 +87,40 @@ pub struct AddonListOptionPreviousValue {
 }
 
 impl ApplicationServices {
+    /// Bind immutable package defaults only for an explicitly admitted preparation.
+    pub(crate) async fn activate_addon_list_preparation_defaults(
+        &self,
+        command: &crate::commands::PublishAddonMediaList,
+    ) -> Result<i32> {
+        let lifecycle = self.ports().addon_media_list_lifecycle();
+        let Some(draft) = lifecycle.draft_options(command.id, None).await? else {
+            return Err(conflict("the saved draft is unavailable"));
+        };
+        if draft.schema.is_some() {
+            return Ok(command.saved_revision);
+        }
+        if !crate::commands::validate_addon_media_list_publication(
+            command,
+            self.ports().addon_media_lists(),
+            self.ports().managed_library_operations(),
+        )
+        .await?
+        {
+            return Ok(command.saved_revision);
+        }
+        let Some(editor) = self.addon_list_option_editor(command.id).await? else {
+            return Ok(command.saved_revision);
+        };
+        let Some(draft) = prepare_default_activation(&editor, command.saved_revision)? else {
+            return Ok(command.saved_revision);
+        };
+        lifecycle.register_option_schema(&editor.schema).await?;
+        lifecycle
+            .save_draft_options(&draft)
+            .await
+            .map_err(Into::into)
+    }
+
     /// Queue item access using explicitly saved options, never provisional defaults.
     pub async fn queue_media_list_access_check(
         &self,
@@ -663,9 +698,56 @@ fn conflict(message: &str) -> ApplicationError {
     ApplicationError::Conflict(message.into())
 }
 
+fn prepare_default_activation(
+    editor: &AddonListOptionEditor,
+    expected_revision: i32,
+) -> Result<Option<AddonMediaListDraftOptions>> {
+    // The editor read may race another save. Never adopt its newer fence.
+    if editor.draft.draft_revision != expected_revision {
+        return Err(conflict("the saved draft changed before preparation"));
+    }
+    if editor.draft.schema.is_some() {
+        return Ok(None);
+    }
+    if !editor.draft.list_values.is_empty() || !editor.draft.item_values.is_empty() {
+        return Err(conflict(
+            "unbound draft options cannot be adopted as defaults",
+        ));
+    }
+    let mut draft = editor.draft.clone();
+    draft.schema = Some(editor.schema.schema.clone());
+    Ok(Some(draft))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preparation_defaults_bind_only_an_exact_unbound_empty_draft() {
+        let (mut editor, _, _) = fixture();
+        let revision = editor.draft.draft_revision;
+        assert!(prepare_default_activation(&editor, revision)
+            .unwrap()
+            .is_none());
+        editor.draft.schema = None;
+        assert!(prepare_default_activation(&editor, revision).is_err());
+        editor.draft.list_values.clear();
+        editor.draft.item_values.clear();
+        assert!(prepare_default_activation(&editor, revision - 1).is_err());
+        let activated = prepare_default_activation(&editor, revision)
+            .unwrap()
+            .unwrap();
+        assert_eq!(activated.schema, Some(editor.schema.schema.clone()));
+        assert_eq!(activated.draft_revision, revision);
+        assert!(activated.list_values.is_empty());
+        assert!(activated.item_values.is_empty());
+        assert!(editor.draft.schema.is_none());
+        editor.draft = activated;
+        assert!(prepare_default_activation(&editor, revision)
+            .unwrap()
+            .is_none());
+    }
 
     fn fixture() -> (
         AddonListOptionEditor,

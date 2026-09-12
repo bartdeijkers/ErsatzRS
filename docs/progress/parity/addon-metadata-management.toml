@@ -2,10 +2,10 @@ feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'In progress'
-adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091', '0092']
+adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091', '0092', '0093']
 
 summary = '''
-ADR 0075 delivers provider-neutral drafts with parent NFOs, frozen contracts,
+ADR 0075 adds provider-neutral drafts with NFOs, frozen contracts,
 provider/override snapshots, durable inclusion, atomic publication, localization,
 artwork and health. ADR 0092 retired Beeld & Geluid; prior results are historical.
 yt-dlp remains the updateable extraction engine; its mapper translates full
@@ -20,16 +20,14 @@ contract, provider and operator snapshots, Publish, refresh, generated
 definitions, scanner persistence, editor, scheduling, health, IPTV/HLS, and the
 cross-platform yt-dlp package. Unknown is never guessed as finite and live
 items are admitted only where a deterministic live boundary is available.
-AMM-G (ADR 0079): paginated discovery precedes publication; optional details
-use durable item jobs and one randomized
-provider-host limiter for manual and automatic work. Localized delay settings
-default to 2–16 seconds, apply without restart, and preserve existing cooldowns.
-The editor supports manual imports, per-item details, durable progress and
-accessible numbering. AMM-G-06 retains unavailable Beeld & Geluid episodes
-without detail calls; AMM-G-07 proves the seven-URL matrix, provider order and
-identity, typed live/finite behavior, and invalid-output rejection. Retry keeps
-operator state while replacing only an incomplete generation. NSF live browser
-acceptance covers publication, scheduling, playout, MPEG-TS and HLS.
+AMM-G (ADR 0079): paginated discovery precedes publication; durable optional
+details share a randomized provider-host limiter. Localized 2–16 second defaults
+apply without restart and preserve cooldowns. The editor supports manual imports,
+detail jobs and accessible numbering. Historical G-06/G-07 evidence covers retained
+unavailable items, the seven-URL matrix, provider order/identity, live/finite
+behavior and invalid-output rejection. Retry preserves operator state and replaces
+only an incomplete generation. NSF live acceptance covers publication, scheduling,
+playout, MPEG-TS and HLS.
 AMM-H closes Windows television-cardinality regressions with canonical artwork,
 deterministic reads, restart-safe exact-duplicate repairs and aggregate health.
 AMM-I closes the import/review UX gaps under `amm-i-01`.
@@ -49,17 +47,199 @@ AMM-M-01A is Complete under ADRs 0087/0088; its milestone owns the options,
 real MPEG-TS/HLS cut and cancellation evidence. Native yt-dlp replaces the
 Range adapter and remains preferred in later slices. HDR/unmapped-subtitle refusals
 remain explicit; static startup-stage diagnostics remain non-blocking debt.
-M-01B completes the native Stream/Download ahead/New videos only select, with a
+M-01B delivers the native Stream/Download ahead/New videos only select, with a
 visible UTC cutoff renewed on re-enabling. Published playback stays frozen;
 existing videos stream and enabled SponsorBlock applies in every mode.
 M-02 completes ADR 0052 manual primary/fallback captions, revision-pinned files
 and aligned MPEG-TS/transcoded HLS captions in both delivery modes. Its milestone
 owns evidence. M-03 is complete; N-01 is pushed with green CI (see milestone):
 permission-reviewed yt-dlp -U, playback-first deferral and offline crash recovery.
-N-01B is locally complete, including live publication; its milestone owns evidence.
-N-02 is complete; N-03 owns draft evidence, the withdrawn anamorphic check
-and remaining packaged acceptance.
+A01-A10 and the confirmed walkthrough publication/setup defects are fixed locally;
+M-01B is complete. N-01B retains broader responsive/accessibility closeout.
+N-02 evidence is retained; N-01B blocks closeout. N-03 owns native ZIP/playback proof;
+Packaged browser-profile and release gates are open.
 '''
+
+[[debt]]
+id          = 'addon-preparation-readmission-context'
+description = 'UX follow-up W31: when provider details change review-gated availability after successful publication, the new saved revision asks for Prepare again without explaining the changed draft or possible reuse of existing prepared media.'
+discovered  = '2026-09-12'
+resolved    = false
+adr         = '0091'
+evidence    = 'Independent real walkthrough: publication revision1 completes from saved draft6; included-item details then change Availability and create draft7. A single Prepare completes a revision7 receipt in about1.1s using the SAME artifact, with one file and unchanged size/hash/mtime/inode. Exact-revision selection and current runtime/tool validation are intentional; no duplicate transfer occurred. Both reviewers withdrew the incidental-Publish-bump and duplicate-download defect hypotheses. Suggested improvement: explain the changed draft and revalidation step using existing state; do not promise cached reuse before admission or bypass exact-revision safety. Milestone amm-m-01b records the proof.'
+
+[[debt]]
+id          = 'addon-narrow-filter-readability'
+description = 'UX follow-up W28: at 320 CSS pixels the list filter shrinks beside Search to about 53 pixels and truncates the current All label to Al; the separate Search button adds avoidable vertical space.'
+discovered  = '2026-09-12'
+resolved    = false
+adr         = '0091'
+evidence    = 'Claude independently measured no page overflow at 320/390 but observed the unreadable filter; Codex independently reviewed ui-fixed-22-list-preparing-320.png. Suggested correction: stack the existing filter/search controls at the narrow breakpoint and keep their values readable. No new control framework or broader layout redesign is needed. Retained as follow-up after the authorized confirmed-fix batch, not a blocker to the verified publication correction.'
+
+[[debt]]
+id          = 'addon-bulk-retained-state-feedback'
+description = 'UX follow-up W29: native bulk selection/exclusion returns to the page top while changed row badges are below the fold and overview/filter counts still show saved state; select-all discovery is buried under numbering and selected counts update only on submission.'
+discovered  = '2026-09-12'
+resolved    = false
+adr         = '0091'
+evidence    = 'Real UI-only 14-item review: Exclude changes retained inputs, not the database; Save correctly persists one included item. Both agents verified this separation. Improve nearby retained-change feedback and selection discoverability using the existing native form/selection state; preserve no-JS navigation and exact-revision Save. Do not silently change saved counts, add a new editing framework or infer approval for a sticky action bar.'
+
+[[debt]]
+id          = 'addon-detail-progress-task-label'
+description = 'UX follow-up W30: the readiness details show a progress element without a programmatic name; its 14/14 count concerns detail discovery, not media preparation, and is ambiguous beside preparation status.'
+discovered  = '2026-09-12'
+resolved    = false
+adr         = '0091'
+evidence    = 'Claude DOM/visual review of the real preparing list at narrow widths. Suggested correction: give the existing progress element an associated localized detail-discovery label, retaining the separate authoritative preparation state. Screen-reader speech was not tested; no new progress subsystem is proposed.'
+
+[[debt]]
+id          = 'addon-publication-failed-child-scan-recovery-drain'
+description = 'P1: publication recovery keeps retrying verification after its original child scan has terminally failed because the drain check accepts only successful completion.'
+discovered  = '2026-09-12'
+resolved    = true
+adr         = '0075'
+evidence    = 'Walkthrough-fixes run1 bulk republish failure left a terminal Failed child and the parent waiting until recovery retries exhausted with original publication scan has not drained before verification. The repository checked Completed rather than both terminal states.'
+resolution  = 'Resolved locally on 2026-09-12: Completed and Failed original scans are drained; active children remain refused. A distinct non-deep verification scan is still required under the current lease, and a failed verification is not accepted as proof. Both terminal-state regressions pass, including active-child refusal and close/reopen/reclaim of the same verification scan. Claude and Astra independently accepted the correction. Evidence: test-results/walkthrough-fixes-native-20260912/ersatzrs-walkthrough-scanner-recovery.log.'
+
+[[debt]]
+id          = 'addon-add-misleading-two-step-guidance'
+description = 'A06/P2: the Add stepper says Import then Publish but omits review/save and conditional preparation, obscuring the next required action.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Removed the two-step promise and added localized import/review/save/conditional-preparation guidance without a wizard. Selected web tests and both-browser first-default-TV workflows pass; Claude independently reviewed the real Add flow and next preparation action on 2026-09-12. Action placement remains low-priority polish. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+adr         = '0091'
+evidence    = 'Joint rendered/source audit confirmed the two-step copy. Owning milestone amm-n-01b remains open. Later UX work, outside A01-A05 and after the maintainer-prioritized amm-o-01; reuse current readiness without introducing a mandatory wizard.'
+
+[[debt]]
+id          = 'addon-add-source-feedback-context'
+description = 'A07/P2: source detection lacks visible pending/unresolved feedback and import errors are transient rather than persistently associated with the URL/form.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Add now retains manual provider choice, shows pending/unresolved detection and persistent form errors, and removes duplicated draft guidance. Selected web tests and matched browser import/partial-Add cases pass. Claude verified real URL blur/Tab detection, automatic provider selection and delivery eligibility. No personal-installation fault injection was needed. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+adr         = '0091'
+evidence    = 'Source audit of AddAddonMediaListPageIsland and rendered duplicate draft notice; failure states were not injected into the personal installation. Later amm-n-01b UX work, not A01-A05. Retain manual provider selection and entered input.'
+
+[[debt]]
+id          = 'addon-row-season-error-labels'
+description = 'A08/P2: item-specific season validation links fall through to the Episode label; multiple row errors lack distinct context.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Existing row-field prefix mapping now identifies season versus episode and retains item context and anchor targets. The selected 711-test web/infra run and scoped source review pass. This is targeted error-label correction, not a screen-reader certification. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; these specific states were not covered by the independent real-provider visual pass.'
+adr         = '0091'
+evidence    = 'workspace/views.rs recognizes season and bulk_season but not the season_<id> row fields emitted by validation. Later amm-n-01b work; map existing field prefixes and retain their targets. No invalid live submission was made.'
+
+[[debt]]
+id          = 'addon-add-nested-main-landmark'
+description = 'A09/P2: Add renders a second main landmark nested inside the admin shell main, contradicting the accessible task-page contract.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. The inner Add container is a section, preserving the shell main. Claude independently confirmed one main and associated controls on the hydrated real Add page; both-browser default-TV workflows and web checks pass. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+adr         = '0091'
+evidence    = 'Joint rendered/source audit found two visible unnamed main elements on Add; workspace routes have one. Replace only the inner layout element and prove one landmark in SSR/hydration. Outside A01-A05; keeps full amm-n-01b accessibility acceptance open.'
+
+[[debt]]
+id          = 'addon-desktop-item-evidence-labels'
+description = 'A10/P2: first-air-date and duration evidence lose accessible labels on desktop because column headings are aria-hidden and mobile labels use display:none.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Desktop date/runtime labels remain in the accessibility tree via the existing visually-hidden style; duplicated mobile text is decorative. Selected web checks and independent source review pass. Actual screen-reader speech remains untested. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; these specific states were not covered by the independent real-provider visual pass.'
+adr         = '0091'
+evidence    = 'workspace/views.rs plus rendered 1440px inspection confirms hidden labels; season/episode input names are not affected. Actual screen-reader speech remains untested. Preserve date/duration context using existing visually-hidden styling and verify mobile behavior. Outside A01-A05; full amm-n-01b acceptance remains open.'
+
+[[debt]]
+id          = 'addon-first-tv-publication-scan-binding'
+description = 'P1: first publication of a newly imported TV Shows list can fail at television projection after successful Download ahead preparation because the scanned item binding required for its NFO lookup is unavailable at commit.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12: publication-owned matching establishes scanned bindings before parent metadata and typed projection, with no extra scan or intermediate playlist writes. Edited/invalid fallback parent NFOs are preserved through a closed, retry-safe refusal. Native TV/music-video/movie, mixed-binding, repeated-publication and preservation tests pass; Chromium/Firefox first-default-TV cases pass in Stream and new-videos-only delivery. Claude independently repeated real UI-only setup/import, bulk-retained one of fourteen items, prepared it and published revision 1 successfully with one bound episode and no publication failure. A graceful test-host interruption requeued preparation before publication; a new process with the unchanged binary and profile resumed without duplicate submission. Milestone amm-m-01b owns current evidence and limits.'
+adr         = '0075'
+evidence    = 'Joint UI-only real yt-dlp walkthrough W25a: default TV Shows presentation, new-videos-only delivery, 14 imported items reduced to one included item. Preparation completed; publication target revision 1 failed with publication_commit_failed and item must be scanned before television conversion. Recovery completed with RestoredAfterFailure; PublishedRevision remained 0. Both agents source-verified that commit invokes reconcile_projection before match_list_items_for_publication, while apply_tv_projection requires the missing first-publication MediaItemId-to-file link. Existing prepared-playback tests bypass this fresh default-TV path. A correction remains untested; preserve prior M-01B evidence and add a fresh TV first-publication regression. Maintainer authorized correction: publication-owned binding now precedes parent-NFO generation and TV projection, with existing lease checks and final playlist matching preserved. Native regression covers nested scanner paths, fresh/mixed bindings, title overrides and repeat publication. Verification remains in progress; no extra scan.'
+
+[[debt]]
+id          = 'addon-restored-publication-failure-feedback'
+description = 'P2: recovered publication failure is obscured by stale queued UI and success-styled Complete wording, with no localized explanation or useful next action.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Outcome-aware localized recovery display shares existing readiness polling across Items and Activity, separating recovered failure from successful publication. Both browsers pass restored-failure/fresh-page checks, including the closed parent-metadata preservation reason. Native status classification tests pass; no new retry infrastructure or lost saved-revision fences. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; these specific states were not covered by the independent real-provider visual pass.'
+adr         = '0075'
+evidence    = 'W25b: after failed first publication, live readiness returned to ready while the SSR recovery block stayed Publication queued. Fresh Activity rendered green Completed / Complete and raw publication_commit_failed with disabled recovery controls; RestoredAfterFailure appeared only farther down. Both agents reviewed the screenshot, job outcome and log. Distinguish successful recovery from successful publication, update the visible recovery state and provide safe localized failure guidance. Do not disable valid recovery or add retry machinery based on a stale-job hypothesis; all three operations were terminal.'
+
+[[debt]]
+id          = 'addon-import-landing-view-stale'
+description = 'P2: after overview import completes, the live readiness header reports imported items while the landing-page name, item table and filter counts still show the initial empty state until manual reload.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. The first empty importing draft shows progress and native Refresh/Activity links, then refreshes the current URL on completion without replacing an editable draft. Run2 delayed-import and partial-Add Chromium/Firefox cases pass. Claude observed the real 14-item import transition automatically to its populated title/table on 2026-09-12. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+evidence    = 'Joint real-provider walkthrough W19/W20: the header showed 14 included/preparations while the name was the source host, All (0), No items and 0-0/0 remained below. Read-only SQLite confirmed completed import, the real name and 14 items; reload revealed them. Both agents reviewed before/after evidence. Make import progress visible and refresh the completed discovery view without discarding operator edits. Correction is implemented and awaiting verification; do not reopen the verified preparation-heading correction.'
+
+[[debt]]
+id          = 'addon-bulk-inclusion-workflow-friction'
+description = 'P2 UX follow-up: reviewing a subset has no bulk inclusion action; retaining one of fourteen items requires opening and saving thirteen item detail pages.'
+discovered  = '2026-09-12'
+resolved    = true
+resolution  = 'Resolved locally on 2026-09-12. Existing selected-item native forms now preview Include/Exclude, with Save/Discard and revision fences. Both browsers pass hydrated exclusion/republication/reinclusion and no-JavaScript save/discard. Claude used bulk exclusion to retain one of fourteen real items and independently checked that only Save changed inclusion. Selection placement and retained-versus-saved feedback remain polish, not missing bulk functionality. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
+evidence    = 'Joint walkthrough W22/W23: all thirteen exclusions were performed through visible item forms, taking about three minutes with automation assistance (not measured human usability time). Row Actions and bulk tools lack inclusion management; item detail owns the checkbox. Suggested improvement for maintainer review: include/exclude existing selection, preserving ADR 0091 selection-versus-inclusion separation. No implementation approval inferred and no new framework required.'
+
+[[debt]]
+id          = 'folder-first-addon-list-portability'
+description = 'Saved list files/folders must be authoritative over SQLite: copied add-on media folders are discovered and their list information reconstructed or updated on the next ordinary or scheduled scan. Admin removal retains files but hides the list locally; rescans preserve that choice, while newly discovered shared copies appear normally elsewhere.'
+discovered  = '2026-09-12'
+resolved    = false
+adr         = '0093'
+evidence    = 'Maintainer explicitly accepted this requirement and ordered amm-o-01 immediately after verified completion of the current A01-A05 slice. Existing NFO/YAML precedence and portable-subfolder wording do not prove independent-database list reconstruction. The milestone owns acceptance; no implementation claimed.'
+
+[[debt]]
+id          = 'retained-option-schema-evolution'
+description = 'P2: an add-on update changing its options declaration conflicts with the immutable schema registered for the same capability; options saves and preparation cannot adopt the changed schema.'
+discovered  = '2026-09-12'
+resolved    = false
+adr         = '0085'
+evidence    = 'Cross-review traced register_option_schema_in_tx and the unique AddonId/CapabilityId constraint. A01 preserves existing list creation on this mismatch without replacing retained defaults. Schema evolution is outside A01-A05; do not silently reinterpret published options.'
+
+[[debt]]
+id          = 'untouched-defaults-preparation-schema'
+description = 'A01/P1: retain declared defaults before preparation; an unbound draft otherwise fails generic request validation before transfer.'
+discovered  = '2026-09-12'
+resolved    = true
+adr         = '0085'
+evidence    = 'Packaged v1.0.33-beta with matching binary and all 69 migrations queued schema-less requests for a schema-declaring provider. Prior native success explicitly saved options. Reopened amm-m-01b owns corrective verification; preserve published snapshots and revision fences.'
+resolution  = 'Resolved locally on 2026-09-12 by immutable creation defaults and exact-revision explicit legacy adoption. Native regressions and Chromium/Firefox untouched-default preparation plus retained publication pass in both delivery modes. Milestone amm-m-01b owns evidence; the live installation is unchanged.'
+
+[[debt]]
+id          = 'preparation-ready-heading-contradiction'
+description = 'A02/P2: publication overview says ready while its action still requires preparation.'
+discovered  = '2026-09-12'
+resolved    = true
+adr         = '0091'
+evidence    = 'Rendered packaged overview and publication.rs state/action logic disagree when required prepared media is missing. Reopened amm-n-01b owns heading/action and browser regression evidence.'
+resolution  = 'Resolved locally on 2026-09-12: heading and action share readiness classification; Chromium/Firefox prove required, ready and failed states without reloading. Milestone amm-n-01b owns tests and review evidence.'
+
+[[debt]]
+id          = 'preparation-failures-hidden-from-workspace'
+description = 'A03/P2: expose required preparation failures in the overview and Activity without confusing optional metadata or publication jobs.'
+discovered  = '2026-09-12'
+resolved    = true
+adr         = '0085'
+evidence    = 'Failed preparation jobs/artifacts coexist with an Activity page showing no publication jobs or events and no preparation failure state. Reopened amm-m-01b and amm-n-01b own corrective evidence.'
+resolution  = 'Resolved locally on 2026-09-12 using latest-attempt redacted projection, current-revision counts and labelled earlier revisions. Native projection tests plus both browsers prove visible guidance, Activity and no-JS Retry. Owning milestones retain evidence.'
+
+[[debt]]
+id          = 'preparation-invalid-request-mislabeled-input-change'
+description = 'A04/P2: preserve a safe typed invalid-request outcome rather than reporting host schema validation as changed operator input.'
+discovered  = '2026-09-12'
+resolved    = true
+adr         = '0085'
+evidence    = 'The preparation runtime maps InvalidRequest and PackageChanged to InputChanged. The failing request has absent options despite an installed schema; package identity matches. Reopened amm-m-01b owns typed persistence/projection regressions.'
+resolution  = 'Resolved locally on 2026-09-12: InvalidRequest persists separately without changing historical JSON; native runtime mapping and legacy queued-request tests prove rejection before transfer. Closed localized guidance preserves neutral wording for older InputChanged records. Milestone amm-m-01b owns evidence.'
+
+[[debt]]
+id          = 'addon-create-partial-failure-navigation'
+description = 'A05/P2: retain the created list identity and report a later save/presentation failure instead of leaving the operator on Add with total-failure wording.'
+discovered  = '2026-09-12'
+resolved    = true
+adr         = '0091'
+evidence    = 'Source-confirmed hydrated create/get/update/presentation chain discards the successful created identity on a later error. Same-source retry reuses the list, not necessarily a uniqueness failure. Reopened amm-n-01b owns fault-injected browser evidence.'
+resolution  = 'Resolved locally on 2026-09-12: hydrated partial Add opens the created list with persistent server-rendered guidance, shared with the no-JS redirect. Both browsers prove injected settings failure, reload persistence and same-identity retry. Milestone amm-n-01b owns evidence.'
 
 [[debt]]
 id          = 'locked-workspace-live-publication'
@@ -566,7 +746,7 @@ id          = 'package-gate-inherits-operator-state'
 description = 'The package verification gate can inherit a higher-priority operator database setting and does not fully isolate application state and logs.'
 discovered  = '2026-09-11'
 adr         = '0085'
-resolved    = false
+resolved    = true
 evidence    = '''
 Found while preparing the required AMM-N-03 disposable Windows acceptance.
 verify-web-bundle.sh sets only DATABASE_URL, while StartupConfig prefers the
@@ -579,8 +759,12 @@ database and log directory exist before accepting hydration assets. Shell
 syntax, diff checks and the matched Leptos build pass. The Linux executable gate
 passes with both inherited repository database aliases deliberately invalid;
 the disposable database/log directory and JS/WASM assets are verified, followed
-by clean shutdown. Packaged Windows execution remains pending. No operator
-database or profile was used to reproduce this source-proven isolation defect.
+by clean shutdown. The exact v1.0.33-beta archive now passes the native Windows
+gate with deliberately invalid inherited database/state aliases, managed
+FFmpeg acquisition, disposable database/log roots and working hydration assets.
+Actual packaged launcher bootstrap also names its disposable database; owned
+processes and test listeners are stopped. Milestone amm-n-03 owns archive
+identity and evidence. No operator database or profile was used.
 '''
 
 [[debt]]

@@ -3,6 +3,58 @@
 # order. Query runnable work with `cargo xtask progress milestones --runnable`.
 
 [[milestone]]
+id         = 'amm-o-01'
+phase      = 'AMM-O — portable file-backed add-on lists'
+title      = 'Rebuild add-on lists from authoritative saved folders'
+status     = 'Not started'
+feature    = 'addon-metadata-management'
+plan       = 'plans/addon-list-lifecycle-broadening.md'
+depends_on = ['amm-m-01b']
+acceptance = '''
+Implement ADR 0093 after verified completion of the active A01-A05 corrections,
+before later UX expansion or further N-03 closeout. Saved list content below a
+configured add-on media root, including yt-dlp_media, is authoritative over its
+SQLite projection. Copying the list folders to an independent installation
+with the appropriate add-on installed must allow the next normal or scheduled
+scan to discover and reconstruct/update the lists without copying SQLite or
+manually re-adding source URLs. Valid file content wins over stale database
+copies; administrative saved content must also survive that reconstruction.
+Do not encode host behavior against the yt-dlp add-on ID. Reuse existing
+YAML/NFO/storage and scan coordination; preserve Save/Publish separation and
+current playback. Removing a list in admin retains its folder and files but
+hides the list in the admin UI; repeat ordinary/scheduled scans must not make
+it visible again. Hiding is installation-local: copying a folder does not
+transfer the sender's hidden state, and a newly discovered list is visible on
+the receiving installation. Resolve copied draft/publication handling and
+revealing hidden lists in the focused plan
+before implementation. Local job/process ownership is not portable;
+copied artifact pins and ownership sidecars do not confer execution/deletion
+authority. Preserve the installed/enabled add-on boundary.
+Prove a saved-folder copy into a fresh database/profile, visible reconstructed
+list information, stale-database reconciliation and repeat-scan idempotence.
+Report invalid/incomplete files without overwriting valid saved content.
+Test supported Linux/Windows path handling without copying private media,
+credentials or machine-specific IDs into fixtures. Cross-review implementation
+and tests with Claude. Exclude transport/updater changes, new ZIP import/export
+services, whole-database backup and unrelated later UX work.
+'''
+evidence = '''
+2026-09-12: maintainer accepted folder-first portability and explicitly ordered
+it after the current slice completes. ADR 0093 is Accepted / Not implemented.
+The maintainer subsequently confirmed retained files with the list hidden in
+admin, then confirmed hiding is installation-local and newly discovered shared
+copies appear normally elsewhere. The persistence mechanism remains unchosen.
+Read-only review found NFO descriptive and YAML operational authority in ADR
+0068, portable-subfolder wording in the storage reference, but database-owned
+draft/publication state in ADR 0075 and scanner staging. Full copied-folder
+reconstruction is not proven. Next action after A01-A05: inventory the missing
+file-backed state and review the smallest implementation plan with Claude.
+Cross-review retains M-01B as the technical dependency and removes broader
+N-01B UX closeout as a prerequisite; the maintainer ordered A01-A05 first, not
+all later UX findings. Do not restore M-01B before that corrective browser proof.
+'''
+
+[[milestone]]
 id         = 'p7a-01'
 phase      = 'Phase 7A — Guardrails and failure semantics'
 title      = 'Decide and enforce the application boundary'
@@ -3464,10 +3516,98 @@ pinning and decoded prepared-file channel playback; do not restore a mandatory
 download fallback to Stream merely to satisfy these tests.
 '''
 evidence = '''
+Reopened after the 2026-09-12 joint visual walkthrough: real new-videos-only
+preparation succeeded, but first publication with Add's default TV Shows
+presentation failed at commit (item must be scanned before television
+conversion) and restored the unpublished state. PublishedRevision stayed 0.
+The UI also obscured the failed result as Complete/ready. W25a/W25b are recorded
+as addon-first-tv-publication-scan-binding and
+addon-restored-publication-failure-feedback. The maintainer subsequently
+authorized correction and independent Claude visual review. Publication-owned
+binding now precedes parent-NFO generation and TV projection, without another
+scan or intermediate playlist updates. The first native run exposed the additional
+parent-path ordering dependency; that correction and scanner-shaped fixture now
+pass, including operator title preservation, mixed bindings and repeat publication.
+Retry-safe refusal preserves edited/invalid fallback parent NFOs instead of silently
+bypassing them; it does not implement folder reconstruction or metadata merging.
+The subsequent browser run exposed stale generated scan work after exclusions and
+recovery waiting on an already Failed original scan. Both bounded corrections are
+independently reviewed and verified in their owning scanner/metadata parity debts.
+
+Restored to Complete locally on 2026-09-12. Evidence:
+- test-results/walkthrough-fixes-native-20260912: 711 selected web/infra tests,
+  65 subsequent preservation/projection tests, three final closed-code/path-alias
+  regressions and focused scanner/recovery tests pass. Two localhost mock tests
+  initially blocked by sandbox permissions pass with loopback access. Scoped
+  web/app/infra and final scanner/infra all-targets Clippy pass with warnings denied.
+- test-results/walkthrough-fixes-run1: eight of twelve Chromium/Firefox cases
+  pass, including fresh default-TV publication in Stream and new-videos-only,
+  truthful recovered failure, manager feedback and no-JavaScript bulk edits.
+  Four failures led to one hidden-element assertion correction and the two
+  demonstrated scanner/recovery fixes; they are not waived.
+- test-results/walkthrough-fixes-run2: all eight selected failed/affected cases
+  pass, including delayed import, exclusion/republication/reinclusion, existing
+  settings persistence and partial-Add recovery. Final matched server/JS/WASM
+  are used for the independent real-provider repeat; no separate server rebuild.
+- Claude independently repeats UI-only official add-on setup, real 14-item
+  import using default TV Shows/new-videos-only, bulk exclusion to retain one,
+  Save, preparation and FIRST publication. At 13:22:03 UTC publication job 1
+  completes with Outcome Published, saved revision 6 to publication revision 1,
+  one bound published item and one Episode. No failure code or SQL setup shortcut.
+  A test-host SIGTERM before preparation finished was graceful; its queued job
+  resumed on the unchanged profile and completed before the first Publish.
+  The sender is unproven; this is not evidence of an application crash.
+  Captures: .playwright-mcp/ui-fixed-*; isolated runtime evidence is retained.
+  This is local Linux UI/provider proof, not a new packaged Windows acceptance
+  or a repeat of scheduled playback/SponsorBlock gates. Prior valid playback
+  evidence below is reused because transport and subtitle processing are unchanged.
+  After publication, provider details change the included item Availability and
+  create saved draft7. A single Prepare creates a revision7 receipt in about1.1s
+  referencing the SAME artifact1: one file, unchanged size/hash/mtime/inode.
+  This verifies existing cache reuse, not a second media transfer. Both reviewers
+  withdraw the duplicate-download/readiness-defect hypothesis; contextual
+  revalidation wording remains UX follow-up W31. No old-revision admission fence
+  was loosened, and publication revision1 remains unchanged.
+Progress, formatting, architecture and hydration checks pass, with the web parity
+wrapper reusing separately recorded native tests and Clippy. No commit, push,
+CI, package deployment or live Windows mutation is part of this correction.
+Claude completes independent visual review with no remaining blocking finding
+for the correction: desktop1440, narrow390/320 without page overflow, light/dark
+key views, landmarks/labels, live import/Check/Save/preparation and next-Tab focus.
+Root cross-checks selected screenshots and persistence. Focus-loss and duplicate-
+download hypotheses are withdrawn after evidence; W28-W31 and other small UX
+improvements remain recorded, not silently implemented. No new exhaustive
+zoom/contrast/screen-reader or seven-width certification is claimed. Browser
+released and isolated host/worker stopped at13:32UTC; evidence/profile retained.
+Independent review traces the ordering to durable-recovery commit 24ad93a9,
+not the delivery-mode change; M-01B is reopened because its publication outcome
+is affected, not because its mode implementation introduced the defect.
+Earlier A01-A05 and prepared-media evidence remains valid for its tested paths;
+do not repeat passed gates or reopen the corrected default-binding defect.
+
 Completed by Codex on 2026-09-07 after exact-SHA green M-01A CI. The maintainer
 approved a fresh cutoff on re-enabling new-videos-only and requires its date
 to be visible on the add-on list page. Implementation and focused acceptance
-are complete; integrated release acceptance remains AMM-N-03.
+were complete for the tested saved-options path. Reopened on 2026-09-12:
+packaged v1.0.33-beta queues preparation with no retained options for a schema-
+declaring add-on, rejecting untouched defaults before transfer. Failed jobs are
+not visible in the task UI. A01/A03/A04 corrections are now verified locally;
+the owning parity debts record closure. Existing prepared-media proof is retained,
+not evidence for untouched defaults. Integrated acceptance remains AMM-N-03.
+Corrective checkpoint: 38 focused app/infra tests pass via
+`CARGO_BUILD_JOBS=2 ./run.sh test -p ersatzrs-infra -p ersatzrs-app -E 'test(preparation) | test(default_binding)' --test-threads 2`.
+Coverage includes legacy schema-less request rejection before transfer, default
+binding in both download modes, preserved published options, exact revisions,
+schema-mismatch import preservation and latest-attempt failure feedback.
+Claude cross-reviewed the implementation and corrections. Restored to Complete
+only after all eight A01-A05 Chromium/Firefox cases passed on 2026-09-12:
+`test-results/a01-a05-preparation-feedback-run1/playwright-results.json`
+(7.3 minutes, zero failures/skips). Untouched defaults prepare and complete
+retained publication in both modes; failure feedback and native no-JS Retry,
+legacy revision receipt with unsaved input, and fault-injected partial Add
+recovery also pass. A matched SSR/WASM build and web Clippy pass; the existing
+dependency future-incompatibility advisory is not changed. No live database,
+commit, push, deployment or new packaged acceptance is implied.
 The native selector, localized saved UTC cutoff, durable first-import identity
 fence, and mixed prepared-file/streaming publication selection are implemented.
 Six persistence tests cover initial/renewed cutoffs, unchanged saves, legacy
@@ -3636,6 +3776,11 @@ item/channel override precedence, publication recovery, and actual MPEG-TS/HLS
 channel viewing with the selected subtitle.
 '''
 evidence = '''
+2026-09-12: restored to Complete after M-01B first-TV publication correction passed
+native/browser and independent real-provider acceptance. The temporary reopening
+was dependency-only. No new subtitle defect was found; applicable earlier subtitle
+evidence below remains valid and is not scheduled for repetition.
+
 Reserved by Codex on 2026-09-07 after maintainer approval of the focused plan.
 ADR 0052 supplies unchanged item/channel/global primary then global fallback
 selection. HLS uses existing transcoded rendering; HLS Direct soft-subtitle
@@ -3719,6 +3864,11 @@ changed by this slice. Defaults are 25 GB per list and 250 GB combined, using
 decimal GB. A value of zero independently disables the corresponding warning.
 '''
 evidence = '''
+2026-09-12: restored to Complete with the verified M-01B publication correction
+and dependency-only M-02 restoration. No disk-warning defect was found; prior
+threshold and accounting acceptance below remains valid and must not be repeated
+without a relevant change.
+
 Scope narrowed by the maintainer on 2026-09-08 to disk-usage health warnings
 only; see the dated ADR 0085 amendment. The previous retention, reclamation,
 quota-administration and concurrency proposal is withdrawn, not deferred to
@@ -3834,7 +3984,7 @@ the next action is an N-02 implementation plan for maintainer review.
 id         = 'amm-n-01b'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
 title      = 'Replace Add-on List editing with the locked task design'
-status     = 'Complete'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/amm-n-01b-addon-list-design-adaptation.md'
 depends_on = ['amm-n-01']
@@ -3882,6 +4032,33 @@ review exposed the native workspace's static action. A narrow island updates the
 state, counts, blockers and native Prepare/Publish submit from resolved readiness;
 it preserves inputs outside the island, cancels after disposal and backs off on
 errors. Background blockers remain eligible for polling until work settles.
+Reopened on 2026-09-12 for A02/A03/A05: the packaged overview falsely says ready
+while preparation is required, Activity hides preparation failures, and hydrated
+Add reports total failure after a successful create followed by a failed step.
+Claude implemented the approved narrow corrections; Codex serialized verification.
+The locked design is unchanged. A01-A05 were locally complete before the later
+walkthrough. The subsequently authorized correction also closes A06-A10,
+stale import landing, bulk inclusion and recovered-failure feedback with focused
+native/browser proof and independent Claude visual review. The M-01B evidence
+records the shared verification and real first publication; add-on-platform
+owns installation/Check/Save corrections. Narrow filter readability, bulk
+retained-versus-saved feedback and detail-progress labelling remain separately
+recorded UX follow-ups. Full responsive/accessibility acceptance and N-01B status
+remain open, not weakened to enable amm-o-01. This focused review does not claim
+a new full seven-width/zoom/contrast acceptance pass; prior unchanged proof below
+remains valid. No later slice is pulled into the current correction.
+Corrective checkpoint: all 648 web tests pass (six existing skips); progress,
+format, architecture and hydration checks passed in the serialized web parity
+run. Clippy passes after cross-reviewed structural corrections; unchanged test
+evidence is reused rather than repeating the full gate. Matched SSR/WASM build
+and all eight focused Chromium/Firefox cases pass (7.3 minutes, no failures or
+skips): test-results/a01-a05-preparation-feedback-run1/playwright-results.json.
+This includes actual retained publication in both delivery modes, live failure
+guidance, native no-JS Retry, legacy adoption without lost input and partial Add
+recovery. The first wrapper attempt stopped at sandbox localhost bind EPERM
+before any test; the exact build was reused outside the network sandbox.
+Both agents reviewed each other's source and corrections. No new packaged
+acceptance, live database change, commit or push is claimed.
 Existing preparation, restart, NSF live, subtitle and SponsorBlock browser paths
 now use the real Playback/access task controls. No acceptance was weakened.
 
@@ -4028,7 +4205,7 @@ health warning; the owning milestone below records the current scope.
 id         = 'amm-n-02'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
 title      = 'Warn when yt-dlp could not update and is behind the latest release'
-status     = 'Complete'
+status     = 'In progress'
 feature    = 'addon-metadata-management'
 plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-n-01b']
@@ -4113,11 +4290,51 @@ Current candidate: immutable annotated v1.0.33-beta resolves to
 0fe8be29dffa949cbf3b550f4da2205632034604, matching local/tracking/live main at
 tagging. CI 34648235359 is terminal success for that exact SHA: all required
 jobs executed, including Chromium, Firefox, Rust tests and Clippy. Release
-run 34650816336 builds only the Windows archive as an unpublished draft;
-the other platform and public-release jobs are skipped. Build success, ZIP
-acceptance and publication remain unproven. Claude owns release monitoring;
-no parallel heavy work is permitted. The maintainer approved the overnight
-Windows-only draft window until 2026-09-12 09:00 local, not public promotion.
+run 34650816336 completed successfully on 2026-09-12 at 01:10 Amsterdam,
+building only the Windows archive as an unpublished draft. Other platform and
+public-release jobs were skipped. Independent Codex and Claude downloads agree:
+ersatzrs-v1.0.33-beta-win-x64.zip is 67872216 bytes, SHA256
+027154c9b46607dd2c5449049ec0cb56b1092cce8ad2585cd0dfd92667dcc03c.
+ZIP integrity, four executables, web assets and archive exclusions pass.
+The maintainer approved unattended isolated native checks before 09:00,
+not public promotion. All heavy operations were serialized.
+On a fresh NTFS extraction, native verify-web-bundle.sh passes with deliberately
+invalid inherited database/state aliases: disposable database/log creation,
+managed FFmpeg 9 acquisition and both hydration assets returning HTTP 200.
+The actual packaged launcher then owns the expected packaged server, whose SHA256
+is ccf4e0d3be5dbe667e9a6aaae95070b3703e8668af4b3b00eb5d6ad16e826ffc.
+Bootstrap names the disposable database; the selected runtime is n9.0-20260805.
+The verified private repository ZIP installs through the hydrated Sources UI.
+Native yt-dlp 2026.08.19 prepares and publishes a real Download ahead item with
+SponsorBlock enabled: format 616+251-12, 297032081 bytes, duration 959691 ms,
+and a current-revision artifact pin. File size, SHA256 and ffprobe duration agree.
+Scheduled playback joins the prepared file at 915843 ms. MPEG-TS first decoded
+video/audio arrive at 6.516/6.514 seconds; HLS first presentation is 1.661 seconds,
+maximum frame gap 50.1 ms, with no post-start waiting/stalled/seeking events.
+Both bounded host-log windows have no detected playback failure. Retained
+captures pass strict audio/video decoding and the existing TSDuck battery:
+40 checks, zero failures, unchanged thresholds. This is native prepared-file
+transport/cadence evidence around the known late-cut region, not another exact
+source-boundary or subjective-audio claim. Earlier source-correlation evidence
+remains applicable to its recorded streaming captures.
+The native publication-restart scenario passes in 3.4 minutes: scheduled scan
+contention, real NTFS sharing violation 32, browser disconnect, exhausted retry
+with retained journal, host termination and restart, then UI Retry completes
+exactly revision 2 under the same job/generation, with no stranded journal,
+lease, active operation or manual repair. Browser errors are empty; owned
+preparation workers exit. Three demonstrated probe-only defects were corrected:
+the edited fixture must return to Ready, prepare its exact draft revision,
+and canonicalize both existing paths before its unchanged containment check.
+Independent review finds no P1/P2. Earlier failed attempts are retained;
+the release executable and assets were never rebuilt or replaced. Temporary
+real-video probe corrections synchronized installation navigation and used
+the persistent artifact root; playback reused the completed publication.
+Evidence: test-results/n03-v1.0.33-beta/{package-identity.json,native-playback,
+native-recovery,tsduck}. Candidate processes and test listeners are stopped;
+no personal database/profile was used. The approved overnight checks are done.
+N-03 remains In progress: integrated packaged browser-profile guidance and
+remaining release acceptance/publication are not claimed complete. Monitoring
+continues for the 09:00 handoff; no additional heavy work is started overnight.
 After tagging, the maintainer's manual anamorphic-check withdrawal is recorded
 without changing the candidate. The existing FFmpeg snapshot
 nvenc_pipeline_anamorphic_source_scales_directly_to_square_pixels_snapshot

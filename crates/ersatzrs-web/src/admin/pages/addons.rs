@@ -12,7 +12,6 @@ use leptos::{html, prelude::*};
 use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::admin::i18n::{provide_i18n_context, tr, use_i18n, TextKey};
-#[cfg(feature = "ssr")]
 use crate::admin::server_fns::addons::load_addon_detail;
 use crate::admin::server_fns::addons::{
     check_addon_package, disable_addon_package, enable_addon_package, install_addon_package,
@@ -167,8 +166,12 @@ fn AddonsSettingsIsland(
     let pickers = FilePickers {
         addon: NodeRef::<html::Input>::new(),
         addon_name: RwSignal::new(String::new()),
+        addon_feedback: RwSignal::new(String::new()),
+        addon_pending: RwSignal::new(false),
         repository: NodeRef::<html::Input>::new(),
         repository_name: RwSignal::new(String::new()),
+        repository_feedback: RwSignal::new(String::new()),
+        repository_pending: RwSignal::new(false),
     };
     let unknown_sources_confirm_open = RwSignal::new(false);
     let repository_delete_open = RwSignal::new(false);
@@ -204,20 +207,28 @@ fn AddonsSettingsIsland(
     let upload_addon = move |_| {
         #[cfg(target_arch = "wasm32")]
         if let Some(input) = pickers.addon.get() {
+            pickers.addon_pending.set(true);
+            pickers.addon_feedback.set(String::new());
             leptos::task::spawn_local(async move {
                 match upload_selected_file(input, "/api/addons/package").await {
                     Ok(()) => {
                         toast.push(tr(TextKey::Install).to_owned(), ToastSeverity::Success);
                         overview.refetch();
+                        pickers.addon_feedback.set(tr(TextKey::Saved).to_owned());
                     }
-                    Err(error) => toast.push(error, ToastSeverity::Error),
+                    Err(error) => pickers
+                        .addon_feedback
+                        .set(package_upload_feedback(&error, true)),
                 }
+                pickers.addon_pending.set(false);
             });
         }
     };
     let upload_repository = move |_| {
         #[cfg(target_arch = "wasm32")]
         if let Some(input) = pickers.repository.get() {
+            pickers.repository_pending.set(true);
+            pickers.repository_feedback.set(String::new());
             leptos::task::spawn_local(async move {
                 match upload_selected_file(input, "/api/addons/repository-bundle").await {
                     Ok(()) => {
@@ -226,15 +237,21 @@ fn AddonsSettingsIsland(
                             ToastSeverity::Success,
                         );
                         overview.refetch();
+                        pickers
+                            .repository_feedback
+                            .set(tr(TextKey::Saved).to_owned());
                     }
-                    Err(error) => toast.push(error, ToastSeverity::Error),
+                    Err(error) => pickers
+                        .repository_feedback
+                        .set(package_upload_feedback(&error, false)),
                 }
+                pickers.repository_pending.set(false);
             });
         }
     };
 
     view! {
-        <main class=style::page data-testid="addons-settings-page">
+        <section class=style::page data-testid="addons-settings-page">
             <header class=style::page_header>
                 <div>
                     <h1>{tr(TextKey::Addons)}</h1>
@@ -294,7 +311,7 @@ fn AddonsSettingsIsland(
                     repository_delete_target.set(None);
                 })
             />
-        </main>
+        </section>
     }
 }
 
@@ -312,8 +329,12 @@ struct DetailWaitEditor {
 struct FilePickers {
     addon: NodeRef<html::Input>,
     addon_name: RwSignal<String>,
+    addon_feedback: RwSignal<String>,
+    addon_pending: RwSignal<bool>,
     repository: NodeRef<html::Input>,
     repository_name: RwSignal<String>,
+    repository_feedback: RwSignal<String>,
+    repository_pending: RwSignal<bool>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -364,6 +385,7 @@ fn manager_body(
         .map(|offer| offer.addon.id.clone())
         .collect::<BTreeSet<_>>();
     let source_count = data.repositories.len();
+    let available_count = data.available.len();
     let checkout_path = data.checkout_path.clone();
     let has_repositories = !data.repositories.is_empty();
     let offers_per_repository =
@@ -428,8 +450,10 @@ fn manager_body(
 
         <form class=style::filters method="get" style:display=if view_name == "sources" { "none" } else { "" }>
             <input type="hidden" name="view" value=view_name.to_owned()/>
-            <input class=style::search type="search" name="search" value=search_value.to_owned() placeholder=tr(TextKey::Search)/>
-            <select class=style::select name="state">
+            <label for="addon-search">{tr(TextKey::Search)}</label>
+            <input id="addon-search" class=style::search type="search" name="search" value=search_value.to_owned() placeholder=tr(TextKey::Search)/>
+            <label for="addon-state">{tr(TextKey::Status)}</label>
+            <select id="addon-state" class=style::select name="state">
                 <option value="all" selected=filter_value == "all">{tr(TextKey::All)}</option>
                 {filter_options(view_name, filter_value)}
             </select>
@@ -531,13 +555,19 @@ fn manager_body(
                 <div class=style::section_divider></div>
                 <p class=style::section_help>{tr(TextKey::DefaultRemoteStreamAddonHelp)}</p>
             </div>
-            {addon_grid(installed_cards.into_iter().map(installed_card).collect(), tr(TextKey::NoAddonsMatch))}
+            {addon_grid(installed_cards.into_iter().map(installed_card).collect(), manager_empty_message(installed_count, TextKey::AddonsNoneInstalled))}
+            <p class=style::empty_setup hidden=installed_count != 0>
+                {tr(TextKey::AddonsSetupHelp)}" "<a href="/settings/addons?view=sources#install-from-file">{tr(TextKey::InstallFromFile)}</a>
+            </p>
         </section>
         <section style:display=if view_name == "browse" { "" } else { "none" }>
             {addon_grid(browse_cards.into_iter().map(|item| {
                 let trust = repository_tiers.get(&item.repository_id).cloned();
                 available_card(item, trust)
-            }).collect(), tr(TextKey::NoAddonsMatch))}
+            }).collect(), manager_empty_message(available_count, TextKey::AddonsNoneAvailable))}
+            <p class=style::empty_setup hidden=available_count != 0>
+                {tr(TextKey::AddonsSetupHelp)}" "<a href="/settings/addons?view=sources#install-from-file">{tr(TextKey::InstallFromFile)}</a>
+            </p>
         </section>
         <section style:display=if view_name == "updates" { "" } else { "none" }>
             {addon_grid(update_cards.into_iter().map(|item| {
@@ -610,12 +640,13 @@ fn manager_body(
                 </div>
             </div>
 
-            <div class=style::section>
+            <div class=style::section id="install-from-file">
                 <div class=style::section_header>
                     <h2 class=style::section_heading>{tr(TextKey::InstallFromFile)}</h2>
                 </div>
                 <div class=style::section_divider></div>
                 <p class=style::section_help style:display=if unknown_enabled { "none" } else { "" }>{tr(TextKey::UnknownSourcesRequired)}</p>
+                <p id="addon-package-help" class=style::section_help>{tr(TextKey::AddonPackageHelp)}</p>
                 <div class=style::file_row>
                     <span class=style::file_row_label>{tr(TextKey::AddonPackage)}</span>
                     <label class=style::file_button aria-disabled=!unknown_enabled title=(!unknown_enabled).then(|| tr(TextKey::UnknownSourcesRequired))>
@@ -624,6 +655,8 @@ fn manager_body(
                             node_ref=pickers.addon
                             class=style::file_input
                             type="file"
+                            aria-label=tr(TextKey::AddonPackage)
+                            aria-describedby="addon-package-help addon-package-feedback"
                             accept=".zip,application/zip"
                             disabled=!unknown_enabled
                             on:change=move |event| pickers.addon_name.set(chosen_file_name(&event_target_value(&event)))
@@ -635,8 +668,10 @@ fn manager_body(
                             if name.is_empty() { tr(TextKey::NoFileSelected).to_owned() } else { name }
                         }}
                     </span>
-                    <button type="button" class=style::btn_secondary disabled=!unknown_enabled on:click=upload_addon>{tr(TextKey::Install)}</button>
+                    <button type="button" class=style::btn_secondary disabled=move || !unknown_enabled || pickers.addon_pending.get() on:click=upload_addon>{move || if pickers.addon_pending.get() { tr(TextKey::Loading) } else { tr(TextKey::Install) }}</button>
                 </div>
+                <p id="addon-package-feedback" class=style::action_feedback role="status">{move || pickers.addon_feedback.get()}</p>
+                <p id="repository-package-help" class=style::section_help>{tr(TextKey::AddonRepositoryPackageHelp)}</p>
                 <div class=style::file_row>
                     <span class=style::file_row_label>{tr(TextKey::RepositoryPackage)}</span>
                     <label
@@ -649,6 +684,8 @@ fn manager_body(
                             node_ref=pickers.repository
                             class=style::file_input
                             type="file"
+                            aria-label=tr(TextKey::RepositoryPackage)
+                            aria-describedby="repository-package-help repository-package-feedback"
                             accept=".zip,application/zip"
                             disabled=!unknown_enabled
                             on:change=move |event| pickers.repository_name.set(chosen_file_name(&event_target_value(&event)))
@@ -660,8 +697,9 @@ fn manager_body(
                             if name.is_empty() { tr(TextKey::NoFileSelected).to_owned() } else { name }
                         }}
                     </span>
-                    <button type="button" class=style::btn_secondary disabled=!unknown_enabled on:click=upload_repository>{tr(TextKey::Install)}</button>
+                    <button type="button" class=style::btn_secondary disabled=move || !unknown_enabled || pickers.repository_pending.get() on:click=upload_repository>{move || if pickers.repository_pending.get() { tr(TextKey::Loading) } else { tr(TextKey::Install) }}</button>
                 </div>
+                <p id="repository-package-feedback" class=style::action_feedback role="status">{move || pickers.repository_feedback.get()}</p>
             </div>
         </section>
     }
@@ -804,6 +842,28 @@ fn updates_empty_message(search_value: &str, filter_value: &str) -> &'static str
     }
 }
 
+fn manager_empty_message(total: usize, empty: TextKey) -> &'static str {
+    tr(if total == 0 {
+        empty
+    } else {
+        TextKey::NoAddonsMatch
+    })
+}
+
+#[cfg(any(target_arch = "wasm32", test))]
+fn package_upload_feedback(error: &str, addon: bool) -> String {
+    let help = tr(if addon {
+        TextKey::AddonPackageUploadHelp
+    } else {
+        TextKey::AddonRepositoryUploadHelp
+    });
+    if error.contains("has no root addon.toml") || error.contains("has no root repository.toml") {
+        help.to_owned()
+    } else {
+        format!("{error} {help}")
+    }
+}
+
 fn addon_grid(cards: Vec<AnyView>, empty: &'static str) -> AnyView {
     let is_empty = cards.is_empty();
     view! {
@@ -937,20 +997,57 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
     let install_action = Action::new(move |target: &(String, String, bool)| {
         install_addon_package(target.0.clone(), target.1.clone(), target.2)
     });
-    let check_action = Action::new(move |id: &String| check_addon_package(id.clone()));
+    let feedback = AddonDetailFeedback {
+        enabled: RwSignal::new(installed.as_ref().is_some_and(|item| item.enabled)),
+        saving: RwSignal::new(false),
+        status: RwSignal::new(
+            installed
+                .as_ref()
+                .map_or_else(|| "—".to_owned(), installed_check_message),
+        ),
+        checked_at: RwSignal::new(
+            installed
+                .as_ref()
+                .and_then(|item| item.last_check_at.as_deref())
+                .map(format_check_timestamp)
+                .unwrap_or_default(),
+        ),
+    };
+    let check_action = Action::new(move |id: &String| {
+        let id = id.clone();
+        async move {
+            check_addon_package(id.clone()).await?;
+            load_addon_detail(id)
+                .await?
+                .and_then(|detail| detail.installed)
+                .ok_or_else(|| ServerFnError::new(tr(TextKey::RequestFailed)))
+        }
+    });
     let enable_action = Action::new(move |id: &String| enable_addon_package(id.clone()));
     let disable_action = Action::new(move |id: &String| disable_addon_package(id.clone()));
     let uninstall_action =
         Action::new(move |id: &String| uninstall_addon_package(id.clone(), false));
-    let setting_action =
-        Action::new(move |setting: &AddonSettingEditor| save_addon_configuration(setting.clone()));
     action_reload_effect(install_action.value().into(), toast);
     action_reload_effect(disable_action.value().into(), toast);
     action_reload_effect(uninstall_action.value().into(), toast);
-    action_reload_effect(setting_action.value().into(), toast);
     Effect::new(move |_| match check_action.value().get() {
-        Some(Ok(message)) => toast.push(message, ToastSeverity::Info),
-        Some(Err(error)) => toast.push(error.to_string(), ToastSeverity::Error),
+        Some(Ok(installed)) => {
+            feedback.status.set(installed_check_message(&installed));
+            feedback.checked_at.set(
+                installed
+                    .last_check_at
+                    .as_deref()
+                    .map(format_check_timestamp)
+                    .unwrap_or_default(),
+            );
+            feedback.enabled.set(installed.enabled);
+        }
+        Some(Err(error)) => {
+            feedback.status.set(error.to_string());
+            // This error has no persisted check timestamp. Do not pair it with
+            // the previous successful check's time.
+            feedback.checked_at.set(String::new());
+        }
         None => {}
     });
     Effect::new(move |_| match enable_action.value().get() {
@@ -976,7 +1073,6 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
         source_url,
     ) = detail_identity(&detail, selected_offer.as_ref());
     let is_installed = installed.is_some();
-    let is_enabled = installed.as_ref().is_some_and(|item| item.enabled);
     let update_available = match (&installed, &selected_offer) {
         (Some(installed), Some(offer)) => {
             semver::Version::parse(&installed.version).is_ok_and(|version| {
@@ -990,7 +1086,7 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
         .as_ref()
         .is_some_and(|offer| offer.host_compatible && offer.package_available);
     let can_install = offer_installable && install_target.is_some() && update_available;
-    let can_import_list = is_enabled && supports_media_list_import(&permissions.0);
+    let supports_import = supports_media_list_import(&permissions.0);
     let import_list_href = format!("/media/addon-lists/add?addon_id={addon_id}");
     let selected_offer_note = is_installed
         .then(|| {
@@ -1047,14 +1143,14 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
 
     view! {
         <SettingsPageLayoutForPath current_path="/settings/addons">
-            <main class=style::detail data-testid="addon-detail-page">
+            <section class=style::detail data-testid="addon-detail-page">
             <a class=style::back href="/settings/addons">{"← "}{tr(TextKey::BackToAddons)}</a>
             <header class=style::detail_hero>
                 {addon_icon(icon_url, &name)}
                 <div class=style::detail_heading>
                     <h1>{name}</h1>
                     <p>{summary.clone()}</p>
-                    <div class=style::badges>{status_badge(&trust)}{status_badge(if is_enabled { "enabled" } else if is_installed { "disabled" } else { "available" })}</div>
+                    <div class=style::badges>{status_badge(&trust)}{move || status_badge(if feedback.enabled.get() { "enabled" } else if is_installed { "disabled" } else { "available" })}</div>
                     <p class=style::muted>{format!("{} · {} {} · {} {}", addon_id, tr(TextKey::Version), version, tr(TextKey::Source), source_id)}</p>
                     {selected_offer_note.map(|note| view! { <p class=style::muted>{note}</p> })}
                 </div>
@@ -1062,15 +1158,15 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
                     <a
                         class=style::btn_primary
                         href=import_list_href
-                        style:display=if can_import_list { "inline-flex" } else { "none" }
+                        style:display=move || if feedback.enabled.get() && supports_import { "inline-flex" } else { "none" }
                     >{tr(TextKey::ImportAList)}</a>
                     <button type="button" class=style::btn_primary disabled=!can_install on:click=move |_| install_confirm.set(true)>
                         {if is_installed { tr(TextKey::UpdateAddon) } else { tr(TextKey::Install) }}
                     </button>
-                    <button type="button" class=style::btn_secondary disabled=!is_installed on:click=move |_| toggle_confirm.set(true)>
-                        {if is_enabled { tr(TextKey::Disable) } else { tr(TextKey::Enable) }}
+                    <button type="button" class=style::btn_secondary disabled=move || !is_installed || feedback.saving.get() || check_action.pending().get() on:click=move |_| toggle_confirm.set(true)>
+                        {move || if feedback.enabled.get() { tr(TextKey::Disable) } else { tr(TextKey::Enable) }}
                     </button>
-                    <button type="button" class=style::btn_secondary disabled=!is_installed on:click=move |_| { check_action.dispatch(addon_id_for_check.clone()); }>{tr(TextKey::Check)}</button>
+                    <button type="button" class=style::btn_secondary disabled=move || !is_installed || feedback.saving.get() || check_action.pending().get() on:click=move |_| { check_action.dispatch(addon_id_for_check.clone()); }>{move || if check_action.pending().get() { tr(TextKey::AddonCheckPending) } else { tr(TextKey::Check) }}</button>
                     <button type="button" class=style::btn_danger disabled=!is_installed on:click=move |_| uninstall_confirm.set(true)>{tr(TextKey::Uninstall)}</button>
                 </div>
             </header>
@@ -1115,15 +1211,16 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
                         addon_id_for_settings.clone(),
                         definition.clone(),
                         stored.get(&definition.key).cloned(),
-                        setting_action,
+                        feedback,
+                        check_action.pending().into(),
                     )).collect_view()}
                 </div>
             </section>
 
             <section id="status" class=style::detail_section>
                 <h2>{tr(TextKey::Status)}</h2>
-                <p>{installed.as_ref().map_or_else(|| "—".to_owned(), |item| crate::admin::i18n::addon_check_message(item.last_check_code.as_deref(), item.last_check_message.as_deref().unwrap_or("—"), item.last_check_tool_update.as_ref()))}</p>
-                <p class=style::muted>{installed.as_ref().and_then(|item| item.last_check_at.clone()).unwrap_or_default()}</p>
+                <p role="status" aria-busy=move || check_action.pending().get()>{move || if check_action.pending().get() { tr(TextKey::AddonCheckPending).to_owned() } else { feedback.status.get() }}</p>
+                <p class=style::muted>{move || feedback.checked_at.get()}</p>
                 <div data-testid="addon-tool-maintenance" hidden=permissions.1.tool_update.is_empty()>
                     <h3>{tr(TextKey::AddonToolMaintenance)}</h3>
                     <p hidden=installed.as_ref().is_some_and(|item| !item.tool_maintenance.is_empty())>{tr(TextKey::AddonToolMaintenanceNone)}</p>
@@ -1159,19 +1256,19 @@ fn AddonDetailIsland(detail: AddonDetail, source: Option<String>) -> impl IntoVi
                 <p>{tr(TextKey::ThirdPartyRepositoryWarning)}</p>
                 {permissions_view(&install_permissions.0, &install_permissions.1)}
             </Modal>
-            <Modal dialog_id="addon-toggle-dialog" open=toggle_confirm title=if is_enabled { tr(TextKey::Disable).to_owned() } else { tr(TextKey::Enable).to_owned() } on_close=Callback::new(move |confirmed| {
+            <Modal dialog_id="addon-toggle-dialog" open=toggle_confirm title=Signal::derive(move || if feedback.enabled.get() { tr(TextKey::Disable).to_owned() } else { tr(TextKey::Enable).to_owned() }) on_close=Callback::new(move |confirmed| {
                 if confirmed {
-                    if is_enabled { disable_action.dispatch(addon_id_for_toggle.clone()); } else { enable_action.dispatch(addon_id_for_toggle.clone()); }
+                    if feedback.enabled.get_untracked() { disable_action.dispatch(addon_id_for_toggle.clone()); } else { enable_action.dispatch(addon_id_for_toggle.clone()); }
                 }
             })>
                 <p>{summary_for_modal.clone()}</p>
-                <p style:display=if is_enabled { "none" } else { "block" }>{tr(TextKey::EnableActivatesPermissions)}</p>
+                <p style:display=move || if feedback.enabled.get() { "none" } else { "block" }>{tr(TextKey::EnableActivatesPermissions)}</p>
                 {permissions_view(&toggle_permissions.0, &toggle_permissions.1)}
             </Modal>
             <Modal dialog_id="addon-uninstall-dialog" open=uninstall_confirm title=tr(TextKey::Uninstall).to_owned() destructive=true on_close=Callback::new(move |confirmed| {
                 if confirmed { uninstall_action.dispatch(addon_id_for_uninstall.clone()); }
             })><p>{tr(TextKey::ThisActionCannotBeUndone)}</p></Modal>
-            </main>
+            </section>
         </SettingsPageLayoutForPath>
     }
 }
@@ -1320,12 +1417,60 @@ fn action_reload_effect(value: Signal<Option<Result<(), ServerFnError>>>, toast:
     });
 }
 
+#[derive(Clone, Copy)]
+struct AddonDetailFeedback {
+    enabled: RwSignal<bool>,
+    saving: RwSignal<bool>,
+    status: RwSignal<String>,
+    checked_at: RwSignal<String>,
+}
+
+fn installed_check_message(item: &InstalledAddonRow) -> String {
+    crate::admin::i18n::addon_check_message(
+        item.last_check_code.as_deref(),
+        item.last_check_message.as_deref().unwrap_or("—"),
+        item.last_check_tool_update.as_ref(),
+    )
+}
+
+fn format_check_timestamp(value: &str) -> String {
+    chrono::DateTime::parse_from_rfc3339(value).map_or_else(
+        |_| String::new(),
+        |timestamp| {
+            timestamp
+                .with_timezone(&chrono::Utc)
+                .format("%Y-%m-%d %H:%M:%S UTC")
+                .to_string()
+        },
+    )
+}
+
 fn setting_editor(
     addon_id: String,
     definition: AddonSettingDefinition,
     stored: Option<AddonSettingRow>,
-    action: Action<AddonSettingEditor, Result<(), ServerFnError>>,
+    feedback: AddonDetailFeedback,
+    checking: Signal<bool>,
 ) -> AnyView {
+    let message = RwSignal::new(String::new());
+    let action =
+        Action::new(move |setting: &AddonSettingEditor| save_addon_configuration(setting.clone()));
+    Effect::new(move |_| match action.value().get() {
+        Some(Ok(())) => {
+            feedback.saving.set(false);
+            feedback.enabled.set(false);
+            feedback
+                .status
+                .set(tr(TextKey::AddonCheckRequired).to_owned());
+            feedback.checked_at.set(String::new());
+            message.set(tr(TextKey::AddonConfigurationSavedRecheck).to_owned());
+        }
+        Some(Err(error)) => {
+            feedback.saving.set(false);
+            message.set(error.to_string());
+        }
+        None => {}
+    });
     let value = RwSignal::new(
         stored
             .as_ref()
@@ -1358,14 +1503,18 @@ fn setting_editor(
     );
     let label = localized(&definition.label);
     let key = definition.key.clone();
+    let input_id = format!("addon-setting-{key}");
+    let label_for = input_id.clone();
+    let kind_id = format!("{input_id}-kind");
+    let kind_label = format!("{} ({})", label, tr(TextKey::Type));
     let input = match definition.kind {
         AddonSettingKind::Boolean => view! {
-            <select prop:value=move || value.get() on:change=move |event| value.set(event_target_value(&event))>
+            <select id=input_id disabled=move || feedback.saving.get() || checking.get() prop:value=move || value.get() on:change=move |event| { value.set(event_target_value(&event)); message.set(String::new()); }>
                 <option value="false">{tr(TextKey::No)}</option><option value="true">{tr(TextKey::Yes)}</option>
             </select>
         }.into_any(),
         AddonSettingKind::Enum => view! {
-            <select prop:value=move || value.get() on:change=move |event| value.set(event_target_value(&event))>
+            <select id=input_id disabled=move || feedback.saving.get() || checking.get() prop:value=move || value.get() on:change=move |event| { value.set(event_target_value(&event)); message.set(String::new()); }>
                 {definition.options.into_iter().map(|option| {
                     let label = option.clone();
                     view! { <option value=option>{label}</option> }
@@ -1374,27 +1523,31 @@ fn setting_editor(
         }.into_any(),
         AddonSettingKind::SecretReference => view! {
             <div class=style::setting_secret>
-                <select prop:value=move || reference_kind.get() on:change=move |event| reference_kind.set(event_target_value(&event))>
+                <label for=kind_id.clone()>{kind_label}</label>
+                <select id=kind_id disabled=move || feedback.saving.get() || checking.get() prop:value=move || reference_kind.get() on:change=move |event| { reference_kind.set(event_target_value(&event)); message.set(String::new()); }>
                     <option value="environment">{tr(TextKey::EnvironmentVariable)}</option><option value="file">{tr(TextKey::SecretFile)}</option>
                 </select>
-                <input prop:value=move || reference.get() on:input=move |event| reference.set(event_target_value(&event))/>
+                <input id=input_id disabled=move || feedback.saving.get() || checking.get() prop:value=move || reference.get() on:input=move |event| { reference.set(event_target_value(&event)); message.set(String::new()); }/>
             </div>
         }.into_any(),
-        _ => view! { <input prop:value=move || value.get() on:input=move |event| value.set(event_target_value(&event))/> }.into_any(),
+        _ => view! { <input id=input_id disabled=move || feedback.saving.get() || checking.get() prop:value=move || value.get() on:input=move |event| { value.set(event_target_value(&event)); message.set(String::new()); }/> }.into_any(),
     };
     let is_secret = definition.kind == AddonSettingKind::SecretReference;
     view! {
         <div class=style::setting data-testid="addon-setting-row">
-            <label>{label}<span class=style::muted>{key.clone()}</span></label>
+            <label for=label_for>{label}<span class=style::muted>{key.clone()}</span></label>
             {input}
-            <button type="button" class=style::btn_secondary on:click=move |_| {
+            <button type="button" class=style::btn_secondary disabled=move || feedback.saving.get() || checking.get() on:click=move |_| {
+                feedback.saving.set(true);
+                message.set(String::new());
                 action.dispatch(AddonSettingEditor {
                     addon_id: addon_id.clone(), key: key.clone(),
                     value: (!is_secret).then(|| value.get_untracked()),
                     reference_kind: is_secret.then(|| reference_kind.get_untracked()),
                     reference: is_secret.then(|| reference.get_untracked()),
                 });
-            }>{tr(TextKey::Save)}</button>
+            }>{move || if action.pending().get() { tr(TextKey::Saving) } else { tr(TextKey::Save) }}</button>
+            <p class=style::setting_feedback role="status">{move || message.get()}</p>
         </div>
     }
     .into_any()
@@ -1538,13 +1691,57 @@ fn reload_page() {
 
 #[cfg(test)]
 mod tests {
-    use super::{localized_for_code, supports_media_list_import, updates_empty_message};
+    use super::{
+        format_check_timestamp, localized_for_code, manager_empty_message, package_upload_feedback,
+        supports_media_list_import, updates_empty_message,
+    };
     use crate::admin::i18n::{tr, TextKey};
     use ersatzrs_addon_contract::{
         CAPABILITY_MEDIA_LIST_IMPORT_V1, CAPABILITY_MEDIA_LIST_LIST_V1,
         CAPABILITY_MEDIA_LIST_LIST_V5,
     };
     use std::collections::BTreeMap;
+
+    #[test]
+    fn manager_empty_states_distinguish_setup_from_filtered_results() {
+        for key in [TextKey::AddonsNoneInstalled, TextKey::AddonsNoneAvailable] {
+            assert_eq!(manager_empty_message(0, key), tr(key));
+            assert_eq!(manager_empty_message(1, key), tr(TextKey::NoAddonsMatch));
+        }
+    }
+
+    #[test]
+    fn package_type_errors_offer_the_other_upload_row_without_manifest_jargon() {
+        assert_eq!(
+            package_upload_feedback(
+                "add-on validation failed: package has no root addon.toml",
+                true
+            ),
+            tr(TextKey::AddonPackageUploadHelp)
+        );
+        for error in [
+            "package has no root repository.toml",
+            "repository has no root repository.toml",
+        ] {
+            assert_eq!(
+                package_upload_feedback(error, false),
+                tr(TextKey::AddonRepositoryUploadHelp)
+            );
+        }
+        assert!(
+            package_upload_feedback("Upload exceeds maximum allowed size", true)
+                .contains("Upload exceeds maximum allowed size")
+        );
+    }
+
+    #[test]
+    fn check_timestamp_uses_readable_seconds_and_an_explicit_timezone() {
+        assert_eq!(
+            format_check_timestamp("2026-09-12T13:07:53.264665576+02:00"),
+            "2026-09-12 11:07:53 UTC"
+        );
+        assert!(format_check_timestamp("invalid timestamp").is_empty());
+    }
 
     #[test]
     fn updates_empty_state_only_claims_up_to_date_when_nothing_is_filtered() {

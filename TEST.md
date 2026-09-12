@@ -86,6 +86,20 @@ enabled after background preparation without reloading or replacing unsaved form
 input. Restart, NSF live, subtitle and SponsorBlock workflows use the same native
 task routes and retain their persistence and actual-media assertions.
 
+Run `addon-list-preparation-feedback.spec.ts` on its own wrapper database for
+untouched-default preparation, failure/retry guidance, legacy schema adoption
+with retained unsaved input, and partial Add recovery. Its isolated add-on
+identities avoid changing schemas used by the other prepared-playback fixtures.
+
+Run `addon-walkthrough-fixes.spec.ts` on its own wrapper database for fresh
+default-TV first publication, first-import completion without a manual reload,
+bulk include/exclude with explicit Save/Discard and draft/publication isolation,
+restored-failure feedback, and live add-on Check/Save without lost sibling edits.
+It includes a JavaScript-disabled bulk workflow and independent package identities
+for each browser/scenario. Use `addons.spec.ts` for the existing declarative
+normal/secret-reference settings regressions; Save now waits for persistent
+feedback rather than a document reload.
+
 ## Hydration rules (read before writing islands)
 
 The hydration smoke layer exists because Leptos islands have sharp edges that

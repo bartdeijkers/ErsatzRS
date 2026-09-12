@@ -2389,8 +2389,8 @@ const fn presentation_text_key(presentation: AddonMediaListPresentationKind) -> 
 /// Source-first add page based on the approved Option D artifact.
 ///
 /// Loading the source creates a draft and moves into the same shared editor as
-/// an existing list. Publication remains the second and only materializing
-/// step.
+/// an existing list. Review/save and conditional preparation precede explicit
+/// publication, the only step that materializes the list for scheduling.
 #[component]
 pub fn AddAddonMediaListPage() -> impl IntoView {
     let query = use_query_map();
@@ -2462,7 +2462,6 @@ fn AddAddonMediaListPageIsland(
     let load_item_details = RwSignal::new(true);
     let resolved_name = RwSignal::new(String::new());
     let hydrated = RwSignal::new(false);
-    let toast = use_toast();
     let supports_adaptive_refresh =
         Memo::new(move |_| adaptive_provider_ids.with_value(|ids| ids.contains(&addon_id.get())));
     Effect::new(move |_| hydrated.set(true));
@@ -2527,29 +2526,35 @@ fn AddAddonMediaListPageIsland(
                     delivery_mode,
                 )
                 .await?;
-                let mut form = get_addon_media_list_form(id)
-                    .await?
-                    .ok_or_else(|| ServerFnError::new("imported add-on list was not found"))?;
-                form.refresh_cadence = refresh_cadence;
-                form.generate_playlist = playlist;
-                update_addon_media_list(form).await?;
-                request_addon_media_list_presentation(id, presentation, None).await?;
-                Ok::<i64, ServerFnError>(id)
+                // The list now exists. A later settings failure must open that
+                // list with a notice, as the no-JS form does, rather than
+                // report the whole add as failed.
+                let settings = async {
+                    let mut form = get_addon_media_list_form(id)
+                        .await?
+                        .ok_or_else(|| ServerFnError::new("imported add-on list was not found"))?;
+                    form.refresh_cadence = refresh_cadence;
+                    form.generate_playlist = playlist;
+                    update_addon_media_list(form).await?;
+                    request_addon_media_list_presentation(id, presentation, None).await?;
+                    Ok::<(), ServerFnError>(())
+                }
+                .await;
+                Ok::<(i64, bool), ServerFnError>((id, settings.is_ok()))
             }
         },
     );
     Effect::new(move |_| {
         if let Some(result) = import_action.value().get() {
             match result {
-                Ok(id) => set_browser_location(&format!("/media/addon-lists/{id}?import=1")),
-                Err(error) => toast.push(
-                    format!(
-                        "{}: {}",
-                        tr(TextKey::AddFailed),
-                        addon_media_list_error_message(error)
-                    ),
-                    ToastSeverity::Error,
-                ),
+                Ok((id, true)) => {
+                    set_browser_location(&format!("/media/addon-lists/{id}?import=1"));
+                }
+                Ok((id, false)) => {
+                    set_browser_location(&format!("/media/addon-lists/{id}?error=save"));
+                }
+                // The form keeps the actionable error beside its submit.
+                Err(_) => {}
             }
         }
     });
@@ -2561,16 +2566,12 @@ fn AddAddonMediaListPageIsland(
                     <span style=icon_style(IconName::ChevronLeft, "1.25rem") aria-hidden="true"></span>
                 </a>
             </div>
-            <main class=style::import_shell>
+            <section class=style::import_shell>
                 <header class=style::import_header>
                     <div>
                         <h1 class=style::page_title>{tr(TextKey::AddAddonMediaList)}</h1>
-                        <p>{tr(TextKey::MetadataDraftNotice)}</p>
+                        <p>{tr(TextKey::AddonWorkspaceImportSteps)}</p>
                     </div>
-                    <ol class=style::stepper aria-label=tr(TextKey::AddAddonMediaList)>
-                        <li class=style::step_active><b>"1"</b><span>{tr(TextKey::Import)}</span></li>
-                        <li><b>"2"</b><span>{tr(TextKey::PublishMetadata)}</span></li>
-                    </ol>
                 </header>
 
                 <form
@@ -2621,6 +2622,9 @@ fn AddAddonMediaListPageIsland(
                         >
                             <span style=icon_style(IconName::Check, "1rem") aria-hidden="true"></span>
                             {move || format!("{} {}", tr(TextKey::AddonAutoDetected), resolved_name.get())}
+                        </span>
+                        <span role="status" hidden=move || addon_chosen.get() || source_url.with(|url| url.trim().is_empty()) || (!resolve_action.pending().get() && !resolved_name.with(String::is_empty))>
+                            {move || tr(if resolve_action.pending().get() {TextKey::WaitingForProvider} else {TextKey::AddonWorkspaceChooseProvider})}
                         </span>
                     </label>
 
@@ -2730,14 +2734,14 @@ fn AddAddonMediaListPageIsland(
                     </label>
 
                     <footer class=style::import_footer>
-                        <p>{tr(TextKey::MetadataDraftNotice)}</p>
+                        <p role="alert" hidden=move || !matches!(import_action.value().get(),Some(Err(_)))>{move || import_action.value().get().and_then(Result::err).map(addon_media_list_error_message)}</p>
                         <button class=style::btn_add type="submit" disabled=move || import_action.pending().get()>
                             <span style=icon_style(IconName::Download, "1.1rem") aria-hidden="true"></span>
                             <span>{tr(TextKey::ImportOverview)}</span>
                         </button>
                     </footer>
                 </form>
-            </main>
+            </section>
         </div>
     }
 }
@@ -7888,6 +7892,7 @@ mod tests {
             PublicationPrimaryAction::PublishBlocked
         );
         let publication_status = |state| AddonMediaListPublicationStatus {
+            outcome: None,
             job_id: 1,
             operation_id: 2,
             generation: 3,
@@ -7936,6 +7941,7 @@ mod tests {
         let mut readiness = AddonMediaListPublicationReadiness {
             included_count: 10,
             publication: Some(AddonMediaListPublicationStatus {
+                outcome: None,
                 job_id: 7,
                 operation_id: 8,
                 generation: 2,

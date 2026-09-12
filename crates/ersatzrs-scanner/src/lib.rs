@@ -336,6 +336,7 @@ async fn scan_local_library_with_progress_once(
         let library_path = bucket.library_path;
         match bucket.kind {
             LocalScanBucketKind::Items(items) => {
+                let mut removed_playlist_definitions = std::collections::BTreeSet::new();
                 for work in items {
                     let is_remote_stream = matches!(
                         &work,
@@ -399,6 +400,8 @@ async fn scan_local_library_with_progress_once(
                             })
                             .await?;
                         }
+                        LocalScanWork::RemoteStream { ref path }
+                            if removed_playlist_definitions.contains(path) => {}
                         LocalScanWork::RemoteStream { path } => {
                             let result = match load_remote_stream_definition(
                                 pool,
@@ -473,12 +476,14 @@ async fn scan_local_library_with_progress_once(
                             }
                         }
                         LocalScanWork::RemoteStreamPlaylist { path } => {
-                            match synchronize_remote_stream_playlist(
+                            match synchronize_remote_stream_playlist_to_boundary(
                                 pool,
                                 config.library_id,
                                 &library_path,
                                 &path,
                                 &config.ffprobe_path,
+                                PlaylistSyncBoundary::Published,
+                                Some(&mut removed_playlist_definitions),
                             )
                             .await
                             {
@@ -2348,6 +2353,7 @@ async fn load_remote_stream_definition(
     Ok((definition, resolved))
 }
 
+#[cfg(test)]
 async fn synchronize_remote_stream_playlist(
     pool: &DbPool,
     library_id: i64,
@@ -2362,6 +2368,7 @@ async fn synchronize_remote_stream_playlist(
         path,
         ffprobe_path,
         PlaylistSyncBoundary::Published,
+        None,
     )
     .await
 }
@@ -2381,6 +2388,7 @@ async fn synchronize_remote_stream_playlist_to_boundary(
     path: &Path,
     ffprobe_path: &str,
     boundary: PlaylistSyncBoundary,
+    removed_definitions: Option<&mut std::collections::BTreeSet<PathBuf>>,
 ) -> Result<Vec<ScanPlayoutRefresh>> {
     let mut reason = ersatzrs_domain::ScanPlayoutRefreshReason::RemoteStreamMembershipMixed;
     let resolution_generation =
@@ -2558,6 +2566,12 @@ async fn synchronize_remote_stream_playlist_to_boundary(
         let _ = boundary;
         sync.publish_sidecar()?;
         complete_scan_refresh_resolution(pool, library_id, resolution_generation, reason).await?;
+        // Discovery predates manifest synchronization. Suppress only queued
+        // paths successfully removed under this manifest's ownership policy.
+        // Retained definitions still follow their ordinary scan/probe path.
+        if let Some(removed) = removed_definitions {
+            removed.extend(sync.removed_definition_paths);
+        }
         Ok::<_, ScannerError>(refreshes)
     }
     .await;
@@ -6121,6 +6135,7 @@ create_playlist: true
             &manifest_path,
             "unused-ffprobe",
             PlaylistSyncBoundary::DatabaseCommitted,
+            None,
         )
         .await
         .expect("commit database boundary before simulated crash");
@@ -6239,6 +6254,80 @@ create_playlist: true
             replayed_intents[0].get::<String, _>("Reason"),
             ScanPlayoutRefreshReason::RemoteStreamMembershipAdded.as_str()
         );
+    }
+
+    #[tokio::test]
+    async fn successful_manifest_removal_does_not_scan_stale_queued_definitions() {
+        use sqlx::Executor;
+
+        let temp = tempfile::tempdir().expect("playlist fixture");
+        let library_root = temp.path().join("remote-streams");
+        let package_root = temp.path().join("addon-package");
+        let pool = test_db().await;
+        seed_managed_remote_stream_playlist(&pool, &library_root, &package_root).await;
+        pool.execute(
+            r#"INSERT INTO "AddonMediaListItem" (
+            "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank",
+            "Title", "SourceUrl", "DurationSeconds", "Published",
+            "ProviderMetadataJson", "ContentKind", "PublishedLiveness"
+        ) VALUES (50, 'two', 'Second', 4, 1, 'Second',
+            'https://example.test/two', 60, 1, '{"title":"Second"}', 4, 1)"#,
+        )
+        .await
+        .expect("second published item");
+        let config = super::LocalScanConfig {
+            library_id: 1,
+            ffprobe_path: "unused-ffprobe".to_owned(),
+        };
+        let first = super::scan_local_library(&pool, &config)
+            .await
+            .expect("initial scan");
+        assert_eq!(first.failed_files, 0, "{:?}", first.issues);
+        let removed = library_root.join("Fixture/two.yml");
+        assert!(removed.is_file());
+        pool.execute(
+            r#"UPDATE "AddonMediaListItem" SET "Published"=0
+            WHERE "AddonMediaListId"=50 AND "ProviderId"='two'"#,
+        )
+        .await
+        .expect("stage exclusion");
+        let second = super::scan_local_library(&pool, &config)
+            .await
+            .expect("republish subset");
+        assert_eq!(second.failed_files, 0, "{:?}", second.issues);
+        assert!(!removed.exists());
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "PlaylistItem" AS "pi"
+            JOIN "Playlist" AS "p" ON "p"."Id"="pi"."PlaylistId"
+            WHERE "p"."ManagedSource" LIKE 'remote-stream-playlist:v1:1:%'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("published membership");
+        assert_eq!(count, 1);
+
+        // A successful manifest never suppresses an unrelated broken definition.
+        let standalone = library_root.join("broken.yml");
+        std::fs::write(&standalone, b"[").expect("invalid standalone definition");
+        let third = super::scan_local_library(&pool, &config)
+            .await
+            .expect("scan standalone error");
+        assert_eq!(third.failed_files, 1, "{:?}", third.issues);
+        assert!(third.issues[0].contains("broken.yml"));
+
+        // A failed manifest confers no handled-path exemption on its definitions.
+        std::fs::write(library_root.join("Fixture.playlist.yml"), b"[").expect("invalid manifest");
+        std::fs::write(library_root.join("Fixture/one.yml"), b"[")
+            .expect("invalid previously managed definition");
+        let failed = super::scan_local_library(&pool, &config)
+            .await
+            .expect("scan manifest error");
+        assert_eq!(failed.failed_files, 3, "{:?}", failed.issues);
+        assert!(failed.issues.iter().any(|issue| issue.contains("one.yml")));
+        assert!(failed
+            .issues
+            .iter()
+            .any(|issue| issue.contains("Fixture.playlist.yml")));
     }
 
     #[tokio::test]

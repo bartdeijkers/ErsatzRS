@@ -19,6 +19,68 @@ is accepted.
 
 ## Outcome
 
+### Completed corrective checkpoint (2026-09-12)
+
+The maintainer approved the evidenced A01-A05 preparation/feedback defects only.
+Retain installed option defaults through existing draft/schema ownership before
+preparation, preserve exact revision and published-snapshot boundaries, distinguish
+invalid requests from changed input, show actual preparation state/failures, and
+retain the created list on a later Add-step failure. No transport redesign,
+later UX work, live database repair, deployment, commit or push is part of this
+checkpoint. Existing M-01B/N-01B milestones and owning parity debts track evidence.
+The A01-A05 checkpoint is verified locally with native tests, Clippy and all
+eight Chromium/Firefox regressions after cross-review. Those milestones own
+the evidence; no deployment or broader UI closeout is implied.
+
+Legacy unbound drafts adopt provisional defaults only through explicit
+Prepare/Publish, including Stream when enabled defaults require processing.
+Automatic refresh retains its existing hold/manual-review boundary; it never
+silently adopts defaults. An incompatible package schema change does not block
+list creation, but keeps the new draft unbound and explicit preparation/options
+saving reports the existing conflict. Retained schema evolution is separate debt.
+
+Source map: this is the ADR 0085/0091 product extension, with no ErsatzTV add-on
+draft/preparation equivalent. Reuse `addon_media_list_options`, lifecycle schema
+storage, preparation/jobs/selection, and the application publication boundary.
+Hydration map: `/media/addon-lists/add` uses `AddAddonMediaListPageIsland`; task routes
+use `AddonListWorkspacePage` and `PublicationOverviewIsland`, native workspace
+POST and publication endpoints, readiness DTOs, existing resource-state/button
+primitives and all cultures. No shell/router or locked geometry changes.
+Focused disposable-fixture proof covers untouched defaults in both download
+modes, genuine schema-less providers, saved/published isolation, typed failure
+persistence, hydrated/no-JS readiness and recovery feedback, and post-create
+partial failure. Codex serializes all builds/tests; Claude owns the web files.
+
+### Next slice: folder-first portability
+
+The subsequent 2026-09-12 visual walkthrough found a separate first-publication
+failure with Add's default TV Shows presentation after successful real
+preparation (W25a), plus misleading failure feedback (W25b). M-01B is reopened;
+its milestone owns the failing evidence and source-reviewed matching-order
+explanation. A01-A05 remains verified. Agree the smallest correction with the
+maintainer before implementing; no extra scan, transport change or broad UI
+rewrite is implied. O-01 remains Not started while that dependency is open.
+
+Following the verified A01-A05 corrections, implement
+`amm-o-01` under [ADR 0093](../docs/adr/0093-make-saved-addon-list-folders-authoritative.md).
+The maintainer accepted saved list files/folders as authority over SQLite so a
+copied add-on media folder is discovered on the next normal or scheduled scan.
+This is not yet implemented and is not additional work inside A01-A05.
+
+First trace folder discovery, saved metadata/options and publication/artifact
+references. Identify what cannot currently be reconstructed without SQLite;
+reuse existing file formats and scan coordination. Review the smallest plan
+with Claude. Removal now has an accepted outcome: retain saved files, hide the
+list in admin, and do not automatically reveal it on subsequent scans. Hiding
+is installation-local; a newly discovered shared copy appears normally on the
+receiving installation. Resolve copied draft/publication behavior and how the
+operator reveals hidden lists with the maintainer;
+then implement and prove independent-profile reconstruction and idempotence.
+The milestone owns scope and acceptance; no new transport, updater, ZIP service,
+or broad backup framework is requested.
+
+### Operator outcome
+
 Make `/media/addon-lists`, its item editor, generated Remote Streams, and the
 official yt-dlp package one complete operator workflow:
 
@@ -851,7 +913,8 @@ Do not add prefetch machinery or proceed to cleanup from this result alone.
 
 ### AMM-M-01B — List-level Download ahead modes
 
-Complete under the focused acceptance in `amm-m-01b`; integrated release
+Reopened for untouched-default preparation and failure feedback under the
+2026-09-12 corrective checkpoint. Retain prior focused evidence in `amm-m-01b`; integrated release
 acceptance remains AMM-N-03. Delivery mode is a generic, provider-neutral list
 option, independent of SponsorBlock. Add one labeled native HTML `<select>` to the
 list settings, localized and usable with and without JavaScript. Not a checkbox

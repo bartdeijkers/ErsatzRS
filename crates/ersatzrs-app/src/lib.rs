@@ -575,8 +575,11 @@ impl ApplicationServices {
     /// Publish one reviewed add-on media-list snapshot.
     pub async fn publish_addon_media_list(
         &self,
-        command: commands::PublishAddonMediaList,
+        mut command: commands::PublishAddonMediaList,
     ) -> Result<commands::PublishAddonMediaListOutcome> {
+        command.saved_revision = self
+            .activate_addon_list_preparation_defaults(&command)
+            .await?;
         commands::publish_addon_media_list(
             command,
             self.ports.addon_media_lists(),
@@ -3501,7 +3504,7 @@ async fn execute_managed_library_operation(
                             .record_publication_failure(
                                 claim,
                                 job.phase,
-                                "publication_commit_failed",
+                                publication_commit_failure_code(&error),
                                 "publication commit failed",
                                 error.publication_failure_cause(),
                             )
@@ -3890,6 +3893,21 @@ const fn managed_operation_execution_path(
             ManagedOperationExecutionPath::Publication
         }
         _ => ManagedOperationExecutionPath::Scan,
+    }
+}
+
+fn publication_commit_failure_code(
+    error: &ersatzrs_core::repositories::RepositoryError,
+) -> &'static str {
+    // Only this closed marker is safe to project into operator guidance. Never
+    // expose arbitrary repository messages as UI diagnostics.
+    match error {
+        ersatzrs_core::repositories::RepositoryError::Conflict(code)
+            if code == "parent_nfo_preservation_required" =>
+        {
+            "parent_nfo_preservation_required"
+        }
+        _ => "publication_commit_failed",
     }
 }
 
@@ -4518,6 +4536,30 @@ mod scan_execution_tests {
     };
     use crate::commands::{ExecuteScanOutcome, ScanRequest, ScanWorkRequest};
     use crate::queries::{GetLibraryScanStatus, LibraryScanStatus, ScanOperationState};
+
+    #[test]
+    fn publication_commit_guidance_accepts_only_the_closed_preservation_marker() {
+        use ersatzrs_core::repositories::RepositoryError;
+        assert_eq!(
+            super::publication_commit_failure_code(&RepositoryError::Conflict(
+                "parent_nfo_preservation_required".into()
+            )),
+            "parent_nfo_preservation_required"
+        );
+        assert_eq!(
+            super::publication_commit_failure_code(&RepositoryError::Conflict(
+                "untrusted detail containing parent_nfo_preservation_required".into()
+            )),
+            "publication_commit_failed"
+        );
+        assert_eq!(
+            super::publication_commit_failure_code(&RepositoryError::unavailable(
+                "publish",
+                "parent_nfo_preservation_required"
+            )),
+            "publication_commit_failed"
+        );
+    }
 
     #[test]
     fn lifecycle_operations_do_not_use_the_generic_scan_worker() {

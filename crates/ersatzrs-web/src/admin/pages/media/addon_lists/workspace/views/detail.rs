@@ -1,10 +1,10 @@
 use super::{
     artwork_value, button, checkbox, choice, content_kind_value, detail_state_text_key, filtered,
     import_can_retry, import_discovery_summary, input, kind_select, liveness_select,
-    metadata_fields, publication_phase_text_key, publication_state_text_key, revision_can_restore,
-    save_bar, select, textarea, tr, value, AddonMediaListArtworkRole, AddonMediaListContentKind,
-    AddonMediaListImportState, AddonMediaListItemRole, AddonMediaListSourceProbeOutcome,
-    AddonMediaListSourceProbeState, PublicationActivity, TextKey, Workspace, FORM,
+    metadata_fields, revision_can_restore, save_bar, select, textarea, tr, value,
+    AddonMediaListArtworkRole, AddonMediaListContentKind, AddonMediaListImportState,
+    AddonMediaListItemRole, AddonMediaListSourceProbeOutcome, AddonMediaListSourceProbeState,
+    PublicationActivity, TextKey, Workspace, FORM,
 };
 use leptos::prelude::*;
 
@@ -217,17 +217,28 @@ pub(super) fn artwork(w: &Workspace) -> AnyView {
 }
 
 pub(super) fn recovery(w: &Workspace) -> AnyView {
-    w.readiness.publication.as_ref().map(|p|view!{
-        <section class="notice" data-testid="addon-publication-recovery"><strong>{tr(publication_state_text_key(p.state))}</strong><p>{tr(publication_phase_text_key(p.phase))}</p><p>{p.diagnostic_code.clone().unwrap_or_default()}</p><p>{tr(TextKey::PublicationAttempts)}": "{p.attempt_count}</p><p>{tr(TextKey::LastProgress)}": "{p.last_progress_at.clone()}</p>
-            <input form=FORM type="hidden" name="job_id" value=p.job_id.to_string()/><input form=FORM type="hidden" name="generation" value=p.generation.to_string()/>
-            <button class="button secondary" form=FORM name="intent" value="recover-retry" disabled=!p.can_retry formnovalidate>{tr(TextKey::Retry)}</button>
-            <button class="button secondary" form=FORM name="intent" value="recover-restore" disabled=!p.can_restore formnovalidate>{tr(TextKey::RestorePreviousRevision)}</button>
+    view! { <super::super::publication::PublicationRecoveryIsland list_id=w.form.id initial=w.readiness.clone()/> }.into_any()
+}
+
+/// Latest failed preparation attempts. Earlier saved revisions stay visible as
+/// history so an older failure is explained, but never reads as current.
+fn preparation_failures(w: &Workspace) -> AnyView {
+    let r = &w.readiness;
+    (!r.prepared_media_failures.is_empty()).then(|| view!{
+        <section class="settings-section" data-testid="addon-preparation-failures"><h2>{tr(TextKey::AddonWorkspacePreparationActivity)}</h2>
+            {r.prepared_media_failures.iter().map(|f| {
+                let current = f.saved_revision == r.saved_revision;
+                view!{<div class=if current {"notice error"} else {"notice"} data-preparation-revision=f.saved_revision.to_string()>
+                    <p>{tr(super::super::publication::preparation_failure_text_key(f.reason))}</p>
+                    <dl class="facts"><div><dt>{tr(if current {TextKey::SavedRevision} else {TextKey::PreviousSavedRevision})}</dt><dd>{f.saved_revision}</dd></div><div><dt>{tr(TextKey::PreparationFailedItems)}</dt><dd>{f.count}</dd></div></dl>
+                </div>}
+            }).collect_view()}
         </section>
     }).into_any()
 }
 
 pub(super) fn activity(w: &Workspace) -> AnyView {
-    view!{<section class="settings-layout">{recovery(w)}
+    view!{<section class="settings-layout">{recovery(w)}{preparation_failures(w)}
         <div class="action-row">{button("test-source",TextKey::TestSource,false)}{button("reconcile",TextKey::ReconcileEntireSource,false)}<a class="button secondary" href=format!("/api/addon-lists/{}/publication-diagnostics",w.form.id) download>{tr(TextKey::DownloadRedactedDiagnostics)}</a></div>
         {source_status(w)}{changes(w)}
         <PublicationActivity list_id=w.form.id history=RwSignal::new(w.history.clone()) hold=RwSignal::new(w.form.auto_publication_hold.clone())/>
@@ -312,7 +323,7 @@ pub(super) fn import_progress(w: &Workspace) -> AnyView {
         let phase=super::super::super::import_progress_phase(p,w.form.published_revision>0,w.form.detail_import_policy);
         view!{<section class="settings-section" id="addon-list-import-progress" data-import-state=format!("{:?}",p.state)><h3>{tr(phase)}</h3><p aria-live="polite">{tr(phase)}" · "{import_discovery_summary(p)}</p>
             {total.map(|total|view!{<progress role="progressbar" max=total.max(1).to_string() value=current.min(total).to_string() aria-valuemin="0" aria-valuemax=total.to_string() aria-valuenow=current.min(total).to_string()></progress>})}
-            <p>{format!("{} / {} {} · {} {} · {} {}",p.detail_complete,p.detail_total,tr(TextKey::DetailsComplete),p.detail_skipped,tr(TextKey::DetailsSkipped),p.detail_failed,tr(TextKey::Failed))}</p>
+            <p>{format!("{} / {} {} · {} {} · {} {}",p.detail_complete,p.detail_total,tr(TextKey::DetailsComplete),p.detail_skipped,tr(TextKey::DetailsSkipped),p.detail_failed,tr(TextKey::ItemDetailsFailed))}</p>
             <p>{p.last_progress_at.clone()}</p>
             <div class="action-row">{actions.into_iter().map(|(intent,key)|button(&format!("import:{intent}"),key,false)).collect_view()}{button("navigate",TextKey::Refresh,false)}</div>
         </section>}

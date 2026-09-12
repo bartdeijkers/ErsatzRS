@@ -1571,7 +1571,10 @@ impl ManagedLibraryOperationRepository for SqliteManagedLibraryOperationReposito
                 tx.commit().await.repository()?;
                 return Ok(operation);
             }
-            if operation.state != ManagedLibraryOperationState::Completed {
+            if !matches!(
+                operation.state,
+                ManagedLibraryOperationState::Completed | ManagedLibraryOperationState::Failed
+            ) {
                 return Err(RepositoryError::Conflict(
                     "the original publication scan has not drained before verification".to_owned(),
                 ));
@@ -2573,6 +2576,7 @@ fn decode_publication_status_row(
             _ => None,
         });
     Ok(AddonMediaListPublicationStatus {
+        outcome: decode_optional_enum_column("AddonMediaListPublicationOutcome", row, "Outcome")?,
         job_id: row.try_get("PublicationJobId").repository()?,
         operation_id: row.try_get("OperationId").repository()?,
         list_id: row.try_get("AddonMediaListId").repository()?,
@@ -4806,8 +4810,17 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn publication_verification_scan_is_distinct_and_resumes_after_reclaim() {
+        verify_publication_scan_after_terminal_child(false).await;
+    }
+
+    #[tokio::test]
+    async fn publication_verification_scan_after_failed_child_is_distinct_and_resumes() {
+        verify_publication_scan_after_terminal_child(true).await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn verify_publication_scan_after_terminal_child(failed: bool) {
         let database_directory = tempfile::tempdir().expect("verification database directory");
         let database_path = database_directory.path().join("verification.db");
         let database_url = format!("sqlite://{}?mode=rwc", database_path.display());
@@ -4860,17 +4873,35 @@ mod tests {
             lease_owner: claim.lease_owner.clone(),
         };
         assert!(repository
-            .complete_operation(&initial_claim)
-            .await
-            .expect("complete initial scan"));
-        assert!(repository
             .begin_publication_verification(
                 &claim,
                 AddonMediaListPublicationPhase::Scanning,
-                AddonMediaListPublicationOutcome::Published,
+                if failed {
+                    AddonMediaListPublicationOutcome::RestoredAfterFailure
+                } else {
+                    AddonMediaListPublicationOutcome::Published
+                },
             )
             .await
             .expect("enter verification"));
+        assert!(
+            repository
+                .ensure_publication_verification_scan(&claim, 1)
+                .await
+                .is_err(),
+            "an active original scan must still drain before verification"
+        );
+        if failed {
+            assert!(repository
+                .fail_operation(&initial_claim, "scan_failed", "synthetic scan failure")
+                .await
+                .expect("fail original scan terminally"));
+        } else {
+            assert!(repository
+                .complete_operation(&initial_claim)
+                .await
+                .expect("complete original scan"));
+        }
         let verification = repository
             .ensure_publication_verification_scan(&claim, 1)
             .await

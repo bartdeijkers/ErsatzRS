@@ -52,6 +52,29 @@ fn preview(
     presentation: AddonMediaListPresentationKind,
     diff: &AddonMediaListDraftDiffRow,
 ) -> Result<Fields> {
+    if matches!(intent, "include-selected" | "exclude-selected") {
+        let mut changed = fields.clone();
+        let targets: Vec<_> = all
+            .iter()
+            .filter(|row| d.selected.contains(&row.id))
+            .collect();
+        if targets.is_empty() {
+            return Err(TextKey::AddonWorkspaceSelectFirst);
+        }
+        for row in targets {
+            if !row_has_edits(fields, row.id) {
+                changed.insert(
+                    format!("review_snapshot_{}", row.id),
+                    super::super::review_snapshot(row),
+                );
+            }
+            changed.insert(
+                format!("included_{}", row.id),
+                (intent == "include-selected").to_string(),
+            );
+        }
+        return Ok(changed);
+    }
     let filtered: Vec<_> = all
         .iter()
         .filter(|r| super::super::matches_row(d, r, presentation, diff))
@@ -413,6 +436,51 @@ mod tests {
             &AddonMediaListDraftDiffRow::default(),
         )
     }
+    #[test]
+    fn inclusion_uses_selection_not_numbering_filters_and_preserves_review_fences() {
+        let rows = vec![
+            row(1, None, None),
+            row(2, Some(3), Some(4)),
+            row(3, None, None),
+        ];
+        let d = Draft {
+            selected: BTreeSet::from([2, 3]),
+            page_size: 1,
+            ..Default::default()
+        };
+        let mut fields = fields();
+        fields.insert("minimum_length".into(), "not a duration".into());
+        fields.insert("season_2".into(), "5".into());
+        fields.insert("review_snapshot_2".into(), "retained fence".into());
+        let excluded = preview(
+            &d,
+            &fields,
+            "exclude-selected",
+            &rows,
+            AddonMediaListPresentationKind::TelevisionShow,
+            &AddonMediaListDraftDiffRow::default(),
+        )
+        .unwrap();
+        assert!(!excluded.contains_key("included_1"));
+        assert_eq!(excluded["included_2"], "false");
+        assert_eq!(excluded["included_3"], "false");
+        assert_eq!(excluded["season_2"], "5");
+        assert_eq!(excluded["review_snapshot_2"], "retained fence");
+        assert!(excluded.contains_key("review_snapshot_3"));
+        let included = preview(
+            &d,
+            &excluded,
+            "include-selected",
+            &rows,
+            AddonMediaListPresentationKind::TelevisionShow,
+            &AddonMediaListDraftDiffRow::default(),
+        )
+        .unwrap();
+        assert_eq!(included["included_2"], "true");
+        assert_eq!(included["included_3"], "true");
+        assert_eq!(d.selected, BTreeSet::from([2, 3]));
+    }
+
     #[test]
     fn selected_numbering_skips_occupied_pairs_and_preserves_other_rows() {
         let d = Draft {

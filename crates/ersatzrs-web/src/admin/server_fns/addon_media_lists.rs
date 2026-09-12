@@ -364,12 +364,40 @@ pub struct AddonMediaListPublicationReadiness {
     pub required_prepared_media_count: u64,
     #[serde(default)]
     pub required_prepared_media_pending: u64,
+    /// Required media whose latest attempt at the saved revision failed.
+    #[serde(default)]
+    pub required_prepared_media_failed: u64,
+    /// Latest failed attempts, including earlier saved revisions as history.
+    #[serde(default)]
+    pub prepared_media_failures: Vec<AddonMediaListPreparationFailure>,
     pub optional_detail_total: u64,
     pub optional_detail_complete: u64,
     pub optional_detail_pending: u64,
     pub saved_revision: i32,
     pub review_state: AddonMediaListReviewState,
     pub publication: Option<AddonMediaListPublicationStatus>,
+}
+
+/// Closed preparation failure category; never provider text.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AddonMediaListPreparationFailureReason {
+    Failed,
+    InputChanged,
+    InvalidRequest,
+    Cancelled,
+    AttemptsExhausted,
+    StorageFull,
+    ProcessRecoveryRequired,
+    Unsupported,
+}
+
+/// Latest failed preparation attempts for one saved revision and category.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListPreparationFailure {
+    pub saved_revision: i32,
+    pub reason: AddonMediaListPreparationFailureReason,
+    pub count: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -381,6 +409,8 @@ pub struct AddonMediaListPublicationStatus {
     pub target_published_revision: i32,
     pub phase: AddonMediaListPublicationPhase,
     pub state: AddonMediaListPublicationState,
+    #[serde(default)]
+    pub outcome: Option<AddonMediaListPublicationOutcome>,
     pub attempt_count: i32,
     pub last_progress_at: String,
     pub diagnostic_code: Option<String>,
@@ -502,6 +532,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationStatus>
 {
     fn from(value: ersatzrs_core::repositories::AddonMediaListPublicationStatus) -> Self {
         Self {
+            outcome: value.outcome,
             job_id: value.job_id,
             operation_id: value.operation_id,
             generation: value.generation,
@@ -533,12 +564,45 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationReadiness>
             required_playback_detail_pending: value.required_playback_detail_pending,
             required_prepared_media_count: value.required_prepared_media_count,
             required_prepared_media_pending: value.required_prepared_media_pending,
+            required_prepared_media_failed: value.required_prepared_media_failed,
+            prepared_media_failures: value
+                .prepared_media_failures
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             optional_detail_total: value.optional_detail_total,
             optional_detail_complete: value.optional_detail_complete,
             optional_detail_pending: value.optional_detail_pending,
             saved_revision: value.saved_revision,
             review_state: value.review_state,
             publication: value.publication.map(Into::into),
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<ersatzrs_core::repositories::AddonMediaListPreparationFailure>
+    for AddonMediaListPreparationFailure
+{
+    fn from(value: ersatzrs_core::repositories::AddonMediaListPreparationFailure) -> Self {
+        use ersatzrs_core::repositories::AddonMediaListPreparationFailureReason as Reason;
+        Self {
+            saved_revision: value.saved_revision,
+            reason: match value.reason {
+                Reason::Failed => AddonMediaListPreparationFailureReason::Failed,
+                Reason::InputChanged => AddonMediaListPreparationFailureReason::InputChanged,
+                Reason::InvalidRequest => AddonMediaListPreparationFailureReason::InvalidRequest,
+                Reason::Cancelled => AddonMediaListPreparationFailureReason::Cancelled,
+                Reason::AttemptsExhausted => {
+                    AddonMediaListPreparationFailureReason::AttemptsExhausted
+                }
+                Reason::StorageFull => AddonMediaListPreparationFailureReason::StorageFull,
+                Reason::ProcessRecoveryRequired => {
+                    AddonMediaListPreparationFailureReason::ProcessRecoveryRequired
+                }
+                Reason::Unsupported => AddonMediaListPreparationFailureReason::Unsupported,
+            },
+            count: value.count,
         }
     }
 }
@@ -2199,16 +2263,17 @@ pub async fn publish_addon_media_list_with_state(
         })
         .await?;
     match outcome {
-        ersatzrs_app::commands::PublishAddonMediaListOutcome::PreparingMedia { pending_items } => {
-            Ok(AddonMediaListPublishResult::PreparingMedia {
-                item_count: pending_items,
-            })
-        }
-        ersatzrs_app::commands::PublishAddonMediaListOutcome::Preparing { pending_details } => {
-            Ok(AddonMediaListPublishResult::PreparingPlaybackDetails {
-                item_count: pending_details,
-            })
-        }
+        ersatzrs_app::commands::PublishAddonMediaListOutcome::PreparingMedia {
+            pending_items,
+            ..
+        } => Ok(AddonMediaListPublishResult::PreparingMedia {
+            item_count: pending_items,
+        }),
+        ersatzrs_app::commands::PublishAddonMediaListOutcome::Preparing {
+            pending_details, ..
+        } => Ok(AddonMediaListPublishResult::PreparingPlaybackDetails {
+            item_count: pending_details,
+        }),
         ersatzrs_app::commands::PublishAddonMediaListOutcome::Queued {
             operation_id,
             generation,

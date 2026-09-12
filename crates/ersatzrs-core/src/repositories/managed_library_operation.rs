@@ -100,6 +100,8 @@ pub struct AddonMediaListPublicationStatus {
     pub target_published_revision: i32,
     pub phase: AddonMediaListPublicationPhase,
     pub state: AddonMediaListPublicationState,
+    /// Terminal publication result, distinct from completion of recovery work.
+    pub outcome: Option<AddonMediaListPublicationOutcome>,
     pub attempt_count: i32,
     pub last_progress_at: DateTime<Utc>,
     pub diagnostic_code: Option<String>,

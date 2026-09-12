@@ -420,6 +420,8 @@ impl fmt::Display for PlaylistMembershipDelta {
 pub struct PlaylistFileSync {
     pub state: PlaylistSidecarState,
     pub definitions: Vec<ManagedPlaylistDefinition>,
+    /// Previously owned definitions removed during this synchronization.
+    pub(crate) removed_definition_paths: Vec<PathBuf>,
     pub changed: bool,
     pub membership_changed: bool,
     pub membership_delta: PlaylistMembershipDelta,
@@ -551,6 +553,7 @@ fn fresh_cached_playlist_sync(
         SidecarPublication::Staged(sidecar_path.to_owned())
     };
     Ok(PlaylistFileSync {
+        removed_definition_paths: Vec::new(),
         definitions: definitions_from_state(folder, &current),
         state: current,
         changed: membership_changed,
@@ -1214,6 +1217,7 @@ pub async fn stage_playlist_files(
         });
     }
 
+    let mut removed_definition_paths = Vec::new();
     if let Some(previous) = &existing {
         for old in &previous.entries {
             if managed_files.contains_key(&old.id) {
@@ -1245,6 +1249,7 @@ pub async fn stage_playlist_files(
                         }
                     }
                     move_to_managed_trash(&folder, &old_path, now)?;
+                    removed_definition_paths.push(old_path);
                     if let Some(old_nfo_path) = old_nfo_path.filter(|path| path.is_file()) {
                         move_to_managed_trash(&folder, &old_nfo_path, now)?;
                     }
@@ -1309,6 +1314,7 @@ pub async fn stage_playlist_files(
     Ok(PlaylistFileSync {
         state,
         definitions,
+        removed_definition_paths,
         changed,
         membership_changed,
         membership_delta,
@@ -5440,6 +5446,7 @@ create_playlist: true
         let sync = PlaylistFileSync {
             state: membership_sidecar(Vec::new()),
             definitions: Vec::new(),
+            removed_definition_paths: Vec::new(),
             changed: true,
             membership_changed: true,
             membership_delta: PlaylistMembershipDelta::default(),

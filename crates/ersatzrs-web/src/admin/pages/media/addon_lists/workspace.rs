@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(feature = "ssr")]
 pub mod actions;
+pub mod import;
 /// Not `ssr`-gated: the publication island must be compiled into the WASM
 /// bundle for `hydrate_islands()` to attach it.
 pub mod publication;
@@ -52,6 +53,9 @@ pub struct Submission {
     pub error: Option<String>,
     pub error_fields: Vec<String>,
     pub notice: Option<crate::admin::i18n::TextKey>,
+    /// Error carried into a fresh page load by a redirect, such as an add whose
+    /// list was created but whose settings were not saved.
+    pub arrival_error: Option<crate::admin::i18n::TextKey>,
     pub replacement_searched: bool,
     pub replacement_results:
         Vec<crate::admin::server_fns::addon_media_lists::AddonMediaListReplacementRow>,
@@ -144,6 +148,7 @@ pub fn AddonListWorkspacePage() -> impl IntoView {
                     ..Draft::default()
                 },
                 error: query.with_untracked(|q|q.get("disk_warning").filter(|s|s=="error").map(|_|super::tr(super::TextKey::AddonListDiskWarningFailed).to_owned())),
+                arrival_error: query.with_untracked(|q|q.get("error").filter(|s|s=="save").map(|_|super::TextKey::AddonWorkspaceAddIncomplete)),
                 ..Submission::default()
             });
             if submission.draft.list_id != id { submission = Submission { draft: Draft { list_id:id, revision:form.draft_revision, page_size:10, ..Draft::default() }, ..Submission::default() }; }

@@ -285,18 +285,7 @@ pub struct ClaimedItemOperation {
     pub input: ItemOperationInput,
 }
 
-/// Closed categories only; provider messages are never persisted here.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ItemOperationFailure {
-    Failed,
-    InputChanged,
-    Cancelled,
-    AttemptsExhausted,
-    StorageFull,
-    /// An unfinished reservation requires independently confirmed process cleanup.
-    ProcessRecoveryRequired,
-    Unsupported,
-}
+pub use ersatzrs_core::repositories::AddonMediaListPreparationFailureReason as ItemOperationFailure;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ItemOperationCompletion {

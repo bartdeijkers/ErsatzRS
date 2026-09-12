@@ -27,10 +27,14 @@ is historical, not the active implementation or an approved fallback.
 
 Partial — M-01A streaming is complete under the native-transfer amendment in
 ADR 0088. Its owning milestone records options, frozen intervals, real scheduled
-MPEG-TS/HLS cut continuity and cancellation acceptance. M-01B completes the
+MPEG-TS/HLS cut continuity and cancellation acceptance. M-01B implements the
 generic optional Download ahead modes, including the visible renewed cutoff
-and frozen mixed publication. Static startup-stage diagnostics remain separate
-visible debt. Current evidence belongs to the milestones, not the
+and frozen mixed publication. Its 2026-09-12 first-default-TV publication
+regression is corrected: native/browser tests and independent real-provider
+publication now pass. The owning milestone retains earlier playback evidence
+and the scan-binding/failure-feedback corrections; M-01A is not reopened.
+Static startup-stage diagnostics remain separate visible debt. Current evidence
+belongs to the milestones, not the
 superseded adapter checkpoints below.
 
 ### Historical implementation checkpoints

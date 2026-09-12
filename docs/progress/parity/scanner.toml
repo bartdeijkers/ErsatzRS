@@ -71,6 +71,15 @@ infrastructure boundary.
 '''
 
 [[debt]]
+id          = 'addon-publication-stale-generated-scan-work'
+description = 'P1: republishing after exclusions can fail because a full scan queues generated definitions before the playlist synchronizer removes excluded files, then processes those stale paths as missing files.'
+discovered  = '2026-09-12'
+resolved    = true
+adr         = '0065'
+evidence    = 'Joint walkthrough-fixes browser run1: first three-item publication succeeds; excluding two items and republishing produces two missing generated-YAML failures. Source trace confirms manifest-first work ordering plus pre-collected definitions, not stale cache or fixture behavior.'
+resolution  = 'Resolved locally on 2026-09-12: skip only owned paths actually removed by a successfully completed manifest synchronization. Retained definitions still use the ordinary scan; unrelated malformed definitions and failed manifests still report errors. The full-scan removal regression, four final focused scanner cases, scanner/infra Clippy and Chromium/Firefox exclusion-republication-reinclusion in walkthrough-fixes-run2 pass. Claude independently accepted the narrowed source correction. Evidence: test-results/walkthrough-fixes-native-20260912 and test-results/walkthrough-fixes-run2.'
+
+[[debt]]
 id          = 'music-video-nfo-fragment-leniency'
 description = 'Local music-video NFO parsing rejects real-world files that ErsatzTV accepts, falling back to filename metadata.'
 discovered  = '2026-06-10'

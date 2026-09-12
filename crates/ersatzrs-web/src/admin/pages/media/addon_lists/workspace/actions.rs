@@ -268,6 +268,8 @@ async fn execute(
                 | "auto-number"
                 | "clear-numbering"
                 | "bulk-options"
+                | "include-selected"
+                | "exclude-selected"
                 | "preview-options"
         )
     {
@@ -275,7 +277,13 @@ async fn execute(
     }
     if matches!(
         intent,
-        "number" | "classify" | "auto-number" | "clear-numbering" | "bulk-options"
+        "number"
+            | "classify"
+            | "auto-number"
+            | "clear-numbering"
+            | "bulk-options"
+            | "include-selected"
+            | "exclude-selected"
     ) || intent.starts_with("start:")
         || intent.starts_with("range-start:")
     {
@@ -369,7 +377,8 @@ async fn execute(
             d.page_size = size;
             d.page = 0;
         }
-        "number" | "classify" | "auto-number" | "clear-numbering" => {
+        "number" | "classify" | "auto-number" | "clear-numbering" | "include-selected"
+        | "exclude-selected" => {
             preview_bulk(state, d, &fields, intent).await?;
         }
         "save" => {
@@ -476,12 +485,25 @@ async fn execute(
                 })
                 .await
                 .map_err(|_| TextKey::PublishBlocked)?;
-            submission.notice = Some(match outcome {
-                ersatzrs_app::commands::PublishAddonMediaListOutcome::Queued { .. } => {
-                    TextKey::PublicationQueued
+            // Preparation can retain the add-on's option defaults, which saves a
+            // new revision. Follow exactly that returned revision so later saves
+            // and publication use it; unsaved task input in the draft is kept.
+            let (notice, saved_revision) = match outcome {
+                ersatzrs_app::commands::PublishAddonMediaListOutcome::Queued {
+                    saved_revision,
+                    ..
+                } => (TextKey::PublicationQueued, saved_revision),
+                ersatzrs_app::commands::PublishAddonMediaListOutcome::Preparing {
+                    saved_revision,
+                    ..
                 }
-                _ => TextKey::PreparingPublication,
-            });
+                | ersatzrs_app::commands::PublishAddonMediaListOutcome::PreparingMedia {
+                    saved_revision,
+                    ..
+                } => (TextKey::PreparingPublication, saved_revision),
+            };
+            d.revision = saved_revision;
+            submission.notice = Some(notice);
         }
         "test-source" => {
             state
@@ -747,7 +769,7 @@ async fn save_command(
                 .map(|row| row.id)
                 .collect::<std::collections::BTreeSet<_>>();
             for key in fields.keys() {
-                for prefix in ["season_", "episode_", "kind_", "liveness_"] {
+                for prefix in ["season_", "episode_", "kind_", "liveness_", "included_"] {
                     if let Some(value) = key.strip_prefix(prefix) {
                         if value == "only" {
                             continue;
@@ -766,12 +788,17 @@ async fn save_command(
                 let episode_name = format!("episode_{}", row.id);
                 let kind_name = format!("kind_{}", row.id);
                 let live_name = format!("liveness_{}", row.id);
+                let included_name = format!("included_{}", row.id);
                 if fields.contains_key(&season_name)
                     || fields.contains_key(&episode_name)
                     || fields.contains_key(&kind_name)
                     || fields.contains_key(&live_name)
+                    || fields.contains_key(&included_name)
                 {
                     let mut review = review(&row);
+                    if fields.contains_key(&included_name) {
+                        review.included = parse::<bool>(fields, &included_name)?;
+                    }
                     if fields.contains_key(&season_name) {
                         review.season = number(fields, &season_name)?;
                     }
@@ -1204,7 +1231,7 @@ fn number_error_fields(fields: &Fields) -> Vec<String> {
 }
 
 fn row_has_edits(fields: &Fields, id: i64) -> bool {
-    ["season", "episode", "kind", "liveness"]
+    ["season", "episode", "kind", "liveness", "included"]
         .iter()
         .any(|name| fields.contains_key(&format!("{name}_{id}")))
 }

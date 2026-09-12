@@ -491,6 +491,72 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn preparation_feedback_counts_current_failures_and_retains_previous_revision() {
+        use crate::addon_media_list_preparation_status::preparation_failures;
+        use ersatzrs_core::repositories::AddonMediaListPreparationFailureReason;
+
+        let (_directory, pool, _) = fixture().await;
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItemOperationJob"
+            SET "State"=3,"OutcomeJson"='{"Failed":"InvalidRequest"}'"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let missing = BTreeSet::from([(10, 1)]);
+        let (failed, reasons) = preparation_failures(&pool, 1, 0, &missing).await.unwrap();
+        assert_eq!(failed, 1);
+        assert_eq!(reasons.len(), 1);
+        assert_eq!(reasons[0].count, 1);
+        assert_eq!(reasons[0].saved_revision, 0);
+        assert_eq!(
+            reasons[0].reason,
+            AddonMediaListPreparationFailureReason::InvalidRequest
+        );
+        let (failed, previous) = preparation_failures(&pool, 1, 1, &missing).await.unwrap();
+        assert_eq!(
+            failed, 0,
+            "historical failures cannot block a newer revision"
+        );
+        assert_eq!(previous, reasons);
+        for (list, missing) in [
+            (2, missing.clone()),
+            (1, BTreeSet::new()),
+            (1, BTreeSet::from([(10, 2)])),
+        ] {
+            assert_eq!(
+                preparation_failures(&pool, list, 0, &missing)
+                    .await
+                    .unwrap(),
+                (0, Vec::new())
+            );
+        }
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItemOperationJob"
+            ("AddonMediaListId","AddonMediaListItemId","Kind","SavedDraftRevision",
+             "InputJson","ContextFingerprint","State","CreatedAt","UpdatedAt")
+            VALUES (1,10,1,1,'{}','fixture',0,'2026-09-12T00:00:00Z','2026-09-12T00:00:00Z')"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            preparation_failures(&pool, 1, 1, &missing).await.unwrap(),
+            (0, Vec::new()),
+            "an active retry replaces the failed attempt in current feedback"
+        );
+        sqlx::query(r#"UPDATE "AddonMediaListItemOperationJob" SET "State"=3,"OutcomeJson"='{"Failed":"newer-unknown-code"}'
+            WHERE "SavedDraftRevision"=1"#).execute(&pool).await.unwrap();
+        let (failed, reasons) = preparation_failures(&pool, 1, 1, &missing).await.unwrap();
+        assert_eq!(failed, 1);
+        assert_eq!(
+            reasons[0].reason,
+            AddonMediaListPreparationFailureReason::Failed
+        );
+        assert_eq!(reasons[0].saved_revision, 1);
+    }
+
+    #[tokio::test]
     #[allow(clippy::too_many_lines)] // Exact successful media/caption context and settings transitions.
     async fn prepared_selection_fences_enabled_and_cleared_subtitle_languages() {
         let (_directory, pool, artifact_id) = fixture().await;
