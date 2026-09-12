@@ -98,7 +98,9 @@ restored-failure feedback, and live add-on Check/Save without lost sibling edits
 It includes a JavaScript-disabled bulk workflow and independent package identities
 for each browser/scenario. Use `addons.spec.ts` for the existing declarative
 normal/secret-reference settings regressions; Save now waits for persistent
-feedback rather than a document reload.
+feedback rather than a document reload. Its hydration readiness wait uses the
+same bounded 15 seconds as the other add-on specs, allowing the cold debug WASM
+load without changing the overall test timeout or interaction assertions.
 
 The exact-overview case in `addon-metadata-editor.spec.ts` starts on the import
 landing with no editable collection. Complete the seeded discovery, then await

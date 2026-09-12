@@ -3557,7 +3557,9 @@ Restored to Complete locally on 2026-09-12. Evidence:
   A test-host SIGTERM before preparation finished was graceful; its queued job
   resumed on the unchanged profile and completed before the first Publish.
   The sender is unproven; this is not evidence of an application crash.
-  Captures: .playwright-mcp/ui-fixed-*; isolated runtime evidence is retained.
+  Captures: .playwright-mcp/ui-fixed-*; screenshots and test-results remain
+  available after the 2026-09-12 power outage. The temporary runtime profiles
+  were lost on reboot and are no longer available for further inspection.
   This is local Linux UI/provider proof, not a new packaged Windows acceptance
   or a repeat of scheduled playback/SponsorBlock gates. Prior valid playback
   evidence below is reused because transport and subtitle processing are unchanged.
@@ -3578,7 +3580,9 @@ Root cross-checks selected screenshots and persistence. Focus-loss and duplicate
 download hypotheses are withdrawn after evidence; W28-W31 and other small UX
 improvements remain recorded, not silently implemented. No new exhaustive
 zoom/contrast/screen-reader or seven-width certification is claimed. Browser
-released and isolated host/worker stopped at13:32UTC; evidence/profile retained.
+released and isolated host/worker stopped at13:32UTC. The later power outage
+removed the temporary profiles; retained captures/results support the recorded
+observations, not a claim that the original runtime can still be inspected.
 Publication checkpoint 6968f243: CI run34697087448 passes non-browser gates,
 but both browsers fail only the old exact-overview test expecting an empty editor
 during active import. The test-only correction uses the new landing and waits
@@ -3588,6 +3592,17 @@ bundle: test-results/ci-import-landing-fix/playwright-results.json. No product
 regression or new milestone gap is inferred from that obsolete test expectation.
 The corrective commit still requires terminal exact-SHA CI before publication
 handoff; the failed run is not reported as green.
+Corrective commit 8c899706, CI run34699101722: non-browser gates and Firefox
+(182 passed) succeed. Chromium first loses runner communication in the power
+outage. Its isolated retry finishes with199 passed, four skipped and five
+serial dependents not run after addons.spec.ts hits a five-second hydration
+wait. The trace shows successful HTTP responses and an incomplete debug WASM
+body, not a hydration exception. The settings helper now uses the neighboring
+add-on specs' 15-second readiness bound without changing the overall timeout
+or assertions. Independent Astra review approves; all twelve focused settings
+cases pass in18.4s against the unchanged matched bundle without rebuilding:
+test-results/ci-addons-hydration-wait/playwright-results.json. Terminal CI for
+the new test-only corrective commit remains pending; no product change is made.
 Independent review traces the ordering to durable-recovery commit 24ad93a9,
 not the delivery-mode change; M-01B is reopened because its publication outcome
 is affected, not because its mode implementation introduced the defect.

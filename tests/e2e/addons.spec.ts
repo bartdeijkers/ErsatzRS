@@ -71,7 +71,7 @@ function openDatabase(): DatabaseSync {
 
 async function waitForHydration(page: Page): Promise<void> {
   await expect
-    .poll(() => page.evaluate(() => window.__ersatzrs_hydrated === true))
+    .poll(() => page.evaluate(() => window.__ersatzrs_hydrated === true), { timeout: 15_000 })
     .toBe(true);
 }
 
