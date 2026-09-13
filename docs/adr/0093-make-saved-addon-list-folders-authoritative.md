@@ -29,6 +29,10 @@ fresh-database acceptance proof.
 
 ## Decision
 
+The 2026-09-13 MVP simplification in [ADR 0094](0094-limit-addon-list-mvp-to-draft-and-publication.md)
+excludes legacy-profile adoption and optional historical browsing/Restore. It
+preserves this decision's current-draft and independent-publication requirements.
+
 Saved add-on list content on disk is authoritative over its SQLite projection.
 For yt-dlp, this includes list subfolders below the configured media root,
 normally `<profile>/yt-dlp_media/`. The host behavior remains provider-neutral.

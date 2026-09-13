@@ -133,14 +133,6 @@ pub struct AddonMediaListSourceTestForm {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct AddonMediaListRestoreRevisionForm {
-    id: i64,
-    source_published_revision: i32,
-    expected_draft_revision: i32,
-    expected_published_revision: i32,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct AddonMediaListItemReviewForm {
     list_id: i64,
     item_id: i64,
@@ -745,34 +737,6 @@ pub async fn test_addon_media_list_source_form(
     }
 }
 
-pub async fn restore_addon_media_list_revision_form(
-    State(state): State<AppState>,
-    Form(input): Form<AddonMediaListRestoreRevisionForm>,
-) -> Redirect {
-    match state
-        .application
-        .restore_addon_media_list_revision(ersatzrs_app::commands::RestoreAddonMediaListRevision {
-            id: input.id,
-            source_published_revision: input.source_published_revision,
-            expected_draft_revision: input.expected_draft_revision,
-            expected_published_revision: input.expected_published_revision,
-        })
-        .await
-    {
-        Ok(_) => Redirect::to(&format!(
-            "/media/addon-lists/{}?status=revision-restore-queued",
-            input.id
-        )),
-        Err(error) => {
-            tracing::warn!(addon_media_list_id = input.id, source_published_revision = input.source_published_revision, error = %error, "failed to restore add-on media-list revision from HTML form");
-            Redirect::to(&format!(
-                "/media/addon-lists/{}?error=revision-restore",
-                input.id
-            ))
-        }
-    }
-}
-
 /// Download the same typed, redacted publication history used by the hydrated
 /// clipboard action. The fixed filename prevents list data from reaching the
 /// response headers.
@@ -1179,24 +1143,10 @@ mod tests {
     }
 
     #[test]
-    fn lifecycle_forms_preserve_exact_revision_preconditions() {
+    fn source_test_form_preserves_exact_revision_precondition() {
         let source: AddonMediaListSourceTestForm =
             serde_urlencoded::from_bytes(b"id=42&saved_revision=7").unwrap();
         assert_eq!((source.id, source.saved_revision), (42, 7));
-
-        let restore: AddonMediaListRestoreRevisionForm = serde_urlencoded::from_bytes(
-            b"id=42&source_published_revision=3&expected_draft_revision=7&expected_published_revision=5",
-        )
-        .unwrap();
-        assert_eq!(
-            (
-                restore.id,
-                restore.source_published_revision,
-                restore.expected_draft_revision,
-                restore.expected_published_revision,
-            ),
-            (42, 3, 7, 5)
-        );
     }
 
     #[test]

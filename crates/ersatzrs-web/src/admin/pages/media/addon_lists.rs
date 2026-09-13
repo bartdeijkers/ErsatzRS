@@ -25,34 +25,31 @@ use crate::admin::server_fns::addon_media_lists::get_addon_media_list_show_nfo;
 use crate::admin::server_fns::addon_media_lists::{
     add_addon_media_list, apply_addon_media_list_content_kind,
     apply_addon_media_list_item_review_edits, change_addon_media_list_addon,
-    compare_addon_media_list_revisions, confirm_addon_media_list_removal,
-    control_addon_media_list_import, get_addon_media_list_form, get_addon_media_list_item,
-    get_addon_media_list_publication_history, get_addon_media_list_publication_readiness,
-    get_addon_media_list_reset_impact, get_addon_media_list_revision_history,
+    confirm_addon_media_list_removal, control_addon_media_list_import, get_addon_media_list_form,
+    get_addon_media_list_item, get_addon_media_list_publication_history,
+    get_addon_media_list_publication_readiness, get_addon_media_list_reset_impact,
     get_addon_media_list_saved_draft_diff, get_addon_media_list_source_probe,
     get_addon_media_lists_page_size, list_addon_media_list_items, list_addon_media_list_providers,
     list_addon_media_lists_by_visibility, match_addon_media_list, publish_addon_media_list,
     reconcile_addon_media_list, recover_addon_media_list_publication,
     redacted_publication_diagnostics_json, request_addon_media_list_item_details,
     request_addon_media_list_presentation, reset_addon_media_list,
-    resolve_addon_media_list_provider, restore_addon_media_list_revision,
-    save_addon_media_list_item_nfo, save_addon_media_list_show_nfo,
-    search_addon_media_list_replacements, set_addon_media_list_admin_hidden,
-    set_addon_media_list_item_replacement, set_addon_media_list_item_role,
-    test_addon_media_list_source, update_addon_media_list, update_addon_media_list_item_chapters,
-    validate_addon_media_list_item_chapters, AddonMediaListAdminSortDirection,
-    AddonMediaListAdminSortField, AddonMediaListArtwork, AddonMediaListArtworkRole,
-    AddonMediaListAutoPublicationHoldRow, AddonMediaListDraftDiffRow, AddonMediaListForm,
-    AddonMediaListImportAction, AddonMediaListImportProgressRow, AddonMediaListItemDetail,
-    AddonMediaListItemReviewEdit, AddonMediaListItemRow, AddonMediaListMetadataConflict,
-    AddonMediaListNfoForm, AddonMediaListNfoMetadata, AddonMediaListNfoPerson,
-    AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
+    resolve_addon_media_list_provider, save_addon_media_list_item_nfo,
+    save_addon_media_list_show_nfo, search_addon_media_list_replacements,
+    set_addon_media_list_admin_hidden, set_addon_media_list_item_replacement,
+    set_addon_media_list_item_role, test_addon_media_list_source, update_addon_media_list,
+    update_addon_media_list_item_chapters, validate_addon_media_list_item_chapters,
+    AddonMediaListAdminSortDirection, AddonMediaListAdminSortField, AddonMediaListArtwork,
+    AddonMediaListArtworkRole, AddonMediaListAutoPublicationHoldRow, AddonMediaListDraftDiffRow,
+    AddonMediaListForm, AddonMediaListImportAction, AddonMediaListImportProgressRow,
+    AddonMediaListItemDetail, AddonMediaListItemReviewEdit, AddonMediaListItemRow,
+    AddonMediaListMetadataConflict, AddonMediaListNfoForm, AddonMediaListNfoMetadata,
+    AddonMediaListNfoPerson, AddonMediaListProviderRow, AddonMediaListPublicationBlocker,
     AddonMediaListPublicationBlockerKind, AddonMediaListPublicationEventRow,
     AddonMediaListPublicationHistoryJobRow, AddonMediaListPublicationHistoryRow,
     AddonMediaListPublicationReadiness, AddonMediaListPublicationStatus,
     AddonMediaListPublishResult, AddonMediaListReconcileResult, AddonMediaListReplacementRow,
-    AddonMediaListResetImpactRow, AddonMediaListResetResult, AddonMediaListRestoreResult,
-    AddonMediaListRevisionDiffRow, AddonMediaListRevisionSummaryRow, AddonMediaListRow,
+    AddonMediaListResetImpactRow, AddonMediaListResetResult, AddonMediaListRow,
     AddonMediaListSourceProbeOutcome, AddonMediaListSourceProbeRow, AddonMediaListSourceProbeState,
 };
 use crate::admin::ui::primitives::{
@@ -191,10 +188,6 @@ fn item_matches_draft_category(
     diff: &AddonMediaListDraftDiffRow,
 ) -> bool {
     category.is_none_or(|category| draft_review_item_ids(diff, category).contains(&item_id))
-}
-
-const fn revision_can_restore(restorable: bool, revision: i32, current_revision: i32) -> bool {
-    restorable && revision < current_revision
 }
 
 fn addon_list_sort_field(value: &str) -> AddonMediaListAdminSortField {
@@ -2771,20 +2764,10 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
     });
     let error = query.with_untracked(|params| params.get("error").unwrap_or_default());
     let status = query.with_untracked(|params| params.get("status").unwrap_or_default());
-    let compare_left = query.with_untracked(|params| {
-        params
-            .get("compare_left")
-            .and_then(|value| value.parse::<i32>().ok())
-    });
-    let compare_right = query.with_untracked(|params| {
-        params
-            .get("compare_right")
-            .and_then(|value| value.parse::<i32>().ok())
-    });
     let review_category =
         query.with_untracked(|params| params.get("review_category").unwrap_or_default());
     admin_result_view(
-        load_addon_media_list_editor_initial(id, compare_left.zip(compare_right)),
+        load_addon_media_list_editor_initial(id),
         move |(
             initial_form,
             initial_items,
@@ -2795,8 +2778,6 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
             initial_source_probe,
             initial_draft_diff,
             initial_reset_impact,
-            initial_revisions,
-            initial_revision_diff,
         )| {
             view! {
                 <AddonMediaListEditorIsland
@@ -2813,9 +2794,6 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
                     initial_source_probe=initial_source_probe
                     initial_draft_diff=initial_draft_diff
                     initial_reset_impact=initial_reset_impact
-                    initial_revisions=initial_revisions
-                    initial_revision_diff=initial_revision_diff
-                    initial_compare_revisions=compare_left.zip(compare_right)
                     initial_review_category=review_category
                 />
                 <AddonListDiskWarningSettings list_id=Some(id)/>
@@ -2836,15 +2814,10 @@ type AddonMediaListEditorInitial = (
     Option<AddonMediaListSourceProbeRow>,
     AddonMediaListDraftDiffRow,
     AddonMediaListResetImpactRow,
-    Vec<AddonMediaListRevisionSummaryRow>,
-    Option<AddonMediaListRevisionDiffRow>,
 );
 
 #[cfg(feature = "ssr")]
-fn load_addon_media_list_editor_initial(
-    id: i64,
-    compare_revisions: Option<(i32, i32)>,
-) -> Result<AddonMediaListEditorInitial, String> {
+fn load_addon_media_list_editor_initial(id: i64) -> Result<AddonMediaListEditorInitial, String> {
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(async move {
             let form = get_addon_media_list_form(id)
@@ -2874,18 +2847,6 @@ fn load_addon_media_list_editor_initial(
             let reset_impact = get_addon_media_list_reset_impact(id)
                 .await
                 .map_err(|error| error.to_string())?;
-            let revisions = get_addon_media_list_revision_history(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let revision_diff = if let Some((left, right)) = compare_revisions {
-                Some(
-                    compare_addon_media_list_revisions(id, left, right)
-                        .await
-                        .map_err(|error| error.to_string())?,
-                )
-            } else {
-                None
-            };
             Ok((
                 form,
                 items,
@@ -2896,18 +2857,13 @@ fn load_addon_media_list_editor_initial(
                 source_probe,
                 draft_diff,
                 reset_impact,
-                revisions,
-                revision_diff,
             ))
         })
     })
 }
 
 #[cfg(not(feature = "ssr"))]
-fn load_addon_media_list_editor_initial(
-    _id: i64,
-    _compare_revisions: Option<(i32, i32)>,
-) -> Result<AddonMediaListEditorInitial, String> {
+fn load_addon_media_list_editor_initial(_id: i64) -> Result<AddonMediaListEditorInitial, String> {
     Err("the add-on list editor is loaded by server-side rendering".to_owned())
 }
 
@@ -4167,9 +4123,6 @@ fn AddonMediaListEditorIsland(
     initial_source_probe: Option<AddonMediaListSourceProbeRow>,
     initial_draft_diff: AddonMediaListDraftDiffRow,
     initial_reset_impact: AddonMediaListResetImpactRow,
-    initial_revisions: Vec<AddonMediaListRevisionSummaryRow>,
-    initial_revision_diff: Option<AddonMediaListRevisionDiffRow>,
-    initial_compare_revisions: Option<(i32, i32)>,
     initial_review_category: String,
 ) -> impl IntoView {
     let initial_error_key = match initial_error.as_str() {
@@ -4180,7 +4133,6 @@ fn AddonMediaListEditorIsland(
         "reconcile" => Some(TextKey::ReconcileFailed),
         "removal-confirmation" => Some(TextKey::RemovalConfirmationFailed),
         "source-test" => Some(TextKey::SourceTestFailed),
-        "revision-restore" => Some(TextKey::RestoreRevisionFailed),
         "" => None,
         _ => Some(TextKey::AddonMediaListSaveFailed),
     };
@@ -4195,7 +4147,6 @@ fn AddonMediaListEditorIsland(
         "reconcile-queued" => Some(TextKey::ReconcileQueued),
         "removal-confirmed" => Some(TextKey::RemovalConfirmed),
         "source-test-queued" => Some(TextKey::SourceTestQueued),
-        "revision-restore-queued" => Some(TextKey::RestoreRevisionQueued),
         _ => None,
     };
     let form = initial_form.unwrap_or_default();
@@ -4223,16 +4174,6 @@ fn AddonMediaListEditorIsland(
     let source_probe = RwSignal::new(initial_source_probe);
     let draft_diff = RwSignal::new(initial_draft_diff);
     let active_draft_category = draft_review_category(&initial_review_category);
-    let default_compare_revisions = initial_compare_revisions.or_else(|| {
-        initial_revisions
-            .first()
-            .zip(initial_revisions.get(1))
-            .map(|(left, right)| (left.revision, right.revision))
-    });
-    let revision_history = RwSignal::new(initial_revisions);
-    let revision_diff = RwSignal::new(initial_revision_diff);
-    let compare_left = RwSignal::new(default_compare_revisions.map(|value| value.0));
-    let compare_right = RwSignal::new(default_compare_revisions.map(|value| value.1));
     let reset_impact = RwSignal::new(initial_reset_impact);
     let import_progress = RwSignal::new(form.import_progress.clone());
     let published_revision = RwSignal::new(form.published_revision);
@@ -4347,8 +4288,6 @@ fn AddonMediaListEditorIsland(
     let reset_open = RwSignal::new(false);
     let reset_status_visible = RwSignal::new(initial_status == "reset-queued");
     let reconcile_status_visible = RwSignal::new(initial_status == "reconcile-queued");
-    let restore_open = RwSignal::new(false);
-    let restore_revision = RwSignal::new(None::<i32>);
     let reset_confirmed_name = RwSignal::new(String::new());
     let reset_confirmation_valid = Memo::new(move |_| {
         reset_confirmed_name
@@ -4374,22 +4313,6 @@ fn AddonMediaListEditorIsland(
     let source_test_action = Action::new(|value: &(i64, i32)| {
         let (id, saved_revision) = *value;
         async move { test_addon_media_list_source(id, saved_revision).await }
-    });
-    let restore_revision_action = Action::new(|value: &(i64, i32, i32, i32)| {
-        let (id, source_revision, draft_revision, published_revision) = *value;
-        async move {
-            restore_addon_media_list_revision(
-                id,
-                source_revision,
-                draft_revision,
-                published_revision,
-            )
-            .await
-        }
-    });
-    let compare_revision_action = Action::new(|value: &(i64, i32, i32)| {
-        let (id, left_revision, right_revision) = *value;
-        async move { compare_addon_media_list_revisions(id, left_revision, right_revision).await }
     });
     let episode_numbering_open = RwSignal::new(false);
     let episode_numbering_season = RwSignal::new("1".to_owned());
@@ -4742,14 +4665,7 @@ fn AddonMediaListEditorIsland(
         Action::new(|id: &i64| get_addon_media_list_publication_history(*id));
     let reload_draft_diff_action =
         Action::new(|id: &i64| get_addon_media_list_saved_draft_diff(*id));
-    let reload_lifecycle_action = Action::new(|id: &i64| {
-        let id = *id;
-        async move {
-            let revisions = get_addon_media_list_revision_history(id).await?;
-            let impact = get_addon_media_list_reset_impact(id).await?;
-            Ok::<_, ServerFnError>((revisions, impact))
-        }
-    });
+    let reload_lifecycle_action = Action::new(|id: &i64| get_addon_media_list_reset_impact(*id));
     let readiness_refresh_pending = RwSignal::new(false);
     let reload_show_nfo_action = Action::new(|id: &i64| get_addon_media_list_show_nfo(*id));
     let review_edit_action = Action::new(
@@ -4853,8 +4769,7 @@ fn AddonMediaListEditorIsland(
         }
     });
     Effect::new(move |_| {
-        if let Some(Ok((revisions, impact))) = reload_lifecycle_action.value().get() {
-            revision_history.set(revisions);
+        if let Some(Ok(impact)) = reload_lifecycle_action.value().get() {
             reset_impact.set(impact);
         }
     });
@@ -5385,36 +5300,6 @@ fn AddonMediaListEditorIsland(
                 }
                 Err(_) => toast.push(
                     tr(TextKey::SourceTestFailed).to_owned(),
-                    ToastSeverity::Error,
-                ),
-            }
-        }
-    });
-    Effect::new(move |_| {
-        if let Some(result) = compare_revision_action.value().get() {
-            match result {
-                Ok(diff) => revision_diff.set(Some(diff)),
-                Err(error) => {
-                    toast.push(addon_media_list_error_message(error), ToastSeverity::Error);
-                }
-            }
-        }
-    });
-    Effect::new(move |_| {
-        if let Some(result) = restore_revision_action.value().get() {
-            restore_open.set(false);
-            match result {
-                Ok(AddonMediaListRestoreResult { .. }) => {
-                    toast.push(
-                        tr(TextKey::RestoreRevisionQueued).to_owned(),
-                        ToastSeverity::Info,
-                    );
-                    set_browser_location(&format!(
-                        "/media/addon-lists/{id}?status=revision-restore-queued"
-                    ));
-                }
-                Err(_) => toast.push(
-                    tr(TextKey::RestoreRevisionFailed).to_owned(),
                     ToastSeverity::Error,
                 ),
             }
@@ -6142,116 +6027,6 @@ fn AddonMediaListEditorIsland(
                             </div>
                         }
                     />
-                </div>
-            </section>
-
-            <section class=style::operator_panel aria-labelledby="addon-list-revision-history-heading">
-                <header class=style::operator_panel_header>
-                    <div>
-                        <h2 id="addon-list-revision-history-heading">{tr(TextKey::RevisionHistory)}</h2>
-                        <p>{tr(TextKey::RevisionHistoryHelp)}</p>
-                    </div>
-                </header>
-                <p class=style::empty style:display=move || if revision_history.with(Vec::is_empty) { "block" } else { "none" }>{tr(TextKey::NoRevisionHistory)}</p>
-                <form method="get" action=format!("/media/addon-lists/{id}") class=style::revision_compare>
-                    <label>
-                        <span>{tr(TextKey::Revision)}</span>
-                        <select
-                            name="compare_left"
-                            required
-                            on:change=move |event| compare_left.set(event_target_value(&event).parse().ok())
-                        >
-                            <For each=move || revision_history.get() key=|revision| revision.revision children=move |revision| view! {
-                                <option value=revision.revision selected=move || compare_left.get() == Some(revision.revision)>{revision.revision}</option>
-                            } />
-                        </select>
-                    </label>
-                    <label>
-                        <span>{tr(TextKey::Revision)}</span>
-                        <select
-                            name="compare_right"
-                            required
-                            on:change=move |event| compare_right.set(event_target_value(&event).parse().ok())
-                        >
-                            <For each=move || revision_history.get() key=|revision| revision.revision children=move |revision| view! {
-                                <option value=revision.revision selected=move || compare_right.get() == Some(revision.revision)>{revision.revision}</option>
-                            } />
-                        </select>
-                    </label>
-                    <button
-                        type="submit"
-                        class=style::btn_cancel
-                        disabled=move || compare_left.get().is_none() || compare_right.get().is_none() || compare_left.get() == compare_right.get() || compare_revision_action.pending().get()
-                        on:click=move |event| {
-                            if let Some((left, right)) = compare_left.get_untracked().zip(compare_right.get_untracked()) {
-                                event.prevent_default();
-                                compare_revision_action.dispatch((id, left, right));
-                            }
-                        }
-                    >{tr(TextKey::CompareRevisions)}</button>
-                </form>
-                {move || revision_diff.get().map(|diff| view! {
-                    <dl class=style::operator_metrics role="status" aria-live="polite" data-testid="revision-diff">
-                        <div><dt>{format!("{} · {}", tr(TextKey::Items), tr(TextKey::Added))}</dt><dd>{diff.items_added}</dd></div>
-                        <div><dt>{format!("{} · {}", tr(TextKey::Items), tr(TextKey::Removed))}</dt><dd>{diff.items_removed}</dd></div>
-                        <div><dt>{format!("{} · {}", tr(TextKey::Items), tr(TextKey::Changed))}</dt><dd>{diff.items_changed}</dd></div>
-                        <div><dt>{tr(TextKey::MetadataChanges)}</dt><dd>{u8::from(diff.list_metadata_changed)}</dd></div>
-                        <div><dt>{tr(TextKey::EffectiveOptions)}</dt><dd>{u8::from(diff.effective_options_changed)}</dd></div>
-                        <div><dt>{tr(TextKey::Files)}</dt><dd>{format!("+{} / -{} / ~{}", diff.files_added, diff.files_removed, diff.files_changed)}</dd></div>
-                        <div><dt>{tr(TextKey::Artifacts)}</dt><dd>{format!("+{} / -{}", diff.artifacts_added, diff.artifacts_removed)}</dd></div>
-                    </dl>
-                })}
-                <div class=style::revision_rows>
-                    <For each=move || revision_history.get() key=|revision| revision.revision children=move |revision| {
-                        let revision_number = revision.revision;
-                        let restorable = revision.restorable;
-                        let native_restore_disabled = !revision_can_restore(
-                            restorable,
-                            revision_number,
-                            published_revision.get_untracked(),
-                        );
-                        view! {
-                            <article class=style::revision_row>
-                                <div>
-                                    <strong>{format!("{} {}", tr(TextKey::Revision), revision_number)}</strong>
-                                    <span>{revision.completed_at.unwrap_or_else(|| tr(TextKey::Unavailable).to_owned())}</span>
-                                </div>
-                                <dl class=style::revision_counts>
-                                    <div><dt>{tr(TextKey::Items)}</dt><dd>{revision.published_item_count}</dd></div>
-                                    <div><dt>{tr(TextKey::Files)}</dt><dd>{revision.file_count}</dd></div>
-                                    <div><dt>{tr(TextKey::Artifacts)}</dt><dd>{revision.artifact_count}</dd></div>
-                                </dl>
-                                <form method="post" action="/api/addon-lists/restore-revision">
-                                    <input type="hidden" name="id" value=id />
-                                    <input type="hidden" name="source_published_revision" value=revision_number />
-                                    <input type="hidden" name="expected_draft_revision" value=move || publication_readiness.with(|value| value.saved_revision) />
-                                    <input type="hidden" name="expected_published_revision" value=move || published_revision.get() />
-                                    <noscript>
-                                        <label class=style::restore_confirmation>
-                                            <input type="checkbox" required />
-                                            <span>{tr(TextKey::RevisionHistoryHelp)}</span>
-                                        </label>
-                                        <button type="submit" class=style::btn_cancel disabled=native_restore_disabled>{tr(TextKey::RestoreRevision)}</button>
-                                    </noscript>
-                                    <button
-                                        type="button"
-                                        class=format!("{} {}", style::btn_cancel, style::js_only)
-                                        disabled=move || {
-                                            !revision_can_restore(
-                                                restorable,
-                                                revision_number,
-                                                published_revision.get(),
-                                            )
-                                        }
-                                        on:click=move |_| {
-                                            restore_revision.set(Some(revision_number));
-                                            restore_open.set(true);
-                                        }
-                                    >{tr(TextKey::RestoreRevision)}</button>
-                                </form>
-                            </article>
-                        }
-                    } />
                 </div>
             </section>
 
@@ -7116,36 +6891,6 @@ fn AddonMediaListEditorIsland(
                         </label>
                     </div>
                 </Modal>
-                <Modal
-                    dialog_id="addon-media-list-restore-revision-dialog"
-                    open=restore_open
-                    title=tr(TextKey::RestoreRevision).to_owned()
-                    on_close=Callback::new(move |confirmed: bool| {
-                        if confirmed {
-                            if let Some(source_revision) = restore_revision.get_untracked() {
-                                restore_revision_action.dispatch((
-                                    id,
-                                    source_revision,
-                                    publication_readiness
-                                        .with_untracked(|value| value.saved_revision),
-                                    published_revision.get_untracked(),
-                                ));
-                            }
-                        }
-                    })
-                    confirm_label=Some(tr(TextKey::RestoreRevision))
-                    confirm_disabled=Signal::derive(move || restore_revision_action.pending().get())
-                    destructive=true
-                    wide=true
-                >
-                    <p>{move || format!(
-                        "{} {} → {} {}",
-                        tr(TextKey::RestoreRevisionWarning),
-                        restore_revision.get().unwrap_or_default(),
-                        tr(TextKey::TargetPublishedRevision),
-                        published_revision.get().saturating_add(1),
-                    )}</p>
-                </Modal>
                 <div
                     class=style::backdrop
                     style:display=move || if replacement_target.get().is_some() { "" } else { "none" }
@@ -7357,14 +7102,6 @@ mod tests {
             "Current List copy",
             "Current List"
         ));
-    }
-
-    #[test]
-    fn revision_restore_is_only_offered_for_an_older_restorable_revision() {
-        assert!(revision_can_restore(true, 2, 3));
-        assert!(!revision_can_restore(false, 2, 3));
-        assert!(!revision_can_restore(true, 3, 3));
-        assert!(!revision_can_restore(true, 4, 3));
     }
 
     #[test]

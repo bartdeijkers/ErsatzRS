@@ -13,6 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Removed
+
+- Historical add-on-list revision browsing, comparison and arbitrary Restore
+  are withdrawn from the MVP. Current draft/published comparison and recovery
+  after a failed publication remain; internal version and publication safety
+  mechanisms are unchanged. Folder portability does not require legacy-profile
+  adoption or an upgrader.
+
 ### Changed
 
 - Record the accepted folder-first add-on-list portability contract: saved

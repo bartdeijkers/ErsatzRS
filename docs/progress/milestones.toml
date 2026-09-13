@@ -48,8 +48,43 @@ Test supported Linux/Windows path handling without copying private media,
 credentials or machine-specific IDs into fixtures. Cross-review implementation
 and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
+Maintainer-approved 2026-09-13 MVP simplification (ADR 0094): exclude legacy-profile
+adoption/backfill and historical revision browsing/comparison/arbitrary Restore.
+Remove their exposed admin/API actions. Preserve current draft/published diff,
+internal version/job fences, active source snapshots and failed-publication recovery.
+New-list file creation and copying current saved folders remain required.
 '''
 evidence = '''
+2026-09-13 MVP simplification (ADR 0094): historical revision browsing,
+comparison and arbitrary Restore are removed from the native task workspace,
+editor island, server-function registry and HTML API route. Draft/published
+comparison, Reset, activity diagnostics and exact failed-publication recovery
+remain. Unfinished file-first historical Restore changes were preserved outside
+the implementation; infrastructure/scanner code is unchanged in this checkpoint.
+Astra and Claude independently reviewed the removal with no P1/P2 (Claude20:15).
+All 48 focused web tests pass in dbad36b8-481a-4d9d-9308-85cc7e2a5dd3
+(6m40s build, 0.166s tests), including removed endpoint registration and retained
+recovery/draftdiff. Three unused history-only CSS selectors were then removed;
+scoped web all-targets Clippy passes with -D warnings (2m22s), formatting and
+hydration lint pass. A matched SSR/WASM build passes with one job per concurrent
+Cargo child. Root observed ten existing Chromium/Firefox publication, Reset and
+exact failed-generation recovery cases pass in the first 14-case run (1.8m).
+Its result file was cleared by Playwright's next-run output cleanup; the terminal
+result is the retained evidence, not an on-disk JSON claim.
+Four new history-absence cases initially failed before navigation because the
+test used an unsupported fixture namespace; after correcting only that fixture
+call, all four pass against the same build in 6 seconds, with JavaScript both
+enabled and disabled: test-results/mvp-history-recheck/playwright-results.json.
+These prove current draft changes remain visible and an old Restore POST is
+rejected without changing revision or job state. Claude independently inspected
+all four passing-case screenshots and the fixture correction at 20:44: no P1/P2,
+no history controls, gaps or overflow; native/hydrated diagnostics remain visible.
+No full closeout, CI or push ran.
+The repository-wide architecture check reports 52 deferred-transaction lint
+violations in unchanged earlier O-01 infrastructure/tests. Classify the real
+writes versus read-only transactions and close that gate before O-01 acceptance;
+this UI removal does not add transaction code or claim that gate passed.
+
 2026-09-13 ordinary-scan provider chapter observations now use the existing
 synchronizer and guarded SavedWriter. Tree ownership precedes the write
 transaction; only root scans may coexist. Changed observations are written
@@ -79,8 +114,10 @@ without changing scanner semantics or suppressing the lint. Final three focused
 scanner regressions pass in 8bc78b7a-8bcb-4807-950f-6841772ab038 (8.29s build,
 1.696s tests). Claude rechecked the boxing and local-revision assertion at 19:18
 with no P1/P2. The unchanged warning tests retain their passing evidence above.
-Runtime discovery remains off; remaining operator writers, Restore/Reset,
-legacy adoption, complete receiving bindings and native/browser proof remain.
+Runtime discovery remains off; remaining active operator writers, Reset,
+new-list file creation, complete receiving bindings and native/browser proof remain.
+Historical Restore integration and legacy adoption were subsequently withdrawn
+from the MVP under ADR 0094; their absence is not an acceptance failure.
 
 2026-09-13 import persistence now shares the existing header phase-zero,
 item phase-one and final reconciliation phase-four transactions. The mapped
@@ -3151,14 +3188,15 @@ depends_on = ['amm-k-03']
 acceptance = '''
 The detail page offers durable non-mutating Test source, an exact saved-draft
 diff, and reset impact counts for published items, generated playlists,
-channels, schedules, and active/future playout. Current plus two preceding
-complete revisions remain reference-counted and comparable; Restore revision
-uses the normal durable lease and creates a new monotonic revision. Cleanup
-cannot remove files/artifacts pinned by retained revisions, active work, or
+channels, schedules, and active/future playout. Historical browsing/comparison
+and arbitrary Restore were withdrawn from the MVP on 2026-09-13 under ADR 0094.
+Internal publication/source retention is unchanged. Cleanup cannot remove
+files/artifacts pinned by retained internal sources, active work, or
 current/future playout. The shared destructive dialog contains keyboard focus
 and uses aria-labelledby; Name/Id sorting is keyboard operable with aria-sort.
 Localized hydrated/no-JS, 320-pixel, 200%-zoom, Chromium, and Firefox proof
-covers source/diff/impact/history and safe restore.
+covers source/diff/impact and publication recovery. Earlier history/Restore
+evidence below is historical, not a current MVP requirement.
 '''
 evidence = '''
 Completed 2026-09-04. A durable bounded first-page source probe retains only

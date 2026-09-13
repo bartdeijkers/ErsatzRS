@@ -2,7 +2,7 @@ feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'In progress'
-adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091', '0092', '0093']
+adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091', '0092', '0093', '0094']
 
 summary = '''
 ADR 0075 adds provider-neutral drafts with NFOs, frozen contracts,
@@ -59,6 +59,15 @@ M-01B is complete. N-01B retains broader responsive/accessibility closeout.
 N-02 evidence is retained; N-01B blocks closeout. N-03 owns native ZIP/playback proof;
 Packaged browser-profile and release gates are open.
 '''
+
+[[debt]]
+id          = 'addon-mvp-history-removal-verification'
+description = 'Verify removal of historical browsing/comparison/arbitrary Restore from native and hydrated admin/API paths while preserving current draftdiff and publication recovery.'
+discovered  = '2026-09-13'
+resolved    = true
+adr         = '0094'
+evidence    = 'Milestone amm-o-01 owns the canonical evidence: 48 focused native tests, scoped web Clippy, formatting/hydration lint, matched build and 14 Chromium/Firefox cases across two focused runs. Astra and Claude independently reviewed source removal with no P1/P2.'
+resolution  = 'Historical native/hydrated controls and API entry points are absent; rejected old POST does not mutate state. Current draft comparison, publication, Reset and exact failed-generation recovery remain verified. Internal snapshots and version counters are unchanged. Broader folder-first O01 acceptance remains open.'
 
 [[debt]]
 id          = 'addon-preparation-readmission-context'

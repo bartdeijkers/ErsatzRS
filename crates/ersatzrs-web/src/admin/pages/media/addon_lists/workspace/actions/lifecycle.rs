@@ -4,7 +4,7 @@ use super::{
 };
 use ersatzrs_app::commands::{
     ChangeAddonMediaListAddon, ConfirmAddonMediaListRemoval, ControlAddonMediaListImport,
-    ResetAddonMediaList, RestoreAddonMediaListRevision,
+    ResetAddonMediaList,
 };
 
 #[expect(
@@ -22,35 +22,6 @@ pub(super) async fn execute(
     match intent {
         "reset-preview" | "change-addon-preview" => {
             d.confirmation = Some(intent.into());
-        }
-        _ if intent.starts_with("restore-preview:") => {
-            let revision: i32 = intent[16..].parse().map_err(|_| TextKey::RestoreRevision)?;
-            let history = state
-                .application
-                .addon_media_list_revision_history(d.list_id)
-                .await
-                .map_err(|_| TextKey::RestoreRevision)?;
-            if !history
-                .iter()
-                .any(|r| r.revision == revision && r.restorable)
-            {
-                return Err(TextKey::RestoreRevision);
-            }
-            d.confirmation = Some(intent.into());
-        }
-        "compare" => {
-            submission.comparison = Some(
-                state
-                    .application
-                    .compare_addon_media_list_revisions(
-                        d.list_id,
-                        parse(&fields, "compare_left")?,
-                        parse(&fields, "compare_right")?,
-                    )
-                    .await
-                    .map_err(|_| TextKey::CompareRevisions)?
-                    .into(),
-            );
         }
         "confirm-operation" => {
             let current = state
@@ -92,29 +63,11 @@ pub(super) async fn execute(
                         .await
                         .map_err(|_| TextKey::ChangeAddon)?;
                 }
-                value if value.starts_with("restore-preview:") => {
-                    state
-                        .application
-                        .restore_addon_media_list_revision(RestoreAddonMediaListRevision {
-                            id: d.list_id,
-                            source_published_revision: value[16..]
-                                .parse()
-                                .map_err(|_| TextKey::RestoreRevision)?,
-                            expected_draft_revision: d.revision,
-                            expected_published_revision: parse(
-                                &fields,
-                                "expected_published_revision",
-                            )?,
-                        })
-                        .await
-                        .map_err(|_| TextKey::RestoreRevision)?;
-                }
                 _ => return Err(TextKey::Confirm),
             }
             submission.notice = Some(match d.confirmation.as_deref() {
                 Some("reset-preview") => TextKey::ResetQueued,
-                Some("change-addon-preview") => TextKey::Saved,
-                _ => TextKey::RestoreRevisionQueued,
+                _ => TextKey::Saved,
             });
             d.confirmation = None;
         }

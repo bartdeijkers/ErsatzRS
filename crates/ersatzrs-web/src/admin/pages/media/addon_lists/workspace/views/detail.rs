@@ -1,10 +1,10 @@
 use super::{
     artwork_value, button, checkbox, choice, content_kind_value, detail_state_text_key, filtered,
     import_can_retry, import_discovery_summary, input, kind_select, liveness_select,
-    metadata_fields, revision_can_restore, save_bar, select, textarea, tr, value,
-    AddonMediaListArtworkRole, AddonMediaListContentKind, AddonMediaListImportState,
-    AddonMediaListItemRole, AddonMediaListSourceProbeOutcome, AddonMediaListSourceProbeState,
-    PublicationActivity, TextKey, Workspace, FORM,
+    metadata_fields, save_bar, select, textarea, tr, value, AddonMediaListArtworkRole,
+    AddonMediaListContentKind, AddonMediaListImportState, AddonMediaListItemRole,
+    AddonMediaListSourceProbeOutcome, AddonMediaListSourceProbeState, PublicationActivity, TextKey,
+    Workspace, FORM,
 };
 use leptos::prelude::*;
 
@@ -243,8 +243,6 @@ pub(super) fn activity(w: &Workspace) -> AnyView {
         <div class="action-row">{button("test-source",TextKey::TestSource,false)}{button("reconcile",TextKey::ReconcileEntireSource,false)}<a class="button secondary" href=format!("/api/addon-lists/{}/publication-diagnostics",w.form.id) download>{tr(TextKey::DownloadRedactedDiagnostics)}</a></div>
         {source_status(w)}{changes(w)}
         <PublicationActivity list_id=w.form.id history=RwSignal::new(w.history.clone()) hold=RwSignal::new(w.form.auto_publication_hold.clone())/>
-        <h2>{tr(TextKey::RevisionHistory)}</h2><p>{tr(TextKey::RevisionHistoryHelp)}</p><p hidden=!w.revisions.is_empty()>{tr(TextKey::NoRevisionHistory)}</p>
-        {w.revisions.iter().map(|r|view!{<section class="settings-section"><strong>{r.revision}</strong><p>{r.completed_at.clone()}</p><button class="button secondary" form=FORM name="intent" value=format!("restore-preview:{}",r.revision) disabled=!revision_can_restore(r.restorable,r.revision,w.form.published_revision) formnovalidate>{tr(TextKey::RestoreRevision)}</button></section>}).collect_view()}
     </section>}.into_any()
 }
 
@@ -253,20 +251,16 @@ pub(super) fn confirmation(w: &Workspace) -> AnyView {
         return ().into_any();
     };
     let reset = operation == "reset-preview";
-    let restore = operation.starts_with("restore-preview:");
-    let label = if reset {
-        TextKey::ResetAndReload
-    } else if restore {
-        TextKey::RestoreRevision
-    } else {
-        TextKey::ChangeAddon
+    let label = match operation {
+        "reset-preview" => TextKey::ResetAndReload,
+        "change-addon-preview" => TextKey::ChangeAddon,
+        _ => return ().into_any(),
     };
     view!{<section class="notice" role="region" tabindex="-1" autofocus=w.submission.error.is_none() aria-labelledby="workspace-confirm-heading">
         <h2 id="workspace-confirm-heading">{tr(label)}</h2><p><strong>{w.form.name.clone()}</strong></p>
         <dl class="facts">{[(TextKey::PublishedItems,w.impact.published_items),(TextKey::GeneratedPlaylists,w.impact.generated_playlists),(TextKey::Channels,w.impact.channels),(TextKey::Schedules,w.impact.schedules),(TextKey::ActiveOrFuturePlayouts,w.impact.active_or_future_playouts)].into_iter().map(|(key,n)|view!{<div><dt>{tr(key)}</dt><dd>{n}</dd></div>}).collect_view()}</dl>
-        <p>{tr(if restore {TextKey::RevisionHistoryHelp} else if reset {TextKey::ResetReloadFailureWarning} else {TextKey::ChangeAddon})}</p>
+        <p>{tr(if reset {TextKey::ResetReloadFailureWarning} else {TextKey::ChangeAddon})}</p>
         {reset.then(||view!{<p>{tr(TextKey::ResetRemovesItems)}" · "{tr(TextKey::ResetRemovesArtifacts)}" · "{tr(TextKey::ResetRetainsSettings)}</p>{input("confirmed_name",TextKey::Name,w.submission.draft.field(&w.task,"confirmed_name",""),"text")} })}
-        <input form=FORM type="hidden" name="expected_published_revision" value=w.impact.published_revision.to_string()/>
         {checkbox("acknowledged",label,false)}
         <div class="action-row">{button("confirm-operation",TextKey::Confirm,true)}{button("cancel-confirmation",TextKey::Cancel,false)}</div>
     </section>}.into_any()
@@ -299,16 +293,10 @@ pub(super) fn source_status(w: &Workspace) -> AnyView {
 
 fn changes(w: &Workspace) -> AnyView {
     let d = &w.diff;
-    let comparison = w.submission.comparison.as_ref().or(w.comparison.as_ref());
     view!{<section class="settings-section"><h2>{tr(TextKey::DraftChanges)}</h2><p>{tr(TextKey::ExactDraftDiffHelp)}</p>
         <p hidden=d.exact>{tr(TextKey::DraftDiffUnavailable)}</p>
         <dl class="facts">{[(TextKey::Added,d.added),(TextKey::MetadataChanges,d.metadata_changed),(TextKey::ExcludedItems,d.excluded),(TextKey::Unavailable,d.unavailable),(TextKey::Conflicts,d.conflicted),(TextKey::PendingRemovals,d.pending_removals),(TextKey::Reappearances,d.reappeared),(TextKey::RemovalCandidates,d.removal_candidates)].into_iter().map(|(key,n)|view!{<div><dt>{tr(key)}</dt><dd>{n}</dd></div>}).collect_view()}</dl>
         {w.items.iter().filter(|r|d.pending_removal_item_ids.contains(&r.id)).map(|r|view!{<div class="action-row"><span>{r.display_title.clone()}</span><button class="button secondary" form=FORM name="intent" value=format!("remove:{}:{}",r.id,d.pending_removal_generations.get(&r.id).copied().unwrap_or(0)) formnovalidate>{tr(TextKey::ConfirmRemoval)}</button></div>}).collect_view()}
-        {(w.revisions.len()>1).then(||view!{
-            <div class="grid-2">{select("compare_left",TextKey::SourceRevision,w.submission.draft.field("activity","compare_left",w.revisions[0].revision.to_string()),w.revisions.iter().map(|r|(r.revision.to_string(),r.revision.to_string())).collect())}{select("compare_right",TextKey::TargetPublishedRevision,w.submission.draft.field("activity","compare_right",w.revisions[1].revision.to_string()),w.revisions.iter().map(|r|(r.revision.to_string(),r.revision.to_string())).collect())}</div>
-            {button("compare",TextKey::CompareRevisions,false)}
-        })}
-        {comparison.map(|d|view!{<dl class="facts" data-testid="revision-diff">{[(TextKey::Added,d.items_added),(TextKey::Removed,d.items_removed),(TextKey::Changed,d.items_changed),(TextKey::MetadataChanges,u64::from(d.list_metadata_changed)),(TextKey::EffectiveOptions,u64::from(d.effective_options_changed)),(TextKey::Files,d.files_changed),(TextKey::Artifacts,d.artifacts_added)].into_iter().map(|(key,n)|view!{<div><dt>{tr(key)}</dt><dd>{n}</dd></div>}).collect_view()}</dl>})}
     </section>}.into_any()
 }
 

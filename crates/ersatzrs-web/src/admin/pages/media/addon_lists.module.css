@@ -2838,45 +2838,29 @@ tbody tr:hover {
     background: var(--color-background);
 }
 
-.operator-metrics,
-.revision-counts {
+.operator-metrics {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
     gap: 0.5rem;
     margin: 0;
 }
 
-.operator-metrics div,
-.revision-counts div {
+.operator-metrics div {
     min-width: 0;
     padding: 0.55rem 0.65rem;
     border-radius: calc(var(--radius) / 2);
     background: var(--color-background);
 }
 
-.operator-metrics dt,
-.revision-counts dt {
+.operator-metrics dt {
     color: var(--color-muted);
     font-size: 0.78rem;
 }
 
-.operator-metrics dd,
-.revision-counts dd {
+.operator-metrics dd {
     margin: 0.15rem 0 0;
     font-weight: 700;
     overflow-wrap: anywhere;
-}
-
-.revision-compare {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    gap: 0.75rem;
-}
-
-.revision-compare label {
-    display: grid;
-    gap: 0.25rem;
 }
 
 .revision-rows {
@@ -2896,14 +2880,6 @@ tbody tr:hover {
 .revision-row > div:first-child {
     display: grid;
     gap: 0.2rem;
-}
-
-.restore-confirmation {
-    display: flex;
-    align-items: start;
-    gap: 0.4rem;
-    max-width: 24rem;
-    font-size: 0.8rem;
 }
 
 @media (max-width: 760px) {

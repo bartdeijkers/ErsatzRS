@@ -588,12 +588,42 @@ WHERE "AddonMediaListId" = ${seed.listId};
     }
   });
 
+  for (const javaScriptEnabled of [true, false]) {
+    test(`omits historical revision actions with JavaScript ${javaScriptEnabled ? 'enabled' : 'disabled'}`, async ({ browser, baseURL }, testInfo) => {
+      const seed = seedMetadataEditor(testInfo);
+      const context = await browser.newContext({ javaScriptEnabled, baseURL });
+      const page = await context.newPage();
+      const errors = watchRuntimeErrors(page);
+      try {
+        await forceEnglish(page);
+        const url = `/media/addon-lists/${seed.listId}/activity`;
+        if (javaScriptEnabled) await gotoHydrated(page, url);
+        else await page.goto(url);
+        await expect(page.getByRole('heading', { name: 'Draft changes' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Revision history' })).toHaveCount(0);
+        await expect(page.locator('button[value^="restore-preview:"], button[value="compare"], [name="compare_left"], [name="compare_right"]')).toHaveCount(0);
+        const before = sqlite(`SELECT "DraftRevision" || ',' || "PublishedRevision" || ',' || (SELECT COUNT(*) FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId"=${seed.listId}) FROM "AddonMediaList" WHERE "Id"=${seed.listId};`);
+        const response = await page.request.post('/api/addon-lists/restore-revision', {
+          form: { id: String(seed.listId), source_published_revision: '1', expected_draft_revision: '0', expected_published_revision: '1' },
+          maxRedirects: 0,
+        });
+        expect(response.status()).toBeGreaterThanOrEqual(400);
+        expect(response.status()).toBeLessThan(500);
+        expect(sqlite(`SELECT "DraftRevision" || ',' || "PublishedRevision" || ',' || (SELECT COUNT(*) FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId"=${seed.listId}) FROM "AddonMediaList" WHERE "Id"=${seed.listId};`)).toBe(before);
+        await page.screenshot({ path: testInfo.outputPath('mvp-activity.png'), fullPage: true });
+        expect(errors).toEqual([]);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
   test('requires the persisted list name before reset and reload', async ({page}, testInfo) => {
     const errors=watchRuntimeErrors(page),seed=seedMetadataEditor(testInfo,'reset');
     await forceEnglish(page);
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}/activity`);
-    await expect(page.getByRole('heading',{name:'Revision history'})).toBeVisible();
-    await expect(page.getByText('No published revisions are retained yet.')).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Revision history'})).toHaveCount(0);
+    await expect(page.locator('button[value^="restore-preview:"]')).toHaveCount(0);
     await expect(page.locator('button[value="compare"]')).toHaveCount(0);
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}/settings`);
     await page.locator('[name="metadata_title"]').fill('Unsaved retained title');
@@ -821,35 +851,9 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
 
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       await noJsPage.goto(`/media/addon-lists/${seed.listId}/activity`);
-      await expect(noJsPage.locator('button[value="restore-preview:2"]')).toBeDisabled();
-      await expect(noJsPage.locator('button[value="restore-preview:1"]')).toBeEnabled();
-      await noJsPage.locator('[name="compare_left"]').selectOption('2');
-      await noJsPage.locator('[name="compare_right"]').selectOption('1');
-      await workspaceSubmit(noJsPage,'compare',false);
-      await expect(noJsPage.getByTestId('revision-diff')).toBeVisible();
-      await workspaceSubmit(noJsPage,'restore-preview:1',false);
-      await noJsPage.locator('[name="acknowledged"][type="checkbox"]').check();
-      await workspaceSubmit(noJsPage,'confirm-operation',false);
-      await expect(noJsPage.locator('#workspace-errors')).toHaveCount(0);
-      await expect
-        .poll(
-          () =>
-            sqlite(`
-SELECT "list"."PublishedRevision" || ',' || "job"."TargetPublishedRevision" || ',' ||
-       "job"."SourcePublishedRevision" || ',' || "operation"."State"
-FROM "AddonMediaList" AS "list"
-JOIN "AddonMediaListPublicationJob" AS "job"
-  ON "job"."AddonMediaListId" = "list"."Id"
-JOIN "ManagedLibraryOperation" AS "operation"
-  ON "operation"."Id" = "job"."OperationId"
-WHERE "list"."Id" = ${seed.listId}
-ORDER BY "job"."Generation" DESC
-LIMIT 1;
-`),
-          { timeout: 30_000 },
-        )
-        .toBe('3,3,1,3');
-      expect(revisionLogicalContent(seed.listId, 3)).toBe(revisionOneContent);
+      await expect(noJsPage.getByRole('heading', { name: 'Revision history' })).toHaveCount(0);
+      await expect(noJsPage.locator('button[value^="restore-preview:"], button[value="compare"]')).toHaveCount(0);
+      expect(sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('2');
 
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       await noJsPage.goto(`/media/addon-lists/${seed.listId}/settings`);
@@ -1449,21 +1453,8 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
 
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}/activity`);
-    await expect(page.locator('button[value="restore-preview:2"]')).toBeDisabled();
-    await expect(page.locator('button[value="restore-preview:1"]')).toBeEnabled();
-    await page.locator('[name="compare_left"]').selectOption('2');await page.locator('[name="compare_right"]').selectOption('1');
-    await workspaceSubmit(page,'compare');await expect(page.getByTestId('revision-diff')).toBeVisible();
-    const staleRestore = await page.request.post('/api/addon-lists/restore-revision', {
-      form: {
-        id: String(seed.listId),
-        source_published_revision: '1',
-        expected_draft_revision: '0',
-        expected_published_revision: '1',
-      },
-      maxRedirects: 0,
-    });
-    expect(staleRestore.status()).toBe(303);
-    expect(staleRestore.headers().location).toContain('?error=revision-restore');
+    await expect(page.getByRole('heading', { name: 'Revision history' })).toHaveCount(0);
+    await expect(page.locator('button[value^="restore-preview:"], button[value="compare"]')).toHaveCount(0);
 
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}/settings`);
     await workspaceSubmit(page,'reset-preview');
@@ -1548,41 +1539,11 @@ FROM (
 `),
     ).toBe(providerStateBeforeReclassification);
 
-    const revisionOneContent = revisionLogicalContent(seed.listId, 1);
-    expect(revisionOneContent).not.toBe('');
+    // Internal source snapshots remain available; optional historical Restore is not exposed.
+    expect(revisionLogicalContent(seed.listId, 1)).not.toBe('');
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}/activity`);
-    await workspaceSubmit(page,'restore-preview:1');
-    await page.locator('[name="acknowledged"][type="checkbox"]').check();
-    await workspaceSubmit(page,'confirm-operation');
-    await expect(page.locator('#workspace-errors')).toHaveCount(0);
-    await expect
-      .poll(
-        () => sqlite(`
-SELECT "list"."PublishedRevision" || ',' || "job"."TargetPublishedRevision" || ',' ||
-       "job"."SourcePublishedRevision" || ',' || "operation"."State"
-FROM "AddonMediaList" AS "list"
-JOIN "AddonMediaListPublicationJob" AS "job"
-  ON "job"."AddonMediaListId" = "list"."Id"
-JOIN "ManagedLibraryOperation" AS "operation"
-  ON "operation"."Id" = "job"."OperationId"
-WHERE "list"."Id" = ${seed.listId}
-ORDER BY "job"."Generation" DESC
-LIMIT 1;
-`),
-        { timeout: 30_000 },
-      )
-      .toBe('4,4,1,3');
-    expect(revisionLogicalContent(seed.listId, 4)).toBe(revisionOneContent);
-    // Older unpinned revisions are pruned by hourly maintenance, not publication.
-    // Repository retention tests cover that cutoff; all three latest snapshots must exist now.
-    expect(sqlite(`
-SELECT group_concat("Revision", ',') FROM (
-  SELECT "Revision" FROM "AddonMediaListRevision"
-  WHERE "AddonMediaListId" = ${seed.listId}
-  ORDER BY "Revision" DESC
-  LIMIT 3
-);
-`)).toBe('4,3,2');
+    await expect(page.locator('button[value^="restore-preview:"], button[value="compare"]')).toHaveCount(0);
+    expect(sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('3');
 
     expect(runtimeErrors).toEqual([]);
   });

@@ -4,6 +4,10 @@
 
 Accepted (2026-09-01), amended (2026-09-04, 2026-09-08, 2026-09-11)
 
+The historical browsing/comparison and arbitrary Restore requirement is superseded
+for the MVP by [ADR 0094](0094-limit-addon-list-mvp-to-draft-and-publication.md)
+(maintainer approval, 2026-09-13). Publication recovery remains required.
+
 The mandatory SponsorBlock processed-video preparation decision is superseded
 by [ADR 0087](0087-stream-sponsorblock-intervals-without-playback-underruns.md)
 (2026-09-05, amended 2026-09-06). Streaming is AMM-M-01A; optional list-level

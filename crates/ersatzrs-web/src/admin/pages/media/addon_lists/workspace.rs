@@ -59,8 +59,6 @@ pub struct Submission {
     pub replacement_searched: bool,
     pub replacement_results:
         Vec<crate::admin::server_fns::addon_media_lists::AddonMediaListReplacementRow>,
-    pub comparison:
-        Option<crate::admin::server_fns::addon_media_lists::AddonMediaListRevisionDiffRow>,
     #[cfg(feature = "ssr")]
     pub option_previews: Vec<ersatzrs_app::addon_media_list_options::AddonListOptionPreview>,
 }
@@ -128,13 +126,8 @@ pub fn AddonListWorkspacePage() -> impl IntoView {
         } else {
             task
         };
-        let comparison = query.with_untracked(|q| {
-            q.get("compare_left")
-                .and_then(|s| s.parse().ok())
-                .zip(q.get("compare_right").and_then(|s| s.parse().ok()))
-        });
-        super::admin_result_view(super::load_addon_media_list_editor_initial(id, comparison), move |initial| {
-            let (form, items, readiness, history, metadata, providers, source, diff, impact, revisions, comparison) = initial;
+        super::admin_result_view(super::load_addon_media_list_editor_initial(id), move |initial| {
+            let (form, items, readiness, history, metadata, providers, source, diff, impact) = initial;
             let Some(form) = form else {
                 return view! { <p role="alert">{super::tr(super::TextKey::AddonMediaListNotFound)}</p> }.into_any();
             };
@@ -152,7 +145,7 @@ pub fn AddonListWorkspacePage() -> impl IntoView {
                 ..Submission::default()
             });
             if submission.draft.list_id != id { submission = Submission { draft: Draft { list_id:id, revision:form.draft_revision, page_size:10, ..Draft::default() }, ..Submission::default() }; }
-            views::render(&views::Workspace { form, items, readiness, history, metadata, providers, source, diff, impact, revisions, comparison, submission, task, item_id })
+            views::render(&views::Workspace { form, items, readiness, history, metadata, providers, source, diff, impact, submission, task, item_id })
         }).into_any()
     }
     #[cfg(not(feature = "ssr"))]

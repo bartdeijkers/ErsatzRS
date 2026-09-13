@@ -2,6 +2,14 @@
 
 ## Status
 
+2026-09-13 MVP simplification: [ADR 0094](../docs/adr/0094-limit-addon-list-mvp-to-draft-and-publication.md)
+withdraws historical revision browsing/comparison and arbitrary Restore, including
+exposed native/hydrated actions. Stop the unfinished historical Restore integration.
+AMM-O-01 also excludes legacy-profile adoption/backfill. Keep current saved draft,
+independent published content, internal version/job fences and failed-publication
+recovery. Current milestone acceptance supersedes older requirements below for
+optional history and legacy adoption; do not reopen them as completion gates.
+
 2026-09-06 amendment: [ADR 0087](../docs/adr/0087-stream-sponsorblock-intervals-without-playback-underruns.md)
 splits former M-01 into M-01A (streaming, reserved and in progress) and M-01B
 (optional list-level Download ahead modes, not started). Streaming must not
@@ -273,7 +281,7 @@ Portable field groups and writer coverage (source-audited design, not enabled):
 |---|---|---|
 | Provider/list identity, source, name and provider/override/conflict metadata | `addon_media_list_sync::{save_list,save_import_list_header,update_incremental_import_list_header,change_addon}`, `addon_media_list/editor::save`, NFO saves | Preserve provider and operator layers separately; remap local list/library identity |
 | Classification, presentation, playlist generation, detail policy, chapters, refresh/publication policy and per-list warning | Repository settings/detail/chapter setters, editor, lifecycle settings and disk-warning setters | Preserve operator choices; recreate local scheduling eligibility rather than importing running jobs |
-| Every item, ordering, inclusion, role, liveness, metadata layers, GUIDs and chapter fragments | Import/reconcile finalization, `merge_detail_item_inner`, item setters, editor, revision materialization | Key by provider identity; retain excluded/unpublished content; derive local bindings |
+| Every item, ordering, inclusion, role, liveness, metadata layers, GUIDs and chapter fragments | Import/reconcile finalization, `merge_detail_item_inner`, item setters, editor | Key by provider identity; retain excluded/unpublished content; derive local bindings |
 | Sparse list/item options and exact schema identity | `save_draft_options_tx`, default initialization, published-options retention | Strip SQLite IDs; validate against installed capability; never adopt copied credentials or executable declarations |
 | Delivery mode, displayed cutoff and durable known-item cohort | `addon_media_list_delivery`, known-identity triggers, explicit reset | Serialize provider identities grouped before/after the cutoff, not sender IDs or timestamp ordering |
 | Last-published selection, metadata/options and referenced list-owned bytes | Publication snapshot/verification and file materialization | Preserve independently from current draft; validate files and recreate local publication bindings before activation |
@@ -367,8 +375,8 @@ unsuitable. Receiving artifact admission must not fabricate provider job leases 
 call reserve/promote. Claude's source review selects the smaller existing seam:
 use `AddonMediaListRevisionSnapshot` and the job's `SourcePublishedRevision` as
 the publication source, rather than introducing a parallel publication DTO.
-Keep the explicit local Restore draft rewrite; receiving activation must skip
-that rewrite. Its enqueue must support a fresh list whose PublishedRevision is
+Historical Restore is excluded from the MVP under ADR 0094. Receiving activation
+must not rewrite the independent draft. Its enqueue must support a fresh list whose PublishedRevision is
 zero and use the existing operation table/fences. Receiving snapshot insertion
 and local subtitle/prepared admission must precede activation; missing prepared
 media needs preparation against the old snapshot, not the newer draft. These
@@ -441,7 +449,7 @@ Proposed save ordering to review before implementation:
    the receiving/reconciliation path must repair before further content writes.
    Do not roll the saved file back from stale SQLite or claim two-resource
    atomicity. Cancellation during blocking filesystem work needs the same fence.
-4. Publication/reset/restore must preserve this authoritative document during
+4. Publication/reset/failed-publication recovery must preserve this authoritative document during
    tree swaps, while changing its published section only for validated completed
    content. Existing tree-lock order and lease recovery must be reviewed with
    this boundary; a draft save must not invalidate published fingerprints.
@@ -449,7 +457,7 @@ Proposed save ordering to review before implementation:
    provider merges, against unresolved publication/reset ownership. A saved
    document copied into an older backup cannot later replace an acknowledged
    newer draft. Prove the document's preservation through each actual swap and
-   revision-materialization ordering, not just ordinary successful publication.
+   recovery ordering, not just ordinary successful publication.
 
 Startup/root discovery must reconcile file-committed/projection-stale state
 before provider jobs or publication retries can write that list. A content
@@ -460,7 +468,7 @@ validated projection path as receiving a saved folder, not a second exporter.
 Required fault proofs follow those actual boundaries: failed file replacement,
 file replacement followed by failed database commit/restart, durable replacement
 ordering across a power-loss boundary, concurrent stale Save, and Save followed
-by failed publication/restore. The full writer coverage
+by failed publication/recovery. The full writer coverage
 and reconstruction path must land together before declaring file authority
 enabled; codec-only or export-only work cannot satisfy this milestone.
 
@@ -486,7 +494,7 @@ official yt-dlp package one complete operator workflow:
 8. an enabled yt-dlp add-on runs a controlled self-update at every ErsatzRS
    start and at least daily;
 9. operators can preview source, publication, reset, and downstream impact,
-   compare or restore bounded publication history, and inspect a redacted
+   compare the current draft with publication, and inspect a redacted
    causal operation timeline; and
 10. inherited/bulk item options, disk-usage warnings, and a stale-after-failed-
     update add-on health warning keep the broadened workflow usable.
