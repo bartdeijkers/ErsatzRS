@@ -46,7 +46,10 @@ impl MappedList {
                LEFT JOIN "AddonMediaSource" AS "source" ON "source"."AddonId"="list"."AddonId"
                LEFT JOIN "AddonInstallation" AS "addon" ON "addon"."AddonId"="list"."AddonId"
                WHERE "list"."Id"=?"#,
-        ).bind(list_id).fetch_optional(pool).await.repository()?.ok_or_else(conflict)?;
+        ).bind(list_id).fetch_optional(pool).await.repository()?.ok_or(RepositoryError::NotFound {
+            kind: "add-on media list",
+            id: list_id,
+        })?;
         let Some(previous_digest) = row
             .try_get::<Option<String>, _>("SavedDocumentDigest")
             .repository()?
@@ -102,11 +105,29 @@ impl MappedList {
     /// queued `SavedFolder` job may coexist with draft repair, just as with Save.
     /// Returns false for a busy owner; identity changes remain errors.
     pub async fn fence(&self, tx: &mut Transaction<'_, Db>) -> Result<bool> {
+        self.fence_with_scans(tx, false).await
+    }
+
+    /// Operator saves touch only reserved saved content, not the generated media
+    /// read by ordinary root scans. External-file repair must not use this allowance.
+    pub async fn fence_operator_save(&self, tx: &mut Transaction<'_, Db>) -> Result<bool> {
+        self.fence_with_scans(tx, true).await
+    }
+
+    async fn fence_with_scans(
+        &self,
+        tx: &mut Transaction<'_, Db>,
+        allow_root_scans: bool,
+    ) -> Result<bool> {
         let available: Option<bool> = sqlx::query_scalar(
             r#"SELECT "list"."ReviewState"<>3
                  AND "list"."PublicationJournalJson" IS NULL
                  AND NOT EXISTS(SELECT 1 FROM "ManagedLibraryLease" AS "lease"
-                     WHERE "lease"."LibraryId"="library"."LibraryId" AND "lease"."LeaseExpiresAt">?)
+                     WHERE "lease"."LibraryId"="library"."LibraryId" AND "lease"."LeaseExpiresAt">?
+                       AND NOT (? AND EXISTS(SELECT 1 FROM "ManagedLibraryOperation" AS "operation"
+                           WHERE "operation"."Id"="lease"."OperationId"
+                             AND "operation"."ParentOperationId" IS NULL
+                             AND "operation"."Kind" IN (?, ?, ?))))
                FROM "AddonMediaList" AS "list"
                JOIN "AddonInstallation" AS "addon" ON "addon"."AddonId"="list"."AddonId"
                JOIN "AddonMediaSource" AS "source" ON "source"."AddonId"="list"."AddonId"
@@ -121,6 +142,16 @@ impl MappedList {
                        AND "other"."SourceUrl"=?)"#,
         )
         .bind(crate::repositories::common::encode_datetime(Utc::now()))
+        .bind(allow_root_scans)
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationKind::ManualScan,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationKind::ScheduledScan,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::ManagedLibraryOperationKind::StartupReplayScan,
+        ))
         .bind(self.list_id)
         .bind(&self.previous_digest)
         .bind(&self.previous_publication_digest)

@@ -61,9 +61,9 @@ impl SavedWriter {
         }))
     }
 
-    /// Recheck authority and *all* managed operations, including warning-only Saves.
+    /// Recheck authority and mutating managed operations, including warning-only Saves.
     pub(crate) async fn fence(&self, tx: &mut Transaction<'_, Db>) -> Result<()> {
-        if !self.mapped.fence(tx).await? {
+        if !self.mapped.fence_operator_save(tx).await? {
             return Err(conflict());
         }
         Ok(())

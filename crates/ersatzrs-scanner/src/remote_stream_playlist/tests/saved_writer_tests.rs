@@ -1,5 +1,247 @@
 use super::*;
 
+async fn option_save(
+    pool: &DbPool,
+    list_id: i64,
+) -> ersatzrs_core::repositories::AddonMediaListDraftOptions {
+    use ersatzrs_core::repositories::{AddonMediaListOptionSchema, AddonMediaListOptionSchemaRef};
+    let capability: ersatzrs_addon_contract::AddonCapability = serde_json::from_value(serde_json::json!({
+        "id":"media-list.options.v1", "options":[{
+            "key":"enabled", "label":{"en-US":"Enabled"}, "description":{"en-US":"Fixture option"},
+            "scope":"both", "operation_targets":["playback"], "applicability":"all",
+            "kind":"boolean", "default":true
+        }]
+    })).unwrap();
+    let manifest: String =
+        sqlx::query_scalar(r#"SELECT "ManifestJson" FROM "AddonInstallation" WHERE "AddonId"=?"#)
+            .bind(ADDON)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    let mut manifest: serde_json::Value = serde_json::from_str(&manifest).unwrap();
+    manifest["manifest_version"] = serde_json::json!(5);
+    manifest["capabilities"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::to_value(capability).unwrap());
+    let installed: ersatzrs_addon_contract::AddonManifest =
+        serde_json::from_value(manifest.clone()).unwrap();
+    let definition_json = installed
+        .media_list_option_schema_snapshot()
+        .unwrap()
+        .unwrap();
+    sqlx::query(r#"UPDATE "AddonInstallation" SET "ManifestJson"=? WHERE "AddonId"=?"#)
+        .bind(manifest.to_string())
+        .bind(ADDON)
+        .execute(pool)
+        .await
+        .unwrap();
+    let schema = AddonMediaListOptionSchemaRef {
+        addon_id: ADDON.into(),
+        capability_id: "media-list.options.v1".into(),
+        schema_digest: saved_sha256(definition_json.as_bytes()),
+    };
+    let repo = ersatzrs_infra::repositories::SqliteAddonMediaListRepository(pool.clone());
+    repo.register_option_schema(&AddonMediaListOptionSchema {
+        schema: schema.clone(),
+        definition_json,
+        created_at: Utc::now(),
+    })
+    .await
+    .unwrap();
+    let mut options = repo.draft_options(list_id, None).await.unwrap().unwrap();
+    assert!(options.schema.is_none());
+    assert!(options.list_values.is_empty());
+    options.schema = Some(schema);
+    options.list_values.insert(
+        "enabled".into(),
+        ersatzrs_domain::AddonMediaListOptionValue::Boolean(false),
+    );
+    options
+}
+
+#[tokio::test]
+async fn saved_writer_direct_options_preserve_scheduled_scan_lease_and_queue_publication() {
+    use ersatzrs_core::repositories::ManagedLibraryScanSpec;
+    use ersatzrs_domain::{ManagedLibraryOperationKind, MediaSourceKind};
+    let (_receiver, pool, copy, initial) = adopted_job().await;
+    publish_received(&pool, &initial).await;
+    let list_id = initial.job.list_id;
+    let options = option_save(&pool, list_id).await;
+    let repos = ersatzrs_infra::repositories::make_repositories(pool.clone());
+    let ops = &repos.managed_library_operations;
+    let scan = ops
+        .enqueue_scan(
+            ManagedLibraryOperationKind::ScheduledScan,
+            initial.operation.library_id,
+            ManagedLibraryScanSpec {
+                provider: MediaSourceKind::Local,
+                show_id: None,
+                deep_scan: false,
+            },
+            true,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let scan_claim = ops
+        .claim_operation(scan.id, Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+    let lease_before: (i64, String, String) = sqlx::query_as(
+        r#"SELECT "OperationId", "OwnerToken", "LeaseOwner" FROM "ManagedLibraryLease" WHERE "LibraryId"=?"#,
+    ).bind(initial.operation.library_id).fetch_one(&pool).await.unwrap();
+    let original: SavedListDocument =
+        serde_json::from_slice(&std::fs::read(&copy).unwrap()).unwrap();
+    let revision = repos
+        .addon_media_lists
+        .save_draft_options(&options)
+        .await
+        .unwrap();
+    assert_eq!(revision, options.draft_revision + 1);
+    let saved: SavedListDocument = serde_json::from_slice(&std::fs::read(&copy).unwrap()).unwrap();
+    assert_eq!(saved.draft.options.list_values, options.list_values);
+    assert_eq!(saved.published, original.published);
+    let current: i32 =
+        sqlx::query_scalar(r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=?"#)
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let publication = ops
+        .enqueue_publication(list_id, initial.operation.library_id, revision, current + 1)
+        .await
+        .unwrap();
+    assert!(ops
+        .claim_operation(publication.operation.id, Utc::now())
+        .await
+        .unwrap()
+        .is_none());
+    let lease_after: (i64, String, String) = sqlx::query_as(
+        r#"SELECT "OperationId", "OwnerToken", "LeaseOwner" FROM "ManagedLibraryLease" WHERE "LibraryId"=?"#,
+    ).bind(initial.operation.library_id).fetch_one(&pool).await.unwrap();
+    assert_eq!(lease_after, lease_before);
+    assert!(ops.heartbeat(&scan_claim, Utc::now()).await.unwrap());
+    assert!(ops.complete_operation(&scan_claim).await.unwrap());
+    // Advance the supplied eligibility clock, not wall time, past the queued retry delay.
+    let publication_claim = ops
+        .claim_operation(
+            publication.operation.id,
+            Utc::now() + chrono::Duration::minutes(2),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(publication_claim.operation.id, publication.operation.id);
+    assert_eq!(
+        publication_claim.operation.owner_token,
+        publication.operation.owner_token
+    );
+    let exact = ops
+        .publication_job(publication.operation.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(exact.saved_revision, revision);
+    assert_eq!(exact.generation, publication.job.generation);
+}
+
+#[tokio::test]
+async fn saved_writer_direct_options_apply_and_undo_preserve_publication() {
+    let (_receiver, pool, copy, queued) = adopted_job().await;
+    let list_id = queued.job.list_id;
+    let repo = ersatzrs_infra::repositories::SqliteAddonMediaListRepository(pool.clone());
+    let original: SavedListDocument =
+        serde_json::from_slice(&std::fs::read(&copy).unwrap()).unwrap();
+    let options = option_save(&pool, list_id).await;
+    let applied_revision = repo.save_draft_options(&options).await.unwrap();
+    assert_eq!(applied_revision, options.draft_revision + 1);
+    let applied_bytes = std::fs::read(&copy).unwrap();
+    let applied: SavedListDocument = serde_json::from_slice(&applied_bytes).unwrap();
+    assert!(applied.draft.options.schema.is_some());
+    assert_eq!(applied.draft.options.list_values, options.list_values);
+    assert_eq!(applied.published, original.published);
+    assert!(repo.save_draft_options(&options).await.is_err());
+    assert_eq!(std::fs::read(&copy).unwrap(), applied_bytes);
+    let mut undo = repo.draft_options(list_id, None).await.unwrap().unwrap();
+    undo.schema = None;
+    undo.list_values.clear();
+    undo.item_values.clear();
+    assert_eq!(
+        repo.save_draft_options(&undo).await.unwrap(),
+        applied_revision + 1
+    );
+    let restored: SavedListDocument =
+        serde_json::from_slice(&std::fs::read(&copy).unwrap()).unwrap();
+    assert_eq!(restored.draft.options, original.draft.options);
+    assert_eq!(restored.published, original.published);
+}
+
+#[tokio::test]
+async fn saved_writer_direct_options_failure_recovers_before_stale_undo() {
+    let (_receiver, pool, copy, queued) = adopted_job().await;
+    let list_id = queued.job.list_id;
+    let options = option_save(&pool, list_id).await;
+    let repo = ersatzrs_infra::repositories::SqliteAddonMediaListRepository(pool.clone());
+    let before = repo.draft_options(list_id, None).await.unwrap().unwrap();
+    let original: SavedListDocument =
+        serde_json::from_slice(&std::fs::read(&copy).unwrap()).unwrap();
+    let state = database_state(&pool, list_id).await;
+    sqlx::raw_sql(
+        r#"CREATE TRIGGER "FixtureOptionsDigestFailure"
+        BEFORE UPDATE OF "SavedDocumentDigest" ON "AddonMediaList"
+        BEGIN SELECT RAISE(ABORT, 'fixture options projection failure'); END;"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let error = repo
+        .save_draft_options(&options)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("database refresh is pending"), "{error}");
+    assert_eq!(
+        repo.draft_options(list_id, None).await.unwrap().unwrap(),
+        before
+    );
+    assert_eq!(database_state(&pool, list_id).await, state);
+    let ahead = std::fs::read(&copy).unwrap();
+    let saved: SavedListDocument = serde_json::from_slice(&ahead).unwrap();
+    assert_eq!(saved.draft.options.list_values, options.list_values);
+    assert_eq!(saved.published, original.published);
+    sqlx::query(r#"DROP TRIGGER "FixtureOptionsDigestFailure""#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let error = repo
+        .save_draft_options(&before)
+        .await
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("database was refreshed from the saved list folder"),
+        "{error}"
+    );
+    assert_eq!(std::fs::read(&copy).unwrap(), ahead);
+    let mut recovered = repo.draft_options(list_id, None).await.unwrap().unwrap();
+    assert_eq!(recovered.schema, options.schema);
+    assert_eq!(recovered.list_values, options.list_values);
+    assert_eq!(recovered.draft_revision, before.draft_revision + 1);
+    recovered.schema = None;
+    recovered.list_values.clear();
+    recovered.item_values.clear();
+    assert_eq!(
+        repo.save_draft_options(&recovered).await.unwrap(),
+        before.draft_revision + 2
+    );
+    let restored: SavedListDocument =
+        serde_json::from_slice(&std::fs::read(copy).unwrap()).unwrap();
+    assert_eq!(restored.draft.options, original.draft.options);
+    assert_eq!(restored.published, original.published);
+}
+
 fn saved_sha256(bytes: &[u8]) -> String {
     use sha2::Digest as _;
     use std::fmt::Write as _;

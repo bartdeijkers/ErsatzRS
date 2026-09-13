@@ -50,7 +50,36 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
-2026-09-13 file-first editor Save and mapped repair continuation is uncommitted;
+2026-09-13 direct option writers are being connected through the existing
+SavedWriter boundary around save_draft_options. Native Undo, legacy option
+Apply/Undo and preparation-default activation share this transaction; its schema,
+sparse-value and revision behavior remains unchanged. Default activation still
+finishes before publication enqueue/lease ownership. The first focused run
+68cba9c0-2075-47d8-bd70-0736aae107f3 passes eight existing option/default tests;
+both new adopted-file tests correctly refuse a fixture that declared options
+under manifest version 3. With the fixture corrected to supported version 5 and
+a validated canonical schema snapshot, both pass in
+a9495e12-1440-4fc6-b5a0-958b717afa8f (8.34s build, 1.094s tests); production
+validation is unchanged. Claude reviewed the option wrapper and recovery tests.
+The wrapper's missing-list error regression is corrected to preserve NotFound.
+His accepted scan/Publish overlap finding is being closed with an operator-only
+allowance for root ManualScan/ScheduledScan/StartupReplayScan leases. External
+file repair remains deferred for all live leases; publication, child scans,
+provider refresh, recovery, reset and reconciliation stay blocking. Actual scans
+also write captured provider chapter observations, so their authoritative-writer
+integration remains required; they are not described as draft-read-only.
+The real scheduled-lease/options/queued-publication proof, missing-list regression,
+publication blocking and mapped-repair deferral all pass in the seven-test run
+537998c6-2311-4659-883d-b362f612413e (20.55s build, 3.610s tests). The scan keeps
+its exact lease; publication waits and its same saved revision/generation becomes
+claimable after scan completion. Claude independently closed both option-writer
+P2s at 18:14 with no remaining findings on this checkpoint. Scoped infra/scanner
+all-targets Clippy passes with -D warnings (25.20s); formatting is normalized.
+Other operator writers and managed import/detail/restore/reset plus ordinary-scan
+observations remain required before runtime discovery is enabled. No new UI,
+provider capability, lease service or full closeout/CI/push is included.
+
+2026-09-13 file-first editor Save and mapped repair checkpoint is committed as bce15737;
 the receiving-publication checkpoint below is committed as 2d333757. O-01
 remains In progress and runtime discovery is still disabled. Existing adopted
 lists now save the bounded document durably before their SQLite transaction

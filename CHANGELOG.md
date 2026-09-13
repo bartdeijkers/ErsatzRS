@@ -51,6 +51,8 @@ release section when tagging a release.
   preserving concurrent file draft edits for reconciliation. Discovery ignores
   host-owned publication backups, and publication verification allows retained
   unpublished media identities without counting them as active members.
+  Direct option edits, Undo and preparation-default activation now share the
+  same file-first persistence for adopted lists, retaining published options.
   Automatic receiving discovery is not yet enabled.
   Remaining writers and runtime scan reconstruction integration are unfinished.
 

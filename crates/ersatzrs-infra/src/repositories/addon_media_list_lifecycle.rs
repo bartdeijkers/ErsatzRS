@@ -518,9 +518,36 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     }
 
     async fn save_draft_options(&self, options: &AddonMediaListDraftOptions) -> Result<i32> {
+        // Native Undo, explicit option edits and preparation-default activation
+        // share this boundary; preserve their existing option/revision semantics.
+        let save = ersatzrs_core::repositories::AddonMediaListEditorSave {
+            list_id: options.list_id,
+            expected_revision: options.draft_revision,
+            metadata: None,
+            settings: None,
+            delivery_mode: None,
+            disk_warning_gb: None,
+            options: Some(options.clone()),
+            items: Vec::new(),
+        };
+        let writer =
+            crate::addon_media_list_saved::writer::SavedWriter::prepare(&self.0, &save).await?;
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        if let Some(writer) = &writer {
+            writer.fence(&mut tx).await?;
+        }
         save_draft_options_tx(&mut tx, options, true).await?;
-        tx.commit().await.repository()?;
+        let saved_guard = if let Some(writer) = writer {
+            Some(writer.write(&mut tx).await?)
+        } else {
+            None
+        };
+        let committed = tx.commit().await;
+        if saved_guard.is_some() {
+            committed.map_err(|_| crate::addon_media_list_saved::writer::pending())?;
+        } else {
+            committed.repository()?;
+        }
         Ok(options.draft_revision + 1)
     }
 

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-O-01: Save, mapped repair and publication completion verified; finish all-writer coverage and runtime reconstruction'
+current_focus = 'AMM-O-01: direct option writers verified; finish remaining operator/managed writers and runtime reconstruction'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -102,8 +102,11 @@ has Claude review and a passing focused native test; browser verification remain
 File-first publication completion now has passing crash-window, concurrent-file
 and idempotent retry tests; Claude closed its actionable review findings. The
 milestone records the conservative untouched-received-draft retry residual.
-Next: route native option Undo/default activation through the existing saved
-editor boundary, then finish lease-fenced import/detail/restore/reset writers
+Native option Undo/default activation and legacy option edits now use the shared
+file-first writer while preserving their existing revision semantics. Actual
+scheduled-scan overlap, exact queued publication and option recovery tests pass;
+Claude closed both correction findings. Next: remaining operator entrypoints,
+then lease-fenced import/detail/restore/reset and ordinary-scan observation writers
 and receiving playback/subtitle bindings. The writer inventory distinguishes
 registered legacy APIs from unrouted old pages; do not duplicate their UI work.
 The accepted cap is enforced by the adopted editor and discovery entry points;
