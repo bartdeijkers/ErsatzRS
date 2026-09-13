@@ -111,7 +111,7 @@ pub async fn restore_in_tx(
         .chain(&incoming.after_cutoff)
         .collect();
     let items = sqlx::query_scalar::<_, String>(
-        r#"SELECT "ProviderId" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
+        r#"SELECT "ProviderId" FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ? AND "InDraft" = 1"#,
     )
     .bind(list_id)
     .fetch_all(&mut **tx)

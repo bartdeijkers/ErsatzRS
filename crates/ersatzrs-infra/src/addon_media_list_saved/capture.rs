@@ -85,6 +85,14 @@ pub async fn draft_in_tx(tx: &mut Transaction<'_, Db>, list_id: EntityId) -> Res
     let schema = option_schema(tx, options.schema.as_ref()).await?;
     let warning: i64 = row.try_get("DiskUsageWarningGb").repository()?;
     let artwork = artwork.finish();
+    let mut files: Vec<_> = artwork.iter().map(|asset| asset.file.clone()).collect();
+    files.extend(items.iter().filter_map(|item| {
+        item.replacement
+            .as_ref()
+            .and_then(|replacement| replacement.file.clone())
+    }));
+    files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    files.dedup();
     let captured = CapturedDraft {
         addon_id: row.try_get("AddonId").repository()?,
         provider_id: row.try_get("ProviderId").repository()?,
@@ -117,7 +125,7 @@ pub async fn draft_in_tx(tx: &mut Transaction<'_, Db>, list_id: EntityId) -> Res
                     .collect(),
             },
             items,
-            files: artwork.iter().map(|asset| asset.file.clone()).collect(),
+            files,
         },
         artwork,
         replacements,
@@ -141,12 +149,13 @@ async fn items_in_tx(
     let state_rows = sqlx::query(
         r#"SELECT "item"."Id" AS "ScopeItemId", "item"."ProviderId", "item"."ProviderMetadataJson",
            "item"."MetadataOverrideJson", "item"."MetadataConflictJson",
-           "item"."LivenessConflict", "absence"."MissingSince", "absence"."LastObservedAt",
+           "item"."LivenessConflict", "item"."SavedReplacementJson",
+           "absence"."MissingSince", "absence"."LastObservedAt",
            "absence"."ObservationCount", "absence"."ConfirmedAt", "absence"."ReappearedAt"
            FROM "AddonMediaListItem" AS "item"
            LEFT JOIN "AddonMediaListItemTombstone" AS "absence"
              ON "absence"."AddonMediaListItemId" = "item"."Id"
-           WHERE "item"."AddonMediaListId" = ?"#,
+           WHERE "item"."AddonMediaListId" = ? AND "item"."InDraft" = 1"#,
     )
     .bind(list_id)
     .fetch_all(&mut **tx)
@@ -163,6 +172,21 @@ async fn items_in_tx(
     let mut replacements = Vec::new();
     for item in current_items {
         let state = states.remove(&item.provider_id).ok_or_else(inconsistent)?;
+        let saved_replacement: Option<String> =
+            state.try_get("SavedReplacementJson").repository()?;
+        let saved_replacement: Option<SavedReplacement> =
+            saved_replacement.as_deref().map(decode_json).transpose()?;
+        if saved_replacement.is_some() && item.replacement_media_item_id.is_some() {
+            // A receiving unresolved choice and a concrete local choice must
+            // never compete. Their writer must resolve this before acknowledgement.
+            return Err(inconsistent());
+        }
+        if let Some(file) = saved_replacement
+            .as_ref()
+            .and_then(|replacement| replacement.file.as_ref())
+        {
+            super::files::validate_reference(file).map_err(|_| inconsistent())?;
+        }
         if let Some(media_item_id) = item.replacement_media_item_id {
             replacements.push(CapturedReplacement {
                 provider_id: item.provider_id.clone(),
@@ -175,9 +199,10 @@ async fn items_in_tx(
             metadata: artwork.metadata(&state, state.try_get("ScopeItemId").repository()?)?,
             liveness_conflict: decode_bool_column(&state, "LivenessConflict")?,
             source_observation: observation(&state)?,
-            replacement: item
-                .replacement_media_item_id
-                .map(|_| SavedReplacement { file: None }),
+            replacement: saved_replacement.or_else(|| {
+                item.replacement_media_item_id
+                    .map(|_| SavedReplacement { file: None })
+            }),
         });
     }
     Ok((items, replacements))

@@ -1,6 +1,179 @@
 use sqlx::{sqlite::SqlitePoolOptions, Executor, Row, SqlitePool};
 
 #[tokio::test]
+async fn unresolved_replacement_migration_preserves_existing_binding_and_visibility() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    let previous = sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version < 202_609_131_142)
+            .cloned()
+            .collect(),
+    );
+    previous.run(&pool).await.unwrap();
+    seed_legacy_lifecycle_rows(&pool).await;
+    sqlx::raw_sql(
+        r#"
+        UPDATE "AddonMediaList" SET "AdminHidden"=1 WHERE "Id"=1;
+        INSERT INTO "AddonMediaListItem"
+            ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","Published")
+        VALUES (10,1,'legacy','Legacy',4,0,'Legacy',1);
+        INSERT INTO "AddonMediaListItemReplacement"
+            ("AddonMediaListItemId","MediaItemId","MediaVersionId","CreatedAt","UpdatedAt")
+        VALUES (10,100,101,'2026-09-13 00:00:00','2026-09-13 00:00:00');
+    "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    migrations.run(&pool).await.unwrap();
+    migrations.run(&pool).await.unwrap();
+    let item: (Option<String>, i32, i32, i64, i64) = sqlx::query_as(
+        r#"
+        SELECT "item"."SavedReplacementJson","item"."InDraft","item"."Published",
+               "replacement"."MediaItemId","replacement"."MediaVersionId"
+        FROM "AddonMediaListItem" AS "item"
+        JOIN "AddonMediaListItemReplacement" AS "replacement"
+          ON "replacement"."AddonMediaListItemId"="item"."Id"
+        WHERE "item"."Id"=10"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(item, (None, 1, 1, 100, 101));
+    let list: (i32, i32, i32) = sqlx::query_as(
+        r#"
+        SELECT "DraftRevision","PublishedRevision","AdminHidden"
+        FROM "AddonMediaList" WHERE "Id"=1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(list, (7, 5, 1));
+}
+
+#[tokio::test]
+async fn draft_membership_migration_preserves_legacy_rows_and_delivery_identity() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let migrations = sqlx::migrate!("../../migrations");
+    let previous = sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version < 202_609_131_115)
+            .cloned()
+            .collect(),
+    );
+    previous.run(&pool).await.unwrap();
+    seed_legacy_lifecycle_rows(&pool).await;
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListItem"
+        ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","Published")
+        VALUES (10,1,'legacy','Legacy',4,0,'Legacy',1)"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let identity: i64 = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "AddonMediaListKnownIdentity"
+        WHERE "AddonMediaListId"=1 AND "ProviderId"='legacy'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    migrations.run(&pool).await.unwrap();
+    let row: (i32, i32, String) = sqlx::query_as(
+        r#"SELECT "InDraft","Published","Title"
+        FROM "AddonMediaListItem" WHERE "Id"=10"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row, (1, 1, "Legacy".into()));
+    let after: i64 = sqlx::query_scalar(
+        r#"SELECT "Id" FROM "AddonMediaListKnownIdentity"
+        WHERE "AddonMediaListId"=1 AND "ProviderId"='legacy'"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(after, identity);
+    let revisions: (i32, i32) = sqlx::query_as(
+        r#"SELECT "DraftRevision","PublishedRevision"
+        FROM "AddonMediaList" WHERE "Id"=1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(revisions, (7, 5));
+    assert_draft_membership_identity_transitions(pool).await;
+}
+
+async fn assert_draft_membership_identity_transitions(pool: SqlitePool) {
+    for invalid in [-1, 2] {
+        assert!(
+            sqlx::query(r#"UPDATE "AddonMediaListItem" SET "InDraft"=? WHERE "Id"=10"#)
+                .bind(invalid)
+                .execute(&pool)
+                .await
+                .is_err()
+        );
+    }
+    sqlx::query(r#"INSERT INTO "AddonMediaListItem"
+        ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","InDraft","Published")
+        VALUES (11,1,'published-only','Old publication',4,1,'Old publication',0,1)"#)
+        .execute(&pool).await.unwrap();
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "AddonMediaListKnownIdentity"
+        WHERE "AddonMediaListId"=1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 1);
+    for _ in 0..2 {
+        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "InDraft"=1 WHERE "Id"=11"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "AddonMediaListKnownIdentity"
+        WHERE "AddonMediaListId"=1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 2);
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "InDraft"=0 WHERE "Id"=11"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM "AddonMediaListKnownIdentity"
+        WHERE "AddonMediaListId"=1"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(count, 2);
+    let published: i32 =
+        sqlx::query_scalar(r#"SELECT "Published" FROM "AddonMediaListItem" WHERE "Id"=11"#)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(published, 1);
+}
+
+#[tokio::test]
 async fn disk_warning_migration_defaults_existing_lists_without_revising_them() {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)

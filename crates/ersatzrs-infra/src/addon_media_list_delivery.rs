@@ -236,7 +236,7 @@ pub async fn effective_item_delivery_in_tx(
     policy.effective_item_delivery(identity, liveness)
 }
 
-/// Batch classify current items from operator/provider liveness, without N+1 reads.
+/// Batch classify current draft items from operator/provider liveness, without N+1 reads.
 /// Inclusion, availability, video kind and provider capability checks remain with
 /// the existing admission/publication caller.
 ///
@@ -254,7 +254,7 @@ pub async fn load_item_deliveries_in_tx(
            LEFT JOIN "AddonMediaListKnownIdentity" AS "known"
              ON "known"."AddonMediaListId" = "item"."AddonMediaListId"
             AND "known"."ProviderId" = "item"."ProviderId"
-           WHERE "item"."AddonMediaListId" = ?"#,
+           WHERE "item"."AddonMediaListId" = ? AND "item"."InDraft" = 1"#,
     )
     .bind(list_id)
     .fetch_all(&mut **tx)

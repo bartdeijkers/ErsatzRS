@@ -258,6 +258,40 @@ async fn publication_readiness_distinguishes_blockers_from_optional_review_work(
     assert_eq!(advisory.optional_detail_total, 1);
     assert_eq!(advisory.optional_detail_pending, 1);
     assert!(advisory.can_start_publication());
+
+    assert_unresolved_replacement_readiness(&pool, &repositories.addon_media_lists).await;
+}
+
+async fn assert_unresolved_replacement_readiness(
+    pool: &sqlx::SqlitePool,
+    repository: &impl AddonMediaListRepository,
+) {
+    // Portable replacement intent blocks even when the original source is usable
+    // or would normally be omitted for an access restriction.
+    for restriction in [None, Some(0_i32), Some(1_i32)] {
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"='{"file":null}',
+            "Availability"=?, "AvailabilityReasonCode"=? WHERE "Id"=10"#,
+        )
+        .bind(i32::from(restriction.is_some()))
+        .bind(restriction)
+        .execute(pool)
+        .await
+        .unwrap();
+        let item = repository.list_items(1).await.unwrap().remove(0);
+        assert!(item.replacement_unresolved);
+        assert!(item.replacement_media_item_id.is_none());
+        assert!(item.replacement_media_version_id.is_none());
+        let readiness = repository.publication_readiness(1).await.unwrap();
+        assert!(readiness
+            .blockers
+            .iter()
+            .any(|blocker| blocker.kind
+                == AddonMediaListPublicationBlockerKind::ReplacementUnresolved));
+        assert!(!readiness.can_start_publication());
+    }
+    repository.set_replacement(10, None).await.unwrap();
+    assert!(!repository.list_items(1).await.unwrap()[0].replacement_unresolved);
 }
 
 #[tokio::test]
@@ -504,6 +538,15 @@ async fn publication_prepares_missing_finite_durations_through_durable_detail_jo
     .await
     .unwrap();
     seed_numbering_item(&pool, 10, 1, None, None, true, None, "First").await;
+    seed_numbering_item(&pool, 11, 2, None, None, true, None, "Retired").await;
+    pool.execute(
+        r#"UPDATE "AddonMediaListItem"
+           SET "InDraft" = 0, "Published" = 1,
+               "ProviderLiveness" = 1, "EffectiveLiveness" = 1,
+               "DurationSeconds" = NULL WHERE "Id" = 11"#,
+    )
+    .await
+    .unwrap();
     pool.execute(
         r#"UPDATE "AddonMediaListItem"
            SET "ProviderLiveness" = 1, "EffectiveLiveness" = 1,
@@ -518,6 +561,8 @@ async fn publication_prepares_missing_finite_durations_through_durable_detail_jo
               "OverviewFingerprint", "OverviewRecordJson", "UpdatedAt"
            ) VALUES (
               10, 1, 'example.invalid', 'fingerprint', '{}', '2026-08-26T10:00:00Z'
+           ), (
+              11, 1, 'example.invalid', 'retired-fingerprint', '{}', '2026-08-26T10:00:00Z'
            )"#,
     )
     .await
@@ -551,6 +596,14 @@ async fn publication_prepares_missing_finite_durations_through_durable_detail_jo
     assert_eq!(queued.0, 1);
     assert!(queued.1);
     assert!(queued.2.is_some());
+    let retired: (i32, bool, Option<String>) = sqlx::query_as(
+        r#"SELECT "State", "ManualPriority", "RequestedAt"
+           FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = 11"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(retired, (0, false, None));
     let preparing = repositories
         .addon_media_lists
         .publication_readiness(1)

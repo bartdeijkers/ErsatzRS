@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod draft_membership_tests;
 mod editor;
 mod editor_artwork;
 pub(crate) use editor_artwork::stage as stage_editor_artwork_in_tx;
@@ -504,6 +506,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                FROM "AddonMediaList" AS "list"
                LEFT JOIN "AddonMediaListItem" AS "matched"
                  ON "matched"."AddonMediaListId" = "list"."Id"
+                AND "matched"."InDraft" = 1
                 AND "matched"."MediaItemId" IS NOT NULL
                WHERE "list"."AdminHidden" = ?5
                GROUP BY "list"."Id", "list"."AddonId", "list"."ProviderId",
@@ -751,7 +754,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     }
 
     async fn list_items(&self, id: EntityId) -> Result<Vec<AddonMediaListItemAdminRow>> {
-        self.query_items(id, None, 0, None).await
+        self.query_items(id, None, 0, None, true).await
     }
 
     async fn publication_readiness(
@@ -765,7 +768,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 kind: "add-on media list",
                 id,
             })?;
-        let items = self.query_items(id, None, 0, None).await?;
+        let items = self.query_items(id, None, 0, None, true).await?;
         addon_media_list_publication_readiness(&self.0, &form, &items).await
     }
 
@@ -776,7 +779,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         page: u32,
         page_size: Option<u32>,
     ) -> Result<Vec<AddonMediaListItemAdminRow>> {
-        self.query_items(id, Some(availability), page, page_size)
+        self.query_items(id, Some(availability), page, page_size, true)
             .await
     }
 
@@ -784,7 +787,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         let rows = sqlx::query(
             r#"SELECT "Availability", COUNT(*) AS "Total"
                FROM "AddonMediaListItem"
-               WHERE "AddonMediaListId" = ?
+               WHERE "AddonMediaListId" = ? AND "InDraft" = 1
                GROUP BY "Availability""#,
         )
         .bind(id)
@@ -814,7 +817,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     ) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let row =
-            sqlx::query(r#"SELECT "AddonMediaListId" FROM "AddonMediaListItem" WHERE "Id" = ?"#)
+            sqlx::query(r#"SELECT "AddonMediaListId" FROM "AddonMediaListItem" WHERE "Id" = ? AND "InDraft" = 1"#)
                 .bind(item_id)
                 .fetch_optional(&mut *tx)
                 .await
@@ -855,7 +858,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                SET "LivenessOverride" = ?,
                    "EffectiveLiveness" = COALESCE(?, "ProviderLiveness"),
                    "LivenessConflict" = 0
-               WHERE "Id" = ? AND "AddonMediaListId" = ? AND "Kind" = 4"#,
+               WHERE "Id" = ? AND "AddonMediaListId" = ? AND "Kind" = 4 AND "InDraft" = 1"#,
         )
         .bind(encoded)
         .bind(encoded)
@@ -900,6 +903,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                        "EffectiveLiveness" = COALESCE(?, "ProviderLiveness"),
                        "LivenessConflict" = 0
                    WHERE "AddonMediaListId" = ? AND "Kind" = 4
+                     AND "InDraft" = 1
                      AND "ParentProviderId" IS NULL"#,
             )
             .bind(encoded)
@@ -912,13 +916,14 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         } else {
             let mut affected = 0_u64;
             for item_id in ids {
+                require_draft_item_tx(&mut tx, id, item_id).await?;
                 affected = affected.saturating_add(
                     sqlx::query(
                         r#"UPDATE "AddonMediaListItem"
                            SET "LivenessOverride" = ?,
                                "EffectiveLiveness" = COALESCE(?, "ProviderLiveness"),
                                "LivenessConflict" = 0
-                           WHERE "Id" = ? AND "AddonMediaListId" = ? AND "Kind" = 4"#,
+                           WHERE "Id" = ? AND "AddonMediaListId" = ? AND "Kind" = 4 AND "InDraft" = 1"#,
                     )
                     .bind(encoded)
                     .bind(encoded)
@@ -953,7 +958,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             .await
             .repository()?;
         let updated = sqlx::query(
-            r#"UPDATE "AddonMediaListItem" SET "ContentKind" = ? WHERE "AddonMediaListId" = ?"#,
+            r#"UPDATE "AddonMediaListItem" SET "ContentKind" = ? WHERE "AddonMediaListId" = ? AND "InDraft" = 1"#,
         )
         .bind(encoded)
         .bind(id)
@@ -993,7 +998,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             let row = sqlx::query(
                 r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson", "MetadataConflictJson"
                    FROM "AddonMediaListItem"
-                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+                   WHERE "Id" = ? AND "AddonMediaListId" = ? AND "InDraft" = 1"#,
             )
             .bind(edit.item_id)
             .bind(id)
@@ -1083,7 +1088,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                       "MetadataConflictJson"
                FROM "AddonMediaListItem"
                WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
-                 AND "Included" = 1
+                 AND "Included" = 1 AND "InDraft" = 1
                ORDER BY "Rank", "Id""#,
         )
         .bind(id)
@@ -1248,7 +1253,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         replacement: Option<(EntityId, EntityId)>,
     ) -> Result<()> {
         let list_id = sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT "AddonMediaListId" FROM "AddonMediaListItem" WHERE "Id" = ?"#,
+            r#"SELECT "AddonMediaListId" FROM "AddonMediaListItem" WHERE "Id" = ? AND "InDraft" = 1"#,
         )
         .bind(item_id)
         .fetch_optional(&self.0)
@@ -1259,6 +1264,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             id: item_id,
         })?;
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        require_draft_item_tx(&mut tx, list_id, item_id).await?;
         if let Some((media_item_id, media_version_id)) = replacement {
             if load_replacement_candidate(&self.0, media_item_id, media_version_id)
                 .await?
@@ -1305,6 +1311,13 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             .await
             .repository()?;
         }
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson" = NULL WHERE "Id" = ?"#,
+        )
+        .bind(item_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
         mark_list_ready_tx(&mut tx, list_id).await?;
         tx.commit().await.repository()?;
         Ok(())
@@ -2001,6 +2014,9 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     ) -> Result<AddonMediaListNfoForm> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         crate::addon_media_list_sync::ensure_not_publishing_tx(&mut tx, list_id).await?;
+        if let Some(item_id) = item_id {
+            require_draft_item_tx(&mut tx, list_id, item_id).await?;
+        }
         let current = editor_artwork::metadata(&mut tx, list_id, item_id).await?;
         if current.etag != expected_etag {
             return Err(RepositoryError::Conflict(
@@ -2099,7 +2115,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaListItem" SET "Included" = ?
-               WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+               WHERE "Id" = ? AND "AddonMediaListId" = ? AND "InDraft" = 1"#,
         )
         .bind(included)
         .bind(item_id)
@@ -2130,7 +2146,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
             // primary is explicit and never changes the provider order.
             sqlx::query(
                 r#"UPDATE "AddonMediaListItem" SET "CollectionRole" = 2
-                   WHERE "AddonMediaListId" = ? AND "CollectionRole" = 1"#,
+                   WHERE "AddonMediaListId" = ? AND "CollectionRole" = 1 AND "InDraft" = 1"#,
             )
             .bind(list_id)
             .execute(&mut *tx)
@@ -2139,7 +2155,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         }
         let updated = sqlx::query(
             r#"UPDATE "AddonMediaListItem" SET "CollectionRole" = ?
-               WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+               WHERE "Id" = ? AND "AddonMediaListId" = ? AND "InDraft" = 1"#,
         )
         .bind(crate::repositories::common::encode_enum(role))
         .bind(item_id)
@@ -2358,6 +2374,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
     async fn reset_nfo(&self, list_id: EntityId, item_id: Option<EntityId>) -> Result<()> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
         if let Some(item_id) = item_id {
+            require_draft_item_tx(&mut tx, list_id, item_id).await?;
             sqlx::query(
                 r#"UPDATE "AddonMediaListItem"
                    SET "MetadataOverrideJson" = '{}', "MetadataConflictJson" = NULL
@@ -2390,7 +2407,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                       "list"."AddonId", "list"."SourceUrl", "list"."ContentKindOverride"
                FROM "AddonMediaListItem" AS "item"
                JOIN "AddonMediaList" AS "list" ON "list"."Id" = "item"."AddonMediaListId"
-               WHERE "item"."Id" = ?"#,
+               WHERE "item"."Id" = ? AND "item"."InDraft" = 1"#,
         )
         .bind(item_id)
         .fetch_optional(&self.0)
@@ -2411,6 +2428,7 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         }
         let list_id: EntityId = row.try_get("AddonMediaListId").repository()?;
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        require_draft_item_tx(&mut tx, list_id, item_id).await?;
         sqlx::query(r#"UPDATE "AddonMediaListItem" SET "ChapterInput" = ? WHERE "Id" = ?"#)
             .bind((!chapter_input.trim().is_empty()).then_some(chapter_input.trim()))
             .bind(item_id)
@@ -3428,7 +3446,7 @@ async fn stage_publication_impl(
         }
         sqlx::query(
             r#"UPDATE "AddonMediaListItem"
-               SET "Published" = "Included",
+               SET "Published" = ("InDraft" = 1 AND "Included" = 1),
                    "PublishedLiveness" = "EffectiveLiveness",
                    "PublishedAvailability" = "Availability",
                    "PublishedAvailabilityReason" = "AvailabilityReason",
@@ -4394,7 +4412,7 @@ async fn accept_reconcile_candidate_in_tx(
     .execute(&mut **tx)
     .await
     .repository()?;
-    sqlx::query(r#"UPDATE "AddonMediaList" SET "ItemCount" = (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?) WHERE "Id" = ?"#)
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "ItemCount" = (SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ? AND "InDraft" = 1) WHERE "Id" = ?"#)
         .bind(list_id)
         .bind(list_id)
         .execute(&mut **tx)
@@ -4582,13 +4600,22 @@ async fn verify_published_publication_database(
     let published_count: i64 = counts.try_get("PublishedCount").repository()?;
     let snapshot_mismatch_count: i64 = counts.try_get("SnapshotMismatchCount").repository()?;
     let unmatched_count: i64 = counts.try_get("UnmatchedCount").repository()?;
-    let publication_selection_complete = SqliteAddonMediaListRepository(pool.clone())
-        .list_items(list_id)
-        .await?
-        .iter()
-        .all(|item| {
-            item.published == (item.included && !access_restricted_without_replacement(item))
-        });
+    let no_retired_items_published: bool = sqlx::query_scalar(
+        r#"SELECT NOT EXISTS(SELECT 1 FROM "AddonMediaListItem"
+           WHERE "AddonMediaListId" = ? AND "InDraft" = 0 AND "Published" = 1)"#,
+    )
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    let publication_selection_complete = no_retired_items_published
+        && SqliteAddonMediaListRepository(pool.clone())
+            .query_items(list_id, None, 0, None, true)
+            .await?
+            .iter()
+            .all(|item| {
+                item.published == (item.included && !access_restricted_without_replacement(item))
+            });
     // Provider identity and replacement playback are deliberately separate:
     // `AddonMediaListItem.MediaItemId` owns the provider match, while an
     // unavailable item's configured replacement is selected only in the
@@ -5487,6 +5514,29 @@ async fn load_list_metadata_form(
     metadata_form_from_json(&provider_json, &override_json, conflict_json.as_deref())
 }
 
+async fn require_draft_item_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    item_id: EntityId,
+) -> Result<()> {
+    let exists: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "AddonMediaListItem"
+           WHERE "Id" = ? AND "AddonMediaListId" = ? AND "InDraft" = 1)"#,
+    )
+    .bind(item_id)
+    .bind(list_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if !exists {
+        return Err(RepositoryError::NotFound {
+            kind: "add-on media list item",
+            id: item_id,
+        });
+    }
+    Ok(())
+}
+
 async fn load_item_metadata_form(
     pool: &Pool<crate::db::Db>,
     list_id: EntityId,
@@ -5495,7 +5545,7 @@ async fn load_item_metadata_form(
     let row = sqlx::query(
         r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson", "MetadataConflictJson"
            FROM "AddonMediaListItem"
-           WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+           WHERE "Id" = ? AND "AddonMediaListId" = ? AND "InDraft" = 1"#,
     )
     .bind(item_id)
     .bind(list_id)
@@ -5703,6 +5753,17 @@ async fn addon_media_list_publication_readiness(
         form.requested_presentation_kind
     };
     let mut blockers = list_publication_blockers(pool, form, presentation, &attempted).await?;
+    blockers.extend(
+        included
+            .iter()
+            .filter(|item| item.replacement_unresolved)
+            .map(|item| {
+                publication_item_blocker(
+                    AddonMediaListPublicationBlockerKind::ReplacementUnresolved,
+                    item,
+                )
+            }),
+    );
     let detail_states = required_playback_detail_states(pool, list_id).await?;
     let mut item_classification = PublicationItemClassification::default();
     let excluded = items
@@ -5788,6 +5849,11 @@ async fn addon_media_list_publication_readiness(
         )
         .await?;
     for item in &included {
+        // Receiving replacement intent must be resolved before considering the
+        // original source's access, playback, or metadata requirements.
+        if item.replacement_unresolved {
+            continue;
+        }
         if access_restricted_without_replacement(item) {
             item_classification.restricted_excluded_count = item_classification
                 .restricted_excluded_count
@@ -6211,6 +6277,9 @@ fn publication_blocker_message(blocker: &AddonMediaListPublicationBlocker) -> St
         AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement => {
             format!("{title} is unavailable and has no valid local replacement")
         }
+        AddonMediaListPublicationBlockerKind::ReplacementUnresolved => {
+            format!("{title} has an unresolved saved replacement; select or remove the replacement")
+        }
         AddonMediaListPublicationBlockerKind::ItemTitleMissing => format!(
             "item {} requires a title before publication",
             blocker.item_rank.unwrap_or_default()
@@ -6348,6 +6417,7 @@ async fn save_item_metadata_override(
     .repository()?;
     let overrides = metadata_override_json(&metadata_json_value(&provider_json)?, metadata)?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
+    require_draft_item_tx(&mut tx, list_id, item_id).await?;
     sqlx::query(
         r#"UPDATE "AddonMediaListItem"
            SET "MetadataOverrideJson" = ?, "MetadataConflictJson" = NULL
@@ -6705,6 +6775,7 @@ impl SqliteAddonMediaListRepository {
                LEFT JOIN "AddonMediaListDetailJob" AS "detail"
                  ON "detail"."AddonMediaListItemId" = "item"."Id"
                WHERE "item"."AddonMediaListId" = ? AND "item"."Included" = 1
+                 AND "item"."InDraft" = 1
                  AND NOT EXISTS (SELECT 1 FROM "AddonMediaListItemTombstone" AS "tombstone"
                      WHERE "tombstone"."AddonMediaListItemId"="item"."Id" AND "tombstone"."ConfirmedAt" IS NOT NULL)
                  AND ("item"."AvailabilityReasonCode" IS NULL
@@ -6908,6 +6979,7 @@ impl SqliteAddonMediaListRepository {
         availability: Option<AddonMediaListItemAvailability>,
         page: u32,
         page_size: Option<u32>,
+        draft_only: bool,
     ) -> Result<Vec<AddonMediaListItemAdminRow>> {
         // One static statement serves every combination: a NULL availability
         // matches every group, and an absent page size becomes an unbounded
@@ -6931,6 +7003,7 @@ impl SqliteAddonMediaListRepository {
                       "item"."Availability", "item"."AvailabilityReason",
                       "item"."AvailabilityReasonCode",
                       "replacement"."MediaItemId" AS "ReplacementMediaItemId",
+                      "item"."SavedReplacementJson" IS NOT NULL AS "ReplacementUnresolved",
                       "replacement"."MediaVersionId" AS "ReplacementMediaVersionId"
                FROM "AddonMediaListItem" AS "item"
                LEFT JOIN "AddonMediaListItemReplacement" AS "replacement"
@@ -6940,11 +7013,13 @@ impl SqliteAddonMediaListRepository {
                LEFT JOIN "AddonMediaListDetailJob" AS "detail"
                  ON "detail"."AddonMediaListItemId" = "item"."Id"
                WHERE "item"."AddonMediaListId" = ?
+                 AND (? = 0 OR "item"."InDraft" = 1)
                  AND (? IS NULL OR "item"."Availability" = ?)
                ORDER BY "item"."Rank", "item"."Id"
                LIMIT ? OFFSET ?"#,
         )
         .bind(id)
+        .bind(draft_only)
         .bind(availability.map(crate::repositories::common::encode_enum))
         .bind(availability.map(crate::repositories::common::encode_enum))
         .bind(page_size.map_or(i64::MAX, |size| i64::from(size.max(1))))
@@ -7009,6 +7084,7 @@ impl SqliteAddonMediaListRepository {
                 replacement_title: candidate.as_ref().map(|item| item.title.clone()),
                 replacement_path: candidate.as_ref().map(|item| item.path.clone()),
                 replacement_valid: candidate.is_some(),
+                replacement_unresolved: row.try_get("ReplacementUnresolved").repository()?,
                 title: effective_title,
                 year: effective_year,
                 season: effective_season,
@@ -8975,6 +9051,27 @@ mod tests {
     use sqlx::Executor as _;
 
     use super::{accept_reconcile_candidate_in_tx, is_safe_remote_artwork_url, FlatProjection};
+
+    #[test]
+    fn stale_concrete_replacement_remains_advisory() {
+        let item = super::AddonMediaListItemAdminRow {
+            replacement_media_item_id: Some(40),
+            replacement_media_version_id: Some(41),
+            replacement_valid: false,
+            replacement_unresolved: false,
+            availability: super::AddonMediaListItemAvailability::Available,
+            ..Default::default()
+        };
+        let mut classification = super::PublicationItemClassification::default();
+        super::classify_item_advisory_and_playback(
+            super::AddonMediaListPresentationKind::TelevisionShow,
+            &item,
+            None,
+            &mut classification,
+        );
+        assert_eq!(classification.recommendation_count, 1);
+        assert!(classification.blockers.is_empty());
+    }
 
     /// One list whose publication has already selected the revision it verifies.
     ///

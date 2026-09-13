@@ -350,7 +350,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
             let mut query = sqlx::QueryBuilder::<crate::db::Db>::new(
                 r#"SELECT "Id", "ProviderId",
                           COALESCE("LivenessOverride", "ProviderLiveness") AS "Liveness"
-                   FROM "AddonMediaListItem" WHERE "AddonMediaListId" = "#,
+                   FROM "AddonMediaListItem" WHERE "InDraft" = 1 AND "AddonMediaListId" = "#,
             );
             query.push_bind(list_id).push(r#" AND "Id" IN ("#);
             let mut separated = query.separated(", ");
@@ -1254,7 +1254,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
                    SET "ReviewState" = CASE WHEN "ReviewState" = 0 THEN 0 ELSE 1 END,
                        "ReviewError" = NULL, "DraftRevision" = "DraftRevision" + 1
                    WHERE "Id" = (
-                       SELECT "AddonMediaListId" FROM "AddonMediaListItem" WHERE "Id" = ?
+                       SELECT "AddonMediaListId" FROM "AddonMediaListItem" WHERE "Id" = ? AND "InDraft" = 1
                    )
                      AND "ReviewState" <> 3
                      AND ("PublicationJournalJson" IS NULL
@@ -2033,7 +2033,7 @@ pub(crate) async fn load_current_revision_items_in_tx(
            FROM "AddonMediaListItem" AS "item"
            LEFT JOIN "AddonMediaListItemReplacement" AS "replacement"
              ON "replacement"."AddonMediaListItemId" = "item"."Id"
-           WHERE "item"."AddonMediaListId" = ?
+           WHERE "item"."AddonMediaListId" = ? AND "item"."InDraft" = 1
            ORDER BY "item"."Rank", "item"."ProviderId""#,
     )
     .bind(list_id)
@@ -2049,7 +2049,7 @@ pub(crate) async fn load_current_revision_items_in_tx(
            FROM "AddonMediaListItemGuid" AS "guid"
            JOIN "AddonMediaListItem" AS "item"
              ON "item"."Id" = "guid"."AddonMediaListItemId"
-           WHERE "item"."AddonMediaListId" = ?
+           WHERE "item"."AddonMediaListId" = ? AND "item"."InDraft" = 1
            ORDER BY "item"."ProviderId", "guid"."Guid", "guid"."Id""#,
     )
     .bind(list_id)
@@ -2796,6 +2796,13 @@ async fn materialize_revision_as_draft(
         .execute(&mut *tx)
         .await
         .repository()?;
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson" = NULL WHERE "Id" = ?"#,
+        )
+        .bind(restored_item_id)
+        .execute(&mut *tx)
+        .await
+        .repository()?;
         match (
             item.replacement_media_item_id,
             item.replacement_media_version_id,
@@ -2891,7 +2898,7 @@ async fn upsert_restored_draft_item_in_tx(
     if let Some(item_id) = existing {
         sqlx::query(
             r#"UPDATE "AddonMediaListItem"
-               SET "Rank" = ?, "Kind" = ?, "ContentKind" = ?, "Included" = ?,
+               SET "InDraft" = 1, "Rank" = ?, "Kind" = ?, "ContentKind" = ?, "Included" = ?,
                    "DisplayTitle" = ?, "Title" = ?, "Year" = ?, "Season" = ?,
                    "Episode" = ?, "SourceUrl" = ?, "AdditionalImageUrls" = ?,
                    "DurationSeconds" = ?, "ParentProviderId" = ?,
@@ -3057,7 +3064,7 @@ async fn calculate_saved_draft_diff_in_tx(
            FROM "AddonMediaListItem" AS "item"
            LEFT JOIN "AddonMediaListItemTombstone" AS "tombstone"
              ON "tombstone"."AddonMediaListItemId" = "item"."Id"
-           WHERE "item"."AddonMediaListId" = ?
+           WHERE "item"."AddonMediaListId" = ? AND "item"."InDraft" = 1
            ORDER BY "item"."ProviderId""#,
     )
     .bind(list_id)
@@ -4193,7 +4200,7 @@ impl SqliteAddonMediaListRepository {
     }
 }
 
-async fn register_option_schema_in_tx(
+pub(crate) async fn register_option_schema_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     schema: &AddonMediaListOptionSchema,
 ) -> Result<()> {
@@ -4286,7 +4293,7 @@ async fn load_draft_item_values_in_tx(
     let rows = sqlx::query(
         r#"SELECT "Id", "ProviderId", "DraftOptionOverridesJson"
            FROM "AddonMediaListItem"
-           WHERE "AddonMediaListId" = ? AND "DraftOptionOverridesJson" <> '{}'
+           WHERE "AddonMediaListId" = ? AND "InDraft" = 1 AND "DraftOptionOverridesJson" <> '{}'
            ORDER BY "Rank", "Id""#,
     )
     .bind(list_id)
@@ -4612,7 +4619,7 @@ fn decode_u64(kind: &'static str, value: i64) -> Result<u64> {
 }
 
 /// Share option validation and writes with a coherent editor transaction.
-pub(super) async fn save_draft_options_tx(
+pub(crate) async fn save_draft_options_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     options: &AddonMediaListDraftOptions,
     advance_revision: bool,
@@ -4640,7 +4647,7 @@ pub(super) async fn save_draft_options_tx(
         }
         let provider_id = sqlx::query_scalar::<_, String>(
             r#"SELECT "ProviderId" FROM "AddonMediaListItem"
-                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+                   WHERE "Id" = ? AND "AddonMediaListId" = ? AND "InDraft" = 1"#,
         )
         .bind(item_id)
         .bind(options.list_id)
@@ -4680,7 +4687,7 @@ pub(super) async fn save_draft_options_tx(
 
     sqlx::query(
         r#"UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson" = '{}'
-               WHERE "AddonMediaListId" = ?"#,
+               WHERE "AddonMediaListId" = ? AND "InDraft" = 1"#,
     )
     .bind(options.list_id)
     .execute(&mut **tx)
@@ -4693,7 +4700,7 @@ pub(super) async fn save_draft_options_tx(
     {
         sqlx::query(
             r#"UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson" = ?
-                   WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+                   WHERE "Id" = ? AND "AddonMediaListId" = ? AND "InDraft" = 1"#,
         )
         .bind(encode_option_values(&item.values)?)
         .bind(item.item_id)

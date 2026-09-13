@@ -853,7 +853,8 @@ fn item_row_view(
     let item_id = item.id;
     let title = item.display_title.clone();
     let search_title = title.clone();
-    let has_replacement = item.replacement_media_version_id.is_some();
+    let has_replacement =
+        item.replacement_unresolved || item.replacement_media_version_id.is_some();
     let replacement_state = if !has_replacement {
         "none"
     } else if item.replacement_valid {
@@ -924,6 +925,7 @@ fn item_row_view(
     let can_request_details =
         item.parent_provider_id.is_none() && !detail_pending && !detail_terminal;
     let base_needs_review = item.availability != AddonMediaListItemAvailability::Available
+        || item.replacement_unresolved
         || (item.replacement_media_version_id.is_some() && !item.replacement_valid)
         || item.title.trim().is_empty()
         || (is_remote_stream
@@ -3314,6 +3316,7 @@ fn item_needs_review(
 ) -> bool {
     item.availability != AddonMediaListItemAvailability::Available
         || item.metadata_conflict_count > 0
+        || item.replacement_unresolved
         || (item.replacement_media_version_id.is_some() && !item.replacement_valid)
         || item.title.trim().is_empty()
         || (item.kind == AddonMediaListItemKind::RemoteStream
@@ -4077,6 +4080,7 @@ const fn publication_blocker_text_key(kind: AddonMediaListPublicationBlockerKind
         AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement => {
             TextKey::BlockerUnavailableWithoutReplacement
         }
+        AddonMediaListPublicationBlockerKind::ReplacementUnresolved => TextKey::InvalidReplacement,
         AddonMediaListPublicationBlockerKind::ItemTitleMissing => TextKey::BlockerItemTitleMissing,
         AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing => {
             TextKey::BlockerSeasonEpisodeMissing
@@ -4140,6 +4144,7 @@ const fn publication_blocker_href(kind: AddonMediaListPublicationBlockerKind) ->
         | AddonMediaListPublicationBlockerKind::PlaybackDetailsUnavailable
         | AddonMediaListPublicationBlockerKind::PlaybackDetailsFailed
         | AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement
+        | AddonMediaListPublicationBlockerKind::ReplacementUnresolved
         | AddonMediaListPublicationBlockerKind::ItemTitleMissing
         | AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing
         | AddonMediaListPublicationBlockerKind::ArtistMissing => "#addon-list-items-heading",
@@ -7267,6 +7272,27 @@ fn AddonMediaListEditorIsland(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unresolved_replacement_is_reviewable_without_local_ids() {
+        let item = AddonMediaListItemRow {
+            title: "Fixture".into(),
+            replacement_unresolved: true,
+            ..Default::default()
+        };
+        assert!(item.replacement_media_item_id.is_none());
+        assert!(item.replacement_media_version_id.is_none());
+        assert!(item_needs_review(
+            &item,
+            AddonMediaListPresentationKind::Auto
+        ));
+        assert_eq!(
+            publication_blocker_text_key(
+                AddonMediaListPublicationBlockerKind::ReplacementUnresolved
+            ),
+            TextKey::InvalidReplacement
+        );
+    }
 
     #[test]
     fn unchanged_people_input_preserves_provider_fields_and_preparation_action() {

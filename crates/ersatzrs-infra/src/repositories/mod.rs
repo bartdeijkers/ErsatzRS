@@ -2,7 +2,8 @@ mod addon_media_list;
 pub(crate) mod addon_media_list_auto_eligibility;
 mod addon_media_list_lifecycle;
 pub(crate) use addon_media_list_lifecycle::{
-    load_current_revision_items_in_tx, load_draft_options_in_tx, load_valid_revision_snapshot_in_tx,
+    load_current_revision_items_in_tx, load_draft_options_in_tx,
+    load_valid_revision_snapshot_in_tx, register_option_schema_in_tx, save_draft_options_tx,
 };
 pub(crate) mod addon_media_list_reset;
 pub(crate) mod addon_publication_fs;

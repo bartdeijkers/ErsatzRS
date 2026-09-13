@@ -313,9 +313,64 @@ current-item foreign key. Current scanner activation still reads item rows marke
 Published, and item-scoped artwork requires an item owner. The next receiving
 projection must therefore distinguish actual draft membership from publication-
 only ownership; setting Included=false alone would manufacture extra saved draft
-items. Review a narrow draft-membership marker on receiving item rows and its
-owning reads before implementation. Reuse existing nullable item ownership and
+items. The additive InDraft marker now preserves existing membership while
+separating draft-facing reads/writes and job admission from publication ownership.
+Ordinary matching retains published-only owners; the next explicit publication
+excludes them. Migration and production-path regressions pass, with independent
+Astra review; Claude cross-review remains pending before the checkpoint commit.
+The receiving row projector is being integrated below; scan activation remains open.
+Reuse existing nullable item ownership and
 revision pins for subtitle/prepared artifacts; no new artifact schema is needed.
+
+Receiving implementation continuation (not scan activation): the transaction-only
+draft projector now assigns saved provenance, options, observations, cohorts and
+chapter relationships to receiving-owned identities. It preserves local hiding
+and active publication state; independent published reconstruction still owns the
+active presentation kind. Copied unresolved replacement intent uses a nullable
+`SavedReplacementJson` on the draft item, separate from concrete local bindings.
+No sender IDs are invented. Explicit choose/remove, restore and re-adoption clear
+that intent; ordinary provider updates retain it. An unresolved included choice
+must block publication before restricted-item exclusion and must not cause original-
+source preparation. Existing invalid concrete replacement behavior is unchanged.
+
+Hydration source map for unresolved receiving replacement feedback:
+
+- Route/page: existing add-on-list item task page and legacy list review rows.
+- SSR wrapper: `AddonListWorkspacePage`; existing task detail forms stay native.
+- Islands: no new island or boundary; legacy review controls keep their wrapper.
+- Data boundary: core/admin item row and web server-function DTO carry one
+  unresolved-choice flag, without exposing saved file paths or local fake IDs.
+- Actions: existing replacement choose/remove and workspace Save/Discard.
+- Fallback: existing native replacement form and localized InvalidReplacement
+  notice; the existing publication blocker directs the operator to item review.
+- Shared primitives: none; only existing text/visibility conditions change.
+- Browser proof target: unresolved copied choice remains visible, choosing/removing
+  it resolves the blocker in both native and hydrated task flows. This proof is
+  still outstanding; native tests alone will not establish it.
+
+Receiving publication source audit (2026-09-13): an explicit validated publication
+input must reach staging, the child scanner and commit; changing membership alone
+does not preserve the separate draft. `stage_publication_impl` uses draft readiness
+and preparation; scanner `load_staged_playlist_entries` reads current source,
+title, duration, fragment and artwork columns even for Published rows. Commit's
+parent metadata/TV projection also reads draft content and currently acknowledges
+draft detail work. These consumers must use the received publication without
+temporarily rewriting draft columns. Reuse the existing journal, backup, child
+scan, generated YAML/NFO writers, sealing and recovery, not another coordinator.
+Lifecycle snapshot insertion and exact binding validators are reusable but do not
+activate a snapshot on their own. `materialize_revision_as_draft` is deliberately
+unsuitable. Receiving artifact admission must not fabricate provider job leases to
+call reserve/promote. The smallest integration seam is under Claude review before
+implementation; existing independent-publication acceptance is unchanged.
+
+Initial source assembly composes the existing owned source and immutable installer
+capabilities; ordinary Saves still require reuse of unchanged authoritative asset
+references. The existing OS file-backed managed-tree lock is held by an owned
+guard that can travel with blocking copies. Each copy retains its guard even if
+the async waiter is cancelled, without a new lock service or hidden async runtime.
+Runtime acquisition must precede database write ownership. Completed file-first
+writer integration, including swap carry-over and durable document replacement,
+is still required before enabling Save or scan authority.
 Manual subtitle capture preserves the original pinned SRT, language and
 Source/Prepared clock: published sidecars may already have programme timing
 transformations and are not interchangeable with those inputs. Prepared media

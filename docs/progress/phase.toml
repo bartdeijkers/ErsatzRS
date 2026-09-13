@@ -74,9 +74,17 @@ Immutable asset installation, selected owned artwork/retained source adapters
 and receiving byte admission now have focused proof: 70 saved-list tests pass,
 with independent Claude implementation/test review. Subtitle/replacement source
 inspection and transactional receiving artwork now have focused native proof;
-metadata binding preserves draft/conflict/old-publication separation. Next: source
-assembly and receiving list/item/subtitle/playback projection, then the durable
-saved-content all-writer boundary and scan reconstruction.
+metadata binding preserves draft/conflict/old-publication separation. Initial
+source assembly, exact receiving draft projection and unresolved replacement
+intent now have focused native proof and independent Astra review. Claude's
+post-reset review found two receiving membership P2s; both are corrected with
+eight passing focused tests; Claude's independent correction review closes both.
+Replacement-video duplication versus a contained reference awaits maintainer
+decision; the existing assembly is unchanged and unwired. The core/web consumer
+has Claude review and a passing focused native test; browser verification remains open.
+Next: independent receiving
+published reconstruction and local playback/subtitle bindings, unchanged-authority
+Save reuse, then the durable all-writer boundary and scan reconstruction.
 The accepted cap is not yet enforced by runtime writers or scans.
 Durable saved-file and
 all-writer boundaries still precede scan reconstruction. No push, CI or release

@@ -2047,6 +2047,12 @@ async fn complete_revision_snapshot_drives_exact_diff_and_fenced_restore() {
         lease_owner: "restore-worker".into(),
         active_at: fixed_time() + chrono::Duration::minutes(10),
     };
+    sqlx::query(
+        r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"='{"file":null}' WHERE "Id"=10"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     assert_eq!(
         repositories
             .addon_media_lists
@@ -2055,6 +2061,13 @@ async fn complete_revision_snapshot_drives_exact_diff_and_fenced_restore() {
             .unwrap(),
         3
     );
+    let unresolved: Option<String> = sqlx::query_scalar(
+        r#"SELECT "SavedReplacementJson" FROM "AddonMediaListItem" WHERE "Id"=10"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(unresolved.is_none());
     // Marker plus exact target revision makes a worker retry idempotent.
     assert_eq!(
         repositories

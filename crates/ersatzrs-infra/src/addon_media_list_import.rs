@@ -2099,6 +2099,7 @@ impl AddonMediaListImportCoordinator {
                JOIN "AddonMediaListItem" AS "item"
                  ON "item"."AddonMediaListId" = ?
                 AND "item"."ProviderId" = "staged"."ProviderId"
+                AND "item"."InDraft" = 1
                JOIN "AddonMediaListDetailJob" AS "detail"
                  ON "detail"."AddonMediaListItemId" = "item"."Id"
                 AND "detail"."OverviewFingerprint" = "staged"."OverviewFingerprint"
@@ -2211,6 +2212,7 @@ impl AddonMediaListImportCoordinator {
                JOIN "AddonMediaListItem" AS "item"
                  ON "item"."AddonMediaListId" = ?
                 AND "item"."ProviderId" = "staged"."ProviderId"
+                AND "item"."InDraft" = 1
                WHERE "staged"."AddonMediaListImportJobId" = ?
                  AND "staged"."VerificationPass" = ?
                  AND "item"."ParentProviderId" IS NULL"#,
@@ -2966,6 +2968,7 @@ impl AddonMediaListImportCoordinator {
                FROM "AddonMediaListDetailJob" AS "detail"
                JOIN "AddonMediaListItem" AS "item"
                  ON "item"."Id" = "detail"."AddonMediaListItemId"
+                AND "item"."InDraft" = 1
                JOIN "AddonMediaList" AS "list"
                  ON "list"."Id" = "detail"."AddonMediaListId"
                JOIN "AddonMediaListImportJob" AS "import" ON "import"."Id" = (
@@ -3143,6 +3146,7 @@ impl AddonMediaListImportCoordinator {
                FROM "AddonMediaListDetailJob" AS "detail"
                JOIN "AddonMediaListItem" AS "item"
                  ON "item"."Id" = "detail"."AddonMediaListItemId"
+                AND "item"."InDraft" = 1
                JOIN "AddonMediaList" AS "list" ON "list"."Id" = "detail"."AddonMediaListId"
                JOIN "AddonMediaListImportJob" AS "import" ON "import"."Id" = (
                    SELECT "latest"."Id" FROM "AddonMediaListImportJob" AS "latest"
@@ -3521,7 +3525,7 @@ impl AddonMediaListImportCoordinator {
                       "ExaminedCount", "ArchivedSkippedCount", "EmittedCount",
                       CAST("TotalHint" AS SIGNED) AS "TotalHint",
                       CAST((SELECT COUNT(*) FROM "AddonMediaListItem" AS "item"
-                            WHERE "item"."AddonMediaListId" = "job"."AddonMediaListId") AS SIGNED)
+                            WHERE "item"."AddonMediaListId" = "job"."AddonMediaListId" AND "item"."InDraft"=1) AS SIGNED)
                           AS "RetainedItemCount",
                       "LastProgressAt", "Diagnostic"
                FROM "AddonMediaListImportJob" AS "job"
@@ -3544,7 +3548,8 @@ impl AddonMediaListImportCoordinator {
                           AS "Failed",
                       CAST(COALESCE(SUM(CASE WHEN "State" IN (?, ?, ?, ?) THEN 1 ELSE 0 END), 0) AS SIGNED)
                           AS "Pending"
-               FROM "AddonMediaListDetailJob" WHERE "AddonMediaListId" = ?"#,
+               FROM "AddonMediaListDetailJob" WHERE "AddonMediaListId" = ?
+                 AND "AddonMediaListItemId" IN (SELECT "Id" FROM "AddonMediaListItem" WHERE "InDraft"=1 AND "AddonMediaListId"=?)"#,
         )
         .bind(encode_enum(AddonMediaListDetailState::Complete))
         .bind(encode_enum(AddonMediaListDetailState::Skipped))
@@ -3554,6 +3559,7 @@ impl AddonMediaListImportCoordinator {
         .bind(encode_enum(AddonMediaListDetailState::Running))
         .bind(encode_enum(AddonMediaListDetailState::WaitingToRetry))
         .bind(list_id)
+        .bind(list_id)
         .fetch_one(&self.pool)
         .await
         .repository()?;
@@ -3562,6 +3568,7 @@ impl AddonMediaListImportCoordinator {
                FROM "AddonMediaListDetailJob" AS "detail"
                JOIN "AddonMediaListItem" AS "item"
                  ON "item"."Id" = "detail"."AddonMediaListItemId"
+                AND "item"."InDraft" = 1
                WHERE "detail"."AddonMediaListId" = ? AND "detail"."State" = ?
                ORDER BY "detail"."StartedAt" DESC LIMIT 1"#,
         )

@@ -431,6 +431,7 @@ pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
                         SELECT 1 FROM "AddonMediaListDetailJob" AS "detail"
                         JOIN "AddonMediaListItem" AS "item" ON "item"."Id" = "detail"."AddonMediaListItemId"
                         WHERE "item"."AddonMediaListId" = ? AND "item"."Included" = 1
+                          AND "item"."InDraft" = 1
                           AND "item"."Kind" = 4 AND "item"."EffectiveLiveness" = 1
                           AND ("item"."DurationSeconds" IS NULL OR "item"."DurationSeconds" <= 0)
                           AND "detail"."ManualPriority" = 0)"#)

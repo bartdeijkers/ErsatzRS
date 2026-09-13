@@ -165,6 +165,9 @@ pub struct AddonMediaListItemAdminRow {
     pub replacement_title: Option<String>,
     pub replacement_path: Option<String>,
     pub replacement_valid: bool,
+    /// Portable replacement intent that has no resolved receiving library file.
+    #[serde(default)]
+    pub replacement_unresolved: bool,
     pub title: String,
     pub year: Option<i32>,
     pub season: Option<i32>,
@@ -269,6 +272,8 @@ pub enum AddonMediaListPublicationBlockerKind {
     PlaybackDetailsUnavailable,
     PlaybackDetailsFailed,
     UnavailableWithoutReplacement,
+    /// A saved replacement must be selected or explicitly removed before publication.
+    ReplacementUnresolved,
     ItemTitleMissing,
     SeasonEpisodeMissing,
     ArtistMissing,

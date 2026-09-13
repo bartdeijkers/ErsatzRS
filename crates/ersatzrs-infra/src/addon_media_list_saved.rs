@@ -8,6 +8,7 @@ pub mod capture;
 pub mod document_io;
 pub mod files;
 pub mod model;
+pub mod projection;
 pub mod published;
 pub mod receiving;
 pub mod receiving_artwork;

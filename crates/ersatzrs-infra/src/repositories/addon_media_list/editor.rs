@@ -157,7 +157,7 @@ async fn save_item(
     let row = sqlx::query(
         r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson", "MetadataConflictJson",
         "ParentProviderId", "DurationSeconds", "ContentKind", "Included", "LivenessOverride"
-        FROM "AddonMediaListItem" WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
+        FROM "AddonMediaListItem" WHERE "Id" = ? AND "AddonMediaListId" = ? AND "InDraft" = 1"#,
     )
     .bind(edit.item_id)
     .bind(list_id)
@@ -356,6 +356,11 @@ async fn save_replacement(
         .await
         .repository()?;
     }
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson" = NULL WHERE "Id" = ?"#)
+        .bind(item_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
     Ok(())
 }
 

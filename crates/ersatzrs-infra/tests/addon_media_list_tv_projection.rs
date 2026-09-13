@@ -2261,8 +2261,26 @@ async fn durable_publication_fences_stale_workers_at_stage_and_commit() {
     let pool = common::test_db().await;
     let _directory = seed_managed_list(&pool).await;
     let repositories = make_repositories(pool.clone());
+    pool.execute(r#"UPDATE "AddonMediaListItem" SET "InDraft"=0 WHERE "Id"=11"#)
+        .await
+        .expect("retire an item from the new draft");
+    let retained: (bool, bool) =
+        sqlx::query_as(r#"SELECT "Included", "Published" FROM "AddonMediaListItem" WHERE "Id"=11"#)
+            .fetch_one(&pool)
+            .await
+            .expect("previous publication remains selected before staging");
+    assert_eq!(retained, (true, true));
     let (enqueued, stale, current) = claim_and_reclaim_publication(&repositories).await;
     assert_stale_publication_claim_is_fenced(&repositories, &enqueued, &stale, &current).await;
+    assert_eq!(
+        scalar::<i64>(
+            &pool,
+            r#"SELECT "Published" FROM "AddonMediaListItem" WHERE "Id"=11"#,
+        )
+        .await,
+        0,
+        "the new publication excludes retained owners absent from its draft"
+    );
 
     repositories
         .addon_media_lists

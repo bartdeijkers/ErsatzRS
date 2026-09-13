@@ -50,6 +50,95 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 read-only receiving-publication audit: stage membership alone is
+insufficient. Scanner load_staged_playlist_entries and commit parent/TV metadata
+projection read current draft content; commit also acknowledges draft detail work.
+The plan now identifies these concrete consumers for an independent publication
+input while retaining existing journal, child scan, generated files and recovery.
+Existing explicit revision insertion/binding checks are reusable but do not
+activate content; historical restore intentionally rewrites the draft. Claude is
+reviewing the smallest integration direction. No new runtime implementation,
+artifact admission, acceptance change or build is claimed by this audit.
+2026-09-13 post-reset Claude review found two concrete receiving membership P2s:
+obsolete unpublished owners survived projection, and publication detail admission
+still selected retired items. Both are corrected. Projection deletes only owners
+absent from both incoming states and not locally Published; foreign-key tests
+preserve incoming/local publication ownership and retained artifact revision pins.
+Detail admission now requires InDraft=1 and leaves retired provider work untouched.
+All seven projection tests and the extended detail regression pass (nextest
+6bb3cb28-57db-4216-8be1-d45c6d77dfb3; 41.92s build, 5.015s execution,
+two build jobs/two test threads). Claude independently re-reviewed both corrections
+and their regressions at 14:12 and closed both P2s with no remaining findings.
+Claude also reviewed the unresolved-replacement core/web consumer with no P1/P2;
+browser acceptance remains outstanding. The review raised a storage decision:
+initial assembly currently duplicates contained replacement media into immutable
+assets, as the recorded implementation sequence describes. The proposed smaller
+reference-only alternative needs maintainer approval because later source edits
+invalidate the saved reference. The question is pending; assembly remains unwired
+and unchanged, with no deletion or acceptance change. No commit, CI or full closeout.
+The reviewed receiving-draft checkpoint excludes initial assembly and its owned
+tree-guard changes; those remain local/uncommitted pending the storage decision.
+The following assembly evidence describes that preserved working-tree work,
+not a committed runtime capability.
+2026-09-13 receiving draft and initial assembly continuation: initial assembly
+keeps draft/published artwork and replacement choices separate, preserves original
+SRT bytes, and never opens/copies prepared Kind 1 caches. It composes existing
+owned source validation and immutable installation, not ordinary-Save reuse.
+An owned guard reuses the existing cross-process managed-tree file lock; blocking
+installers retain it through completion even when the waiter is cancelled.
+The receiving draft projector assigns metadata provenance, options, cohorts,
+observations and chapter relationships with fresh local fences and stable owner
+identities. It preserves local hiding and active publication state; independent
+published reconstruction still owns the active presentation kind.
+Copied unresolved replacement intent now has an explicit nullable saved JSON
+field, not synthetic media IDs. It survives capture/provider updates, blocks
+publication before restricted-item exclusion and excludes original-source
+preparation even at direct queue admission. Deliberate access inspection remains
+available; old invalid concrete replacements retain their advisory behavior.
+Explicit choose/remove, restore and re-adoption clear the copied intent.
+The existing localized admin warning and review action consume a boolean DTO;
+no new dialog, island boundary or translation string is introduced.
+All 139 focused infra tests pass (nextest d9b0bce1-2e92-4095-8972-eecb8265258b;
+61s build, 23.149s execution). The assembly fixture subsequently stopped disabling
+foreign keys and supplies its missing installation owner: all five assembly tests
+plus readiness/subtitle regressions pass (6f5ff9b9-0163-4d7e-ad43-a07e3e4cb851;
+25.04s build, 1.993s execution). Exact revision restore also passes
+(f3eeea03-e85a-4292-bb4c-dafeb842138e). The initial compile caught two test-only
+SHA formatting errors and an acquisition visibility warning, corrected before
+the passing runs. Astra independently reviewed projection, unresolved behavior
+and assembly/guard lifetime without remaining P1/P2. Hydration lint has no new
+findings. The focused web library consumer builds and its unresolved-replacement
+review test passes (64b8e60f-c64f-4920-82a2-9f14894016a7; 4m47s build, 0.007s test).
+The compiler reports the existing proc-macro-error2 2.0.1 future-compatibility
+notice; no dependency upgrade is part of this slice. Actual browser proof remains
+pending; the subsequent Claude review and correction evidence are recorded above.
+The review request was sent after the 14:00 quota reset. Final scoped infra
+all-targets Clippy with -D warnings passes in 18.47s. Corrections were explicit
+imports, checked test conversion and extraction of unchanged assertion helpers;
+the preceding behavioral evidence remains applicable. No CI or full closeout was run.
+Remaining: fresh list discovery/ownership, separate published reconstruction and
+subtitle/prepared/replacement bindings, unchanged-authority ordinary-save reuse,
+durable file-first all-writer commits and complete independent-profile acceptance.
+The new assembly/projector operations are not yet wired into runtime Save/scans.
+2026-09-13 draft/publication ownership boundary: additive InDraft membership
+preserves existing rows and publication bindings while allowing copied publications
+to own identities absent from the saved draft. Draft capture, editor reads/writes,
+options, delivery cohorts, detail/preparation jobs and refresh reconciliation
+exclude publication-only owners. Re-adoption reuses identity with fresh draft
+choices and advances the draft fence; omitted published chapters retain playback
+ownership and immutable artifacts while active draft jobs are cancelled, not erased.
+Astra found two concrete publication regressions and independently re-reviewed
+their fixes: ordinary matching retains still-published owners, while the next
+explicit Publish excludes owners absent from the draft and verifies that result.
+All 46 focused infra tests pass (nextest a6ea183b-9bca-4001-b26f-3778d7026ec4;
+37.56s build, 10.427s execution, two build jobs/two test threads), including
+legacy migration/ledger preservation, exact draft capture, stale edit/job fences,
+same-ID re-adoption, chapter retirement and actual matcher/publication regressions.
+Formatting passes. No CI or full closeout. Claude review was requested after the
+maintainer-reported 14:00 Amsterdam quota reset; this checkpoint is not committed.
+The earlier test handle ended without a retained final result and is not evidence.
+Receiving row projection, file-first writer durability and scan activation remain
+unfinished; no folder-copy or Windows runtime acceptance is claimed by this gate.
 2026-09-13 subtitle/replacement sources and receiving artwork (unwired): exact
 retained Kind 0 Ready subtitle originals are checked against their revision pin,
 list, language, clock, length and hash before reading original SRT bytes. The

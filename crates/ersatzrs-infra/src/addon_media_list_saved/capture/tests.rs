@@ -91,6 +91,142 @@ async fn saved_list_capture_retains_operator_provider_and_excluded_state_without
     tx.rollback().await.unwrap();
 }
 
+#[tokio::test]
+async fn saved_list_capture_preserves_unresolved_replacement_intent_without_local_ids() {
+    let pool = database().await;
+    let file = SavedFile {
+        relative_path: ".ersatzrs-saved/replacements/fixture.mkv".into(),
+        sha256: "a".repeat(64),
+        byte_length: 100,
+    };
+    for choice in [
+        SavedReplacement { file: None },
+        SavedReplacement {
+            file: Some(file.clone()),
+        },
+    ] {
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"=? WHERE "Id"=11"#)
+            .bind(serde_json::to_string(&choice).unwrap())
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let captured = draft_in_tx(&mut tx, 1).await.unwrap();
+        let item = captured
+            .draft
+            .items
+            .iter()
+            .find(|item| item.content.provider_id == "new")
+            .unwrap();
+        assert_eq!(item.replacement.as_ref(), Some(&choice));
+        assert!(captured.replacements.is_empty());
+        assert_eq!(
+            captured.draft.files,
+            choice.file.clone().into_iter().collect::<Vec<_>>()
+        );
+        let concrete: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaListItemReplacement""#)
+                .fetch_one(&mut *tx)
+                .await
+                .unwrap();
+        assert_eq!(concrete, 0);
+        tx.rollback().await.unwrap();
+    }
+    let mut tx = pool.begin().await.unwrap();
+    let captured = draft_in_tx(&mut tx, 1).await.unwrap();
+    assert!(captured
+        .draft
+        .items
+        .iter()
+        .all(|item| item.replacement.is_none()));
+}
+
+#[tokio::test]
+async fn saved_list_capture_rejects_unsafe_or_competing_replacement_intent() {
+    let pool = database().await;
+    for value in [
+        r#"{"file":{"relative_path":"../outside.mkv","sha256":"bad","byte_length":1}}"#,
+        r#"{"file":null,"sender_media_id":100}"#,
+    ] {
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"=? WHERE "Id"=11"#)
+            .bind(value)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        assert!(draft_in_tx(&mut tx, 1).await.is_err());
+        tx.rollback().await.unwrap();
+    }
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::raw_sql(
+        r#"
+        UPDATE "AddonMediaListItem" SET "SavedReplacementJson"='{"file":null}' WHERE "Id"=11;
+        INSERT INTO "AddonMediaListItemReplacement"
+            ("AddonMediaListItemId","MediaItemId","MediaVersionId","CreatedAt","UpdatedAt")
+        VALUES (11,100,101,'2026-09-13 00:00:00','2026-09-13 00:00:00');
+    "#,
+    )
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    assert!(draft_in_tx(&mut tx, 1).await.is_err());
+}
+
+#[tokio::test]
+async fn saved_list_capture_draft_membership_excludes_publication_only_owners() {
+    use ersatzrs_core::repositories::AddonMediaListLifecycleRepository as _;
+    let pool = database().await;
+    sqlx::query(r#"INSERT INTO "AddonMediaListItem"
+        ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title",
+         "InDraft","Published","Included","DraftOptionOverridesJson")
+        VALUES (12,1,'published-only','Old publication',4,3,'Old publication',0,1,1,'{"old":true}')"#)
+        .execute(&pool).await.unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    let captured = draft_in_tx(&mut tx, 1).await.unwrap();
+    assert_eq!(captured.draft.items.len(), 2);
+    assert!(captured
+        .draft
+        .items
+        .iter()
+        .all(|item| item.content.provider_id != "published-only"));
+    assert!(captured.draft.options.item_values.is_empty());
+    assert!(!captured
+        .draft
+        .delivery
+        .before_cutoff
+        .iter()
+        .any(|id| id == "published-only"));
+    crate::addon_media_list_delivery::portable::restore_in_tx(&mut tx, 1, &captured.draft.delivery)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    let repository = crate::repositories::SqliteAddonMediaListRepository(pool.clone());
+    assert_eq!(
+        repository.option_items(1, &[10, 11]).await.unwrap().len(),
+        2
+    );
+    assert!(repository.option_items(1, &[12]).await.is_err());
+    let mut options = repository.draft_options(1, None).await.unwrap().unwrap();
+    options.item_values.push(
+        ersatzrs_core::repositories::AddonMediaListItemOptionValues {
+            item_id: Some(12),
+            provider_id: "published-only".into(),
+            values: BTreeMap::new(),
+        },
+    );
+    assert!(repository.save_draft_options(&options).await.is_err());
+    options.item_values.clear();
+    repository.save_draft_options(&options).await.unwrap();
+    let row: (i32, i32, String) = sqlx::query_as(
+        r#"SELECT "InDraft","Published","DraftOptionOverridesJson"
+        FROM "AddonMediaListItem" WHERE "Id"=12"#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row, (0, 1, "{\"old\":true}".into()));
+}
+
 async fn upload(pool: &crate::db::DbPool, id: i64, list_id: i64, hash: &str) {
     sqlx::query(r#"INSERT INTO "AddonMediaListArtworkUpload" ("Id", "AddonMediaListId", "ScopeItemId", "Role", "ContentType", "Extension", "Bytes", "Sha256", "CreatedAt", "UpdatedAt")
         VALUES (?, ?, 0, 1, 'image/png', 'png', X'010203', ?, '2026-09-13 00:00:00', '2026-09-13 00:00:00')"#)

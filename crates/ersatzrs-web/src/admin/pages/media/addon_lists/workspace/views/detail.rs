@@ -91,6 +91,7 @@ pub(super) fn item(w: &Workspace) -> AnyView {
         || pending_replacement.is_some()
         || !w.submission.replacement_results.is_empty()
         || w.submission.error.is_some()
+        || row.replacement_unresolved
         || (row.replacement_media_item_id.is_some() && !row.replacement_valid);
     view! {
         <div class="item-review settings-layout">
@@ -152,7 +153,7 @@ pub(super) fn item(w: &Workspace) -> AnyView {
                 <summary><span class="disclosure-label"><strong>{tr(TextKey::LocalReplacement)}</strong><small>{replacement_title}</small></span><span class="disclosure-toggle" aria-hidden="true"></span></summary>
                 <div class="disclosure-body">
                     <p>{tr(TextKey::ItemReplacementHelp)}</p>
-                    <p class="notice" hidden={row.replacement_media_item_id.is_none() || row.replacement_valid}>{tr(TextKey::InvalidReplacement)}</p>
+                    <p class="notice" hidden={!row.replacement_unresolved && (row.replacement_media_item_id.is_none() || row.replacement_valid)}>{tr(TextKey::InvalidReplacement)}</p>
                     <p role="status" hidden=pending_replacement.is_none()>{tr(TextKey::ItemReplacementPending)}</p>
                     {input("replacement_query",TextKey::ItemSearchReplacement,d.field(group,"replacement_query",""),"search")}
                     <div class="action-row">{button("replacement-search",TextKey::Search,false)}{button("replacement-clear",TextKey::ItemRemoveReplacement,false)}</div>

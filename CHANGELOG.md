@@ -34,8 +34,12 @@ release section when tagging a release.
   missing prepared videos from damaged or missing required assets. Receiving
   artwork staging preserves draft and published metadata separately without
   exposing partially created lists; exact subtitle and replacement source checks
-  retain their ownership and unresolved-selection rules. Durable Save and scan
-  reconstruction integration remains unfinished.
+  retain their ownership and unresolved-selection rules. Draft membership is now
+  distinct from retained publication ownership, so removing a draft chapter does
+  not remove its current playback before the next Publish. Receiving groundwork
+  preserves unresolved copied replacement choices and requires choosing or
+  removing them instead of silently preparing/publishing the original source.
+  Durable Save and scan reconstruction integration remains unfinished.
 
 - Replace destructive add-on-list removal in admin with reversible Hide list
   and Show list actions and a Hidden lists filter on the existing page. Hiding
