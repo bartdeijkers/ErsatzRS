@@ -1,6 +1,8 @@
 //! AMM-M-01B: saved delivery policy and durable first-import classification.
 //! Publication owns freezing these choices; saving never changes active playback.
 
+pub mod portable;
+
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
@@ -284,6 +286,9 @@ mod tests {
     use sqlx::{sqlite::SqlitePoolOptions, Executor as _};
 
     const DELIVERY_MIGRATION: i64 = 202_609_071_800;
+
+    #[path = "portable.rs"]
+    mod portable_tests;
 
     async fn database(include_delivery: bool) -> DbPool {
         let pool = SqlitePoolOptions::new()

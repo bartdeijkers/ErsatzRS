@@ -22,7 +22,8 @@ release section when tagging a release.
   elsewhere. Copied saved drafts and last-published content remain separate;
   scans must not publish newer draft edits or import machine-local credentials
   and execution state. Validated copied publications become active automatically;
-  missing Download ahead media still needs local preparation. Folder-first
+  missing Download ahead media still needs local preparation. Conflicting copied
+  folders must retain the existing local list and show a warning. Folder-first
   reconstruction remains planned, not included in the current beta.
 
 - Replace destructive add-on-list removal in admin with reversible Hide list

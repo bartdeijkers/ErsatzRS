@@ -2007,7 +2007,7 @@ async fn bind_prepared_revision_items_in_tx(
     Ok(())
 }
 
-async fn load_current_revision_items_in_tx(
+pub(crate) async fn load_current_revision_items_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
 ) -> Result<Vec<AddonMediaListRevisionItem>> {
@@ -4243,7 +4243,7 @@ async fn register_option_schema_in_tx(
     Ok(())
 }
 
-async fn load_draft_options_in_tx(
+pub(crate) async fn load_draft_options_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
     expected_schema: Option<&AddonMediaListOptionSchemaRef>,

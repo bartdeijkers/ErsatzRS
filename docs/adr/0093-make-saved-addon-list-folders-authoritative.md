@@ -8,8 +8,10 @@ Accepted (2026-09-12)
 
 Partial — milestone `amm-o-01` is in progress after the verified A01-A05
 corrections. The first engineering checkpoint implements and locally verifies
-visibility-only hide/reveal. File authority and portable reconstruction remain
-unimplemented; the milestone owns detailed acceptance and evidence.
+visibility-only hide/reveal. The portable model, delivery cohorts and independent
+draft/published capture are present but not wired into runtime writers or scans.
+File authority and portable reconstruction remain unimplemented; the milestone
+owns detailed acceptance and evidence.
 
 ## Context
 
@@ -39,6 +41,11 @@ normally `<profile>/yt-dlp_media/`. The host behavior remains provider-neutral.
   The plan must define concurrent-edit reconciliation: genuinely conflicting
   saved content is surfaced for review, not silently overwritten by a scan.
   SQLite does not become a competing authority for the same saved content.
+- A copied folder that conflicts with a list already present on the receiving
+  installation must keep the existing local list and show a warning (maintainer
+  confirmation, 2026-09-12). Do not automatically replace it or create duplicate
+  ownership. This differs from rebuilding a stale SQLite projection of that
+  installation's already-mapped authoritative folder.
 - Portable identity and references must not depend on the sender's SQLite IDs
   or absolute profile path. Referenced list-owned files travel with the folder.
 - SQLite remains local storage for runtime coordination, jobs, leases and

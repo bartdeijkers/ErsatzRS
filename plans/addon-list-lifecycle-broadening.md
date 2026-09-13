@@ -119,9 +119,15 @@ Sequence:
    restore copied last-published content as active without publishing newer
    drafts. Missing Download ahead media needs local preparation; do not change
    the saved delivery mode to make the copy appear playable.
+   For a conflicting copied folder, retain the existing local list and warn;
+   do not replace it or create duplicate ownership. Reconstructing stale SQLite
+   from its already-mapped authoritative folder remains a different operation.
 2. Define one versioned portable saved-content document alongside the existing
    YAML/NFO content. `list.playlist.yml` rejects unknown fields, so do not embed
-   an incompatible extension there. Preserve complete saved items, including
+   an incompatible extension there. Use `.ersatzrs-list.json` and the reserved
+   `.ersatzrs-saved/` asset directory, reusing existing fingerprint exclusions;
+   Reset preserves these entries without bypassing symlink refusal.
+   Preserve complete saved items, including
    excluded/unpublished items, provider identities and operator decisions;
    discovery must not require provider enumeration to reconstruct saved content.
    Reuse existing metadata/options types where portable, but do not serialize
@@ -175,6 +181,127 @@ fence operator saves and provider/detail merges against publication tree swaps.
 Test save/reset and save/failed-publication/restore preservation. Reconcile an
 existing provider identity in its mapped folder without clearing local hiding;
 report conflicting duplicate folders instead of creating duplicate ownership.
+
+Portable-content boundary review (after checkpoint `7d1d2e26`):
+
+- Receiving validation must cover the document version and required fields,
+  installed/enabled matching add-on, portable identity and local mapping,
+  contained relative file references, and integrity of the saved published
+  content. A digest establishes internal consistency, not trust in the sender
+  or permission to execute copied code. Missing prepared media must remain
+  preparation-required under the saved delivery policy.
+- `editor::save` currently commits SQLite without a portable write. Its
+  `mark_list_ready_tx` call is conditional on draft changes, whereas a disk-space
+  warning-only save commits without it. Therefore wiring only that helper
+  would miss saved settings. Inventory writer families before selecting a
+  common persistence boundary; do not enable a partially populated document.
+- Existing manifest writing uses a same-directory temporary file and rename,
+  but only flushes the userspace buffer. Review durable file synchronization
+  and crash ordering explicitly before reusing it for acknowledged saved
+  authority. A database commit and filesystem rename are not one transaction.
+- Next review is the complete portable field inventory and save/projection
+  failure sequence, including provider merges and publication/reset swaps.
+  Use existing types and operation fences; no new general-purpose coordinator.
+
+Portable field groups and writer coverage (source-audited design, not enabled):
+
+| Saved content | Existing owners to wire | Receiving behavior |
+|---|---|---|
+| Provider/list identity, source, name and provider/override/conflict metadata | `addon_media_list_sync::{save_list,save_import_list_header,update_incremental_import_list_header,change_addon}`, `addon_media_list/editor::save`, NFO saves | Preserve provider and operator layers separately; remap local list/library identity |
+| Classification, presentation, playlist generation, detail policy, chapters, refresh/publication policy and per-list warning | Repository settings/detail/chapter setters, editor, lifecycle settings and disk-warning setters | Preserve operator choices; recreate local scheduling eligibility rather than importing running jobs |
+| Every item, ordering, inclusion, role, liveness, metadata layers, GUIDs and chapter fragments | Import/reconcile finalization, `merge_detail_item_inner`, item setters, editor, revision materialization | Key by provider identity; retain excluded/unpublished content; derive local bindings |
+| Sparse list/item options and exact schema identity | `save_draft_options_tx`, default initialization, published-options retention | Strip SQLite IDs; validate against installed capability; never adopt copied credentials or executable declarations |
+| Delivery mode, displayed cutoff and durable known-item cohort | `addon_media_list_delivery`, known-identity triggers, explicit reset | Serialize provider identities grouped before/after the cutoff, not sender IDs or timestamp ordering |
+| Last-published selection, metadata/options and referenced list-owned bytes | Publication snapshot/verification and file materialization | Preserve independently from current draft; validate files and recreate local publication bindings before activation |
+| Local replacement/artwork/subtitle/prepared-media references | Replacement and artwork setters; publication artifact binding | Use validated contained file references where portable; absent local assets/bindings remain unresolved, never silently substitute playback |
+
+`AddonMediaListKnownIdentity` retains removed identities and uses a database-ID
+ordering fence, not timestamps (`202609071800_addon_media_list_delivery.sql`).
+Both cohorts must include retained absent identities. On receipt, allocate the
+pre-cutoff identities, record the receiving cutoff, then allocate the post-cutoff
+identities before inserting item rows. This preserves delivery classification
+with fresh IDs and the original displayed cutoff date. Repeat scans must not
+advance that cutoff; explicit re-enabling still establishes a fresh one.
+
+Runtime-only exclusions: admin hiding, page-size preferences, media/library/job
+IDs, leases, import cursors and retry ownership, process/history diagnostics,
+artifact pins, credentials and installation settings. Browser-family choices
+are portable enum preferences, not stored browser bindings: the receiving
+installed schema revalidates them, and missing login/access uses the existing
+access-failure path. No new option portability flag or provider-name special
+case is required. Persisted
+provider-removal decisions need portable identity/state rather than copied
+generation/job ownership; review their tombstone writer separately.
+
+Published capture uses the digest-validated current retained revision, not live
+draft rows. Its item set is actual publication membership; the independent saved
+draft retains all excluded/unpublished items. Do not reconstruct the old
+publication from newer draft content. Artwork materializations are mutable between
+publications, not historical authority. Uploaded artwork uses its immutable
+list/scope/role-owned handle and retained SHA/byte length; identical retained
+bytes at multiple paths are interchangeable sources. Materializations may map
+remote URLs only when their basename/hash still matches the retained snapshot;
+otherwise preserve the remote URL. An operator-replaced upload may use that
+same retained-file match only for its existing owned handle and exact source,
+scope and role; a newer draft handle never substitutes for the old one.
+Revision-file provider IDs are unset in
+production and cannot establish item ownership.
+Manual subtitle capture preserves the original pinned SRT, language and
+Source/Prepared clock: published sidecars may already have programme timing
+transformations and are not interchangeable with those inputs. Prepared media
+retains expected bytes and duration without sender artifact IDs. Capture reads
+references only; it does not copy the cache or claim missing media is playable.
+The receiving validator must distinguish missing Download ahead media requiring
+local preparation from corrupt required document/artwork content. Reuse the
+artifact store's containment and symlink checks before reading any local source.
+
+Proposed save ordering to review before implementation:
+
+1. Use the current SQLite write transaction and exact revision/publication
+   fence. Check the mapped saved-file digest against the last projected digest
+   before applying an edit; unresolved divergence must not be overwritten.
+2. Build the complete new document from the transaction's resulting saved
+   state. Never block waiting for the managed-tree lock while holding the SQLite
+   write transaction: tree copy/hash can outlast the database busy timeout and
+   starve unrelated writers or lease renewal. Use nonblocking acquisition with a
+   visible busy result, or acquire the required file guard before starting the
+   write transaction; select one consistent order when wiring all callers.
+   Under that guard, recheck the expected file, synchronize a same-directory
+   temporary file and atomically replace the saved document. Do not hold the
+   guard across provider/network operations. Existing tree-locked closures must
+   remain free of SQLite calls; do not introduce an inverse blocking lock order.
+3. Establish the platform's durable replacement barrier before recording its
+   projected digest and committing SQLite, then acknowledge Save. Synchronizing
+   only the file is insufficient if the rename can disappear after power loss;
+   verify directory synchronization on Unix and the supported Windows replacement
+   semantics before claiming this requirement. A
+   failure before replacement leaves old file authority. A failure after
+   replacement leaves the new file authoritative with a stale database, which
+   the receiving/reconciliation path must repair before further content writes.
+   Do not roll the saved file back from stale SQLite or claim two-resource
+   atomicity. Cancellation during blocking filesystem work needs the same fence.
+4. Publication/reset/restore must preserve this authoritative document during
+   tree swaps, while changing its published section only for validated completed
+   content. Existing tree-lock order and lease recovery must be reviewed with
+   this boundary; a draft save must not invalidate published fingerprints.
+   Fence every portable writer, including warning-only settings and background
+   provider merges, against unresolved publication/reset ownership. A saved
+   document copied into an older backup cannot later replace an acknowledged
+   newer draft. Prove the document's preservation through each actual swap and
+   revision-materialization ordering, not just ordinary successful publication.
+
+Startup/root discovery must reconcile file-committed/projection-stale state
+before provider jobs or publication retries can write that list. A content
+writer encountering divergence must stop with a visible actionable result,
+not repeatedly overwrite it or retry unchanged input. Recovery uses the same
+validated projection path as receiving a saved folder, not a second exporter.
+
+Required fault proofs follow those actual boundaries: failed file replacement,
+file replacement followed by failed database commit/restart, durable replacement
+ordering across a power-loss boundary, concurrent stale Save, and Save followed
+by failed publication/restore. The full writer coverage
+and reconstruction path must land together before declaring file authority
+enabled; codec-only or export-only work cannot satisfy this milestone.
 
 ### Operator outcome
 

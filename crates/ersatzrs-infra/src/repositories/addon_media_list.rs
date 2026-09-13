@@ -5591,7 +5591,7 @@ fn hex_hash(bytes: &[u8]) -> String {
     value
 }
 
-const fn artwork_role_value(role: AddonMediaListArtworkRole) -> i32 {
+pub(crate) const fn artwork_role_value(role: AddonMediaListArtworkRole) -> i32 {
     match role {
         AddonMediaListArtworkRole::Poster => 1,
         AddonMediaListArtworkRole::Fanart => 2,

@@ -338,6 +338,11 @@ fn empty_prepared_managed_candidate_unlocked(
                 "managed reset candidates may not contain symbolic links",
             ));
         }
+        if entry.file_name() == crate::addon_media_list_saved::model::SAVED_LIST_FILE_NAME
+            || entry.file_name() == crate::addon_media_list_saved::model::SAVED_ASSETS_DIRECTORY
+        {
+            continue;
+        }
         if file_type.is_dir() {
             fs::remove_dir_all(entry.path())
                 .map_err(|source| io_error("remove managed reset directory", source))?;
@@ -2266,6 +2271,62 @@ mod tests {
         assert!(!new_paths.managed.join("new.yml").exists());
         verify_empty_reset_candidate(&new_paths, new_identity)
             .expect("current generation retains empty sealed ownership");
+    }
+
+    #[test]
+    fn saved_content_is_outside_publication_fingerprints_and_survives_reset() {
+        use crate::addon_media_list_saved::model::{SAVED_ASSETS_DIRECTORY, SAVED_LIST_FILE_NAME};
+        let (_temp, paths, identity) = fixture();
+        let document = paths.managed.join(SAVED_LIST_FILE_NAME);
+        let assets = paths.managed.join(SAVED_ASSETS_DIRECTORY);
+        fs::write(&document, b"saved draft one").unwrap();
+        fs::create_dir(&assets).unwrap();
+        fs::write(assets.join("poster.png"), b"saved artwork").unwrap();
+        create_backup(&paths, identity).unwrap();
+        seal_candidate(&paths, identity);
+        let marker = read_marker(&paths.managed).unwrap();
+        fs::write(&document, b"saved draft two").unwrap();
+        verify_fingerprint(&paths.managed, &marker).unwrap();
+
+        let reset = PublicationFsIdentity {
+            operation_id: Some(99),
+            generation: Some(4),
+            previous_revision: identity.target_revision,
+            target_revision: identity.target_revision + 1,
+            ..identity
+        };
+        let reset_paths = publication_paths(
+            paths.managed.clone(),
+            reset.list_id,
+            reset.operation_id,
+            reset.generation,
+        )
+        .unwrap();
+        prepare_empty_managed_candidate(&reset_paths, reset).unwrap();
+        empty_prepared_managed_candidate(&reset_paths, reset).unwrap();
+        verify_empty_reset_candidate(&reset_paths, reset).unwrap();
+        assert_eq!(fs::read(&document).unwrap(), b"saved draft two");
+        assert_eq!(
+            fs::read(assets.join("poster.png")).unwrap(),
+            b"saved artwork"
+        );
+        assert!(!reset_paths.managed.join("item.yml").exists());
+    }
+
+    // Unix-only fixture setup; the production FileType refusal is platform-neutral.
+    #[cfg(unix)]
+    #[test]
+    fn saved_content_names_do_not_bypass_reset_symlink_refusal() {
+        use crate::addon_media_list_saved::model::{SAVED_ASSETS_DIRECTORY, SAVED_LIST_FILE_NAME};
+        for name in [SAVED_LIST_FILE_NAME, SAVED_ASSETS_DIRECTORY] {
+            let (temp, paths, identity) = fixture();
+            prepare_empty_managed_candidate(&paths, identity).unwrap();
+            let outside = temp.path().join("outside.txt");
+            fs::write(&outside, b"unowned").unwrap();
+            std::os::unix::fs::symlink(&outside, paths.managed.join(name)).unwrap();
+            assert!(empty_prepared_managed_candidate(&paths, identity).is_err());
+            assert_eq!(fs::read(&outside).unwrap(), b"unowned");
+        }
     }
 
     #[test]

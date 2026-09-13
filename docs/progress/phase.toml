@@ -60,13 +60,29 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-13 maintainer explicitly resumes after the power-off. Changes survived;
+no Cargo processes remained. Codex owns edits and the serialized focused loop.
+Claude's artwork-capture P2 and supported operator-image follow-up are fixed and
+independently re-reviewed: 5 focused publication tests and scoped infra all-targets
+Clippy pass. Record the local capture checkpoint, then continue contained asset
+validation/materialization and durable saved-file/all-writer boundaries before
+scan reconstruction. No push, CI or release is authorized.
+AMM-O-01 remains In progress; automatic scan activation is not enabled.
+
 2026-09-12 22:56 Amsterdam: maintainer confirms the20:03 WSL interruption was
 the WSL update and explicitly resumes AMM-O-01. Codex owns implementation and
 the only build/test loop. Copied draft/published content separation and the
 existing-page Hidden lists filter/Show list with visibility-only effects are
-confirmed. Separate Astra backend/UI workers completed the first visibility
-checkpoint; Claude cross-reviews and the external test agent owns its isolated
-browser regression. Portable saved-content reconstruction is not implemented.
+confirmed. The reviewed visibility checkpoint is committed locally as 7d1d2e26.
+All writing workers have finished; the external helper has been stopped by the
+maintainer. Codex owns the portable-content boundary, with Claude review.
+The unwired cohort helper and separate draft/published capture have focused
+native proof. Next: contained asset validation/materialization, durable saved
+writes and all-writer fences, then root admission and reconstruction. No runtime
+file authority is enabled; independent-profile activation remains unproven.
+Portable saved-content reconstruction is not implemented. Conflicting copied
+folders must keep the existing local list and show a warning (ADR 0093).
+The earlier power-off pause has ended with the explicit 2026-09-13 resume above.
 The maintainer subsequently withdrew midnight as a target: quality takes priority.
 Commit only a reviewed, verified local checkpoint without claiming the unfinished
 slice complete. No push,

@@ -20,6 +20,7 @@ mod addon_media_list_preparation_status;
 mod addon_media_list_prepared_selection;
 mod addon_media_list_publication_preparation;
 pub mod addon_media_list_refresh;
+pub mod addon_media_list_saved;
 pub mod addon_media_list_source_probe;
 pub(crate) mod addon_media_list_subtitle_artifacts;
 pub mod addon_media_list_subtitle_playback;

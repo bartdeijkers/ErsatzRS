@@ -19,6 +19,8 @@ with the appropriate add-on installed must allow the next normal or scheduled
 scan to discover and reconstruct/update the lists without copying SQLite or
 manually re-adding source URLs. Valid file content wins over stale database
 copies; administrative saved content must also survive that reconstruction.
+If a copied folder conflicts with an existing local list, retain the existing
+list and show a warning instead of replacing it or creating duplicate ownership.
 Do not encode host behavior against the yt-dlp add-on ID. Reuse existing
 YAML/NFO/storage and scan coordination; preserve Save/Publish separation and
 current playback. Removing a list in admin retains its folder and files but
@@ -44,6 +46,37 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 portable-content engineering checkpoint (unwired): explicit saved
+drafts retain all items, provider/operator/conflict metadata, options, settings
+and source observations. Delivery cohorts preserve removed identities and the
+pre/post-cutoff classification with fresh receiving IDs and canonical dates.
+Independent publication capture uses the validated retained snapshot, preserving
+old membership/metadata/options, interval geometry, prepared duration and original
+manual subtitle language/Source-or-Prepared clock. Local execution/source handles
+stay outside serialization; image/media BLOBs are not loaded en masse.
+Claude's artwork P2 is fixed: mutable materializations cannot invalidate an old
+upload when a newer draft poster is projected. Owned immutable upload SHA/length
+select retained bytes; a same-source/scope/role materialization is a fallback only
+for an operator-replaced image whose retained filename/hash matches. Stale remote
+mappings keep their URL. Claude independently reviewed both fixes with no findings.
+Native evidence (serialized, Cargo jobs2): cohort/model selection 7/7; draft plus
+publication-filesystem selection 37/37, followed by 6/6 affected cases after the
+symlink guard/whole-draft handle correction; model/publication selection 7/7.
+Latest saved_publication_capture selection after the artwork fixes passes 5/5
+(13s build, 0.7s run), including publish-A/draft-B, duplicate retained byte paths,
+wrong scope/role, operator replacement, corrupt snapshots and subtitle clocks.
+Scoped infra all-targets Clippy with -D warnings passes on the corrected source
+(18.8s). This is a local engineering checkpoint, not CI or full closeout.
+The reserved .ersatzrs-list.json and .ersatzrs-saved entries stay outside published
+fingerprints and survive Reset without bypassing symlink refusal. No runtime
+writer or scan enables these helpers. Asset validation/materialization, durable
+writes, swap carry-over, all-writer fences, discovery and independent-profile
+activation remain required. No cache duplication or folder-copy acceptance is
+claimed; the save-lock/power-loss constraints remain in the owning plan.
+2026-09-13 continuation: visibility checkpoint committed locally as 7d1d2e26;
+portable-content implementation remains open. The maintainer's copied-folder
+conflict rule is now recorded in ADR 0093: preserve the existing local list and
+warn. This does not waive stale-projection reconstruction from its mapped folder.
 2026-09-12 visibility engineering checkpoint: implemented the additive local
 AdminHidden flag, filtered counts/pagination, native and hydrated Hide/Show,
 legacy removal-to-hide compatibility and all nine cultures. No publication,
