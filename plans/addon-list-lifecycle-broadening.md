@@ -184,6 +184,12 @@ report conflicting duplicate folders instead of creating duplicate ownership.
 
 Portable-content boundary review (after checkpoint `7d1d2e26`):
 
+- The maintainer approved a 256 MiB saved-JSON limit on 2026-09-13 (ADR 0093).
+  Use the existing JSON serializer with bounded input and a counting output
+  preflight; do not add a custom streaming persistence framework. Test the same
+  boundary with small limits and a sparse oversized input, not giant in-memory
+  fixtures. Every writer must reject oversize before committing file/DB state;
+  receiving refusal must leave the current local list intact.
 - Receiving validation must cover the document version and required fields,
   installed/enabled matching add-on, portable identity and local mapping,
   contained relative file references, and integrity of the saved published

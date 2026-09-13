@@ -1,6 +1,6 @@
 use super::*;
 
-fn fixture() -> SavedListDocument {
+pub(in crate::addon_media_list_saved) fn fixture() -> SavedListDocument {
     let draft_item = SavedDraftItem {
         content: SavedItemContent {
             provider_id: "unpublished".to_owned(),

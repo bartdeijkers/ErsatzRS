@@ -24,7 +24,9 @@ release section when tagging a release.
   and execution state. Validated copied publications become active automatically;
   missing Download ahead media still needs local preparation. Conflicting copied
   folders must retain the existing local list and show a warning. Folder-first
-  reconstruction remains planned, not included in the current beta.
+  reconstruction remains planned, not included in the current beta. The approved
+  saved-text limit is 256 MiB per list, excluding videos and pictures; oversized
+  copies and Saves must be refused without changing existing saved content.
 
 - Replace destructive add-on-list removal in admin with reversible Hide list
   and Show list actions and a Hidden lists filter on the existing page. Hiding

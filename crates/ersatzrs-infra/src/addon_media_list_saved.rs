@@ -4,5 +4,7 @@
 //! enables this document; exporting an incomplete draft is not file authority.
 
 pub mod capture;
+pub mod document_io;
+pub mod files;
 pub mod model;
 pub mod published;

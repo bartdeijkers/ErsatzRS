@@ -40,12 +40,50 @@ authority. Preserve the installed/enabled add-on boundary.
 Prove a saved-folder copy into a fresh database/profile, visible reconstructed
 list information, stale-database reconciliation and repeat-scan idempotence.
 Report invalid/incomplete files without overwriting valid saved content.
+The saved JSON document, including draft and published text, is limited to
+256 MiB, excluding external video/picture bytes (approved 2026-09-13).
+Refuse oversized copies with a warning and oversized Saves with an error,
+without committing changes to existing saved content or its local projection.
 Test supported Linux/Windows path handling without copying private media,
 credentials or machine-specific IDs into fixtures. Cross-review implementation
 and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 approved-size continuation (unwired): document_io enforces 256 MiB
+on JSON text reads and serialized-size preflight, requiring buffered seekable
+input and guarding growth after the size probe. The version probe precedes
+strict model decoding; no complete JSON String/Value copy is allocated. Writer
+preflight rejects oversize before touching its caller-owned temporary output,
+then buffers JSON chunks and propagates flush failures. The caller still owns
+durable replacement, semantic validation and DB ordering.
+Final seven document tests pass (nextest d05828c8-78a0-4f76-933b-248d089073fa).
+Unchanged model tests passed in selection 36441dda-d4b4-4801-a60b-f4f170b35e4f;
+file verification passed after moving its 16 KiB buffer to the heap in selection
+59a3b462-d782-4440-b574-199f026dde87. No fixture allocates a 256 MiB JSON string.
+Fixtures prove exact-limit/+1 refusal, output preservation, byte rather than
+character counting, external media exclusion, sparse real-limit rejection,
+bounded input growth, version/strict-field handling, buffered output and redacted
+IO errors. Claude reviewed the implementation with no P1/P2 findings; his
+write-buffer P3 is corrected and independently re-reviewed without findings.
+Final scoped infra all-targets Clippy with -D warnings passes (23.5s).
+Full closeout and CI were not run.
+Runtime Save/scan enforcement and whole O-01 acceptance remain open.
+2026-09-13 receiving-file validation continuation (unwired): portable references
+reject traversal/device paths and unsafe file kinds; existing artifact callers
+still require presence. Byte verification uses a 16 KiB buffer with exact length
+and SHA checks, distinguishing missing files from unsafe/corrupt content without
+writes or a delivery-mode fallback. Three focused saved_file_validation tests
+pass on Linux (nextest 39389d00-5579-4c90-a261-b758786287d1), including synthetic
+symlink fixtures. Claude reviewed the boundary with no P1/P2 findings.
+The existing artifact promotion/reuse regression also passes (nextest
+380bd458-fa1b-4aac-92ea-38fb5957144d); Claude re-reviewed the hex-format compile
+correction with no findings. These are focused local results, not full closeout.
+The maintainer approved the 256 MiB saved-document cap on 2026-09-13 after
+review showed that existing per-item limits permit multi-gigabyte metadata.
+The cap is not a RAM ceiling. Bounded document I/O is covered above; semantic
+validation, writer integration, persistence and reconstruction remain open,
+with no runtime enforcement claimed yet.
 2026-09-13 portable-content engineering checkpoint (unwired): explicit saved
 drafts retain all items, provider/operator/conflict metadata, options, settings
 and source observations. Delivery cohorts preserve removed identities and the

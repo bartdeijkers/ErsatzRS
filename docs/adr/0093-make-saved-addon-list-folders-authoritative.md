@@ -10,6 +10,7 @@ Partial — milestone `amm-o-01` is in progress after the verified A01-A05
 corrections. The first engineering checkpoint implements and locally verifies
 visibility-only hide/reveal. The portable model, delivery cohorts and independent
 draft/published capture are present but not wired into runtime writers or scans.
+Bounded document I/O and contained-file verification have focused local proof.
 File authority and portable reconstruction remain unimplemented; the milestone
 owns detailed acceptance and evidence.
 
@@ -48,6 +49,14 @@ normally `<profile>/yt-dlp_media/`. The host behavior remains provider-neutral.
   installation's already-mapped authoritative folder.
 - Portable identity and references must not depend on the sender's SQLite IDs
   or absolute profile path. Referenced list-owned files travel with the folder.
+- Limit each saved JSON document to 256 MiB (268,435,456 bytes), including both
+  draft and last-published text but excluding external video and picture bytes
+  (maintainer approval, 2026-09-13). Oversized copied documents are refused with
+  a warning without changing the existing local list. Once file authority is
+  enabled, a Save exceeding this limit fails before committed file or database
+  state changes. Apply the same limit to every saved-content writer. This is a
+  deliberate compatibility limit, not a claim that parsed memory is at most
+  256 MiB; retain existing field limits and avoid whole-document copies.
 - SQLite remains local storage for runtime coordination, jobs, leases and
   derived indexes. Copying content does not copy active process ownership or
   install/authorize an add-on executable.
