@@ -50,6 +50,28 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 immutable asset installation (unwired): reuses the retained-candidate
+16 KiB verified-copy loop, refusing excess bytes before writing them. Installs
+only below reserved storage, reuses verified existing bytes without reading the
+source, and never replaces corrupt or conflicting destinations. File data is
+synchronized before no-clobber installation. Diagnostics retain the existing
+redacted filesystem category/native code for caller-owned retry; no inline retry,
+background task, database mutation or Save acknowledgement is added.
+Final eight Linux asset tests pass (nextest eac3be8f-ba3f-459c-b9e2-39c4a1ba60eb),
+including source failure/length/hash refusal, own-temp cleanup, unrelated-byte
+preservation, path/symlink refusal, reuse and retained A surviving projection B.
+Two existing retained-candidate regressions passed with the extracted copy loop
+in selection 7f52a2bd-df2c-420e-be46-43c3fe650c89. A native-Windows sharing-code
+test is present but has not run locally; Linux tests prove portable redaction.
+This is byte-copy evidence, not image/SRT admission or durable Save/scan proof.
+Source adapters exclude prepared Kind 1 cache copies. Recognizable temporary
+names do not authorize deletion of copied files; owned-leftover cleanup, directory
+sync, native Windows document replacement and all-writer integration remain open.
+Claude's proposed filesystem overwrite fallback was withdrawn after official
+VFAT/exFAT no-replace support contradicted its premise. Claude reviewed the actual
+helper, tests and extraction at 12:14 with no P1/P2 findings. No CI or full
+closeout is run. Scoped infra all-targets Clippy with -D warnings passes (47.4s)
+after a borrow-only diagnostic helper cleanup; behavior and test inputs are unchanged.
 2026-09-13 semantic receiving validation (unwired): checks installed identity,
 independent draft/publication options and item relationships, existing playback
 timing and subtitle clocks, tolerant stored metadata, and declared file identity.

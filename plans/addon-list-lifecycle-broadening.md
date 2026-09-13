@@ -207,6 +207,16 @@ Portable-content boundary review (after checkpoint `7d1d2e26`):
   Exclude reserved scanner state at every depth. Do not exclude every SRT:
   unpinned manual sidecars can coexist with generated sidecars. Without retained
   ownership proof, preserve those bytes; activation still uses pinned originals.
+- Immutable asset installation reuses verified no-clobber copying for retained
+  list-owned files, artwork, manual subtitle originals and portable replacements.
+  Do not duplicate prepared Kind 1 cache media; it remains reference-only here.
+  Capture/source authority, managed-tree fences and async cancellation ownership
+  remain with the writer. Copy outside SQLite write transactions. File sync is
+  not a durable document commit: preserve directory/platform synchronization and
+  file-before-projection ordering. Clean only proven locally owned temporary
+  leftovers, never imported files merely matching a prefix. Reuse redacted
+  publication error categories and caller retry, not inline sleeps or a clobber
+  fallback on unsupported filesystems.
 - Receiving options require a compatible installed declaration. The existing
   `retained-option-schema-evolution` debt remains a known limitation, not new
   schema-migration scope here. Refusal guidance must request a compatible add-on

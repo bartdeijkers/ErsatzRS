@@ -29,6 +29,8 @@ release section when tagging a release.
   copies and Saves must be refused without changing existing saved content.
   Copied options require a compatible installed add-on schema; automatic schema
   migration is not included in this portability work.
+  Receiving validation and non-overwriting saved-asset copying groundwork are
+  in place; durable Save and scan reconstruction integration remains unfinished.
 
 - Replace destructive add-on-list removal in admin with reversible Hide list
   and Show list actions and a Hidden lists filter on the existing page. Hiding

@@ -1543,32 +1543,7 @@ fn copy_revision_blob_into_candidate(
         File::open(source).map_err(|source| io_error("open retained revision blob", source))?;
     let mut temporary = tempfile::NamedTempFile::new_in(parent)
         .map_err(|source| io_error("create retained revision candidate file", source))?;
-    let mut hasher = Sha256::new();
-    let mut byte_length = 0_u64;
-    let mut buffer = [0_u8; 16 * 1024];
-    loop {
-        let read = input
-            .read(&mut buffer)
-            .map_err(|source| io_error("read retained revision blob", source))?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-        temporary
-            .write_all(&buffer[..read])
-            .map_err(|source| io_error("write retained revision candidate file", source))?;
-        byte_length = byte_length
-            .checked_add(u64::try_from(read).unwrap_or(u64::MAX))
-            .ok_or(PublicationFsError::Integrity(
-                "a retained revision file is too large",
-            ))?;
-    }
-    let digest = hasher.finalize();
-    if byte_length != file.byte_length || hex_digest(&digest) != file.sha256 {
-        return Err(PublicationFsError::Integrity(
-            "a retained revision blob changed while it was materialized",
-        ));
-    }
+    copy_verified_bytes(&mut input, &mut temporary, &file.sha256, file.byte_length)?;
     temporary
         .as_file()
         .sync_all()
@@ -1579,7 +1554,48 @@ fn copy_revision_blob_into_candidate(
     verify_revision_blob(&destination, &file.sha256, file.byte_length)
 }
 
-fn ensure_managed_subdirectories(root: &Path, directory: &Path) -> Result<(), PublicationFsError> {
+/// Shared bounded copy for retained revision candidates and immutable saved assets.
+/// The caller owns source confinement, the temporary destination and installation.
+pub(crate) fn copy_verified_bytes(
+    input: &mut impl std::io::Read,
+    output: &mut impl std::io::Write,
+    expected_sha256: &str,
+    expected_byte_length: u64,
+) -> Result<(), PublicationFsError> {
+    let mut hasher = Sha256::new();
+    let mut byte_length = 0_u64;
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        let read = input
+            .read(&mut buffer)
+            .map_err(|source| io_error("read retained file content", source))?;
+        if read == 0 {
+            break;
+        }
+        byte_length = byte_length
+            .checked_add(u64::try_from(read).unwrap_or(u64::MAX))
+            .filter(|length| *length <= expected_byte_length)
+            .ok_or(PublicationFsError::Integrity(
+                "retained file content exceeds its recorded length",
+            ))?;
+        hasher.update(&buffer[..read]);
+        output
+            .write_all(&buffer[..read])
+            .map_err(|source| io_error("write retained file content", source))?;
+    }
+    let digest = hasher.finalize();
+    if byte_length != expected_byte_length || hex_digest(&digest) != expected_sha256 {
+        return Err(PublicationFsError::Integrity(
+            "a retained revision blob changed while it was materialized",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn ensure_managed_subdirectories(
+    root: &Path,
+    directory: &Path,
+) -> Result<(), PublicationFsError> {
     let relative = directory.strip_prefix(root).map_err(|_| {
         PublicationFsError::UnsafeState("a retained revision target escaped its managed root")
     })?;
@@ -1622,7 +1638,7 @@ fn ensure_plain_directory(path: &Path) -> Result<(), PublicationFsError> {
     }
 }
 
-fn verify_revision_blob(
+pub(crate) fn verify_revision_blob(
     path: &Path,
     expected_sha256: &str,
     expected_byte_length: u64,
