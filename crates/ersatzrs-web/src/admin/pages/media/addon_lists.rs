@@ -3646,6 +3646,7 @@ const fn publication_trigger_text_key(trigger: AddonMediaListPublicationEnqueueT
     match trigger {
         AddonMediaListPublicationEnqueueTrigger::Operator => TextKey::TriggerOperator,
         AddonMediaListPublicationEnqueueTrigger::RestoreRevision => TextKey::TriggerRestoreRevision,
+        AddonMediaListPublicationEnqueueTrigger::SavedFolder => TextKey::TriggerSavedFolder,
         AddonMediaListPublicationEnqueueTrigger::AutomaticRefresh => {
             TextKey::TriggerAutomaticRefresh
         }

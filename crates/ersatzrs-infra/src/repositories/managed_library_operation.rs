@@ -190,6 +190,65 @@ pub(crate) async fn enqueue_publication_in_tx(
     })
 }
 
+/// Admit a validated receiving snapshot through the ordinary publication queue.
+/// The copied draft remains independent; the enqueue event distinguishes this
+/// operation from an operator Restore, which intentionally replaces the draft.
+pub(crate) async fn enqueue_saved_folder_publication_in_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    library_id: EntityId,
+    saved_revision: i32,
+    source_revision: i32,
+) -> Result<AddonMediaListPublicationEnqueue> {
+    let snapshot = load_valid_revision_snapshot_in_tx(tx, list_id, source_revision)
+        .await?
+        .ok_or_else(|| {
+            RepositoryError::Conflict("saved publication source is unavailable".into())
+        })?;
+    let current: (i32, EntityId) = sqlx::query_as(
+        r#"SELECT "list"."PublishedRevision", "binding"."LibraryId"
+           FROM "AddonMediaList" AS "list"
+           JOIN "AddonMediaListLibrary" AS "binding" ON "binding"."AddonMediaListId"="list"."Id"
+           WHERE "list"."Id"=?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if current != (0, library_id) || snapshot.source_draft_revision != saved_revision {
+        return Err(RepositoryError::Conflict(
+            "saved publication receiving identity changed".into(),
+        ));
+    }
+    let mut queued = enqueue_publication_in_tx(
+        tx,
+        list_id,
+        library_id,
+        saved_revision,
+        1,
+        AddonMediaListPublicationEnqueueTrigger::SavedFolder,
+    )
+    .await?;
+    if queued.existing {
+        if queued.job.source_published_revision != Some(source_revision) {
+            return Err(RepositoryError::Conflict(
+                "another publication already owns the receiving list".into(),
+            ));
+        }
+        return Ok(queued);
+    }
+    sqlx::query(
+        r#"UPDATE "AddonMediaListPublicationJob" SET "SourcePublishedRevision"=? WHERE "Id"=?"#,
+    )
+    .bind(source_revision)
+    .bind(queued.job.id)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    queued.job.source_published_revision = Some(source_revision);
+    Ok(queued)
+}
+
 const LEASE_SECONDS: i64 = 90;
 const PUBLICATION_HISTORY_LIMIT: i32 = 256;
 const PUBLICATION_TERMINAL_HISTORY_DAYS: i64 = 30;

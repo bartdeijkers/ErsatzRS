@@ -41,6 +41,9 @@ release section when tagging a release.
   removing them instead of silently preparing/publishing the original source.
   Contained replacement videos use their existing file and verified hash rather
   than another media copy; changing those bytes invalidates the saved reference.
+  Plain streaming copy/reconstruction now has an integrated publication and
+  repeat-scan regression, preserving the newer draft and older publication.
+  Automatic receiving discovery is not yet enabled.
   Durable Save and scan reconstruction integration remains unfinished.
 
 - Replace destructive add-on-list removal in admin with reversible Hide list

@@ -602,6 +602,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TriggerAutomaticRefresh => "Aggiornamento pianificato",
         TextKey::TriggerOperator => "Richiesta da un operatore",
         TextKey::TriggerRestoreRevision => "Richiesta dal ripristino di una revisione",
+        TextKey::TriggerSavedFolder => "Ripristinata da una cartella di elenco salvata",
         TextKey::TestSource => "Verifica origine",
         TextKey::TestSourceHelp => {
             "Verifica l’origine salvata senza importare o modificare l’elenco."

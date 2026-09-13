@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-O-01: visibility-only hide/reveal verified locally; next implement portable saved-content durability and reconstruction'
+current_focus = 'AMM-O-01: receiving Stream copy/publication proof passes; finish queued-edit review, then file-first durability and complete runtime reconstruction'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -88,7 +88,12 @@ This engineering checkpoint does not enable receiving activation. Ordinary manag
 regeneration now uses active snapshot content while preserving provider chapter
 suggestions and availability health. Focused correction tests pass and Claude
 independently closed the introduced P1/P2 findings; the milestone owns evidence.
-The next boundary is snapshot-aware commit and receiving activation inputs.
+Snapshot-aware commit and plain Stream receiving admission now have passing
+copy-to-fresh-profile publication/replay integration tests, including a whole
+folder with a newer draft manifest. Runtime maintenance is not wired. Exact
+SavedFolder queued-edit corrections are under review; the milestone owns the
+evidence and remaining durability/binding acceptance. The requested 16:00
+completion cannot be met without leaving accepted runtime requirements undone.
 The core/web consumer
 has Claude review and a passing focused native test; browser verification remains open.
 Next: independent receiving

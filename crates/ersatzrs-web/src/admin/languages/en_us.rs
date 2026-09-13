@@ -596,6 +596,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TriggerAutomaticRefresh => "Scheduled refresh",
         TextKey::TriggerOperator => "Requested by an operator",
         TextKey::TriggerRestoreRevision => "Requested by revision restore",
+        TextKey::TriggerSavedFolder => "Restored from a saved list folder",
         TextKey::TestSource => "Test source",
         TextKey::TestSourceHelp => "Check the saved source without importing or changing the list.",
         TextKey::SourceTestQueued => "Source test queued",

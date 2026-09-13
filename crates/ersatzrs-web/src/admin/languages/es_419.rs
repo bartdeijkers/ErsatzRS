@@ -602,6 +602,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TriggerAutomaticRefresh => "Actualización programada",
         TextKey::TriggerOperator => "Solicitada por un operador",
         TextKey::TriggerRestoreRevision => "Solicitada al restaurar una revisión",
+        TextKey::TriggerSavedFolder => "Restaurada desde una carpeta de lista guardada",
         TextKey::TestSource => "Probar fuente",
         TextKey::TestSourceHelp => "Comprueba la fuente guardada sin importar ni cambiar la lista.",
         TextKey::SourceTestQueued => "Prueba de fuente en cola",

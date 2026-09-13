@@ -3,6 +3,8 @@
 //! The format is under implementation. No runtime writer or scanner currently
 //! enables this document; exporting an incomplete draft is not file authority.
 
+pub mod activation;
+pub mod admission;
 pub mod assembly;
 pub mod assets;
 pub mod capture;

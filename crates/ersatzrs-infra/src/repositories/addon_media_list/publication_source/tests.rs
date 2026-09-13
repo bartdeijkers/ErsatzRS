@@ -68,6 +68,74 @@ async fn fixture() -> SqliteAddonMediaListRepository {
 }
 
 #[tokio::test]
+async fn saved_folder_origin_requires_exact_event_and_keeps_newer_draft() {
+    let repo = fixture().await;
+    let fence = PublicationFence {
+        operation_id: 100,
+        generation: 1,
+        saved_revision: 7,
+        owner_token: "fixture-owner",
+        lease_owner: "fixture-lease",
+    };
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "DraftRevision"=8 WHERE "Id"=1"#)
+        .execute(&repo.0)
+        .await
+        .unwrap();
+    assert!(
+        !repo
+            .source_snapshot_and_origin_for_fence(1, fence)
+            .await
+            .unwrap()
+            .1
+    );
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListPublicationEvent"
+           ("PublicationJobId", "Sequence", "DedupeKey", "Kind", "EnqueueTrigger", "OccurredAt")
+           VALUES (100,1,'enqueued',?,?,'2026-09-13')"#,
+    )
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListPublicationEventKind::Enqueued,
+    ))
+    .bind(crate::repositories::common::encode_enum(
+        ersatzrs_domain::AddonMediaListPublicationEnqueueTrigger::SavedFolder,
+    ))
+    .execute(&repo.0)
+    .await
+    .unwrap();
+    let (snapshot, saved_folder) = repo
+        .source_snapshot_and_origin_for_fence(1, fence)
+        .await
+        .unwrap();
+    assert!(saved_folder);
+    assert_eq!(snapshot.unwrap().name, "Retained title");
+    assert!(repo
+        .source_snapshot_and_origin_for_fence(
+            1,
+            PublicationFence {
+                generation: 2,
+                ..fence
+            }
+        )
+        .await
+        .is_err());
+    sqlx::query(r#"UPDATE "AddonMediaListPublicationJob" SET "SourcePublishedRevision"=NULL WHERE "Id"=100"#)
+        .execute(&repo.0).await.unwrap();
+    assert!(repo
+        .source_snapshot_and_origin_for_fence(1, fence)
+        .await
+        .is_err());
+    assert_eq!(
+        sqlx::query_scalar::<_, i32>(
+            r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=1"#
+        )
+        .fetch_one(&repo.0)
+        .await
+        .unwrap(),
+        8
+    );
+}
+
+#[tokio::test]
 async fn active_publication_snapshot_uses_exact_revision_without_changing_newer_draft() {
     let repo = fixture().await;
     let snapshot = repo.active_publication_snapshot(1).await.unwrap().unwrap();
@@ -192,6 +260,39 @@ async fn active(repository: &SqliteAddonMediaListRepository, value: &serde_json:
     .execute(&repository.0)
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn publication_commit_source_distinguishes_receiving_from_materialized_restore() {
+    let repo = fixture().await;
+    active(&repo, &journal()).await;
+    let before: (String, i32) =
+        sqlx::query_as(r#"SELECT "Name", "DraftRevision" FROM "AddonMediaList" WHERE "Id"=1"#)
+            .fetch_one(&repo.0)
+            .await
+            .unwrap();
+    let (source, materialized) = repo.publication_commit_source(1).await.unwrap();
+    assert!(source.is_some());
+    assert!(!materialized);
+    sqlx::query(r#"UPDATE "AddonMediaListPublicationJob" SET "RestoreMaterializedAt"='2026-09-13T12:00:00Z' WHERE "Id"=100"#)
+        .execute(&repo.0).await.unwrap();
+    let (restored, materialized) = repo.publication_commit_source(1).await.unwrap();
+    assert_eq!(restored, source);
+    assert!(materialized);
+    assert_eq!(repo.publication_source_snapshot(1).await.unwrap(), source);
+    let after: (String, i32) =
+        sqlx::query_as(r#"SELECT "Name", "DraftRevision" FROM "AddonMediaList" WHERE "Id"=1"#)
+            .fetch_one(&repo.0)
+            .await
+            .unwrap();
+    assert_eq!(after, before);
+    // A marker cannot manufacture a source for an ordinary publication.
+    sqlx::query(r#"UPDATE "AddonMediaListPublicationJob" SET "SourcePublishedRevision"=NULL WHERE "Id"=100"#)
+        .execute(&repo.0).await.unwrap();
+    assert_eq!(
+        repo.publication_commit_source(1).await.unwrap(),
+        (None, false)
+    );
 }
 
 #[tokio::test]

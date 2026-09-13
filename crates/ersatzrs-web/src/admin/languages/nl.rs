@@ -1314,6 +1314,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TriggerAutomaticRefresh => "Geplande vernieuwing",
         TextKey::TriggerOperator => "Aangevraagd door een beheerder",
         TextKey::TriggerRestoreRevision => "Aangevraagd door een revisie te herstellen",
+        TextKey::TriggerSavedFolder => "Hersteld vanuit een opgeslagen lijstmap",
         TextKey::TestSource => "Bron testen",
         TextKey::TestSourceHelp => {
             "Controleer de opgeslagen bron zonder de lijst te importeren of te wijzigen."

@@ -1327,6 +1327,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TriggerAutomaticRefresh => "Zaplanowane odświeżenie",
         TextKey::TriggerOperator => "Zażądane przez operatora",
         TextKey::TriggerRestoreRevision => "Zażądane przez przywrócenie wersji",
+        TextKey::TriggerSavedFolder => "Przywrócono z zapisanego folderu listy",
         TextKey::TestSource => "Testuj źródło",
         TextKey::TestSourceHelp => "Sprawdź zapisane źródło bez importowania ani zmiany listy.",
         TextKey::SourceTestQueued => "Test źródła w kolejce",

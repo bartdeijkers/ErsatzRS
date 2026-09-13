@@ -50,6 +50,51 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 receiving integration remains uncommitted and O-01 In progress.
+The new admission entry point composes existing bounded validation, contained
+folder registration, draft projection, independent publication snapshot and
+the durable publication queue. It is deliberately not called by runtime
+maintenance until writer durability and complete playback bindings are ready.
+Two actual scanner integration tests now pass: a copy without derived files,
+and the whole sender folder including a newer draft name/chapter manifest,
+generated streams and scanner sidecar. Both drive admission, lease, staging,
+real scan, commit, verification scan, source retention and cleanup; repeated
+admission and ordinary scanning preserve the newer draft and saved JSON while
+the active snapshot and actual media projection contain the old publication.
+Nextest 88dcddec-5ef6-4a66-ae1c-f6e4147eb853 passes all four selected tests
+(26.08s build, 1.785s tests, two build jobs/two test threads), including exact
+SavedFolder classification and newer-draft materializer refusal/no-op boundaries.
+The proof exposed and corrected publication verification comparing copied
+membership against mutable draft inclusion; invariant failures now identify
+the mismatched check without exposing content. Earlier integration failures
+also caught receiving timestamp precision and over-strict derived-manifest
+comparison. Five manifest cases and the nanosecond snapshot round trip pass
+in 6e425791-1582-43e9-9aac-29dc61346a2f; its then-failing copy case is covered
+by the later passing integration run.
+Claude independently closed the source-retention P1, manifest P1, queued-Save
+P2 and source-membership verification correction. The actual operator
+Save-after-enqueue integration case also passes: all five selected tests pass
+in 6c2490d2-0185-4ccf-8174-48369b9f15c9 (23.36s build, 3.020s tests), including
+the staging transaction's refreshed rollback state and item capture. Claude's
+remaining test P2 required asserting the initial admitted draft equals the
+copied draft, rather than merely remaining unchanged. Those explicit assertions
+now pass in all three copy variants: 69decf53-8a0c-423f-bc42-7053f4b4b1f2
+(7.63s build, 2.444s tests). A compiler-only assertion used a provider field
+not exposed by the admin row; the corrected test resolves provider-keyed local
+owners explicitly. Claude independently closed his last P2 at 15:58; no open
+P1/P2 on this connected checkpoint. Formatting and structured progress pass.
+Scoped infra/scanner all-targets Clippy passes with -D warnings (22.66s);
+corrections only document intentionally linear transaction/test orchestration
+and remove an unused lint expectation. The new SavedFolder trigger's web
+consumer type-check passes (1m58s); Cargo reports the existing proc-macro-error2
+future-compatibility warning, not a slice compilation failure. The reviewed
+connected checkpoint is ready for a local commit; no overall acceptance is
+claimed. Required remaining work is complete receiving-local playback and
+subtitle/replacement binding, authoritative file-first writers and recovery,
+mapped stale-database repair, runtime discovery/warnings, and native/browser
+acceptance. These existing requirements cannot be responsibly completed by
+the requested 16:00 deadline; the maintainer has been informed. No CI, closeout
+or push.
 2026-09-13 ordinary regeneration correction follows local checkpoint e5f52b56.
 It loads the exact active snapshot once for content and cache identity while
 retaining legacy manifest enumeration. Review found and corrected modern plain

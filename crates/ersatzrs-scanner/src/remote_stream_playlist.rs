@@ -3800,6 +3800,9 @@ mod tests {
     // Uses the existing POSIX add-on fixture; intentionally skipped on Windows.
     #[cfg(unix)]
     mod snapshot_stage_tests;
+    // Reuses the POSIX installed-package fixture; no provider process should run.
+    #[cfg(unix)]
+    mod copied_discovery_tests;
 
     fn valid_yaml() -> &'static str {
         r#"

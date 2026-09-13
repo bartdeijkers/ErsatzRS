@@ -9,7 +9,10 @@ use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
 };
-use ersatzrs_core::repositories::{AddonMediaListMetadataConflict, RepositoryError, Result};
+use ersatzrs_core::repositories::{
+    AddonMediaListMetadataConflict, AddonMediaListRevisionItem, AddonMediaListRevisionSnapshot,
+    RepositoryError, Result,
+};
 use ersatzrs_domain::{
     AddonMediaList, AddonMediaListItemAvailability, AddonMediaListItemKind, EntityId,
     ManagedLibraryOperationState, RemoteStreamLiveness, ScanPlayoutRefresh,
@@ -263,8 +266,12 @@ impl AddonMediaListSynchronizer {
     /// Ordinary matchers freeze while a publication journal is active. Only
     /// the coordinator may bypass that freeze, and its caller revalidates the
     /// lease immediately after this method returns.
-    pub(crate) async fn match_list_items_for_publication(&self, list_id: EntityId) -> Result<()> {
-        self.match_list_items_with_report_inner(list_id, true)
+    pub(crate) async fn match_list_items_for_publication(
+        &self,
+        list_id: EntityId,
+        source: Option<&AddonMediaListRevisionSnapshot>,
+    ) -> Result<()> {
+        self.match_list_items_with_report_inner(list_id, true, source)
             .await
             .map(|_| ())
     }
@@ -272,9 +279,14 @@ impl AddonMediaListSynchronizer {
     /// Bind scanned sources before publication builds its typed media projection.
     /// The coordinator checks its lease before and after this operation. Playlist
     /// selection and refresh intents must wait until projection has completed.
-    pub(crate) async fn bind_list_items_for_publication(&self, list_id: EntityId) -> Result<()> {
+    pub(crate) async fn bind_list_items_for_publication(
+        &self,
+        list_id: EntityId,
+        source: Option<&AddonMediaListRevisionSnapshot>,
+    ) -> Result<()> {
         let list = self.load_list(list_id).await?;
-        self.match_persisted_items(&list, false, true).await?;
+        self.match_persisted_items(&list, false, true, source)
+            .await?;
         Ok(())
     }
 
@@ -289,9 +301,12 @@ impl AddonMediaListSynchronizer {
         &self,
         list_id: EntityId,
         playlist_id: EntityId,
+        source: Option<&AddonMediaListRevisionSnapshot>,
     ) -> Result<()> {
         let list = self.load_list(list_id).await?;
-        let desired = self.match_persisted_items(&list, true, true).await?;
+        let desired = self
+            .match_persisted_items(&list, true, true, source)
+            .await?;
         let persisted = load_generated_playlist_items(&self.pool, playlist_id).await?;
         if persisted == desired {
             return self.record_last_match(list_id, true).await;
@@ -323,7 +338,7 @@ impl AddonMediaListSynchronizer {
         &self,
         list_id: EntityId,
     ) -> Result<AddonMediaListMatchReport> {
-        self.match_list_items_with_report_inner(list_id, false)
+        self.match_list_items_with_report_inner(list_id, false, None)
             .await
     }
 
@@ -331,13 +346,21 @@ impl AddonMediaListSynchronizer {
         &self,
         list_id: EntityId,
         publication_owned: bool,
+        source: Option<&AddonMediaListRevisionSnapshot>,
     ) -> Result<AddonMediaListMatchReport> {
         if !publication_owned && self.has_active_publication(list_id).await? {
             return Ok(AddonMediaListMatchReport::default());
         }
-        let list = self.load_list(list_id).await?;
+        let mut list = self.load_list(list_id).await?;
+        if let Some(source) = source {
+            if !publication_owned || source.list_id != list_id {
+                return Err(publication_in_progress());
+            }
+            list.name.clone_from(&source.name);
+            list.generate_playlist = source.generate_playlist;
+        }
         let desired_playlist_items = self
-            .match_persisted_items(&list, list.generate_playlist, publication_owned)
+            .match_persisted_items(&list, list.generate_playlist, publication_owned, source)
             .await?;
 
         if !list.generate_playlist {
@@ -362,6 +385,7 @@ impl AddonMediaListSynchronizer {
                     &desired_playlist_items,
                     &refresh,
                     publication_owned,
+                    source.is_some(),
                 )
                 .await;
             if let Err(error) = result {
@@ -409,12 +433,68 @@ impl AddonMediaListSynchronizer {
         Ok(AddonMediaListMatchReport::one(playout_refreshes))
     }
 
+    async fn match_snapshot_items(
+        &self,
+        list: &AddonMediaList,
+        source: &AddonMediaListRevisionSnapshot,
+        generate_playlist_items: bool,
+    ) -> Result<Vec<GeneratedPlaylistItem>> {
+        let mut desired = Vec::new();
+        for retained in source.items.iter().filter(|item| item.published) {
+            let id: EntityId = sqlx::query_scalar(
+                r#"SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=? AND "ProviderId"=?"#,
+            ).bind(list.id).bind(&retained.provider_id).fetch_optional(&self.pool).await.repository()?
+                .ok_or_else(publication_in_progress)?;
+            let item = MatchItem {
+                id,
+                addon_id: list.addon_id.clone(),
+                provider_id: retained.provider_id.clone(),
+                kind: retained.kind,
+                title: retained.title.clone(),
+                year: retained.year,
+                season: retained.season,
+                episode: retained.episode,
+                rank: retained.rank,
+                source_url: retained.source_url.clone(),
+                availability: retained.availability,
+                duration_seconds: retained.duration_seconds,
+                liveness: retained.effective_liveness,
+                guids: retained.guids.clone(),
+            };
+            let matched_id = self.identify_item(&item).await?;
+            let updated = sqlx::query(
+                r#"UPDATE "AddonMediaListItem" SET "MediaItemId"=? WHERE "Id"=? AND "AddonMediaListId"=?"#,
+            ).bind(matched_id).bind(id).bind(list.id).execute(&self.pool).await.repository()?;
+            if updated.rows_affected() != 1 {
+                return Err(publication_in_progress());
+            }
+            if generate_playlist_items {
+                if let Some(selection) = self
+                    .playlist_selection(&item, matched_id, Some(retained))
+                    .await?
+                {
+                    desired.push(GeneratedPlaylistItem::new(&item, selection));
+                }
+            }
+        }
+        Ok(desired)
+    }
+
     async fn match_persisted_items(
         &self,
         list: &AddonMediaList,
         generate_playlist_items: bool,
         publication_owned: bool,
+        source: Option<&AddonMediaListRevisionSnapshot>,
     ) -> Result<Vec<GeneratedPlaylistItem>> {
+        if let Some(source) = source {
+            if !publication_owned || source.list_id != list.id {
+                return Err(publication_in_progress());
+            }
+            return self
+                .match_snapshot_items(list, source, generate_playlist_items)
+                .await;
+        }
         let rows = sqlx::query(
             r#"SELECT "Id", "ProviderId", "Kind", "Title", "Year", "Season", "Episode", "Rank", "SourceUrl",
                       "Availability", "PublishedAvailability", "Published", "DurationSeconds",
@@ -487,7 +567,7 @@ impl AddonMediaListSynchronizer {
                 return Err(publication_in_progress());
             }
             if generate_playlist_items && published {
-                if let Some(selection) = self.playlist_selection(&item, matched_id).await? {
+                if let Some(selection) = self.playlist_selection(&item, matched_id, None).await? {
                     desired.push(GeneratedPlaylistItem::new(&item, selection));
                 }
             }
@@ -2035,6 +2115,7 @@ impl AddonMediaListSynchronizer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)] // Snapshot policy and publication ownership are separate guards.
     async fn commit_generated_playlist_creation(
         &self,
         list: &AddonMediaList,
@@ -2042,6 +2123,7 @@ impl AddonMediaListSynchronizer {
         desired: &[GeneratedPlaylistItem],
         refresh: &GeneratedPlaylistRefresh,
         publication_owned: bool,
+        snapshot_owned: bool,
     ) -> Result<EntityId> {
         let mut transaction = crate::db::begin_write(&self.pool).await.repository()?;
         let result = sqlx::query(
@@ -2057,10 +2139,11 @@ impl AddonMediaListSynchronizer {
 
         let linked = sqlx::query(
             r#"UPDATE "AddonMediaList" SET "PlaylistId" = ?
-               WHERE "Id" = ? AND "PlaylistId" IS NULL AND "GeneratePlaylist" = 1"#,
+               WHERE "Id" = ? AND "PlaylistId" IS NULL AND ("GeneratePlaylist" = 1 OR ? = 1)"#,
         )
         .bind(playlist_id)
         .bind(list.id)
+        .bind(snapshot_owned && publication_owned && list.generate_playlist)
         .execute(&mut *transaction)
         .await
         .repository()?;
@@ -2271,8 +2354,19 @@ impl AddonMediaListSynchronizer {
         &self,
         item: &MatchItem,
         provider_media_item_id: Option<EntityId>,
+        source: Option<&AddonMediaListRevisionItem>,
     ) -> Result<Option<PlaylistSelection>> {
+        let retained_replacement = source.and_then(|item| {
+            item.replacement_media_item_id
+                .zip(item.replacement_media_version_id)
+        });
+        if source.is_some_and(|item| {
+            item.replacement_media_item_id.is_some() != item.replacement_media_version_id.is_some()
+        }) {
+            return Err(publication_in_progress());
+        }
         if item.kind == AddonMediaListItemKind::RemoteStream
+            && retained_replacement.is_none()
             && (item.liveness == RemoteStreamLiveness::Unknown
                 || (item.liveness == RemoteStreamLiveness::Finite
                     && item.duration_seconds.is_none_or(|duration| duration == 0)))
@@ -2296,9 +2390,18 @@ impl AddonMediaListSynchronizer {
                     collection_type: Some(COLLECTION_TYPE_EPISODE),
                 }));
             }
+            if let Some((media, version)) = retained_replacement {
+                return self.replacement_selection(media, version).await;
+            }
             return Ok(provider_media_item_id.map(PlaylistSelection::provider));
         }
 
+        if source.is_some() {
+            return match retained_replacement {
+                Some((media, version)) => self.replacement_selection(media, version).await,
+                None => Ok(None),
+            };
+        }
         let row = sqlx::query(
             r#"SELECT "MediaItemId", "MediaVersionId"
                FROM "AddonMediaListItemReplacement"
@@ -2313,6 +2416,15 @@ impl AddonMediaListSynchronizer {
         };
         let media_item_id = row.try_get("MediaItemId").repository()?;
         let media_version_id = row.try_get("MediaVersionId").repository()?;
+        self.replacement_selection(media_item_id, media_version_id)
+            .await
+    }
+
+    async fn replacement_selection(
+        &self,
+        media_item_id: EntityId,
+        media_version_id: EntityId,
+    ) -> Result<Option<PlaylistSelection>> {
         let candidate = crate::repositories::load_replacement_candidate(
             &self.pool,
             media_item_id,
@@ -4362,6 +4474,7 @@ mod reconcile_tests {
 
 #[cfg(test)]
 mod generated_playlist_refresh_tests {
+    mod source_tests;
     use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::Executor as _;
 
@@ -4911,7 +5024,14 @@ mod generated_playlist_refresh_tests {
         reject_refresh_intent_inserts(&pool).await;
 
         synchronizer
-            .commit_generated_playlist_creation(&list, 1, &[generated_item(1)], &refresh, false)
+            .commit_generated_playlist_creation(
+                &list,
+                1,
+                &[generated_item(1)],
+                &refresh,
+                false,
+                false,
+            )
             .await
             .expect_err("intent failure must roll back playlist creation");
 

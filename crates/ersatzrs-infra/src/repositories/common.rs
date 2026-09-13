@@ -593,6 +593,7 @@ db_enum!(AddonMediaListPublicationEnqueueTrigger {
     0 => AddonMediaListPublicationEnqueueTrigger::Operator,
     1 => AddonMediaListPublicationEnqueueTrigger::RestoreRevision,
     2 => AddonMediaListPublicationEnqueueTrigger::AutomaticRefresh,
+    3 => AddonMediaListPublicationEnqueueTrigger::SavedFolder,
 });
 db_enum!(AddonMediaListPublicationFilesystemTransition {
     0 => AddonMediaListPublicationFilesystemTransition::PreviousBackedUp,

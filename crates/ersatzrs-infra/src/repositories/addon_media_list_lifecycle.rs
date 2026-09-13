@@ -40,6 +40,148 @@ const OPTION_SCHEMA_MISMATCH: &str =
 const MAX_OPTION_SCHEMA_DEFINITION_BYTES: usize = 256 * 1024;
 const TOOL_MAINTENANCE_HISTORY_LIMIT: i64 = 50;
 
+#[cfg(test)]
+mod source_retention_tests;
+
+impl SqliteAddonMediaListRepository {
+    // Keep the existing retention arguments plus the exact optional source revision.
+    #[allow(clippy::too_many_arguments)]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Retry comparison and insertion share one immutable-source retention transaction"
+    )]
+    pub(crate) async fn retain_publication_source_revision(
+        &self,
+        list_id: EntityId,
+        revision: i32,
+        source_draft_revision: i32,
+        completed_at: chrono::DateTime<chrono::Utc>,
+        files: &[AddonMediaListRevisionFile],
+        artifacts: &AddonMediaListRevisionArtifacts,
+        source_revision: Option<i32>,
+    ) -> Result<AddonMediaListRevisionSnapshot> {
+        let completed_at = decode_datetime(
+            "AddonMediaListRevision.CompletedAt",
+            &encode_datetime(completed_at),
+        )?;
+        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
+        if let Some(existing) =
+            load_valid_revision_snapshot_in_tx(&mut tx, list_id, revision).await?
+        {
+            let mut expected_files = files.to_vec();
+            expected_files.sort_by(|left, right| {
+                left.published_relative_path
+                    .cmp(&right.published_relative_path)
+            });
+            let mut expected_artifacts = artifacts.ids.clone();
+            expected_artifacts.sort_unstable();
+            expected_artifacts.dedup();
+            if existing.source_draft_revision != source_draft_revision
+                || encode_datetime(existing.completed_at) != encode_datetime(completed_at)
+                || existing.files != expected_files
+                || existing.artifact_ids != expected_artifacts
+                || existing
+                    .items
+                    .iter()
+                    .filter_map(|item| {
+                        item.prepared_artifact_id
+                            .map(|id| (item.provider_id.clone(), id))
+                    })
+                    .collect::<BTreeMap<_, _>>()
+                    != artifacts.prepared_media
+                || existing
+                    .items
+                    .iter()
+                    .filter_map(|item| {
+                        item.playback_timeline
+                            .clone()
+                            .map(|plan| (item.provider_id.clone(), plan))
+                    })
+                    .collect::<BTreeMap<_, _>>()
+                    != artifacts.streaming_plans
+                || existing
+                    .items
+                    .iter()
+                    .filter(|item| !item.subtitle_artifact_ids.is_empty())
+                    .map(|item| (item.provider_id.clone(), item.subtitle_artifact_ids.clone()))
+                    .collect::<BTreeMap<_, _>>()
+                    != artifacts.subtitles
+            {
+                return Err(RepositoryError::Conflict(
+                    "completed publication revision is immutable".into(),
+                ));
+            }
+            if source_revision.is_some() {
+                let mut expected = capture_retained_publication_snapshot(
+                    &mut tx,
+                    list_id,
+                    revision,
+                    source_draft_revision,
+                    completed_at,
+                    files,
+                    &artifacts.ids,
+                    source_revision,
+                )
+                .await?;
+                bind_prepared_revision_items_in_tx(
+                    &mut tx,
+                    &mut expected,
+                    &artifacts.prepared_media,
+                )
+                .await?;
+                bind_streaming_revision_items(&mut expected, &artifacts.streaming_plans)?;
+                bind_subtitle_revision_items_in_tx(&mut tx, &mut expected, &artifacts.subtitles)
+                    .await?;
+                expected.snapshot_digest = revision_snapshot_digest(&expected)?;
+                if expected != existing {
+                    return Err(RepositoryError::Conflict(
+                        "completed publication source is immutable".into(),
+                    ));
+                }
+            }
+            tx.commit().await.repository()?;
+            return Ok(existing);
+        }
+        let legacy_exists: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS (
+                   SELECT 1 FROM "AddonMediaListRevision"
+                   WHERE "AddonMediaListId" = ? AND "Revision" = ?
+               )"#,
+        )
+        .bind(list_id)
+        .bind(revision)
+        .fetch_one(&mut *tx)
+        .await
+        .repository()?;
+        if legacy_exists {
+            return Err(RepositoryError::Conflict(
+                "a legacy publication revision cannot be made restorable after the fact".into(),
+            ));
+        }
+
+        let mut snapshot = capture_retained_publication_snapshot(
+            &mut tx,
+            list_id,
+            revision,
+            source_draft_revision,
+            completed_at,
+            files,
+            &artifacts.ids,
+            source_revision,
+        )
+        .await?;
+        bind_prepared_revision_items_in_tx(&mut tx, &mut snapshot, &artifacts.prepared_media)
+            .await?;
+        bind_streaming_revision_items(&mut snapshot, &artifacts.streaming_plans)?;
+        bind_subtitle_revision_items_in_tx(&mut tx, &mut snapshot, &artifacts.subtitles).await?;
+        snapshot.snapshot_digest = revision_snapshot_digest(&snapshot)?;
+        insert_revision_snapshot_in_tx(&mut tx, &snapshot).await?;
+        tx.commit().await.repository()?;
+
+        Ok(snapshot)
+    }
+}
+
 #[async_trait]
 impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
     async fn disk_warning_gb(&self, list_id: Option<EntityId>) -> Result<u32> {
@@ -560,96 +702,16 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
         files: &[AddonMediaListRevisionFile],
         artifacts: &AddonMediaListRevisionArtifacts,
     ) -> Result<AddonMediaListRevisionSnapshot> {
-        let completed_at = decode_datetime(
-            "AddonMediaListRevision.CompletedAt",
-            &encode_datetime(completed_at),
-        )?;
-        let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        if let Some(existing) =
-            load_valid_revision_snapshot_in_tx(&mut tx, list_id, revision).await?
-        {
-            let mut expected_files = files.to_vec();
-            expected_files.sort_by(|left, right| {
-                left.published_relative_path
-                    .cmp(&right.published_relative_path)
-            });
-            let mut expected_artifacts = artifacts.ids.clone();
-            expected_artifacts.sort_unstable();
-            expected_artifacts.dedup();
-            if existing.source_draft_revision != source_draft_revision
-                || encode_datetime(existing.completed_at) != encode_datetime(completed_at)
-                || existing.files != expected_files
-                || existing.artifact_ids != expected_artifacts
-                || existing
-                    .items
-                    .iter()
-                    .filter_map(|item| {
-                        item.prepared_artifact_id
-                            .map(|id| (item.provider_id.clone(), id))
-                    })
-                    .collect::<BTreeMap<_, _>>()
-                    != artifacts.prepared_media
-                || existing
-                    .items
-                    .iter()
-                    .filter_map(|item| {
-                        item.playback_timeline
-                            .clone()
-                            .map(|plan| (item.provider_id.clone(), plan))
-                    })
-                    .collect::<BTreeMap<_, _>>()
-                    != artifacts.streaming_plans
-                || existing
-                    .items
-                    .iter()
-                    .filter(|item| !item.subtitle_artifact_ids.is_empty())
-                    .map(|item| (item.provider_id.clone(), item.subtitle_artifact_ids.clone()))
-                    .collect::<BTreeMap<_, _>>()
-                    != artifacts.subtitles
-            {
-                return Err(RepositoryError::Conflict(
-                    "completed publication revision is immutable".into(),
-                ));
-            }
-            tx.commit().await.repository()?;
-            return Ok(existing);
-        }
-        let legacy_exists: bool = sqlx::query_scalar(
-            r#"SELECT EXISTS (
-                   SELECT 1 FROM "AddonMediaListRevision"
-                   WHERE "AddonMediaListId" = ? AND "Revision" = ?
-               )"#,
-        )
-        .bind(list_id)
-        .bind(revision)
-        .fetch_one(&mut *tx)
-        .await
-        .repository()?;
-        if legacy_exists {
-            return Err(RepositoryError::Conflict(
-                "a legacy publication revision cannot be made restorable after the fact".into(),
-            ));
-        }
-
-        let mut snapshot = capture_current_revision_snapshot(
-            &mut tx,
+        self.retain_publication_source_revision(
             list_id,
             revision,
             source_draft_revision,
             completed_at,
             files,
-            &artifacts.ids,
+            artifacts,
+            None,
         )
-        .await?;
-        bind_prepared_revision_items_in_tx(&mut tx, &mut snapshot, &artifacts.prepared_media)
-            .await?;
-        bind_streaming_revision_items(&mut snapshot, &artifacts.streaming_plans)?;
-        bind_subtitle_revision_items_in_tx(&mut tx, &mut snapshot, &artifacts.subtitles).await?;
-        snapshot.snapshot_digest = revision_snapshot_digest(&snapshot)?;
-        insert_revision_snapshot_in_tx(&mut tx, &snapshot).await?;
-        tx.commit().await.repository()?;
-
-        Ok(snapshot)
+        .await
     }
 
     async fn revision_history(
@@ -1701,6 +1763,73 @@ const REVISION_SNAPSHOT_VERSION: i32 = 1;
 const RETAINED_COMPLETE_REVISION_COUNT: usize = 3;
 
 #[allow(clippy::too_many_lines)] // Capture the complete revision under one transaction boundary.
+/// Reuse reviewed source content only for an independently activated publication.
+/// The caller supplies the source from its exact fenced job, never a latest revision.
+#[allow(clippy::too_many_arguments)]
+async fn capture_retained_publication_snapshot(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    revision: i32,
+    source_draft_revision: i32,
+    completed_at: chrono::DateTime<chrono::Utc>,
+    files: &[AddonMediaListRevisionFile],
+    artifact_ids: &[EntityId],
+    source_revision: Option<i32>,
+) -> Result<AddonMediaListRevisionSnapshot> {
+    let Some(source_revision) = source_revision else {
+        return capture_current_revision_snapshot(
+            tx,
+            list_id,
+            revision,
+            source_draft_revision,
+            completed_at,
+            files,
+            artifact_ids,
+        )
+        .await;
+    };
+    let current: Option<i32> =
+        sqlx::query_scalar(r#"SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=?"#)
+            .bind(list_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .repository()?;
+    if current != Some(revision) || source_revision <= 0 || source_revision >= revision {
+        return Err(RepositoryError::Conflict(
+            "the source publication revision changed before retention".into(),
+        ));
+    }
+    let mut snapshot = load_valid_revision_snapshot_in_tx(tx, list_id, source_revision)
+        .await?
+        .ok_or_else(|| RepositoryError::Conflict("publication source is not restorable".into()))?;
+    let (files, artifact_ids) =
+        validate_revision_inventory_in_tx(tx, list_id, files, artifact_ids).await?;
+    snapshot.revision = revision;
+    snapshot.source_draft_revision = source_draft_revision;
+    snapshot.completed_at = completed_at;
+    snapshot.options.revision = revision;
+    snapshot.options.source_draft_revision = Some(source_draft_revision);
+    snapshot.options.completed_at = Some(completed_at);
+    snapshot.files = files;
+    snapshot.artifact_ids = artifact_ids;
+    for item in &mut snapshot.items {
+        item.prepared_artifact_id = None;
+        item.subtitle_artifact_ids.clear();
+        item.playback_timeline = None;
+        item.published_media_item_id = sqlx::query_scalar(
+            r#"SELECT "MediaItemId" FROM "AddonMediaListItem"
+               WHERE "AddonMediaListId"=? AND "ProviderId"=?"#,
+        )
+        .bind(list_id)
+        .bind(&item.provider_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .repository()?
+        .flatten();
+    }
+    Ok(snapshot)
+}
+
 pub(crate) async fn capture_current_revision_snapshot(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
@@ -1778,6 +1907,47 @@ pub(crate) async fn capture_current_revision_snapshot(
             .then_with(|| left.provider_id.cmp(&right.provider_id))
     });
 
+    let (retained_files, artifacts) =
+        validate_revision_inventory_in_tx(tx, list_id, files, artifact_ids).await?;
+
+    Ok(AddonMediaListRevisionSnapshot {
+        list_id,
+        revision,
+        source_draft_revision,
+        completed_at,
+        name: row.try_get("Name").repository()?,
+        description: row.try_get("Description").repository()?,
+        generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
+        content_kind_override: decode_enum_column(
+            "AddonMediaListContentKind",
+            &row,
+            "ContentKindOverride",
+        )?,
+        presentation_kind: decode_enum_column(
+            "AddonMediaListPresentationKind",
+            &row,
+            "PresentationKind",
+        )?,
+        requested_presentation_kind: decode_enum_column(
+            "AddonMediaListPresentationKind",
+            &row,
+            "RequestedPresentationKind",
+        )?,
+        metadata_json,
+        options,
+        items,
+        files: retained_files,
+        artifact_ids: artifacts,
+        snapshot_digest: String::new(),
+    })
+}
+
+async fn validate_revision_inventory_in_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    files: &[AddonMediaListRevisionFile],
+    artifact_ids: &[EntityId],
+) -> Result<(Vec<AddonMediaListRevisionFile>, Vec<EntityId>)> {
     let mut retained_files = files.to_vec();
     retained_files.sort_by(|left, right| {
         left.published_relative_path
@@ -1840,37 +2010,7 @@ pub(crate) async fn capture_current_revision_snapshot(
             ));
         }
     }
-
-    Ok(AddonMediaListRevisionSnapshot {
-        list_id,
-        revision,
-        source_draft_revision,
-        completed_at,
-        name: row.try_get("Name").repository()?,
-        description: row.try_get("Description").repository()?,
-        generate_playlist: decode_bool_column(&row, "GeneratePlaylist")?,
-        content_kind_override: decode_enum_column(
-            "AddonMediaListContentKind",
-            &row,
-            "ContentKindOverride",
-        )?,
-        presentation_kind: decode_enum_column(
-            "AddonMediaListPresentationKind",
-            &row,
-            "PresentationKind",
-        )?,
-        requested_presentation_kind: decode_enum_column(
-            "AddonMediaListPresentationKind",
-            &row,
-            "RequestedPresentationKind",
-        )?,
-        metadata_json,
-        options,
-        items,
-        files: retained_files,
-        artifact_ids: artifacts,
-        snapshot_digest: String::new(),
-    })
+    Ok((retained_files, artifacts))
 }
 
 fn bind_streaming_revision_items(
@@ -2126,7 +2266,7 @@ fn decode_current_revision_item(row: &crate::db::DbRow) -> Result<AddonMediaList
     })
 }
 
-async fn insert_revision_snapshot_in_tx(
+pub(crate) async fn insert_revision_snapshot_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     snapshot: &AddonMediaListRevisionSnapshot,
 ) -> Result<()> {
@@ -2537,7 +2677,9 @@ fn decode_revision_summary_row(
     })
 }
 
-fn revision_snapshot_digest(snapshot: &AddonMediaListRevisionSnapshot) -> Result<String> {
+pub(crate) fn revision_snapshot_digest(
+    snapshot: &AddonMediaListRevisionSnapshot,
+) -> Result<String> {
     let mut payload = snapshot.clone();
     payload.snapshot_digest.clear();
     let bytes = serde_json::to_vec(&payload).map_err(|error| RepositoryError::Decode {
@@ -2644,7 +2786,12 @@ async fn materialize_revision_as_draft(
             })?;
     let active_at = encode_datetime(fence.active_at);
     let row = sqlx::query(
-        r#"SELECT "job"."RestoreMaterializedAt", "list"."DraftRevision"
+        r#"SELECT "job"."RestoreMaterializedAt", "list"."DraftRevision",
+                  EXISTS (SELECT 1 FROM "AddonMediaListPublicationEvent" AS "event"
+                          WHERE "event"."PublicationJobId" = "job"."Id"
+                            AND "event"."DedupeKey" = 'enqueued'
+                            AND "event"."Kind" = ? AND "event"."EnqueueTrigger" = ?)
+                      AS "SavedFolderSource"
            FROM "AddonMediaListPublicationJob" AS "job"
            JOIN "ManagedLibraryOperation" AS "operation"
              ON "operation"."Id" = "job"."OperationId"
@@ -2659,6 +2806,12 @@ async fn materialize_revision_as_draft(
              AND "operation"."OwnerToken" = ? AND "operation"."LeaseOwner" = ?
              AND "lease"."LeaseOwner" = ? AND "lease"."LeaseExpiresAt" > ?"#,
     )
+    .bind(encode_enum(
+        ersatzrs_domain::AddonMediaListPublicationEventKind::Enqueued,
+    ))
+    .bind(encode_enum(
+        ersatzrs_domain::AddonMediaListPublicationEnqueueTrigger::SavedFolder,
+    ))
     .bind(fence.operation_id)
     .bind(fence.list_id)
     .bind(fence.generation)
@@ -2679,6 +2832,16 @@ async fn materialize_revision_as_draft(
     })?;
     let current_draft_revision: i32 = row.try_get("DraftRevision").repository()?;
     let materialized_at: Option<String> = row.try_get("RestoreMaterializedAt").repository()?;
+    if row.try_get::<bool, _>("SavedFolderSource").repository()? {
+        if materialized_at.is_some() {
+            return Err(RepositoryError::Conflict(
+                "an independent receiving publication cannot have a restore marker".into(),
+            ));
+        }
+        // SavedRevision identifies the queued source, not the independently editable draft.
+        tx.commit().await.repository()?;
+        return Ok(current_draft_revision);
+    }
     if materialized_at.is_some() {
         if current_draft_revision == fence.target_draft_revision {
             tx.commit().await.repository()?;

@@ -16,6 +16,20 @@ use super::{
 use crate::db::DbPool;
 pub use crate::repositories::addon_publication_fs::ManagedTreeGuard;
 
+/// Lock a validated managed folder before capture, file I/O or projection.
+/// Run in blocking context, outside a database transaction; retain the returned
+/// guard through the last writer, including cancelled blocking work.
+///
+/// # Errors
+/// Refuses unavailable local tree ownership without exposing filesystem paths.
+pub fn lock_managed_tree(managed: &Path) -> Result<Arc<ManagedTreeGuard>> {
+    ManagedTreeGuard::acquire(managed)
+        .map(Arc::new)
+        .map_err(|_| {
+            RepositoryError::Conflict("saved list managed-folder ownership is unavailable".into())
+        })
+}
+
 /// Explicit local ownership supplied by the initial-materialization caller.
 pub struct AssemblyContext<'a> {
     pub list_id: i64,

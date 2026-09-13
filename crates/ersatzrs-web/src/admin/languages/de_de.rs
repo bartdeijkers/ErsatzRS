@@ -606,6 +606,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::TriggerAutomaticRefresh => "Geplante Aktualisierung",
         TextKey::TriggerOperator => "Von einem Bediener angefordert",
         TextKey::TriggerRestoreRevision => "Durch Wiederherstellen einer Revision angefordert",
+        TextKey::TriggerSavedFolder => "Aus einem gespeicherten Listenordner wiederhergestellt",
         TextKey::TestSource => "Quelle testen",
         TextKey::TestSourceHelp => {
             "Gespeicherte Quelle prüfen, ohne die Liste zu importieren oder zu ändern."

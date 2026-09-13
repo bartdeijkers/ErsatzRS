@@ -89,6 +89,18 @@ impl SqliteAddonMediaListRepository {
         &self,
         list_id: EntityId,
     ) -> Result<Option<AddonMediaListRevisionSnapshot>> {
+        self.publication_commit_source(list_id)
+            .await
+            .map(|(snapshot, _)| snapshot)
+    }
+
+    /// Resolve whether this exact source job already materialized a local Restore.
+    /// A receiving-source activation has no such marker and must not acknowledge
+    /// unrelated newer draft content. Ordinary/legacy publication returns false.
+    pub(super) async fn publication_commit_source(
+        &self,
+        list_id: EntityId,
+    ) -> Result<(Option<AddonMediaListRevisionSnapshot>, bool)> {
         let mut tx = self.0.begin().await.repository()?;
         let journal: Option<Option<String>> = sqlx::query_scalar(
             r#"SELECT "PublicationJournalJson" FROM "AddonMediaList"
@@ -100,7 +112,7 @@ impl SqliteAddonMediaListRepository {
         .repository()?;
         let Some(journal) = journal else {
             tx.commit().await.repository()?;
-            return Ok(None);
+            return Ok((None, false));
         };
         let journal: PublicationJournal =
             serde_json::from_str(&journal.ok_or_else(invalid)?).map_err(|_| invalid())?;
@@ -109,7 +121,7 @@ impl SqliteAddonMediaListRepository {
             journal.generation,
             journal.saved_revision,
         ) {
-            (None, None, None) => None,
+            (None, None, None) => (None, false),
             (Some(operation_id), Some(generation), Some(saved_revision)) => {
                 source_in_tx(&mut tx, list_id, operation_id, generation, saved_revision).await?
             }
@@ -120,14 +132,26 @@ impl SqliteAddonMediaListRepository {
     }
 
     /// Resolve the exact job source before its journal has been written.
-    /// The staging caller has already validated the live lease and draft fence.
+    /// The staging caller has already validated the live lease.
+    #[cfg(test)]
     pub(super) async fn source_snapshot_for_fence(
         &self,
         list_id: EntityId,
         fence: PublicationFence<'_>,
     ) -> Result<Option<AddonMediaListRevisionSnapshot>> {
+        self.source_snapshot_and_origin_for_fence(list_id, fence)
+            .await
+            .map(|(snapshot, _)| snapshot)
+    }
+
+    /// Saved-folder input owns its publication independently of later draft Saves.
+    pub(super) async fn source_snapshot_and_origin_for_fence(
+        &self,
+        list_id: EntityId,
+        fence: PublicationFence<'_>,
+    ) -> Result<(Option<AddonMediaListRevisionSnapshot>, bool)> {
         let mut tx = self.0.begin().await.repository()?;
-        let snapshot = source_in_tx(
+        let (snapshot, _) = source_in_tx(
             &mut tx,
             list_id,
             fence.operation_id,
@@ -135,8 +159,34 @@ impl SqliteAddonMediaListRepository {
             fence.saved_revision,
         )
         .await?;
+        let saved_folder: bool = sqlx::query_scalar(
+            r#"SELECT EXISTS (
+                SELECT 1 FROM "AddonMediaListPublicationJob" AS "job"
+                JOIN "AddonMediaListPublicationEvent" AS "event"
+                  ON "event"."PublicationJobId" = "job"."Id"
+                WHERE "job"."AddonMediaListId"=? AND "job"."OperationId"=?
+                  AND "job"."Generation"=? AND "job"."SavedRevision"=?
+                  AND "event"."DedupeKey"='enqueued' AND "event"."Kind"=?
+                  AND "event"."EnqueueTrigger"=?)"#,
+        )
+        .bind(list_id)
+        .bind(fence.operation_id)
+        .bind(fence.generation)
+        .bind(fence.saved_revision)
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListPublicationEventKind::Enqueued,
+        ))
+        .bind(crate::repositories::common::encode_enum(
+            ersatzrs_domain::AddonMediaListPublicationEnqueueTrigger::SavedFolder,
+        ))
+        .fetch_one(&mut *tx)
+        .await
+        .repository()?;
+        if saved_folder && snapshot.is_none() {
+            return Err(invalid());
+        }
         tx.commit().await.repository()?;
-        Ok(snapshot)
+        Ok((snapshot, saved_folder))
     }
 }
 
@@ -146,12 +196,12 @@ async fn source_in_tx(
     operation_id: EntityId,
     generation: i32,
     saved_revision: i32,
-) -> Result<Option<AddonMediaListRevisionSnapshot>> {
+) -> Result<(Option<AddonMediaListRevisionSnapshot>, bool)> {
     if list_id <= 0 || operation_id <= 0 || generation < 0 || saved_revision < 0 {
         return Err(invalid());
     }
-    let source: Option<i32> = sqlx::query_scalar(
-        r#"SELECT "SourcePublishedRevision" FROM "AddonMediaListPublicationJob"
+    let (source, materialized): (Option<i32>, Option<String>) = sqlx::query_as(
+        r#"SELECT "SourcePublishedRevision", "RestoreMaterializedAt" FROM "AddonMediaListPublicationJob"
            WHERE "AddonMediaListId"=? AND "OperationId"=? AND "Generation"=? AND "SavedRevision"=?"#,
     )
     .bind(list_id)
@@ -163,14 +213,14 @@ async fn source_in_tx(
     .repository()?
     .ok_or_else(invalid)?;
     let Some(revision) = source else {
-        return Ok(None);
+        return Ok((None, false));
     };
     if revision <= 0 {
         return Err(invalid());
     }
     load_valid_revision_snapshot_in_tx(tx, list_id, revision)
         .await?
-        .map(Some)
+        .map(|snapshot| (Some(snapshot), materialized.is_some()))
         .ok_or_else(invalid)
 }
 
