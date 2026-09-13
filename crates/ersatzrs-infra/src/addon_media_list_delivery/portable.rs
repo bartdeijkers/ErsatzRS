@@ -28,7 +28,7 @@ pub struct PortableDeliveryPolicy {
 }
 
 impl PortableDeliveryPolicy {
-    fn validated(&self) -> Result<Self> {
+    pub(crate) fn validated(&self) -> Result<Self> {
         let mut normalized = self.clone();
         if self.mode == AddonMediaListDeliveryMode::DownloadAheadNewVideos {
             let at = self.cutoff_at.as_deref().ok_or_else(invalid)?;

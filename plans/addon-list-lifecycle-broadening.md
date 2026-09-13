@@ -196,6 +196,21 @@ Portable-content boundary review (after checkpoint `7d1d2e26`):
   content. A digest establishes internal consistency, not trust in the sender
   or permission to execute copied code. Missing prepared media must remain
   preparation-required under the saved delivery policy.
+- Saved publication files use reserved hash-named copies from retained revision
+  bytes, never mutable active-tree paths. Draft metadata projection can rewrite
+  those active files after publication. Copy and verify the retained bytes before
+  committing the document; there is no fallback to newer draft content. Receiving
+  activation regenerates host YAML/NFO from the separate published model with
+  fresh local bindings, rather than executing copied sender YAML. Omit these
+  generated files from portable byte copies. Preserve other files' extensions
+  for existing image/subtitle validators; the suffix is not proof of valid bytes.
+  Exclude reserved scanner state at every depth. Do not exclude every SRT:
+  unpinned manual sidecars can coexist with generated sidecars. Without retained
+  ownership proof, preserve those bytes; activation still uses pinned originals.
+- Receiving options require a compatible installed declaration. The existing
+  `retained-option-schema-evolution` debt remains a known limitation, not new
+  schema-migration scope here. Refusal guidance must request a compatible add-on
+  version or review of saved options; a newer version is not necessarily compatible.
 - `editor::save` currently commits SQLite without a portable write. Its
   `mark_list_ready_tx` call is conditional on draft changes, whereas a disk-space
   warning-only save commits without it. Therefore wiring only that helper

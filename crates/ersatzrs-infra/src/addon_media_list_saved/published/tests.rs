@@ -308,7 +308,7 @@ async fn saved_publication_capture_maps_artwork_to_hash_matched_retained_bytes_n
         let captured = in_tx(&mut tx, 1).await.unwrap().unwrap();
         assert_eq!(
             captured.publication.metadata["artwork"][0]["url"],
-            "./streams/poster.png"
+            format!("./.ersatzrs-saved/published/{}.png", "c".repeat(64))
         );
         assert_eq!(captured.revision_files[0].blob_id, blob_id);
         assert!(!serde_json::to_string(&captured.publication)
@@ -333,9 +333,9 @@ async fn saved_publication_capture_maps_artwork_to_hash_matched_retained_bytes_n
         let mut tx = pool.begin().await.unwrap();
         let captured = in_tx(&mut tx, 1).await.unwrap().unwrap();
         let expected = if source.starts_with(crate::addon_artwork::UPLOAD_URL_PREFIX) {
-            "./streams/poster.png"
+            format!("./.ersatzrs-saved/published/{}.png", "c".repeat(64))
         } else {
-            source
+            source.to_owned()
         };
         assert_eq!(captured.publication.metadata["artwork"][0]["url"], expected);
         let draft = super::super::capture::draft_in_tx(&mut tx, 1)
@@ -375,7 +375,7 @@ async fn saved_publication_capture_retains_owned_operator_artwork_only_when_snap
     let captured = in_tx(&mut tx, 1).await.unwrap().unwrap();
     assert_eq!(
         captured.publication.metadata["artwork"][0]["url"],
-        "./streams/poster.png"
+        format!("./.ersatzrs-saved/published/{}.png", "c".repeat(64))
     );
     tx.rollback().await.unwrap();
     // A materialization cannot bypass handle ownership or substitute new bytes.
@@ -388,4 +388,138 @@ async fn saved_publication_capture_retains_owned_operator_artwork_only_when_snap
         assert!(in_tx(&mut tx, 1).await.is_err());
         tx.rollback().await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn saved_publication_capture_isolates_retained_bytes_and_deduplicates_destinations() {
+    let pool = database().await;
+    let blob_id = retained_artwork(pool.clone(), "ersatzrs-upload://41").await;
+    let mut tx = pool.begin().await.unwrap();
+    let captured = in_tx(&mut tx, 1).await.unwrap().unwrap();
+    // Both original paths remain available to the local copy coordinator, while
+    // identical retained bytes require only one portable destination.
+    assert_eq!(captured.revision_files.len(), 2);
+    assert_eq!(captured.publication.files.len(), 1);
+    assert_eq!(captured.revision_files[0].blob_id, blob_id);
+    assert_eq!(
+        captured.revision_files[0].published_relative_path,
+        "streams/poster.png"
+    );
+    assert_eq!(
+        captured.revision_files[1].published_relative_path,
+        "streams/z-copy.png"
+    );
+    let retained = &captured.publication.files[0];
+    assert_eq!(
+        retained.relative_path,
+        format!(".ersatzrs-saved/published/{}.png", "c".repeat(64))
+    );
+    assert_eq!(retained.byte_length, 80);
+    assert_eq!(
+        captured.publication.metadata["artwork"][0]["url"],
+        format!("./{}", retained.relative_path)
+    );
+    let mut draft_projection = captured.revision_files[0].clone();
+    draft_projection.sha256 = "d".repeat(64);
+    draft_projection.byte_length = 81;
+    // A new projection at the same display path cannot overwrite retained A.
+    let different_bytes = saved_file(&draft_projection);
+    assert_ne!(retained.relative_path, different_bytes.relative_path);
+    assert_ne!(retained.sha256, different_bytes.sha256);
+    draft_projection.published_relative_path = "renamed/draft-poster.png".into();
+    assert_eq!(saved_file(&draft_projection), different_bytes);
+    assert_eq!(saved_file(&captured.revision_files[1]), *retained);
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn saved_publication_capture_omits_regenerated_files_and_preserves_content_extensions() {
+    let pool = database().await;
+    let blob = crate::repositories::make_repositories(pool.clone())
+        .addon_media_lists
+        .register_revision_file_blob(
+            1,
+            "blobs/retained-content",
+            &"f".repeat(64),
+            80,
+            Utc.with_ymd_and_hms(2026, 9, 13, 0, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
+    let files = [
+        "streams/item.NfO",
+        "streams/item.YAML",
+        "streams/item.yMl",
+        "streams/.ersatzrs-scan.json",
+        "streams/.ersatzrs-trash/old.png",
+        ".ersatzrs-state/retained.png",
+        "streams/poster.PNG",
+        "streams/photo.JPG",
+        "streams/thumb.WebP",
+        "streams/retained.Custom",
+        "streams/extensionless",
+        "streams/operator.SRT",
+    ]
+    .into_iter()
+    .map(|path| AddonMediaListRevisionFile {
+        blob_id: blob.id,
+        provider_id: None,
+        published_relative_path: path.into(),
+        storage_relative_path: blob.storage_relative_path.clone(),
+        sha256: blob.sha256.clone(),
+        byte_length: blob.byte_length,
+    })
+    .collect::<Vec<_>>();
+    retain(&pool, &files, &AddonMediaListRevisionArtifacts::default()).await;
+    let mut tx = pool.begin().await.unwrap();
+    let captured = in_tx(&mut tx, 1).await.unwrap().unwrap();
+    assert_eq!(captured.revision_files.len(), 6);
+    assert_eq!(captured.publication.files.len(), 6);
+    for original in files.iter().filter(|file| portable_revision_file(file)) {
+        assert!(captured.revision_files.contains(original));
+    }
+    for extension in ["png", "jpg", "webp", "custom", "blob", "srt"] {
+        assert!(captured.publication.files.iter().any(|file| {
+            file.relative_path
+                == format!(".ersatzrs-saved/published/{}.{extension}", "f".repeat(64))
+        }));
+    }
+    tx.rollback().await.unwrap();
+}
+
+#[test]
+fn saved_publication_capture_uses_blob_for_unsafe_extensions_without_discarding_bytes() {
+    let mut file = AddonMediaListRevisionFile {
+        blob_id: 1,
+        provider_id: None,
+        published_relative_path: String::new(),
+        storage_relative_path: "blobs/retained".into(),
+        sha256: "a".repeat(64),
+        byte_length: 80,
+    };
+    for path in [
+        "streams/file.png ",
+        "streams/file.png!",
+        "streams/file.we-bp",
+        "streams/file.é",
+    ] {
+        file.published_relative_path = path.into();
+        assert!(portable_revision_file(&file));
+        let saved = saved_file(&file);
+        assert_eq!(
+            saved.relative_path,
+            format!(".ersatzrs-saved/published/{}.blob", file.sha256)
+        );
+        assert_eq!(saved.byte_length, file.byte_length);
+        assert_eq!(saved.sha256, file.sha256);
+    }
+    file.published_relative_path = format!("streams/file.{}", "A".repeat(32));
+    assert_eq!(
+        saved_file(&file).relative_path,
+        format!(
+            ".ersatzrs-saved/published/{}.{}",
+            file.sha256,
+            "a".repeat(32)
+        )
+    );
 }

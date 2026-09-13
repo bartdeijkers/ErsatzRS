@@ -68,7 +68,9 @@ Clippy pass. The capture checkpoint is committed locally as 79792e1b.
 Unwired contained-file validation now has three passing focused tests and Claude
 review. The maintainer approved the 256 MiB metadata-document cap on 2026-09-13;
 Bounded document I/O reuses serde_json and has focused native proof in the
-milestone. Next: semantic receiving validation and asset materialization.
+milestone. Semantic receiving validation now has 20 focused passing tests;
+publication capture now references immutable reserved assets with focused proof.
+Next: asset materialization, followed by durable saved-content writer integration.
 The accepted cap is not yet enforced by runtime writers or scans.
 Durable saved-file and
 all-writer boundaries still precede scan reconstruction. No push, CI or release

@@ -50,6 +50,36 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 semantic receiving validation (unwired): checks installed identity,
+independent draft/publication options and item relationships, existing playback
+timing and subtitle clocks, tolerant stored metadata, and declared file identity.
+Preserves sparse options, incomplete drafts, host-generated chapter IDs, retained
+absent items and operator metadata beyond provider-wire limits. File references
+are checked only in actual artwork/person URL slots, including conflict layers.
+Twenty focused tests pass (nextest 81cc3260-9968-4033-a531-269c4df07a62), including
+cross-state path collisions and the independently reviewed person-name P2 fix.
+Claude's receiving-schema P2 is recorded as the existing
+retained-option-schema-evolution limitation: incompatible installed declarations
+refuse the copy, with no silent option reinterpretation. Receiving warning wiring
+must request a compatible version/options review, not promise that newer fixes it.
+Publication capture names retained bytes under reserved hash-named paths,
+preserving extensions for the existing MIME validators, local retained source
+descriptors and deduplication. Generated NFO/YAML and reserved scanner state
+at every depth are omitted from the byte inventory; unknown non-regenerable
+file kinds and potentially operator-owned SRT remain. Unsafe extensions use a
+portable fallback without discarding bytes. The receiving model,
+not copied sender YAML, will regenerate the local host projection. Actual contained
+asset materialization, durable all-writer integration and receiving activation
+remain required. These helpers alone do not enable scans or acknowledge Saves.
+Final eight capture tests pass after filter corrections (nextest
+2de05661-09a4-46bb-9777-b18f919cf86c). Style-corrected validator tests passed
+in selection 8c7293e0-233c-4b84-9811-d3ca1e05f67e; unchanged metadata/options
+evidence is retained from the 20-test selection above. Claude independently
+reviewed the actual corrections at 11:58 with no remaining checkpoint findings;
+blanket SRT exclusion was rejected after source audit proved possible manual
+ownership. Actual asset copying and receiving URL mapping remain upcoming work.
+Final scoped infra all-targets Clippy with -D warnings passes (18.3s).
+No CI or full closeout has run.
 2026-09-13 approved-size continuation (unwired): document_io enforces 256 MiB
 on JSON text reads and serialized-size preflight, requiring buffered seekable
 input and guarding growth after the size probe. The version probe precedes

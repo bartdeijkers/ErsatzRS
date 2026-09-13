@@ -21,6 +21,8 @@ use crate::repositories::{load_valid_revision_snapshot_in_tx, SqlxResultExt as _
 
 /// Portable publication plus local byte sources awaiting verification/copying.
 /// Deliberately not serializable: blob/artifact/replacement identities stay local.
+/// Receiving projection regenerates host YAML/NFO from the independent published
+/// model with fresh local IDs; retained raw YAML is never executed as authority.
 pub struct CapturedPublication {
     pub publication: SavedListPublication,
     pub revision_files: Vec<AddonMediaListRevisionFile>,
@@ -63,6 +65,10 @@ pub async fn in_tx(
     let snapshot = load_valid_revision_snapshot_in_tx(tx, list_id, revision)
         .await?
         .ok_or_else(inconsistent)?;
+    let mut snapshot = snapshot;
+    // These host projections contain sender-local identities. Regenerate them
+    // from the model instead of transporting them as portable content.
+    snapshot.files.retain(portable_revision_file);
     let artwork = PublishedArtwork::load(tx, &snapshot).await?;
     let mut artifacts = ArtifactCapture::load(tx, list_id, revision).await?;
     let (items, replacements) = published_items(&snapshot, &artwork, &mut artifacts)?;
@@ -165,12 +171,41 @@ fn inconsistent() -> RepositoryError {
     RepositoryError::Conflict("saved publication content is inconsistent or unavailable".into())
 }
 
-fn saved_file(file: &AddonMediaListRevisionFile) -> SavedFile {
+/// Destination for the retained file's raw bytes, independent of mutable projection paths.
+/// Keep the normalized extension for existing MIME/signature image validation;
+/// Missing or non-alphanumeric extensions use `.blob` without changing their bytes.
+/// The original local source remains in `CapturedPublication::revision_files`.
+pub(super) fn saved_file(file: &AddonMediaListRevisionFile) -> SavedFile {
+    let extension = retained_extension(file).unwrap_or_else(|| "blob".into());
     SavedFile {
-        relative_path: file.published_relative_path.clone(),
+        relative_path: format!(
+            "{SAVED_ASSETS_DIRECTORY}/published/{}.{extension}",
+            file.sha256
+        ),
         sha256: file.sha256.clone(),
         byte_length: file.byte_length,
     }
+}
+
+fn retained_extension(file: &AddonMediaListRevisionFile) -> Option<String> {
+    std::path::Path::new(&file.published_relative_path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .filter(|extension| {
+            !extension.is_empty() && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        })
+        .map(str::to_ascii_lowercase)
+}
+
+fn portable_revision_file(file: &AddonMediaListRevisionFile) -> bool {
+    !file
+        .published_relative_path
+        .split('/')
+        .any(|component| component.starts_with(".ersatzrs-"))
+        && !matches!(
+            retained_extension(file).as_deref(),
+            Some("nfo" | "yaml" | "yml")
+        )
 }
 
 struct ArtifactCapture {
