@@ -61,7 +61,16 @@ fn layers(metadata: &SavedMetadata, files: &FileRegistry<'_>) -> Result<(), Save
     merged(&metadata.provider, &metadata.overrides)?;
     artwork(&metadata.provider, files)?;
     artwork(&metadata.overrides, files)?;
-    for field in ["artwork", "artwork_urls", "people"] {
+    if let Some(conflict) = metadata.conflicts.get("people") {
+        for value in [
+            &conflict.provider_before,
+            &conflict.provider_after,
+            &conflict.operator_value,
+        ] {
+            person_thumbs(value)?;
+        }
+    }
+    for field in ["artwork", "artwork_urls"] {
         if let Some(conflict) = metadata.conflicts.get(field) {
             for value in [
                 &conflict.provider_before,
@@ -98,10 +107,25 @@ fn artwork(
     metadata: &Map<String, Value>,
     files: &FileRegistry<'_>,
 ) -> Result<(), SavedContentError> {
-    for field in ["artwork", "artwork_urls", "people"] {
+    if let Some(people) = metadata.get("people") {
+        person_thumbs(people)?;
+    }
+    for field in ["artwork", "artwork_urls"] {
         if let Some(value) = metadata.get(field) {
             references(field, value, files)?;
         }
+    }
+    Ok(())
+}
+
+fn person_thumbs(value: &Value) -> Result<(), SavedContentError> {
+    if value.as_array().into_iter().flatten().any(|person| {
+        person
+            .get("thumb")
+            .and_then(Value::as_str)
+            .is_some_and(|url| url.starts_with(crate::addon_artwork::UPLOAD_URL_PREFIX))
+    }) {
+        return Err(SavedContentError::Files);
     }
     Ok(())
 }
@@ -114,16 +138,7 @@ fn references(
     // Names, roles and unknown descriptive fields are not file references.
     // Masked provider/conflict values retain their stored form; only actual URL
     // slots can acquire a receiving upload handle during materialization.
-    for entry in value.as_array().into_iter().flatten() {
-        let url = match field {
-            "artwork" => entry.get("url"),
-            "people" => entry.get("thumb"),
-            "artwork_urls" => Some(entry),
-            _ => None,
-        };
-        let Some(url) = url.and_then(Value::as_str) else {
-            continue;
-        };
+    for url in urls(field, value) {
         if url.starts_with(crate::addon_artwork::UPLOAD_URL_PREFIX) {
             return Err(SavedContentError::Files);
         }
@@ -132,6 +147,22 @@ fn references(
         }
     }
     Ok(())
+}
+
+/// Only these metadata slots denote owned, portable artwork assets.
+pub(crate) fn urls<'a>(field: &'a str, value: &'a Value) -> impl Iterator<Item = &'a str> {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(move |entry| {
+            match field {
+                "artwork" => entry.get("url"),
+                "artwork_urls" => Some(entry),
+                _ => None,
+            }
+            .and_then(Value::as_str)
+        })
 }
 
 struct FileRegistry<'a>(BTreeMap<String, &'a SavedFile>);

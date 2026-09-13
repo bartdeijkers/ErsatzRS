@@ -455,7 +455,7 @@ impl PublishedArtwork {
 
     fn metadata(&self, json: &str, provider_id: Option<&str>) -> Result<Map<String, Value>> {
         let mut metadata: Map<String, Value> = decode_json(json)?;
-        for field in ["artwork", "artwork_urls", "people"] {
+        for field in ["artwork", "artwork_urls"] {
             if let Some(value) = metadata.get_mut(field) {
                 if field == "artwork" {
                     if let Some(entries) = value.as_array_mut() {

@@ -70,9 +70,11 @@ review. The maintainer approved the 256 MiB metadata-document cap on 2026-09-13;
 Bounded document I/O reuses serde_json and has focused native proof in the
 milestone. Semantic receiving validation now has 20 focused passing tests;
 publication capture now references immutable reserved assets with focused proof.
-Immutable asset installation now has focused byte-copy and retained-candidate
-proof. Next: source adapters and receiving image/subtitle ownership, followed
-by durable saved-content writer integration.
+Immutable asset installation, selected owned artwork/retained source adapters
+and receiving byte admission now have focused proof: 70 saved-list tests pass,
+with independent Claude implementation/test review. Next: remaining subtitle and
+replacement source integration, fresh receiving ownership, then the durable
+saved-content all-writer boundary and scan reconstruction.
 The accepted cap is not yet enforced by runtime writers or scans.
 Durable saved-file and
 all-writer boundaries still precede scan reconstruction. No push, CI or release

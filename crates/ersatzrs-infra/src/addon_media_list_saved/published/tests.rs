@@ -6,6 +6,48 @@ use ersatzrs_core::repositories::{
     AddonMediaListRevisionFile,
 };
 
+#[test]
+fn saved_publication_metadata_preserves_person_thumbnail_matching_artwork_source() {
+    let source = "https://example.invalid/person.png";
+    let artwork = PublishedArtwork {
+        entries: vec![PublishedArtworkEntry {
+            provider_id: None,
+            role: 1,
+            source: source.into(),
+            file: Some(SavedFile {
+                relative_path: ".ersatzrs-saved/published/person.png".into(),
+                sha256: "a".repeat(64),
+                byte_length: 3,
+            }),
+        }],
+    };
+    let people = serde_json::json!([
+        {"name":"Remote", "thumb":source},
+        {"name":"Literal", "thumb":"./person.png"}
+    ]);
+    let metadata = serde_json::json!({"people":people, "artwork_urls":[source]});
+    let captured = artwork.metadata(&metadata.to_string(), None).unwrap();
+    assert_eq!(captured["people"], people);
+    assert_eq!(
+        captured["artwork_urls"][0],
+        "./.ersatzrs-saved/published/person.png"
+    );
+}
+
+#[tokio::test]
+async fn saved_publication_capture_rejects_person_upload_handle() {
+    let pool = database().await;
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "ProviderMetadataJson"=? WHERE "Id"=1"#)
+        .bind(r#"{"people":[{"name":"Example","thumb":"ersatzrs-upload://41"}]}"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    retain(&pool, &[], &AddonMediaListRevisionArtifacts::default()).await;
+    let mut tx = pool.begin().await.unwrap();
+    assert!(in_tx(&mut tx, 1).await.is_err());
+    tx.rollback().await.unwrap();
+}
+
 async fn database() -> crate::db::DbPool {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)

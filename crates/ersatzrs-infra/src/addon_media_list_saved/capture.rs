@@ -39,13 +39,9 @@ pub struct CapturedDraft {
 /// Installation-local upload source, not part of portable JSON.
 pub struct CapturedArtwork {
     pub upload_id: EntityId,
+    pub scope_item_id: EntityId,
+    pub role: i32,
     pub file: SavedFile,
-}
-
-struct OwnedArtwork {
-    source: CapturedArtwork,
-    scope_item_id: EntityId,
-    role: i32,
 }
 
 /// Installation-local selection to check for a portable list-owned file.
@@ -299,7 +295,7 @@ pub(super) async fn option_schema(
 }
 
 struct ArtworkCapture {
-    uploads: BTreeMap<String, OwnedArtwork>,
+    uploads: BTreeMap<String, CapturedArtwork>,
     used: BTreeSet<String>,
 }
 
@@ -323,16 +319,14 @@ impl ArtworkCapture {
             let size: i64 = row.try_get("ByteLength").repository()?;
             uploads.insert(
                 format!("{}{id}", crate::addon_artwork::UPLOAD_URL_PREFIX),
-                OwnedArtwork {
+                CapturedArtwork {
+                    upload_id: id,
                     scope_item_id: row.try_get("ScopeItemId").repository()?,
                     role: row.try_get("Role").repository()?,
-                    source: CapturedArtwork {
-                        upload_id: id,
-                        file: SavedFile {
-                            relative_path: format!(".ersatzrs-saved/artwork/{hash}.{extension}"),
-                            sha256: hash,
-                            byte_length: u64::try_from(size).map_err(|_| inconsistent())?,
-                        },
+                    file: SavedFile {
+                        relative_path: format!(".ersatzrs-saved/artwork/{hash}.{extension}"),
+                        sha256: hash,
+                        byte_length: u64::try_from(size).map_err(|_| inconsistent())?,
                     },
                 },
             );
@@ -364,7 +358,7 @@ impl ArtworkCapture {
         };
         self.metadata_map(&mut value.provider, scope)?;
         self.metadata_map(&mut value.overrides, scope)?;
-        for field in ["artwork", "artwork_urls", "people"] {
+        for field in ["artwork", "artwork_urls"] {
             if let Some(conflict) = value.conflicts.get_mut(field) {
                 self.field(field, &mut conflict.provider_before, scope)?;
                 self.field(field, &mut conflict.provider_after, scope)?;
@@ -375,7 +369,7 @@ impl ArtworkCapture {
     }
 
     fn metadata_map(&mut self, value: &mut Map<String, Value>, scope: EntityId) -> Result<()> {
-        for field in ["artwork", "artwork_urls", "people"] {
+        for field in ["artwork", "artwork_urls"] {
             if let Some(value) = value.get_mut(field) {
                 self.field(field, value, scope)?;
             }
@@ -410,7 +404,7 @@ impl ArtworkCapture {
                 if owned.scope_item_id != scope || role.is_some_and(|role| role != owned.role) {
                     return Err(inconsistent());
                 }
-                let asset = &owned.source;
+                let asset = owned;
                 let file = &asset.file;
                 if file.sha256.len() != 64
                     || !file
@@ -448,7 +442,7 @@ impl ArtworkCapture {
         let mut files = BTreeMap::new();
         for (url, owned) in self.uploads {
             if self.used.contains(&url) {
-                let asset = owned.source;
+                let asset = owned;
                 files
                     .entry(asset.file.relative_path.clone())
                     .or_insert(asset);

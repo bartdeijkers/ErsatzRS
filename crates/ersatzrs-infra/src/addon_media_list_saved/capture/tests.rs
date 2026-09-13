@@ -144,6 +144,7 @@ async fn saved_list_capture_rejects_wrong_artwork_scope_role_and_stray_handles()
     for metadata in [
         r#"{"artwork":[{"url":"ersatzrs-upload://41","role":"fanart"}]}"#,
         r#"{"plot":"ersatzrs-upload://41"}"#,
+        r#"{"people":[{"name":"Example","thumb":"ersatzrs-upload://41"}]}"#,
     ] {
         sqlx::query(r#"UPDATE "AddonMediaList" SET "MetadataOverrideJson"=? WHERE "Id"=1"#)
             .bind(metadata)
@@ -162,5 +163,24 @@ async fn saved_list_capture_rejects_wrong_artwork_scope_role_and_stray_handles()
         .execute(&pool).await.unwrap();
     let mut tx = pool.begin().await.unwrap();
     assert!(draft_in_tx(&mut tx, 1).await.is_err());
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn saved_list_capture_preserves_literal_person_thumbnails() {
+    let pool = database().await;
+    let people = serde_json::json!([
+        {"name":"Remote", "thumb":"https://example.invalid/person.png"},
+        {"name":"Literal", "thumb":"./person.png"}
+    ]);
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "MetadataOverrideJson"=? WHERE "Id"=1"#)
+        .bind(serde_json::json!({"people": people}).to_string())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut tx = pool.begin().await.unwrap();
+    let captured = draft_in_tx(&mut tx, 1).await.unwrap();
+    assert_eq!(captured.draft.metadata.overrides["people"], people);
+    assert!(captured.artwork.is_empty());
     tx.rollback().await.unwrap();
 }

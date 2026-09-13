@@ -50,6 +50,32 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 receiving bytes and selected source adapters (unwired): semantic
+validation precedes byte admission; only missing exclusively prepared media
+returns provider identities requiring local preparation. Required draft files,
+artwork, manual subtitles and replacements must exist. Unsafe/corrupt media
+refuses admission rather than becoming a streaming fallback. Receiving image/SRT
+readers validate the exact returned bytes using existing limits and preserve
+original subtitle content. Activation must stage those returned bytes under its
+fence, not reopen an earlier-approved path without verification.
+Selected artwork sources recheck list/scope/role, SQL byte bounds and image/hash
+identity. Retained sources enforce existing owner/list/hash storage before the
+immutable installer; prepared video caches are not copied. Person thumbnails
+remain literal metadata, not invented upload slots; sender upload handles refuse.
+All 70 focused saved-list tests pass (nextest e36a3e86-238d-4eb7-bbbb-2f4ba0da70aa,
+Linux, 73s build and 0.892s execution), including nine receiving tests, five source
+adapter tests and the capture/metadata corrections. Existing size, file-safety,
+independent-publication and immutable-copy regressions remain green. Claude's
+12:34 implementation and 12:36 test reviews find no remaining P1/P2. A first
+type check caught unsupported SHA LowerHex formatting, corrected with the existing
+explicit hexadecimal loop before the passing test build. No CI or full closeout.
+Scoped infra all-targets Clippy with -D warnings passes (42.3s), after replacing
+one test fixture's unchecked integer cast with an exact checked conversion;
+fixture values and the passing behavioral evidence are unchanged. Formatting
+and progress validation pass.
+Remaining: subtitle/replacement source integration, fresh receiving ownership,
+durable all-writer/file-before-database commitment, discovery and independent-profile
+activation acceptance. This gate alone does not create lists, publish or acknowledge Save.
 2026-09-13 immutable asset installation (unwired): reuses the retained-candidate
 16 KiB verified-copy loop, refusing excess bytes before writing them. Installs
 only below reserved storage, reuses verified existing bytes without reading the
@@ -77,7 +103,8 @@ independent draft/publication options and item relationships, existing playback
 timing and subtitle clocks, tolerant stored metadata, and declared file identity.
 Preserves sparse options, incomplete drafts, host-generated chapter IDs, retained
 absent items and operator metadata beyond provider-wire limits. File references
-are checked only in actual artwork/person URL slots, including conflict layers.
+were checked only in actual artwork/person URL slots, including conflict layers;
+the later reviewed correction above preserves literal person thumbnails instead.
 Twenty focused tests pass (nextest 81cc3260-9968-4033-a531-269c4df07a62), including
 cross-state path collisions and the independently reviewed person-name P2 fix.
 Claude's receiving-schema P2 is recorded as the existing

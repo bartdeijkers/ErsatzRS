@@ -61,29 +61,42 @@ fn saved_metadata_validation_checks_each_layer_and_conflict_file_reference() {
 }
 
 #[test]
-fn saved_metadata_validation_checks_url_slots_not_person_names_or_roles() {
+fn saved_metadata_validation_preserves_literal_people_without_asset_interpretation() {
     let (mut document, _) = fixture();
     document.draft.metadata.overrides.insert(
         "people".into(),
         json!([
-            {"name":"./Example", "role":"./Role", "order":null, "thumb":null}
+            {"name":"./Example", "role":"./Role", "order":null, "thumb":"./actor.png"},
+            {"name":"Remote", "thumb":"https://example.invalid/person.png"}
         ]),
     );
     document.draft.metadata.conflicts.insert(
         "people".into(),
         AddonMediaListMetadataConflict {
-            provider_before: json!([{"name":"./Before", "thumb":null}]),
-            provider_after: json!([{"name":"./After", "thumb":null}]),
+            provider_before: json!([{"name":"./Before", "thumb":"./before.png"}]),
+            provider_after: json!([{"name":"./After", "thumb":"./after.png"}]),
             operator_value: document.draft.metadata.overrides["people"].clone(),
         },
     );
     let before = document.clone();
     validate_metadata(&document).unwrap();
     assert_eq!(document, before);
-    document.draft.metadata.overrides.get_mut("people").unwrap()[0]["thumb"] = json!("./actor.png");
+    assert_eq!(
+        urls("people", &document.draft.metadata.overrides["people"]).count(),
+        0
+    );
+    document.draft.metadata.overrides.get_mut("people").unwrap()[0]["thumb"] =
+        json!("ersatzrs-upload://41");
     assert_eq!(validate_metadata(&document), Err(SavedContentError::Files));
-    document.draft.files.push(image("actor.png", 'd'));
-    validate_metadata(&document).unwrap();
+    document.draft.metadata.overrides = before.draft.metadata.overrides;
+    document
+        .draft
+        .metadata
+        .conflicts
+        .get_mut("people")
+        .unwrap()
+        .provider_after = json!([{"name":"Example", "thumb":"ersatzrs-upload://41"}]);
+    assert_eq!(validate_metadata(&document), Err(SavedContentError::Files));
 }
 
 #[test]

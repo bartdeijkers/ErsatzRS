@@ -9,4 +9,6 @@ pub mod document_io;
 pub mod files;
 pub mod model;
 pub mod published;
+pub mod receiving;
+pub mod sources;
 pub mod validation;

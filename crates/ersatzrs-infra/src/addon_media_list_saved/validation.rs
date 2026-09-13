@@ -8,7 +8,7 @@ use super::document_io::serialized_size;
 use super::model::SavedListDocument;
 
 mod items;
-mod metadata;
+pub(super) mod metadata;
 mod options;
 
 /// Safe receiving diagnostics; never include copied metadata or private paths.

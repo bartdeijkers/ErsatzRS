@@ -217,6 +217,22 @@ Portable-content boundary review (after checkpoint `7d1d2e26`):
   leftovers, never imported files merely matching a prefix. Reuse redacted
   publication error categories and caller retry, not inline sleeps or a clobber
   fallback on unsupported filesystems.
+- Source adapters load only selected, size-bounded artwork uploads with the
+  captured list/scope/role and exact bytes revalidated. Retained sources use the
+  existing storage owner/list/hash layout, never mutable active artwork. Roots
+  and operation ownership remain caller-supplied; no database calls run inside
+  the blocking copy helper. Subtitle originals are Kind 0 Ready artifacts;
+  Kind 1 prepared video remains reference-only.
+- Receiving byte admission verifies declared assets and returns local-preparation
+  requirements only for missing prepared media. Required draft assets, artwork,
+  subtitle originals and replacements must exist; corrupt or unsafe prepared
+  media is not treated as absence. Use existing image/SRT limits and validators
+  on the exact verified bytes passed to receiving-owned staging, not a later
+  unchecked reread. Preserve original subtitle bytes and Source/Prepared clocks.
+  Artwork mapping visits only `artwork[].url` and `artwork_urls[]`, including
+  conflict layers. Person thumbnails remain literal metadata, matching the
+  current host; do not invent a person upload or actor-image renderer. Sender
+  upload handles are not portable, including in person thumbnail fields.
 - Receiving options require a compatible installed declaration. The existing
   `retained-option-schema-evolution` debt remains a known limitation, not new
   schema-migration scope here. Refusal guidance must request a compatible add-on
