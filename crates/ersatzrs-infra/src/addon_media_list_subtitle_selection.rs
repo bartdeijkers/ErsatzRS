@@ -94,8 +94,6 @@ pub(crate) async fn subtitle_requirements(
         FROM "AddonMediaListItem" AS "item"
         LEFT JOIN "AddonMediaListItemReplacement" AS "replacement" ON "replacement"."AddonMediaListItemId"="item"."Id"
         WHERE "item"."AddonMediaListId"=? AND "item"."Included"=1 AND "item"."Kind"=4
-          AND "item"."InDraft"=1
-          AND "item"."SavedReplacementJson" IS NULL
           AND COALESCE("item"."LivenessOverride", "item"."ProviderLiveness")=1
         ORDER BY "item"."Id""#).bind(list_id).fetch_all(pool).await.repository()?;
     let mut requirements = Vec::new();
@@ -410,16 +408,6 @@ mod tests {
         assert!(subtitle_requirements(&pool, 1, 0, &[]).await.unwrap()[0]
             .artifacts
             .is_none());
-        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"='{"file":null}' WHERE "Id"=10"#)
-            .execute(&pool).await.unwrap();
-        assert!(subtitle_requirements(&pool, 1, 0, &[])
-            .await
-            .unwrap()
-            .is_empty());
-        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"=NULL WHERE "Id"=10"#)
-            .execute(&pool)
-            .await
-            .unwrap();
         let runtime = InstalledItemRuntime::load(&pool, "org.ersatzrs.addon.fixture", None)
             .await
             .unwrap();

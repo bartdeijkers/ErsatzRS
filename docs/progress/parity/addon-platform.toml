@@ -134,14 +134,6 @@ adr         = '0072'
 resolved    = false
 
 [[debt]]
-id          = 'default-source-hosts-not-declared-by-official-packages'
-description = 'Declare `default_source_hosts` in the official Beeld & Geluid package (schema v4) so Schatkamer URLs resolve without relying on the administrator-configured default remote stream processor.'
-discovered  = '2026-08-19'
-evidence    = 'The host accepts and ranks the field, and the fallback path resolves schatkamer.beeldengeluid.nl through the configured default today. The package lives in the separate add-on repository and must be published after a host that supports manifest schema v4, because older hosts reject a v4 manifest.'
-adr         = '0072'
-resolved    = false
-
-[[debt]]
 id          = 'official-addon-repository-is-not-published'
 description = 'Replace the planned public signed official catalog with a private operator-acquired repository and offline bundle artifact.'
 discovered  = '2026-08-11'
@@ -236,4 +228,5 @@ description = 'The official storage-backed add-ons ship POSIX and PowerShell var
 discovered  = '2026-08-15'
 evidence    = 'Tracked by the add-on NFO sidecar and local replacement closeout plan, which lists this as the second remaining blocker. Needs the PowerShell implementation executed with fixtures on Windows or pwsh, with CRLF-normalized packaged batch files and all six RIDs intact.'
 adr         = '0066'
-resolved    = false
+resolved    = true
+resolution  = 'Merged into milestone amm-n-03 on 2026-09-13 (maintainer). Its Linux x64 and Windows x64 native/package acceptance owns packaged Windows add-on execution; this entry no longer tracks separate work.'

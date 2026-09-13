@@ -3,7 +3,9 @@
 > **Status:** Active closeout. Slices 1 through 6, the complete managed-pair
 > failure/recovery matrix, and generic hydrated browser acceptance are
 > implemented and tested. Packaged Windows add-on execution still blocks
-> completion; ADR 0080 retired the former MySQL proof requirement.
+> completion and is tracked by milestone `amm-n-03`; ADR 0080 retired the former
+> MySQL proof requirement. This plan also carries the former parity debt
+> `addon-nfo-v2-closeout` (merged 2026-09-13).
 
 ## Goal
 

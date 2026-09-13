@@ -46,31 +46,6 @@ fn command(revision: i32) -> AddonMediaListEditorSave {
 }
 
 #[tokio::test]
-async fn editor_preserves_unresolved_replacement_until_explicit_choice() {
-    let pool = fixture().await;
-    let repositories = make_repositories(pool.clone());
-    let repo = &repositories.addon_media_lists;
-    sqlx::query(
-        r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"='{"file":null}' WHERE "Id"=10"#,
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
-    let revision = repo
-        .get_admin_form(1)
-        .await
-        .unwrap()
-        .unwrap()
-        .draft_revision;
-    let revision = repo.save_editor_task(&command(revision)).await.unwrap();
-    assert!(repo.list_items(1).await.unwrap()[0].replacement_unresolved);
-    let mut save = command(revision);
-    save.items[0].replacement = Some(None);
-    repo.save_editor_task(&save).await.unwrap();
-    assert!(!repo.list_items(1).await.unwrap()[0].replacement_unresolved);
-}
-
-#[tokio::test]
 async fn editor_artwork_staging_is_immutable_deduplicated_and_does_not_save() {
     let pool = fixture().await;
     let repositories = make_repositories(pool);

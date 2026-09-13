@@ -19,8 +19,7 @@ public open-source project.
 | Commit style | Conventional Commits | CI can lint commits and release notes can be generated later. |
 | Changelog | Keep a Changelog in `CHANGELOG.md` | The root changelog is the main human-readable release overview and must stay current under `[Unreleased]`. |
 | Official Beeld & Geluid add-on | Retired by [ADR 0092](../docs/adr/0092-retire-official-beeld-en-geluid-addon.md) | No service-backed acceptance or new official support; preserve provider-neutral features and operator data. |
-| Saved add-on list folders | Authoritative portable content under [ADR 0093](../docs/adr/0093-make-saved-addon-list-folders-authoritative.md) | Planned `amm-o-01`: copied folders rebuild/update SQLite on the next normal scan; implement after the current A01-A05 corrections. |
-| Add-on-list MVP | Current draft and independent publication under [ADR 0094](../docs/adr/0094-limit-addon-list-mvp-to-draft-and-publication.md) | No historical browsing/arbitrary Restore or legacy-profile adopter; preserve publication recovery and internal version fences. |
+| Saved add-on list folders | Withdrawn [ADR 0093](../docs/adr/0093-make-saved-addon-list-folders-authoritative.md) | `amm-o-01` withdrawn on 2026-09-13; pre-implementation baseline restored. No active implementation scope. |
 | Documentation model | Diataxis | Docs are split into tutorials, how-to guides, reference, and explanation. |
 | Porting rule | ErsatzTV behavior by default | Deliberate deviations require ADRs. |
 | AI workflows | Canonical repo-local `skills/` with agent compatibility pointers | Skills travel with the repository and stay reviewable without diverging copies. |

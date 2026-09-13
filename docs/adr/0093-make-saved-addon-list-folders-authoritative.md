@@ -2,17 +2,14 @@
 
 ## Status
 
-Accepted (2026-09-12)
+Withdrawn (2026-09-13), previously accepted 2026-09-12
 
 ## Implementation
 
-Partial — milestone `amm-o-01` is in progress after the verified A01-A05
-corrections. The first engineering checkpoint implements and locally verifies
-visibility-only hide/reveal. The portable model, delivery cohorts and independent
-draft/published capture are present but not wired into runtime writers or scans.
-Bounded document I/O and contained-file verification have focused local proof.
-File authority and portable reconstruction remain unimplemented; the milestone
-owns detailed acceptance and evidence.
+Not implemented — the maintainer stopped `amm-o-01` and restored pre-implementation
+baseline `de14a03c`. Recovery checkpoint `0e9413d3` preserves the stopped work.
+The decision below is historical and no longer governs implementation.
+ADR 0075 retains database ownership of saved drafts and publication snapshots.
 
 ## Context
 
@@ -29,10 +26,6 @@ fresh-database acceptance proof.
 
 ## Decision
 
-The 2026-09-13 MVP simplification in [ADR 0094](0094-limit-addon-list-mvp-to-draft-and-publication.md)
-excludes legacy-profile adoption and optional historical browsing/Restore. It
-preserves this decision's current-draft and independent-publication requirements.
-
 Saved add-on list content on disk is authoritative over its SQLite projection.
 For yt-dlp, this includes list subfolders below the configured media root,
 normally `<profile>/yt-dlp_media/`. The host behavior remains provider-neutral.
@@ -46,35 +39,14 @@ normally `<profile>/yt-dlp_media/`. The host behavior remains provider-neutral.
   The plan must define concurrent-edit reconciliation: genuinely conflicting
   saved content is surfaced for review, not silently overwritten by a scan.
   SQLite does not become a competing authority for the same saved content.
-- A copied folder that conflicts with a list already present on the receiving
-  installation must keep the existing local list and show a warning (maintainer
-  confirmation, 2026-09-12). Do not automatically replace it or create duplicate
-  ownership. This differs from rebuilding a stale SQLite projection of that
-  installation's already-mapped authoritative folder.
 - Portable identity and references must not depend on the sender's SQLite IDs
   or absolute profile path. Referenced list-owned files travel with the folder.
-- Limit each saved JSON document to 256 MiB (268,435,456 bytes), including both
-  draft and last-published text but excluding external video and picture bytes
-  (maintainer approval, 2026-09-13). Oversized copied documents are refused with
-  a warning without changing the existing local list. Once file authority is
-  enabled, a Save exceeding this limit fails before committed file or database
-  state changes. Apply the same limit to every saved-content writer. This is a
-  deliberate compatibility limit, not a claim that parsed memory is at most
-  256 MiB; retain existing field limits and avoid whole-document copies.
 - SQLite remains local storage for runtime coordination, jobs, leases and
   derived indexes. Copying content does not copy active process ownership or
   install/authorize an add-on executable.
 - Preserve explicit Save/Publish separation and current published playback.
-  Copied folders preserve both the saved draft and last-published content as
-  separate states (maintainer confirmation, 2026-09-12). Scanning must not
-  automatically publish newer draft edits. Machine-local jobs, identifiers and
-  credentials are not imported. Reconciliation with local unsaved work must
-  preserve these boundaries.
-  After receiving-installation validation, scanning automatically restores the
-  copied last-published content as its active published state (maintainer
-  confirmation, 2026-09-12); this does not publish newer saved draft edits.
-  Missing Download ahead media requires local preparation. Preserve the saved
-  delivery mode rather than silently falling back to streaming.
+  The focused implementation plan must define copied draft/publication handling
+  and reconciliation with local unsaved work before changing those boundaries.
 - Keep the existing per-list subfolder and `list.playlist.yml` model. Removing
   a list in the admin UI retains its saved folder and files but hides the list
   in the admin UI (maintainer decision, 2026-09-12). Subsequent ordinary or
@@ -82,12 +54,9 @@ normally `<profile>/yt-dlp_media/`. The host behavior remains provider-neutral.
   Hiding is installation-local, not portable list content: sharing a folder
   does not transfer the sender's hidden state, so a newly discovered copy is
   visible on the receiving installation (maintainer confirmation, 2026-09-12).
-  Hiding changes admin visibility only: published media, scheduled playback
-  and refresh behavior remain intact (maintainer confirmation, 2026-09-12).
-  The existing add-on lists page offers a Hidden lists filter and a Show list
-  action. This replaces that admin action's former destructive projection
-  removal; it does not turn hiding into unloading. No persistence mechanism
-  is chosen here.
+  This decision concerns retention and visibility; it does not authorize new
+  playback or unloading behavior. The focused plan must still settle how an
+  operator can reveal a hidden list. No persistence mechanism is chosen here.
 
 This supersedes database-only ownership of saved portable list content, not
 the publication safety requirements of ADR 0075 or durable coordination in

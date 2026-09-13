@@ -24,7 +24,7 @@ pub(super) async fn metadata(
     )
 }
 
-pub(crate) async fn stage(
+pub(super) async fn stage(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
     item_id: Option<EntityId>,

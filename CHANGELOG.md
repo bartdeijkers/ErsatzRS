@@ -13,82 +13,18 @@ release section when tagging a release.
 
 ## [Unreleased]
 
-### Removed
-
-- Historical add-on-list revision browsing, comparison and arbitrary Restore
-  are withdrawn from the MVP. Current draft/published comparison and recovery
-  after a failed publication remain; internal version and publication safety
-  mechanisms are unchanged. Folder portability does not require legacy-profile
-  adoption or an upgrader.
-
 ### Changed
 
-- Record the accepted folder-first add-on-list portability contract: saved
-  folders must reconstruct their SQLite projection after copying to another
-  installation; admin removal must retain files and keep the list hidden across
-  rescans on that installation, without hiding newly discovered shared copies
-  elsewhere. Copied saved drafts and last-published content remain separate;
-  scans must not publish newer draft edits or import machine-local credentials
-  and execution state. Validated copied publications become active automatically;
-  missing Download ahead media still needs local preparation. Conflicting copied
-  folders must retain the existing local list and show a warning. Folder-first
-  reconstruction remains planned, not included in the current beta. The approved
-  saved-text limit is 256 MiB per list, excluding videos and pictures; oversized
-  copies and Saves must be refused without changing existing saved content.
-  Copied options require a compatible installed add-on schema; automatic schema
-  migration is not included in this portability work.
-  Receiving validation and non-overwriting saved-asset copying groundwork now
-  includes owned source checks and image/subtitle byte admission, distinguishing
-  missing prepared videos from damaged or missing required assets. Receiving
-  artwork staging preserves draft and published metadata separately without
-  exposing partially created lists; exact subtitle and replacement source checks
-  retain their ownership and unresolved-selection rules. Draft membership is now
-  distinct from retained publication ownership, so removing a draft chapter does
-  not remove its current playback before the next Publish. Receiving groundwork
-  preserves unresolved copied replacement choices and requires choosing or
-  removing them instead of silently preparing/publishing the original source.
-  Contained replacement videos use their existing file and verified hash rather
-  than another media copy; changing those bytes invalidates the saved reference.
-  Plain streaming copy/reconstruction now has an integrated publication and
-  repeat-scan regression, preserving the newer draft and older publication.
-  Adopted-list editor Saves now persist files before SQLite, and mapped-folder
-  repair recovers interrupted database updates without republishing draft-only
-  changes or revealing hidden lists. Rollback preserves newer saved content;
-  invalid content is retained separately while previous playback is restored.
-  Ordinary publication completion persists its independent saved publication,
-  preserving concurrent file draft edits for reconciliation. Discovery ignores
-  host-owned publication backups, and publication verification allows retained
-  unpublished media identities without counting them as active members.
-  Direct option edits, Undo and preparation-default activation now share the
-  same file-first persistence for adopted lists, retaining published options.
-  Provider-detail merges now persist their saved draft before SQLite and finish
-  the detail checkpoint in the same transaction, avoiding replay after a
-  successful merge. They defer during publication and refuse unresolved file
-  divergence without overwriting saved content.
-  Import headers, items and reconciliation observations now use the same
-  file-first boundary. Recovery preserves refreshed provider identities and
-  prevents a retried reconciliation from counting missing videos twice.
-  Ordinary-scan chapter suggestions and direct per-list disk warning changes
-  now persist to adopted folders without publishing or advancing the draft.
-  Automatic receiving discovery is not yet enabled.
-  Remaining writers and runtime scan reconstruction integration are unfinished.
-
-- Replace destructive add-on-list removal in admin with reversible Hide list
-  and Show list actions and a Hidden lists filter on the existing page. Hiding
-  changes only local admin visibility: saved files, published media, playlists,
-  scheduled playback and refreshes remain intact. Folder-first reconstruction
-  is still unfinished.
+- Withdraw the O-01 folder portability program and restore the preceding
+  add-on-list implementation, including database-owned drafts/publications,
+  existing removal behavior and historical revision actions. Preserve the
+  preparation/publication fixes and unrelated parity debt cleanup.
 
 - Withdraw the manual anamorphic regression-source release check by maintainer
   decision; retain automated NVENC command-level regression coverage and all
   other accepted Windows package gates.
 
 ### Fixed
-
-- Regenerate snapshot-backed add-on list files from the active published revision,
-  keeping unpublished metadata, content-kind and chapter edits out of ordinary
-  rescans, while keeping provider chapter suggestions and availability warnings
-  current. Legacy manifests keep their existing enumeration behavior.
 
 - Bind scanned items before a new add-on list's first typed-media publication,
   prevent parent metadata edits from being silently bypassed when storage paths differ,

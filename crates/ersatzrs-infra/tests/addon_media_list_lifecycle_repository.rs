@@ -85,24 +85,6 @@ fn draft_option_fixture(schema: &AddonMediaListOptionSchemaRef) -> AddonMediaLis
 }
 
 #[tokio::test]
-async fn draft_options_missing_list_returns_not_found() {
-    let pool = common::test_db().await;
-    let repositories = make_repositories(pool);
-    let error = repositories
-        .addon_media_lists
-        .save_draft_options(&AddonMediaListDraftOptions {
-            list_id: 999,
-            draft_revision: 0,
-            schema: None,
-            list_values: BTreeMap::new(),
-            item_values: Vec::new(),
-        })
-        .await
-        .unwrap_err();
-    assert!(matches!(error, RepositoryError::NotFound { id: 999, .. }));
-}
-
-#[tokio::test]
 async fn draft_options_reject_stale_revision_and_duplicate_identity_without_mutation() {
     let pool = common::test_db().await;
     let repositories = make_repositories(pool.clone());
@@ -2065,12 +2047,6 @@ async fn complete_revision_snapshot_drives_exact_diff_and_fenced_restore() {
         lease_owner: "restore-worker".into(),
         active_at: fixed_time() + chrono::Duration::minutes(10),
     };
-    sqlx::query(
-        r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"='{"file":null}' WHERE "Id"=10"#,
-    )
-    .execute(&pool)
-    .await
-    .unwrap();
     assert_eq!(
         repositories
             .addon_media_lists
@@ -2079,13 +2055,6 @@ async fn complete_revision_snapshot_drives_exact_diff_and_fenced_restore() {
             .unwrap(),
         3
     );
-    let unresolved: Option<String> = sqlx::query_scalar(
-        r#"SELECT "SavedReplacementJson" FROM "AddonMediaListItem" WHERE "Id"=10"#,
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap();
-    assert!(unresolved.is_none());
     // Marker plus exact target revision makes a worker retry idempotent.
     assert_eq!(
         repositories

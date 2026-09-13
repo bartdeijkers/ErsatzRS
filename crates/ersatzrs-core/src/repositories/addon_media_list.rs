@@ -165,9 +165,6 @@ pub struct AddonMediaListItemAdminRow {
     pub replacement_title: Option<String>,
     pub replacement_path: Option<String>,
     pub replacement_valid: bool,
-    /// Portable replacement intent that has no resolved receiving library file.
-    #[serde(default)]
-    pub replacement_unresolved: bool,
     pub title: String,
     pub year: Option<i32>,
     pub season: Option<i32>,
@@ -272,8 +269,6 @@ pub enum AddonMediaListPublicationBlockerKind {
     PlaybackDetailsUnavailable,
     PlaybackDetailsFailed,
     UnavailableWithoutReplacement,
-    /// A saved replacement must be selected or explicitly removed before publication.
-    ReplacementUnresolved,
     ItemTitleMissing,
     SeasonEpisodeMissing,
     ArtistMissing,
@@ -532,7 +527,7 @@ pub struct AddonMediaListReplacementCandidate {
 /// Persistence and synchronization boundary for add-on media-list administration.
 #[async_trait]
 pub trait AddonMediaListRepository: Send + Sync {
-    /// Return visible administrative rows and their total count.
+    /// Return one pageable list of administrative rows and its total count.
     async fn list_admin(
         &self,
         page: u32,
@@ -540,30 +535,6 @@ pub trait AddonMediaListRepository: Send + Sync {
         sort_field: AddonMediaListAdminSortField,
         sort_direction: AddonMediaListAdminSortDirection,
     ) -> Result<(Vec<AddonMediaListAdminRow>, u64)>;
-    /// Return only rows with the selected administrative visibility.
-    /// Visibility never changes publication, refresh, or playback eligibility.
-    async fn list_admin_visibility(
-        &self,
-        page: u32,
-        page_size: u32,
-        sort_field: AddonMediaListAdminSortField,
-        sort_direction: AddonMediaListAdminSortDirection,
-        hidden: bool,
-    ) -> Result<(Vec<AddonMediaListAdminRow>, u64)> {
-        if hidden {
-            return Ok((Vec::new(), 0));
-        }
-        self.list_admin(page, page_size, sort_field, sort_direction)
-            .await
-    }
-    /// Hide or reveal one list in administration, preserving all runtime state.
-    async fn set_admin_hidden(&self, id: EntityId, hidden: bool) -> Result<()> {
-        let _ = (id, hidden);
-        Err(RepositoryError::unavailable(
-            "add-on list visibility",
-            "not implemented",
-        ))
-    }
     /// Load the editable settings for one list.
     async fn get_admin_form(&self, id: EntityId) -> Result<Option<AddonMediaListAdminForm>>;
     /// List provider items and replacement state in provider order.

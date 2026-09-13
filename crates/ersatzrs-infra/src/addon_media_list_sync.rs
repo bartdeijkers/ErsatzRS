@@ -9,10 +9,7 @@ use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::addon_media_list::{
     AddonMediaListProvider, EnumeratedAddonMediaList, EnumeratedAddonMediaListItem,
 };
-use ersatzrs_core::repositories::{
-    AddonMediaListMetadataConflict, AddonMediaListRevisionItem, AddonMediaListRevisionSnapshot,
-    RepositoryError, Result,
-};
+use ersatzrs_core::repositories::{AddonMediaListMetadataConflict, RepositoryError, Result};
 use ersatzrs_domain::{
     AddonMediaList, AddonMediaListItemAvailability, AddonMediaListItemKind, EntityId,
     ManagedLibraryOperationState, RemoteStreamLiveness, ScanPlayoutRefresh,
@@ -266,12 +263,8 @@ impl AddonMediaListSynchronizer {
     /// Ordinary matchers freeze while a publication journal is active. Only
     /// the coordinator may bypass that freeze, and its caller revalidates the
     /// lease immediately after this method returns.
-    pub(crate) async fn match_list_items_for_publication(
-        &self,
-        list_id: EntityId,
-        source: Option<&AddonMediaListRevisionSnapshot>,
-    ) -> Result<()> {
-        self.match_list_items_with_report_inner(list_id, true, source)
+    pub(crate) async fn match_list_items_for_publication(&self, list_id: EntityId) -> Result<()> {
+        self.match_list_items_with_report_inner(list_id, true)
             .await
             .map(|_| ())
     }
@@ -279,14 +272,9 @@ impl AddonMediaListSynchronizer {
     /// Bind scanned sources before publication builds its typed media projection.
     /// The coordinator checks its lease before and after this operation. Playlist
     /// selection and refresh intents must wait until projection has completed.
-    pub(crate) async fn bind_list_items_for_publication(
-        &self,
-        list_id: EntityId,
-        source: Option<&AddonMediaListRevisionSnapshot>,
-    ) -> Result<()> {
+    pub(crate) async fn bind_list_items_for_publication(&self, list_id: EntityId) -> Result<()> {
         let list = self.load_list(list_id).await?;
-        self.match_persisted_items(&list, false, true, source)
-            .await?;
+        self.match_persisted_items(&list, false, true).await?;
         Ok(())
     }
 
@@ -301,12 +289,9 @@ impl AddonMediaListSynchronizer {
         &self,
         list_id: EntityId,
         playlist_id: EntityId,
-        source: Option<&AddonMediaListRevisionSnapshot>,
     ) -> Result<()> {
         let list = self.load_list(list_id).await?;
-        let desired = self
-            .match_persisted_items(&list, true, true, source)
-            .await?;
+        let desired = self.match_persisted_items(&list, true, true).await?;
         let persisted = load_generated_playlist_items(&self.pool, playlist_id).await?;
         if persisted == desired {
             return self.record_last_match(list_id, true).await;
@@ -338,7 +323,7 @@ impl AddonMediaListSynchronizer {
         &self,
         list_id: EntityId,
     ) -> Result<AddonMediaListMatchReport> {
-        self.match_list_items_with_report_inner(list_id, false, None)
+        self.match_list_items_with_report_inner(list_id, false)
             .await
     }
 
@@ -346,21 +331,13 @@ impl AddonMediaListSynchronizer {
         &self,
         list_id: EntityId,
         publication_owned: bool,
-        source: Option<&AddonMediaListRevisionSnapshot>,
     ) -> Result<AddonMediaListMatchReport> {
         if !publication_owned && self.has_active_publication(list_id).await? {
             return Ok(AddonMediaListMatchReport::default());
         }
-        let mut list = self.load_list(list_id).await?;
-        if let Some(source) = source {
-            if !publication_owned || source.list_id != list_id {
-                return Err(publication_in_progress());
-            }
-            list.name.clone_from(&source.name);
-            list.generate_playlist = source.generate_playlist;
-        }
+        let list = self.load_list(list_id).await?;
         let desired_playlist_items = self
-            .match_persisted_items(&list, list.generate_playlist, publication_owned, source)
+            .match_persisted_items(&list, list.generate_playlist, publication_owned)
             .await?;
 
         if !list.generate_playlist {
@@ -385,7 +362,6 @@ impl AddonMediaListSynchronizer {
                     &desired_playlist_items,
                     &refresh,
                     publication_owned,
-                    source.is_some(),
                 )
                 .await;
             if let Err(error) = result {
@@ -433,74 +409,18 @@ impl AddonMediaListSynchronizer {
         Ok(AddonMediaListMatchReport::one(playout_refreshes))
     }
 
-    async fn match_snapshot_items(
-        &self,
-        list: &AddonMediaList,
-        source: &AddonMediaListRevisionSnapshot,
-        generate_playlist_items: bool,
-    ) -> Result<Vec<GeneratedPlaylistItem>> {
-        let mut desired = Vec::new();
-        for retained in source.items.iter().filter(|item| item.published) {
-            let id: EntityId = sqlx::query_scalar(
-                r#"SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=? AND "ProviderId"=?"#,
-            ).bind(list.id).bind(&retained.provider_id).fetch_optional(&self.pool).await.repository()?
-                .ok_or_else(publication_in_progress)?;
-            let item = MatchItem {
-                id,
-                addon_id: list.addon_id.clone(),
-                provider_id: retained.provider_id.clone(),
-                kind: retained.kind,
-                title: retained.title.clone(),
-                year: retained.year,
-                season: retained.season,
-                episode: retained.episode,
-                rank: retained.rank,
-                source_url: retained.source_url.clone(),
-                availability: retained.availability,
-                duration_seconds: retained.duration_seconds,
-                liveness: retained.effective_liveness,
-                guids: retained.guids.clone(),
-            };
-            let matched_id = self.identify_item(&item).await?;
-            let updated = sqlx::query(
-                r#"UPDATE "AddonMediaListItem" SET "MediaItemId"=? WHERE "Id"=? AND "AddonMediaListId"=?"#,
-            ).bind(matched_id).bind(id).bind(list.id).execute(&self.pool).await.repository()?;
-            if updated.rows_affected() != 1 {
-                return Err(publication_in_progress());
-            }
-            if generate_playlist_items {
-                if let Some(selection) = self
-                    .playlist_selection(&item, matched_id, Some(retained))
-                    .await?
-                {
-                    desired.push(GeneratedPlaylistItem::new(&item, selection));
-                }
-            }
-        }
-        Ok(desired)
-    }
-
     async fn match_persisted_items(
         &self,
         list: &AddonMediaList,
         generate_playlist_items: bool,
         publication_owned: bool,
-        source: Option<&AddonMediaListRevisionSnapshot>,
     ) -> Result<Vec<GeneratedPlaylistItem>> {
-        if let Some(source) = source {
-            if !publication_owned || source.list_id != list.id {
-                return Err(publication_in_progress());
-            }
-            return self
-                .match_snapshot_items(list, source, generate_playlist_items)
-                .await;
-        }
         let rows = sqlx::query(
             r#"SELECT "Id", "ProviderId", "Kind", "Title", "Year", "Season", "Episode", "Rank", "SourceUrl",
                       "Availability", "PublishedAvailability", "Published", "DurationSeconds",
                       "PublishedLiveness"
                FROM "AddonMediaListItem"
-               WHERE "AddonMediaListId" = ? AND ("InDraft" = 1 OR "Published" = 1)
+               WHERE "AddonMediaListId" = ?
                ORDER BY "Rank", "Id""#,
         )
         .bind(list.id)
@@ -567,91 +487,12 @@ impl AddonMediaListSynchronizer {
                 return Err(publication_in_progress());
             }
             if generate_playlist_items && published {
-                if let Some(selection) = self.playlist_selection(&item, matched_id, None).await? {
+                if let Some(selection) = self.playlist_selection(&item, matched_id).await? {
                     desired.push(GeneratedPlaylistItem::new(&item, selection));
                 }
             }
         }
         Ok(desired)
-    }
-
-    /// Persist ordinary-scan chapter suggestions without changing draft revision
-    /// or the independent publication. Adopted lists write their folder first.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error on conflicting file/operation ownership or failed persistence.
-    pub async fn save_provider_chapter_inputs(
-        &self,
-        manifest_path: &std::path::Path,
-        addon_id: &str,
-        records: &[ersatzrs_addon_contract::PlaylistEntryMetadata],
-    ) -> Result<()> {
-        let list_id: Option<EntityId> = sqlx::query_scalar(
-            r#"SELECT "list"."Id" FROM "AddonMediaList" AS "list"
-               JOIN "AddonMediaListLibrary" AS "library" ON "library"."AddonMediaListId"="list"."Id"
-               WHERE "library"."ManifestPath"=? AND "list"."AddonId"=?"#,
-        )
-        .bind(manifest_path.to_string_lossy().as_ref())
-        .bind(addon_id)
-        .fetch_optional(&self.pool)
-        .await
-        .repository()?;
-        let Some(list_id) = list_id else {
-            return Ok(());
-        };
-        let mapped =
-            crate::addon_media_list_saved::mapped::MappedList::load(&self.pool, list_id).await?;
-        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
-        if let Some(mapped) = &mapped {
-            if !mapped.fence_operator_save(&mut tx).await? {
-                return Err(publication_in_progress());
-            }
-        }
-        let mut changed = false;
-        for record in records {
-            let input = record
-                .chapter_input
-                .as_deref()
-                .filter(|value| !value.trim().is_empty());
-            changed |= sqlx::query(
-                r#"UPDATE "AddonMediaListItem" SET "ProviderChapterInput"=?
-                   WHERE "AddonMediaListId"=? AND "ProviderId"=? AND "ParentProviderId" IS NULL
-                     AND "ProviderChapterInput" IS NOT ?"#,
-            )
-            .bind(input)
-            .bind(list_id)
-            .bind(&record.provider_id)
-            .bind(input)
-            .execute(&mut *tx)
-            .await
-            .repository()?
-            .rows_affected()
-                != 0;
-        }
-        let saved_guard = if changed {
-            if let Some(mapped) = mapped {
-                // Only chapter suggestions changed; existing operator asset
-                // references can be captured unchanged within this transaction.
-                let writer =
-                    crate::addon_media_list_saved::writer::SavedWriter::capture_provider_update(
-                        mapped, &mut tx, list_id,
-                    )
-                    .await?;
-                Some(writer.write(&mut tx).await?)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        let committed = tx.commit().await;
-        if saved_guard.is_some() {
-            committed.map_err(|_| crate::addon_media_list_saved::writer::pending())?;
-        } else {
-            committed.repository()?;
-        }
-        Ok(())
     }
 
     /// Update user-editable Add-on media list settings.
@@ -799,37 +640,16 @@ impl AddonMediaListSynchronizer {
         item: &EnumeratedAddonMediaListItem,
         detail_fence: Option<(EntityId, &str)>,
     ) -> Result<DetailMergeOutcome> {
-        let mapped =
-            crate::addon_media_list_saved::mapped::MappedList::load(&self.pool, list_id).await?;
-        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
-        let saved_writer = if let Some(mapped) = mapped {
-            // Restore can temporarily materialize a different draft. Defer
-            // before comparing its assets against the authoritative document.
-            if !mapped.fence(&mut tx).await? {
-                return Ok(DetailMergeOutcome::DeferredForPublication);
-            }
-            Some(
-                crate::addon_media_list_saved::writer::SavedWriter::capture_provider_update(
-                    mapped, &mut tx, list_id,
-                )
-                .await?,
-            )
-        } else {
-            None
-        };
-        // Calculate conflicts from the same state that the merge will update;
-        // file preflight must not leave stale operator overrides in memory.
         let row = sqlx::query(
             r#"SELECT "item".*, "list"."PublishedRevision"
                FROM "AddonMediaListItem" AS "item"
                JOIN "AddonMediaList" AS "list" ON "list"."Id" = "item"."AddonMediaListId"
                WHERE "item"."AddonMediaListId" = ? AND "item"."ProviderId" = ?
-                 AND "item"."InDraft" = 1
                  AND "item"."ParentProviderId" IS NULL"#,
         )
         .bind(list_id)
         .bind(&item.provider_id)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&self.pool)
         .await
         .repository()?
         .ok_or_else(|| {
@@ -862,14 +682,7 @@ impl AddonMediaListSynchronizer {
             liveness_override,
             previous_liveness_conflict,
         );
-        let previous_guids: Vec<String> = sqlx::query_scalar(
-            r#"SELECT COALESCE("Guid", '') FROM "AddonMediaListItemGuid"
-               WHERE "AddonMediaListItemId"=? ORDER BY "Id""#,
-        )
-        .bind(item_id)
-        .fetch_all(&mut *tx)
-        .await
-        .repository()?;
+        let previous_guids = self.load_item_guids(item_id).await?;
         let operational_change = row.try_get::<i32, _>("Kind").repository()?
             != encode_enum(item.kind)
             || row.try_get::<Option<String>, _>("SourceUrl").repository()? != item.source_url
@@ -892,6 +705,7 @@ impl AddonMediaListSynchronizer {
         let mut review_required = published && (operational_change || conflicts.is_some());
         let image_urls = encode_image_urls(&item.additional_image_urls)?;
         let now = encode_datetime(Utc::now());
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let mut draft_detail = false;
         if let Some((expected_item_id, lease_owner)) = detail_fence {
             if expected_item_id != item_id {
@@ -1092,26 +906,7 @@ impl AddonMediaListSynchronizer {
             sqlx::query(r#"UPDATE "AddonMediaListDetailJob" SET "OptionContextJson"=? WHERE "AddonMediaListItemId"=?"#)
                 .bind(context).bind(item_id).execute(&mut *tx).await.repository()?;
         }
-        if let Some((item_id, lease_owner)) = detail_fence {
-            crate::addon_media_list_import::finish_checkpointed_detail_in_tx(
-                &mut tx,
-                list_id,
-                item_id,
-                lease_owner,
-            )
-            .await?;
-        }
-        let saved_guard = match saved_writer {
-            Some(writer) => Some(writer.write(&mut tx).await?),
-            None => None,
-        };
-        if saved_guard.is_some() {
-            tx.commit()
-                .await
-                .map_err(|_| crate::addon_media_list_saved::writer::pending())?;
-        } else {
-            tx.commit().await.repository()?;
-        }
+        tx.commit().await.repository()?;
         Ok(DetailMergeOutcome::Applied)
     }
 
@@ -1376,14 +1171,8 @@ impl AddonMediaListSynchronizer {
             expected_phase: 0,
             next_phase: 1,
         };
-        let mapped =
-            crate::addon_media_list_saved::mapped::MappedList::load(&self.pool, list.id).await?;
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         begin_import_finalization_phase(&mut tx, fence).await?;
-        let saved_writer = crate::addon_media_list_saved::writer::SavedWriter::capture_import(
-            mapped, &mut tx, list.id,
-        )
-        .await?;
         let previous_revision: i32 =
             sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#)
                 .bind(list.id)
@@ -1493,16 +1282,7 @@ impl AddonMediaListSynchronizer {
         )
         .await?;
         complete_import_finalization_phase(&mut tx, fence).await?;
-        let saved_guard = match saved_writer {
-            Some(writer) => Some(writer.write_import(&mut tx).await?),
-            None => None,
-        };
-        let committed = tx.commit().await;
-        if saved_guard.is_some() {
-            committed.map_err(|_| crate::addon_media_list_saved::writer::pending())
-        } else {
-            committed.repository()
-        }
+        tx.commit().await.repository()
     }
 
     #[allow(clippy::too_many_lines)]
@@ -1570,42 +1350,31 @@ impl AddonMediaListSynchronizer {
         reconcile_generation: Option<i32>,
         finalization: Option<ImportFinalizationFence<'_>>,
     ) -> Result<AddonMediaList> {
-        let mapped =
-            crate::addon_media_list_saved::mapped::MappedList::load(&self.pool, list_id).await?;
+        let incoming_ids = incoming
+            .iter()
+            .map(|item| item.provider_id.as_str())
+            .collect::<HashSet<_>>();
+        let existing = self.load_existing_items(list_id).await?;
+        let existing_ids = existing
+            .iter()
+            .map(|item| (item.provider_id.as_str(), item.id))
+            .collect::<HashMap<_, _>>();
+        let observed_at = Utc::now();
+        let observed_at_text = encode_datetime(observed_at);
+
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         if let Some(fence) = finalization {
             begin_import_finalization_phase(&mut tx, fence).await?;
         }
         ensure_not_publishing_tx(&mut tx, list_id).await?;
-        let saved_writer = crate::addon_media_list_saved::writer::SavedWriter::capture_import(
-            mapped, &mut tx, list_id,
-        )
-        .await?;
-        let incoming_ids = incoming
-            .iter()
-            .map(|item| item.provider_id.as_str())
-            .collect::<HashSet<_>>();
-        let existing = Self::load_existing_items(&mut tx, list_id).await?;
-        let existing_ids = existing
-            .iter()
-            .map(|item| (item.provider_id.as_str(), item.id))
-            .collect::<HashMap<_, _>>();
-        let draft_ids = existing
-            .iter()
-            .filter(|item| item.in_draft)
-            .map(|item| item.provider_id.as_str())
-            .collect::<HashSet<_>>();
-        let observed_at = Utc::now();
-        let observed_at_text = encode_datetime(observed_at);
-
         if delta {
             let mut incoming_ranks = incoming
                 .iter()
-                .filter(|item| !draft_ids.contains(item.provider_id.as_str()))
+                .filter(|item| !existing_ids.contains_key(item.provider_id.as_str()))
                 .map(|item| item.rank)
                 .collect::<Vec<_>>();
             incoming_ranks.sort_unstable();
-            for item in existing.iter().filter(|item| item.in_draft) {
+            for item in &existing {
                 if incoming_ids.contains(item.provider_id.as_str()) {
                     continue;
                 }
@@ -1627,29 +1396,19 @@ impl AddonMediaListSynchronizer {
                 .repository()?;
         }
         let mut retained_count = 0_usize;
-        let mut draft_membership_changed = false;
         let mut tombstone_rank = incoming
             .iter()
             .map(|item| item.rank)
             .max()
             .unwrap_or(-1)
             .saturating_add(1);
-        for item in existing.iter().filter(|item| item.in_draft) {
+        for item in &existing {
             if delta {
                 break;
             }
             if !incoming_ids.contains(item.provider_id.as_str()) {
                 if item.parent_provider_id.is_some() && reconcile_generation.is_none() {
-                    if item.published {
-                        draft_membership_changed = true;
-                        remove_retired_draft_jobs(&mut tx, list_id, item.id).await?;
-                    }
-                    let sql = if item.published {
-                        r#"UPDATE "AddonMediaListItem" SET "InDraft"=0 WHERE "Id"=?"#
-                    } else {
-                        r#"DELETE FROM "AddonMediaListItem" WHERE "Id" = ?"#
-                    };
-                    sqlx::query(sql)
+                    sqlx::query(r#"DELETE FROM "AddonMediaListItem" WHERE "Id" = ?"#)
                         .bind(item.id)
                         .execute(&mut *tx)
                         .await
@@ -1686,45 +1445,32 @@ impl AddonMediaListSynchronizer {
 
         let mut persisted_ids = HashMap::new();
         for item in incoming {
-            let item_id = if let Some(existing_id) =
-                existing_ids.get(item.provider_id.as_str()).copied()
-            {
-                let image_urls = encode_image_urls(&item.additional_image_urls)?;
-                let provider_metadata = encode_metadata(&item.metadata)?;
-                let existing_item = existing
-                    .iter()
-                    .find(|existing| existing.id == existing_id)
-                    .ok_or_else(|| RepositoryError::Decode {
-                        kind: "add-on media-list refresh identity",
-                        value: existing_id.to_string(),
-                    })?;
-                if !existing_item.in_draft {
-                    draft_membership_changed = true;
-                    readopt_draft_item(&mut tx, list_id, existing_id, item.collection_role).await?;
-                }
-                let conflicts = if existing_item.in_draft {
-                    refresh_conflict_json(
+            let item_id =
+                if let Some(existing_id) = existing_ids.get(item.provider_id.as_str()).copied() {
+                    let image_urls = encode_image_urls(&item.additional_image_urls)?;
+                    let provider_metadata = encode_metadata(&item.metadata)?;
+                    let existing_item = existing
+                        .iter()
+                        .find(|existing| existing.id == existing_id)
+                        .ok_or_else(|| RepositoryError::Decode {
+                            kind: "add-on media-list refresh identity",
+                            value: existing_id.to_string(),
+                        })?;
+                    let conflicts = refresh_conflict_json(
                         &existing_item.provider_metadata_json,
                         &provider_metadata,
                         &existing_item.metadata_override_json,
                         existing_item.metadata_conflict_json.as_deref(),
-                    )?
-                } else {
-                    None
-                };
-                let (effective_liveness, liveness_conflict) = if existing_item.in_draft {
-                    refresh_liveness(
+                    )?;
+                    let (effective_liveness, liveness_conflict) = refresh_liveness(
                         existing_item.provider_liveness,
                         item.liveness,
                         existing_item.liveness_override,
                         existing_item.liveness_conflict,
-                    )
-                } else {
-                    (item.liveness, false)
-                };
-                sqlx::query(
-                    r#"UPDATE "AddonMediaListItem"
-                       SET "InDraft" = 1, "Kind" = ?, "Rank" = ?, "Title" = ?, "Year" = ?,
+                    );
+                    sqlx::query(
+                        r#"UPDATE "AddonMediaListItem"
+                       SET "Kind" = ?, "Rank" = ?, "Title" = ?, "Year" = ?,
                            "DisplayTitle" = ?,
                            "Season" = CASE WHEN ? THEN "Season" ELSE ? END,
                            "Episode" = CASE WHEN ? THEN "Episode" ELSE ? END,
@@ -1742,59 +1488,59 @@ impl AddonMediaListSynchronizer {
                            "LastReconcileGeneration" =
                                COALESCE(?, "LastReconcileGeneration")
                        WHERE "Id" = ?"#,
-                )
-                .bind(encode_enum(item.kind))
-                .bind(item.rank)
-                .bind(&item.title)
-                .bind(item.year)
-                .bind(&item.display_title)
-                .bind(reconcile_generation.is_some() && existing_item.in_draft)
-                .bind(item.season)
-                .bind(reconcile_generation.is_some() && existing_item.in_draft)
-                .bind(item.episode)
-                .bind(&item.source_url)
-                .bind(encode_enum(item.availability))
-                .bind(&item.availability_reason)
-                .bind(item.availability_reason_code.map(encode_enum))
-                .bind(encode_datetime(Utc::now()))
-                .bind(reconcile_generation.is_some() && existing_item.in_draft)
-                .bind(encode_enum(item.content_kind))
-                .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
-                .bind(&item.parent_provider_id)
-                .bind(optional_fragment_bound(
-                    item.fragment_start_seconds,
-                    "fragment start",
-                )?)
-                .bind(optional_fragment_bound(
-                    item.fragment_end_seconds,
-                    "fragment end",
-                )?)
-                .bind(image_urls)
-                .bind(provider_metadata)
-                .bind(conflicts)
-                .bind(encode_enum(item.liveness))
-                .bind(encode_enum(effective_liveness))
-                .bind(liveness_conflict)
-                .bind(reconcile_generation.is_some() || !existing_item.in_draft)
-                .bind(reconcile_generation)
-                .bind(existing_id)
-                .execute(&mut *tx)
-                .await
-                .repository()?;
-                sqlx::query(
-                    r#"DELETE FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" = ?"#,
-                )
-                .bind(existing_id)
-                .execute(&mut *tx)
-                .await
-                .repository()?;
-                insert_item_guids(&mut tx, existing_id, &item.guids).await?;
-                existing_id
-            } else {
-                let item_id = insert_item(&mut tx, list_id, item, reconcile_generation).await?;
-                insert_item_guids(&mut tx, item_id, &item.guids).await?;
-                item_id
-            };
+                    )
+                    .bind(encode_enum(item.kind))
+                    .bind(item.rank)
+                    .bind(&item.title)
+                    .bind(item.year)
+                    .bind(&item.display_title)
+                    .bind(reconcile_generation.is_some())
+                    .bind(item.season)
+                    .bind(reconcile_generation.is_some())
+                    .bind(item.episode)
+                    .bind(&item.source_url)
+                    .bind(encode_enum(item.availability))
+                    .bind(&item.availability_reason)
+                    .bind(item.availability_reason_code.map(encode_enum))
+                    .bind(encode_datetime(Utc::now()))
+                    .bind(reconcile_generation.is_some())
+                    .bind(encode_enum(item.content_kind))
+                    .bind(optional_fragment_bound(item.duration_seconds, "duration")?)
+                    .bind(&item.parent_provider_id)
+                    .bind(optional_fragment_bound(
+                        item.fragment_start_seconds,
+                        "fragment start",
+                    )?)
+                    .bind(optional_fragment_bound(
+                        item.fragment_end_seconds,
+                        "fragment end",
+                    )?)
+                    .bind(image_urls)
+                    .bind(provider_metadata)
+                    .bind(conflicts)
+                    .bind(encode_enum(item.liveness))
+                    .bind(encode_enum(effective_liveness))
+                    .bind(liveness_conflict)
+                    .bind(reconcile_generation.is_some())
+                    .bind(reconcile_generation)
+                    .bind(existing_id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                    sqlx::query(
+                        r#"DELETE FROM "AddonMediaListItemGuid" WHERE "AddonMediaListItemId" = ?"#,
+                    )
+                    .bind(existing_id)
+                    .execute(&mut *tx)
+                    .await
+                    .repository()?;
+                    insert_item_guids(&mut tx, existing_id, &item.guids).await?;
+                    existing_id
+                } else {
+                    let item_id = insert_item(&mut tx, list_id, item, reconcile_generation).await?;
+                    insert_item_guids(&mut tx, item_id, &item.guids).await?;
+                    item_id
+                };
             persisted_ids.insert(item.provider_id.as_str(), item_id);
         }
 
@@ -1851,7 +1597,7 @@ impl AddonMediaListSynchronizer {
             .await?;
         let item_count = if delta {
             sqlx::query_scalar::<_, i64>(
-                r#"SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ? AND "InDraft" = 1"#,
+                r#"SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ?"#,
             )
             .bind(list_id)
             .fetch_one(&mut *tx)
@@ -1860,9 +1606,7 @@ impl AddonMediaListSynchronizer {
         } else {
             i64::try_from(incoming.len().saturating_add(retained_count)).unwrap_or(i64::MAX)
         };
-        let draft_changed = draft_membership_changed
-            || reconcile_generation.is_some()
-            || (delta && !incoming.is_empty());
+        let draft_changed = reconcile_generation.is_some() || (delta && !incoming.is_empty());
         sqlx::query(
             r#"UPDATE "AddonMediaList"
                SET "ItemCount" = ?,
@@ -1892,16 +1636,8 @@ impl AddonMediaListSynchronizer {
             .await?;
             complete_import_finalization_phase(&mut tx, fence).await?;
         }
-        let saved_guard = match saved_writer {
-            Some(writer) => Some(writer.write_import(&mut tx).await?),
-            None => None,
-        };
-        let committed = tx.commit().await;
-        if saved_guard.is_some() {
-            committed.map_err(|_| crate::addon_media_list_saved::writer::pending())?;
-        } else {
-            committed.repository()?;
-        }
+        tx.commit().await.repository()?;
+
         self.load_list(list_id).await
     }
 
@@ -1963,12 +1699,9 @@ impl AddonMediaListSynchronizer {
         })
     }
 
-    async fn load_existing_items(
-        tx: &mut Transaction<'_, Db>,
-        list_id: EntityId,
-    ) -> Result<Vec<ExistingItem>> {
+    async fn load_existing_items(&self, list_id: EntityId) -> Result<Vec<ExistingItem>> {
         let rows = sqlx::query(
-            r#"SELECT "Id", "InDraft", "Published", "ProviderId", "Rank", "ParentProviderId", "ProviderMetadataJson",
+            r#"SELECT "Id", "ProviderId", "Rank", "ParentProviderId", "ProviderMetadataJson",
                       "MetadataOverrideJson", "MetadataConflictJson", "ProviderLiveness",
                       "LivenessOverride", "LivenessConflict"
                FROM "AddonMediaListItem"
@@ -1976,7 +1709,7 @@ impl AddonMediaListSynchronizer {
                ORDER BY "Rank", "Id""#,
         )
         .bind(list_id)
-        .fetch_all(&mut **tx)
+        .fetch_all(&self.pool)
         .await
         .repository()?;
 
@@ -1984,8 +1717,6 @@ impl AddonMediaListSynchronizer {
             .map(|row| {
                 Ok(ExistingItem {
                     id: row.try_get("Id").repository()?,
-                    in_draft: decode_bool_column(row, "InDraft")?,
-                    published: decode_bool_column(row, "Published")?,
                     provider_id: row.try_get("ProviderId").repository()?,
                     rank: row.try_get("Rank").repository()?,
                     parent_provider_id: row.try_get("ParentProviderId").repository()?,
@@ -2257,7 +1988,6 @@ impl AddonMediaListSynchronizer {
         }
     }
 
-    #[allow(clippy::too_many_arguments)] // Snapshot policy and publication ownership are separate guards.
     async fn commit_generated_playlist_creation(
         &self,
         list: &AddonMediaList,
@@ -2265,7 +1995,6 @@ impl AddonMediaListSynchronizer {
         desired: &[GeneratedPlaylistItem],
         refresh: &GeneratedPlaylistRefresh,
         publication_owned: bool,
-        snapshot_owned: bool,
     ) -> Result<EntityId> {
         let mut transaction = crate::db::begin_write(&self.pool).await.repository()?;
         let result = sqlx::query(
@@ -2281,11 +2010,10 @@ impl AddonMediaListSynchronizer {
 
         let linked = sqlx::query(
             r#"UPDATE "AddonMediaList" SET "PlaylistId" = ?
-               WHERE "Id" = ? AND "PlaylistId" IS NULL AND ("GeneratePlaylist" = 1 OR ? = 1)"#,
+               WHERE "Id" = ? AND "PlaylistId" IS NULL AND "GeneratePlaylist" = 1"#,
         )
         .bind(playlist_id)
         .bind(list.id)
-        .bind(snapshot_owned && publication_owned && list.generate_playlist)
         .execute(&mut *transaction)
         .await
         .repository()?;
@@ -2496,19 +2224,8 @@ impl AddonMediaListSynchronizer {
         &self,
         item: &MatchItem,
         provider_media_item_id: Option<EntityId>,
-        source: Option<&AddonMediaListRevisionItem>,
     ) -> Result<Option<PlaylistSelection>> {
-        let retained_replacement = source.and_then(|item| {
-            item.replacement_media_item_id
-                .zip(item.replacement_media_version_id)
-        });
-        if source.is_some_and(|item| {
-            item.replacement_media_item_id.is_some() != item.replacement_media_version_id.is_some()
-        }) {
-            return Err(publication_in_progress());
-        }
         if item.kind == AddonMediaListItemKind::RemoteStream
-            && retained_replacement.is_none()
             && (item.liveness == RemoteStreamLiveness::Unknown
                 || (item.liveness == RemoteStreamLiveness::Finite
                     && item.duration_seconds.is_none_or(|duration| duration == 0)))
@@ -2532,18 +2249,9 @@ impl AddonMediaListSynchronizer {
                     collection_type: Some(COLLECTION_TYPE_EPISODE),
                 }));
             }
-            if let Some((media, version)) = retained_replacement {
-                return self.replacement_selection(media, version).await;
-            }
             return Ok(provider_media_item_id.map(PlaylistSelection::provider));
         }
 
-        if source.is_some() {
-            return match retained_replacement {
-                Some((media, version)) => self.replacement_selection(media, version).await,
-                None => Ok(None),
-            };
-        }
         let row = sqlx::query(
             r#"SELECT "MediaItemId", "MediaVersionId"
                FROM "AddonMediaListItemReplacement"
@@ -2558,15 +2266,6 @@ impl AddonMediaListSynchronizer {
         };
         let media_item_id = row.try_get("MediaItemId").repository()?;
         let media_version_id = row.try_get("MediaVersionId").repository()?;
-        self.replacement_selection(media_item_id, media_version_id)
-            .await
-    }
-
-    async fn replacement_selection(
-        &self,
-        media_item_id: EntityId,
-        media_version_id: EntityId,
-    ) -> Result<Option<PlaylistSelection>> {
         let candidate = crate::repositories::load_replacement_candidate(
             &self.pool,
             media_item_id,
@@ -2759,7 +2458,6 @@ where
                SELECT "item"."Id", ?, ?, 1, ?, NULL, NULL
                FROM "AddonMediaListItem" AS "item"
                WHERE "item"."AddonMediaListId" = ?
-                 AND "item"."InDraft" = 1
                  AND ("item"."LastReconcileGeneration" IS NULL
                       OR "item"."LastReconcileGeneration" <> ?)
                ON CONFLICT ("AddonMediaListItemId") DO UPDATE SET
@@ -2807,7 +2505,6 @@ where
                      FROM "AddonMediaListItem" AS "item"
                      WHERE "item"."Id" = "tombstone"."AddonMediaListItemId"
                        AND "item"."AddonMediaListId" = ?
-                       AND "item"."InDraft" = 1
                        AND "item"."LastReconcileGeneration" = ?
                  )"#,
         )
@@ -3222,7 +2919,7 @@ where
         let requests = sqlx::query(
             r#"SELECT "ProviderId", "SourceUrl", "ChapterInput"
                FROM "AddonMediaListItem"
-               WHERE "AddonMediaListId" = ? AND "InDraft" = 1 AND "ParentProviderId" IS NULL
+               WHERE "AddonMediaListId" = ? AND "ParentProviderId" IS NULL
                  AND COALESCE("ChapterInput", '') <> ''
                ORDER BY "Rank", "Id""#,
         )
@@ -3291,7 +2988,7 @@ pub(crate) async fn reconcile_changed_addon_state_in_tx(
     .repository()?;
     sqlx::query(
         r#"UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson" = '{}'
-           WHERE "AddonMediaListId" = ? AND "InDraft" = 1"#,
+           WHERE "AddonMediaListId" = ?"#,
     )
     .bind(list_id)
     .execute(&mut **tx)
@@ -3418,57 +3115,6 @@ async fn insert_item(
     inserted_id(tx, result).await.repository()
 }
 
-/// Reuse retained identity without importing its historic draft choices.
-/// Published fields, local published bindings and immutable revision/artifact
-/// records remain attached to the same item ID.
-async fn readopt_draft_item(
-    tx: &mut Transaction<'_, Db>,
-    list_id: EntityId,
-    item_id: EntityId,
-    role: ersatzrs_domain::AddonMediaListItemRole,
-) -> Result<()> {
-    sqlx::query(
-        r#"UPDATE "AddonMediaListItem" SET "Included"=1,
-        "MetadataOverrideJson"='{}', "MetadataConflictJson"=NULL,
-        "DraftOptionOverridesJson"='{}', "LivenessOverride"=NULL, "LivenessConflict"=0,
-        "ChapterInput"=NULL, "ProviderChapterInput"=NULL, "CollectionRole"=?,
-        "LastReconcileGeneration"=NULL, "SavedReplacementJson"=NULL WHERE "Id"=? AND "InDraft"=0"#,
-    )
-    .bind(encode_enum(role))
-    .bind(item_id)
-    .execute(&mut **tx)
-    .await
-    .repository()?;
-    for statement in [
-        r#"DELETE FROM "AddonMediaListItemReplacement" WHERE "AddonMediaListItemId"=?"#,
-        r#"DELETE FROM "AddonMediaListItemTombstone" WHERE "AddonMediaListItemId"=?"#,
-    ] {
-        sqlx::query(statement)
-            .bind(item_id)
-            .execute(&mut **tx)
-            .await
-            .repository()?;
-    }
-    remove_retired_draft_jobs(tx, list_id, item_id).await?;
-    Ok(())
-}
-
-/// Remove obsolete detail state and cancel active draft operations while
-/// preserving process recovery evidence, published owners and artifact pins.
-async fn remove_retired_draft_jobs(
-    tx: &mut Transaction<'_, Db>,
-    list_id: EntityId,
-    item_id: EntityId,
-) -> Result<()> {
-    sqlx::query(r#"DELETE FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId"=?"#)
-        .bind(item_id)
-        .execute(&mut **tx)
-        .await
-        .repository()?;
-    crate::addon_media_list_item_jobs::cancel_item_jobs_in_tx(tx, list_id, item_id, Utc::now())
-        .await
-}
-
 async fn insert_item_guids(
     tx: &mut sqlx::Transaction<'_, Db>,
     item_id: EntityId,
@@ -3488,8 +3134,6 @@ async fn insert_item_guids(
 #[derive(Debug)]
 struct ExistingItem {
     id: EntityId,
-    in_draft: bool,
-    published: bool,
     provider_id: String,
     rank: i32,
     parent_provider_id: Option<String>,
@@ -4170,9 +3814,6 @@ const fn collection_type_for_kind(kind: AddonMediaListItemKind) -> i32 {
 
 #[cfg(test)]
 mod reconcile_tests {
-    mod in_draft_tests;
-    mod saved_detail_tests;
-    mod saved_import_tests;
     use ersatzrs_core::repositories::AddonMediaListLifecycleRepository as _;
     use ersatzrs_core::repositories::AddonMediaListNfoMetadata;
     use sqlx::sqlite::SqlitePoolOptions;
@@ -4340,46 +3981,6 @@ mod reconcile_tests {
         .await
         .expect("seed item artifact");
         pool
-    }
-
-    #[tokio::test]
-    async fn unresolved_replacement_survives_merge_but_not_readoption() {
-        let pool = fixture().await;
-        sqlx::query(
-            r#"DELETE FROM "AddonMediaListItemReplacement" WHERE "AddonMediaListItemId"=20"#,
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"='{"file":null}' WHERE "Id"=20"#)
-            .execute(&pool).await.unwrap();
-        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
-        synchronizer
-            .save_list_items_with_mode(10, &[source_item("Updated", 0)], false, None, None)
-            .await
-            .unwrap();
-        let preserved: Option<String> = sqlx::query_scalar(
-            r#"SELECT "SavedReplacementJson" FROM "AddonMediaListItem" WHERE "Id"=20"#,
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(preserved.as_deref(), Some(r#"{"file":null}"#));
-        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "InDraft"=0 WHERE "Id"=20"#)
-            .execute(&pool)
-            .await
-            .unwrap();
-        synchronizer
-            .save_list_items_with_mode(10, &[source_item("Readopted", 0)], false, None, None)
-            .await
-            .unwrap();
-        let cleared: Option<String> = sqlx::query_scalar(
-            r#"SELECT "SavedReplacementJson" FROM "AddonMediaListItem" WHERE "Id"=20"#,
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert!(cleared.is_none());
     }
 
     #[tokio::test]
@@ -4618,7 +4219,6 @@ mod reconcile_tests {
 
 #[cfg(test)]
 mod generated_playlist_refresh_tests {
-    mod source_tests;
     use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::Executor as _;
 
@@ -5168,14 +4768,7 @@ mod generated_playlist_refresh_tests {
         reject_refresh_intent_inserts(&pool).await;
 
         synchronizer
-            .commit_generated_playlist_creation(
-                &list,
-                1,
-                &[generated_item(1)],
-                &refresh,
-                false,
-                false,
-            )
+            .commit_generated_playlist_creation(&list, 1, &[generated_item(1)], &refresh, false)
             .await
             .expect_err("intent failure must roll back playlist creation");
 
@@ -5404,48 +4997,6 @@ mod generated_playlist_refresh_tests {
         .await
         .expect("count scan resolutions");
         assert_eq!(resolutions, 0);
-    }
-
-    #[tokio::test]
-    async fn ordinary_match_retains_published_only_playlist_member() {
-        let pool = pool().await;
-        seed_generated_list(&pool).await;
-        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "InDraft"=0 WHERE "Id"=20"#)
-            .execute(&pool)
-            .await
-            .expect("remove owner from draft only");
-        let before = playlist_item_identity(&pool, PLAYLIST_ID).await;
-        let synchronizer = AddonMediaListSynchronizer::new(pool.clone());
-
-        let report = synchronizer
-            .match_list_items_with_report(LIST_ID)
-            .await
-            .expect("match while published member is absent from draft");
-
-        assert_eq!(report.matched_list_count, 1);
-        assert!(report.playout_refreshes.is_empty());
-        assert_eq!(playlist_item_identity(&pool, PLAYLIST_ID).await, before);
-        assert!(intent_playout_ids(&pool).await.is_empty());
-        let binding: Option<i64> =
-            sqlx::query_scalar(r#"SELECT "MediaItemId" FROM "AddonMediaListItem" WHERE "Id"=20"#)
-                .fetch_one(&pool)
-                .await
-                .expect("load retained published binding");
-        assert_eq!(binding, Some(1));
-
-        // Model the membership transition performed by explicit publication.
-        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Published"=0 WHERE "Id"=20"#)
-            .execute(&pool)
-            .await
-            .expect("remove owner from published membership");
-        synchronizer
-            .match_list_items_with_report(LIST_ID)
-            .await
-            .expect("match after published membership changes");
-        assert!(load_generated_playlist_items(&pool, PLAYLIST_ID)
-            .await
-            .expect("load updated playlist")
-            .is_empty());
     }
 
     #[tokio::test]

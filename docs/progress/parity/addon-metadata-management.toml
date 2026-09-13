@@ -2,7 +2,7 @@ feature    = 'Reviewable add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'In progress'
-adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091', '0092', '0093', '0094']
+adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091', '0092', '0093']
 
 summary = '''
 ADR 0075 adds provider-neutral drafts with NFOs, frozen contracts,
@@ -61,15 +61,6 @@ Packaged browser-profile and release gates are open.
 '''
 
 [[debt]]
-id          = 'addon-mvp-history-removal-verification'
-description = 'Verify removal of historical browsing/comparison/arbitrary Restore from native and hydrated admin/API paths while preserving current draftdiff and publication recovery.'
-discovered  = '2026-09-13'
-resolved    = true
-adr         = '0094'
-evidence    = 'Milestone amm-o-01 owns the canonical evidence: 48 focused native tests, scoped web Clippy, formatting/hydration lint, matched build and 14 Chromium/Firefox cases across two focused runs. Astra and Claude independently reviewed source removal with no P1/P2.'
-resolution  = 'Historical native/hydrated controls and API entry points are absent; rejected old POST does not mutate state. Current draft comparison, publication, Reset and exact failed-generation recovery remain verified. Internal snapshots and version counters are unchanged. Broader folder-first O01 acceptance remains open.'
-
-[[debt]]
 id          = 'addon-preparation-readmission-context'
 description = 'UX follow-up W31: when provider details change review-gated availability after successful publication, the new saved revision asks for Prepare again without explaining the changed draft or possible reuse of existing prepared media.'
 discovered  = '2026-09-12'
@@ -117,7 +108,7 @@ discovered  = '2026-09-12'
 resolved    = true
 resolution  = 'Resolved locally on 2026-09-12. Removed the two-step promise and added localized import/review/save/conditional-preparation guidance without a wizard. Selected web tests and both-browser first-default-TV workflows pass; Claude independently reviewed the real Add flow and next preparation action on 2026-09-12. Action placement remains low-priority polish. Evidence: test-results/walkthrough-fixes-native-20260912, walkthrough-fixes-run1 and walkthrough-fixes-run2; independent ui-fixed visual captures.'
 adr         = '0091'
-evidence    = 'Joint rendered/source audit confirmed the two-step copy. Owning milestone amm-n-01b remains open. Later UX work, outside A01-A05 and after the maintainer-prioritized amm-o-01; reuse current readiness without introducing a mandatory wizard.'
+evidence    = 'Joint rendered/source audit confirmed the two-step copy. Owning milestone amm-n-01b remains open. Later UX work, outside A01-A05; reuse current readiness without introducing a mandatory wizard.'
 
 [[debt]]
 id          = 'addon-add-source-feedback-context'
@@ -193,17 +184,11 @@ evidence    = 'Joint walkthrough W22/W23: all thirteen exclusions were performed
 id          = 'folder-first-addon-list-portability'
 description = 'Saved list files/folders must be authoritative over SQLite: copied add-on media folders are discovered and their list information reconstructed or updated on the next ordinary or scheduled scan. Admin removal retains files but hides the list locally; rescans preserve that choice, while newly discovered shared copies appear normally elsewhere.'
 discovered  = '2026-09-12'
-resolved    = false
+resolved    = true
 adr         = '0093'
-evidence    = 'AMM-O-01 owns acceptance and current evidence. Its first local checkpoint implements visibility-only hide/reveal with native and browser retention proof; folder authority and independent-database reconstruction remain unimplemented. The maintainer confirmed separate saved/published content, automatic activation after receiving-installation validation, and local preparation for missing Download ahead media without changing modes. This debt remains open until full copied-folder acceptance passes.'
+evidence    = 'Maintainer explicitly accepted this requirement and ordered amm-o-01 immediately after verified completion of the current A01-A05 slice. Existing NFO/YAML precedence and portable-subfolder wording do not prove independent-database list reconstruction. The milestone owns acceptance; no implementation claimed.'
 
-[[debt]]
-id          = 'addon-list-mobile-row-action-discoverability'
-description = 'Low UX follow-up: add-on-list row actions require horizontal scrolling within the bounded table at narrow widths. Consider a visible scroll cue or a compact action placement when revisiting the list layout; do not change visibility or playback semantics.'
-discovered  = '2026-09-12'
-resolved    = false
-adr         = '0091'
-evidence    = 'O-01 visibility final run3 dark-theme captures at 390 pixels retain a bounded horizontal table. The browser proves keyboard focus/scroll reaches the complete Show list action without page-level overflow or excessive fixture row height. This is discoverability polish, not a failed functional gate or authorization for a table redesign; the O-01 milestone owns retained evidence.'
+resolution  = 'Withdrawn by the maintainer on 2026-09-13, not implemented. ADR 0093 and amm-o-01 are inactive; the pre-implementation baseline is restored. Original scope and stopped work are retained at recovery checkpoint 0e9413d3.'
 
 [[debt]]
 id          = 'retained-option-schema-evolution'
@@ -541,7 +526,8 @@ description = 'Add inherited list defaults, nullable per-item overrides, bulk pr
 discovered  = '2026-09-01'
 adr         = '0085'
 evidence    = 'The official package currently has no bulk mutation, access-test, or artifact input and its playback command streams directly to stdout. yt-dlp documents browser-cookie enums, --sponsorblock-remove as video-file post-processing, and --write-subs with --no-write-auto-subs. ADR 0052 already implements global subtitle-language precedence, but generated Remote Streams receive no provider subtitle rows. AMM-K-01 adds schema-declared inherited list/item option storage plus artifact ownership and budget foundations; AMM-M still owns provider declarations, operator UX, production, cleanup, and playback projection. Tracked by AMM-M and plans/addon-list-lifecycle-broadening.md.'
-resolved    = false
+resolved    = true
+resolution  = 'Resolved 2026-09-13 (maintainer accepted). Inherited list defaults, per-item overrides, bulk preview and undo, redacted browser access testing, finite SponsorBlock interval streaming and human default/fallback subtitles are delivered by amm-m-01a and amm-m-02 (Complete). The real-channel proof remains amm-n-03 acceptance.'
 
 [[debt]]
 id          = 'enabled-yt-dlp-tool-is-not-maintained-by-ersatzrs'
@@ -724,7 +710,8 @@ id          = 'windows-addon-browser-profile-locations-stripped'
 description = 'Windows add-on execution strips the directory-location variables required by native yt-dlp browser-profile discovery.'
 discovered  = '2026-09-11'
 adr         = '0085'
-resolved    = false
+resolved    = true
+resolution  = 'Resolved 2026-09-13 (maintainer accepted). Windows add-on execution now preserves APPDATA and LOCALAPPDATA (crates/ersatzrs-infra/src/addons.rs allowlist) with a native Windows allowlist regression. Real browser-profile dogfood remains amm-n-03 acceptance.'
 evidence    = '''
 AMM-N-03 owns correction and native acceptance. The host clears the child
 environment and omits APPDATA and LOCALAPPDATA; neither resolved settings nor

@@ -1,16 +1,9 @@
 mod addon_media_list;
 pub(crate) mod addon_media_list_auto_eligibility;
 mod addon_media_list_lifecycle;
-pub(crate) use addon_media_list_lifecycle::{
-    insert_revision_snapshot_in_tx, load_current_revision_items_in_tx, load_draft_options_in_tx,
-    load_valid_revision_snapshot_in_tx, register_option_schema_in_tx, revision_snapshot_digest,
-    save_draft_options_tx,
-};
 pub(crate) mod addon_media_list_reset;
 pub(crate) mod addon_publication_fs;
-pub(crate) use addon_media_list::{
-    artwork_role_value, load_replacement_candidate, stage_editor_artwork_in_tx,
-};
+pub(crate) use addon_media_list::load_replacement_candidate;
 mod admin_media;
 mod admin_settings;
 mod artwork;

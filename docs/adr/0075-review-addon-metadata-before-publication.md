@@ -4,9 +4,9 @@
 
 Accepted (2026-08-21)
 
-ADR 0093 supersedes database-only ownership of saved portable list content;
-its folder-first reconstruction remains unimplemented. The explicit review,
-publication and current-playback safety requirements here remain in force.
+ADR 0093 was withdrawn on 2026-09-13. Database ownership of saved drafts and
+publication snapshots remains governed by this decision, together with its
+explicit review, publication and current-playback safety requirements.
 
 ## Implementation
 

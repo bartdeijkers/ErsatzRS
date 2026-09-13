@@ -57,12 +57,7 @@ pub(super) async fn save(
         || save
             .delivery_mode
             .is_some_and(|mode| mode != current.delivery_mode);
-    let saved_writer =
-        crate::addon_media_list_saved::writer::SavedWriter::prepare(pool, save).await?;
     let mut tx = crate::db::begin_write(pool).await.repository()?;
-    if let Some(writer) = &saved_writer {
-        writer.fence(&mut tx).await?;
-    }
     if changes_draft {
         crate::addon_media_list_sync::ensure_not_publishing_tx(&mut tx, save.list_id).await?;
     }
@@ -120,17 +115,7 @@ pub(super) async fn save(
         crate::repositories::managed_library_operation::enqueue_reconcile_tx(&mut tx, save.list_id)
             .await?;
     }
-    let saved_guard = if let Some(writer) = saved_writer {
-        Some(writer.write(&mut tx).await?)
-    } else {
-        None
-    };
-    let committed = tx.commit().await;
-    if saved_guard.is_some() {
-        committed.map_err(|_| crate::addon_media_list_saved::writer::pending())?;
-    } else {
-        committed.repository()?;
-    }
+    tx.commit().await.repository()?;
     Ok(revision + i32::from(changes_draft))
 }
 
@@ -172,7 +157,7 @@ async fn save_item(
     let row = sqlx::query(
         r#"SELECT "ProviderMetadataJson", "MetadataOverrideJson", "MetadataConflictJson",
         "ParentProviderId", "DurationSeconds", "ContentKind", "Included", "LivenessOverride"
-        FROM "AddonMediaListItem" WHERE "Id" = ? AND "AddonMediaListId" = ? AND "InDraft" = 1"#,
+        FROM "AddonMediaListItem" WHERE "Id" = ? AND "AddonMediaListId" = ?"#,
     )
     .bind(edit.item_id)
     .bind(list_id)
@@ -371,11 +356,6 @@ async fn save_replacement(
         .await
         .repository()?;
     }
-    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson" = NULL WHERE "Id" = ?"#)
-        .bind(item_id)
-        .execute(&mut **tx)
-        .await
-        .repository()?;
     Ok(())
 }
 

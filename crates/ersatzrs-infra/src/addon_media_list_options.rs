@@ -267,7 +267,7 @@ fn resolve_values(
     })
 }
 
-pub(crate) fn wire_values(schema: &str, stored: &StoredValues) -> AddonMediaListOptionValues {
+fn wire_values(schema: &str, stored: &StoredValues) -> AddonMediaListOptionValues {
     AddonMediaListOptionValues {
         schema: schema.into(),
         values: stored

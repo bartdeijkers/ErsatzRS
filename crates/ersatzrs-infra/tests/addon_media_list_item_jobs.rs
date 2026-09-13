@@ -71,62 +71,6 @@ fn success(now: chrono::DateTime<chrono::Utc>) -> ItemOperationCompletion {
     }
 }
 
-#[tokio::test]
-async fn unresolved_replacement_blocks_preparation_but_preserves_access_inspection() {
-    let (pool, queue, input) = fixture().await;
-    let now = common::fixed_time();
-    queue
-        .enqueue(1, 10, 0, ItemOperationKind::Preparation, input.clone(), now)
-        .await
-        .unwrap();
-    pool.execute(
-        r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"='{"file":null}' WHERE "Id"=10"#,
-    )
-    .await
-    .unwrap();
-    assert!(queue
-        .enqueue(1, 10, 0, ItemOperationKind::Preparation, input.clone(), now)
-        .await
-        .is_err());
-    // Already admitted work must also lose its claim when replacement intent changes.
-    assert!(queue.claim(now, 30).await.unwrap().is_none());
-    queue
-        .enqueue(1, 10, 0, ItemOperationKind::Access, input, now)
-        .await
-        .unwrap();
-    let job = queue.claim(now, 30).await.unwrap().unwrap();
-    assert_eq!(job.kind, ItemOperationKind::Access);
-}
-
-#[tokio::test]
-async fn draft_membership_fences_enqueue_and_completed_access_evidence() {
-    let (pool, queue, input) = fixture().await;
-    let now = common::fixed_time();
-    let id = queue
-        .enqueue(1, 10, 0, ItemOperationKind::Access, input.clone(), now)
-        .await
-        .unwrap();
-    let job = queue.claim(now, 30).await.unwrap().unwrap();
-    queue.complete(&job, success(now), now).await.unwrap();
-    pool.execute(r#"UPDATE "AddonMediaListItem" SET "InDraft"=0, "Published"=1 WHERE "Id"=10"#)
-        .await
-        .unwrap();
-    assert!(queue
-        .enqueue(1, 10, 0, ItemOperationKind::Access, input, now)
-        .await
-        .is_err());
-    let status = queue.status(id, now).await.unwrap().unwrap();
-    assert_eq!(status.state, 5);
-    assert!(status.completion.is_none());
-    let persisted: i32 =
-        sqlx::query_scalar(r#"SELECT "State" FROM "AddonMediaListItemOperationJob" WHERE "Id"=?"#)
-            .bind(id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(persisted, 2, "read-only status retains completed history");
-}
-
 fn interval_input(mut input: ItemOperationInput) -> ItemOperationInput {
     let timing = ItemOperationTiming {
         item_duration_seconds: None,

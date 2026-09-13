@@ -114,7 +114,6 @@ async fn queue_required_media_impl(
             r#"SELECT "ProviderId", "SourceUrl", "DurationSeconds",
                       "FragmentStartSeconds", "FragmentEndSeconds" FROM "AddonMediaListItem"
                WHERE "Id"=? AND "AddonMediaListId"=? AND "Included"=1
-                 AND "InDraft"=1
                  AND COALESCE("LivenessOverride", "ProviderLiveness")=1"#,
         )
         .bind(item.item_id)

@@ -742,37 +742,19 @@ pub(crate) fn stage_path(root: &Path, job: i64, generation: i64, owner: &str) ->
         .join(format!("{job}-{generation}-{owner}")))
 }
 pub(crate) async fn confined_file(root: &Path, relative: &str) -> Result<PathBuf> {
-    confined_file_if_present(root, relative)
-        .await?
-        .ok_or_else(invalid)
-}
-
-/// The same containment policy, distinguishing absence from unsafe or unreadable
-/// paths so receiving saved lists can require local media preparation.
-pub(crate) async fn confined_file_if_present(
-    root: &Path,
-    relative: &str,
-) -> Result<Option<PathBuf>> {
     if relative.is_empty() || relative.contains(['\\', ':']) || relative.starts_with('/') {
         return Err(invalid());
     }
     let mut current = root.to_path_buf();
     let parts = relative.split('/').collect::<Vec<_>>();
-    // Check the whole reference before probing: a missing prefix must not make
-    // a later traversal component look like an ordinary absent file.
-    if parts
-        .iter()
-        .any(|part| part.is_empty() || *part == "." || *part == "..")
-    {
-        return Err(invalid());
-    }
     for (index, part) in parts.iter().enumerate() {
+        if part.is_empty() || *part == "." || *part == ".." {
+            return Err(invalid());
+        }
         current.push(part);
-        let metadata = match tokio::fs::symlink_metadata(&current).await {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(_) => return Err(invalid()),
-        };
+        let metadata = tokio::fs::symlink_metadata(&current)
+            .await
+            .map_err(|_| invalid())?;
         if metadata.is_symlink()
             || (index + 1 == parts.len() && !metadata.is_file())
             || (index + 1 < parts.len() && !metadata.is_dir())
@@ -780,7 +762,7 @@ pub(crate) async fn confined_file_if_present(
             return Err(invalid());
         }
     }
-    Ok(Some(current))
+    Ok(current)
 }
 pub(crate) async fn measure_tree(root: &Path, limit: u64) -> Result<u64> {
     let mut pending = vec![root.to_path_buf()];

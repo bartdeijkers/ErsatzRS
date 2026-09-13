@@ -15,11 +15,6 @@ use crate::repositories::SqlxResultExt as _;
 
 const REMOTE_STREAM_MEDIA_KIND: i32 = 7;
 
-mod registration;
-pub use registration::register_existing_list_library_in_transaction;
-mod receiving_manifest;
-pub use receiving_manifest::ensure_receiving_playlist_manifest;
-
 /// Resolve the configured storage root or the profile-relative default.
 ///
 /// # Errors
@@ -240,15 +235,40 @@ pub async fn ensure_list_library(
 
     let mut transaction = crate::db::begin_write(pool).await.repository()?;
     let library_id = if library_id == 0 {
-        insert_list_library_projection(
-            &mut transaction,
-            list_id,
-            source_id,
-            &folder_name,
-            &folder,
-            &manifest_path,
+        let inserted = sqlx::query(
+            r#"INSERT INTO "Library" ("MediaSourceId", "MediaKind", "Name") VALUES (?, ?, ?)"#,
         )
-        .await?
+        .bind(source_id)
+        .bind(REMOTE_STREAM_MEDIA_KIND)
+        .bind(&folder_name)
+        .execute(&mut *transaction)
+        .await
+        .repository()?;
+        let library_id = inserted_id(&mut transaction, inserted).await.repository()?;
+        sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (?)"#)
+            .bind(library_id)
+            .execute(&mut *transaction)
+            .await
+            .repository()?;
+        sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
+            .bind(library_id)
+            .bind(folder.to_string_lossy().as_ref())
+            .execute(&mut *transaction)
+            .await
+            .repository()?;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLibrary"
+               ("AddonMediaListId", "LibraryId", "FolderName", "ManifestPath")
+               VALUES (?, ?, ?, ?)"#,
+        )
+        .bind(list_id)
+        .bind(library_id)
+        .bind(&folder_name)
+        .bind(manifest_path.to_string_lossy().as_ref())
+        .execute(&mut *transaction)
+        .await
+        .repository()?;
+        library_id
     } else {
         update_list_library_projection(
             &mut transaction,
@@ -262,50 +282,6 @@ pub async fn ensure_list_library(
         library_id
     };
     transaction.commit().await.repository()?;
-    Ok(library_id)
-}
-
-async fn insert_list_library_projection(
-    transaction: &mut Transaction<'_, Db>,
-    list_id: EntityId,
-    source_id: EntityId,
-    folder_name: &str,
-    folder: &Path,
-    manifest_path: &Path,
-) -> Result<EntityId> {
-    let inserted = sqlx::query(
-        r#"INSERT INTO "Library" ("MediaSourceId", "MediaKind", "Name") VALUES (?, ?, ?)"#,
-    )
-    .bind(source_id)
-    .bind(REMOTE_STREAM_MEDIA_KIND)
-    .bind(folder_name)
-    .execute(&mut **transaction)
-    .await
-    .repository()?;
-    let library_id = inserted_id(transaction, inserted).await.repository()?;
-    sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (?)"#)
-        .bind(library_id)
-        .execute(&mut **transaction)
-        .await
-        .repository()?;
-    sqlx::query(r#"INSERT INTO "LibraryPath" ("LibraryId", "Path") VALUES (?, ?)"#)
-        .bind(library_id)
-        .bind(folder.to_string_lossy().as_ref())
-        .execute(&mut **transaction)
-        .await
-        .repository()?;
-    sqlx::query(
-        r#"INSERT INTO "AddonMediaListLibrary"
-           ("AddonMediaListId", "LibraryId", "FolderName", "ManifestPath")
-           VALUES (?, ?, ?, ?)"#,
-    )
-    .bind(list_id)
-    .bind(library_id)
-    .bind(folder_name)
-    .bind(manifest_path.to_string_lossy().as_ref())
-    .execute(&mut **transaction)
-    .await
-    .repository()?;
     Ok(library_id)
 }
 
@@ -525,7 +501,23 @@ async fn write_playlist_manifest(
     source_url: &str,
     chapter_input: &str,
 ) -> Result<()> {
-    let yaml = serialized_playlist_manifest(addon_id, name, source_url, chapter_input)?;
+    let yaml = serde_yaml::to_string(&ManagedPlaylistManifest {
+        name,
+        url: source_url,
+        addon: addon_id,
+        folder: "streams",
+        chapters: (!chapter_input.is_empty()).then_some(chapter_input),
+        sync: ManagedPlaylistSync {
+            interval: "24h",
+            max_items: 0,
+            order: "upstream",
+            on_removed: "trash",
+        },
+    })
+    .map_err(|error| RepositoryError::Decode {
+        kind: "managed add-on playlist manifest",
+        value: error.to_string(),
+    })?;
     let path = path.to_path_buf();
     tokio::task::spawn_blocking(move || -> Result<()> {
         use std::io::Write as _;
@@ -555,31 +547,6 @@ async fn write_playlist_manifest(
     .map_err(|error| {
         RepositoryError::unavailable("write add-on playlist manifest", error.to_string())
     })?
-}
-
-fn serialized_playlist_manifest(
-    addon_id: &str,
-    name: &str,
-    source_url: &str,
-    chapter_input: &str,
-) -> Result<String> {
-    serde_yaml::to_string(&ManagedPlaylistManifest {
-        name,
-        url: source_url,
-        addon: addon_id,
-        folder: "streams",
-        chapters: (!chapter_input.is_empty()).then_some(chapter_input),
-        sync: ManagedPlaylistSync {
-            interval: "24h",
-            max_items: 0,
-            order: "upstream",
-            on_removed: "trash",
-        },
-    })
-    .map_err(|error| RepositoryError::Decode {
-        kind: "managed add-on playlist manifest",
-        value: error.to_string(),
-    })
 }
 
 #[allow(clippy::needless_pass_by_value)] // `map_err` supplies the owned error.

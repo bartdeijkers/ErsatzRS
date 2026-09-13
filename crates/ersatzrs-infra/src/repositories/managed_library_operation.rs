@@ -66,19 +66,15 @@ pub(crate) async fn enqueue_publication_in_tx(
             "the saved add-on media-list revision changed before publication was queued".to_owned(),
         ));
     }
-    // Saved-folder admission owns unchanged-content coalescing. Its publication
-    // source can change independently of the current draft revision.
-    if trigger != AddonMediaListPublicationEnqueueTrigger::SavedFolder {
-        if let Some(row) =
-            completed_publication_row(tx, list_id, saved_revision, current_published).await?
-        {
-            let (job, operation) = decode_publication_row(&row)?;
-            return Ok(AddonMediaListPublicationEnqueue {
-                job,
-                operation,
-                existing: true,
-            });
-        }
+    if let Some(row) =
+        completed_publication_row(tx, list_id, saved_revision, current_published).await?
+    {
+        let (job, operation) = decode_publication_row(&row)?;
+        return Ok(AddonMediaListPublicationEnqueue {
+            job,
+            operation,
+            existing: true,
+        });
     }
     if current_published.checked_add(1) != Some(expected_next_published_revision) {
         return Err(RepositoryError::Conflict(
@@ -192,75 +188,6 @@ pub(crate) async fn enqueue_publication_in_tx(
         },
         existing: false,
     })
-}
-
-/// Admit a validated receiving snapshot through the ordinary publication queue.
-/// The copied draft remains independent; the enqueue event distinguishes this
-/// operation from an operator Restore, which intentionally replaces the draft.
-pub(crate) async fn enqueue_saved_folder_publication_in_tx(
-    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
-    list_id: EntityId,
-    library_id: EntityId,
-    saved_revision: i32,
-    source_revision: i32,
-) -> Result<AddonMediaListPublicationEnqueue> {
-    let snapshot = load_valid_revision_snapshot_in_tx(tx, list_id, source_revision)
-        .await?
-        .ok_or_else(|| {
-            RepositoryError::Conflict("saved publication source is unavailable".into())
-        })?;
-    let current: (i32, EntityId, i32) = sqlx::query_as(
-        r#"SELECT "list"."PublishedRevision", "binding"."LibraryId", "list"."DraftRevision"
-           FROM "AddonMediaList" AS "list"
-           JOIN "AddonMediaListLibrary" AS "binding" ON "binding"."AddonMediaListId"="list"."Id"
-           WHERE "list"."Id"=?"#,
-    )
-    .bind(list_id)
-    .fetch_one(&mut **tx)
-    .await
-    .repository()?;
-    if current.1 != library_id
-        || current.2 != saved_revision
-        || snapshot.source_draft_revision != saved_revision
-    {
-        return Err(RepositoryError::Conflict(
-            "saved publication receiving identity changed".into(),
-        ));
-    }
-    let mut queued = enqueue_publication_in_tx(
-        tx,
-        list_id,
-        library_id,
-        saved_revision,
-        current.0.checked_add(1).ok_or_else(|| {
-            RepositoryError::Conflict(
-                "the published add-on media-list revision is exhausted".into(),
-            )
-        })?,
-        AddonMediaListPublicationEnqueueTrigger::SavedFolder,
-    )
-    .await?;
-    if queued.existing {
-        if queued.operation.library_id != library_id
-            || queued.job.saved_revision != saved_revision
-            || queued.job.source_published_revision != Some(source_revision)
-        {
-            return Err(RepositoryError::Conflict(
-                "another publication already owns the receiving list".into(),
-            ));
-        }
-        return Ok(queued);
-    }
-    sqlx::query(
-        r#"UPDATE "AddonMediaListPublicationJob" SET "SourcePublishedRevision"=? WHERE "Id"=?"#,
-    )
-    .bind(source_revision)
-    .bind(queued.job.id)
-    .execute(&mut **tx)
-    .await
-    .repository()?;
-    queued.job.source_published_revision = Some(source_revision);
-    Ok(queued)
 }
 
 const LEASE_SECONDS: i64 = 90;
@@ -3681,93 +3608,6 @@ mod tests {
         .await
         .expect("count jobs");
         assert_eq!(count, 1);
-    }
-
-    #[tokio::test]
-    async fn saved_folder_mapped_publication_uses_fresh_source_and_monotonic_revisions() {
-        let pool = pool_with_library().await;
-        seed_publication_list(&pool, "org.example.saved-folder").await;
-        sqlx::query(r#"INSERT INTO "AddonMediaListLibrary" ("AddonMediaListId", "LibraryId", "FolderName", "ManifestPath") VALUES (1, 1, 'list', 'managed/list/list.playlist.yml')"#)
-            .execute(&pool).await.unwrap();
-        let lifecycle = crate::repositories::SqliteAddonMediaListRepository(pool.clone());
-        for revision in [7, 9] {
-            sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision"=? WHERE "Id"=1"#)
-                .bind(revision)
-                .execute(&pool)
-                .await
-                .unwrap();
-            lifecycle
-                .retain_published_revision(
-                    1,
-                    revision,
-                    3,
-                    Utc::now(),
-                    &[],
-                    &ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default(),
-                )
-                .await
-                .unwrap();
-        }
-        sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision"=1 WHERE "Id"=1"#)
-            .execute(&pool)
-            .await
-            .unwrap();
-        let mut tx = pool.begin().await.unwrap();
-        assert!(enqueue_saved_folder_publication_in_tx(&mut tx, 1, 2, 3, 7)
-            .await
-            .is_err());
-        assert!(enqueue_saved_folder_publication_in_tx(&mut tx, 1, 1, 4, 7)
-            .await
-            .is_err());
-        let first = enqueue_saved_folder_publication_in_tx(&mut tx, 1, 1, 3, 7)
-            .await
-            .unwrap();
-        assert!(!first.existing);
-        assert_eq!(first.job.generation, 1);
-        assert_eq!(first.job.target_published_revision, 10);
-        assert_eq!(first.job.source_published_revision, Some(7));
-        let duplicate = enqueue_saved_folder_publication_in_tx(&mut tx, 1, 1, 3, 7)
-            .await
-            .unwrap();
-        assert!(duplicate.existing);
-        assert_eq!(duplicate.operation.id, first.operation.id);
-        assert!(enqueue_saved_folder_publication_in_tx(&mut tx, 1, 1, 3, 9)
-            .await
-            .is_err());
-        tx.commit().await.unwrap();
-        let repository = SqliteManagedLibraryOperationRepository(pool.clone());
-        let claim = repository
-            .claim_operation(first.operation.id, Utc::now())
-            .await
-            .unwrap()
-            .unwrap();
-        sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision"=? WHERE "Id"=1"#)
-            .bind(first.job.target_published_revision)
-            .execute(&pool)
-            .await
-            .unwrap();
-        assert!(repository
-            .complete_publication(&claim, AddonMediaListPublicationOutcome::Published)
-            .await
-            .unwrap());
-        let mut tx = pool.begin().await.unwrap();
-        let next = enqueue_saved_folder_publication_in_tx(&mut tx, 1, 1, 3, 9)
-            .await
-            .unwrap();
-        assert!(!next.existing);
-        assert_ne!(next.operation.id, first.operation.id);
-        assert_eq!(next.job.generation, 2);
-        assert_eq!(next.job.saved_revision, first.job.saved_revision);
-        assert_eq!(next.job.source_published_revision, Some(9));
-        assert_eq!(next.job.target_published_revision, 11);
-        tx.commit().await.unwrap();
-        let state: (i32, i32) = sqlx::query_as(
-            r#"SELECT "DraftRevision", "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=1"#,
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-        assert_eq!(state, (3, 10));
     }
 
     #[tokio::test]

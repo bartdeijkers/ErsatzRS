@@ -216,23 +216,7 @@ notes  = 'List island; hydrated copy/delete smoke clean.'
 name   = 'AddonMediaListsPage'
 status = '✅'
 routes = ['/media/addon-lists']
-notes  = '''
-2026-09-05 AMM-CI-01: focused Chromium/Firefox proof passes for hydrated import,
-overrides, replacement and recovery, plus native no-JS sorting and publication/
-revision restore. Route-local in-order SSR exposes native controls, and
-JavaScript-only restore buttons stay hidden without scripting. Creation remains
-on the dedicated add page. 2026-09-08 AMM-M-03: addon-list-disk-warnings.spec.ts
-passes four Chromium/Firefox hydrated/no-JS cases for combined and per-list
-warning settings, independent zero-disable, persistence and unchanged revisions;
-390/1440-pixel captures confirm compact controls. Canonical evidence is in M-03.
-2026-09-12 AMM-O-01 visibility checkpoint: addon-list-visibility.spec.ts passes
-four Chromium/Firefox hydrated/no-JS cases for Hide/Show, hidden filtering and
-paging, retained content, legacy removal compatibility and native failure
-feedback. Final captures prove full desktop action visibility and narrow-table
-focus/scroll reachability without excessive row height or page overflow.
-This is local visibility evidence, not copied-folder reconstruction acceptance;
-the O-01 milestone records the retained artifacts and remaining work.
-'''
+notes  = '2026-09-05 AMM-CI-01: focused Chromium/Firefox proof passes for hydrated import, overrides, replacement and recovery, plus native no-JS sorting and publication/revision restore. Route-local in-order SSR exposes native controls, and JavaScript-only restore buttons stay hidden without scripting. Creation remains on the dedicated add page. 2026-09-08 AMM-M-03: addon-list-disk-warnings.spec.ts passes four Chromium/Firefox hydrated/no-JS cases for combined and per-list warning settings, independent zero-disable, persistence and unchanged revisions; 390/1440-pixel captures confirm compact controls. Canonical evidence is in the M-03 milestone.'
 
 [[page]]
 name   = 'AddAddonMediaListPage'

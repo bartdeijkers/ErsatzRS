@@ -89,6 +89,15 @@ pub enum AddonMediaListReconcileResult {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListRestoreResult {
+    pub operation_id: i64,
+    pub generation: i32,
+    pub saved_revision: i32,
+    pub target_published_revision: i32,
+    pub existing: bool,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AddonMediaListSourceProbeState {
     Queued,
@@ -160,14 +169,41 @@ pub struct AddonMediaListResetImpactRow {
     pub active_or_future_playouts: u64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListRevisionSummaryRow {
+    pub revision: i32,
+    pub source_draft_revision: Option<i32>,
+    pub completed_at: Option<String>,
+    pub restorable: bool,
+    pub published_item_count: u64,
+    pub file_count: u64,
+    pub artifact_count: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddonMediaListRevisionDiffRow {
+    pub list_metadata_changed: bool,
+    pub effective_options_changed: bool,
+    pub items_added: u64,
+    pub items_removed: u64,
+    pub items_changed: u64,
+    pub files_added: u64,
+    pub files_removed: u64,
+    pub files_changed: u64,
+    pub artifacts_added: u64,
+    pub artifacts_removed: u64,
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod lifecycle_transport {
     use super::{
-        AddonMediaListDraftDiffRow, AddonMediaListResetImpactRow, AddonMediaListSourceProbeOutcome,
+        AddonMediaListDraftDiffRow, AddonMediaListResetImpactRow, AddonMediaListRevisionDiffRow,
+        AddonMediaListRevisionSummaryRow, AddonMediaListSourceProbeOutcome,
         AddonMediaListSourceProbeRow, AddonMediaListSourceProbeState,
     };
     use ersatzrs_core::repositories::{
-        AddonMediaListDraftDiff, AddonMediaListResetImpact, AddonMediaListSourceProbe,
+        AddonMediaListDraftDiff, AddonMediaListResetImpact, AddonMediaListRevisionDiff,
+        AddonMediaListRevisionSummary, AddonMediaListSourceProbe,
     };
 
     impl From<AddonMediaListSourceProbe> for AddonMediaListSourceProbeRow {
@@ -256,6 +292,37 @@ mod lifecycle_transport {
             }
         }
     }
+
+    impl From<AddonMediaListRevisionSummary> for AddonMediaListRevisionSummaryRow {
+        fn from(value: AddonMediaListRevisionSummary) -> Self {
+            Self {
+                revision: value.revision,
+                source_draft_revision: value.source_draft_revision,
+                completed_at: value.completed_at.map(|date| date.to_rfc3339()),
+                restorable: value.restorable,
+                published_item_count: value.published_item_count,
+                file_count: value.file_count,
+                artifact_count: value.artifact_count,
+            }
+        }
+    }
+
+    impl From<AddonMediaListRevisionDiff> for AddonMediaListRevisionDiffRow {
+        fn from(value: AddonMediaListRevisionDiff) -> Self {
+            Self {
+                list_metadata_changed: value.list_metadata_changed,
+                effective_options_changed: value.effective_options_changed,
+                items_added: value.items_added,
+                items_removed: value.items_removed,
+                items_changed: value.items_changed,
+                files_added: value.files_added,
+                files_removed: value.files_removed,
+                files_changed: value.files_changed,
+                artifacts_added: value.artifacts_added,
+                artifacts_removed: value.artifacts_removed,
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -272,7 +339,6 @@ pub enum AddonMediaListPublicationBlockerKind {
     PlaybackDetailsUnavailable,
     PlaybackDetailsFailed,
     UnavailableWithoutReplacement,
-    ReplacementUnresolved,
     ItemTitleMissing,
     SeasonEpisodeMissing,
     ArtistMissing,
@@ -559,7 +625,6 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationBlocker>
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::PlaybackDetailsUnavailable => AddonMediaListPublicationBlockerKind::PlaybackDetailsUnavailable,
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::PlaybackDetailsFailed => AddonMediaListPublicationBlockerKind::PlaybackDetailsFailed,
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement => AddonMediaListPublicationBlockerKind::UnavailableWithoutReplacement,
-                ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::ReplacementUnresolved => AddonMediaListPublicationBlockerKind::ReplacementUnresolved,
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::ItemTitleMissing => AddonMediaListPublicationBlockerKind::ItemTitleMissing,
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing => AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing,
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::ArtistMissing => AddonMediaListPublicationBlockerKind::ArtistMissing,
@@ -755,8 +820,6 @@ pub struct AddonMediaListItemRow {
     pub replacement_title: Option<String>,
     pub replacement_path: Option<String>,
     pub replacement_valid: bool,
-    #[serde(default)]
-    pub replacement_unresolved: bool,
     pub title: String,
     pub year: Option<i32>,
     pub season: Option<i32>,
@@ -930,7 +993,6 @@ impl From<ersatzrs_core::repositories::AddonMediaListItemAdminRow> for AddonMedi
             replacement_title: row.replacement_title,
             replacement_path: row.replacement_path,
             replacement_valid: row.replacement_valid,
-            replacement_unresolved: row.replacement_unresolved,
             title: row.title,
             year: row.year,
             season: row.season,
@@ -1258,59 +1320,14 @@ pub async fn list_addon_media_lists_with_state(
     sort_field: AddonMediaListAdminSortField,
     sort_direction: AddonMediaListAdminSortDirection,
 ) -> ersatzrs_app::Result<(Vec<AddonMediaListRow>, u64)> {
-    list_addon_media_lists_by_visibility_with_state(
-        state,
-        page,
-        page_size,
-        sort_field,
-        sort_direction,
-        false,
-    )
-    .await
-}
-
-/// Browse visible or hidden lists without changing their publication state.
-#[server]
-pub async fn list_addon_media_lists_by_visibility(
-    page: u32,
-    page_size: u32,
-    sort_field: AddonMediaListAdminSortField,
-    sort_direction: AddonMediaListAdminSortDirection,
-    hidden: bool,
-) -> Result<(Vec<AddonMediaListRow>, u64), ServerFnError> {
-    let state = expect_context::<crate::host::state::AppState>();
-    list_addon_media_lists_by_visibility_with_state(
-        &state,
-        page,
-        page_size,
-        sort_field,
-        sort_direction,
-        hidden,
-    )
-    .await
-    .map_err(ServerFnError::new)
-}
-
-#[cfg(feature = "ssr")]
-async fn list_addon_media_lists_by_visibility_with_state(
-    state: &crate::host::state::AppState,
-    page: u32,
-    page_size: u32,
-    sort_field: AddonMediaListAdminSortField,
-    sort_direction: AddonMediaListAdminSortDirection,
-    hidden: bool,
-) -> ersatzrs_app::Result<(Vec<AddonMediaListRow>, u64)> {
     let (rows, total) = state
         .application
-        .list_addon_media_lists_by_visibility(
-            ersatzrs_app::queries::ListAddonMediaLists {
-                page,
-                page_size,
-                sort_field: sort_field.into(),
-                sort_direction: sort_direction.into(),
-            },
-            hidden,
-        )
+        .list_addon_media_lists(ersatzrs_app::queries::ListAddonMediaLists {
+            page,
+            page_size,
+            sort_field: sort_field.into(),
+            sort_direction: sort_direction.into(),
+        })
         .await?;
     Ok((
         rows.into_iter()
@@ -1508,6 +1525,67 @@ pub async fn get_addon_media_list_reset_impact(
         .map_err(ServerFnError::new)
 }
 
+#[server]
+pub async fn get_addon_media_list_revision_history(
+    id: i64,
+) -> Result<Vec<AddonMediaListRevisionSummaryRow>, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .addon_media_list_revision_history(id)
+        .await
+        .map(|history| history.into_iter().map(Into::into).collect())
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn compare_addon_media_list_revisions(
+    id: i64,
+    left_revision: i32,
+    right_revision: i32,
+) -> Result<AddonMediaListRevisionDiffRow, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .compare_addon_media_list_revisions(id, left_revision, right_revision)
+        .await
+        .map(Into::into)
+        .map_err(ServerFnError::new)
+}
+
+#[server]
+pub async fn restore_addon_media_list_revision(
+    id: i64,
+    source_published_revision: i32,
+    expected_draft_revision: i32,
+    expected_published_revision: i32,
+) -> Result<AddonMediaListRestoreResult, ServerFnError> {
+    use crate::host::state::AppState;
+
+    let state = expect_context::<AppState>();
+    state
+        .application
+        .restore_addon_media_list_revision(ersatzrs_app::commands::RestoreAddonMediaListRevision {
+            id,
+            source_published_revision,
+            expected_draft_revision,
+            expected_published_revision,
+        })
+        .await
+        .map(|outcome| AddonMediaListRestoreResult {
+            operation_id: outcome.operation_id,
+            generation: outcome.generation,
+            saved_revision: outcome.saved_revision,
+            target_published_revision: outcome.target_published_revision,
+            existing: outcome.existing,
+        })
+        .map_err(ServerFnError::new)
+}
+
 /// Retry or restore one exact failed/expired publication generation.
 #[server]
 pub async fn recover_addon_media_list_publication(
@@ -1573,7 +1651,6 @@ pub async fn list_addon_media_list_items(
                     replacement_title: row.replacement_title,
                     replacement_path: row.replacement_path,
                     replacement_valid: row.replacement_valid,
-                    replacement_unresolved: row.replacement_unresolved,
                     title: row.title,
                     year: row.year,
                     season: row.season,
@@ -2285,16 +2362,6 @@ pub async fn delete_addon_media_list(id: i64) -> Result<(), ServerFnError> {
         .map_err(ServerFnError::new)
 }
 
-/// Change admin visibility only; playback and background work remain active.
-#[server]
-pub async fn set_addon_media_list_admin_hidden(id: i64, hidden: bool) -> Result<(), ServerFnError> {
-    expect_context::<crate::host::state::AppState>()
-        .application
-        .set_addon_media_list_admin_hidden(id, hidden)
-        .await
-        .map_err(ServerFnError::new)
-}
-
 /// Record a failed add-on media list operation with its provider diagnostic.
 ///
 /// The admin UI surfaces the same message to the operator, and add-on
@@ -2508,37 +2575,14 @@ pub async fn delete_addon_media_list_with_state(
 ) -> ersatzrs_app::Result<()> {
     state
         .application
-        .set_addon_media_list_admin_hidden(id, true)
+        .delete_addon_media_list(ersatzrs_app::commands::DeleteAddonMediaList { id })
         .await
-        .inspect_err(|error| log_addon_media_list_failure("hide", None, Some(id), error))
+        .inspect_err(|error| log_addon_media_list_failure("delete", None, Some(id), error))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[cfg(not(target_arch = "wasm32"))]
-    #[test]
-    fn historical_revision_endpoints_are_not_registered_but_recovery_and_draft_diff_remain() {
-        use leptos::server_fn::ServerFn;
-
-        let paths: Vec<_> = leptos::server_fn::axum::server_fn_paths()
-            .map(|(path, _)| path)
-            .collect();
-        for removed in [
-            "/api/get_addon_media_list_revision_history",
-            "/api/compare_addon_media_list_revisions",
-            "/api/restore_addon_media_list_revision",
-        ] {
-            assert!(
-                !paths.iter().any(|path| path.starts_with(removed)),
-                "historical revision operation must not remain exposed: {removed}"
-            );
-        }
-        assert!(paths.contains(&RecoverAddonMediaListPublication::PATH));
-        assert!(paths.contains(&GetAddonMediaListSavedDraftDiff::PATH));
-        assert!(paths.contains(&GetAddonMediaListPublicationHistory::PATH));
-    }
 
     #[test]
     fn redacted_publication_diagnostics_have_only_the_typed_visible_shape() {

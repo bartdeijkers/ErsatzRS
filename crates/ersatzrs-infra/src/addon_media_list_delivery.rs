@@ -1,8 +1,6 @@
 //! AMM-M-01B: saved delivery policy and durable first-import classification.
 //! Publication owns freezing these choices; saving never changes active playback.
 
-pub mod portable;
-
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
@@ -236,7 +234,7 @@ pub async fn effective_item_delivery_in_tx(
     policy.effective_item_delivery(identity, liveness)
 }
 
-/// Batch classify current draft items from operator/provider liveness, without N+1 reads.
+/// Batch classify current items from operator/provider liveness, without N+1 reads.
 /// Inclusion, availability, video kind and provider capability checks remain with
 /// the existing admission/publication caller.
 ///
@@ -254,7 +252,7 @@ pub async fn load_item_deliveries_in_tx(
            LEFT JOIN "AddonMediaListKnownIdentity" AS "known"
              ON "known"."AddonMediaListId" = "item"."AddonMediaListId"
             AND "known"."ProviderId" = "item"."ProviderId"
-           WHERE "item"."AddonMediaListId" = ? AND "item"."InDraft" = 1"#,
+           WHERE "item"."AddonMediaListId" = ?"#,
     )
     .bind(list_id)
     .fetch_all(&mut **tx)
@@ -286,9 +284,6 @@ mod tests {
     use sqlx::{sqlite::SqlitePoolOptions, Executor as _};
 
     const DELIVERY_MIGRATION: i64 = 202_609_071_800;
-
-    #[path = "portable.rs"]
-    mod portable_tests;
 
     async fn database(include_delivery: bool) -> DbPool {
         let pool = SqlitePoolOptions::new()

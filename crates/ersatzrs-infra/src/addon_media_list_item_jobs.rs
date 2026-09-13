@@ -420,15 +420,7 @@ impl AddonMediaListItemJobQueue {
         }
         let time = encode_datetime(now);
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
-        current(
-            &mut tx,
-            list_id,
-            item_id,
-            expected_revision,
-            kind.code(),
-            &input,
-        )
-        .await?;
+        current(&mut tx, list_id, item_id, expected_revision, &input).await?;
         if !retry_terminal {
             let admitted: Option<i64> = sqlx::query_scalar(
                 r#"SELECT "Id" FROM "AddonMediaListItemOperationJob"
@@ -648,7 +640,6 @@ impl AddonMediaListItemJobQueue {
             job.list_id,
             job.item_id,
             job.saved_draft_revision,
-            job.kind.code(),
             &job.input,
         )
         .await
@@ -827,7 +818,7 @@ impl AddonMediaListItemJobQueue {
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         let row = sqlx::query(
             r#"SELECT "AddonMediaListId","AddonMediaListItemId",
-                "SavedDraftRevision","Kind","InputJson" FROM "AddonMediaListItemOperationJob"
+                "SavedDraftRevision","InputJson" FROM "AddonMediaListItemOperationJob"
             WHERE "Id"=? AND "Generation"=? AND "LeaseOwner"=? AND "Kind" IN (1,3) AND "State"=1"#,
         )
         .bind(attempt.job_id)
@@ -847,7 +838,6 @@ impl AddonMediaListItemJobQueue {
             row.try_get("AddonMediaListId").repository()?,
             row.try_get("AddonMediaListItemId").repository()?,
             row.try_get("SavedDraftRevision").repository()?,
-            row.try_get("Kind").repository()?,
             &input,
         )
         .await
@@ -893,7 +883,6 @@ impl AddonMediaListItemJobQueue {
                 job.list_id,
                 job.item_id,
                 job.saved_draft_revision,
-                job.kind.code(),
                 &job.input,
             )
             .await?;
@@ -1053,7 +1042,7 @@ impl AddonMediaListItemJobQueue {
         let row = sqlx::query(
             r#"SELECT "State", "AttemptCount", "OutcomeJson", "InputJson",
                       "AddonMediaListId", "AddonMediaListItemId", "SavedDraftRevision",
-                      "NextEligibleAt", "Kind"
+                      "NextEligibleAt"
                FROM "AddonMediaListItemOperationJob" WHERE "Id"=?"#,
         )
         .bind(id)
@@ -1109,7 +1098,6 @@ impl AddonMediaListItemJobQueue {
                 row.try_get("AddonMediaListId").repository()?,
                 row.try_get("AddonMediaListItemId").repository()?,
                 row.try_get("SavedDraftRevision").repository()?,
-                row.try_get("Kind").repository()?,
                 &input,
             )
             .await;
@@ -1139,7 +1127,6 @@ pub(crate) async fn validate_claim(
         job.list_id,
         job.item_id,
         job.saved_draft_revision,
-        job.kind.code(),
         &job.input,
     )
     .await?;
@@ -1222,37 +1209,12 @@ async fn validate_subtitle_artifacts(
     Ok(())
 }
 
-/// Cancel active draft work while retaining process ownership for worker cleanup.
-pub(crate) async fn cancel_item_jobs_in_tx(
-    tx: &mut sqlx::Transaction<'_, Db>,
-    list_id: i64,
-    item_id: i64,
-    now: DateTime<Utc>,
-) -> Result<()> {
-    let time = encode_datetime(now);
-    sqlx::query(
-        r#"UPDATE "AddonMediaListItemOperationJob"
-           SET "State"=4, "UpdatedAt"=?, "CompletedAt"=?
-           WHERE "AddonMediaListId"=? AND "AddonMediaListItemId"=?
-             AND "State" IN (0,1)"#,
-    )
-    .bind(&time)
-    .bind(&time)
-    .bind(list_id)
-    .bind(item_id)
-    .execute(&mut **tx)
-    .await
-    .repository()?;
-    Ok(())
-}
-
 #[allow(clippy::too_many_lines)] // Validate the complete saved job identity in one transaction.
 async fn current(
     tx: &mut sqlx::Transaction<'_, Db>,
     list_id: i64,
     item_id: i64,
     revision: i32,
-    operation_kind: i32,
     input: &ItemOperationInput,
 ) -> Result<()> {
     if input.preparation_v2 == Some(true)
@@ -1270,8 +1232,6 @@ async fn current(
     {
         return Err(conflict());
     }
-    // Access (kind 0) is deliberate inspection; all media preparation must
-    // wait for a receiving replacement choice, including previously queued work.
     let valid: bool = sqlx::query_scalar(r#"
             SELECT EXISTS(SELECT 1
                 FROM "AddonMediaList" AS "list"
@@ -1279,8 +1239,6 @@ async fn current(
                 LEFT JOIN "AddonMediaListOptionSchema" AS "schema" ON "schema"."Id"="list"."DraftOptionSchemaId"
                 WHERE "list"."Id"=?
                 AND "item"."Id"=?
-                AND "item"."InDraft"=1
-                AND (? = 0 OR "item"."SavedReplacementJson" IS NULL)
                 AND "list"."DraftRevision"=?
                 AND "item"."ProviderId"=?
                 AND "item"."SourceUrl"=?
@@ -1290,7 +1248,6 @@ async fn current(
         "#)
         .bind(list_id)
         .bind(item_id)
-        .bind(operation_kind)
         .bind(revision)
         .bind(&input.provider_id)
         .bind(&input.source_url)

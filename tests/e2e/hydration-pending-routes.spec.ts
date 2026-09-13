@@ -782,11 +782,16 @@ SELECT COALESCE("PlaylistId", '') FROM "AddonMediaList" WHERE "Id" = ${seed.edit
 SELECT "PlaylistId" FROM "AddonMediaList" WHERE "Id" = ${seed.editorListId};
 `);
     const deleteRow = page.locator('tr').filter({ hasText: seed.deleteListName });
-    await deleteRow.getByRole('button', { name: /^hide list$/i }).click();
+    await deleteRow.getByRole('button', { name: /^delete add-on list$/i }).click();
+    const deleteDialog = page
+      .locator('div[class*="panel"]')
+      .filter({ has: page.getByRole('heading', { name: 'Confirm Delete' }) })
+      .last();
+    await expect(deleteDialog).toBeVisible();
+    await deleteDialog.getByRole('button', { name: /^delete$/i }).click();
     await expect.poll(() => sqlite(`
-SELECT "AdminHidden" FROM "AddonMediaList" WHERE "Id" = ${seed.deleteListId};
-`)).toBe('1');
-    await expect(deleteRow).toHaveCount(0);
+SELECT COUNT(*) FROM "AddonMediaList" WHERE "Id" = ${seed.deleteListId};
+`)).toBe('0');
 
     // A package can lose its source-check capability after Adaptive was saved.
     // Keep that value visible and submittable so unrelated edits do not silently

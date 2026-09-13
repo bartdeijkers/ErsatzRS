@@ -430,6 +430,10 @@ pub fn build_app(app_state: AppState) -> Router {
                 post(api::addon_media_lists::test_addon_media_list_source_form),
             )
             .route(
+                "/api/addon-lists/restore-revision",
+                post(api::addon_media_lists::restore_addon_media_list_revision_form),
+            )
+            .route(
                 "/api/addon-lists/{id}/publication-diagnostics",
                 get(api::addon_media_lists::download_addon_media_list_publication_diagnostics),
             )
@@ -440,10 +444,6 @@ pub fn build_app(app_state: AppState) -> Router {
             .route(
                 "/api/addon-lists/delete",
                 post(api::addon_media_lists::delete_addon_media_list_form),
-            )
-            .route(
-                "/api/addon-lists/visibility",
-                post(api::addon_media_lists::set_addon_media_list_visibility_form),
             )
             .route(
                 "/api/media-sources/local/save",

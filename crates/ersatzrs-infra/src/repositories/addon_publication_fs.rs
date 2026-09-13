@@ -338,11 +338,6 @@ fn empty_prepared_managed_candidate_unlocked(
                 "managed reset candidates may not contain symbolic links",
             ));
         }
-        if entry.file_name() == crate::addon_media_list_saved::model::SAVED_LIST_FILE_NAME
-            || entry.file_name() == crate::addon_media_list_saved::model::SAVED_ASSETS_DIRECTORY
-        {
-            continue;
-        }
         if file_type.is_dir() {
             fs::remove_dir_all(entry.path())
                 .map_err(|source| io_error("remove managed reset directory", source))?;
@@ -683,184 +678,6 @@ pub(crate) fn restore_step(
     paths: &PublicationFsPaths,
     identity: PublicationFsIdentity,
 ) -> Result<RestoreProgress, PublicationFsError> {
-    with_managed_tree_lock(paths, || restore_step_unlocked(paths, identity))
-}
-
-// The failed candidate remains intact until the restored tree is complete. A
-// retry can reinstall the same immutable assets and exact document bytes.
-// False means rejected content; actual storage failures remain errors.
-#[allow(clippy::too_many_lines)] // Keep rejection and storage-failure handling beside each bounded operation.
-fn carry_saved_content(source: &Path, destination: &Path) -> Result<bool, PublicationFsError> {
-    use crate::addon_media_list_saved::{assets, document_io, files, model};
-
-    let invalid = || {
-        PublicationFsError::UnsafeState(
-            "saved content cannot be safely carried into the restored publication",
-        )
-    };
-    let source_document = source.join(model::SAVED_LIST_FILE_NAME);
-    match fs::symlink_metadata(&source_document) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
-        Err(error) => return Err(io_error("inspect saved restore document", error)),
-        Ok(metadata) if metadata.is_symlink() || !metadata.is_file() => return Ok(false),
-        Ok(_) => {}
-    }
-    let target = destination.join(model::SAVED_LIST_FILE_NAME);
-    match fs::symlink_metadata(&target) {
-        Ok(metadata) if metadata.is_symlink() || !metadata.is_file() => return Err(invalid()),
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            return Err(io_error("inspect restored saved document", error));
-        }
-        _ => {}
-    }
-    let mut temporary = tempfile::Builder::new()
-        .prefix(".ersatzrs-saved-restore-")
-        .tempfile_in(destination)
-        .map_err(|error| io_error("create restored saved document", error))?;
-    let input = File::open(source_document)
-        .map_err(|error| io_error("open saved restore document", error))?;
-    let count = std::io::copy(
-        &mut input.take(document_io::MAX_SAVED_DOCUMENT_BYTES + 1),
-        &mut temporary,
-    )
-    .map_err(|error| io_error("copy saved restore document", error))?;
-    if count > document_io::MAX_SAVED_DOCUMENT_BYTES {
-        return Ok(false);
-    }
-    let document = match document_io::read_document(&mut std::io::BufReader::new(
-        temporary
-            .reopen()
-            .map_err(|error| io_error("read restored saved document", error))?,
-    )) {
-        Ok(document) => document,
-        Err(document_io::SavedDocumentError::Io) => {
-            return Err(io_error(
-                "read restored saved document",
-                std::io::Error::other("saved document read failed"),
-            ))
-        }
-        Err(
-            document_io::SavedDocumentError::Invalid
-            | document_io::SavedDocumentError::TooLarge
-            | document_io::SavedDocumentError::UnsupportedVersion,
-        ) => return Ok(false),
-    };
-    for reference in document.draft.files.iter().chain(
-        document
-            .published
-            .iter()
-            .flat_map(|publication| publication.files.iter()),
-    ) {
-        if files::validate_reference(reference).is_err() {
-            return Ok(false);
-        }
-        if reference.relative_path.split('/').next() != Some(model::SAVED_ASSETS_DIRECTORY) {
-            // Existing replacement/prepared media remain references, never copies.
-            continue;
-        }
-        let mut path = source.to_owned();
-        for component in reference.relative_path.split('/') {
-            path.push(component);
-            let metadata = match fs::symlink_metadata(&path) {
-                Ok(metadata) => metadata,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-                Err(error) => return Err(io_error("inspect saved restore asset", error)),
-            };
-            if metadata.is_symlink() {
-                return Ok(false);
-            }
-        }
-        if !fs::symlink_metadata(&path)
-            .map_err(|error| io_error("inspect saved restore asset", error))?
-            .is_file()
-        {
-            return Ok(false);
-        }
-        let mut input =
-            File::open(path).map_err(|error| io_error("open saved restore asset", error))?;
-        match assets::install(destination, reference, &mut input) {
-            Ok(()) => {}
-            Err(assets::SavedAssetError::Reference(_)) => return Ok(false),
-            Err(assets::SavedAssetError::Filesystem {
-                category,
-                os_error_code,
-            }) => {
-                if category == AddonMediaListPublicationErrorCategory::PublicationIntegrity {
-                    return Ok(false);
-                }
-                let error = os_error_code.map_or_else(
-                    || std::io::Error::other("saved asset preservation failed"),
-                    std::io::Error::from_raw_os_error,
-                );
-                return Err(io_error("preserve restored saved asset", error));
-            }
-        }
-    }
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|error| io_error("sync restored saved document", error))?;
-    let temporary = temporary.into_temp_path();
-    atomicwrites::replace_atomic(&temporary, &target)
-        .map_err(|error| io_error("replace restored saved document", error))?;
-    Ok(true)
-}
-
-fn saved_recovery_directory(destination: &Path, identity: PublicationFsIdentity) -> PathBuf {
-    destination
-        .join(crate::addon_media_list_saved::model::SAVED_ASSETS_DIRECTORY)
-        .join(format!(
-            "recovery-{}-{}-{}-{}",
-            identity.list_id,
-            identity.operation_id.unwrap_or(0),
-            identity.generation.unwrap_or(0),
-            identity.target_revision
-        ))
-}
-
-/// Moves only reserved evidence, leaving the previous valid document authoritative.
-/// The tree lock serializes destination checks and renames. Both-present conflicts
-/// are refused rather than guessing which bytes a previous attempt owned.
-fn preserve_rejected_saved_content(
-    source: &Path,
-    destination: &Path,
-    identity: PublicationFsIdentity,
-) -> Result<(), PublicationFsError> {
-    use crate::addon_media_list_saved::model::{SAVED_ASSETS_DIRECTORY, SAVED_LIST_FILE_NAME};
-    let recovery = saved_recovery_directory(destination, identity);
-    ensure_managed_subdirectories(destination, &recovery)?;
-    for name in [SAVED_ASSETS_DIRECTORY, SAVED_LIST_FILE_NAME] {
-        let from = source.join(name);
-        let to = recovery.join(name);
-        let source_present = match fs::symlink_metadata(&from) {
-            Ok(_) => true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-            Err(error) => return Err(io_error("inspect rejected saved content", error)),
-        };
-        let target_present = match fs::symlink_metadata(&to) {
-            Ok(_) => true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-            Err(error) => return Err(io_error("inspect saved recovery evidence", error)),
-        };
-        if source_present && target_present {
-            return Err(PublicationFsError::UnsafeState(
-                "saved recovery evidence conflicts with the rejected source",
-            ));
-        }
-        if source_present {
-            fs::rename(&from, &to)
-                .map_err(|error| io_error("preserve rejected saved content", error))?;
-        }
-    }
-    tracing::warn!(list_id = identity.list_id, operation_id = identity.operation_id,
-        "rejected saved list content was preserved separately while restoring the previous publication");
-    Ok(())
-}
-
-fn restore_step_unlocked(
-    paths: &PublicationFsPaths,
-    identity: PublicationFsIdentity,
-) -> Result<RestoreProgress, PublicationFsError> {
     validate_sibling_paths(paths)?;
     let managed = marker_if_present(&paths.managed)?;
     let backup = marker_if_present(&paths.backup)?;
@@ -905,9 +722,6 @@ fn restore_step_unlocked(
             "the complete publication backup marker disappeared",
         ))?;
         verify_fingerprint(&paths.backup, backup)?;
-        if !carry_saved_content(&paths.failed, &paths.backup)? {
-            preserve_rejected_saved_content(&paths.failed, &paths.backup, identity)?;
-        }
         fs::rename(&paths.backup, &paths.managed)
             .map_err(|source| io_error("restore previous publication", source))?;
         return Ok(RestoreProgress::Advanced);
@@ -1257,13 +1071,6 @@ pub(crate) fn abort_staging(
     paths: &PublicationFsPaths,
     identity: PublicationFsIdentity,
 ) -> Result<(), PublicationFsError> {
-    with_managed_tree_lock(paths, || abort_staging_unlocked(paths, identity))
-}
-
-fn abort_staging_unlocked(
-    paths: &PublicationFsPaths,
-    identity: PublicationFsIdentity,
-) -> Result<(), PublicationFsError> {
     validate_sibling_paths(paths)?;
     let backup = if let Some(marker) = cleanup_tombstone_marker(&paths.backup)? {
         Some(marker)
@@ -1329,49 +1136,17 @@ fn with_managed_tree_lock<T>(
     action: impl FnOnce() -> Result<T, PublicationFsError>,
 ) -> Result<T, PublicationFsError> {
     validate_sibling_paths(paths)?;
-    let _guard = ManagedTreeGuard::acquire(&paths.managed)?;
+    let lock_path = managed_tree_lock_path(&paths.managed)?;
+    let lock = File::options()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(lock_path)
+        .map_err(|source| io_error("open managed publication lock", source))?;
+    lock.lock()
+        .map_err(|source| io_error("lock managed publication tree", source))?;
     action()
-}
-
-/// Own the existing cross-process tree lock through the last filesystem writer.
-///
-/// An `Arc` clone can travel with blocking asset work. Cancelling its async waiter
-/// must not release the lock while that work is still running. This guard only
-/// fences cooperating tree writers; the caller still validates root/operation
-/// ownership and must acquire it before opening a database write transaction.
-pub struct ManagedTreeGuard {
-    _lock: File,
-    managed: PathBuf,
-}
-
-impl ManagedTreeGuard {
-    /// Acquire in blocking context, before database write ownership. Never acquire
-    /// the same tree again while retaining this guard: file locks are not reentrant.
-    ///
-    /// # Errors
-    /// Returns a filesystem error if the parent or cooperating lock is unavailable.
-    pub(crate) fn acquire(managed: &Path) -> Result<Self, PublicationFsError> {
-        let lock_path = managed_tree_lock_path(managed)?;
-        let lock = File::options()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(lock_path)
-            .map_err(|source| io_error("open managed publication lock", source))?;
-        lock.lock()
-            .map_err(|source| io_error("lock managed publication tree", source))?;
-        Ok(Self {
-            _lock: lock,
-            managed: managed.to_owned(),
-        })
-    }
-
-    /// Return the caller-validated root associated with this lock.
-    #[must_use]
-    pub fn managed_root(&self) -> &Path {
-        &self.managed
-    }
 }
 
 fn managed_tree_lock_path(managed: &Path) -> Result<PathBuf, PublicationFsError> {
@@ -1763,7 +1538,32 @@ fn copy_revision_blob_into_candidate(
         File::open(source).map_err(|source| io_error("open retained revision blob", source))?;
     let mut temporary = tempfile::NamedTempFile::new_in(parent)
         .map_err(|source| io_error("create retained revision candidate file", source))?;
-    copy_verified_bytes(&mut input, &mut temporary, &file.sha256, file.byte_length)?;
+    let mut hasher = Sha256::new();
+    let mut byte_length = 0_u64;
+    let mut buffer = [0_u8; 16 * 1024];
+    loop {
+        let read = input
+            .read(&mut buffer)
+            .map_err(|source| io_error("read retained revision blob", source))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+        temporary
+            .write_all(&buffer[..read])
+            .map_err(|source| io_error("write retained revision candidate file", source))?;
+        byte_length = byte_length
+            .checked_add(u64::try_from(read).unwrap_or(u64::MAX))
+            .ok_or(PublicationFsError::Integrity(
+                "a retained revision file is too large",
+            ))?;
+    }
+    let digest = hasher.finalize();
+    if byte_length != file.byte_length || hex_digest(&digest) != file.sha256 {
+        return Err(PublicationFsError::Integrity(
+            "a retained revision blob changed while it was materialized",
+        ));
+    }
     temporary
         .as_file()
         .sync_all()
@@ -1774,48 +1574,7 @@ fn copy_revision_blob_into_candidate(
     verify_revision_blob(&destination, &file.sha256, file.byte_length)
 }
 
-/// Shared bounded copy for retained revision candidates and immutable saved assets.
-/// The caller owns source confinement, the temporary destination and installation.
-pub(crate) fn copy_verified_bytes(
-    input: &mut impl std::io::Read,
-    output: &mut impl std::io::Write,
-    expected_sha256: &str,
-    expected_byte_length: u64,
-) -> Result<(), PublicationFsError> {
-    let mut hasher = Sha256::new();
-    let mut byte_length = 0_u64;
-    let mut buffer = [0_u8; 16 * 1024];
-    loop {
-        let read = input
-            .read(&mut buffer)
-            .map_err(|source| io_error("read retained file content", source))?;
-        if read == 0 {
-            break;
-        }
-        byte_length = byte_length
-            .checked_add(u64::try_from(read).unwrap_or(u64::MAX))
-            .filter(|length| *length <= expected_byte_length)
-            .ok_or(PublicationFsError::Integrity(
-                "retained file content exceeds its recorded length",
-            ))?;
-        hasher.update(&buffer[..read]);
-        output
-            .write_all(&buffer[..read])
-            .map_err(|source| io_error("write retained file content", source))?;
-    }
-    let digest = hasher.finalize();
-    if byte_length != expected_byte_length || hex_digest(&digest) != expected_sha256 {
-        return Err(PublicationFsError::Integrity(
-            "a retained revision blob changed while it was materialized",
-        ));
-    }
-    Ok(())
-}
-
-pub(crate) fn ensure_managed_subdirectories(
-    root: &Path,
-    directory: &Path,
-) -> Result<(), PublicationFsError> {
+fn ensure_managed_subdirectories(root: &Path, directory: &Path) -> Result<(), PublicationFsError> {
     let relative = directory.strip_prefix(root).map_err(|_| {
         PublicationFsError::UnsafeState("a retained revision target escaped its managed root")
     })?;
@@ -1858,7 +1617,7 @@ fn ensure_plain_directory(path: &Path) -> Result<(), PublicationFsError> {
     }
 }
 
-pub(crate) fn verify_revision_blob(
+fn verify_revision_blob(
     path: &Path,
     expected_sha256: &str,
     expected_byte_length: u64,
@@ -2025,7 +1784,7 @@ fn fingerprint_directory(
 ///
 /// The check is by name at any depth, so it covers the root publication marker
 /// and every scanner-owned sidecar nested under a generated media folder.
-pub(crate) fn is_reserved_entry(name: &std::ffi::OsStr) -> bool {
+fn is_reserved_entry(name: &std::ffi::OsStr) -> bool {
     name.to_string_lossy().starts_with(RESERVED_ENTRY_PREFIX)
 }
 
@@ -2507,253 +2266,6 @@ mod tests {
         assert!(!new_paths.managed.join("new.yml").exists());
         verify_empty_reset_candidate(&new_paths, new_identity)
             .expect("current generation retains empty sealed ownership");
-    }
-
-    #[test]
-    fn restore_carries_exact_newer_saved_document_and_assets_with_retry() {
-        use crate::addon_media_list_delivery::portable::PortableDeliveryPolicy;
-        use crate::addon_media_list_saved::model::*;
-        use ersatzrs_domain::*;
-        let (_temp, paths, identity) = fixture();
-        let mut document = SavedListDocument {
-            version: SAVED_LIST_VERSION,
-            addon_id: "org.example.restore".into(),
-            provider_id: "list".into(),
-            source_url: "https://example.invalid/list".into(),
-            draft: SavedListDraft {
-                revision: 1,
-                presentation: SavedListPresentation::default(),
-                metadata: SavedMetadata::default(),
-                detail_import_policy: AddonMediaListDetailPolicy::ManualOnly,
-                chapter_input: String::new(),
-                refresh_cadence: AddonMediaListRefreshCadence::Daily,
-                refresh_publication_policy: AddonMediaListRefreshPublicationPolicy::Review,
-                disk_warning_gb: 25,
-                delivery: PortableDeliveryPolicy {
-                    mode: AddonMediaListDeliveryMode::Stream,
-                    cutoff_at: None,
-                    before_cutoff: Vec::new(),
-                    after_cutoff: Vec::new(),
-                },
-                options: SavedOptions::default(),
-                items: Vec::new(),
-                files: Vec::new(),
-            },
-            published: None,
-        };
-        fs::write(
-            paths.managed.join(SAVED_LIST_FILE_NAME),
-            serde_json::to_vec(&document).unwrap(),
-        )
-        .unwrap();
-        create_backup(&paths, identity).unwrap();
-        let asset = SavedFile {
-            relative_path: format!("{SAVED_ASSETS_DIRECTORY}/poster.png"),
-            sha256: hex_digest(&Sha256::digest(b"new artwork")),
-            byte_length: 11,
-        };
-        fs::create_dir(paths.managed.join(SAVED_ASSETS_DIRECTORY)).unwrap();
-        fs::write(paths.managed.join(&asset.relative_path), b"new artwork").unwrap();
-        document.draft.revision = 2;
-        document.draft.files.push(asset.clone());
-        let bytes = serde_json::to_vec_pretty(&document).unwrap();
-        fs::write(paths.managed.join(SAVED_LIST_FILE_NAME), &bytes).unwrap();
-        assert_eq!(
-            restore_step(&paths, identity).unwrap(),
-            RestoreProgress::Advanced
-        );
-        // Simulate a retry after carry-over but before the directory rename.
-        carry_saved_content(&paths.failed, &paths.backup).unwrap();
-        assert_eq!(
-            restore_step(&paths, identity).unwrap(),
-            RestoreProgress::Advanced
-        );
-        assert_eq!(
-            restore_step(&paths, identity).unwrap(),
-            RestoreProgress::Complete
-        );
-        assert_eq!(
-            fs::read(paths.managed.join(SAVED_LIST_FILE_NAME)).unwrap(),
-            bytes
-        );
-        assert_eq!(
-            fs::read(paths.managed.join(asset.relative_path)).unwrap(),
-            b"new artwork"
-        );
-    }
-
-    #[test]
-    fn rejected_saved_document_survives_restore_cleanup_and_reset() {
-        use crate::addon_media_list_saved::model::{SAVED_ASSETS_DIRECTORY, SAVED_LIST_FILE_NAME};
-        let (_temp, paths, identity) = fixture();
-        create_backup(&paths, identity).unwrap();
-        fs::write(
-            paths.managed.join(SAVED_LIST_FILE_NAME),
-            b"invalid newer draft",
-        )
-        .unwrap();
-        abort_staging(&paths, identity).unwrap();
-        assert_eq!(
-            fs::read(paths.managed.join(SAVED_LIST_FILE_NAME)).unwrap(),
-            b"invalid newer draft"
-        );
-        fs::remove_file(paths.managed.join(SAVED_LIST_FILE_NAME)).unwrap();
-        create_backup(&paths, identity).unwrap();
-        fs::write(
-            paths.managed.join(SAVED_LIST_FILE_NAME),
-            b"invalid newer draft",
-        )
-        .unwrap();
-        fs::create_dir(paths.managed.join(SAVED_ASSETS_DIRECTORY)).unwrap();
-        fs::write(
-            paths
-                .managed
-                .join(SAVED_ASSETS_DIRECTORY)
-                .join("evidence.bin"),
-            b"reserved evidence",
-        )
-        .unwrap();
-        assert_eq!(
-            restore_step(&paths, identity).unwrap(),
-            RestoreProgress::Advanced
-        );
-        // Resume an interrupted preservation after its assets-only move.
-        let recovery = saved_recovery_directory(&paths.backup, identity);
-        ensure_managed_subdirectories(&paths.backup, &recovery).unwrap();
-        fs::rename(
-            paths.failed.join(SAVED_ASSETS_DIRECTORY),
-            recovery.join(SAVED_ASSETS_DIRECTORY),
-        )
-        .unwrap();
-        assert_eq!(
-            restore_step(&paths, identity).unwrap(),
-            RestoreProgress::Advanced
-        );
-        assert_eq!(
-            restore_step(&paths, identity).unwrap(),
-            RestoreProgress::Complete
-        );
-        cleanup_after_verification(&paths, identity, PublicationTreeRole::Previous).unwrap();
-        assert!(paths.managed.join("item.yml").is_file());
-        assert!(!paths.managed.join(SAVED_LIST_FILE_NAME).exists());
-        let recovery = saved_recovery_directory(&paths.managed, identity);
-        assert_eq!(
-            fs::read(recovery.join(SAVED_LIST_FILE_NAME)).unwrap(),
-            b"invalid newer draft"
-        );
-        assert_eq!(
-            fs::read(recovery.join(SAVED_ASSETS_DIRECTORY).join("evidence.bin")).unwrap(),
-            b"reserved evidence"
-        );
-        assert!(!paths.failed.exists());
-        let reset = PublicationFsIdentity {
-            operation_id: Some(99),
-            generation: Some(4),
-            target_revision: identity.target_revision + 1,
-            ..identity
-        };
-        let reset_paths = publication_paths(
-            paths.managed.clone(),
-            reset.list_id,
-            reset.operation_id,
-            reset.generation,
-        )
-        .unwrap();
-        prepare_empty_managed_candidate(&reset_paths, reset).unwrap();
-        empty_prepared_managed_candidate(&reset_paths, reset).unwrap();
-        assert_eq!(
-            fs::read(recovery.join(SAVED_LIST_FILE_NAME)).unwrap(),
-            b"invalid newer draft"
-        );
-        assert_eq!(
-            fs::read(recovery.join(SAVED_ASSETS_DIRECTORY).join("evidence.bin")).unwrap(),
-            b"reserved evidence"
-        );
-    }
-
-    #[test]
-    fn rejected_saved_recovery_never_overwrites_conflicting_evidence() {
-        use crate::addon_media_list_saved::model::SAVED_LIST_FILE_NAME;
-        let (_temp, paths, identity) = fixture();
-        create_backup(&paths, identity).unwrap();
-        fs::write(
-            paths.managed.join(SAVED_LIST_FILE_NAME),
-            b"new rejected document",
-        )
-        .unwrap();
-        restore_step(&paths, identity).unwrap();
-        let recovery = saved_recovery_directory(&paths.backup, identity);
-        ensure_managed_subdirectories(&paths.backup, &recovery).unwrap();
-        fs::write(
-            recovery.join(SAVED_LIST_FILE_NAME),
-            b"existing recovery evidence",
-        )
-        .unwrap();
-        assert!(restore_step(&paths, identity).is_err());
-        assert_eq!(
-            fs::read(paths.failed.join(SAVED_LIST_FILE_NAME)).unwrap(),
-            b"new rejected document"
-        );
-        assert_eq!(
-            fs::read(recovery.join(SAVED_LIST_FILE_NAME)).unwrap(),
-            b"existing recovery evidence"
-        );
-    }
-
-    #[test]
-    fn saved_content_is_outside_publication_fingerprints_and_survives_reset() {
-        use crate::addon_media_list_saved::model::{SAVED_ASSETS_DIRECTORY, SAVED_LIST_FILE_NAME};
-        let (_temp, paths, identity) = fixture();
-        let document = paths.managed.join(SAVED_LIST_FILE_NAME);
-        let assets = paths.managed.join(SAVED_ASSETS_DIRECTORY);
-        fs::write(&document, b"saved draft one").unwrap();
-        fs::create_dir(&assets).unwrap();
-        fs::write(assets.join("poster.png"), b"saved artwork").unwrap();
-        create_backup(&paths, identity).unwrap();
-        seal_candidate(&paths, identity);
-        let marker = read_marker(&paths.managed).unwrap();
-        fs::write(&document, b"saved draft two").unwrap();
-        verify_fingerprint(&paths.managed, &marker).unwrap();
-
-        let reset = PublicationFsIdentity {
-            operation_id: Some(99),
-            generation: Some(4),
-            previous_revision: identity.target_revision,
-            target_revision: identity.target_revision + 1,
-            ..identity
-        };
-        let reset_paths = publication_paths(
-            paths.managed.clone(),
-            reset.list_id,
-            reset.operation_id,
-            reset.generation,
-        )
-        .unwrap();
-        prepare_empty_managed_candidate(&reset_paths, reset).unwrap();
-        empty_prepared_managed_candidate(&reset_paths, reset).unwrap();
-        verify_empty_reset_candidate(&reset_paths, reset).unwrap();
-        assert_eq!(fs::read(&document).unwrap(), b"saved draft two");
-        assert_eq!(
-            fs::read(assets.join("poster.png")).unwrap(),
-            b"saved artwork"
-        );
-        assert!(!reset_paths.managed.join("item.yml").exists());
-    }
-
-    // Unix-only fixture setup; the production FileType refusal is platform-neutral.
-    #[cfg(unix)]
-    #[test]
-    fn saved_content_names_do_not_bypass_reset_symlink_refusal() {
-        use crate::addon_media_list_saved::model::{SAVED_ASSETS_DIRECTORY, SAVED_LIST_FILE_NAME};
-        for name in [SAVED_LIST_FILE_NAME, SAVED_ASSETS_DIRECTORY] {
-            let (temp, paths, identity) = fixture();
-            prepare_empty_managed_candidate(&paths, identity).unwrap();
-            let outside = temp.path().join("outside.txt");
-            fs::write(&outside, b"unowned").unwrap();
-            std::os::unix::fs::symlink(&outside, paths.managed.join(name)).unwrap();
-            assert!(empty_prepared_managed_candidate(&paths, identity).is_err());
-            assert_eq!(fs::read(&outside).unwrap(), b"unowned");
-        }
     }
 
     #[test]
@@ -3321,39 +2833,6 @@ mod tests {
             .expect("cleanup publication");
         worker.join().expect("join cleanup worker");
         assert!(!paths.backup.exists());
-    }
-
-    #[tokio::test]
-    async fn owned_tree_guard_survives_cancellation_of_running_blocking_work() {
-        let (_temp, paths, _identity) = fixture();
-        let guard = std::sync::Arc::new(ManagedTreeGuard::acquire(&paths.managed).unwrap());
-        assert_eq!(guard.managed_root(), paths.managed);
-        let probe = File::options()
-            .read(true)
-            .write(true)
-            .open(managed_tree_lock_path(&paths.managed).unwrap())
-            .unwrap();
-        let worker_guard = std::sync::Arc::clone(&guard);
-        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        let worker = tokio::task::spawn_blocking(move || {
-            let _guard = worker_guard;
-            started_tx.send(()).unwrap();
-            // Channel ownership also releases the worker if the assertion fails.
-            let _ = release_rx.recv();
-        });
-        started_rx.await.unwrap();
-        worker.abort();
-        drop(guard);
-        assert!(matches!(
-            probe.try_lock(),
-            Err(std::fs::TryLockError::WouldBlock)
-        ));
-        release_tx.send(()).unwrap();
-        worker.await.unwrap();
-        probe
-            .try_lock()
-            .expect("last filesystem owner released the lock");
     }
 
     #[test]

@@ -123,8 +123,6 @@ async fn classify_requirements(
         FROM "AddonMediaListItem" AS "item"
         LEFT JOIN "AddonMediaListItemReplacement" AS "replacement" ON "replacement"."AddonMediaListItemId"="item"."Id"
         WHERE "item"."AddonMediaListId"=? AND "item"."Included"=1 AND "item"."Kind"=?
-          AND "item"."InDraft"=1
-          AND "item"."SavedReplacementJson" IS NULL
         ORDER BY "item"."Id""#)
         .bind(list_id).bind(encode_enum(AddonMediaListItemKind::RemoteStream)).fetch_all(pool).await.repository()?;
     let mut requirements = Vec::new();
@@ -1021,36 +1019,6 @@ mod tests {
         assert_eq!(requirements[0].artifact_id, None);
         assert!(!requirements[0].pending);
         assert!(select_prepared_media(&pool, 1, 0, &[]).await.is_err());
-    }
-
-    #[tokio::test]
-    async fn unresolved_replacement_never_prepares_original_source() {
-        let (_temporary, pool, _) = fixture().await;
-        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"='{"file":null}' WHERE "Id"=10"#)
-            .execute(&pool).await.unwrap();
-        assert!(preparation_requirements(&pool, 1, 0, &[])
-            .await
-            .unwrap()
-            .is_empty());
-        sqlx::query(r#"UPDATE "AddonMediaList" SET "DeliveryMode"=0 WHERE "Id"=1"#)
-            .execute(&pool)
-            .await
-            .unwrap();
-        assert!(interval_metadata_requirements(&pool, 1, 0, &[])
-            .await
-            .unwrap()
-            .is_empty());
-        sqlx::query(r#"UPDATE "AddonMediaListItem" SET "SavedReplacementJson"=NULL WHERE "Id"=10"#)
-            .execute(&pool)
-            .await
-            .unwrap();
-        assert_eq!(
-            interval_metadata_requirements(&pool, 1, 0, &[])
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
     }
 
     #[tokio::test]

@@ -156,7 +156,7 @@ pub(crate) async fn assess_auto_publication_in_tx(
            FROM "AddonMediaListItem" AS "item"
            LEFT JOIN "AddonMediaListItemTombstone" AS "tombstone"
              ON "tombstone"."AddonMediaListItemId" = "item"."Id"
-           WHERE "item"."AddonMediaListId" = ? AND "item"."InDraft" = 1"#,
+           WHERE "item"."AddonMediaListId" = ?"#,
     )
     .bind(list_id)
     .fetch_all(&mut **tx)

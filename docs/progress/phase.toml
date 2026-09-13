@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-O-01: history removal verified; paused before remaining folder reconstruction'
+current_focus = 'Pre-O-01 baseline restored; O-01 withdrawn; existing AMM-N acceptance remains open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -60,89 +60,6 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-13 maintainer explicitly resumes after the power-off. Changes survived;
-no Cargo processes remained. Codex owns edits and the serialized focused loop.
-Claude's artwork-capture P2 and supported operator-image follow-up are fixed and
-independently re-reviewed: 5 focused publication tests and scoped infra all-targets
-Clippy pass. The capture checkpoint is committed locally as 79792e1b.
-Unwired contained-file validation now has three passing focused tests and Claude
-review. The maintainer approved the 256 MiB metadata-document cap on 2026-09-13;
-Bounded document I/O reuses serde_json and has focused native proof in the
-milestone. Semantic receiving validation now has 20 focused passing tests;
-publication capture now references immutable reserved assets with focused proof.
-Immutable asset installation, selected owned artwork/retained source adapters
-and receiving byte admission now have focused proof: 70 saved-list tests pass,
-with independent Claude implementation/test review. Subtitle/replacement source
-inspection and transactional receiving artwork now have focused native proof;
-metadata binding preserves draft/conflict/old-publication separation. Initial
-source assembly, exact receiving draft projection and unresolved replacement
-intent now have focused native proof and independent Astra review. Claude's
-post-reset review found two receiving membership P2s; both are corrected with
-eight passing focused tests; Claude's independent correction review closes both.
-The maintainer approved existing replacement references without duplication;
-assembly now follows that decision with focused proof. Snapshot-sourced staging
-and scanner inputs are implemented with 18 selected regressions covered by passing
-runs plus the actual generated YAML/NFO entry-point test requested by Claude.
-Astra review and Claude's correction review are clear; affected-crate lint passes.
-This engineering checkpoint does not enable receiving activation. Ordinary managed
-regeneration now uses active snapshot content while preserving provider chapter
-suggestions and availability health. Focused correction tests pass and Claude
-independently closed the introduced P1/P2 findings; the milestone owns evidence.
-Snapshot-aware commit and plain Stream receiving admission now have passing
-copy-to-fresh-profile publication/replay integration tests, including a whole
-folder with a newer draft manifest. Runtime maintenance is not wired. Exact
-SavedFolder queued-edit corrections were reviewed and committed in 2d333757.
-The adopted-list file-first editor Save and mapped repair now have focused proof,
-including SQL failure recovery, hidden-state preservation and independently
-changed saved publication activation. The milestone owns the evidence and
-remaining durability/binding acceptance. The requested 16:00
-completion cannot be met without leaving accepted runtime requirements undone.
-The core/web consumer
-has Claude review and a passing focused native test; browser verification remains open.
-File-first publication completion now has passing crash-window, concurrent-file
-and idempotent retry tests; Claude closed its actionable review findings. The
-milestone records the conservative untouched-received-draft retry residual.
-Native option Undo/default activation and legacy option edits now use the shared
-file-first writer while preserving their existing revision semantics. Actual
-scheduled-scan overlap, exact queued publication and option recovery tests pass;
-Claude closed both correction findings. Next: remaining operator entrypoints,
-then lease-fenced remaining active writers/reset
-and receiving playback/subtitle bindings. The writer inventory distinguishes
-registered legacy APIs from unrouted old pages; do not duplicate their UI work.
-The accepted cap is enforced by the adopted editor and discovery entry points;
-new-list file creation and runtime scan integration remain unfinished. Complete these
-boundaries before enabling automatic discovery. No push, CI or release is authorized.
-AMM-O-01 remains In progress; automatic scan activation is not enabled.
-Maintainer approval on 2026-09-13 (ADR 0094) withdraws legacy-profile adoption and
-historical browsing/comparison/arbitrary Restore from the MVP. Exposed history
-actions are removed and verified by focused native and browser tests; current
-draft/published diff, internal version fences and failed-publication recovery
-remain. Do not continue the unfinished Restore integration. Pause after this
-local checkpoint; on explicit resume, finish the remaining operator writer
-entrypoints before Reset, new-list creation and receiving/runtime acceptance.
-The 52 architecture-lint violations in earlier O01 transactions also remain to
-be classified and corrected before full O01 acceptance; no new transaction code
-was added by the history removal.
-
-2026-09-12 22:56 Amsterdam: maintainer confirms the20:03 WSL interruption was
-the WSL update and explicitly resumes AMM-O-01. Codex owns implementation and
-the only build/test loop. Copied draft/published content separation and the
-existing-page Hidden lists filter/Show list with visibility-only effects are
-confirmed. The reviewed visibility checkpoint is committed locally as 7d1d2e26.
-All writing workers have finished; the external helper has been stopped by the
-maintainer. Codex owns the portable-content boundary, with Claude review.
-The unwired cohort helper and separate draft/published capture have focused
-native proof. Next: contained asset validation/materialization, durable saved
-writes and all-writer fences, then root admission and reconstruction. No runtime
-file authority is enabled; independent-profile activation remains unproven.
-Portable saved-content reconstruction is not implemented. Conflicting copied
-folders must keep the existing local list and show a warning (ADR 0093).
-The earlier power-off pause has ended with the explicit 2026-09-13 resume above.
-The maintainer subsequently withdrew midnight as a target: quality takes priority.
-Commit only a reviewed, verified local checkpoint without claiming the unfinished
-slice complete. No push,
-CI, release, workflow changes or later UX expansion in this request.
-
 2026-09-12 publication authorization: the maintainer requests commit, push to
 main and terminal green CI for the verified walkthrough corrections. Codex owns
 the commit/push and exact-SHA CI watch; Claude remains non-writing. Preserve the
@@ -166,12 +83,8 @@ the neighboring add-on specs' 15-second readiness bound, retaining the overall
 timeout and all interaction/persistence assertions. Independent Astra review
 and all twelve focused settings cases pass in18.4s without a rebuild; five
 serial cases skipped after the CI failure are exercised by this focused run.
-Corrective commit de14a03c is pushed; CI run34706497560 completes successfully
-on that exact SHA, with both browsers and all required non-browser gates green.
-Local, tracking and live remote main match. Pause at this delivery checkpoint;
-no next-slice implementation, workflow change or release is performed. The
-post-CI evidence update remains local for the next authorized coherent commit,
-preserving the tested remote SHA. The outage removes the
+One reviewed corrective push follows; terminal exact-SHA CI remains required
+before handoff. The outage removes the
 temporary walkthrough profiles; screenshots and test-results remain available.
 
 2026-09-12 corrective checkpoint: the authorized confirmed walkthrough fixes
@@ -191,7 +104,7 @@ No build/test/media operation remains from this task. Remaining UX
 follow-ups are recorded separately, not a reason to weaken exact-revision admission.
 N-01B full responsive/accessibility closeout stays open. No commit/push, deployment,
 live Windows mutation, unresolved design decision or folder-first O-01 work is
-authorized by this correction. O-01 remains the next slice, not started.
+authorized by this correction. O-01 was subsequently withdrawn on 2026-09-13.
 
 2026-09-12: maintainer requested a visual first-time add-on/list walkthrough
 with Claude and a running list of shortcomings with suggested improvements.
@@ -203,7 +116,7 @@ UX implementation into amm-o-01. Preparation passed on one real included item,
 but first publication with default TV Shows failed at commit and recovery
 restored the unpublished state. M-01B is reopened for W25a/W25b; M-02/M-03 are
 In progress only because of that dependency, with their earlier evidence valid
-and no new subtitle/disk-warning defect. O-01 remains Not started; review the
+and no new subtitle/disk-warning defect. At that historical checkpoint O-01 had not started; review the
 minimal publication correction with the maintainer before implementation.
 The disposable host and browser are stopped; evidence is retained.
 
@@ -215,20 +128,15 @@ The owning M-01B/N-01B milestones hold evidence. At that checkpoint M-01B and
 dependency-only M-02/M-03 were restored to Complete; the later W25 walkthrough
 reopened them as described above. Their valid earlier evidence is retained.
 N-01B and N-02 remain open for recorded A06-A10 UX/accessibility acceptance;
-that does not authorize extra work before amm-o-01. N-03/release acceptance
+those follow-ups remain separately scoped. N-03/release acceptance
 remain open. The packaged installation and personal database were untouched;
 no current commit, push or deployment is authorized. Keep heavy work serialized.
 
-Next implementation slice, now that A01-A05 is completed and verified:
-amm-o-01, folder-first add-on list portability (ADR 0093, accepted 2026-09-12).
-Saved list files/folders lead over SQLite; the next ordinary or scheduled scan
-must discover copied folders and reconstruct/update list information without
-transferring a database or re-adding URLs. The decision is registered but not
-implemented. Removal must retain saved files and hide the list in admin across
-rescans. Hiding is installation-local; newly discovered shared copies appear
-normally elsewhere. First settle copied draft/publication handling and revealing
-hidden lists in its focused plan. Review each other's work with Claude. This next
-slice takes priority over later UX expansion and further N-03 closeout work.
+2026-09-13: the maintainer withdrew O-01 and authorized restoration of
+pre-implementation baseline de14a03c, preserving unrelated parity debt cleanup.
+Recovery checkpoint 0e9413d3 retains the stopped work. ADR 0093 is withdrawn;
+O-01 is not the next slice and must not resume without a new maintainer decision.
+Existing AMM-N acceptance remains open; this rollback does not pass or waive it.
 
 AMM-M-01A is Complete. The maintainer approved the accumulated 122-file host
 commit scope, including preserved M-01B groundwork and excluding the separate

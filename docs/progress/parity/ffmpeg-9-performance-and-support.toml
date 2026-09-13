@@ -264,7 +264,8 @@ id          = 'first-class-vulkan-encoding-is-undecided'
 description = 'Do not add a persisted Vulkan hardware-acceleration kind yet. Revisit h264_vulkan/hevc_vulkan only after operation-scoped Vulkan probing and comparative HDR benchmarks provide multi-vendor quality, latency, device-selection, mux/client, fallback, and six-RID packaging evidence; write a separate ADR before schema, UI, or encoder-priority changes.'
 discovered  = '2026-08-07'
 evidence    = 'The current Vulkan use is an internal libplacebo processing bridge for NVENC rather than an encoder backend. A 2026-08-09 native-Windows NVIDIA measurement proved H.264/HEVC Vulkan encoding, decoded HLS/MPEG-TS output, transport integrity, and useful but codec-specific speed/quality/memory tradeoffs against NVENC. It remains one vendor and synthetic content: multi-vendor device selection, real-content quality, concurrency, latency, power, clients, fallback, and six-RID package evidence are still absent.'
-resolved    = false
+resolved    = true
+resolution  = 'Merged into deferred milestone p8c-04 on 2026-09-13 (maintainer). Its acceptance carries the same multi-vendor evidence and ADR precondition; the decision stays deferred there.'
 
 [[debt]]
 id          = 'ffmpeg-runtime-publication-is-not-atomic'

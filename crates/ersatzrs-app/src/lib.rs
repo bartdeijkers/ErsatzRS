@@ -364,25 +364,6 @@ impl ApplicationServices {
         queries::list_addon_media_lists(query, self.ports.addon_media_lists()).await
     }
 
-    /// List visible or hidden add-on lists and persist the chosen page size.
-    pub async fn list_addon_media_lists_by_visibility(
-        &self,
-        query: queries::ListAddonMediaLists,
-        hidden: bool,
-    ) -> Result<(
-        Vec<ersatzrs_core::repositories::AddonMediaListAdminRow>,
-        u64,
-    )> {
-        queries::list_addon_media_lists_by_visibility(query, hidden, self.ports.addon_media_lists())
-            .await
-    }
-
-    /// Change only administrative visibility, retaining content and runtime state.
-    pub async fn set_addon_media_list_admin_hidden(&self, id: i64, hidden: bool) -> Result<()> {
-        commands::set_addon_media_list_admin_hidden(id, hidden, self.ports.addon_media_lists())
-            .await
-    }
-
     /// Load one Add-on media list editor state.
     pub async fn get_addon_media_list(
         &self,
