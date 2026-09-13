@@ -1141,17 +1141,49 @@ fn with_managed_tree_lock<T>(
     action: impl FnOnce() -> Result<T, PublicationFsError>,
 ) -> Result<T, PublicationFsError> {
     validate_sibling_paths(paths)?;
-    let lock_path = managed_tree_lock_path(&paths.managed)?;
-    let lock = File::options()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(lock_path)
-        .map_err(|source| io_error("open managed publication lock", source))?;
-    lock.lock()
-        .map_err(|source| io_error("lock managed publication tree", source))?;
+    let _guard = ManagedTreeGuard::acquire(&paths.managed)?;
     action()
+}
+
+/// Own the existing cross-process tree lock through the last filesystem writer.
+///
+/// An `Arc` clone can travel with blocking asset work. Cancelling its async waiter
+/// must not release the lock while that work is still running. This guard only
+/// fences cooperating tree writers; the caller still validates root/operation
+/// ownership and must acquire it before opening a database write transaction.
+pub struct ManagedTreeGuard {
+    _lock: File,
+    managed: PathBuf,
+}
+
+impl ManagedTreeGuard {
+    /// Acquire in blocking context, before database write ownership. Never acquire
+    /// the same tree again while retaining this guard: file locks are not reentrant.
+    ///
+    /// # Errors
+    /// Returns a filesystem error if the parent or cooperating lock is unavailable.
+    pub(crate) fn acquire(managed: &Path) -> Result<Self, PublicationFsError> {
+        let lock_path = managed_tree_lock_path(managed)?;
+        let lock = File::options()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(lock_path)
+            .map_err(|source| io_error("open managed publication lock", source))?;
+        lock.lock()
+            .map_err(|source| io_error("lock managed publication tree", source))?;
+        Ok(Self {
+            _lock: lock,
+            managed: managed.to_owned(),
+        })
+    }
+
+    /// Return the caller-validated root associated with this lock.
+    #[must_use]
+    pub fn managed_root(&self) -> &Path {
+        &self.managed
+    }
 }
 
 fn managed_tree_lock_path(managed: &Path) -> Result<PathBuf, PublicationFsError> {
@@ -2910,6 +2942,39 @@ mod tests {
             .expect("cleanup publication");
         worker.join().expect("join cleanup worker");
         assert!(!paths.backup.exists());
+    }
+
+    #[tokio::test]
+    async fn owned_tree_guard_survives_cancellation_of_running_blocking_work() {
+        let (_temp, paths, _identity) = fixture();
+        let guard = std::sync::Arc::new(ManagedTreeGuard::acquire(&paths.managed).unwrap());
+        assert_eq!(guard.managed_root(), paths.managed);
+        let probe = File::options()
+            .read(true)
+            .write(true)
+            .open(managed_tree_lock_path(&paths.managed).unwrap())
+            .unwrap();
+        let worker_guard = std::sync::Arc::clone(&guard);
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let worker = tokio::task::spawn_blocking(move || {
+            let _guard = worker_guard;
+            started_tx.send(()).unwrap();
+            // Channel ownership also releases the worker if the assertion fails.
+            let _ = release_rx.recv();
+        });
+        started_rx.await.unwrap();
+        worker.abort();
+        drop(guard);
+        assert!(matches!(
+            probe.try_lock(),
+            Err(std::fs::TryLockError::WouldBlock)
+        ));
+        release_tx.send(()).unwrap();
+        worker.await.unwrap();
+        probe
+            .try_lock()
+            .expect("last filesystem owner released the lock");
     }
 
     #[test]

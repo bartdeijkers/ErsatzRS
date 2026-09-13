@@ -2,6 +2,7 @@
 mod draft_membership_tests;
 mod editor;
 mod editor_artwork;
+mod publication_source;
 pub(crate) use editor_artwork::stage as stage_editor_artwork_in_tx;
 #[cfg(test)]
 mod visibility_tests;
@@ -3257,53 +3258,65 @@ async fn stage_publication_impl(
         )
         .await?;
     }
-    let mut readiness = repository.publication_readiness(id).await?;
-    if fence.is_some() {
-        readiness.blockers.retain(|blocker| {
-            blocker.kind != AddonMediaListPublicationBlockerKind::PublicationInProgress
-        });
-    }
-    if let Some(blocker) = readiness.blockers.first() {
-        let message = publication_blocker_message(blocker);
-        record_publication_error(&repository.0, id, &message).await?;
-        return Err(RepositoryError::Conflict(message));
-    }
-    if readiness.required_playback_detail_count > 0 {
-        let message = format!(
-            "{} included finite item(s) still require playback details",
-            readiness.required_playback_detail_count
-        );
-        record_publication_error(&repository.0, id, &message).await?;
-        return Err(RepositoryError::Conflict(message));
-    }
-    let mut publication_excluded_ids = repository
-        .list_items(id)
-        .await?
-        .into_iter()
-        .filter(|item| item.included && access_restricted_without_replacement(item))
-        .map(|item| item.id)
-        .collect::<Vec<_>>();
-    publication_excluded_ids.extend(
-        sqlx::query_scalar::<_, EntityId>(
-            r#"SELECT "tombstone"."AddonMediaListItemId"
+    let source_snapshot = if let Some(fence) = fence {
+        repository.source_snapshot_for_fence(id, fence).await?
+    } else {
+        None
+    };
+    // A retained publication has already selected its own membership and
+    // playback. Newer draft blockers or tombstones must not change that input.
+    let publication_excluded_ids = if source_snapshot.is_some() {
+        Vec::new()
+    } else {
+        let mut readiness = repository.publication_readiness(id).await?;
+        if fence.is_some() {
+            readiness.blockers.retain(|blocker| {
+                blocker.kind != AddonMediaListPublicationBlockerKind::PublicationInProgress
+            });
+        }
+        if let Some(blocker) = readiness.blockers.first() {
+            let message = publication_blocker_message(blocker);
+            record_publication_error(&repository.0, id, &message).await?;
+            return Err(RepositoryError::Conflict(message));
+        }
+        if readiness.required_playback_detail_count > 0 {
+            let message = format!(
+                "{} included finite item(s) still require playback details",
+                readiness.required_playback_detail_count
+            );
+            record_publication_error(&repository.0, id, &message).await?;
+            return Err(RepositoryError::Conflict(message));
+        }
+        let mut publication_excluded_ids = repository
+            .list_items(id)
+            .await?
+            .into_iter()
+            .filter(|item| item.included && access_restricted_without_replacement(item))
+            .map(|item| item.id)
+            .collect::<Vec<_>>();
+        publication_excluded_ids.extend(
+            sqlx::query_scalar::<_, EntityId>(
+                r#"SELECT "tombstone"."AddonMediaListItemId"
                FROM "AddonMediaListItemTombstone" AS "tombstone"
                JOIN "AddonMediaListItem" AS "item"
                  ON "item"."Id" = "tombstone"."AddonMediaListItemId"
                WHERE "item"."AddonMediaListId" = ?
                  AND "tombstone"."ConfirmedAt" IS NOT NULL"#,
-        )
-        .bind(id)
-        .fetch_all(&repository.0)
-        .await
-        .repository()?,
-    );
-    publication_excluded_ids.sort_unstable();
-    publication_excluded_ids.dedup();
+            )
+            .bind(id)
+            .fetch_all(&repository.0)
+            .await
+            .repository()?,
+        );
+        publication_excluded_ids.sort_unstable();
+        publication_excluded_ids.dedup();
+        publication_excluded_ids
+    };
     let playback_selection = select_publication_playback(
         repository,
         id,
         form.draft_revision,
-        fence,
+        source_snapshot.as_ref(),
         &publication_excluded_ids,
     )
     .await?;
@@ -3444,6 +3457,9 @@ async fn stage_publication_impl(
         if updated.rows_affected() != 1 {
             return Err(publication_in_progress());
         }
+        if let Some(snapshot) = &source_snapshot {
+            stage_snapshot_membership_in_tx(&mut tx, snapshot).await?;
+        } else {
         sqlx::query(
             r#"UPDATE "AddonMediaListItem"
                SET "Published" = ("InDraft" = 1 AND "Included" = 1),
@@ -3457,6 +3473,7 @@ async fn stage_publication_impl(
         .execute(&mut *tx)
         .await
         .repository()?;
+        }
         for item_id in publication_excluded_ids {
             sqlx::query(
                 r#"UPDATE "AddonMediaListItem"
@@ -3485,50 +3502,73 @@ async fn stage_publication_impl(
     })
 }
 
+/// Assign only active publication fields; saved draft choices remain untouched.
+async fn stage_snapshot_membership_in_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    snapshot: &ersatzrs_core::repositories::AddonMediaListRevisionSnapshot,
+) -> Result<()> {
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Published"=0 WHERE "AddonMediaListId"=?"#)
+        .bind(snapshot.list_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+    for item in snapshot.items.iter().filter(|item| item.published) {
+        let updated = sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "Published"=1, "PublishedLiveness"=?,
+               "PublishedAvailability"=?, "PublishedAvailabilityReason"=?,
+               "PublishedAvailabilityReasonCode"=?
+               WHERE "AddonMediaListId"=? AND "ProviderId"=?"#,
+        )
+        .bind(crate::repositories::common::encode_enum(
+            item.effective_liveness,
+        ))
+        .bind(crate::repositories::common::encode_enum(item.availability))
+        .bind(&item.availability_reason)
+        .bind(
+            item.availability_reason_code
+                .map(crate::repositories::common::encode_enum),
+        )
+        .bind(snapshot.list_id)
+        .bind(&item.provider_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        if updated.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict(
+                "the retained publication item has no receiving owner".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 async fn select_publication_playback(
     repository: &SqliteAddonMediaListRepository,
     list_id: EntityId,
     saved_revision: i32,
-    fence: Option<PublicationFence<'_>>,
+    source_snapshot: Option<&ersatzrs_core::repositories::AddonMediaListRevisionSnapshot>,
     excluded_item_ids: &[EntityId],
 ) -> Result<ersatzrs_core::repositories::AddonMediaListRevisionArtifacts> {
-    if let Some(fence) = fence {
-        let source_revision: Option<i32> = sqlx::query_scalar(
-            r#"SELECT "SourcePublishedRevision" FROM "AddonMediaListPublicationJob"
-               WHERE "OperationId"=? AND "AddonMediaListId"=? AND "Generation"=?"#,
-        )
-        .bind(fence.operation_id)
-        .bind(list_id)
-        .bind(fence.generation)
-        .fetch_one(&repository.0)
-        .await
-        .repository()?;
-        if let Some(revision) = source_revision {
-            let snapshot = repository
-                .revision_snapshot(list_id, revision)
-                .await?
-                .ok_or_else(|| {
-                    RepositoryError::Conflict("restore revision is not restorable".into())
-                })?;
-            let mut selection =
-                ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default();
-            for item in snapshot.items {
-                if !item.subtitle_artifact_ids.is_empty() {
-                    selection
-                        .subtitles
-                        .insert(item.provider_id.clone(), item.subtitle_artifact_ids);
-                }
-                if let Some(artifact_id) = item.prepared_artifact_id {
-                    selection
-                        .prepared_media
-                        .insert(item.provider_id.clone(), artifact_id);
-                }
-                if let Some(plan) = item.playback_timeline {
-                    selection.streaming_plans.insert(item.provider_id, plan);
-                }
+    if let Some(snapshot) = source_snapshot {
+        let mut selection = ersatzrs_core::repositories::AddonMediaListRevisionArtifacts::default();
+        for item in snapshot.items.iter().filter(|item| item.published) {
+            if !item.subtitle_artifact_ids.is_empty() {
+                selection
+                    .subtitles
+                    .insert(item.provider_id.clone(), item.subtitle_artifact_ids.clone());
             }
-            return Ok(selection);
+            if let Some(artifact_id) = item.prepared_artifact_id {
+                selection
+                    .prepared_media
+                    .insert(item.provider_id.clone(), artifact_id);
+            }
+            if let Some(plan) = &item.playback_timeline {
+                selection
+                    .streaming_plans
+                    .insert(item.provider_id.clone(), plan.clone());
+            }
         }
+        return Ok(selection);
     }
     let prepared_media = crate::addon_media_list_prepared_selection::select_prepared_media(
         &repository.0,
@@ -9342,21 +9382,23 @@ mod tests {
                  "Phase","SourcePublishedRevision","CreatedAt","UpdatedAt")
                 VALUES (100,1,1,2,2,0,1,'2026-09-06T07:00:00Z','2026-09-06T07:00:00Z');"#)
             .execute(&pool).await.unwrap();
-        let selection = super::select_publication_playback(
-            &repository,
-            1,
-            2,
-            Some(super::PublicationFence {
-                operation_id: 100,
-                generation: 1,
-                saved_revision: 2,
-                owner_token: "fixture",
-                lease_owner: "fixture",
-            }),
-            &[],
-        )
-        .await
-        .unwrap();
+        let source = repository
+            .source_snapshot_for_fence(
+                1,
+                super::PublicationFence {
+                    operation_id: 100,
+                    generation: 1,
+                    saved_revision: 2,
+                    owner_token: "fixture",
+                    lease_owner: "fixture",
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let selection = super::select_publication_playback(&repository, 1, 2, Some(&source), &[])
+            .await
+            .unwrap();
         assert_eq!(selection.streaming_plans.get("item"), Some(&plan));
         assert!(selection.prepared_media.is_empty());
         let journal: super::PublicationJournal = serde_json::from_value(serde_json::json!({

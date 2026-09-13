@@ -50,14 +50,67 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 snapshot staging/scanner and reference-only assembly continuation:
+the exact journal/job-scoped reader reuses digest-validated retained snapshots;
+stage membership/status and scanner entries, metadata, content kind, artifact
+selection and subtitle fragment windows now come from that source without
+rewriting draft content. Ordinary publication keeps its existing input path.
+Six initial assembly tests prove independent artwork/subtitle state and existing
+replacement references, including same-length changed-byte refusal and no second
+replacement directory. Prepared caches remain unopened/uncopied. The combined
+infra/scanner run passed 17 tests and caught a redundant ConfigElement insert in
+the new staging fixture (68e27aa5-ab9b-4254-98a8-0bf2ab1245af). Removing that
+duplicate seed and enabling foreign keys in the new scanner fixture gives three
+passing focused tests (b79bfde9-29d2-4586-b231-3683a6976be1; 25.05s build,
+0.460s tests). Together these cover all 18 selected regressions; earlier passing
+assembly/source/guard/ordinary-publication/restore evidence remains applicable.
+An initial compile caught the old test helper call signature, updated to consume
+the new fenced snapshot reader before the behavioral runs. Astra independently
+reviewed the changes with no P1/P2. Scoped infra/scanner all-targets Clippy now
+passes with -D warnings (54.83s); fixes only lift the existing query tuple alias
+and name unchanged test defaults explicitly, so prior behavioral evidence holds.
+Claude confirms source behavior and asks for one actual stage_playlist_files
+YAML/NFO wiring regression. It now passes (a0dce718-66af-4ff5-a41a-2ce5d925f443;
+26.92s build, 0.471s test): a real retained revision and fenced journal choose old
+membership, URL, duration, content kind and reviewed metadata in generated YAML/NFO
+despite a conflicting newer draft, without provider enumeration or draft rewrite.
+It reuses the existing POSIX add-on fixture and is intentionally Unix-only; no
+native Windows runtime proof is claimed. Claude independently re-reviewed it at
+14:44 and closed the wiring P2 without further findings. Final scanner all-targets
+Clippy with -D warnings passes after the added test (16.01s). All workers and
+verification handles are terminal; this is a reviewed engineering checkpoint,
+not completed receiving activation or O-01 acceptance.
+Claude also identified
+the non-staged managed refresh metadata/content-kind reads as an existing missing
+O-01 consumer: after cache expiry they can propagate newer draft fields into
+generated NFO. The plan records the path; external-NFO reconciliation is not a
+publication boundary. This remains unfinished O-01 work, not a closed finding.
+Still missing: source-derived manifest/defaults/list metadata, receiving artwork
+handles/retained NFO inputs, snapshot-aware commit and detail acknowledgement,
+fresh receiving enqueue and artifact/preparation bindings, all-writer file-first
+durability, discovery and complete independent-profile/native/browser acceptance.
+No receiving activation, complete O01 acceptance, CI or closeout is claimed.
+2026-09-13 maintainer approves reference-only contained replacement videos:
+reuse their existing relative path with hash/length; do not make another immutable
+media copy. Changing source bytes invalidates the reference. Assembly correction
+has focused regression proof above; independent Claude review is still due. No existing files are
+deleted. Snapshot-sourced staging/scanner work is also in progress on the reviewed
+existing-source seam. This does not establish receiving activation or file authority.
+2026-09-13 reviewed receiving-draft checkpoint is committed locally as a240fe6b.
+It excludes initial assembly and the owned tree guard, preserved uncommitted
+pending the replacement-storage decision, and excludes unrelated maintainer/
+Claude edits. No push, CI or closeout. Claude's follow-up source review selects
+existing retained snapshots and SourcePublishedRevision for the independent
+publication input, not another DTO/coordinator. The plan records the concrete
+enqueue, snapshot-scoped preparation and local binding gaps before activation.
 2026-09-13 read-only receiving-publication audit: stage membership alone is
 insufficient. Scanner load_staged_playlist_entries and commit parent/TV metadata
 projection read current draft content; commit also acknowledges draft detail work.
 The plan now identifies these concrete consumers for an independent publication
 input while retaining existing journal, child scan, generated files and recovery.
 Existing explicit revision insertion/binding checks are reusable but do not
-activate content; historical restore intentionally rewrites the draft. Claude is
-reviewing the smallest integration direction. No new runtime implementation,
+activate content; historical restore intentionally rewrites the draft. Claude's
+review selects the existing snapshot-sourced path above. No new runtime implementation,
 artifact admission, acceptance change or build is claimed by this audit.
 2026-09-13 post-reset Claude review found two concrete receiving membership P2s:
 obsolete unpublished owners survived projection, and publication detail admission

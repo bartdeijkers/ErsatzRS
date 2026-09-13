@@ -6,6 +6,8 @@
 //! joins metadata to resolve a season title — reached a running system.
 
 mod common;
+#[path = "addon_media_list_tv_projection/snapshot_staging.rs"]
+mod snapshot_staging;
 
 use std::{collections::BTreeSet, fs, path::Path, path::PathBuf};
 

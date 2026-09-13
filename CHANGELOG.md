@@ -39,6 +39,8 @@ release section when tagging a release.
   not remove its current playback before the next Publish. Receiving groundwork
   preserves unresolved copied replacement choices and requires choosing or
   removing them instead of silently preparing/publishing the original source.
+  Contained replacement videos use their existing file and verified hash rather
+  than another media copy; changing those bytes invalidates the saved reference.
   Durable Save and scan reconstruction integration remains unfinished.
 
 - Replace destructive add-on-list removal in admin with reversible Hide list

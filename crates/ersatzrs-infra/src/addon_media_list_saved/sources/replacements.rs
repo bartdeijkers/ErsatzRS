@@ -12,7 +12,7 @@ use crate::db::DbPool;
 
 /// Describe a selected Local video only when its single source is inside this list.
 /// The returned relative path names the existing source, not an installed immutable
-/// asset. Caller owns the normalized root, capture/tree fence, subsequent copy and
+/// asset. Caller owns the normalized root, capture/tree fence, reference verification and
 /// separate attachment to draft or publication. No latest-version fallback occurs.
 /// Supply the root normalized by `addon_media_storage` using `dunce`, not the
 /// Windows verbatim path returned by `std::fs::canonicalize`. Native Windows

@@ -208,7 +208,11 @@ Portable-content boundary review (after checkpoint `7d1d2e26`):
   unpinned manual sidecars can coexist with generated sidecars. Without retained
   ownership proof, preserve those bytes; activation still uses pinned originals.
 - Immutable asset installation reuses verified no-clobber copying for retained
-  list-owned files, artwork, manual subtitle originals and portable replacements.
+  list-owned files, artwork and manual subtitle originals. Contained replacement
+  videos reference the existing path, hash and length without duplicating bytes
+  (maintainer approval, 2026-09-13). Later source changes invalidate that reference;
+  never silently substitute the original stream. Missing/outside selections stay
+  unresolved. Do not delete an existing source or asset as part of this correction.
   Do not duplicate prepared Kind 1 cache media; it remains reference-only here.
   Capture/source authority, managed-tree fences and async cancellation ownership
   remain with the writer. Copy outside SQLite write transactions. File sync is
@@ -243,7 +247,7 @@ Portable-content boundary review (after checkpoint `7d1d2e26`):
   compensation lifecycle is needed. Subtitle and exact contained replacement
   source adapters are implemented; assembly and receiving bindings remain open.
   Replacement source inspection hashes initial/new bytes; ordinary metadata saves
-  must reuse valid saved immutable references rather than invoke whole-media
+  must reuse valid saved references rather than invoke whole-media
   admission on every edit. Decide that reuse at the actual capture/fence boundary,
   not through a separate speculative cache or size/mtime-as-integrity shortcut.
 - Receiving options require a compatible installed declaration. The existing
@@ -360,8 +364,28 @@ scan, generated YAML/NFO writers, sealing and recovery, not another coordinator.
 Lifecycle snapshot insertion and exact binding validators are reusable but do not
 activate a snapshot on their own. `materialize_revision_as_draft` is deliberately
 unsuitable. Receiving artifact admission must not fabricate provider job leases to
-call reserve/promote. The smallest integration seam is under Claude review before
-implementation; existing independent-publication acceptance is unchanged.
+call reserve/promote. Claude's source review selects the smaller existing seam:
+use `AddonMediaListRevisionSnapshot` and the job's `SourcePublishedRevision` as
+the publication source, rather than introducing a parallel publication DTO.
+Keep the explicit local Restore draft rewrite; receiving activation must skip
+that rewrite. Its enqueue must support a fresh list whose PublishedRevision is
+zero and use the existing operation table/fences. Receiving snapshot insertion
+and local subtitle/prepared admission must precede activation; missing prepared
+media needs preparation against the old snapshot, not the newer draft. These
+are implementation requirements, not new product scope. Snapshot-sourced stage
+and scanner input selection now have focused proof and independent correction
+review. Commit-time inputs, ordinary managed refresh isolation and receiving
+bindings remain next; independent-publication acceptance is unchanged.
+
+Claude's follow-up review also identifies ordinary managed refresh scans as an
+O-01 publication consumer, not only the active publication child scan. Once the
+cache expires, the non-staged branch calls `apply_reviewed_metadata` on current
+provider/override rows and reads the current content-kind override. Its generated
+NFO goes through `reconcile_generated`, which preserves external NFO edits, not
+Save/Publish separation for otherwise unchanged generated fields. Receiving a
+different saved draft would therefore leak that draft on a later refresh unless
+the active published snapshot also supplies those published inputs. Correct this
+before O-01 acceptance; do not treat snapshot-sourced staging alone as sufficient.
 
 Initial source assembly composes the existing owned source and immutable installer
 capabilities; ordinary Saves still require reuse of unchanged authoritative asset

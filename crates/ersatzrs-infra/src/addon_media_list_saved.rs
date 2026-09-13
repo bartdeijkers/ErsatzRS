@@ -3,6 +3,7 @@
 //! The format is under implementation. No runtime writer or scanner currently
 //! enables this document; exporting an incomplete draft is not file authority.
 
+pub mod assembly;
 pub mod assets;
 pub mod capture;
 pub mod document_io;

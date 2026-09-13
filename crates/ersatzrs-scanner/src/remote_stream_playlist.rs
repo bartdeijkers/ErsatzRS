@@ -25,6 +25,7 @@ use ersatzrs_addon_contract::{
     validate_operator_source_url, AddonOperationError, OPERATION_CODE_UNSUPPORTED_URL,
 };
 use ersatzrs_core::media_chapters::parse_chapter_input;
+use ersatzrs_core::repositories::AddonMediaListRevisionSnapshot;
 use ersatzrs_domain::{
     AddonMediaListContentKind, AddonMediaListItemAvailability, RemoteStreamLiveness,
 };
@@ -920,14 +921,42 @@ pub async fn stage_playlist_files(
     runtime: &AddonRuntimeContext,
 ) -> Result<PlaylistFileSync> {
     let addon = resolve_playlist_addon(pool, &manifest.manifest.addon).await?;
-    let content_kind_override = load_content_kind_override(pool, manifest_path).await?;
     let parent = manifest_path.parent().unwrap_or_else(|| Path::new("."));
     let folder = parent.join(&manifest.folder);
     let sidecar_path = folder.join(".ersatzrs-playlist.json");
     let existing = load_sidecar(&sidecar_path)?;
-    let published_selection = published_provider_selection(pool, manifest_path).await?;
-    let playback_artifacts =
-        publication_artifact_selection(pool, published_selection.as_ref()).await?;
+    let mut published_selection = published_provider_selection(pool, manifest_path).await?;
+    let source_snapshot = if let Some(selection) = published_selection
+        .as_ref()
+        .filter(|selection| selection.is_publishing)
+    {
+        ersatzrs_infra::repositories::SqliteAddonMediaListRepository(pool.clone())
+            .publication_source_snapshot(selection.list_id)
+            .await
+            .map_err(|_| {
+                PlaylistError::Enumeration("the publication source snapshot is unavailable".into())
+            })?
+    } else {
+        None
+    };
+    if let (Some(selection), Some(snapshot)) = (&mut published_selection, &source_snapshot) {
+        selection.provider_ids = snapshot
+            .items
+            .iter()
+            .filter(|item| item.published)
+            .map(|item| item.provider_id.clone())
+            .collect();
+    }
+    let content_kind_override = if let Some(snapshot) = &source_snapshot {
+        snapshot.content_kind_override
+    } else {
+        load_content_kind_override(pool, manifest_path).await?
+    };
+    let playback_artifacts = if let Some(snapshot) = &source_snapshot {
+        snapshot_artifact_selection(snapshot)
+    } else {
+        publication_artifact_selection(pool, published_selection.as_ref()).await?
+    };
     let playback_durations = selected_playback_durations(
         pool,
         published_selection.as_ref(),
@@ -971,17 +1000,21 @@ pub async fn stage_playlist_files(
         }
     }
 
-    // A staged publication owns a complete, already validated provider
-    // snapshot in AddonMediaListItem. Replaying that snapshot keeps Publish a
-    // local materialization boundary: neither media-list.list nor the legacy
-    // remote-stream enumeration is invoked again just because the operator
-    // changed metadata, inclusion, or the projected library type.
+    // An explicit retained source owns immutable publication content; ordinary
+    // staged publication uses the reviewed item rows. Both keep Publish a local
+    // materialization boundary without another provider enumeration.
     let staged_selection = published_selection
         .as_ref()
         .filter(|selection| selection.is_publishing);
     let (selected, truncated, enumerated) = if let Some(selection) = staged_selection {
         (
-            load_staged_playlist_entries(pool, selection.list_id, content_kind_override).await?,
+            load_staged_playlist_entries(
+                pool,
+                selection.list_id,
+                content_kind_override,
+                source_snapshot.as_ref(),
+            )
+            .await?,
             false,
             false,
         )
@@ -1050,7 +1083,11 @@ pub async fn stage_playlist_files(
         )
         .await;
     }
-    let reviewed_metadata = apply_reviewed_metadata(pool, manifest_path, &mut selected).await?;
+    let reviewed_metadata = if let Some(snapshot) = &source_snapshot {
+        apply_snapshot_metadata(snapshot, &mut selected)?
+    } else {
+        apply_reviewed_metadata(pool, manifest_path, &mut selected).await?
+    };
     if enumerated {
         if let Err(error) = append_item_chapter_fragments(
             pool,
@@ -1065,7 +1102,12 @@ pub async fn stage_playlist_files(
         }
     }
     selected.retain(|entry| !override_ids.contains(&entry.id.to_ascii_lowercase()));
-    if let Err(error) = validate_fragment_parents(&selected) {
+    let fragment_validation = if source_snapshot.is_some() {
+        validate_snapshot_fragments(&selected)
+    } else {
+        validate_fragment_parents(&selected)
+    };
+    if let Err(error) = fragment_validation {
         persist_failed_sync(&folder, existing.as_ref(), manifest_etag.clone(), now)?;
         return Err(error);
     }
@@ -1439,6 +1481,32 @@ fn validate_fragment_parents(entries: &[PlaylistEntry]) -> Result<()> {
     Ok(())
 }
 
+/// A retained publication may select a fragment without its excluded source.
+/// Validate its direct geometry without manufacturing publication membership.
+fn validate_snapshot_fragments(entries: &[PlaylistEntry]) -> Result<()> {
+    for entry in entries {
+        let valid = match (
+            &entry.parent_provider_id,
+            entry.fragment_start_seconds,
+            entry.fragment_end_seconds,
+        ) {
+            (None, None, None) => true,
+            (Some(parent), Some(start), end) => {
+                !parent.trim().is_empty()
+                    && parent != entry.provider_id.as_deref().unwrap_or(&entry.id)
+                    && end.is_none_or(|end| end > start)
+            }
+            _ => false,
+        };
+        if !valid {
+            return Err(PlaylistError::Enumeration(
+                "the publication fragment geometry is invalid".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn parse_ndjson_entries(value: &str) -> Result<Vec<PlaylistEntry>> {
     conform_remote_stream_list_output(value.as_bytes())
         .map_err(|error| PlaylistError::Enumeration(error.to_string()))
@@ -1660,6 +1728,37 @@ async fn playback_duration_overrides(
 struct PublicationArtifactSelection {
     artifacts: ersatzrs_core::repositories::AddonMediaListRevisionArtifacts,
     fragment_windows: BTreeMap<String, (Option<u64>, Option<u64>)>,
+}
+
+fn snapshot_artifact_selection(
+    snapshot: &AddonMediaListRevisionSnapshot,
+) -> PublicationArtifactSelection {
+    let mut selected = PublicationArtifactSelection::default();
+    for item in snapshot.items.iter().filter(|item| item.published) {
+        if !item.subtitle_artifact_ids.is_empty() {
+            selected.fragment_windows.insert(
+                item.provider_id.clone(),
+                (item.fragment_start_seconds, item.fragment_end_seconds),
+            );
+            selected
+                .artifacts
+                .subtitles
+                .insert(item.provider_id.clone(), item.subtitle_artifact_ids.clone());
+        }
+        if let Some(id) = item.prepared_artifact_id {
+            selected
+                .artifacts
+                .prepared_media
+                .insert(item.provider_id.clone(), id);
+        }
+        if let Some(plan) = &item.playback_timeline {
+            selected
+                .artifacts
+                .streaming_plans
+                .insert(item.provider_id.clone(), plan.clone());
+        }
+    }
+    selected
 }
 
 async fn publication_artifact_selection(
@@ -2047,6 +2146,22 @@ async fn published_provider_selection(
     }))
 }
 
+type StagedItemRow = (
+    String,
+    Option<String>,
+    Option<String>,
+    String,
+    Option<i64>,
+    Option<String>,
+    Option<i64>,
+    Option<i64>,
+    i32,
+    Option<String>,
+    i32,
+    Option<String>,
+    i32,
+);
+
 /// Rebuild the scanner input from the reviewed control-plane snapshot.
 ///
 /// These are the same provider identities and playback fields persisted by
@@ -2057,23 +2172,11 @@ async fn load_staged_playlist_entries(
     pool: &DbPool,
     list_id: i64,
     content_kind_override: AddonMediaListContentKind,
+    snapshot: Option<&AddonMediaListRevisionSnapshot>,
 ) -> Result<Vec<PlaylistEntry>> {
-    type StagedItemRow = (
-        String,
-        Option<String>,
-        Option<String>,
-        String,
-        Option<i64>,
-        Option<String>,
-        Option<i64>,
-        Option<i64>,
-        i32,
-        Option<String>,
-        i32,
-        Option<String>,
-        i32,
-    );
-
+    if let Some(snapshot) = snapshot {
+        return snapshot_playlist_entries(snapshot);
+    }
     let rows = sqlx::query_as::<_, StagedItemRow>(
         r#"SELECT "ProviderId", "SourceUrl", "Title", "DisplayTitle", "DurationSeconds",
                   "ParentProviderId", "FragmentStartSeconds", "FragmentEndSeconds",
@@ -2157,6 +2260,92 @@ async fn load_staged_playlist_entries(
             },
         )
         .collect()
+}
+
+fn snapshot_playlist_entries(
+    snapshot: &AddonMediaListRevisionSnapshot,
+) -> Result<Vec<PlaylistEntry>> {
+    let mut items = snapshot
+        .items
+        .iter()
+        .filter(|item| item.published)
+        .collect::<Vec<_>>();
+    items.sort_by_key(|item| item.rank);
+    items
+        .into_iter()
+        .map(|item| {
+            let url = item
+                .source_url
+                .as_ref()
+                .filter(|url| !url.trim().is_empty())
+                .ok_or_else(|| {
+                    PlaylistError::Enumeration("the publication item has no playback URL".into())
+                })?;
+            let additional_image_urls = item
+                .additional_image_urls
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|_| {
+                    PlaylistError::Enumeration("the publication artwork URLs are invalid".into())
+                })?
+                .unwrap_or_default();
+            let kind = if snapshot.content_kind_override == AddonMediaListContentKind::Auto {
+                item.content_kind
+            } else {
+                snapshot.content_kind_override
+            };
+            Ok(PlaylistEntry {
+                id: item.provider_id.clone(),
+                provider_id: Some(item.provider_id.clone()),
+                url: url.clone(),
+                title: item.title.clone(),
+                duration_seconds: item.duration_seconds,
+                additional_image_urls,
+                parent_provider_id: item.parent_provider_id.clone(),
+                fragment_start_seconds: item.fragment_start_seconds,
+                fragment_end_seconds: item.fragment_end_seconds,
+                availability: match item.availability {
+                    AddonMediaListItemAvailability::Available => WireAvailability::Available,
+                    AddonMediaListItemAvailability::Unavailable => WireAvailability::Unavailable,
+                    AddonMediaListItemAvailability::Unknown => WireAvailability::Unknown,
+                },
+                availability_reason: item.availability_reason.clone(),
+                content_kind: wire_content_kind(kind),
+                liveness: Some(match item.effective_liveness {
+                    RemoteStreamLiveness::Unknown => WireLiveness::Unknown,
+                    RemoteStreamLiveness::Finite => WireLiveness::Finite,
+                    RemoteStreamLiveness::Live => WireLiveness::Live,
+                }),
+                ..PlaylistEntry::default()
+            })
+        })
+        .collect()
+}
+
+fn apply_snapshot_metadata(
+    snapshot: &AddonMediaListRevisionSnapshot,
+    selected: &mut [PlaylistEntry],
+) -> Result<BTreeMap<String, ersatzrs_core::repositories::AddonMediaListNfoMetadata>> {
+    let metadata = snapshot
+        .items
+        .iter()
+        .filter(|item| item.published)
+        .map(|item| {
+            serde_json::from_str(&item.metadata_json)
+                .map(|metadata| (item.provider_id.clone(), metadata))
+                .map_err(|_| {
+                    PlaylistError::Enumeration("the publication metadata is invalid".into())
+                })
+        })
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    for entry in selected {
+        if let Some(value) = metadata.get(entry.provider_id.as_deref().unwrap_or(&entry.id)) {
+            apply_metadata_to_entry(entry, value);
+        }
+    }
+    Ok(metadata)
 }
 
 fn staged_u64(value: Option<i64>, field: &str, provider_id: &str) -> Result<Option<u64>> {
@@ -3583,8 +3772,15 @@ fn non_empty(value: Option<&str>) -> Option<&str> {
 }
 
 #[cfg(test)]
+mod snapshot_source_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+
+    // Uses the existing POSIX add-on fixture; intentionally skipped on Windows.
+    #[cfg(unix)]
+    mod snapshot_stage_tests;
 
     fn valid_yaml() -> &'static str {
         r#"
