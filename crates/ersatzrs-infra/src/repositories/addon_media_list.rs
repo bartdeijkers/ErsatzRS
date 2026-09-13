@@ -1,5 +1,6 @@
 mod editor;
 mod editor_artwork;
+pub(crate) use editor_artwork::stage as stage_editor_artwork_in_tx;
 #[cfg(test)]
 mod visibility_tests;
 

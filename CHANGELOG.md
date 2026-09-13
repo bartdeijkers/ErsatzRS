@@ -31,8 +31,11 @@ release section when tagging a release.
   migration is not included in this portability work.
   Receiving validation and non-overwriting saved-asset copying groundwork now
   includes owned source checks and image/subtitle byte admission, distinguishing
-  missing prepared videos from damaged or missing required assets. Durable Save
-  and scan reconstruction integration remains unfinished.
+  missing prepared videos from damaged or missing required assets. Receiving
+  artwork staging preserves draft and published metadata separately without
+  exposing partially created lists; exact subtitle and replacement source checks
+  retain their ownership and unresolved-selection rules. Durable Save and scan
+  reconstruction integration remains unfinished.
 
 - Replace destructive add-on-list removal in admin with reversible Hide list
   and Show list actions and a Hidden lists filter on the existing page. Hiding

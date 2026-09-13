@@ -1,5 +1,8 @@
 //! Direct local source adapters; callers retain capture and managed-tree ownership.
 
+mod replacements;
+pub use replacements::inspect_owned_replacement;
+
 use std::{fmt::Write as _, fs, path::Path};
 
 use ersatzrs_core::repositories::{AddonMediaListRevisionFile, RepositoryError};
@@ -66,6 +69,69 @@ pub async fn load_owned_artwork(
     Ok(bytes)
 }
 
+/// Read an exact retained manual subtitle original without creating local jobs or files.
+/// The caller supplies the artifact root and retains its capture/revision fence
+/// across the ownership query and file read. No transaction is held across IO.
+///
+/// # Errors
+/// Rejects mismatched captures, missing retained pins, prepared-media artifacts,
+/// changed ownership/metadata/bytes, unsafe paths and invalid SRT originals.
+pub async fn load_owned_subtitle(
+    pool: &DbPool,
+    list_id: EntityId,
+    revision: i32,
+    captured: &super::published::CapturedArtifact,
+    subtitle: &super::model::SavedSubtitle,
+    artifact_root: &Path,
+) -> ersatzrs_core::repositories::Result<String> {
+    let invalid = || {
+        RepositoryError::Conflict("the captured subtitle source is unavailable or changed".into())
+    };
+    validate_reference(&captured.file).map_err(|_| invalid())?;
+    ersatzrs_addon_contract::subtitle_logical_language(&subtitle.language)
+        .map_err(|_| invalid())?;
+    if list_id <= 0
+        || revision <= 0
+        || captured.file != subtitle.file
+        || captured.file.relative_path
+            != format!(".ersatzrs-saved/published/{}.srt", captured.file.sha256)
+        || captured.file.byte_length == 0
+        || captured.file.byte_length
+            > crate::addon_media_list_subtitle_artifacts::MAXIMUM_SUBTITLE_FILE_BYTES
+    {
+        return Err(invalid());
+    }
+    let clock = match subtitle.timeline {
+        ersatzrs_addon_contract::MediaListSubtitleTimeline::Source => 0,
+        ersatzrs_addon_contract::MediaListSubtitleTimeline::Prepared => 1,
+    };
+    let owned: bool = sqlx::query_scalar(r#"SELECT EXISTS(
+        SELECT 1 FROM "AddonMediaListRevisionArtifact" AS "pin"
+        JOIN "AddonMediaListRevision" AS "revision" ON "revision"."Id"="pin"."AddonMediaListRevisionId"
+        JOIN "AddonMediaListArtifact" AS "artifact" ON "artifact"."Id"="pin"."AddonMediaListArtifactId"
+        WHERE "revision"."AddonMediaListId"=? AND "revision"."Revision"=? AND "revision"."CompletedAt" IS NOT NULL
+          AND "artifact"."Id"=? AND "artifact"."AddonMediaListId"=?
+          AND "artifact"."Kind"=0 AND "artifact"."State"=2 AND "artifact"."CompletedAt" IS NOT NULL
+          AND "artifact"."RelativePath"=? AND "artifact"."Sha256"=? AND "artifact"."ByteLength"=?
+          AND "artifact"."SubtitleLanguage"=? AND "artifact"."SubtitleTimeline"=?)"#)
+        .bind(list_id).bind(revision).bind(captured.artifact_id).bind(list_id)
+        .bind(&captured.storage_relative_path).bind(&captured.file.sha256)
+        .bind(i64::try_from(captured.file.byte_length).map_err(|_| invalid())?)
+        .bind(&subtitle.language).bind(clock).fetch_one(pool).await.map_err(|_| invalid())?;
+    if !owned {
+        return Err(invalid());
+    }
+    let source = super::model::SavedFile {
+        relative_path: captured.storage_relative_path.clone(),
+        ..captured.file.clone()
+    };
+    // The shared receiving reader checks root/confinement, bounded byte identity,
+    // UTF-8 and SRT grammar, and returns the original text without normalization.
+    super::receiving::read_subtitle(artifact_root, &source)
+        .await
+        .map_err(|_| invalid())
+}
+
 /// Copy one captured retained file using explicit storage roots and list ownership.
 /// Call in blocking context while retaining the caller's managed-tree fence. This
 /// performs no database access, root discovery, document commit or publication.
@@ -125,3 +191,6 @@ fn redacted(error: &PublicationFsError) -> SavedAssetError {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod subtitles_tests;

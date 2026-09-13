@@ -10,5 +10,6 @@ pub mod files;
 pub mod model;
 pub mod published;
 pub mod receiving;
+pub mod receiving_artwork;
 pub mod sources;
 pub mod validation;

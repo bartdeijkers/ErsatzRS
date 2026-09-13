@@ -50,6 +50,43 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 subtitle/replacement sources and receiving artwork (unwired): exact
+retained Kind 0 Ready subtitle originals are checked against their revision pin,
+list, language, clock, length and hash before reading original SRT bytes. The
+source selection passes nine tests (77d2fee4-d79b-479d-9e4c-01d9f10a0726),
+including four new subtitle regressions. Exact selected Local replacement versions
+produce a contained file reference without copying media; missing, outside or
+ambiguous file selections remain unresolved. Claude's non-portable-name finding
+is corrected: legal local names that cannot travel to Windows retain unresolved
+choices before any media hashing. Five replacement regressions and the extracted
+metadata mapping fixture pass (29ae3173-840a-4923-8dd7-6db0f7146932), including
+real Unix colon/trailing-dot names and symlink refusal. The portable cases are
+present for Windows but have not run there. The caller must use existing dunce
+root normalization, not Windows verbatim paths. Full hashing is initial source
+admission; ordinary-save reference reuse remains an integration requirement,
+not a new mtime cache or an inspector defect (Claude concurrence at 13:07).
+Receiving artwork stages one verified image at a time in connection-local TEMP
+storage before main write ownership. The connection closes on drop, including
+failed admission; no placeholder owners, persistent staging jobs or cleanup
+markers are introduced. The final transaction reuses existing owned image staging.
+Binding maps each provider/override/conflict branch and old publication separately,
+preserving typed roles, literal person metadata and state-specific references.
+Eight artwork tests pass (2ddb42b8-dc52-45bb-a467-b5a224a96773), including main
+writer availability, atomic owner/upload rollback, idempotence and disposal.
+The earlier six-test selection (760e1acf-6ce7-424f-ad64-25838206b1fa) measured
+61.3 ms for a 16 x 256 KiB final transaction on Linux with the fixture's default
+SQLite journal settings. This is not a large-list or Windows timing guarantee;
+final BLOB writes still scale with aggregate bytes. Claude reviewed the subtitle,
+staging and metadata implementation/tests without P1/P2; Astra independently
+reviewed staging and metadata with the same result. Claude's 13:09 review confirms
+the replacement-name fix; the proposed missing Unix guard was already present
+and Claude withdrew that finding at 13:10. No open checkpoint P1/P2 remain. Final scoped
+infra all-targets Clippy with -D warnings passes (19.0s), retaining earlier rustdoc
+formatting and extraction of the unchanged mapping fixture from its test function.
+Progress validation passes. No CI or full closeout.
+Remaining: source assembly, receiving list/item/subtitle/playback projection,
+durable all-writer file-first commits, discovery and independent-profile activation.
+These helpers do not yet enable authoritative Save or scan reconstruction.
 2026-09-13 receiving bytes and selected source adapters (unwired): semantic
 validation precedes byte admission; only missing exclusively prepared media
 returns provider identities requiring local preparation. Required draft files,

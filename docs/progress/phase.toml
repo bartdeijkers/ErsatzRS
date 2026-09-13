@@ -72,8 +72,10 @@ milestone. Semantic receiving validation now has 20 focused passing tests;
 publication capture now references immutable reserved assets with focused proof.
 Immutable asset installation, selected owned artwork/retained source adapters
 and receiving byte admission now have focused proof: 70 saved-list tests pass,
-with independent Claude implementation/test review. Next: remaining subtitle and
-replacement source integration, fresh receiving ownership, then the durable
+with independent Claude implementation/test review. Subtitle/replacement source
+inspection and transactional receiving artwork now have focused native proof;
+metadata binding preserves draft/conflict/old-publication separation. Next: source
+assembly and receiving list/item/subtitle/playback projection, then the durable
 saved-content all-writer boundary and scan reconstruction.
 The accepted cap is not yet enforced by runtime writers or scans.
 Durable saved-file and

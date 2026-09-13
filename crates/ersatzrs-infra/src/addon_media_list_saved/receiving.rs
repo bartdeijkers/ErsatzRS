@@ -116,7 +116,7 @@ pub async fn validate_received_assets(
         .collect())
 }
 
-fn layer_images<'a>(metadata: &'a SavedMetadata, images: &mut BTreeSet<&'a str>) {
+pub(super) fn layer_images<'a>(metadata: &'a SavedMetadata, images: &mut BTreeSet<&'a str>) {
     map_images(&metadata.provider, images);
     map_images(&metadata.overrides, images);
     for field in ["artwork", "artwork_urls"] {
@@ -132,7 +132,7 @@ fn layer_images<'a>(metadata: &'a SavedMetadata, images: &mut BTreeSet<&'a str>)
     }
 }
 
-fn map_images<'a>(metadata: &'a Map<String, Value>, images: &mut BTreeSet<&'a str>) {
+pub(super) fn map_images<'a>(metadata: &'a Map<String, Value>, images: &mut BTreeSet<&'a str>) {
     for field in ["artwork", "artwork_urls"] {
         if let Some(value) = metadata.get(field) {
             images.extend(urls(field, value).filter_map(|url| url.strip_prefix("./")));

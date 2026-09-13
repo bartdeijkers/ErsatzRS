@@ -233,6 +233,19 @@ Portable-content boundary review (after checkpoint `7d1d2e26`):
   conflict layers. Person thumbnails remain literal metadata, matching the
   current host; do not invent a person upload or actor-image renderer. Sender
   upload handles are not portable, including in person thumbnail fields.
+- Receiving artwork uses one operation-owned SQLite connection with file-backed
+  TEMP staging and close-on-drop disposal. Stage verified images individually
+  before main write ownership; use that same connection for the final transaction,
+  create owners first, then reuse owned upload staging and bind the metadata.
+  Keep state-specific file indexes and all conflict branches. Final BLOB writes
+  still scale with aggregate bytes; do not hold the main transaction across source
+  file reads or wait on the managed-tree fence. No persistent pending-owner or
+  compensation lifecycle is needed. Subtitle and exact contained replacement
+  source adapters are implemented; assembly and receiving bindings remain open.
+  Replacement source inspection hashes initial/new bytes; ordinary metadata saves
+  must reuse valid saved immutable references rather than invoke whole-media
+  admission on every edit. Decide that reuse at the actual capture/fence boundary,
+  not through a separate speculative cache or size/mtime-as-integrity shortcut.
 - Receiving options require a compatible installed declaration. The existing
   `retained-option-schema-evolution` debt remains a known limitation, not new
   schema-migration scope here. Refusal guidance must request a compatible add-on
@@ -293,6 +306,16 @@ same retained-file match only for its existing owned handle and exact source,
 scope and role; a newer draft handle never substitutes for the old one.
 Revision-file provider IDs are unset in
 production and cannot establish item ownership.
+Published-only identities are a real reconstruction case: chapter refresh can
+delete current fragments, and reset deletes draft rows while retaining the
+published revision. Retained revision items have provider identity without a
+current-item foreign key. Current scanner activation still reads item rows marked
+Published, and item-scoped artwork requires an item owner. The next receiving
+projection must therefore distinguish actual draft membership from publication-
+only ownership; setting Included=false alone would manufacture extra saved draft
+items. Review a narrow draft-membership marker on receiving item rows and its
+owning reads before implementation. Reuse existing nullable item ownership and
+revision pins for subtitle/prepared artifacts; no new artifact schema is needed.
 Manual subtitle capture preserves the original pinned SRT, language and
 Source/Prepared clock: published sidecars may already have programme timing
 transformations and are not interchangeable with those inputs. Prepared media

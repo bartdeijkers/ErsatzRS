@@ -6,7 +6,9 @@ pub(crate) use addon_media_list_lifecycle::{
 };
 pub(crate) mod addon_media_list_reset;
 pub(crate) mod addon_publication_fs;
-pub(crate) use addon_media_list::{artwork_role_value, load_replacement_candidate};
+pub(crate) use addon_media_list::{
+    artwork_role_value, load_replacement_candidate, stage_editor_artwork_in_tx,
+};
 mod admin_media;
 mod admin_settings;
 mod artwork;
