@@ -50,7 +50,88 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
-2026-09-13 direct option writers are being connected through the existing
+2026-09-13 import persistence now shares the existing header phase-zero,
+item phase-one and final reconciliation phase-four transactions. The mapped
+tree is acquired before write ownership; existing import lease, cancellation
+and phase fences remain in force. Provider changes can add unselected items,
+clear re-adopted selections and refresh provider-list identity, but cannot
+introduce new local replacement/artwork selections. Independent published
+content remains unchanged. No new coordinator, migration or lease exemption
+was added. Ordinary root-scan coexistence reuses the operator-write allowance.
+Mapped repair fences the observed local provider identity and updates it from
+the validated file in the same projection transaction, with existing uniqueness
+constraints retained. This closes a demonstrated post-file header failure that
+otherwise prevented recovery after a provider-ID change.
+
+The actual archived reconciliation regression exposed duplicate observation
+counting after phase-four file success, SQLite rollback, mapped repair and
+same-generation Retry. Mapped repair now baselines file-present draft
+observations against an exact local pending full-reconcile phase-four archive.
+It changes no observation count, timestamps or item membership generation and
+grants no execution authority. Cancelled work is included because existing Retry
+resumes its same generation. An externally supplied observation is conservatively
+treated as baseline for that pending archive; only a genuinely new generation
+adds new evidence. No sender job identity is imported. Astra independently
+reviewed this correction and all import hooks with no remaining concrete P1/P2.
+
+After resume, the previous test handle was unavailable; no result is claimed
+for that interrupted run. Run 02c5f8f7-2ede-42ae-ab3f-d4402197c216 proved the
+double-count correction, then exposed a test-only incorrect expectation that a
+reconciliation archive was committed before publication. The corrected assertion
+preserves the existing staged-until-publication contract and also verifies Ready
+with lease release. Both selected tests pass in
+23f72c5a-d887-4b98-ab8b-1776a13ce03e (12.65s build, 0.663s tests).
+All fourteen detail/import/asset tests pass in
+c47d9ce8-9133-4cb1-b476-f076dddf5c53 (7.15s build, 3.091s tests), including
+same-generation recovery, a new generation adding exactly one observation
+without premature 24-hour confirmation, provider-ID recovery, phase rollback,
+re-adoption and unchanged publication. Checks use two build jobs/test threads.
+Scoped infra all-targets Clippy passes with -D warnings (23.14s). The new
+capture/finalization path exceeded the existing future-size lint; boxing the
+adopted capture and actual finalization boundaries contains it without changing
+job behavior or suppressing warnings. Boxing only the file-write future did not
+reduce the reported size and was removed. Final eighteen infra/scanner tests
+pass in 73e1ee2c-34ca-46e2-9b38-bf010190d6cb (30.21s build, 5.491s tests),
+including existing mapped repair, publication-lease deferral, preserved hiding
+and exact changed-publication queue behavior. Claude independently reviewed
+implementation and tests, including the lint correction, with no open P1/P2.
+His proposed source-URL header finding was withdrawn after tracing production
+inputs: the header copies SQLite's current URL, provider list enumeration has
+no URL field, and Reset reload retains that URL. Source-changing writers remain
+part of the existing unfinished integration; no speculative import relaxation
+was added. All local checks are terminal; this is a reviewed local checkpoint.
+Runtime discovery stays disabled and the remaining writers, receiving bindings
+and native/browser acceptance remain required. No CI/full closeout/push ran.
+
+2026-09-13 provider-detail persistence is being integrated at its existing
+content transaction. The mapped tree is acquired before database write ownership;
+managed/publication availability is checked before captured asset reuse, including
+Restore's temporary draft materialization. Operator overrides and GUIDs are read
+inside that same transaction. Unchanged replacement/artwork references are reused
+without media reads, and the resulting draft is written before SQLite commits,
+preserving its independent published section. An external or file-first-pending
+document is not repaired through the job: it stops with the existing diagnostic
+and retained checkpoint for projection recovery before retry. Successful detail
+completion now shares the merge transaction, closing the demonstrated crash gap
+between merge and terminal completion that allowed revision-changing replay.
+Astra independently closed the Restore-ordering P2 with no remaining findings.
+The initial compile exposed a test fixture's wrong synchronizer type, corrected
+without changing production behavior. All fourteen selected tests pass in
+ba51f6ad-fa4b-493f-8138-a11d36165192 (62s build, 3.467s tests, two jobs/threads):
+three adopted-list detail tests, checkpoint restart/context/sibling/publication
+regressions, and existing asset reuse. The file-first SQL-failure case proves
+the new file survives while SQLite and the Running checkpoint roll back;
+pre-repair replay refuses without mutation. Mapped repair restores semantic
+content and the unchanged publication. A valid result can then complete once
+with a receiving-local revision rewrite; subsequent replay is refused without
+any database/file changes. Scoped infra all-targets Clippy passes with -D warnings
+(53.15s) after boxing only the actual checkpoint merge future and naming the
+test's default artifact type. The final fourteen-test rerun passes in
+39097f27-01fd-4025-bf65-2fd4ca731fa0 (13.44s build, 3.426s tests). Claude
+cross-review remains pending, so this detail checkpoint is uncommitted.
+Runtime discovery remains disabled; this is not complete O-01 acceptance.
+
+2026-09-13 direct option writers are committed as 76590768 through the existing
 SavedWriter boundary around save_draft_options. Native Undo, legacy option
 Apply/Undo and preparation-default activation share this transaction; its schema,
 sparse-value and revision behavior remains unchanged. Default activation still

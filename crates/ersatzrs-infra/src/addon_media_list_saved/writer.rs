@@ -1,4 +1,4 @@
-//! Ordinary editor Save for an already-adopted authoritative list folder.
+//! Draft writes for an already-adopted authoritative list folder.
 //!
 //! Adoption and other content writers remain part of the same O-01 integration.
 
@@ -19,6 +19,51 @@ pub(crate) struct SavedWriter {
 }
 
 impl SavedWriter {
+    /// Provider updates retain operator assets and never repair a divergent file
+    /// through their own job. Recovery must reconcile authority before retrying.
+    /// The caller acquires the tree before its transaction and checks managed
+    /// availability before capture, since Restore may be materializing a draft.
+    pub(crate) async fn capture_provider_update(
+        mapped: MappedList,
+        tx: &mut Transaction<'_, Db>,
+        list_id: i64,
+    ) -> Result<Self> {
+        if mapped.digest != mapped.previous_digest {
+            return Err(RepositoryError::Conflict(
+                "the saved list folder changed; refresh its database projection before retrying provider results".into(),
+            ));
+        }
+        validation::validate_content(&mapped.document, &mapped.installed)
+            .map_err(|_| conflict())?;
+        let captured = capture::draft_in_tx(tx, list_id).await?;
+        let assets = PreparedAssets::reuse(&mapped.document, &captured)?;
+        Ok(Self {
+            mapped,
+            assets,
+            list_id,
+        })
+    }
+
+    /// Import phases own their existing import-job fence, not a managed lease.
+    /// Like operator Save, reserved draft writes may coexist with root scans;
+    /// publication, reset and other mutating managed operations remain blocking.
+    pub(crate) async fn capture_import(
+        mapped: Option<MappedList>,
+        tx: &mut Transaction<'_, Db>,
+        list_id: i64,
+    ) -> Result<Option<Self>> {
+        let Some(mapped) = mapped else {
+            return Ok(None);
+        };
+        if !mapped.fence_operator_save(tx).await? {
+            return Err(conflict());
+        }
+        // Bound the enclosing import/refresh future at the adopted-list capture.
+        Box::pin(Self::capture_provider_update(mapped, tx, list_id))
+            .await
+            .map(Some)
+    }
+
     /// Preflight only adopted lists, before acquiring any database write lock.
     pub(crate) async fn prepare(
         pool: &DbPool,
@@ -71,10 +116,34 @@ impl SavedWriter {
 
     /// Persist the resulting draft, retaining the independent published section.
     pub(crate) async fn write(
-        mut self,
+        self,
         tx: &mut Transaction<'_, Db>,
     ) -> Result<Arc<assembly::ManagedTreeGuard>> {
+        self.write_inner(tx, false).await
+    }
+
+    /// Import may add/remove items or clear a re-adopted replacement choice;
+    /// it must never invent an operator-selected local asset.
+    pub(crate) async fn write_import(
+        self,
+        tx: &mut Transaction<'_, Db>,
+    ) -> Result<Arc<assembly::ManagedTreeGuard>> {
+        self.write_inner(tx, true).await
+    }
+
+    async fn write_inner(
+        mut self,
+        tx: &mut Transaction<'_, Db>,
+        provider_changes: bool,
+    ) -> Result<Arc<assembly::ManagedTreeGuard>> {
         let mut captured = capture::draft_in_tx(tx, self.list_id).await?;
+        if provider_changes {
+            self.assets.accept_provider_changes(&captured)?;
+            self.mapped
+                .document
+                .provider_id
+                .clone_from(&captured.provider_id);
+        }
         self.assets.apply(&mut captured)?;
         self.mapped.document.draft = captured.draft;
         validation::validate_content(&self.mapped.document, &self.mapped.installed)

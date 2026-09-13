@@ -53,6 +53,13 @@ release section when tagging a release.
   unpublished media identities without counting them as active members.
   Direct option edits, Undo and preparation-default activation now share the
   same file-first persistence for adopted lists, retaining published options.
+  Provider-detail merges now persist their saved draft before SQLite and finish
+  the detail checkpoint in the same transaction, avoiding replay after a
+  successful merge. They defer during publication and refuse unresolved file
+  divergence without overwriting saved content.
+  Import headers, items and reconciliation observations now use the same
+  file-first boundary. Recovery preserves refreshed provider identities and
+  prevents a retried reconciliation from counting missing videos twice.
   Automatic receiving discovery is not yet enabled.
   Remaining writers and runtime scan reconstruction integration are unfinished.
 

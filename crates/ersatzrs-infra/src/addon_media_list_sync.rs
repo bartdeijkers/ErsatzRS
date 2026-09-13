@@ -720,6 +720,26 @@ impl AddonMediaListSynchronizer {
         item: &EnumeratedAddonMediaListItem,
         detail_fence: Option<(EntityId, &str)>,
     ) -> Result<DetailMergeOutcome> {
+        let mapped =
+            crate::addon_media_list_saved::mapped::MappedList::load(&self.pool, list_id).await?;
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let saved_writer = if let Some(mapped) = mapped {
+            // Restore can temporarily materialize a different draft. Defer
+            // before comparing its assets against the authoritative document.
+            if !mapped.fence(&mut tx).await? {
+                return Ok(DetailMergeOutcome::DeferredForPublication);
+            }
+            Some(
+                crate::addon_media_list_saved::writer::SavedWriter::capture_provider_update(
+                    mapped, &mut tx, list_id,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+        // Calculate conflicts from the same state that the merge will update;
+        // file preflight must not leave stale operator overrides in memory.
         let row = sqlx::query(
             r#"SELECT "item".*, "list"."PublishedRevision"
                FROM "AddonMediaListItem" AS "item"
@@ -730,7 +750,7 @@ impl AddonMediaListSynchronizer {
         )
         .bind(list_id)
         .bind(&item.provider_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await
         .repository()?
         .ok_or_else(|| {
@@ -763,7 +783,14 @@ impl AddonMediaListSynchronizer {
             liveness_override,
             previous_liveness_conflict,
         );
-        let previous_guids = self.load_item_guids(item_id).await?;
+        let previous_guids: Vec<String> = sqlx::query_scalar(
+            r#"SELECT COALESCE("Guid", '') FROM "AddonMediaListItemGuid"
+               WHERE "AddonMediaListItemId"=? ORDER BY "Id""#,
+        )
+        .bind(item_id)
+        .fetch_all(&mut *tx)
+        .await
+        .repository()?;
         let operational_change = row.try_get::<i32, _>("Kind").repository()?
             != encode_enum(item.kind)
             || row.try_get::<Option<String>, _>("SourceUrl").repository()? != item.source_url
@@ -786,21 +813,6 @@ impl AddonMediaListSynchronizer {
         let mut review_required = published && (operational_change || conflicts.is_some());
         let image_urls = encode_image_urls(&item.additional_image_urls)?;
         let now = encode_datetime(Utc::now());
-        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
-        let still_in_draft: bool = sqlx::query_scalar(
-            r#"SELECT EXISTS (SELECT 1 FROM "AddonMediaListItem"
-               WHERE "Id"=? AND "AddonMediaListId"=? AND "InDraft"=1)"#,
-        )
-        .bind(item_id)
-        .bind(list_id)
-        .fetch_one(&mut *tx)
-        .await
-        .repository()?;
-        if !still_in_draft {
-            return Err(RepositoryError::Conflict(
-                "the enriched item no longer belongs to the committed overview".to_owned(),
-            ));
-        }
         let mut draft_detail = false;
         if let Some((expected_item_id, lease_owner)) = detail_fence {
             if expected_item_id != item_id {
@@ -1001,7 +1013,26 @@ impl AddonMediaListSynchronizer {
             sqlx::query(r#"UPDATE "AddonMediaListDetailJob" SET "OptionContextJson"=? WHERE "AddonMediaListItemId"=?"#)
                 .bind(context).bind(item_id).execute(&mut *tx).await.repository()?;
         }
-        tx.commit().await.repository()?;
+        if let Some((item_id, lease_owner)) = detail_fence {
+            crate::addon_media_list_import::finish_checkpointed_detail_in_tx(
+                &mut tx,
+                list_id,
+                item_id,
+                lease_owner,
+            )
+            .await?;
+        }
+        let saved_guard = match saved_writer {
+            Some(writer) => Some(writer.write(&mut tx).await?),
+            None => None,
+        };
+        if saved_guard.is_some() {
+            tx.commit()
+                .await
+                .map_err(|_| crate::addon_media_list_saved::writer::pending())?;
+        } else {
+            tx.commit().await.repository()?;
+        }
         Ok(DetailMergeOutcome::Applied)
     }
 
@@ -1266,8 +1297,14 @@ impl AddonMediaListSynchronizer {
             expected_phase: 0,
             next_phase: 1,
         };
+        let mapped =
+            crate::addon_media_list_saved::mapped::MappedList::load(&self.pool, list.id).await?;
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
         begin_import_finalization_phase(&mut tx, fence).await?;
+        let saved_writer = crate::addon_media_list_saved::writer::SavedWriter::capture_import(
+            mapped, &mut tx, list.id,
+        )
+        .await?;
         let previous_revision: i32 =
             sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id" = ?"#)
                 .bind(list.id)
@@ -1377,7 +1414,16 @@ impl AddonMediaListSynchronizer {
         )
         .await?;
         complete_import_finalization_phase(&mut tx, fence).await?;
-        tx.commit().await.repository()
+        let saved_guard = match saved_writer {
+            Some(writer) => Some(writer.write_import(&mut tx).await?),
+            None => None,
+        };
+        let committed = tx.commit().await;
+        if saved_guard.is_some() {
+            committed.map_err(|_| crate::addon_media_list_saved::writer::pending())
+        } else {
+            committed.repository()
+        }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -1445,11 +1491,22 @@ impl AddonMediaListSynchronizer {
         reconcile_generation: Option<i32>,
         finalization: Option<ImportFinalizationFence<'_>>,
     ) -> Result<AddonMediaList> {
+        let mapped =
+            crate::addon_media_list_saved::mapped::MappedList::load(&self.pool, list_id).await?;
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        if let Some(fence) = finalization {
+            begin_import_finalization_phase(&mut tx, fence).await?;
+        }
+        ensure_not_publishing_tx(&mut tx, list_id).await?;
+        let saved_writer = crate::addon_media_list_saved::writer::SavedWriter::capture_import(
+            mapped, &mut tx, list_id,
+        )
+        .await?;
         let incoming_ids = incoming
             .iter()
             .map(|item| item.provider_id.as_str())
             .collect::<HashSet<_>>();
-        let existing = self.load_existing_items(list_id).await?;
+        let existing = Self::load_existing_items(&mut tx, list_id).await?;
         let existing_ids = existing
             .iter()
             .map(|item| (item.provider_id.as_str(), item.id))
@@ -1462,11 +1519,6 @@ impl AddonMediaListSynchronizer {
         let observed_at = Utc::now();
         let observed_at_text = encode_datetime(observed_at);
 
-        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
-        if let Some(fence) = finalization {
-            begin_import_finalization_phase(&mut tx, fence).await?;
-        }
-        ensure_not_publishing_tx(&mut tx, list_id).await?;
         if delta {
             let mut incoming_ranks = incoming
                 .iter()
@@ -1761,8 +1813,16 @@ impl AddonMediaListSynchronizer {
             .await?;
             complete_import_finalization_phase(&mut tx, fence).await?;
         }
-        tx.commit().await.repository()?;
-
+        let saved_guard = match saved_writer {
+            Some(writer) => Some(writer.write_import(&mut tx).await?),
+            None => None,
+        };
+        let committed = tx.commit().await;
+        if saved_guard.is_some() {
+            committed.map_err(|_| crate::addon_media_list_saved::writer::pending())?;
+        } else {
+            committed.repository()?;
+        }
         self.load_list(list_id).await
     }
 
@@ -1824,7 +1884,10 @@ impl AddonMediaListSynchronizer {
         })
     }
 
-    async fn load_existing_items(&self, list_id: EntityId) -> Result<Vec<ExistingItem>> {
+    async fn load_existing_items(
+        tx: &mut Transaction<'_, Db>,
+        list_id: EntityId,
+    ) -> Result<Vec<ExistingItem>> {
         let rows = sqlx::query(
             r#"SELECT "Id", "InDraft", "Published", "ProviderId", "Rank", "ParentProviderId", "ProviderMetadataJson",
                       "MetadataOverrideJson", "MetadataConflictJson", "ProviderLiveness",
@@ -1834,7 +1897,7 @@ impl AddonMediaListSynchronizer {
                ORDER BY "Rank", "Id""#,
         )
         .bind(list_id)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut **tx)
         .await
         .repository()?;
 
@@ -4029,6 +4092,8 @@ const fn collection_type_for_kind(kind: AddonMediaListItemKind) -> i32 {
 #[cfg(test)]
 mod reconcile_tests {
     mod in_draft_tests;
+    mod saved_detail_tests;
+    mod saved_import_tests;
     use ersatzrs_core::repositories::AddonMediaListLifecycleRepository as _;
     use ersatzrs_core::repositories::AddonMediaListNfoMetadata;
     use sqlx::sqlite::SqlitePoolOptions;

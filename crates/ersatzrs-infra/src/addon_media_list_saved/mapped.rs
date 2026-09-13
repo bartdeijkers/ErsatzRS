@@ -28,6 +28,9 @@ pub(crate) struct MappedList {
     pub manifest_json: String,
     pub published_revision: i32,
     list_id: i64,
+    // An import may have committed a new provider identity only to the file.
+    // Fence the observed local owner so mapped repair can finish that transition.
+    previous_provider_id: String,
     pub previous_digest: String,
     pub publication_digest: String,
     pub previous_publication_digest: Option<String>,
@@ -39,7 +42,7 @@ impl MappedList {
     pub async fn load(pool: &DbPool, list_id: i64) -> Result<Option<Self>> {
         let row = sqlx::query(
             r#"SELECT "list"."SavedDocumentDigest", "list"."SavedPublicationDigest",
-               "list"."PublishedRevision", "library"."ManifestPath", "source"."RootPath",
+               "list"."PublishedRevision", "list"."ProviderId", "library"."ManifestPath", "source"."RootPath",
                "addon"."ManifestJson", "addon"."Enabled"
                FROM "AddonMediaList" AS "list"
                LEFT JOIN "AddonMediaListLibrary" AS "library" ON "library"."AddonMediaListId"="list"."Id"
@@ -93,6 +96,7 @@ impl MappedList {
             manifest_json,
             published_revision: row.try_get("PublishedRevision").repository()?,
             list_id,
+            previous_provider_id: row.try_get("ProviderId").repository()?,
             previous_digest,
             publication_digest,
             previous_publication_digest: row.try_get("SavedPublicationDigest").repository()?,
@@ -157,7 +161,7 @@ impl MappedList {
         .bind(&self.previous_publication_digest)
         .bind(self.published_revision)
         .bind(&self.document.addon_id)
-        .bind(&self.document.provider_id)
+        .bind(&self.previous_provider_id)
         .bind(&self.manifest_json)
         .bind(&self.root)
         .bind(&self.manifest_path)
@@ -213,10 +217,11 @@ impl MappedList {
                 .repository()?;
         let revision = revision.checked_add(1).ok_or_else(conflict)?;
         sqlx::query(
-            r#"UPDATE "AddonMediaList" SET "DraftRevision"=?,
+            r#"UPDATE "AddonMediaList" SET "DraftRevision"=?, "ProviderId"=?,
             "ReviewState"=CASE WHEN "ReviewState"=0 THEN 0 ELSE 1 END WHERE "Id"=?"#,
         )
         .bind(revision)
+        .bind(&self.document.provider_id)
         .bind(self.list_id)
         .execute(&mut *tx)
         .await
@@ -230,6 +235,7 @@ impl MappedList {
             now,
         )
         .await?;
+        self.baseline_pending_observations(&mut tx).await?;
         let queued = if publication_changed {
             let publication = self.document.published.as_ref().ok_or_else(conflict)?;
             let source_revision: i32 = sqlx::query_scalar(
@@ -264,8 +270,52 @@ impl MappedList {
             .execute(&mut *tx).await.repository()?;
         tx.commit().await.repository()?;
         self.previous_digest.clone_from(&self.digest);
+        self.previous_provider_id
+            .clone_from(&self.document.provider_id);
         self.previous_publication_digest = Some(self.publication_digest.clone());
         Ok(Repair::Updated(queued.map(Box::new)))
+    }
+
+    /// File-authoritative observations are already the baseline for a pending
+    /// finalized archive. Replaying that archive must not count them twice.
+    /// This does not claim provider evidence or change item membership generations.
+    async fn baseline_pending_observations(&self, tx: &mut Transaction<'_, Db>) -> Result<()> {
+        use crate::repositories::common::encode_enum;
+        use ersatzrs_domain::{
+            AddonMediaListImportMode, AddonMediaListImportPurpose, AddonMediaListImportState,
+        };
+        let generation: Option<i32> = sqlx::query_scalar(
+            r#"SELECT MAX("job"."Generation")
+               FROM "AddonMediaListImportJob" AS "job"
+               JOIN "AddonMediaListImportCheckpoint" AS "checkpoint"
+                 ON "checkpoint"."Id"="job"."CheckpointId"
+                 AND "checkpoint"."AddonMediaListId"="job"."AddonMediaListId"
+                 AND "checkpoint"."Generation"="job"."Generation"
+                 AND "checkpoint"."Committed"=0
+               WHERE "job"."AddonMediaListId"=? AND "job"."Purpose"=? AND "job"."Mode"=?
+                 AND "job"."OverviewComplete"=1 AND "job"."FinalizationPhase"=4
+                 AND "job"."State" NOT IN (?, ?)"#,
+        )
+        .bind(self.list_id)
+        .bind(encode_enum(AddonMediaListImportPurpose::Reconcile))
+        .bind(encode_enum(AddonMediaListImportMode::Full))
+        .bind(encode_enum(AddonMediaListImportState::Ready))
+        .bind(encode_enum(AddonMediaListImportState::Superseded))
+        .fetch_one(&mut **tx)
+        .await
+        .repository()?;
+        if let Some(generation) = generation {
+            // Projection has deleted draft tombstones absent from the file, so
+            // these are exactly its present observations. Cancelled work is also
+            // resumable in the same generation; this grants no execution authority.
+            sqlx::query(
+                r#"UPDATE "AddonMediaListItemTombstone"
+                   SET "LastReconcileGeneration"=MAX("LastReconcileGeneration", ?)
+                   WHERE "AddonMediaListItemId" IN (
+                       SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=? AND "InDraft"=1)"#,
+            ).bind(generation).bind(self.list_id).execute(&mut **tx).await.repository()?;
+        }
+        Ok(())
     }
 }
 

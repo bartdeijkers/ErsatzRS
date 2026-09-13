@@ -35,42 +35,7 @@ impl PreparedAssets {
         current_capture: &CapturedDraft,
         save: &AddonMediaListEditorSave,
     ) -> Result<Self> {
-        if current_document.addon_id != current_capture.addon_id
-            || current_document.provider_id != current_capture.provider_id
-            || current_document.source_url != current_capture.source_url
-        {
-            return Err(invalid());
-        }
-        let mut prepared = Self {
-            identity: (
-                current_capture.addon_id.clone(),
-                current_capture.provider_id.clone(),
-                current_capture.source_url.clone(),
-            ),
-            artwork: current_capture.artwork.clone(),
-            files: current_document.draft.files.clone(),
-            replacements: BTreeMap::new(),
-        };
-        for item in &current_capture.draft.items {
-            let provider = &item.content.provider_id;
-            let source = current_capture
-                .replacements
-                .iter()
-                .find(|source| &source.provider_id == provider)
-                .cloned();
-            let saved = current_document
-                .draft
-                .items
-                .iter()
-                .find(|saved| &saved.content.provider_id == provider)
-                .ok_or_else(invalid)?;
-            if item.replacement.is_some() != saved.replacement.is_some() {
-                return Err(invalid());
-            }
-            prepared
-                .replacements
-                .insert(provider.clone(), (source, saved.replacement.clone()));
-        }
+        let mut prepared = Self::reuse(current_document, current_capture)?;
         // Capture submitted handles using the same list/scope/role rules as final capture.
         // Finish this read transaction before any upload or video bytes are inspected.
         let mut tx = pool.begin().await.map_err(|_| invalid())?;
@@ -143,6 +108,107 @@ impl PreparedAssets {
             );
         }
         Ok(prepared)
+    }
+
+    /// Reuse existing operator-selected assets when only provider details change.
+    /// No file is opened, hashed or copied.
+    pub(crate) fn reuse(
+        current_document: &SavedListDocument,
+        current_capture: &CapturedDraft,
+    ) -> Result<Self> {
+        if current_document.addon_id != current_capture.addon_id
+            || current_document.provider_id != current_capture.provider_id
+            || current_document.source_url != current_capture.source_url
+        {
+            return Err(invalid());
+        }
+        let mut prepared = Self {
+            identity: (
+                current_capture.addon_id.clone(),
+                current_capture.provider_id.clone(),
+                current_capture.source_url.clone(),
+            ),
+            artwork: current_capture.artwork.clone(),
+            files: current_document.draft.files.clone(),
+            replacements: BTreeMap::new(),
+        };
+        for item in &current_capture.draft.items {
+            let provider = &item.content.provider_id;
+            let source = current_capture
+                .replacements
+                .iter()
+                .find(|source| &source.provider_id == provider)
+                .cloned();
+            let saved = current_document
+                .draft
+                .items
+                .iter()
+                .find(|saved| &saved.content.provider_id == provider)
+                .ok_or_else(invalid)?;
+            if item.replacement.is_some() != saved.replacement.is_some() {
+                return Err(invalid());
+            }
+            prepared
+                .replacements
+                .insert(provider.clone(), (source, saved.replacement.clone()));
+        }
+        Ok(prepared)
+    }
+
+    /// Accept trusted provider membership changes without adopting new local assets.
+    /// Import may refresh its list identity, add unselected items or clear an old
+    /// selection on re-adoption. Editor/detail callers retain strict `apply` behavior.
+    pub(crate) fn accept_provider_changes(&mut self, captured: &CapturedDraft) -> Result<()> {
+        if captured.addon_id != self.identity.0
+            || captured.source_url != self.identity.2
+            || captured
+                .artwork
+                .iter()
+                .any(|upload| !self.artwork.contains(upload))
+        {
+            return Err(invalid());
+        }
+        for source in &captured.replacements {
+            if self
+                .replacements
+                .get(&source.provider_id)
+                .and_then(|(expected, _)| expected.as_ref())
+                != Some(source)
+            {
+                return Err(invalid());
+            }
+        }
+        for item in &captured.draft.items {
+            let provider = &item.content.provider_id;
+            let source = captured
+                .replacements
+                .iter()
+                .find(|source| &source.provider_id == provider);
+            if source.is_none() && item.replacement.is_none() {
+                continue;
+            }
+            let (expected, replacement) = self.replacements.get(provider).ok_or_else(invalid)?;
+            if source != expected.as_ref()
+                || item.replacement.is_some() != replacement.is_some()
+                || (source.is_none() && &item.replacement != replacement)
+            {
+                return Err(invalid());
+            }
+        }
+        // Mutate only after every local-asset check passes.
+        for item in &captured.draft.items {
+            if item.replacement.is_none()
+                && !captured
+                    .replacements
+                    .iter()
+                    .any(|source| source.provider_id == item.content.provider_id)
+            {
+                self.replacements
+                    .insert(item.content.provider_id.clone(), (None, None));
+            }
+        }
+        self.identity.1.clone_from(&captured.provider_id);
+        Ok(())
     }
 
     /// Recheck post-edit local ownership and attach only prepared/reused references.

@@ -1,6 +1,104 @@
 use super::*;
 use std::fmt::Write as _;
 
+#[test]
+fn provider_changes_accept_new_items_and_cleared_selection_without_asset_io() {
+    let mut document = super::super::model::tests::fixture();
+    let file = SavedFile {
+        relative_path: "existing/replacement.mkv".into(),
+        sha256: "a".repeat(64),
+        byte_length: 123,
+    };
+    document.draft.items[0].replacement = Some(SavedReplacement {
+        file: Some(file.clone()),
+    });
+    document.draft.files.push(file);
+    let mut before = captured(&document);
+    before.replacements.push(CapturedReplacement {
+        provider_id: before.draft.items[0].content.provider_id.clone(),
+        media_item_id: 20,
+        media_version_id: Some(30),
+    });
+    before.draft.items[0].replacement = Some(SavedReplacement { file: None });
+    let mut prepared = PreparedAssets::reuse(&document, &before).unwrap();
+    let mut after = captured(&document);
+    after.provider_id = "refreshed-list-identity".into();
+    after.draft.items[0].replacement = None;
+    let mut added = after.draft.items[0].clone();
+    added.content.provider_id = "new-provider-item".into();
+    after.draft.items.push(added);
+    assert!(
+        prepared.apply(&mut after).is_err(),
+        "ordinary apply remains strict"
+    );
+    prepared.accept_provider_changes(&after).unwrap();
+    prepared.apply(&mut after).unwrap();
+    assert_eq!(after.draft.items.len(), 2);
+    assert!(after
+        .draft
+        .items
+        .iter()
+        .all(|item| item.replacement.is_none()));
+    assert!(
+        after.draft.files.is_empty(),
+        "cleared replacement bytes are not retained as referenced assets"
+    );
+}
+
+#[test]
+fn provider_changes_refuse_new_or_changed_local_replacement_and_artwork() {
+    let document = super::super::model::tests::fixture();
+    let before = captured(&document);
+    let mut prepared = PreparedAssets::reuse(&document, &before).unwrap();
+    let mut after = captured(&document);
+    after.draft.items[0].replacement = Some(SavedReplacement { file: None });
+    after.replacements.push(CapturedReplacement {
+        provider_id: after.draft.items[0].content.provider_id.clone(),
+        media_item_id: 20,
+        media_version_id: Some(30),
+    });
+    assert!(prepared.accept_provider_changes(&after).is_err());
+    let mut after = captured(&document);
+    after.artwork.push(CapturedArtwork {
+        upload_id: 42,
+        scope_item_id: 0,
+        role: 1,
+        file: SavedFile {
+            relative_path: ".ersatzrs-saved/artwork/new.png".into(),
+            sha256: "a".repeat(64),
+            byte_length: 3,
+        },
+    });
+    assert!(prepared.accept_provider_changes(&after).is_err());
+    // A refusal must not broaden the prepared state for a later ordinary apply.
+    prepared.apply(&mut captured(&document)).unwrap();
+
+    let mut document = document;
+    document.draft.items[0].replacement = Some(SavedReplacement { file: None });
+    let mut before = captured(&document);
+    before.replacements.push(CapturedReplacement {
+        provider_id: before.draft.items[0].content.provider_id.clone(),
+        media_item_id: 20,
+        media_version_id: Some(30),
+    });
+    let mut prepared = PreparedAssets::reuse(&document, &before).unwrap();
+    before.replacements[0].media_version_id = Some(31);
+    assert!(prepared.accept_provider_changes(&before).is_err());
+}
+
+#[test]
+fn provider_changes_keep_addon_and_source_identity_fenced() {
+    let document = super::super::model::tests::fixture();
+    let mut prepared = PreparedAssets::reuse(&document, &captured(&document)).unwrap();
+    let mut changed = captured(&document);
+    changed.addon_id = "org.example.other".into();
+    assert!(prepared.accept_provider_changes(&changed).is_err());
+    let mut changed = captured(&document);
+    changed.source_url = "https://example.invalid/other".into();
+    assert!(prepared.accept_provider_changes(&changed).is_err());
+    prepared.apply(&mut captured(&document)).unwrap();
+}
+
 fn captured(document: &SavedListDocument) -> CapturedDraft {
     CapturedDraft {
         addon_id: document.addon_id.clone(),

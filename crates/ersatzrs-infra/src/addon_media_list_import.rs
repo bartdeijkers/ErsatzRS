@@ -1757,9 +1757,8 @@ impl AddonMediaListImportCoordinator {
         let revision_token: Option<String> = row.try_get("RevisionToken").repository()?;
         let now = encode_datetime(Utc::now());
         if job.import_capability == CAPABILITY_MEDIA_LIST_IMPORT_V2 {
-            return self
-                .promote_complete_overview(job, job.verification_pass)
-                .await;
+            // Finalization owns the saved-document work, not every page poll.
+            return Box::pin(self.promote_complete_overview(job, job.verification_pass)).await;
         }
         let identity_hash = self.identity_hash(job.id, job.verification_pass).await?;
         if revision_token.is_none() && job.verification_pass == 0 {
@@ -1785,8 +1784,7 @@ impl AddonMediaListImportCoordinator {
                     .to_owned(),
             ));
         }
-        self.promote_complete_overview(job, job.verification_pass)
-            .await
+        Box::pin(self.promote_complete_overview(job, job.verification_pass)).await
     }
 
     async fn start_unversioned_verification(
@@ -1951,6 +1949,13 @@ impl AddonMediaListImportCoordinator {
             )
             .await?;
         self.initialize_detail_jobs(job, job.list_id, pass).await?;
+        // Reconcile observations are saved content; guard the folder before
+        // taking the final phase transaction, never export after Ready commits.
+        let mapped = if job.purpose == AddonMediaListImportPurpose::Reconcile {
+            crate::addon_media_list_saved::mapped::MappedList::load(&self.pool, job.list_id).await?
+        } else {
+            None
+        };
         let completed_at = Utc::now();
         let now = encode_datetime(completed_at);
         let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
@@ -1970,6 +1975,12 @@ impl AddonMediaListImportCoordinator {
                 "the import finalization lease or phase changed".to_owned(),
             ));
         }
+        let saved_writer = crate::addon_media_list_saved::writer::SavedWriter::capture_import(
+            mapped,
+            &mut tx,
+            job.list_id,
+        )
+        .await?;
         if job.purpose == AddonMediaListImportPurpose::Reconcile {
             let has_candidate: bool = sqlx::query_scalar(
                 r#"SELECT EXISTS (
@@ -2080,7 +2091,16 @@ impl AddonMediaListImportCoordinator {
             ));
         }
         crate::addon_media_list_auto_publication::ready_in_tx(&mut tx, job.id).await?;
-        tx.commit().await.repository()?;
+        let saved_guard = match saved_writer {
+            Some(writer) => Some(writer.write_import(&mut tx).await?),
+            None => None,
+        };
+        let committed = tx.commit().await;
+        if saved_guard.is_some() {
+            committed.map_err(|_| crate::addon_media_list_saved::writer::pending())?;
+        } else {
+            committed.repository()?;
+        }
         Ok(())
     }
 
@@ -3029,7 +3049,6 @@ impl AddonMediaListImportCoordinator {
             lease_owner: Some(lease_owner),
         };
         let result_record_json: String = row.try_get("ResultRecordJson").repository()?;
-        let outcome: String = row.try_get("Outcome").repository()?;
         tx.commit().await.repository()?;
 
         let result = serde_json::from_str::<AddonMediaListRecord>(&result_record_json)
@@ -3040,30 +3059,29 @@ impl AddonMediaListImportCoordinator {
             .and_then(|record| Self::decode_enriched_item(&job, &record));
         let result = match result {
             Ok(item) => {
-                AddonMediaListSynchronizer::new(self.pool.clone())
-                    .merge_detail_item_with_lease(
-                        job.list_id,
-                        job.item_id,
-                        job.lease_owner.as_deref().ok_or_else(|| {
-                            RepositoryError::Conflict(
-                                "the checkpointed detail lease is missing".to_owned(),
-                            )
-                        })?,
-                        &item,
-                    )
-                    .await
+                // Keep the guarded saved-document merge off the coordinator's
+                // inline future; only an actual checkpoint result allocates it.
+                Box::pin(
+                    AddonMediaListSynchronizer::new(self.pool.clone())
+                        .merge_detail_item_with_lease(
+                            job.list_id,
+                            job.item_id,
+                            job.lease_owner.as_deref().ok_or_else(|| {
+                                RepositoryError::Conflict(
+                                    "the checkpointed detail lease is missing".to_owned(),
+                                )
+                            })?,
+                            &item,
+                        ),
+                )
+                .await
             }
             Err(error) => Err(error),
         };
         match result {
-            Ok(DetailMergeOutcome::Applied) => {
-                let state = if outcome == "unavailable" {
-                    AddonMediaListDetailState::Skipped
-                } else {
-                    AddonMediaListDetailState::Complete
-                };
-                self.finish_checkpointed_detail(&job, state).await?;
-            }
+            // Completion is committed with the merge, so a restart cannot apply
+            // the same checkpoint a second time and advance its revision again.
+            Ok(DetailMergeOutcome::Applied) => {}
             Ok(DetailMergeOutcome::DeferredForPublication) => {
                 self.defer_checkpointed_detail_for_publication(&job).await?;
             }
@@ -3378,43 +3396,6 @@ impl AddonMediaListImportCoordinator {
         Ok(())
     }
 
-    async fn finish_checkpointed_detail(
-        &self,
-        job: &DetailJob,
-        state: AddonMediaListDetailState,
-    ) -> Result<()> {
-        let now = encode_datetime(Utc::now());
-        let lease_owner = claimed_detail_lease(job)?;
-        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
-        let updated = sqlx::query(
-            r#"UPDATE "AddonMediaListDetailJob"
-               SET "State" = ?, "ManualPriority" = 0, "Diagnostic" = NULL,
-                   "NextEligibleAt" = NULL, "LeaseOwner" = NULL,
-                   "LeaseExpiresAt" = NULL, "CompletedAt" = ?, "UpdatedAt" = ?
-               WHERE "AddonMediaListItemId" = ? AND "ResultRecordJson" IS NOT NULL
-                 AND "State" = ? AND "LeaseOwner" = ?
-                 AND "LeaseExpiresAt" IS NOT NULL AND "LeaseExpiresAt" > ?"#,
-        )
-        .bind(encode_enum(state))
-        .bind(&now)
-        .bind(&now)
-        .bind(job.item_id)
-        .bind(encode_enum(AddonMediaListDetailState::Running))
-        .bind(lease_owner)
-        .bind(&now)
-        .execute(&mut *tx)
-        .await
-        .repository()?;
-        if updated.rows_affected() != 1 {
-            return Err(RepositoryError::Conflict(
-                "the detail lease changed before completion".to_owned(),
-            ));
-        }
-        update_detail_progress(&mut tx, job.list_id, &now).await?;
-        tx.commit().await.repository()?;
-        Ok(())
-    }
-
     async fn defer_checkpointed_detail_for_publication(&self, job: &DetailJob) -> Result<()> {
         let now = Utc::now();
         let retry_at = encode_datetime(now + Duration::seconds(DETAIL_PUBLICATION_RETRY_SECONDS));
@@ -3607,6 +3588,46 @@ impl AddonMediaListImportCoordinator {
             diagnostic: job.try_get("Diagnostic").repository()?,
         }))
     }
+}
+
+/// Complete the checkpoint in the content transaction, before its file-first
+/// write. No successful merge may leave the same result eligible for replay.
+pub(crate) async fn finish_checkpointed_detail_in_tx(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+    item_id: EntityId,
+    lease_owner: &str,
+) -> Result<()> {
+    let now = encode_datetime(Utc::now());
+    let updated = sqlx::query(
+        r#"UPDATE "AddonMediaListDetailJob"
+           SET "State" = CASE WHEN "Outcome"='unavailable' THEN ? ELSE ? END,
+               "ManualPriority" = 0, "Diagnostic" = NULL,
+               "NextEligibleAt" = NULL, "LeaseOwner" = NULL,
+               "LeaseExpiresAt" = NULL, "CompletedAt" = ?, "UpdatedAt" = ?
+           WHERE "AddonMediaListItemId" = ? AND "AddonMediaListId" = ?
+             AND "ResultRecordJson" IS NOT NULL
+             AND "State" = ? AND "LeaseOwner" = ?
+             AND "LeaseExpiresAt" IS NOT NULL AND "LeaseExpiresAt" > ?"#,
+    )
+    .bind(encode_enum(AddonMediaListDetailState::Skipped))
+    .bind(encode_enum(AddonMediaListDetailState::Complete))
+    .bind(&now)
+    .bind(&now)
+    .bind(item_id)
+    .bind(list_id)
+    .bind(encode_enum(AddonMediaListDetailState::Running))
+    .bind(lease_owner)
+    .bind(&now)
+    .execute(&mut **tx)
+    .await
+    .repository()?;
+    if updated.rows_affected() != 1 {
+        return Err(RepositoryError::Conflict(
+            "the detail lease changed before completion".to_owned(),
+        ));
+    }
+    update_detail_progress(tx, list_id, &now).await
 }
 
 async fn update_detail_progress(
@@ -3935,6 +3956,8 @@ mod tests {
     }
 
     mod sqlite {
+        mod saved_reconcile_tests;
+
         use super::*;
         use ersatzrs_core::repositories::{
             AddonMediaListLifecycleRepository as _, AddonMediaListOptionSchemaRef,

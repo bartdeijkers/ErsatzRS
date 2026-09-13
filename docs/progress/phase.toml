@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-O-01: direct option writers verified; finish remaining operator/managed writers and runtime reconstruction'
+current_focus = 'AMM-O-01: detail/import recovery reviewed and verified; remaining writers and runtime reconstruction open'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
