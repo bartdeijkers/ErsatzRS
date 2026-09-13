@@ -2674,34 +2674,18 @@ async fn persist_provider_chapter_inputs(
     addon_id: &str,
     records: &[ersatzrs_addon_contract::PlaylistEntryMetadata],
 ) {
-    for record in records {
-        if let Err(error) = sqlx::query(
-            r#"UPDATE "AddonMediaListItem"
-               SET "ProviderChapterInput" = ?
-               WHERE "ProviderId" = ? AND "ParentProviderId" IS NULL
-                 AND "AddonMediaListId" = (
-                     SELECT "AddonMediaListId" FROM "AddonMediaListLibrary"
-                     WHERE "ManifestPath" = ?
-                 )"#,
-        )
-        .bind(
-            record
-                .chapter_input
-                .as_deref()
-                .filter(|value| !value.trim().is_empty()),
-        )
-        .bind(&record.provider_id)
-        .bind(manifest_path.to_string_lossy().as_ref())
-        .execute(pool)
-        .await
-        {
-            tracing::warn!(
-                addon_id,
-                provider_id = %record.provider_id,
-                operation_message = %error,
-                "provider chapter text could not be persisted"
-            );
-        }
+    // Do not embed the captured saved document in the whole scanner future.
+    if let Err(error) = Box::pin(
+        ersatzrs_infra::addon_media_list_sync::AddonMediaListSynchronizer::new(pool.clone())
+            .save_provider_chapter_inputs(manifest_path, addon_id, records),
+    )
+    .await
+    {
+        tracing::warn!(
+            addon_id,
+            operation_message = %error,
+            "provider chapter text could not be persisted"
+        );
     }
 }
 

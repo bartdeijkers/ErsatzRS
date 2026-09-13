@@ -50,6 +50,38 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 ordinary-scan provider chapter observations now use the existing
+synchronizer and guarded SavedWriter. Tree ownership precedes the write
+transaction; only root scans may coexist. Changed observations are written
+file-first, with unchanged operator assets, draft revision, review state and
+independent publication. Identical observations skip document replacement.
+The scanner retains advisory/nonfatal enrichment behavior. Direct per-list disk
+warning saves delegate adopted lists to the existing warning-only editor Save;
+legacy lists and the installation-local combined warning remain unchanged.
+No new coordinator, migration, UI or provider capability was added.
+
+The first compile caught two test-only field paths and a redundant inherited
+trait import. Run 6e0a1044-f00f-4423-bbb3-00df73f003f7 then passed four cases
+and exposed one incorrect fixture expectation: a copied file may retain the
+sender's revision until its first local write. The corrected test asserts the
+unchanged receiving database revision and passes in
+9aeeee94-19a8-4dd4-b954-1c38b08773ff (6.73s build, 1.115s tests).
+Together these runs cover actual scanner chapter persistence during a claimed
+ScheduledScan lease, repeat-scan byte idempotence, unchanged publication,
+file-first failure/refusal/repair, direct warning 42/0 and global/missing/failure,
+plus existing ordinary snapshot chapter/availability behavior. Claude reviewed
+source and tests at 19:16 with no P1/P2. Generic repair after a chapter-only
+file-first failure still advances the local draft and marks Ready; this is the
+existing conservative repair behavior, not publication. Scoped infra/scanner
+all-targets Clippy passes with -D warnings (24.23s). The new persistence call
+made the outer scanner future exceed 18 KiB; boxing that call contains it
+without changing scanner semantics or suppressing the lint. Final three focused
+scanner regressions pass in 8bc78b7a-8bcb-4807-950f-6841772ab038 (8.29s build,
+1.696s tests). Claude rechecked the boxing and local-revision assertion at 19:18
+with no P1/P2. The unchanged warning tests retain their passing evidence above.
+Runtime discovery remains off; remaining operator writers, Restore/Reset,
+legacy adoption, complete receiving bindings and native/browser proof remain.
+
 2026-09-13 import persistence now shares the existing header phase-zero,
 item phase-one and final reconciliation phase-four transactions. The mapped
 tree is acquired before write ownership; existing import lease, cancellation

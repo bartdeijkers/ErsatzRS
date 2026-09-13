@@ -575,6 +575,85 @@ impl AddonMediaListSynchronizer {
         Ok(desired)
     }
 
+    /// Persist ordinary-scan chapter suggestions without changing draft revision
+    /// or the independent publication. Adopted lists write their folder first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error on conflicting file/operation ownership or failed persistence.
+    pub async fn save_provider_chapter_inputs(
+        &self,
+        manifest_path: &std::path::Path,
+        addon_id: &str,
+        records: &[ersatzrs_addon_contract::PlaylistEntryMetadata],
+    ) -> Result<()> {
+        let list_id: Option<EntityId> = sqlx::query_scalar(
+            r#"SELECT "list"."Id" FROM "AddonMediaList" AS "list"
+               JOIN "AddonMediaListLibrary" AS "library" ON "library"."AddonMediaListId"="list"."Id"
+               WHERE "library"."ManifestPath"=? AND "list"."AddonId"=?"#,
+        )
+        .bind(manifest_path.to_string_lossy().as_ref())
+        .bind(addon_id)
+        .fetch_optional(&self.pool)
+        .await
+        .repository()?;
+        let Some(list_id) = list_id else {
+            return Ok(());
+        };
+        let mapped =
+            crate::addon_media_list_saved::mapped::MappedList::load(&self.pool, list_id).await?;
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        if let Some(mapped) = &mapped {
+            if !mapped.fence_operator_save(&mut tx).await? {
+                return Err(publication_in_progress());
+            }
+        }
+        let mut changed = false;
+        for record in records {
+            let input = record
+                .chapter_input
+                .as_deref()
+                .filter(|value| !value.trim().is_empty());
+            changed |= sqlx::query(
+                r#"UPDATE "AddonMediaListItem" SET "ProviderChapterInput"=?
+                   WHERE "AddonMediaListId"=? AND "ProviderId"=? AND "ParentProviderId" IS NULL
+                     AND "ProviderChapterInput" IS NOT ?"#,
+            )
+            .bind(input)
+            .bind(list_id)
+            .bind(&record.provider_id)
+            .bind(input)
+            .execute(&mut *tx)
+            .await
+            .repository()?
+            .rows_affected()
+                != 0;
+        }
+        let saved_guard = if changed {
+            if let Some(mapped) = mapped {
+                // Only chapter suggestions changed; existing operator asset
+                // references can be captured unchanged within this transaction.
+                let writer =
+                    crate::addon_media_list_saved::writer::SavedWriter::capture_provider_update(
+                        mapped, &mut tx, list_id,
+                    )
+                    .await?;
+                Some(writer.write(&mut tx).await?)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let committed = tx.commit().await;
+        if saved_guard.is_some() {
+            committed.map_err(|_| crate::addon_media_list_saved::writer::pending())?;
+        } else {
+            committed.repository()?;
+        }
+        Ok(())
+    }
+
     /// Update user-editable Add-on media list settings.
     ///
     /// # Errors

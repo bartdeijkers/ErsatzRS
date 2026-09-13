@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "saved_disk_warning_tests.rs"]
+mod saved_disk_warning_tests;
+
 async fn option_save(
     pool: &DbPool,
     list_id: i64,
@@ -621,7 +624,7 @@ async fn concurrent_completion_edit(change_publication: bool) {
     assert_eq!(database_state(&pool, list_id).await.1, saved_sha256(&bytes));
 }
 
-async fn adopted_job() -> (
+pub(super) async fn adopted_job() -> (
     tempfile::TempDir,
     DbPool,
     PathBuf,

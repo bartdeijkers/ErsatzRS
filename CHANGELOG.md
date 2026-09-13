@@ -60,6 +60,8 @@ release section when tagging a release.
   Import headers, items and reconciliation observations now use the same
   file-first boundary. Recovery preserves refreshed provider identities and
   prevents a retried reconciliation from counting missing videos twice.
+  Ordinary-scan chapter suggestions and direct per-list disk warning changes
+  now persist to adopted folders without publishing or advancing the draft.
   Automatic receiving discovery is not yet enabled.
   Remaining writers and runtime scan reconstruction integration are unfinished.
 

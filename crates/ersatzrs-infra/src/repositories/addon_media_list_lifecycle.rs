@@ -216,6 +216,35 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
 
     async fn save_disk_warning_gb(&self, list_id: Option<EntityId>, warning_gb: u32) -> Result<()> {
         if let Some(id) = list_id {
+            let (revision, adopted): (i32, bool) = sqlx::query_as(
+                r#"SELECT "DraftRevision", "SavedDocumentDigest" IS NOT NULL
+                   FROM "AddonMediaList" WHERE "Id" = ?"#,
+            )
+            .bind(id)
+            .fetch_optional(&self.0)
+            .await
+            .repository()?
+            .ok_or(RepositoryError::NotFound {
+                kind: "add-on media list",
+                id,
+            })?;
+            if adopted {
+                use ersatzrs_core::repositories::{
+                    AddonMediaListEditorSave, AddonMediaListRepository as _,
+                };
+                self.save_editor_task(&AddonMediaListEditorSave {
+                    list_id: id,
+                    expected_revision: revision,
+                    metadata: None,
+                    settings: None,
+                    delivery_mode: None,
+                    disk_warning_gb: Some(warning_gb),
+                    options: None,
+                    items: Vec::new(),
+                })
+                .await?;
+                return Ok(());
+            }
             let result = sqlx::query(
                 r#"UPDATE "AddonMediaList" SET "DiskUsageWarningGb" = ? WHERE "Id" = ?"#,
             )

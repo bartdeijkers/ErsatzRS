@@ -582,3 +582,6 @@ async fn copied_stream_round_trip(whole_folder: bool, save_after_enqueue: bool) 
 
 #[path = "saved_writer_tests.rs"]
 mod saved_writer_tests;
+
+#[path = "saved_scan_chapter_tests.rs"]
+mod saved_scan_chapter_tests;
