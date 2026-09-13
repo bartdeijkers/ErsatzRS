@@ -55,6 +55,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Regenerate snapshot-backed add-on list files from the active published revision,
+  keeping unpublished metadata, content-kind and chapter edits out of ordinary
+  rescans, while keeping provider chapter suggestions and availability warnings
+  current. Legacy manifests keep their existing enumeration behavior.
+
 - Bind scanned items before a new add-on list's first typed-media publication,
   prevent parent metadata edits from being silently bypassed when storage paths differ,
   and distinguish a failed publication with successful recovery from a

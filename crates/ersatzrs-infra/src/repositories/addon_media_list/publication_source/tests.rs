@@ -11,6 +11,10 @@ async fn fixture() -> SqliteAddonMediaListRepository {
         .await
         .unwrap();
     sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+    assert!(sqlx::query_scalar::<_, bool>("PRAGMA foreign_keys")
+        .fetch_one(&pool)
+        .await
+        .unwrap());
     sqlx::raw_sql(
         r#"INSERT INTO "AddonInstallation"
            ("AddonId", "Version", "Enabled", "PackageSha256", "ContentSha256",
@@ -61,6 +65,114 @@ async fn fixture() -> SqliteAddonMediaListRepository {
     .await
     .unwrap();
     repository
+}
+
+#[tokio::test]
+async fn active_publication_snapshot_uses_exact_revision_without_changing_newer_draft() {
+    let repo = fixture().await;
+    let snapshot = repo.active_publication_snapshot(1).await.unwrap().unwrap();
+    assert_eq!(snapshot.revision, 2);
+    assert_eq!(snapshot.source_draft_revision, 4);
+    assert_eq!(snapshot.name, "Retained title");
+    assert_eq!(snapshot.items.len(), 1);
+    assert_eq!(snapshot.items[0].provider_id, "retained-item");
+    // A later retained snapshot also cannot supersede PublishedRevision.
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision"=3 WHERE "Id"=1"#)
+        .execute(&repo.0)
+        .await
+        .unwrap();
+    repo.retain_published_revision(
+        1,
+        3,
+        7,
+        chrono::DateTime::parse_from_rfc3339("2026-09-13T13:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc),
+        &[],
+        &AddonMediaListRevisionArtifacts::default(),
+    )
+    .await
+    .unwrap();
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision"=2 WHERE "Id"=1"#)
+        .execute(&repo.0)
+        .await
+        .unwrap();
+    assert_eq!(
+        repo.active_publication_snapshot(1).await.unwrap().unwrap(),
+        snapshot
+    );
+    let draft: (String, i32, i32) = sqlx::query_as(
+        r#"SELECT "Name", "DraftRevision", "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=1"#,
+    )
+    .fetch_one(&repo.0)
+    .await
+    .unwrap();
+    assert_eq!(draft, ("New draft".into(), 7, 2));
+}
+
+#[tokio::test]
+async fn active_publication_snapshot_preserves_unbound_legacy_and_no_publication() {
+    let repo = fixture().await;
+    assert!(repo.active_publication_snapshot(999).await.is_err());
+    for revision in [0, 999] {
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision"=? WHERE "Id"=1"#)
+            .bind(revision)
+            .execute(&repo.0)
+            .await
+            .unwrap();
+        assert!(repo.active_publication_snapshot(1).await.unwrap().is_none());
+    }
+    sqlx::raw_sql(
+        r#"UPDATE "AddonMediaList" SET "PublishedRevision"=2 WHERE "Id"=1;
+        UPDATE "AddonMediaListRevision" SET "SnapshotDigest"=NULL, "SnapshotVersion"=NULL WHERE "Revision"=2;"#,
+    )
+    .execute(&repo.0)
+    .await
+    .unwrap();
+    assert!(repo.active_publication_snapshot(1).await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn active_publication_snapshot_refuses_modern_stream_without_digest() {
+    let repo = fixture().await;
+    sqlx::query(r#"UPDATE "AddonMediaListRevision" SET "SnapshotDigest"=NULL WHERE "Revision"=2"#)
+        .execute(&repo.0)
+        .await
+        .unwrap();
+    assert!(repo.active_publication_snapshot(1).await.is_err());
+}
+
+#[tokio::test]
+async fn active_publication_snapshot_refuses_corrupt_modern_content() {
+    let repo = fixture().await;
+    sqlx::query(
+        r#"UPDATE "AddonMediaListRevision" SET "Name"='Corrupt snapshot' WHERE "Revision"=2"#,
+    )
+    .execute(&repo.0)
+    .await
+    .unwrap();
+    assert!(repo.active_publication_snapshot(1).await.is_err());
+}
+
+#[tokio::test]
+async fn active_publication_snapshot_refuses_missing_digest_with_playback_bindings() {
+    for binding in [
+        r#"UPDATE "AddonMediaListRevisionItem" SET "PreparedArtifactId"=50"#,
+        r#"UPDATE "AddonMediaListRevisionItem" SET "PlaybackTimelineJson"='{}'"#,
+        r#"UPDATE "AddonMediaListRevisionItem" SET "SubtitleArtifactIdsJson"='[50]'"#,
+    ] {
+        let repo = fixture().await;
+        sqlx::raw_sql(r#"INSERT INTO "AddonMediaListArtifact"
+            ("Id","AddonMediaListId","AddonMediaListItemId","CacheKey","Kind","State","CreatedAt","UpdatedAt")
+            VALUES (50,1,10,'fixture-artifact',1,2,'2026-09-13','2026-09-13');
+            UPDATE "AddonMediaListRevision" SET "SnapshotDigest"=NULL, "SnapshotVersion"=NULL WHERE "Revision"=2;"#)
+            .execute(&repo.0).await.unwrap();
+        sqlx::query(binding).execute(&repo.0).await.unwrap();
+        assert!(
+            repo.active_publication_snapshot(1).await.is_err(),
+            "{binding}"
+        );
+    }
 }
 
 fn journal() -> serde_json::Value {

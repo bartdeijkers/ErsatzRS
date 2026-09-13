@@ -85,7 +85,10 @@ and scanner inputs are implemented with 18 selected regressions covered by passi
 runs plus the actual generated YAML/NFO entry-point test requested by Claude.
 Astra review and Claude's correction review are clear; affected-crate lint passes.
 This engineering checkpoint does not enable receiving activation. Ordinary managed
-refresh metadata/content-kind reads are also recorded as unfinished O-01 consumers.
+regeneration now uses active snapshot content while preserving provider chapter
+suggestions and availability health. Focused correction tests pass and Claude
+independently closed the introduced P1/P2 findings; the milestone owns evidence.
+The next boundary is snapshot-aware commit and receiving activation inputs.
 The core/web consumer
 has Claude review and a passing focused native test; browser verification remains open.
 Next: independent receiving

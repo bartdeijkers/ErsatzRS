@@ -374,8 +374,8 @@ and local subtitle/prepared admission must precede activation; missing prepared
 media needs preparation against the old snapshot, not the newer draft. These
 are implementation requirements, not new product scope. Snapshot-sourced stage
 and scanner input selection now have focused proof and independent correction
-review. Commit-time inputs, ordinary managed refresh isolation and receiving
-bindings remain next; independent-publication acceptance is unchanged.
+review. Commit-time inputs and receiving bindings remain next;
+independent-publication acceptance is unchanged.
 
 Claude's follow-up review also identifies ordinary managed refresh scans as an
 O-01 publication consumer, not only the active publication child scan. Once the
@@ -384,8 +384,20 @@ provider/override rows and reads the current content-kind override. Its generate
 NFO goes through `reconcile_generated`, which preserves external NFO edits, not
 Save/Publish separation for otherwise unchanged generated fields. Receiving a
 different saved draft would therefore leak that draft on a later refresh unless
-the active published snapshot also supplies those published inputs. Correct this
-before O-01 acceptance; do not treat snapshot-sourced staging alone as sufficient.
+the active published snapshot also supplies those published inputs. The correction
+uses the exact active snapshot for ordinary regeneration as well as retained-source
+staging, including its membership, chapters, metadata, content kind and playback
+bindings. Include the snapshot digest in cache identity. Provider changes remain
+owned by scheduled Import and its explicit/additions-only publication boundary;
+playback resolves the retained source through the add-on. Ordinary snapshot scans
+still fetch provider chapter suggestions into throwaway parent-entry copies for
+admin review, and use provider-observed availability for stream health. Neither
+observation changes retained metadata or chapter geometry. Keep existing provider
+enumeration for standalone and legacy publications without complete snapshots.
+Keep manually authored YAML defaults/tags and local sidecar exclusions; generated
+managed manifests do not contain those defaults/tags. Verify expired-cache scans,
+unchanged repeats and active-revision changes at the actual generated-file boundary
+before closing this consumer finding. This does not complete receiving activation.
 
 Initial source assembly composes the existing owned source and immutable installer
 capabilities; ordinary Saves still require reuse of unchanged authoritative asset

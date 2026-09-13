@@ -50,6 +50,30 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
+2026-09-13 ordinary regeneration correction follows local checkpoint e5f52b56.
+It loads the exact active snapshot once for content and cache identity while
+retaining legacy manifest enumeration. Review found and corrected modern plain
+Stream rows falling through to legacy behavior when their digest is missing.
+The first focused run (7f82856b-10c1-42a0-be3b-97e9c7dd91d8, 34.16s build,
+4.614s tests) passed 18/20; two new retention fixtures advanced PublishedRevision
+too late and are corrected. A compiler-only fixture error now uses static SQL.
+Claude identified two real lost observations: provider chapter suggestions and
+stream-detail availability. The correction retains chapter-only enrichment on
+throwaway published parents and overlays provider availability only during ordinary
+regeneration, never during staged publication. The corrected rerun passes all
+seven selected tests (995ab3d8-ddd7-4131-bf7c-8e9d7f90b87c; 30.98s build,
+1.991s execution, two build jobs/two test threads), including both failed fixtures,
+the actual chapter/availability regression, retained-source staging and legacy
+enumeration/healing/removal. Earlier passing reader/artifact/subtitle evidence is
+unchanged. The tests also prove authored YAML defaults/tags and local exclusions
+remain effective, and metadata-only publication changes invalidate fresh caches.
+Claude independently reviewed the final source and tests at 15:02 and closed both
+of his findings plus the digestless-modern P2; Astra source correction review is
+also clear. This closes the ordinary regeneration consumer finding, not receiving
+activation, snapshot-aware commit or O-01. Infra/scanner all-targets Clippy passes
+with -D warnings (23.71s). Formatting and structured progress are checked at
+the local checkpoint; full runtime/browser/native acceptance remains outstanding.
+No CI, closeout or push.
 2026-09-13 snapshot staging/scanner and reference-only assembly continuation:
 the exact journal/job-scoped reader reuses digest-validated retained snapshots;
 stage membership/status and scanner entries, metadata, content kind, artifact
