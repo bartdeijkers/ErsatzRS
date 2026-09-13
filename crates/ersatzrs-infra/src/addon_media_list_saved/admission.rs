@@ -3,7 +3,6 @@
 //! Not yet installed in the runtime maintenance loop: file-first Save/replay and
 //! the remaining local playback bindings must pass O-01 acceptance first.
 
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
@@ -16,18 +15,20 @@ use super::receiving_artwork::ArtworkStaging;
 use crate::db::DbPool;
 use crate::repositories::SqlxResultExt as _;
 
-/// Newly registered publication jobs and redacted refusal count for this pass.
+/// Registered jobs, repaired projections and deferred/refused folders this pass.
 #[derive(Default)]
 pub struct DiscoveryReport {
     pub admitted: Vec<AddonMediaListPublicationEnqueue>,
+    pub repaired: usize,
+    pub deferred: usize,
     pub refused: usize,
 }
 
-/// Discover unmapped direct child folders under enabled installed add-on roots.
+/// Discover and reconcile direct child folders under enabled installed add-on roots.
 ///
 /// No provider enumeration, add-on installation, copied execution ownership or
-/// saved-file replacement occurs. Mapped folders remain untouched until the
-/// file-first writer/replay boundary is connected. Unsupported receiving media
+/// saved-file replacement occurs. Changed mapped folders repair their local
+/// projection unless a managed operation is active. Unsupported receiving media
 /// bindings are refused, never converted to streaming. This entry point is under
 /// integration test and is not yet called by runtime maintenance.
 ///
@@ -53,6 +54,10 @@ pub async fn discover_copied_lists(pool: &DbPool) -> Result<DiscoveryReport> {
         let root = PathBuf::from(row.try_get::<String, _>("RootPath").repository()?);
         let mut entries = tokio::fs::read_dir(&root).await.map_err(|_| invalid())?;
         while let Some(entry) = entries.next_entry().await.map_err(|_| invalid())? {
+            // Publication backups and other reserved host trees are not copied lists.
+            if crate::repositories::addon_publication_fs::is_reserved_entry(&entry.file_name()) {
+                continue;
+            }
             let folder = entry.path();
             if !entry.file_type().await.map_err(|_| invalid())?.is_dir() {
                 continue;
@@ -65,15 +70,27 @@ pub async fn discover_copied_lists(pool: &DbPool) -> Result<DiscoveryReport> {
                 }
                 Ok(_) => {}
             }
-            let mapped: bool = sqlx::query_scalar(
-                r#"SELECT EXISTS(SELECT 1 FROM "AddonMediaListLibrary"
-                   WHERE LOWER("ManifestPath")=LOWER(?))"#,
+            let mapped: Option<i64> = sqlx::query_scalar(
+                r#"SELECT "AddonMediaListId" FROM "AddonMediaListLibrary"
+                   WHERE LOWER("ManifestPath")=LOWER(?)"#,
             )
             .bind(folder.join("list.playlist.yml").to_string_lossy().as_ref())
-            .fetch_one(pool)
+            .fetch_optional(pool)
             .await
             .repository()?;
-            if mapped {
+            if let Some(list_id) = mapped {
+                match super::mapped::refresh(pool, list_id).await {
+                    Ok(super::mapped::Repair::Unchanged) => {}
+                    Ok(super::mapped::Repair::Deferred) => report.deferred += 1,
+                    Ok(super::mapped::Repair::Updated(queued)) => {
+                        report.repaired += 1;
+                        report.admitted.extend(queued.map(|job| *job));
+                    }
+                    Err(error) => {
+                        report.refused += 1;
+                        tracing::warn!(list_id, reason = %error, "saved add-on list projection refresh refused");
+                    }
+                }
                 continue;
             }
             match admit_folder(pool, &folder, &addon_id, &installed, &manifest_json).await {
@@ -102,21 +119,16 @@ async fn admit_folder(
     manifest_json: &str,
 ) -> Result<Option<AddonMediaListPublicationEnqueue>> {
     let copied_folder = folder.to_owned();
-    let (tree, document) = tokio::task::spawn_blocking(move || {
+    let (tree, document, digest, publication_digest) = tokio::task::spawn_blocking(move || {
         let metadata = std::fs::symlink_metadata(&copied_folder).map_err(|_| invalid())?;
         if metadata.is_symlink() || !metadata.is_dir() {
             return Err(invalid());
         }
         let tree = super::assembly::lock_managed_tree(&copied_folder)?;
-        let path = copied_folder.join(SAVED_LIST_FILE_NAME);
-        let metadata = std::fs::symlink_metadata(&path).map_err(|_| invalid())?;
-        if metadata.is_symlink() || !metadata.is_file() {
-            return Err(invalid());
-        }
-        let file = std::fs::File::open(path).map_err(|_| invalid())?;
-        let document = super::document_io::read_document(&mut BufReader::new(file))
-            .map_err(|error| RepositoryError::Conflict(error.to_string()))?;
-        Ok((tree, document))
+        let (document, digest) = super::document_store::read(&tree)?;
+        let publication_digest =
+            super::document_store::publication_digest(document.published.as_ref())?;
+        Ok((tree, document, digest, publication_digest))
     })
     .await
     .map_err(|_| invalid())??;
@@ -189,13 +201,15 @@ async fn admit_folder(
     }
     let list_id = sqlx::query_scalar(
         r#"INSERT INTO "AddonMediaList"
-           ("AddonId","ProviderId","SourceUrl","Name","DraftRevision","ReviewState")
-           VALUES (?,?,?,?,1,2) RETURNING "Id""#,
+           ("AddonId","ProviderId","SourceUrl","Name","DraftRevision","ReviewState","SavedDocumentDigest","SavedPublicationDigest")
+           VALUES (?,?,?,?,1,2,?,?) RETURNING "Id""#,
     )
     .bind(addon_id)
     .bind(&document.provider_id)
     .bind(&document.source_url)
     .bind(&document.draft.presentation.name)
+    .bind(digest)
+    .bind(publication_digest)
     .fetch_one(&mut *tx)
     .await
     .repository()?;

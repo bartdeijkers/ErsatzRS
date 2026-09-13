@@ -1,4 +1,4 @@
-//! Initial source assembly, not the ordinary saved-content writer or reuse path.
+//! Initial and publication-only asset assembly under caller-owned content fences.
 
 use std::{collections::BTreeSet, path::Path, sync::Arc};
 
@@ -9,7 +9,10 @@ use super::{
     assets,
     capture::CapturedDraft,
     document_io, files,
-    model::{SavedFile, SavedListDocument, SavedPlayback, SAVED_LIST_VERSION},
+    model::{
+        SavedFile, SavedListDocument, SavedListDraft, SavedListPublication, SavedPlayback,
+        SAVED_LIST_VERSION,
+    },
     published::CapturedPublication,
     receiving, sources, validation,
 };
@@ -99,56 +102,20 @@ pub async fn assemble_initial(
         let bytes = sources::load_owned_artwork(pool, context.list_id, &upload).await?;
         install_bytes(Arc::clone(&context.tree), upload.file, bytes).await?;
     }
-    for file in revision_files {
-        if !document
-            .published
-            .as_ref()
-            .is_some_and(|state| state.files.contains(&super::published::saved_file(&file)))
-        {
-            return Err(invalid());
-        }
-        let tree = Arc::clone(&context.tree);
-        let parent = context.storage_parent.to_owned();
-        let owner = context.storage_owner.to_owned();
-        let list_id = context.list_id;
-        tokio::task::spawn_blocking(move || {
-            sources::install_retained_file(tree.managed_root(), &parent, &owner, list_id, &file)
-                .map_err(|_| invalid())
-        })
-        .await
-        .map_err(|_| invalid())??;
-    }
-    if let Some(state) = &document.published {
-        for subtitle in state.items.iter().flat_map(|item| &item.subtitles) {
-            // Identical text may have distinct pinned language/clock owners.
-            // Reuse only a source whose full ownership check accepts this slot.
-            let mut original = None;
-            for source in artifacts
-                .iter()
-                .filter(|source| source.file == subtitle.file)
-            {
-                if let Ok(text) = sources::load_owned_subtitle(
-                    pool,
-                    context.list_id,
-                    state.revision,
-                    source,
-                    subtitle,
-                    context.artifact_root,
-                )
-                .await
-                {
-                    original = Some(text);
-                    break;
-                }
-            }
-            let text = original.ok_or_else(invalid)?;
-            install_bytes(
-                Arc::clone(&context.tree),
-                subtitle.file.clone(),
-                text.into_bytes(),
+    if let Some(publication) = document.published.take() {
+        document.published = Some(
+            materialize_publication(
+                pool,
+                context,
+                CapturedPublication {
+                    publication,
+                    revision_files,
+                    artifacts,
+                    replacements: published_replacements,
+                },
             )
-            .await?;
-        }
+            .await?,
+        );
     }
     for selected in replacements {
         let item = document
@@ -165,23 +132,6 @@ pub async fn assemble_initial(
             document.draft.files.push(file.clone());
         }
     }
-    for selected in published_replacements {
-        let state = document.published.as_mut().ok_or_else(invalid)?;
-        let item = state
-            .items
-            .iter_mut()
-            .find(|item| item.content.provider_id == selected.provider_id)
-            .ok_or_else(invalid)?;
-        let SavedPlayback::Replacement { replacement } = &mut item.playback else {
-            return Err(invalid());
-        };
-        replacement.file =
-            sources::inspect_owned_replacement(pool, context.tree.managed_root(), &selected)
-                .await?;
-        if let Some(file) = &replacement.file {
-            state.files.push(file.clone());
-        }
-    }
     for files in std::iter::once(&mut document.draft.files)
         .chain(document.published.iter_mut().map(|state| &mut state.files))
     {
@@ -194,6 +144,103 @@ pub async fn assemble_initial(
     Ok(document)
 }
 
+/// Materialize only the independently captured publication, without reading a draft.
+/// Retained artwork and original subtitles use the existing owned installers;
+/// contained replacement videos are referenced in place and prepared videos are
+/// not read or copied. The caller validates the complete document and its size
+/// before committing, and retains the content/tree fence throughout.
+pub(crate) async fn assemble_publication(
+    pool: &DbPool,
+    context: &AssemblyContext<'_>,
+    captured: CapturedPublication,
+) -> Result<SavedListPublication> {
+    let publication = materialize_publication(pool, context, captured).await?;
+    verify_layers(context.tree.managed_root(), None, Some(&publication)).await?;
+    Ok(publication)
+}
+
+async fn materialize_publication(
+    pool: &DbPool,
+    context: &AssemblyContext<'_>,
+    captured: CapturedPublication,
+) -> Result<SavedListPublication> {
+    let CapturedPublication {
+        mut publication,
+        revision_files,
+        artifacts,
+        replacements,
+    } = captured;
+    for file in revision_files {
+        if !publication
+            .files
+            .contains(&super::published::saved_file(&file))
+        {
+            return Err(invalid());
+        }
+        let tree = Arc::clone(&context.tree);
+        let parent = context.storage_parent.to_owned();
+        let owner = context.storage_owner.to_owned();
+        let list_id = context.list_id;
+        tokio::task::spawn_blocking(move || {
+            sources::install_retained_file(tree.managed_root(), &parent, &owner, list_id, &file)
+                .map_err(|_| invalid())
+        })
+        .await
+        .map_err(|_| invalid())??;
+    }
+    for subtitle in publication.items.iter().flat_map(|item| &item.subtitles) {
+        // Identical text may have distinct pinned language/clock owners.
+        // Reuse only a source whose full ownership check accepts this slot.
+        let mut original = None;
+        for source in artifacts
+            .iter()
+            .filter(|source| source.file == subtitle.file)
+        {
+            if let Ok(text) = sources::load_owned_subtitle(
+                pool,
+                context.list_id,
+                publication.revision,
+                source,
+                subtitle,
+                context.artifact_root,
+            )
+            .await
+            {
+                original = Some(text);
+                break;
+            }
+        }
+        let text = original.ok_or_else(invalid)?;
+        install_bytes(
+            Arc::clone(&context.tree),
+            subtitle.file.clone(),
+            text.into_bytes(),
+        )
+        .await?;
+    }
+    for selected in replacements {
+        let item = publication
+            .items
+            .iter_mut()
+            .find(|item| item.content.provider_id == selected.provider_id)
+            .ok_or_else(invalid)?;
+        let SavedPlayback::Replacement { replacement } = &mut item.playback else {
+            return Err(invalid());
+        };
+        replacement.file =
+            sources::inspect_owned_replacement(pool, context.tree.managed_root(), &selected)
+                .await?;
+        if let Some(file) = &replacement.file {
+            publication.files.push(file.clone());
+        }
+    }
+    publication
+        .files
+        .sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    publication.files.dedup();
+    Ok(publication)
+}
+
 async fn install_bytes(tree: Arc<ManagedTreeGuard>, file: SavedFile, bytes: Vec<u8>) -> Result<()> {
     tokio::task::spawn_blocking(move || {
         assets::install(tree.managed_root(), &file, &mut bytes.as_slice()).map_err(|_| invalid())
@@ -203,19 +250,28 @@ async fn install_bytes(tree: Arc<ManagedTreeGuard>, file: SavedFile, bytes: Vec<
 }
 
 async fn verify_required(root: &Path, document: &SavedListDocument) -> Result<()> {
+    verify_layers(root, Some(&document.draft), document.published.as_ref()).await
+}
+
+async fn verify_layers(
+    root: &Path,
+    draft: Option<&SavedListDraft>,
+    publication: Option<&SavedListPublication>,
+) -> Result<()> {
     let mut images = BTreeSet::new();
-    receiving::layer_images(&document.draft.metadata, &mut images);
-    for item in &document.draft.items {
-        receiving::layer_images(&item.metadata, &mut images);
+    if let Some(draft) = draft {
+        receiving::layer_images(&draft.metadata, &mut images);
+        for item in &draft.items {
+            receiving::layer_images(&item.metadata, &mut images);
+        }
     }
     let mut prepared = BTreeSet::new();
-    let mut required: BTreeSet<_> = document
-        .draft
-        .files
-        .iter()
+    let mut required: BTreeSet<_> = draft
+        .into_iter()
+        .flat_map(|draft| &draft.files)
         .map(|file| &file.relative_path)
         .collect();
-    if let Some(state) = &document.published {
+    if let Some(state) = publication {
         receiving::map_images(&state.metadata, &mut images);
         for item in &state.items {
             receiving::map_images(&item.metadata, &mut images);
@@ -237,11 +293,10 @@ async fn verify_required(root: &Path, document: &SavedListDocument) -> Result<()
             );
         }
     }
-    for file in document
-        .draft
-        .files
-        .iter()
-        .chain(document.published.iter().flat_map(|state| &state.files))
+    for file in draft
+        .into_iter()
+        .flat_map(|draft| &draft.files)
+        .chain(publication.into_iter().flat_map(|state| &state.files))
     {
         if images.contains(file.relative_path.as_str()) {
             receiving::read_artwork(root, file)

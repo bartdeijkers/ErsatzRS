@@ -90,13 +90,24 @@ pub fn install(
     )
     .map_err(|error| redacted(&error))?;
     temporary.as_file().sync_all().map_err(io_failure)?;
-    match temporary.persist_noclobber(&destination) {
-        Ok(_) => verify(&destination, reference),
-        Err(error) if error.error.kind() == io::ErrorKind::AlreadyExists => {
-            verify(&destination, reference)
-        }
-        Err(error) => Err(io_failure(error.error)),
+    let temporary = temporary.into_temp_path();
+    match atomicwrites::move_atomic(&temporary, &destination) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(io_failure(error)),
     }
+    // The move synchronizes its directory on Unix and requests Windows
+    // write-through. Unix also needs newly created ancestor entries persisted.
+    #[cfg(unix)]
+    for directory in parent.ancestors() {
+        fs::File::open(directory)
+            .and_then(|directory| directory.sync_all())
+            .map_err(io_failure)?;
+        if directory == managed_root {
+            break;
+        }
+    }
+    verify(&destination, reference)
 }
 
 fn verify(path: &Path, reference: &SavedFile) -> Result<(), SavedAssetError> {

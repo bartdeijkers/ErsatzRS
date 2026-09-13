@@ -43,8 +43,16 @@ release section when tagging a release.
   than another media copy; changing those bytes invalidates the saved reference.
   Plain streaming copy/reconstruction now has an integrated publication and
   repeat-scan regression, preserving the newer draft and older publication.
+  Adopted-list editor Saves now persist files before SQLite, and mapped-folder
+  repair recovers interrupted database updates without republishing draft-only
+  changes or revealing hidden lists. Rollback preserves newer saved content;
+  invalid content is retained separately while previous playback is restored.
+  Ordinary publication completion persists its independent saved publication,
+  preserving concurrent file draft edits for reconciliation. Discovery ignores
+  host-owned publication backups, and publication verification allows retained
+  unpublished media identities without counting them as active members.
   Automatic receiving discovery is not yet enabled.
-  Durable Save and scan reconstruction integration remains unfinished.
+  Remaining writers and runtime scan reconstruction integration are unfinished.
 
 - Replace destructive add-on-list removal in admin with reversible Hide list
   and Show list actions and a Hidden lists filter on the existing page. Hiding

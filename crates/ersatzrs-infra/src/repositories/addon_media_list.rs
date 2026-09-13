@@ -4,6 +4,7 @@ mod editor;
 mod editor_artwork;
 mod publication_projection;
 mod publication_source;
+mod saved_completion;
 pub(crate) use editor_artwork::stage as stage_editor_artwork_in_tx;
 #[cfg(test)]
 mod visibility_tests;
@@ -1930,6 +1931,11 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         .map_err(|error| publication_fs_repository_error(&error))?;
         ensure_current_publication_claim(&self.0, id, fence, true).await?;
 
+        let saved_completion = if outcome == AddonMediaListPublicationOutcome::Published {
+            saved_completion::prepare(self, id, operation_id, generation).await?
+        } else {
+            None
+        };
         let now = crate::repositories::common::encode_datetime(chrono::Utc::now());
         let terminal_review_state = match outcome {
             AddonMediaListPublicationOutcome::Published => AddonMediaListReviewState::Published,
@@ -1987,7 +1993,17 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
                 "the verified add-on publication changed before finalization".to_owned(),
             ));
         }
-        tx.commit().await.repository()
+        let saved_guard = if let Some(completion) = saved_completion {
+            Some(completion.write(&mut tx).await?)
+        } else {
+            None
+        };
+        let committed = tx.commit().await;
+        if saved_guard.is_some() {
+            committed.map_err(|_| crate::addon_media_list_saved::writer::pending())
+        } else {
+            committed.repository()
+        }
     }
 
     async fn stage_editor_artwork(
@@ -4903,32 +4919,34 @@ async fn verify_published_projection_database(
     .fetch_one(pool)
     .await
     .repository()?;
+    // Unpublished owners retain their typed identities for existing references.
+    // Only current publication members contribute to its projection cardinality.
     let total_projection_count: i64 = sqlx::query_scalar(
         r#"SELECT
              (SELECT COUNT(*) FROM "AddonMediaListItemEpisode" AS "projection"
                 JOIN "AddonMediaListItem" AS "item"
                   ON "item"."Id" = "projection"."AddonMediaListItemId"
-                WHERE "item"."AddonMediaListId" = ?)
+                WHERE "item"."AddonMediaListId" = ? AND "item"."Published" = 1)
              + (SELECT COUNT(*) FROM "AddonMediaListItemMovie" AS "projection"
                 JOIN "AddonMediaListItem" AS "item"
                   ON "item"."Id" = "projection"."AddonMediaListItemId"
-                WHERE "item"."AddonMediaListId" = ?)
+                WHERE "item"."AddonMediaListId" = ? AND "item"."Published" = 1)
              + (SELECT COUNT(*) FROM "AddonMediaListItemOtherVideo" AS "projection"
                 JOIN "AddonMediaListItem" AS "item"
                   ON "item"."Id" = "projection"."AddonMediaListItemId"
-                WHERE "item"."AddonMediaListId" = ?)
+                WHERE "item"."AddonMediaListId" = ? AND "item"."Published" = 1)
              + (SELECT COUNT(*) FROM "AddonMediaListItemSong" AS "projection"
                 JOIN "AddonMediaListItem" AS "item"
                   ON "item"."Id" = "projection"."AddonMediaListItemId"
-                WHERE "item"."AddonMediaListId" = ?)
+                WHERE "item"."AddonMediaListId" = ? AND "item"."Published" = 1)
              + (SELECT COUNT(*) FROM "AddonMediaListItemImage" AS "projection"
                 JOIN "AddonMediaListItem" AS "item"
                   ON "item"."Id" = "projection"."AddonMediaListItemId"
-                WHERE "item"."AddonMediaListId" = ?)
+                WHERE "item"."AddonMediaListId" = ? AND "item"."Published" = 1)
              + (SELECT COUNT(*) FROM "AddonMediaListItemMusicVideo" AS "projection"
                 JOIN "AddonMediaListItem" AS "item"
                   ON "item"."Id" = "projection"."AddonMediaListItemId"
-                WHERE "item"."AddonMediaListId" = ?)"#,
+                WHERE "item"."AddonMediaListId" = ? AND "item"."Published" = 1)"#,
     )
     .bind(list_id)
     .bind(list_id)

@@ -37,6 +37,7 @@ pub struct CapturedDraft {
 }
 
 /// Installation-local upload source, not part of portable JSON.
+#[derive(Clone, PartialEq, Eq)]
 pub struct CapturedArtwork {
     pub upload_id: EntityId,
     pub scope_item_id: EntityId,
@@ -45,6 +46,7 @@ pub struct CapturedArtwork {
 }
 
 /// Installation-local selection to check for a portable list-owned file.
+#[derive(Clone, PartialEq, Eq)]
 pub struct CapturedReplacement {
     pub provider_id: String,
     pub media_item_id: EntityId,
@@ -319,13 +321,13 @@ pub(super) async fn option_schema(
     }))
 }
 
-struct ArtworkCapture {
+pub(super) struct ArtworkCapture {
     uploads: BTreeMap<String, CapturedArtwork>,
     used: BTreeSet<String>,
 }
 
 impl ArtworkCapture {
-    async fn load(tx: &mut Transaction<'_, Db>, list_id: EntityId) -> Result<Self> {
+    pub(super) async fn load(tx: &mut Transaction<'_, Db>, list_id: EntityId) -> Result<Self> {
         // Capture references, not every image BLOB in memory. Materialization must
         // verify/copy one selected upload at a time before writing the document.
         let rows = sqlx::query(
@@ -393,7 +395,11 @@ impl ArtworkCapture {
         Ok(value)
     }
 
-    fn metadata_map(&mut self, value: &mut Map<String, Value>, scope: EntityId) -> Result<()> {
+    pub(super) fn metadata_map(
+        &mut self,
+        value: &mut Map<String, Value>,
+        scope: EntityId,
+    ) -> Result<()> {
         for field in ["artwork", "artwork_urls"] {
             if let Some(value) = value.get_mut(field) {
                 self.field(field, value, scope)?;
@@ -463,17 +469,17 @@ impl ArtworkCapture {
         Ok(())
     }
 
-    fn finish(self) -> Vec<CapturedArtwork> {
-        let mut files = BTreeMap::new();
-        for (url, owned) in self.uploads {
-            if self.used.contains(&url) {
-                let asset = owned;
-                files
-                    .entry(asset.file.relative_path.clone())
-                    .or_insert(asset);
-            }
-        }
-        files.into_values().collect()
+    pub(super) fn finish(self) -> Vec<CapturedArtwork> {
+        // Keep every selected local owner, even when two scopes use identical
+        // bytes. The portable file inventory is deduplicated by the caller.
+        self.finish_sources()
+    }
+
+    pub(super) fn finish_sources(self) -> Vec<CapturedArtwork> {
+        self.uploads
+            .into_iter()
+            .filter_map(|(url, asset)| self.used.contains(&url).then_some(asset))
+            .collect()
     }
 }
 

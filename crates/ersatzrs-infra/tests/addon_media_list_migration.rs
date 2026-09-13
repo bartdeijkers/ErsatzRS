@@ -1,6 +1,68 @@
 use sqlx::{sqlite::SqlitePoolOptions, Executor, Row, SqlitePool};
 
 #[tokio::test]
+async fn saved_document_digest_migration_accepts_only_null_or_canonical_sha256() {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+    seed_legacy_lifecycle_rows(&pool).await;
+    for (select, update) in [
+        (
+            r#"SELECT "SavedDocumentDigest" FROM "AddonMediaList" WHERE "Id"=1"#,
+            r#"UPDATE "AddonMediaList" SET "SavedDocumentDigest"=? WHERE "Id"=1"#,
+        ),
+        (
+            r#"SELECT "SavedPublicationDigest" FROM "AddonMediaList" WHERE "Id"=1"#,
+            r#"UPDATE "AddonMediaList" SET "SavedPublicationDigest"=? WHERE "Id"=1"#,
+        ),
+    ] {
+        assert_nullable_digest_column(&pool, select, update).await;
+    }
+}
+
+async fn assert_nullable_digest_column(
+    pool: &SqlitePool,
+    select: &'static str,
+    update: &'static str,
+) {
+    let initial: Option<String> = sqlx::query_scalar(select).fetch_one(pool).await.unwrap();
+    assert_eq!(initial, None);
+
+    let canonical = "0123456789abcdef".repeat(4);
+    sqlx::query(update)
+        .bind(&canonical)
+        .execute(pool)
+        .await
+        .unwrap();
+    for invalid in [
+        String::new(),
+        "a".repeat(63),
+        "a".repeat(65),
+        "A".repeat(64),
+        "g".repeat(64),
+        format!("{} ", "a".repeat(63)),
+        format!("{canonical}\0suffix"),
+        "é".repeat(64),
+    ] {
+        assert!(sqlx::query(update)
+            .bind(invalid)
+            .execute(pool)
+            .await
+            .is_err());
+    }
+    let retained: String = sqlx::query_scalar(select).fetch_one(pool).await.unwrap();
+    assert_eq!(retained, canonical);
+    sqlx::query(update)
+        .bind(Option::<String>::None)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
 async fn unresolved_replacement_migration_preserves_existing_binding_and_visibility() {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)

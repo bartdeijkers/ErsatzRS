@@ -180,6 +180,69 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn publication_only_assembly_does_not_capture_or_materialize_the_current_draft() {
+    let fixture = fixture().await;
+    // Publication completion must not parse newer draft metadata or consume its
+    // staged upload handles. This draft cannot pass a fresh draft capture.
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "MetadataOverrideJson"='not-json' WHERE "Id"=1"#)
+        .execute(&fixture.pool)
+        .await
+        .unwrap();
+    let draft_upload = fixture.draft.artwork[0].file.clone();
+    let draft_bytes = fs::read(fixture.root.path().join("draft.mkv")).unwrap();
+    let context = AssemblyContext {
+        list_id: 1,
+        tree: Arc::new(ManagedTreeGuard::acquire(fixture.root.path()).unwrap()),
+        storage_parent: fixture.root.path(),
+        storage_owner: OWNER,
+        artifact_root: fixture.root.path(),
+        installed: &fixture.installed,
+    };
+    let publication = assemble_publication(&fixture.pool, &context, fixture.publication)
+        .await
+        .unwrap();
+    let SavedPlayback::Replacement { replacement } = &publication.items[0].playback else {
+        panic!("replacement");
+    };
+    let replacement = replacement.file.as_ref().unwrap();
+    assert_eq!(replacement.relative_path, "published.mkv");
+    assert_eq!(
+        replacement.sha256,
+        file(b"published replacement", "unused", "mkv").sha256
+    );
+    assert_eq!(
+        fs::read(
+            fixture
+                .root
+                .path()
+                .join(&publication.items[0].subtitles[0].file.relative_path)
+        )
+        .unwrap(),
+        ORIGINAL
+    );
+    assert_eq!(
+        fs::read(fixture.root.path().join("draft.mkv")).unwrap(),
+        draft_bytes
+    );
+    assert!(!fixture
+        .root
+        .path()
+        .join(draft_upload.relative_path)
+        .exists());
+    assert!(!fixture
+        .root
+        .path()
+        .join(".ersatzrs-saved/replacements")
+        .exists());
+    let draft: String =
+        sqlx::query_scalar(r#"SELECT "MetadataOverrideJson" FROM "AddonMediaList" WHERE "Id"=1"#)
+            .fetch_one(&fixture.pool)
+            .await
+            .unwrap();
+    assert_eq!(draft, "not-json");
+}
+
+#[tokio::test]
 async fn initial_assembly_keeps_independent_artwork_replacements_and_original_srt() {
     let (root, document) = fixture().await.assemble().await.unwrap();
     let draft = document.draft.items[0]
@@ -248,6 +311,39 @@ async fn existing_replacement_reference_refuses_changed_bytes() {
         fs::write(root.path().join(path), changed).unwrap();
         assert!(verify_required(root.path(), &document).await.is_err());
     }
+}
+
+#[tokio::test]
+async fn publication_only_assembly_never_opens_prepared_video_sources() {
+    let mut fixture = fixture().await;
+    let prepared = file(b"prepared media", "published", "media");
+    fixture.publication.publication.items[0].playback = SavedPlayback::DownloadAhead {
+        file: prepared.clone(),
+        duration_milliseconds: 1000,
+    };
+    fixture.publication.publication.items[0].subtitles.clear();
+    fixture.publication.publication.files = vec![prepared.clone()];
+    fixture.publication.publication.metadata.clear();
+    fixture.publication.revision_files.clear();
+    fixture.publication.replacements.clear();
+    fixture.publication.artifacts = vec![CapturedArtifact {
+        artifact_id: 999,
+        storage_relative_path: "../must-not-open".into(),
+        file: prepared.clone(),
+    }];
+    let context = AssemblyContext {
+        list_id: 1,
+        tree: Arc::new(ManagedTreeGuard::acquire(fixture.root.path()).unwrap()),
+        storage_parent: fixture.root.path(),
+        storage_owner: OWNER,
+        artifact_root: fixture.root.path(),
+        installed: &fixture.installed,
+    };
+    let publication = assemble_publication(&fixture.pool, &context, fixture.publication)
+        .await
+        .unwrap();
+    assert_eq!(publication.files, vec![prepared.clone()]);
+    assert!(!fixture.root.path().join(prepared.relative_path).exists());
 }
 
 #[tokio::test]

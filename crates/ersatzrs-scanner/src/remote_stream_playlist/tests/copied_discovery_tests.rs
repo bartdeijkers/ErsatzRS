@@ -204,14 +204,10 @@ async fn child_scan(
         .unwrap());
 }
 
-#[expect(
-    clippy::too_many_lines,
-    reason = "Exercise the real publication phases in coordinator order"
-)]
-async fn publish_received(
+async fn publish_through_cleanup(
     pool: &DbPool,
     queued: &ersatzrs_core::repositories::AddonMediaListPublicationEnqueue,
-) {
+) -> ManagedLibraryOperationClaim {
     let repos = ersatzrs_infra::repositories::make_repositories(pool.clone());
     let ops = &repos.managed_library_operations;
     let repo = &repos.addon_media_lists;
@@ -225,20 +221,22 @@ async fn publish_received(
         .transition_publication(&claim, Phase::AwaitingLease, Phase::Staging)
         .await
         .unwrap());
-    repos
-        .addon_media_lists
-        .materialize_revision_as_draft(&AddonMediaListRevisionRestoreFence {
-            list_id: job.list_id,
-            source_revision: job.source_published_revision.unwrap(),
-            target_draft_revision: job.saved_revision,
-            operation_id: job.operation_id,
-            generation: job.generation,
-            owner_token: claim.operation.owner_token.clone(),
-            lease_owner: claim.lease_owner.clone(),
-            active_at: Utc::now(),
-        })
-        .await
-        .unwrap();
+    if let Some(source_revision) = job.source_published_revision {
+        repos
+            .addon_media_lists
+            .materialize_revision_as_draft(&AddonMediaListRevisionRestoreFence {
+                list_id: job.list_id,
+                source_revision,
+                target_draft_revision: job.saved_revision,
+                operation_id: job.operation_id,
+                generation: job.generation,
+                owner_token: claim.operation.owner_token.clone(),
+                lease_owner: claim.lease_owner.clone(),
+                active_at: Utc::now(),
+            })
+            .await
+            .unwrap();
+    }
     repo.stage_publication_revision(
         job.list_id,
         job.saved_revision,
@@ -283,20 +281,41 @@ async fn publish_received(
     .await
     .unwrap();
     child_scan(pool, &claim, job.list_id, true).await;
-    repo.verify_staged_publication_revision(
-        job.list_id,
-        Outcome::Published,
-        job.operation_id,
-        job.generation,
-        &claim.operation.owner_token,
-        &claim.lease_owner,
-    )
-    .await
-    .unwrap();
+    let verified = repo
+        .verify_staged_publication_revision(
+            job.list_id,
+            Outcome::Published,
+            job.operation_id,
+            job.generation,
+            &claim.operation.owner_token,
+            &claim.lease_owner,
+        )
+        .await;
+    if let Err(error) = verified {
+        let projections: Vec<(String, bool, Option<i64>, Option<i64>)> = sqlx::query_as(
+            r#"SELECT "item"."ProviderId", "item"."Published", "item"."MediaItemId", "projection"."EpisodeId"
+               FROM "AddonMediaListItem" AS "item"
+               LEFT JOIN "AddonMediaListItemEpisode" AS "projection" ON "projection"."AddonMediaListItemId"="item"."Id"
+               WHERE "item"."AddonMediaListId"=? ORDER BY "item"."Id""#,
+        ).bind(job.list_id).fetch_all(pool).await.unwrap();
+        panic!("publication verification failed: {error}; fixture projections: {projections:?}");
+    }
     assert!(ops
         .transition_publication(&claim, Phase::Verifying, Phase::CleaningUp)
         .await
         .unwrap());
+    claim
+}
+
+async fn publish_received(
+    pool: &DbPool,
+    queued: &ersatzrs_core::repositories::AddonMediaListPublicationEnqueue,
+) {
+    let claim = publish_through_cleanup(pool, queued).await;
+    let repos = ersatzrs_infra::repositories::make_repositories(pool.clone());
+    let ops = &repos.managed_library_operations;
+    let repo = &repos.addon_media_lists;
+    let job = &queued.job;
     repo.finalize_staged_publication_revision(
         job.list_id,
         Outcome::Published,
@@ -534,7 +553,25 @@ async fn copied_stream_round_trip(whole_folder: bool, save_after_enqueue: bool) 
         projected,
         vec![("published-item".into(), "Published item".into())]
     );
-    assert_eq!(std::fs::read(copy).unwrap(), copied_bytes);
+    let after_bytes = std::fs::read(copy).unwrap();
+    if save_after_enqueue {
+        assert_ne!(after_bytes, copied_bytes);
+        let saved: SavedListDocument = serde_json::from_slice(&after_bytes).unwrap();
+        assert_eq!(saved.published, document.published);
+        assert!(
+            !saved
+                .draft
+                .items
+                .iter()
+                .find(|item| item.content.provider_id == "draft-only")
+                .unwrap()
+                .content
+                .included
+        );
+        assert_eq!(saved.draft.revision, expected_draft_revision);
+    } else {
+        assert_eq!(after_bytes, copied_bytes);
+    }
     if let Some(bytes) = copied_manifest {
         assert_eq!(
             std::fs::read(folder.join("list.playlist.yml")).unwrap(),
@@ -542,3 +579,6 @@ async fn copied_stream_round_trip(whole_folder: bool, save_after_enqueue: bool) 
         );
     }
 }
+
+#[path = "saved_writer_tests.rs"]
+mod saved_writer_tests;

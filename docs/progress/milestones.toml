@@ -50,7 +50,64 @@ and tests with Claude. Exclude transport/updater changes, new ZIP import/export
 services, whole-database backup and unrelated later UX work.
 '''
 evidence = '''
-2026-09-13 receiving integration remains uncommitted and O-01 In progress.
+2026-09-13 file-first editor Save and mapped repair continuation is uncommitted;
+the receiving-publication checkpoint below is committed as 2d333757. O-01
+remains In progress and runtime discovery is still disabled. Existing adopted
+lists now save the bounded document durably before their SQLite transaction
+commits. A post-replacement database failure reports that file Save succeeded
+with projection refresh pending; the next edit repairs SQLite first and rejects
+the stale form rather than overwriting recovered content. Mapped discovery uses
+the same repair path, preserves local hiding, and leaves unchanged published
+content/job ownership intact. Changed published content uses the existing
+SavedFolder queue with a fresh retained source and monotonic local revisions.
+SavedPublicationDigest identifies the accepted file section/queue, not successful
+playback; terminal failures keep the existing visible Retry action. Claude
+withdrew a suggested new automatic retry policy after tracing that working path.
+The selected 24-test proof is complete across two runs: nineteen tests passed
+before the maintainer's pause interrupted 278cc535-975c-4473-a71e-0b469d76fce1;
+all five remaining tests passed after explicit resume in
+2be80566-bfaf-448a-b238-fe5974acd540 (8.74s build, 3.081s tests). This includes
+actual mapped copy/publication/replay, warning-only Save, injected SQL failure,
+unchanged replacement reuse, migration constraints, and rejected saved-content
+preservation through playback rollback/reset. SQLx 0.9 rejected dynamic test
+query strings before execution; corrected tests use literal SQL. The dependency
+audit for atomicwrites 0.4.4 passed; existing duplicate-version warnings remain.
+Ordinary publication completion now writes file-first after retention and before
+journal-clear commit, reusing publication-only asset materialization. Focused
+run 13ac67f1-a6ac-49e1-8843-c03982a9d64f passes all thirteen selected tests
+(25.15s build, 7.010s tests): both completion SQL-failure windows, preserved
+external draft edits, conflicting publication refusal, mapped live-operation
+deferral and existing projection-corruption rejection. Earlier failures exposed
+two real defects: verification counted retained unpublished typed identities as
+active members, and discovery treated a reserved publication backup as another
+copy. Both are corrected without deleting media identities or changing test
+membership. Claude's silent-draft-acknowledgement finding is corrected by leaving
+the full-document digest pending when an external draft is not yet projected.
+The strengthened four completion regressions pass in
+63457d1b-04e4-4011-b7d6-4de572432b01 (15.61s build, 3.054s tests): exact portable
+draft equality recognizes the operation's own file-first retry without changing
+DraftRevision or Published state, while a real external draft still repairs once.
+Concrete local replacement stubs remain conservative pending repair; complete
+receiving replacement binding is still required below. Genuine conflicting file
+publications remain preserved and report an accurate resolve-before-retry error;
+repeated refusal is tested. Claude withdrew the proposed extra conflict workflow
+after tracing existing visible Retry behavior and the accepted conflict contract.
+Claude independently closed every open completion/repair P1/P2 at 17:57.
+Exact equality intentionally remains conservative for an untouched received draft
+whose sender revision differs from local SQLite: after a crash retry it may
+re-project once and show Ready, without content loss or republishing. This known
+residual is not normalized away or claimed covered by local-writer equality.
+Scoped infra/scanner all-targets Clippy passes with -D warnings (25.57s).
+Mechanical lint corrections cover borrowed Option arguments, heap digest buffer,
+boxed queue results, hex formatting and linear test futures; the ten affected
+digest/queue/assets/completion regressions pass afterward in
+572ff659-2b31-48bb-b2a3-fce4d7cb6174 (20.93s build, 4.468s tests). Earlier
+passing migration, rejected-content rollback and copy proofs remain applicable.
+Other required work remains all-writer coverage, complete receiving playback and
+subtitle/replacement binding, runtime discovery/warnings and native/browser
+acceptance. No CI, full closeout or push.
+
+2026-09-13 receiving integration checkpoint (now committed as 2d333757):
 The new admission entry point composes existing bounded validation, contained
 folder registration, draft projection, independent publication snapshot and
 the durable publication queue. It is deliberately not called by runtime

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-O-01: receiving Stream copy/publication proof passes; finish queued-edit review, then file-first durability and complete runtime reconstruction'
+current_focus = 'AMM-O-01: Save, mapped repair and publication completion verified; finish all-writer coverage and runtime reconstruction'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -91,18 +91,24 @@ independently closed the introduced P1/P2 findings; the milestone owns evidence.
 Snapshot-aware commit and plain Stream receiving admission now have passing
 copy-to-fresh-profile publication/replay integration tests, including a whole
 folder with a newer draft manifest. Runtime maintenance is not wired. Exact
-SavedFolder queued-edit corrections are under review; the milestone owns the
-evidence and remaining durability/binding acceptance. The requested 16:00
+SavedFolder queued-edit corrections were reviewed and committed in 2d333757.
+The adopted-list file-first editor Save and mapped repair now have focused proof,
+including SQL failure recovery, hidden-state preservation and independently
+changed saved publication activation. The milestone owns the evidence and
+remaining durability/binding acceptance. The requested 16:00
 completion cannot be met without leaving accepted runtime requirements undone.
 The core/web consumer
 has Claude review and a passing focused native test; browser verification remains open.
-Next: independent receiving
-published reconstruction and local playback/subtitle bindings, unchanged-authority
-Save reuse, then the durable all-writer boundary and scan reconstruction.
-The accepted cap is not yet enforced by runtime writers or scans.
-Durable saved-file and
-all-writer boundaries still precede scan reconstruction. No push, CI or release
-is authorized.
+File-first publication completion now has passing crash-window, concurrent-file
+and idempotent retry tests; Claude closed its actionable review findings. The
+milestone records the conservative untouched-received-draft retry residual.
+Next: route native option Undo/default activation through the existing saved
+editor boundary, then finish lease-fenced import/detail/restore/reset writers
+and receiving playback/subtitle bindings. The writer inventory distinguishes
+registered legacy APIs from unrouted old pages; do not duplicate their UI work.
+The accepted cap is enforced by the adopted editor and discovery entry points;
+legacy adoption and runtime scan integration remain unfinished. Complete these
+boundaries before enabling automatic discovery. No push, CI or release is authorized.
 AMM-O-01 remains In progress; automatic scan activation is not enabled.
 
 2026-09-12 22:56 Amsterdam: maintainer confirms the20:03 WSL interruption was

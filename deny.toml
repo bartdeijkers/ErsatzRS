@@ -68,6 +68,16 @@ version = "=5.3.0"
 reason = "Follows the split between getrandom 0.3 and getrandom 0.4 in the current upstream graph."
 
 [[bans.skip]]
+name = "rustix"
+version = "=0.38.44"
+reason = "atomicwrites 0.4.4 provides the O-01 durable Unix/Windows replacement boundary and still requires rustix 0.38."
+
+[[bans.skip]]
+name = "linux-raw-sys"
+version = "=0.4.15"
+reason = "Follows atomicwrites 0.4.4's rustix 0.38 dependency; the remaining graph uses rustix 1.1."
+
+[[bans.skip]]
 name = "thiserror"
 version = "=1.0.69"
 reason = "Leptos/server_fn still transitively depend on gloo-net 0.6 while the workspace crates use thiserror 2."
