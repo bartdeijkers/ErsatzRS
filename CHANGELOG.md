@@ -13,6 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Security
+
+- Update `rustls` to 0.23.45 and its required `rustls-webpki` patch for
+  [RUSTSEC-2026-0285](https://rustsec.org/advisories/RUSTSEC-2026-0285), which
+  fixes acceptance of TLS 1.3 handshake messages at the wrong encryption level.
+
 ### Changed
 
 - Withdraw the O-01 folder portability program and restore the preceding
