@@ -90,6 +90,8 @@ Run `addon-list-preparation-feedback.spec.ts` on its own wrapper database for
 untouched-default preparation, failure/retry guidance, legacy schema adoption
 with retained unsaved input, and partial Add recovery. Its isolated add-on
 identities avoid changing schemas used by the other prepared-playback fixtures.
+Its import helper waits for the visible workspace after database completion,
+so subsequent navigation cannot race the landing page's automatic reload.
 
 Run `addon-walkthrough-fixes.spec.ts` on its own wrapper database for fresh
 default-TV first publication, first-import completion without a manual reload,

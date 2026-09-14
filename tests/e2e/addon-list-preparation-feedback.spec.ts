@@ -73,6 +73,10 @@ async function importList(page: Page, variant: PreparedFixtureVariant, mode: str
   await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
   const listId = listIdFrom(page);
   await importComplete(listId);
+  // Database completion precedes the landing page's automatic reload. Wait for
+  // that transition before a caller navigates, so Firefox cannot abort its goto.
+  await expect(page.getByRole('heading', { level: 1, name: 'Prepared playback fixture' })).toBeVisible({ timeout: 30000 });
+  await hydrated(page);
   return listId;
 }
 
