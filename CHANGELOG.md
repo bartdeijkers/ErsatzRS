@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.34-beta] - 2026-09-14
+
 ### Security
 
 - Update `rustls` to 0.23.45 and its required `rustls-webpki` patch for
@@ -2993,7 +2995,8 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.33-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.34-beta...HEAD
+[1.0.34-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.33-beta...v1.0.34-beta
 [1.0.33-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.32-beta...v1.0.33-beta
 [1.0.28-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.27-beta...v1.0.28-beta
 [1.0.27-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.26-beta...v1.0.27-beta
