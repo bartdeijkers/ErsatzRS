@@ -1,7 +1,8 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { existsSync, readFileSync } from 'fs';
 import {
-  sourceUrl, hydrated, installPreparedFixture, preparedInvocationLog, preparedSqlite,
+  preparedSourceUrl, hydrated, installPreparedFixture, preparedInvocationLog, preparedSqlite,
+  waitForPreparedImport, preparedWorkspaceReady,
   type PreparedFixtureVariant,
 } from './addon-prepared-fixture';
 
@@ -45,7 +46,7 @@ function watchErrors(page: Page): string[] {
 
 async function fillAdd(page: Page, variant: PreparedFixtureVariant, mode: string): Promise<string> {
   const name = variant.addonId!.split('.').pop()!;
-  const url = `${sourceUrl}/${name}`;
+  const url = `${preparedSourceUrl(variant)}/${name}`;
   await hydrated(page, '/media/addon-lists/add');
   await page.getByLabel('Add-on list URL').fill(url);
   await page.getByLabel('Add-on', { exact: true }).selectOption(variant.addonId!);
@@ -64,7 +65,7 @@ function listIdFrom(page: Page): number {
 }
 
 async function importComplete(listId: number): Promise<void> {
-  await expect.poll(() => sqlite(`SELECT "State"||'|'||"DiscoveredCount" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60000 }).toBe('3|1');
+  await waitForPreparedImport(dbPath!, listId);
 }
 
 async function importList(page: Page, variant: PreparedFixtureVariant, mode: string): Promise<number> {
@@ -75,8 +76,7 @@ async function importList(page: Page, variant: PreparedFixtureVariant, mode: str
   await importComplete(listId);
   // Database completion precedes the landing page's automatic reload. Wait for
   // that transition before a caller navigates, so Firefox cannot abort its goto.
-  await expect(page.getByRole('heading', { level: 1, name: 'Prepared playback fixture' })).toBeVisible({ timeout: 30000 });
-  await hydrated(page);
+  await preparedWorkspaceReady(page);
   return listId;
 }
 
@@ -241,6 +241,7 @@ test('an add whose settings fail opens the created list with a persistent notice
   // Retrying the same add-on and source reuses the created list rather than adding another.
   await page.unroute(settingsCall);
   await importComplete(listId);
+  await preparedWorkspaceReady(page);
   await fillAdd(page, variant, 'download_ahead');
   await page.getByRole('button', { name: 'Import overview' }).click();
   await expect(page).toHaveURL(new RegExp(`/media/addon-lists/${listId}\\?import=1$`));

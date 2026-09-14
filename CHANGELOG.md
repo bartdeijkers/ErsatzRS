@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Isolate synthetic add-on E2E provider hosts so unrelated scenarios do not
+  inherit each other's admission waits. Preserve import deadlines and exact
+  counts, add safe job-state diagnostics, await import-page navigation before
+  playback editing, and verify applied readiness updates instead of sleeping.
+
 ## [1.0.34-beta] - 2026-09-14
 
 ### Security

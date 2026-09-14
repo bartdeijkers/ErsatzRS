@@ -7,9 +7,35 @@ import { subtitleProviderSource } from './addon-subtitle-provider';
 
 export const addonId = 'org.ersatzrs.e2e.prepared-playback';
 export const sourceUrl = 'https://prepared.example.invalid/video';
+/** Host admission is shared across add-ons, so package isolation also needs host isolation. */
+export function preparedSourceUrl(variant: PreparedFixtureVariant = {}): string {
+  if (!variant.addonId) return sourceUrl;
+  const identity = createHash('sha256').update(variant.addonId).digest('hex').slice(0, 24);
+  return `https://${identity}.prepared.example.invalid/video`;
+}
 const quote = (value: string): string => value.replace(/'/g, "''");
 export function preparedSqlite(dbPath: string, sql: string): string {
   return execFileSync('sqlite3', [dbPath], { input: `.timeout 10000\n${sql}`, encoding: 'utf8' }).trim();
+}
+
+/** Only safe state/counters/timestamps: never provider diagnostics, URLs or payloads. */
+export async function waitForPreparedImport(dbPath: string, listId: number, discoveredCount = 1): Promise<void> {
+  // objectContaining retains diagnostic fields in the failure diff; toMatchObject hides them.
+  await expect.poll(() => JSON.parse(preparedSqlite(dbPath, `SELECT json_object(
+    'state', "State", 'discoveredCount', "DiscoveredCount", 'generation', "Generation",
+    'attempts', "AttemptCount", 'nextEligibleAt', "NextEligibleAt",
+    'heartbeatAt', "HeartbeatAt", 'lastProgressAt', "LastProgressAt",
+    'leaseExpiresAt', "LeaseExpiresAt", 'completedAt', "CompletedAt")
+    FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId}
+    ORDER BY "Generation" DESC LIMIT 1;`) || 'null'), {
+    timeout: 60000, message: 'Synthetic overview import completes with the exact item count',
+  }).toEqual(expect.objectContaining({ state: 3, discoveredCount }));
+}
+
+/** DB completion precedes the landing page's own reload; let that navigation finish. */
+export async function preparedWorkspaceReady(page: Page): Promise<void> {
+  await expect(page.getByRole('heading', { level: 1, name: 'Prepared playback fixture' })).toBeVisible({ timeout: 30000 });
+  await hydrated(page);
 }
 
 function contentHash(root: string): string {
@@ -58,6 +84,7 @@ export function installPreparedFixture(dbPath: string, pauseFirst = false, subti
   if (!dbPath) throw new Error('The isolated E2E database is required');
   const sqlite = (sql: string): string => preparedSqlite(dbPath, sql);
   const fixtureAddonId = variant.addonId ?? addonId;
+  const fixtureSourceUrl = preparedSourceUrl(variant);
   const suffix = variant.addonId ? `-${variant.addonId}` : '';
   const root = join(dirname(dbPath), `addon-prepared-playback-package${suffix}`);
   const storage = join(dirname(dbPath), `addon-prepared-playback-library${suffix}`);
@@ -72,7 +99,7 @@ export function installPreparedFixture(dbPath: string, pauseFirst = false, subti
       record_type: 'item', provider_id: index === 0 ? 'prepared-video' : `prepared-video-${index + 1}`, rank: index,
       display_title: index === 0 ? 'Prepared calibration' : `Prepared calibration ${index + 1}`,
       title: index === 0 ? 'Prepared calibration' : `Prepared calibration ${index + 1}`, kind: 'remote_stream',
-      guids: [], source_url: index === 0 ? sourceUrl : `${sourceUrl}/${index + 1}`, availability: 'available', content_kind: 'other_video',
+      guids: [], source_url: index === 0 ? fixtureSourceUrl : `${fixtureSourceUrl}/${index + 1}`, availability: 'available', content_kind: 'other_video',
       liveness: 'finite', duration_seconds: subtitleFixture ? 90 : 120,
     })),
   ];
@@ -138,7 +165,7 @@ else if (command === 'discover' || command === 'list') {
     ],
     dependencies: [], entrypoints: { any: { path: 'addon.sh', kind: 'posix_shell' },
       'win-x64': { path: 'addon.cmd', kind: 'windows_batch' } },
-    permissions: { network_hosts: ['prepared.example.invalid'], media_read: false,
+    permissions: { network_hosts: [new URL(fixtureSourceUrl).hostname], media_read: false,
       managed_ffmpeg: true, external_commands: ['node'] },
     settings: [{ key: 'MEDIA_STORAGE_PATH', label: { 'en-US': 'Media storage location' },
       kind: 'path', required: false, options: [] },

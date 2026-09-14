@@ -1,7 +1,8 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { existsSync, readFileSync } from 'fs';
 import {
-  sourceUrl, hydrated, installPreparedFixture, preparedInvocationLog, preparedSqlite,
+  preparedSourceUrl, hydrated, installPreparedFixture, preparedInvocationLog, preparedSqlite,
+  waitForPreparedImport, preparedWorkspaceReady,
   type PreparedFixtureVariant,
 } from './addon-prepared-fixture';
 
@@ -52,7 +53,7 @@ function watchErrors(page: Page): string[] {
 async function fillAdd(page: Page, variant: PreparedFixtureVariant, mode: string, presentation?: string): Promise<void> {
   const name = variant.addonId!.split('.').pop()!;
   await hydrated(page, '/media/addon-lists/add');
-  await page.getByLabel('Add-on list URL').fill(`${sourceUrl}/${name}`);
+  await page.getByLabel('Add-on list URL').fill(`${preparedSourceUrl(variant)}/${name}`);
   await page.getByLabel('Add-on', { exact: true }).selectOption(variant.addonId!);
   // The reported failure used Add's default presentation.
   await expect(page.getByLabel('Collection Type', { exact: true })).toHaveValue('television_show');
@@ -70,11 +71,10 @@ async function importList(page: Page, variant: PreparedFixtureVariant, mode: str
   await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
   const listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
   expect(listId).toBeGreaterThan(0);
-  await expect.poll(() => sqlite(`SELECT "State"||'|'||"DiscoveredCount" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60000 }).toBe(`3|${variant.itemCount ?? 1}`);
+  await waitForPreparedImport(dbPath!, listId, variant.itemCount ?? 1);
   // Let the landing page finish its automatic reload before callers navigate
   // or mutate the fixture revision; database completion alone is too early.
-  await expect(page.getByRole('heading', { level: 1, name: 'Prepared playback fixture' })).toBeVisible({ timeout: 30000 });
-  await hydrated(page);
+  await preparedWorkspaceReady(page);
   return listId;
 }
 
@@ -258,10 +258,27 @@ VALUES (last_insert_rowid(),${listId},1,(SELECT "DraftRevision" FROM "AddonMedia
   await expect(overview).toContainText('Publication failed');
   await expect(page.getByText('Saved changes ready to publish', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Published list is up to date', { exact: true })).toHaveCount(0);
-  // The live readiness poll must not turn the failure back into success.
-  await page.waitForTimeout(7000);
-  await expect(overview).toContainText('Publication failed');
-  await expect(page.getByText('Saved changes ready to publish', { exact: true })).toHaveCount(0);
+  // A settled list intentionally stops polling. Give this list owned, queued
+  // optional detail work so the live-failure assertion actually exercises a poll.
+  // Future eligibility is a fixture barrier: no provider process should run.
+  try {
+    expect(sqlite(`UPDATE "AddonMediaListDetailJob" SET "State"=1,
+"NextEligibleAt"=strftime('%Y-%m-%d %H:%M:%f','now','+1 hour')
+WHERE "AddonMediaListId"=${listId} AND "State"=0; SELECT changes();`)).toBe('1');
+    await hydrated(page, `/media/addon-lists/${listId}`);
+    await expectFailure();
+    const recovery = page.getByTestId('addon-publication-recovery');
+    await expect(recovery.getByText('Attempts: 1', { exact: true })).toBeVisible();
+    sqlite(`UPDATE "ManagedLibraryOperation" SET "AttemptCount"=2
+WHERE "Id"=(SELECT "OperationId" FROM "AddonMediaListPublicationJob"
+WHERE "AddonMediaListId"=${listId} AND "Generation"=1);`);
+    await expect(recovery.getByText('Attempts: 2', { exact: true })).toBeVisible({ timeout: 7000 });
+    await expect(overview).toContainText('Publication failed');
+    await expect(page.getByText('Saved changes ready to publish', { exact: true })).toHaveCount(0);
+  } finally {
+    sqlite(`UPDATE "AddonMediaListDetailJob" SET "State"=0,"NextEligibleAt"=NULL
+WHERE "AddonMediaListId"=${listId} AND "State"=1;`);
+  }
 
   const preservation = 'Publication stopped to preserve edited or invalid tvshow.nfo / artist.nfo metadata in the list folder.';
   await hydrated(page, `/media/addon-lists/${listId}/activity`);
@@ -429,7 +446,7 @@ test('166-entry overview reports overlapping preparation tasks separately from i
   installPreparedFixture(dbPath!, false, true, variant);
   sqlite(`INSERT INTO "ConfigElement" ("Key","Value") VALUES('ffmpeg.preferred_subtitle_language_code','eng'),('ffmpeg.fallback_subtitle_language_code','eng')
     ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value";`);
-  const listId = await importList(page, variant, 'stream', 'remote_streams', `${sourceUrl}?delivery=stream`);
+  const listId = await importList(page, variant, 'stream', 'remote_streams', `${preparedSourceUrl(variant)}?delivery=stream`);
   const unresolved = Number(sqlite(`SELECT MIN("Id") FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId};`));
   sqlite(`UPDATE "AddonMediaListItem" SET "DurationSeconds"=NULL,"ProviderLiveness"=0,"EffectiveLiveness"=0,"Availability"=2,"ProviderMetadataJson"='{"title":"Unresolved fixture"}' WHERE "Id"=${unresolved};
     UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=${listId};`);

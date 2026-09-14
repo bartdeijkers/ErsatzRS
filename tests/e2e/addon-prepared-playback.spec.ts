@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { execFileSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { get as httpGet } from 'http';
-import { addonId, sourceUrl, hydrated, installPreparedFixture, preparedSqlite } from './addon-prepared-fixture';
+import { addonId, sourceUrl, hydrated, installPreparedFixture, preparedSqlite, waitForPreparedImport, preparedWorkspaceReady } from './addon-prepared-fixture';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 function sqlite(sql: string): string {
@@ -68,7 +68,8 @@ test('prepared publication pins its generated file and plays it instead of raw p
   await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
   const listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
   expect(listId).toBeGreaterThan(0);
-  await expect.poll(() => sqlite(`SELECT "State"||'|'||"DiscoveredCount" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60000 }).toBe('3|1');
+  await waitForPreparedImport(dbPath!, listId);
+  await preparedWorkspaceReady(page);
   await hydrated(page, `/media/addon-lists/${listId}/playback`);
   await page.locator('[data-option-key="processed"] select').selectOption('true');
   await Promise.all([

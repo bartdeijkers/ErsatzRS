@@ -92,6 +92,14 @@ with retained unsaved input, and partial Add recovery. Its isolated add-on
 identities avoid changing schemas used by the other prepared-playback fixtures.
 Its import helper waits for the visible workspace after database completion,
 so subsequent navigation cannot race the landing page's automatic reload.
+Prepared fixture variants isolate both package identity and synthetic provider
+host. Changing only the URL path does not isolate host admission: a preceding
+scenario's active provider lease can defer an import until its lease expiry,
+even when that provider finishes earlier. Keep real same-host pacing intact;
+do not reduce its configuration to speed up functional tests. Import assertions
+retain their 60-second bound and exact item count, and report only job state,
+attempts, eligibility, lease and progress timestamps on failure. The prepared
+playback scenario also awaits the visible workspace before opening Playback.
 
 Run `addon-walkthrough-fixes.spec.ts` on its own wrapper database for fresh
 default-TV first publication, first-import completion without a manual reload,
@@ -108,6 +116,14 @@ On a hydration timeout it reports document visibility, loader readiness and
 completed package-resource timings, without resource URLs or settings values.
 Installation waits for the redirected page's Enable action after persistence;
 an immediate test-driven reload can race that redirect in Firefox.
+
+The restored-publication-failure scenario checks fresh renders and a live poll.
+Settled lists intentionally stop polling, so the live case first queues owned
+optional detail work behind a future-eligibility barrier, then observes an
+updated attempt counter from its synthetic operation in the UI. It restores that
+detail work in `finally`. This proves a real readiness poll was applied within
+the existing seven-second bound while failure feedback persists; elapsed time
+alone is not evidence of a poll.
 
 The exact-overview case in `addon-metadata-editor.spec.ts` starts on the import
 landing with no editable collection. Complete the seeded discovery, then await
