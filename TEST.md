@@ -104,6 +104,8 @@ normal/secret-reference settings regressions; Save now waits for persistent
 feedback rather than a document reload. Its hydration readiness wait uses the
 same bounded 15 seconds as the other add-on specs, allowing the cold debug WASM
 load without changing the overall test timeout or interaction assertions.
+On a hydration timeout it reports document visibility, loader readiness and
+completed package-resource timings, without resource URLs or settings values.
 Installation waits for the redirected page's Enable action after persistence;
 an immediate test-driven reload can race that redirect in Firefox.
 

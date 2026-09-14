@@ -71,9 +71,29 @@ function openDatabase(): DatabaseSync {
 }
 
 async function waitForHydration(page: Page): Promise<void> {
-  await expect
-    .poll(() => page.evaluate(() => window.__ersatzrs_hydrated === true), { timeout: 15_000 })
-    .toBe(true);
+  try {
+    await expect
+      .poll(() => page.evaluate(() => window.__ersatzrs_hydrated === true), { timeout: 15_000 })
+      .toBe(true);
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      readyState: document.readyState,
+      visibility: document.visibilityState,
+      islandLoaderReady: typeof (window as Window & { __hydrateIsland?: unknown }).__hydrateIsland === 'function',
+      resources: performance.getEntriesByType('resource')
+        .filter(entry => /\/pkg\/[^/]+\.(wasm|js)$/.test(new URL(entry.name).pathname))
+        .map(entry => {
+          const resource = entry as PerformanceResourceTiming;
+          return {
+            file: new URL(resource.name).pathname.split('/').pop(),
+            duration: resource.duration,
+            responseEnd: resource.responseEnd,
+            transferSize: resource.transferSize,
+          };
+        }),
+    })).catch(() => ({ pageUnavailable: true }));
+    throw new Error(`Hydration did not complete: ${JSON.stringify(diagnostics)}`, { cause: error });
+  }
 }
 
 function resetFixtures(): void {
