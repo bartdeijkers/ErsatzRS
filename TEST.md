@@ -98,11 +98,14 @@ default-TV first publication, first-import completion without a manual reload,
 bulk include/exclude with explicit Save/Discard and draft/publication isolation,
 restored-failure feedback, and live add-on Check/Save without lost sibling edits.
 It includes a JavaScript-disabled bulk workflow and independent package identities
-for each browser/scenario. Use `addons.spec.ts` for the existing declarative
+for each browser/scenario. Its import helper also awaits the visible workspace
+before navigation or fixture mutation. Use `addons.spec.ts` for the existing declarative
 normal/secret-reference settings regressions; Save now waits for persistent
 feedback rather than a document reload. Its hydration readiness wait uses the
 same bounded 15 seconds as the other add-on specs, allowing the cold debug WASM
 load without changing the overall test timeout or interaction assertions.
+Installation waits for the redirected page's Enable action after persistence;
+an immediate test-driven reload can race that redirect in Firefox.
 
 The exact-overview case in `addon-metadata-editor.spec.ts` starts on the import
 landing with no editable collection. Complete the seeded discovery, then await

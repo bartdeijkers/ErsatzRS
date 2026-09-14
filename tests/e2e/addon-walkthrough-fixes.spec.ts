@@ -71,6 +71,10 @@ async function importList(page: Page, variant: PreparedFixtureVariant, mode: str
   const listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
   expect(listId).toBeGreaterThan(0);
   await expect.poll(() => sqlite(`SELECT "State"||'|'||"DiscoveredCount" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60000 }).toBe(`3|${variant.itemCount ?? 1}`);
+  // Let the landing page finish its automatic reload before callers navigate
+  // or mutate the fixture revision; database completion alone is too early.
+  await expect(page.getByRole('heading', { level: 1, name: 'Prepared playback fixture' })).toBeVisible({ timeout: 30000 });
+  await hydrated(page);
   return listId;
 }
 

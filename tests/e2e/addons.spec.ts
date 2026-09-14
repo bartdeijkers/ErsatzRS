@@ -536,7 +536,9 @@ external_commands = []
     await dialog.getByRole('button', { name: 'Confirm', exact: true }).focus();
     await page.keyboard.press('Enter');
     await expect.poll(installed).toEqual({ Enabled: 0 });
-    await page.reload();
+    // Installation redirects after committing; observe that transition rather
+    // than racing it with a test-driven reload as soon as the row exists.
+    await expect(page.getByRole('button', { name: 'Enable', exact: true })).toBeVisible();
     await waitForHydration(page);
     await page.getByRole('button', { name: 'Enable', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
