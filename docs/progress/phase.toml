@@ -60,6 +60,14 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-14 publication follow-up: commit, push and terminal green CI are now
+authorized. Add-ons ba440f3 passes validation run 34852466201. Host 08aa9cf4
+passes non-browser CI gates, but the Chromium suite exposes Save after Undo
+and an obsolete test label. The scoped correction passes ten focused browser
+cases and the repeated web parity gate. Finish exact-commit CI for the corrective
+host commit and report both canonical run URLs. Release/deployment and O-01
+remain outside this authorization.
+
 2026-09-14: the resumed, accepted D01-D13 correction is implemented and locally
 verified across five reviewable checkpoints. Owning parity debts and amm-n-01b
 record native/browser/runtime evidence and its limits. The current live dogfood

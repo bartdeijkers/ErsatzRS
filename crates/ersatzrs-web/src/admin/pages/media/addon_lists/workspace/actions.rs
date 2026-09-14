@@ -485,17 +485,36 @@ async fn execute(
             submission.notice = Some(TextKey::Saved);
         }
         "undo-options" => {
-            let receipts = serde_json::from_str(
-                d.option_undo
-                    .as_deref()
-                    .ok_or(TextKey::AddonOptionsConflict)?,
-            )
-            .map_err(|_| TextKey::AddonOptionsConflict)?;
+            let receipts: Vec<ersatzrs_app::addon_media_list_options::AddonListOptionUndo> =
+                serde_json::from_str(
+                    d.option_undo
+                        .as_deref()
+                        .ok_or(TextKey::AddonOptionsConflict)?,
+                )
+                .map_err(|_| TextKey::AddonOptionsConflict)?;
             d.revision = state
                 .application
-                .undo_addon_list_option_task(receipts)
+                .undo_addon_list_option_task(receipts.clone())
                 .await
                 .map_err(|_| TextKey::AddonOptionsConflict)?;
+            if let (Some(baseline), Some(first)) = (&mut d.playback_baseline, receipts.first()) {
+                // Undo changes only these saved options. Keep the original
+                // delivery, installation and warning fences for retained input.
+                baseline.schema.clone_from(&first.previous_schema);
+                for receipt in &receipts {
+                    for previous in &receipt.previous {
+                        if previous.item_id.is_none() {
+                            if let Some(value) = &previous.value {
+                                baseline
+                                    .list_values
+                                    .insert(receipt.key.clone(), value.clone());
+                            } else {
+                                baseline.list_values.remove(&receipt.key);
+                            }
+                        }
+                    }
+                }
+            }
             d.option_undo = None;
         }
         "bulk-options" => bulk::select_options(state, d, &fields).await?,

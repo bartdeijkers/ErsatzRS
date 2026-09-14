@@ -38,7 +38,7 @@ release section when tagging a release.
 - Allow Playback & access saves after metadata-only draft updates when the saved
   task baseline still matches, while retaining conflicts for competing playback
   edits. Preserve editor input when ancillary reads fail and report save failures
-  by category.
+  by category. Keep subsequent saves usable after undoing playback options.
 
 - Bind scanned items before a new add-on list's first typed-media publication,
   prevent parent metadata edits from being silently bypassed when storage paths differ,

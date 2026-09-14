@@ -361,3 +361,10 @@ status classification. The display-only comparison indexes native baseline names
 once per event, preserving the existing form as the sole draft owner. Fixture
 review also restored the distinction between an inherited option and explicit
 false, and used the subtitle provider fixture's supported source route.
+
+CI subsequently exposed Save after option Undo retaining the pre-Undo baseline.
+After successful Undo, the native adapter applies only the receipt's restored
+schema and list-option values to that baseline. Delivery, cutoff, installation
+and warning fences remain unchanged; a legacy form without a baseline keeps
+the strict path. Both option workflows now test another metadata update between
+Undo and Save, while retaining published-option isolation.

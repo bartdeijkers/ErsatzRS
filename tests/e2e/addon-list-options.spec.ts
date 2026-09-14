@@ -103,6 +103,8 @@ INSERT INTO "AddonProviderHostCooldown" ("ProviderHost","NextEligibleAt","Sample
         expect(defaults(seed)).toEqual({browser:'firefox'});expect(publishedSnapshot(seed)).toBe(published);
         await submit('undo-options');expect(defaults(seed)).toEqual({});
         expect(sqlite(`SELECT COALESCE("DraftOptionSchemaId",0) FROM "AddonMediaList" WHERE "Id"=${seed.listId}`)).toBe('0');
+        // Undo refreshes its option baseline, so later metadata progress is disjoint.
+        sqlite(`UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=${seed.listId}`);
         await option(page,'browser').locator('select').selectOption('"firefox"');await save();
         await visit(firstUrl);
         await expect(option(page,'browser')).toContainText('From list');

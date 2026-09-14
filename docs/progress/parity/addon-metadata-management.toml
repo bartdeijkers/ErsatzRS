@@ -887,7 +887,7 @@ description = 'Metadata-only draft revision movement rejects Playback and access
 discovered  = '2026-09-13'
 adr         = '0091'
 resolved    = true
-evidence    = "2026-09-14: ADR 0091 addendum and repository regressions prove metadata-only revision tolerance, actual committed revision, schema/identity/cutoff/ownership and competing-edit conflicts, conservative legacy forms, atomic write failure and publication isolation. Option-service tests pass. Both-browser native/hydrated Save and exact sparse-option Undo after metadata progress pass in the final 16-case closeout."
+evidence    = "2026-09-14: ADR 0091 addendum and repository regressions prove metadata-only revision tolerance, actual committed revision, schema/identity/cutoff/ownership and competing-edit conflicts, conservative legacy forms, atomic write failure and publication isolation. Option-service tests pass. Both-browser native/hydrated Save and exact sparse-option Undo after metadata progress pass in the final 16-case closeout. CI follow-up also corrects Save after Undo: only the successful receipt schema/list values update the baseline; other task fences remain original. Ten focused browser cases and the repeated 655-test web parity gate pass. Milestone amm-n-01b records the initial CI failure and corrective acceptance."
 
 [[debt]]
 id          = 'dogfood-d12-resilient-editor-loading'

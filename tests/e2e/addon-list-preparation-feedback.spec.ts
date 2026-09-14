@@ -143,7 +143,7 @@ test('a failed preparation attempt is explained and retryable with and without J
   // A03: without a reload, the live summary turns into an actionable failure.
   const failed = page.getByTestId('addon-preparation-failed');
   await expect(failed).toBeVisible({ timeout: 20000 });
-  await expect(failed).toContainText('Media files that failed to prepare: 1');
+  await expect(failed).toContainText('Preparation tasks: 1');
   await expect(page.getByText('Media preparation failed', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry preparation', exact: true })).toBeEnabled();
   await hydrated(page, `/media/addon-lists/${listId}/activity`);
@@ -158,7 +158,7 @@ test('a failed preparation attempt is explained and retryable with and without J
     expect((await plain.goto(`/media/addon-lists/${listId}`))?.status()).toBe(200);
     const plainFailed = plain.getByTestId('addon-preparation-failed');
     await expect(plainFailed).toBeVisible();
-    await expect(plainFailed).toContainText('Media files that failed to prepare: 1');
+    await expect(plainFailed).toContainText('Preparation tasks: 1');
     const attempts = prepareInvocations(variant);
     await Promise.all([
       plain.waitForEvent('framenavigated', frame => frame === plain.mainFrame()),
@@ -168,7 +168,7 @@ test('a failed preparation attempt is explained and retryable with and without J
     expect(prepareInvocations(variant)).toBeGreaterThan(attempts);
 
     expect((await plain.goto(`/media/addon-lists/${listId}/activity`))?.status()).toBe(200);
-    await expect(plain.getByTestId('addon-preparation-failures')).toContainText('Media files that failed to prepare');
+    await expect(plain.getByTestId('addon-preparation-failures')).toContainText('Preparation tasks');
     // The arrival notice is server-rendered for the no-JS add redirect.
     expect((await plain.goto(`/media/addon-lists/${listId}?error=save`))?.status()).toBe(200);
     await expect(plain.getByTestId('addon-list-arrival-error')).toContainText('The list was added, but some of its settings were not saved.');

@@ -407,6 +407,14 @@ for (const javaScriptEnabled of [false, true]) {
     await expect(editor.locator('[name="option_processed"]')).toHaveValue(initialOption);
     expect(sqlite(`SELECT COALESCE("DraftOptionSchemaId",0)||'|'||"DraftOptionValuesJson" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe(draftOptionsBefore);
     expect(sqlite(`SELECT "OptionValuesJson" FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=${listId} ORDER BY "Revision" DESC LIMIT 1;`)).toBe(publishedBefore);
+    // Undo must update its own option baseline without making the next Save stale.
+    sqlite(`UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=${listId};`);
+    await editor.locator('[name="option_processed"]').selectOption('true');
+    await editor.locator('button[name="intent"][value="save"]').click();
+    await editor.waitForLoadState('load');
+    await expect(editor.locator('#workspace-errors')).toHaveCount(0);
+    await expect(editor.locator('[name="option_processed"]')).toHaveValue('true');
+    expect(sqlite(`SELECT "OptionValuesJson" FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=${listId} ORDER BY "Revision" DESC LIMIT 1;`)).toBe(publishedBefore);
     await context.close();
   });
 }

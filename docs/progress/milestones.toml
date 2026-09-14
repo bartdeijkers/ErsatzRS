@@ -4019,6 +4019,25 @@ playback and release gates remain unchanged; prototype reports cannot replace
 production acceptance.
 '''
 evidence = '''
+2026-09-14 CI follow-up: host commit 08aa9cf4 and add-ons commit ba440f3 were
+pushed with maintainer authorization. Add-ons validation run 34852466201 passes
+Windows entrypoints, Linux validation and bundle construction. Host run
+34852426530 passes all non-browser gates; Chromium records 214 passes, four
+skips and three failures. The run was cancelled after Chromium completed so the
+known failing candidate did not consume another browser cycle.
+
+Two failures expose a stale playback baseline after successful option Undo;
+the third is an outdated preparation-count label in the test. The correction
+updates only schema/list option values from the successful Undo receipts,
+preserving the original delivery, cutoff, installation and warning fences.
+Legacy forms do not gain an inferred baseline. Existing inheritance and new
+metadata-progress regressions now exercise Save after Undo, with published
+options unchanged. All ten focused Chromium/Firefox hydrated/no-JS cases pass
+in test-results/addon-ci-correction. The final web parity gate passes again,
+including all 655 tests and Clippy. Source review finds no remaining actionable
+issue in this correction. A fresh exact-commit CI run is required after push;
+the cancelled run is not green acceptance for the corrected source.
+
 2026-09-14: the accepted D01-D13 dogfood corrections are locally verified in
 five reviewable checkpoints, documented in the execution plan. Each finding is
 closed separately in addon-platform or addon-metadata-management; this is not
