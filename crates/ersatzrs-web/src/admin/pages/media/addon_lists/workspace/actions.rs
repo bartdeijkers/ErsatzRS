@@ -259,6 +259,32 @@ async fn execute(
 ) -> Result<()> {
     let d = &mut submission.draft;
     let fields = d.groups.get(group).cloned().unwrap_or_default();
+    if d.category == "blockers"
+        && matches!(
+            intent,
+            "number"
+                | "classify"
+                | "auto-number"
+                | "clear-numbering"
+                | "select-range"
+                | "bulk-options"
+        )
+    {
+        let readiness = state
+            .application
+            .addon_media_list_publication_readiness(d.list_id)
+            .await
+            .map_err(|_| TextKey::AddonWorkspaceLoadIncomplete)?;
+        if readiness.saved_revision != d.revision {
+            return Err(TextKey::AddonWorkspaceSaveConflict);
+        }
+        d.publication_blocker_items = readiness
+            .blockers
+            .iter()
+            .filter_map(|blocker| blocker.item_id)
+            .collect();
+    }
+
     if d.stale_groups.contains(group)
         && matches!(
             intent,
@@ -303,6 +329,19 @@ async fn execute(
             }
             d.revision = current.draft_revision;
             d.stale_groups.remove(group);
+            if group == "playback" {
+                let (revision, baseline) = state
+                    .application
+                    .ports()
+                    .addon_media_lists()
+                    .playback_baseline(d.list_id)
+                    .await
+                    .map_err(|error| save_error_key(&error.into()))?;
+                if revision != d.revision {
+                    return Err(TextKey::AddonWorkspaceRetained);
+                }
+                d.playback_baseline = Some(baseline);
+            }
             d.option_undo = None;
             let target = d.groups.entry(group.into()).or_default();
             if matches!(group, "settings" | "artwork") {
@@ -382,13 +421,19 @@ async fn execute(
             preview_bulk(state, d, &fields, intent).await?;
         }
         "save" => {
-            let (command, undo) = save_command(state, d, group, &fields).await?;
+            let (command, mut undo) = save_command(state, d, group, &fields).await?;
             let review_undo = saved_review_undo(state, &command, group).await?;
             let revision = state
                 .application
                 .save_addon_media_list_editor_task(command)
                 .await
-                .map_err(|_| TextKey::AddonWorkspaceRetained)?;
+                .map_err(|error| save_error_key(&error))?;
+            for receipt in &mut undo {
+                receipt.expected_revision = revision;
+            }
+            if group == "playback" {
+                d.playback_baseline = None;
+            }
             d.revision = revision;
             d.saved_review_undo = review_undo;
             d.option_undo = if undo.is_empty() {
@@ -434,7 +479,7 @@ async fn execute(
                 .application
                 .save_addon_media_list_editor_task(command)
                 .await
-                .map_err(|_| TextKey::AddonWorkspaceRetained)?;
+                .map_err(|error| save_error_key(&error))?;
             d.saved_review_undo = None;
             d.option_undo = None;
             submission.notice = Some(TextKey::Saved);
@@ -638,6 +683,18 @@ fn item_id(group: &str) -> Result<i64> {
         .ok_or(TextKey::AddonMediaListNotFound)
 }
 
+fn save_error_key(error: &ersatzrs_app::ApplicationError) -> TextKey {
+    use ersatzrs_app::ApplicationError;
+    match error {
+        ApplicationError::Conflict(_) => TextKey::AddonWorkspaceSaveConflict,
+        ApplicationError::Validation { .. } | ApplicationError::InvalidData { .. } => {
+            TextKey::AddonWorkspaceSaveInvalid
+        }
+        ApplicationError::NotFound { .. } => TextKey::AddonMediaListNotFound,
+        _ => TextKey::AddonWorkspaceSaveStorage,
+    }
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "Each task projects a distinct field group into the same atomic command"
@@ -658,6 +715,7 @@ async fn save_command(
     let mut save = AddonMediaListEditorSave {
         list_id: d.list_id,
         expected_revision: d.revision,
+        playback_baseline: None,
         metadata: None,
         settings: None,
         delivery_mode: None,
@@ -748,7 +806,22 @@ async fn save_command(
                 .get("disk_warning_gb")
                 .map(|_| parse(fields, "disk_warning_gb"))
                 .transpose()?;
-            (save.options, undo) = options(state, d, fields, Vec::new()).await?;
+            let mut validation_draft = d.clone();
+            if let Some(expected) = &d.playback_baseline {
+                let (revision, current) = state
+                    .application
+                    .ports()
+                    .addon_media_lists()
+                    .playback_baseline(d.list_id)
+                    .await
+                    .map_err(|error| save_error_key(&error.into()))?;
+                if expected != &current {
+                    return Err(TextKey::AddonWorkspaceSaveConflict);
+                }
+                validation_draft.revision = revision;
+                save.playback_baseline = Some(expected.clone());
+            }
+            (save.options, undo) = options(state, &validation_draft, fields, Vec::new()).await?;
         }
         "items" => {
             if let Some(value) = fields.get("option_targets") {
@@ -1069,7 +1142,7 @@ async fn option_edits(
     let editor =
         crate::admin::server_fns::addon_list_options::load_option_editor(state, d.list_id, ids)
             .await
-            .map_err(|()| TextKey::AddonOptionsConflict)?;
+            .map_err(|error| save_error_key(&error))?;
     let Some(editor) = editor else {
         return Ok(Vec::new());
     };
@@ -1084,7 +1157,7 @@ async fn option_edits(
             edit.value = if value.is_empty() {
                 None
             } else {
-                Some(serde_json::from_str(value).map_err(|_| TextKey::AddonOptionsConflict)?)
+                Some(serde_json::from_str(value).map_err(|_| TextKey::AddonWorkspaceSaveInvalid)?)
             };
             if editor.provisional || field.rows.iter().any(|r| r.before != edit.value) {
                 edits.push(edit);
@@ -1108,7 +1181,7 @@ async fn options(
         .application
         .prepare_addon_list_option_edits(edits)
         .await
-        .map_err(|_| TextKey::AddonOptionsConflict)
+        .map_err(|error| save_error_key(&error))
 }
 
 async fn upload(
@@ -1198,6 +1271,7 @@ async fn saved_review_undo(
         .collect::<Result<Vec<_>>>()?;
     Ok(Some(AddonMediaListEditorSave {
         list_id: command.list_id,
+        playback_baseline: None,
         expected_revision: command
             .expected_revision
             .checked_add(1)

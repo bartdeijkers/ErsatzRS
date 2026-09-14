@@ -257,6 +257,8 @@ pub struct AddonMediaListDraftDiff {
     pub metadata_changed: u64,
     pub excluded: u64,
     pub unavailable: u64,
+    #[serde(default)]
+    pub unknown: u64,
     pub conflicted: u64,
     pub pending_removals: u64,
     pub reappeared: u64,
@@ -264,6 +266,8 @@ pub struct AddonMediaListDraftDiff {
     pub added_item_ids: Vec<EntityId>,
     pub metadata_changed_item_ids: Vec<EntityId>,
     pub excluded_item_ids: Vec<EntityId>,
+    #[serde(default)]
+    pub unknown_item_ids: Vec<i64>,
     pub unavailable_item_ids: Vec<EntityId>,
     pub conflicted_item_ids: Vec<EntityId>,
     pub pending_removal_item_ids: Vec<EntityId>,

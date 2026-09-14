@@ -51,7 +51,7 @@ pub async fn upload_repository_bundle(
         .install_addon_repository_bundle(bytes)
         .await
     {
-        Ok(()) => Json(json!({"ok": true})).into_response(),
+        Ok(repository) => Json(json!({"ok": true, "repository": repository})).into_response(),
         Err(error) => api_error(
             StatusCode::UNPROCESSABLE_ENTITY,
             upload_error_text(language, &error.to_string()),

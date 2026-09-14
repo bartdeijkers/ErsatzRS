@@ -285,3 +285,79 @@ proof without a reload and with unsubmitted input preserved. Workspace native,
 hydrated and visual suites cover both browsers; playback/restart/caption suites
 retain their persistence and decoded-media guarantees through the new task
 controls. Milestone `amm-n-01b` owns the results and remaining acceptance.
+
+## Dogfood corrections (2026-09-13)
+
+The accepted correction keeps O-01 withdrawn and uses existing AMM-N ownership.
+Deliver reliable saves/editor loading (D11/D12), installation/setup accessibility
+(D01-D03/D09), blockers/progress (D04-D07), focused presentation/provider fixes
+(D08/D10/D13), then integrated verification. Do not touch the live profile or
+infer publication authorization. Each finding remains separately tracked in its
+owning parity record until evidence supports closure.
+
+### D11/D12 source map
+
+- Routes: `/media/addon-lists/{id}` and its task routes, particularly `/playback`.
+- SSR wrapper: `AddonListWorkspacePage` and the initial editor loader in
+  `admin/pages/media/addon_lists.rs`; task views remain SSR components.
+- Interactive boundary: existing publication readiness island and polling.
+- Native fallback: the existing workspace POST adapter carries `Draft`; only Save
+  commits the task through the application service and repository transaction.
+- Persistence: core `AddonMediaListEditorSave` and the SQLite editor repository;
+  retained schemas and publication ownership use the existing lifecycle helpers.
+- Shared UI: no new draft manager; incomplete task data disables its fieldset.
+- Upstream relationship: ADR 0091's related RemoteStreamList/CollectionItems
+  source map still applies; repository-installed add-on tasks are an extension.
+- Browser target: Chromium/Firefox, JavaScript enabled/disabled, synthetic fixture
+  metadata movement and two-operator saves; matched SSR/WASM/CSS assets required.
+
+D11/D12 acceptance combines repository transaction tests, controlled moving-read
+tests and native/hydrated browser workflows. The owning milestone records their
+results; this correction does not imply full AMM-N completion.
+
+### Dogfood correction component boundaries
+
+- The shared `Modal` owns viewport bounds and body scrolling. Its existing focus
+  trap, Escape handling and focus restoration still own keyboard behavior.
+- Repository uploads return the committed source identity, display name and
+  offer count. The existing Browse route accepts a repository filter; uploading,
+  installing and enabling remain separate operations.
+- Publication blockers carry optional stable item identities. Both direct native
+  editor navigation and the Publication blockers filter use those identities
+  from the authoritative readiness classification. Unknown availability has its
+  own draft category; publication restrictions are unchanged.
+- `AddonMediaListPreparationSummary` is an additive read model. It counts unique
+  item/operation requirements and projects the existing durable jobs for the
+  saved revision. Required interval, download and subtitle tasks are separate
+  from affected items. Heartbeats are activity; completed required tasks are
+  progress. There is no byte estimate or ETA. Legacy aggregate fields remain.
+- The native form still owns all drafts and submissions. The small
+  `public/workspace-draft-status.js` asset only compares rendered form defaults
+  for display and exposes the full selected filter label on narrow screens.
+  It never stores, reconstructs or submits a draft. Without JavaScript, the
+  server reports retained edits after each native submission.
+- The provider duration correction is in the sibling add-ons repository as
+  yt-dlp patch 0.11.2. Unknown input is omitted before numeric conversion;
+  genuine numeric zero is preserved. No protocol version changes.
+
+Missing media preparation continues through the existing typed
+`Preparing`/`PreparingMedia` publication outcomes. It is not a reason to reject
+an otherwise valid Playback & access Save. Revision conflicts, invalid option
+values and storage failures have distinct typed paths and localized Save copy.
+
+### Reviewable checkpoints
+
+| Checkpoint | Source responsibility | Regression evidence |
+|---|---|---|
+| 1 — D11/D12 | Typed task baseline, application option validation, transactional editor save, resilient SSR reads and ADR 0091 addendum. | Repository editor/lifecycle suites, option-service tests, controlled editor-read tests, native/hydrated metadata-save and Undo scenarios. |
+| 2 — D01-D03/D09 | Shared Modal, repository import receipt, existing add-on manager and localized permission descriptions. | `addons.spec.ts`: short/narrow dialog keyboard behavior and repository upload, browse, install and explicit enablement. |
+| 3 — D04-D07 | Readiness item identities, Unknown reporting, closed access outcomes and current-revision durable preparation projection. | Readiness/restriction repository tests, synthetic 166-entry task projection, blocker navigation and Activity browser scenarios. |
+| 4 — D08/D10/D13 | Responsive native controls, thumbnail fallback, cutoff/save feedback, ignored build metadata and sibling yt-dlp 0.11.2 duration correction. | Both-theme viewport/zoom matrix, Dutch/German narrow labels, large-list form regression and add-ons unknown-duration regression. |
+| 5 — Integrated verification | Owning parity debts, hydration records, changelogs and milestone evidence. | Affected native tests/Clippy, final web parity gate, matched Chromium/Firefox build, smoke and applicable TSDuck acceptance. |
+
+Source review corrected typed error erasure, the public asset route, a quadratic
+form comparison on All pages, the Stylance cutoff selector and incomplete-read
+status classification. The display-only comparison indexes native baseline names
+once per event, preserving the existing form as the sole draft owner. Fixture
+review also restored the distinction between an inherited option and explicit
+false, and used the subtitle provider fixture's supported source route.

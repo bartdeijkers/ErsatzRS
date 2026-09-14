@@ -63,8 +63,9 @@ async function fillAdd(page: Page, variant: PreparedFixtureVariant, mode: string
   await page.getByRole('checkbox', { name: 'Load item details automatically' }).uncheck();
 }
 
-async function importList(page: Page, variant: PreparedFixtureVariant, mode: string, presentation?: string): Promise<number> {
+async function importList(page: Page, variant: PreparedFixtureVariant, mode: string, presentation?: string, source?: string): Promise<number> {
   await fillAdd(page, variant, mode, presentation);
+  if (source) await page.getByLabel('Add-on list URL').fill(source);
   await page.getByRole('button', { name: 'Import overview' }).click();
   await expect(page).toHaveURL(/\/media\/addon-lists\/\d+\?import=1$/);
   const listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
@@ -369,4 +370,79 @@ test('bulk exclusion can be discarded or saved without JavaScript', async ({ pag
   } finally {
     await context.close();
   }
+});
+
+for (const javaScriptEnabled of [false, true]) {
+  test(`processing option Save and Undo survive metadata progress (${javaScriptEnabled ? 'hydrated' : 'no JS'})`, async ({ page, browser, baseURL }, info) => {
+    test.setTimeout(180000);
+    const variant = scenario(info, `metadata-option-${javaScriptEnabled}`, false);
+    const listId = await importList(page, variant, 'stream', 'remote_streams');
+    await hydrated(page, `/media/addon-lists/${listId}`);
+    await publishAndWait(page, listId, 1);
+    const publishedBefore = sqlite(`SELECT "OptionValuesJson" FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=${listId} ORDER BY "Revision" DESC LIMIT 1;`);
+    const context = await browser.newContext({ baseURL, javaScriptEnabled });
+    await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+    const editor = await context.newPage();
+    await editor.goto(`/media/addon-lists/${listId}/playback`);
+    if (javaScriptEnabled) await hydrated(editor);
+    const initialOption = await editor.locator('[name="option_processed"]').inputValue();
+    const draftOptionsBefore = sqlite(`SELECT COALESCE("DraftOptionSchemaId",0)||'|'||"DraftOptionValuesJson" FROM "AddonMediaList" WHERE "Id"=${listId};`);
+    await expect(editor.locator('.fresh-cutoff-notice')).toBeHidden();
+    await editor.locator('[name="delivery_mode"][value="download_ahead_new_videos"]').check();
+    await expect(editor.locator('.fresh-cutoff-notice')).toBeVisible();
+    await editor.locator('[name="delivery_mode"][value="stream"]').check();
+    await expect(editor.locator('.fresh-cutoff-notice')).toBeHidden();
+    await editor.locator('[name="option_processed"]').selectOption('true');
+    sqlite(`UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=${listId};`);
+    const metadataRevision = Number(sqlite(`SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`));
+    await editor.locator('button[name="intent"][value="save"]').click();
+    await editor.waitForLoadState('load');
+    await expect(editor.locator('#workspace-errors')).toHaveCount(0);
+    await expect(editor.locator('[name="option_processed"]')).toHaveValue('true');
+    expect(sqlite(`SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe(String(metadataRevision + 1));
+    expect(sqlite(`SELECT "OptionValuesJson" FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=${listId} ORDER BY "Revision" DESC LIMIT 1;`)).toBe(publishedBefore);
+    await editor.locator('button[name="intent"][value="undo-options"]').click();
+    await editor.waitForLoadState('load');
+    await expect(editor.locator('#workspace-errors')).toHaveCount(0);
+    await expect(editor.locator('[name="option_processed"]')).toHaveValue(initialOption);
+    expect(sqlite(`SELECT COALESCE("DraftOptionSchemaId",0)||'|'||"DraftOptionValuesJson" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe(draftOptionsBefore);
+    expect(sqlite(`SELECT "OptionValuesJson" FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=${listId} ORDER BY "Revision" DESC LIMIT 1;`)).toBe(publishedBefore);
+    await context.close();
+  });
+}
+
+test('166-entry overview reports overlapping preparation tasks separately from items', async ({ page }, info) => {
+  test.setTimeout(120000);
+  const variant = { addonId: `org.ersatzrs.e2e-walkthrough.${info.project.name}-overlapping`, processedDefault: true, itemCount: 166 };
+  installPreparedFixture(dbPath!, false, true, variant);
+  sqlite(`INSERT INTO "ConfigElement" ("Key","Value") VALUES('ffmpeg.preferred_subtitle_language_code','eng'),('ffmpeg.fallback_subtitle_language_code','eng')
+    ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value";`);
+  const listId = await importList(page, variant, 'stream', 'remote_streams', `${sourceUrl}?delivery=stream`);
+  const unresolved = Number(sqlite(`SELECT MIN("Id") FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId};`));
+  sqlite(`UPDATE "AddonMediaListItem" SET "DurationSeconds"=NULL,"ProviderLiveness"=0,"EffectiveLiveness"=0,"Availability"=2,"ProviderMetadataJson"='{"title":"Unresolved fixture"}' WHERE "Id"=${unresolved};
+    UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=${listId};`);
+  await hydrated(page, `/media/addon-lists/${listId}`);
+  const preparation = page.getByTestId('addon-preparation-tasks');
+  await expect(preparation.getByText('Affected items', { exact: true }).locator('..').locator('dd')).toHaveText('165');
+  await expect(preparation.getByText('Interval / SponsorBlock tasks', { exact: true }).locator('..').locator('dd')).toHaveText('165');
+  await expect(preparation.getByText('Subtitle tasks', { exact: true }).locator('..').locator('dd')).toHaveText('165');
+  await expect(preparation.getByText('Download tasks', { exact: true }).locator('..').locator('dd')).toHaveText('0');
+  await expect(preparation.getByText('Not queued', { exact: true }).locator('..').locator('dd')).toHaveText('330');
+  await expect(page.locator('[name="category"] option[value="unknown"]')).toHaveText('Unknown (1)');
+  // Stable durable states exercise Activity without racing or accelerating the worker.
+  const pendingItem = Number(sqlite(`SELECT MIN("Id") FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId} AND "Id"<>${unresolved};`));
+  sqlite(`INSERT INTO "AddonMediaListItemOperationJob"
+    ("AddonMediaListId","AddonMediaListItemId","Kind","SavedDraftRevision","InputJson","ContextFingerprint","State","NextEligibleAt","LeaseExpiresAt","CreatedAt","UpdatedAt")
+    SELECT ${listId},${pendingItem},2,"DraftRevision",'{}','activity-running',1,NULL,datetime('now','+1 hour'),datetime('now','-1 minute'),datetime('now') FROM "AddonMediaList" WHERE "Id"=${listId};
+    INSERT INTO "AddonMediaListItemOperationJob"
+    ("AddonMediaListId","AddonMediaListItemId","Kind","SavedDraftRevision","InputJson","ContextFingerprint","State","NextEligibleAt","CreatedAt","UpdatedAt")
+    SELECT ${listId},${pendingItem},3,"DraftRevision",'{}','activity-waiting',0,datetime('now','+1 hour'),datetime('now','-1 minute'),datetime('now') FROM "AddonMediaList" WHERE "Id"=${listId};`);
+  await page.locator('button[formaction$="/activity"]').first().click();
+  await hydrated(page);
+  const activity = page.getByTestId('addon-preparation-tasks');
+  await expect(activity.getByText('Affected items', { exact: true }).locator('..').locator('dd')).toHaveText('165');
+  await expect(activity.getByText('Running', { exact: true }).locator('..').locator('dd')).toHaveText('1');
+  await expect(activity.getByText('Waiting', { exact: true }).locator('..').locator('dd')).toHaveText('1');
+  await expect(activity.getByText('Not queued', { exact: true }).locator('..').locator('dd')).toHaveText('328');
+  expect(sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id"=${unresolved};`)).toBe('1');
 });

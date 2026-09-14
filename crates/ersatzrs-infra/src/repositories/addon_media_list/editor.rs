@@ -7,6 +7,68 @@ fn conflict(message: &str) -> RepositoryError {
     RepositoryError::Conflict(message.to_owned())
 }
 
+/// The same transaction snapshot is used at display and again under the save lock.
+pub(super) async fn playback_baseline(
+    tx: &mut sqlx::Transaction<'_, crate::db::Db>,
+    list_id: EntityId,
+) -> Result<(
+    i32,
+    ersatzrs_core::repositories::AddonMediaListPlaybackBaseline,
+)> {
+    use sha2::{Digest as _, Sha256};
+    use std::fmt::Write as _;
+    let row = sqlx::query(
+        r#"SELECT "list"."AddonId", "list"."DeliveryMode",
+        "list"."DeliveryCutoffAt", "list"."DeliveryCutoffIdentityId", "list"."DiskUsageWarningGb",
+        "addon"."ManifestJson", "addon"."PackageSha256", "addon"."ContentSha256" FROM "AddonMediaList" AS "list"
+        JOIN "AddonInstallation" AS "addon" ON "addon"."AddonId" = "list"."AddonId"
+        WHERE "list"."Id" = ? AND "addon"."Enabled" = 1"#,
+    )
+    .bind(list_id)
+    .fetch_optional(&mut **tx)
+    .await
+    .repository()?
+    .ok_or_else(|| conflict("the installed enabled add-on is unavailable"))?;
+    let options =
+        super::super::addon_media_list_lifecycle::load_draft_options_in_tx(tx, list_id, None)
+            .await?
+            .ok_or_else(|| conflict("the saved draft is unavailable"))?;
+    let manifest: String = row.try_get("ManifestJson").repository()?;
+    let identity = serde_json::to_vec(&(
+        manifest,
+        row.try_get::<String, _>("PackageSha256").repository()?,
+        row.try_get::<String, _>("ContentSha256").repository()?,
+    ))
+    .map_err(|_| conflict("invalid installed identity"))?;
+    let installation_digest =
+        Sha256::digest(&identity)
+            .iter()
+            .fold(String::with_capacity(64), |mut output, byte| {
+                let _ = write!(output, "{byte:02x}");
+                output
+            });
+    Ok((
+        options.draft_revision,
+        ersatzrs_core::repositories::AddonMediaListPlaybackBaseline {
+            addon_id: row.try_get("AddonId").repository()?,
+            installation_digest,
+            delivery_mode: crate::repositories::common::decode_enum_column(
+                "delivery mode",
+                &row,
+                "DeliveryMode",
+            )?,
+            cutoff_at: row.try_get("DeliveryCutoffAt").repository()?,
+            cutoff_identity_id: row.try_get("DeliveryCutoffIdentityId").repository()?,
+            disk_warning_gb: Some(
+                u32::try_from(row.try_get::<i64, _>("DiskUsageWarningGb").repository()?)
+                    .map_err(|_| conflict("invalid disk warning threshold"))?,
+            ),
+            schema: options.schema,
+            list_values: options.list_values,
+        },
+    ))
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "The named editing task and durable reconciliation commit in one transaction"
@@ -67,7 +129,64 @@ pub(super) async fn save(
             .fetch_one(&mut *tx)
             .await
             .repository()?;
-    if revision != save.expected_revision || current.draft_revision != revision {
+    if revision == i32::MAX {
+        return Err(conflict("the saved revision limit has been reached"));
+    }
+    if let Some(expected) = &save.playback_baseline {
+        if save.metadata.is_some()
+            || save.settings.is_some()
+            || !save.items.is_empty()
+            || save.delivery_mode.is_none()
+        {
+            return Err(conflict("playback baseline requires a playback-only task"));
+        }
+        crate::addon_media_list_sync::ensure_not_publishing_tx(&mut tx, save.list_id).await?;
+        let (_, persisted) = playback_baseline(&mut tx, save.list_id).await?;
+        if expected != &persisted {
+            return Err(conflict(
+                "playback settings changed; review the current revision",
+            ));
+        }
+        if save
+            .delivery_mode
+            .is_some_and(|mode| mode != ersatzrs_domain::AddonMediaListDeliveryMode::Stream)
+        {
+            #[derive(serde::Deserialize)]
+            struct Declaration {
+                #[serde(default)]
+                capabilities: Vec<ersatzrs_addon_contract::AddonCapability>,
+            }
+            let manifest: String = sqlx::query_scalar(r#"SELECT "ManifestJson" FROM "AddonInstallation" WHERE "AddonId" = ? AND "Enabled" = 1"#)
+                .bind(&persisted.addon_id).fetch_one(&mut *tx).await.repository()?;
+            let declaration: Declaration = serde_json::from_str(&manifest)
+                .map_err(|_| conflict("invalid installed capability declaration"))?;
+            for required in [
+                ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_PREPARE_V2,
+                ersatzrs_addon_contract::CAPABILITY_MEDIA_LIST_ITEM_RUNTIME_V1,
+            ] {
+                if !declaration
+                    .capabilities
+                    .iter()
+                    .any(|capability| capability.id == required)
+                {
+                    return Err(conflict(
+                        "the installed add-on does not support this delivery mode",
+                    ));
+                }
+            }
+        }
+        // Preparation used this revision. A second change must retry validation;
+        // never relabel a prepared option snapshot with the newest revision.
+        if save
+            .options
+            .as_ref()
+            .is_some_and(|options| options.draft_revision != revision)
+        {
+            return Err(conflict(
+                "option preparation changed; review the current revision",
+            ));
+        }
+    } else if revision != save.expected_revision || current.draft_revision != revision {
         return Err(conflict(
             "the saved draft changed; review the current revision",
         ));

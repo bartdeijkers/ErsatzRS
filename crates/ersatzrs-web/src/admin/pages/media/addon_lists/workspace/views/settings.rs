@@ -107,7 +107,7 @@ pub(super) fn playback(w: &Workspace) -> AnyView {
             let label=chrono::DateTime::parse_from_rfc3339(&cutoff).ok().and_then(|t|format_progress_timestamp(&t.with_timezone(&chrono::Utc).to_rfc3339())).unwrap_or_else(||cutoff.clone());
             view! {<p data-testid="addon-delivery-cutoff">{tr(TextKey::AddonDeliveryCutoff)}": "<time datetime=cutoff>{label}</time></p>}
         })}
-        <p hidden={w.form.delivery_mode==AddonMediaListDeliveryMode::DownloadAheadNewVideos}>{tr(TextKey::AddonDeliveryFreshCutoff)}</p>
+        <p class="fresh-cutoff-notice" hidden={w.form.delivery_mode==AddonMediaListDeliveryMode::DownloadAheadNewVideos}>{tr(TextKey::AddonDeliveryFreshCutoff)}</p>
         </section><section class="work-section"><h2>{tr(TextKey::AddonWorkspaceAccess)}</h2><div class="option-grid access-stack">{option_controls(w,Vec::new())}</div>
         </section><section class="work-section storage-settings"><h3>{tr(TextKey::AddonListDiskWarnings)}</h3>
         {match warning {Ok(n)=>input("disk_warning_gb",TextKey::AddonListDiskWarningGb,d.field("playback","disk_warning_gb",n.to_string()),"number"),Err(_)=>view! {<p role="alert">{tr(TextKey::AddonListDiskWarningFailed)}</p>}.into_any()}}
@@ -156,7 +156,7 @@ pub(super) fn option_views(w: &Workspace, ids: Vec<i64>, compact: bool) -> Optio
                 view! {<p>{tr(TextKey::AddonWorkspaceNoOptions)}</p>}.into_any()
             })
         }
-        Err(()) => {
+        Err(_) => {
             return OptionViews::empty(
                 view! {<p role="alert">{tr(TextKey::AddonOptionsConflict)}</p>}.into_any(),
             )
@@ -204,7 +204,7 @@ pub(super) fn option_views(w: &Workspace, ids: Vec<i64>, compact: bool) -> Optio
             let source = if editor.provisional {TextKey::ItemPackageDefault} else if field.rows.first().is_some_and(|r|r.before.is_some()) {TextKey::ItemOverride} else {TextKey::ItemFromList};
             let state_id = format!("{id}-state");
             let help_id = format!("{id}-help");
-            view! { <div class="access-setting option-setting" data-option-key=field.definition.key.clone()><label for=id.clone()>{localized(&field.definition.label)}</label>
+            view! { <div class="access-setting option-setting" data-option-key=field.definition.key.clone()>{if editor.provisional { ().into_any() } else { super::baseline(&name,&selected) }}<label for=id.clone()>{localized(&field.definition.label)}</label>
                 <select form=FORM id=id.clone() name=name disabled=!applicable aria-describedby=format!("{state_id} {help_id}")>{choices.into_iter().map(|(v,label)|view!{<option selected={selected==v} value=v>{label}</option>}).collect_view()}</select>
                 <p id=state_id class="option-effective">{tr(if compact && !editor.provisional {TextKey::ItemSavedValue} else {TextKey::EffectiveOptions})}": "{if mixed {tr(TextKey::AddonOptionsMixed).to_owned()}else{field.rows.first().map(|r|value_label(&r.effective_before,&field.definition)).unwrap_or_default()}}" · "{tr(if compact {source} else if field.rows.first().is_some_and(|r|r.before.is_some()){TextKey::AddonOptionsOverride}else{TextKey::AddonOptionsInherited})}</p>
                 <div id=help_id><p>{localized(&field.definition.description)}</p><p hidden=applicable>{tr(TextKey::AddonOptionsFiniteOnly)}</p></div>

@@ -61,13 +61,8 @@ pub async fn load_option_editor(
     state: &AppState,
     list_id: i64,
     ids: Vec<i64>,
-) -> Result<Option<OptionEditor>, ()> {
-    let Some(editor) = state
-        .application
-        .addon_list_option_editor(list_id)
-        .await
-        .map_err(|_| ())?
-    else {
+) -> ersatzrs_app::Result<Option<OptionEditor>> {
+    let Some(editor) = state.application.addon_list_option_editor(list_id).await? else {
         return Ok(None);
     };
     let access = if editor.supports_access_check && ids.len() == 1 {
@@ -94,8 +89,7 @@ pub async fn load_option_editor(
         state
             .application
             .list_addon_media_list_items(list_id)
-            .await
-            .map_err(|_| ())?
+            .await?
             .into_iter()
             .filter(|item| selected_ids.contains(&item.id))
             .map(|item| (item.id, item.display_title))
@@ -131,14 +125,15 @@ pub async fn load_option_editor(
         // The application owns effective-value resolution and applicability.
         let mut probe = edit.clone();
         probe.value = Some(
-            serde_json::from_value(serde_json::to_value(&definition.default).map_err(|_| ())?)
-                .map_err(|_| ())?,
+            serde_json::from_value(
+                serde_json::to_value(&definition.default).map_err(|_| invalid_option_schema())?,
+            )
+            .map_err(|_| invalid_option_schema())?,
         );
         let preview = state
             .application
             .preview_addon_list_option_edit(probe)
-            .await
-            .map_err(|_| ())?;
+            .await?;
         fields.push(OptionField {
             definition,
             edit,
@@ -155,6 +150,13 @@ pub async fn load_option_editor(
         titles,
         fields,
     }))
+}
+
+fn invalid_option_schema() -> ersatzrs_app::ApplicationError {
+    ersatzrs_app::ApplicationError::InvalidData {
+        kind: "add-on option schema",
+        value: "unsupported default value".into(),
+    }
 }
 
 #[cfg(test)]

@@ -452,10 +452,18 @@ impl AddonRuntime for NativeAddonRuntime {
             .map_err(runtime_error)
     }
 
-    async fn install_repository_bundle(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError> {
-        install_local_repository_bundle(&self.pool, archive)
+    async fn install_repository_bundle(
+        &self,
+        archive: Vec<u8>,
+    ) -> Result<ersatzrs_app::ports::AddonRepositoryImportRead, AddonRuntimeError> {
+        let receipt = install_local_repository_bundle(&self.pool, archive)
             .await
-            .map_err(runtime_error)
+            .map_err(runtime_error)?;
+        Ok(ersatzrs_app::ports::AddonRepositoryImportRead {
+            id: receipt.id,
+            name: receipt.name,
+            available_count: receipt.available_count,
+        })
     }
 
     async fn save_setting(&self, setting: AddonSettingEdit) -> Result<(), AddonRuntimeError> {

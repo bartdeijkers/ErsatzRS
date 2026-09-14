@@ -43,3 +43,27 @@ mod tests {
         assert!(serde_json::from_str::<AddonMediaListDeliveryMode>("\"unsupported\"").is_err());
     }
 }
+
+/// Read-only preparation task counts, distinct from affected media items.
+/// Aggregate legacy readiness counters remain available to older clients.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AddonMediaListPreparationSummary {
+    pub interval_tasks: u64,
+    pub download_tasks: u64,
+    pub subtitle_tasks: u64,
+    pub affected_items: u64,
+    pub completed_tasks: u64,
+    pub queued_tasks: u64,
+    pub running_tasks: u64,
+    pub waiting_tasks: u64,
+    pub failed_tasks: u64,
+    pub unqueued_tasks: u64,
+    pub started_at: Option<String>,
+    /// Latest durable job activity, including heartbeats; not byte progress.
+    pub last_activity_at: Option<String>,
+    /// Latest completed required task; never inferred from a worker heartbeat.
+    pub last_progress_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub retry_at: Option<String>,
+}

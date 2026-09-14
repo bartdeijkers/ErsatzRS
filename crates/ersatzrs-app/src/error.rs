@@ -43,6 +43,7 @@ impl From<RepositoryError> for ApplicationError {
         match error {
             RepositoryError::NotFound { kind, id } => Self::NotFound { kind, id },
             RepositoryError::Conflict(message) => Self::Conflict(message),
+            RepositoryError::Validation { field, message } => Self::Validation { field, message },
             RepositoryError::Decode { kind, value } => Self::InvalidData { kind, value },
             RepositoryError::Unavailable { operation, message } => {
                 Self::Unavailable { operation, message }

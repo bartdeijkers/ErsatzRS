@@ -26,6 +26,20 @@ release section when tagging a release.
 
 ### Fixed
 
+- Keep add-on installation dialogs usable in short viewports; distinguish adding
+  a repository from installing an add-on and link successful imports to their
+  repository offers. Explain permissions and prioritize first-time setup.
+- Link item publication blockers to review, separate unknown availability, and
+  report preparation categories, task/item totals and durable activity separately.
+- Preserve complete filter labels on narrow screens, show unknown durations and
+  stable thumbnail fallbacks, and limit fresh-cutoff notices to a new selection.
+  Display save status from native form input; remove ignored Leptos metadata.
+
+- Allow Playback & access saves after metadata-only draft updates when the saved
+  task baseline still matches, while retaining conflicts for competing playback
+  edits. Preserve editor input when ancillary reads fail and report save failures
+  by category.
+
 - Bind scanned items before a new add-on list's first typed-media publication,
   prevent parent metadata edits from being silently bypassed when storage paths differ,
   and distinguish a failed publication with successful recovery from a

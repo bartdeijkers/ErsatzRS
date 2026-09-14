@@ -172,7 +172,7 @@ impl ApplicationServices {
     pub async fn install_addon_repository_bundle(
         &self,
         archive: Vec<u8>,
-    ) -> std::result::Result<(), AddonRuntimeError> {
+    ) -> std::result::Result<ports::AddonRepositoryImportRead, AddonRuntimeError> {
         self.ports.addons().install_repository_bundle(archive).await
     }
 

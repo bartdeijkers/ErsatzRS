@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const DATABASE_PATH = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 const APP_STATE_DIR = process.env.E2E_APP_STATE_DIR;
@@ -278,7 +279,7 @@ test('shows local repository sources without remote catalog controls', async ({ 
   await expect(row).toContainText(FIXTURE_REPOSITORY_ID);
   await expect(row).toContainText('e2e-addon-repository');
   await expect(row).toContainText('Git checkout');
-  await expect(page.getByRole('button', { name: 'Add repository' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Add repository', exact: true })).toHaveCount(1);
   await expect(page.getByTestId('addon-repository-editor')).toHaveCount(0);
   await expect(page.getByText('Add-on package', { exact: true })).toBeVisible();
   await expect(page.getByText('Repository package', { exact: true })).toBeVisible();
@@ -440,3 +441,105 @@ test('opens the canonical detail page and confirms unknown sources', async ({ pa
     })
     .toEqual({ Value: 'true' });
 });
+
+for (const viewport of [{ width: 800, height: 513 }, { width: 320, height: 800 }]) {
+  test(`permission dialog keeps keyboard actions reachable at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto(`/settings/addons/${FIXTURE_ADDON_ID}`);
+    await waitForHydration(page);
+    const trigger = page.getByRole('button', { name: 'Enable', exact: true });
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByText('Technical details', { exact: true }).click();
+    const bounds = await dialog.boundingBox();
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
+    const confirm = dialog.getByRole('button', { name: 'Confirm', exact: true });
+    await expect(confirm).toBeInViewport();
+    await confirm.focus();
+    await page.keyboard.press('Tab');
+    expect(await dialog.evaluate(element => element.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+}
+
+for (const viewport of [{ width: 800, height: 513 }, { width: 320, height: 800 }]) {
+  test(`uploads a repository then explicitly installs and enables at ${viewport.width}x${viewport.height}`, async ({ page }, info) => {
+    test.setTimeout(120000);
+    const addonId = `org.example.dogfood.${info.project.name}-${viewport.width}`;
+    const repoId = `${addonId}.repository`;
+    const zip = info.outputPath('repository.zip');
+    mkdirSync(info.outputDir, { recursive: true });
+    const addonToml = `manifest_version = 1
+id = "${addonId}"
+version = "1.0.0"
+license = "MIT"
+source_url = "https://example.invalid/source"
+host_version = "*"
+[name]
+"en-US" = "Dogfood fixture"
+[summary]
+"en-US" = "Synthetic installation regression"
+[[capabilities]]
+id = "addon.check.v1"
+[entrypoints.any]
+path = "addon.sh"
+kind = "posix_shell"
+[entrypoints.win-x64]
+path = "addon.cmd"
+kind = "windows_batch"
+[permissions]
+network_hosts = ["example.invalid"]
+media_read = false
+managed_ffmpeg = false
+external_commands = []
+`;
+    const files = {
+      'repository.toml': `schema_version = 1\nid = "${repoId}"\nname = "Dogfood repository"\n[description]\n"en-US" = "Synthetic repository"\n`,
+      [`addons/${addonId}/addon.toml`]: addonToml,
+      [`addons/${addonId}/addon.sh`]: `#!/bin/sh\nprintf '%s\\n' '{"status":"ready","code":"ready","message":"Fixture ready"}'\n`,
+      [`addons/${addonId}/addon.cmd`]: `@echo off\r\necho {"status":"ready","code":"ready","message":"Fixture ready"}\r\n`,
+    };
+    execFileSync(process.platform === 'win32' ? 'python' : 'python3', ['-c',
+      'import json,sys,zipfile; z=zipfile.ZipFile(sys.argv[1],"w"); [z.writestr(k,v) for k,v in json.load(sys.stdin).items()]; z.close()', zip],
+      { input: JSON.stringify(files) });
+    await page.setViewportSize(viewport);
+    await page.goto('/settings/addons?view=sources');
+    await waitForHydration(page);
+    await page.getByRole('button', { name: 'Enable', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(page.getByLabel('Repository package', { exact: true })).toBeEnabled();
+    await page.getByLabel('Repository package', { exact: true }).setInputFiles(zip);
+    await page.getByRole('button', { name: 'Add repository', exact: true }).click();
+    const feedback = page.locator('#repository-package-feedback');
+    await expect(feedback).toContainText('Dogfood repository');
+    await expect(feedback).toContainText('1');
+    const installed = () => {
+      const db = openDatabase();
+      try { return db.prepare('SELECT Enabled FROM AddonInstallation WHERE AddonId=?').get(addonId); }
+      finally { db.close(); }
+    };
+    expect(installed()).toBeUndefined();
+    await feedback.getByRole('link').click();
+    await waitForHydration(page);
+    await page.getByTestId('available-addon-row').filter({ hasText: 'Dogfood fixture' }).getByRole('link').click();
+    await waitForHydration(page);
+    const install = page.getByRole('button', { name: 'Install', exact: true });
+    await install.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', { name: 'Confirm', exact: true })).toBeInViewport();
+    await dialog.getByRole('button', { name: 'Confirm', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect.poll(installed).toEqual({ Enabled: 0 });
+    await page.reload();
+    await waitForHydration(page);
+    await page.getByRole('button', { name: 'Enable', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect.poll(installed).toEqual({ Enabled: 1 });
+  });
+}

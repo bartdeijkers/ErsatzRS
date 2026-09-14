@@ -158,7 +158,7 @@ pub async fn edit(State(state): State<AppState>, Form(form): Form<OptionScopeFor
         Ok(None) => respond(&state, form.list_id, StatusCode::OK, || {
             view! { <p>{tr(TextKey::AddonOptionsNone)}</p> }.into_any()
         }),
-        Err(()) => failed(&state, form.list_id),
+        Err(_) => failed(&state, form.list_id),
     }
 }
 

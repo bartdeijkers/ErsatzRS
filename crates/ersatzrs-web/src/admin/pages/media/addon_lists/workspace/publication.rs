@@ -135,6 +135,9 @@ fn preparation_retry(readiness: &AddonMediaListPublicationReadiness) -> bool {
 /// Zero blockers only means the saved metadata is publishable. While media must
 /// still be prepared, the heading says so instead of "ready to publish".
 fn state_key(readiness: &AddonMediaListPublicationReadiness) -> TextKey {
+    if readiness.saved_revision < 0 {
+        return TextKey::AddonWorkspaceLoadIncomplete;
+    }
     if restored_failure(readiness) {
         return TextKey::AddonWorkspacePublicationFailed;
     }
@@ -297,11 +300,33 @@ fn watch_readiness(list_id: i64, readiness: RwSignal<AddonMediaListPublicationRe
     }
 }
 
+fn preparation_view(readiness: RwSignal<AddonMediaListPublicationReadiness>) -> impl IntoView {
+    use super::super::{elapsed_between, format_progress_timestamp};
+    view! {
+        <section class="settings-section" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0)>
+            <h3>{tr(TextKey::PreparationTasks)}</h3>
+            <dl class="facts">
+                {[(TextKey::PreparationAffectedItems,0),(TextKey::PreparationIntervals,1),(TextKey::PreparationDownloads,2),(TextKey::PreparationSubtitles,3),(TextKey::PreparationQueued,4),(TextKey::PreparationRunning,5),(TextKey::PreparationWaiting,6),(TextKey::Completed,7),(TextKey::Failed,8),(TextKey::PreparationNotQueued,9)].into_iter().map(|(key,index)| view! {
+                    <div><dt>{tr(key)}</dt><dd>{move || readiness.with(|r| {
+                        let p=&r.preparation;
+                        [p.affected_items,p.interval_tasks,p.download_tasks,p.subtitle_tasks,p.queued_tasks,p.running_tasks,p.waiting_tasks,p.completed_tasks,p.failed_tasks,p.unqueued_tasks][index]
+                    })}</dd></div>
+                }).collect_view()}
+                <div><dt>{tr(TextKey::ElapsedTime)}</dt><dd>{move || readiness.with(|r| r.preparation.started_at.as_deref().and_then(|at| elapsed_between(at,r.preparation.completed_at.as_deref())).unwrap_or_else(||tr(TextKey::NotAvailable).into()))}</dd></div>
+                <div><dt>{tr(TextKey::LastActivity)}</dt><dd>{move || readiness.with(|r| r.preparation.last_activity_at.as_deref().and_then(format_progress_timestamp).unwrap_or_else(||tr(TextKey::NotAvailable).into()))}</dd></div>
+                <div><dt>{tr(TextKey::LastProgress)}</dt><dd>{move || readiness.with(|r| r.preparation.last_progress_at.as_deref().and_then(format_progress_timestamp).unwrap_or_else(||tr(TextKey::NotAvailable).into()))}</dd></div>
+                <div hidden=move || readiness.with(|r| r.preparation.retry_at.is_none())><dt>{tr(TextKey::RefreshRetryAt)}</dt><dd>{move || readiness.with(|r| r.preparation.retry_at.as_deref().and_then(format_progress_timestamp).unwrap_or_default())}</dd></div>
+            </dl>
+        </section>
+    }
+}
+
 fn overview_view(
     list_id: i64,
     readiness: RwSignal<AddonMediaListPublicationReadiness>,
 ) -> impl IntoView {
     view! {
+        {preparation_view(readiness)}
         <div class="publication-overview">
             <div class="publication-state">
                 <strong>{move || readiness.with(|r| tr(state_key(r)))}</strong>
@@ -342,7 +367,16 @@ fn overview_view(
             </button>
         </div>
         <For
-            each=move || readiness.with(|r| publication_blocker_groups(&r.blockers))
+            each=move || readiness.with(|r| r.blockers.iter().filter_map(|blocker| blocker.item_id.map(|id| (id, blocker.clone()))).collect::<Vec<_>>())
+            key=|(id, blocker)| format!("{id}:{:?}", blocker.kind)
+            children=move |(id, blocker)| view! {
+                <p class="notice error"><button class="button secondary" form=FORM name="intent" value="navigate" formaction=format!("/media/addon-lists/{list_id}/items/{id}") formnovalidate>
+                    {format!("{}: {}", blocker.item_title.unwrap_or_else(|| tr(TextKey::Items).to_owned()), tr(super::super::publication_blocker_text_key(blocker.kind)))}
+                </button></p>
+            }
+        />
+        <For
+            each=move || readiness.with(|r| publication_blocker_groups(&r.blockers.iter().filter(|blocker| blocker.item_id.is_none()).cloned().collect::<Vec<_>>()))
             key=|group| format!("{:?}:{}", group.kind, group.item_scoped)
             children=move |group| view! {
                 <p class="notice error">{publication_blocker_group_label(&group)}</p>
@@ -359,7 +393,7 @@ pub fn PublicationRecoveryIsland(
 ) -> impl IntoView {
     let readiness = RwSignal::new(initial);
     watch_readiness(list_id, readiness);
-    view! { <PublicationRecovery readiness list_id/> }
+    view! { <PublicationRecovery readiness list_id/>{preparation_view(readiness)} }
 }
 
 #[component]
@@ -438,6 +472,7 @@ mod tests {
     fn publication_poll_waits_for_background_resolution_of_blockers() {
         let mut readiness = AddonMediaListPublicationReadiness {
             blockers: vec![AddonMediaListPublicationBlocker {
+                item_id: None,
                 kind: AddonMediaListPublicationBlockerKind::ItemTitleMissing,
                 item_rank: Some(0),
                 item_title: None,
@@ -485,6 +520,7 @@ mod tests {
         assert!(!action_enabled(&readiness));
 
         readiness.blockers.push(AddonMediaListPublicationBlocker {
+            item_id: None,
             kind: AddonMediaListPublicationBlockerKind::NoIncludedItems,
             item_rank: None,
             item_title: None,

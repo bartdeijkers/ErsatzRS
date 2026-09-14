@@ -54,3 +54,26 @@ test('locked workspace reflows in both themes from mobile to 4K', async ({page},
   await page.evaluate(()=>{document.body.style.zoom='2';});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth+1)).toBe(true);
 });
+
+test('long Dutch and German selected filters stay readable at 320 pixels', async ({ page }, info) => {
+  test.skip(!process.env.E2E_DB_PATH, 'An isolated E2E database is required');
+  const seed = seedMetadataEditor(info);
+  await page.setViewportSize({ width: 320, height: 800 });
+  for (const language of ['nl', 'de-de']) {
+    for (const dark of [false, true]) {
+      await page.request.post('/api/settings/ui/save', { form: { is_dark_mode: String(dark), language }, maxRedirects: 0 });
+      await page.goto(`/media/addon-lists/${seed.listId}`);
+      await page.waitForFunction(() => (window as any).__ersatzrs_hydrated === true);
+      const longestValue = await page.locator('[name="category"] option').evaluateAll(options =>
+        (options.reduce((a, b) => (b.textContent?.length ?? 0) > (a.textContent?.length ?? 0) ? b : a) as HTMLOptionElement).value);
+      await page.locator('[name="category"]').selectOption(longestValue);
+      const selected = await page.locator('[name="category"] option:checked').textContent();
+      await expect(page.locator('.selected-filter-label')).toHaveText(selected!);
+      await expect(page.locator('.selected-filter-label')).toBeVisible();
+      const box = await page.locator('.selected-filter-label').boundingBox();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= 321)).toBe(true);
+      await page.screenshot({ path: info.outputPath(`filter-${language}-${dark ? 'dark' : 'light'}.png`), fullPage: true });
+    }
+  }
+});

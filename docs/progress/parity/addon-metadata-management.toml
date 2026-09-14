@@ -832,3 +832,75 @@ process-group regressions pass (nextest fdd7200b-8c91-4fed-9bb3-27cd3480ee4e),
 including fixed cadences, cold start, backoff, provider pacing and no-reimport.
 '''
 resolution  = 'Official yt-dlp 0.10.2 supplies the accepted bounded-window probe through the existing AMM-L-01 scheduler. No scheduler, migration, fixed-cadence change or milestone restructuring was introduced. Integrated release/platform closeout remains AMM-N-03.'
+
+[[debt]]
+id          = 'dogfood-d04-publication-blocker-navigation'
+description = 'Item publication blockers need direct editor links and a readiness-derived Publication blockers filter.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: tests/e2e/addon-list-workspace.spec.ts passes readiness-derived blocker filtering and direct native item-editor navigation in Chromium/Firefox with and without JavaScript. Unresolved entries remain included until an explicit edit and Save; repository publication restriction tests pass."
+
+[[debt]]
+id          = 'dogfood-d05-unknown-availability'
+description = 'Draft summaries and filters conflate Unknown with Unavailable; separate reporting without relaxing publication restrictions.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: Unknown has separate summary/filter IDs and counts from Unavailable. Both-browser native/hydrated blocker scenarios prove Unknown (1), Unavailable (0), unknown duration and unchanged inclusion; typed-access restriction repository coverage remains green."
+
+[[debt]]
+id          = 'dogfood-d06-access-outcome-guidance'
+description = 'Access failures need outcome-specific localized next actions without provider stderr or sensitive source data.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: exhaustive closed-outcome mapping and all nine translations provide profile-unavailable, locked-profile, decryption and provider-restriction next actions; unclassified failure explicitly says its cause is unknown. No raw provider diagnostic is rendered. Final web parity/localization tests and source review pass."
+
+[[debt]]
+id          = 'dogfood-d07-preparation-task-progress'
+description = 'Preparation aggregates conflate tasks and media items and omit category/activity progress; expose interval, download and subtitle work separately.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: preparation projection regression proves 167 tasks across 165 affected items in a synthetic 166-entry list, including completed/running/waiting/failed/queued states and current-revision isolation. tests/e2e/addon-walkthrough-fixes.spec.ts passes 330 interval/subtitle tasks across 165 items, one unresolved included entry, and Activity running/waiting counts in both browsers. Heartbeats remain activity, successful required tasks are progress, and legacy aggregate fields remain compatible."
+
+[[debt]]
+id          = 'dogfood-d08-responsive-filter-labels'
+description = 'Filter and search controls clip selected labels in narrow viewports and long translations.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: tests/e2e/addon-list-workspace-visual.spec.ts passes both themes, seven widths from 320 to 3840, 200% zoom, contrast/reflow/target checks, and complete Dutch/German selected labels at 320 pixels in both browsers. Filter/search controls stack at the existing narrow breakpoint."
+
+[[debt]]
+id          = 'dogfood-d10-unknown-duration-and-thumbnail'
+description = 'Missing provider duration can be converted to zero and failed thumbnails lack a stable fallback; preserve unknown duration and genuine numeric zero.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: sibling yt-dlp 0.11.2 has a passing discovery_preserves_unknown_duration regression for missing/null/blank/invalid input and genuine numeric/string zero. Both-browser native/hydrated item scenarios show Unknown duration. Source and visual review verify the stable icon underneath a failed decorative thumbnail background, including without JavaScript. No protocol change."
+
+[[debt]]
+id          = 'dogfood-d11-playback-save-baseline'
+description = 'Metadata-only draft revision movement rejects Playback and access saves; preserve genuine task conflicts with a complete transactional baseline.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: ADR 0091 addendum and repository regressions prove metadata-only revision tolerance, actual committed revision, schema/identity/cutoff/ownership and competing-edit conflicts, conservative legacy forms, atomic write failure and publication isolation. Option-service tests pass. Both-browser native/hydrated Save and exact sparse-option Undo after metadata progress pass in the final 16-case closeout."
+
+[[debt]]
+id          = 'dogfood-d12-resilient-editor-loading'
+description = 'Ancillary editor read failures replace the form and obscure recovery; retain input and retry a moving revision once.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: controlled concurrent-read regressions prove one retry, retained form after repeated movement or failed retry, recoverable status and disabled uncertain actions. Ancillary failures no longer replace the form. Final web parity gate passes all 655 tests, architecture/hydration checks and Clippy; submission-time publication checks remain authoritative."
+
+[[debt]]
+id          = 'dogfood-d13-playback-feedback-and-build-metadata'
+description = 'Fresh-cutoff and saved-state feedback are misleading and ignored Leptos env/watch metadata produces noise; correct the existing surfaces without changing defaults.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: final Chromium/Firefox closeout proves Saved/Unsaved feedback, fresh-cutoff notice only for a new selection, native no-JS Save/Undo and responsive 1001-item forms. Display-only comparison is linear and its served bytes match source. Ignored Leptos env/watch metadata is removed; run.sh dev watch behavior is unchanged. The transitive future-compatibility warning remains separately tracked."

@@ -21,6 +21,7 @@ use detail::{activity, artwork, item};
 use settings::{metadata_fields, option_controls, playback, settings};
 
 pub(super) struct Workspace {
+    pub load_status: super::super::EditorLoadStatus,
     pub form: AddonMediaListForm,
     pub items: Vec<AddonMediaListItemRow>,
     pub readiness: AddonMediaListPublicationReadiness,
@@ -127,15 +128,63 @@ pub(super) fn render(w: &Workspace) -> AnyView {
             {w.submission.arrival_error.map(|key| view! { <div class="notice error" role="alert" data-testid="addon-list-arrival-error"><p>{tr(key)}</p><button class="button secondary" form=FORM name="intent" value="navigate" formaction=format!("{base}/settings") formnovalidate>{tr(TextKey::AddonWorkspaceSettings)}</button></div> })}
             {w.submission.error.clone().map(|error| view! { <div class="notice error" role="alert" tabindex="-1" autofocus id="workspace-errors"><strong>{tr(TextKey::AddonWorkspaceRetained)}</strong><p>{error}</p><ul>{error_links}</ul>{button("review-current",TextKey::AddonWorkspaceReviewLatest,false)}</div> })}
             {w.submission.notice.map(|key| view! { <p class="notice success" role="status">{tr(key)}</p> })}
+            <p data-workspace-save-status data-retained=retained_edits(w).to_string() data-saved=tr(TextKey::Saved) data-unsaved=tr(TextKey::UnsavedChanges) role="status">{tr(if retained_edits(w) {TextKey::UnsavedChanges} else {TextKey::Saved})}</p>
+            <script src="/public/workspace-draft-status.js" defer></script>
+
             {detail::confirmation(w)}
             {w.submission.draft.option_undo.as_ref().map(|_|button("undo-options",TextKey::UndoLastChange,false))}
-            {task_view}
+            <fieldset class="workspace-task-fields" disabled=w.load_status.disabled_tasks.contains(w.task.split(':').next().unwrap_or("items"))>{task_view}</fieldset>
         </div>
     }.into_any()
 }
 
+fn retained_edits(w: &Workspace) -> bool {
+    w.submission
+        .draft
+        .groups
+        .get(&w.task)
+        .is_some_and(|fields| {
+            fields.iter().any(|(name, value)| {
+                if name == "delivery_mode" {
+                    return *value != self::value(w.form.delivery_mode);
+                }
+                if name == "disk_warning_gb" {
+                    return w
+                        .submission
+                        .draft
+                        .playback_baseline
+                        .as_ref()
+                        .and_then(|baseline| baseline.disk_warning_gb)
+                        .is_none_or(|saved| *value != saved.to_string());
+                }
+                name.starts_with("metadata_") && name != "metadata_etag"
+                    || name.starts_with("option_") && name != "option_targets"
+                    || name.starts_with("season_")
+                    || name.starts_with("episode_")
+                    || name.starts_with("included_")
+                    || name.starts_with("content_kind_")
+                    || matches!(
+                        name.as_str(),
+                        "season"
+                            | "episode"
+                            | "included"
+                            | "content_kind"
+                            | "liveness"
+                            | "role"
+                            | "chapter_input"
+                            | "refresh_cadence"
+                            | "refresh_publication_policy"
+                            | "generate_playlist"
+                            | "presentation_kind"
+                            | "load_item_details"
+                    )
+            })
+        })
+}
+
 fn baseline(name: &str, displayed: &str) -> AnyView {
-    let persistent = name.starts_with("metadata_")
+    let persistent = name.starts_with("option_")
+        || name.starts_with("metadata_")
         || name.starts_with("season_")
         || name.starts_with("episode_")
         || matches!(
@@ -196,7 +245,14 @@ fn select_disabled(
     disabled: Option<&str>,
 ) -> AnyView {
     let id = format!("workspace-{name}");
-    view! { <div class="field">{baseline(name,current)}<label for=id.clone()>{tr(label)}</label><select id=id.clone() name=name.to_owned() form=FORM>{choices.into_iter().map(|(value,label)| view! { <option selected={value == current} disabled=disabled.is_some_and(|v|v==value) value=value>{label}</option> }).collect_view()}</select></div> }.into_any()
+    let selected_label = (name == "category").then(|| {
+        choices
+            .iter()
+            .find(|(value, _)| value == current)
+            .map(|(_, label)| label.clone())
+            .unwrap_or_default()
+    });
+    view! { <div class="field">{baseline(name,current)}<label for=id.clone()>{tr(label)}</label><select id=id.clone() name=name.to_owned() form=FORM>{choices.into_iter().map(|(value,label)| view! { <option selected={value == current} disabled=disabled.is_some_and(|v|v==value) value=value>{label}</option> }).collect_view()}</select>{selected_label.map(|label| view! { <output class="selected-filter-label" for=id>{label}</output> })}</div> }.into_any()
 }
 
 fn button(intent: &str, label: TextKey, primary: bool) -> AnyView {
@@ -317,13 +373,13 @@ fn item_row(w: &Workspace, row: &AddonMediaListItemRow) -> AnyView {
     view!{<li class="episode-row" id=format!("item-{id}")>
         <input type="hidden" form=FORM name=format!("review_snapshot_{id}") value=super::review_snapshot(row)/>
         <label class="row-pick"><input type="hidden" form=FORM name=select_name.clone() value="false"/><input type="checkbox" form=FORM name=select_name value="true" checked=d.selected.contains(&id) aria-label=format!("{}: {title}",tr(TextKey::AddonWorkspaceSelection))/><span aria-hidden="true">{format!("{:02}",rank+1)}</span></label>
-        <div class="episode-identity">{row.thumbnail_url.clone().map_or_else(||view!{<span class="row-art-placeholder" style=icon_style(presentation_icon(w.form.presentation_kind),"2rem") aria-hidden="true"></span>}.into_any(),|url|view!{<img src=url alt="" loading="lazy"/>}.into_any())}<div>
+        <div class="episode-identity"><span class="row-art-placeholder" aria-hidden="true"><span style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span><span class="row-thumbnail" style:background-image=row.thumbnail_url.as_ref().map(|url| format!("url({})",serde_json::to_string(url).expect("thumbnail URL serializes"))).unwrap_or_default()></span></span><div>
             <button class="button row-title" form=FORM name="intent" value="navigate" formaction=format!("/media/addon-lists/{}/items/{id}",w.form.id) formnovalidate>{title}</button>
             <small>{tr(if d.field("items", &format!("included_{id}"), row.included.to_string()) == "true" {TextKey::IncludeInPublication} else {TextKey::AddonWorkspaceExcluded})}</small>
             {(row.metadata_conflict_count>0 || row.liveness_conflict).then(||view!{<small>{tr(TextKey::Conflicts)}</small>})}
         </div></div>
         <div class="episode-evidence"><div class="airdate"><span class="mobile-column" aria-hidden="true">{tr(TextKey::FirstAired)}</span><span class="sr-only">{tr(TextKey::FirstAired)}": "</span><time datetime=row.first_aired.clone()>{row.first_aired.clone().unwrap_or_else(||tr(TextKey::UnknownAvailability).into())}</time>{gap.map(|days|view!{<small class="gap-note">{format!("{days} d")}</small>})}</div>
-        <div class="runtime"><span class="mobile-column" aria-hidden="true">{tr(TextKey::Duration)}</span><span class="sr-only">{tr(TextKey::Duration)}": "</span><span>{row.duration_seconds.map_or_else(||"—".into(),|n|format!("{}:{:02}",n/60,n%60))}</span>{row.duration_seconds.is_none().then(||view!{<small>{tr(TextKey::UnknownAvailability)}</small>})}</div></div>
+        <div class="runtime"><span class="mobile-column" aria-hidden="true">{tr(TextKey::Duration)}</span><span class="sr-only">{tr(TextKey::Duration)}": "</span><span>{row.duration_seconds.map_or_else(||tr(TextKey::UnknownAvailability).into(),|n|format!("{}:{:02}",n/60,n%60))}</span></div></div>
         <div class="row-numbering"><div class="inline-pair">
             {[("season",TextKey::Season,row.season),("episode",TextKey::Episode,row.episode)].into_iter().map(|(name,key,saved)|view!{<label>{baseline(&format!("{name}_{id}"),&d.field("items",&format!("{name}_{id}"),saved.map(|n|n.to_string()).unwrap_or_default()))}<span aria-hidden="true">{tr(key).chars().next().map(|c|c.to_string())}</span><input id=format!("workspace-{name}_{id}") type="number" min="0" max="2147483647" form=FORM name=format!("{name}_{id}") value=d.field("items",&format!("{name}_{id}"),saved.map(|n|n.to_string()).unwrap_or_default()) placeholder="—" aria-invalid=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("true") aria-describedby=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("workspace-errors") aria-label=format!("{}: {}",tr(key),row.display_title)/></label>}).collect_view()}
         </div><small>{tr(TextKey::ItemSavedValue)}": "{match (row.season,row.episode){(Some(s),Some(e))=>format!("S{s:02}E{e:02}"),_=>tr(TextKey::Unnumbered).into()}}</small></div>
@@ -381,6 +437,8 @@ fn category_choices(w: &Workspace) -> Vec<(String, String)> {
     [
         ("", TextKey::All),
         ("review", TextKey::NeedReview),
+        ("blockers", TextKey::PublicationBlockers),
+        ("unknown", TextKey::UnknownAvailability),
         ("unnumbered", TextKey::Unnumbered),
         ("added", TextKey::Added),
         ("metadata_changed", TextKey::MetadataChanges),

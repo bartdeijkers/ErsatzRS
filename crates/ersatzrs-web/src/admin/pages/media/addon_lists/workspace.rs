@@ -26,10 +26,16 @@ pub const FORM: &str = "addon-list-workspace";
 pub struct Draft {
     pub list_id: i64,
     pub revision: i32,
+    #[cfg(feature = "ssr")]
+    #[serde(default)]
+    pub playback_baseline: Option<ersatzrs_core::repositories::AddonMediaListPlaybackBaseline>,
     pub groups: BTreeMap<String, BTreeMap<String, String>>,
     pub selected: BTreeSet<i64>,
     pub query: String,
     pub category: String,
+    /// Derived from current authoritative readiness; never accepted from a POST.
+    #[serde(skip)]
+    pub publication_blocker_items: BTreeSet<i64>,
     pub page: usize,
     pub page_size: usize,
     #[serde(default)]
@@ -134,7 +140,7 @@ pub fn AddonListWorkspacePage() -> impl IntoView {
                 .zip(q.get("compare_right").and_then(|s| s.parse().ok()))
         });
         super::admin_result_view(super::load_addon_media_list_editor_initial(id, comparison), move |initial| {
-            let (form, items, readiness, history, metadata, providers, source, diff, impact, revisions, comparison) = initial;
+            let (form, items, readiness, history, metadata, providers, source, diff, impact, revisions, comparison, load_status) = initial;
             let Some(form) = form else {
                 return view! { <p role="alert">{super::tr(super::TextKey::AddonMediaListNotFound)}</p> }.into_any();
             };
@@ -152,7 +158,21 @@ pub fn AddonListWorkspacePage() -> impl IntoView {
                 ..Submission::default()
             });
             if submission.draft.list_id != id { submission = Submission { draft: Draft { list_id:id, revision:form.draft_revision, page_size:10, ..Draft::default() }, ..Submission::default() }; }
-            views::render(&views::Workspace { form, items, readiness, history, metadata, providers, source, diff, impact, revisions, comparison, submission, task, item_id })
+            if !submission.draft.groups.contains_key("playback") {
+                let state = expect_context::<crate::host::state::AppState>();
+                let baseline = tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(
+                    state.application.ports().addon_media_lists().playback_baseline(id)));
+                if let Ok((revision, baseline)) = baseline {
+                    if revision == form.draft_revision {
+                        submission.draft.playback_baseline = Some(baseline);
+                    }
+                }
+            }
+            if load_status.incomplete && submission.error.is_none() {
+                submission.error = Some(super::tr(super::TextKey::AddonWorkspaceLoadIncomplete).to_owned());
+            }
+            submission.draft.publication_blocker_items = readiness.blockers.iter().filter_map(|blocker| blocker.item_id).collect();
+            views::render(&views::Workspace { load_status, form, items, readiness, history, metadata, providers, source, diff, impact, revisions, comparison, submission, task, item_id })
         }).into_any()
     }
     #[cfg(not(feature = "ssr"))]
@@ -176,6 +196,8 @@ fn matches_row(
         && match d.category.as_str() {
             "" => true,
             "review" => super::item_needs_review(row, presentation),
+            "blockers" => d.publication_blocker_items.contains(&row.id),
+            "unknown" => row.availability == super::AddonMediaListItemAvailability::Unknown,
             "unnumbered" => row.season.is_none() || row.episode.is_none(),
             "excluded" => !row.included,
             "unavailable" => row.availability == super::AddonMediaListItemAvailability::Unavailable,

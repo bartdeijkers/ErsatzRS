@@ -557,7 +557,10 @@ fn validate_value(
                 AddonMediaListOptionValueScope::ListDefault
             },
         )
-        .map_err(|_| conflict("the option value or scope is invalid"))
+        .map_err(|_| ApplicationError::Validation {
+            field: "options",
+            message: "the option value or scope is invalid".into(),
+        })
 }
 
 fn prepare_edit(

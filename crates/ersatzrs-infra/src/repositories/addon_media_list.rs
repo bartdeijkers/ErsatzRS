@@ -2284,6 +2284,20 @@ impl AddonMediaListRepository for SqliteAddonMediaListRepository {
         Ok(())
     }
 
+    async fn playback_baseline(
+        &self,
+        id: EntityId,
+    ) -> Result<(
+        i32,
+        ersatzrs_core::repositories::AddonMediaListPlaybackBaseline,
+    )> {
+        // Read-only transaction: capture all playback fields from one snapshot.
+        let mut tx = self.0.begin().await.repository()?;
+        let result = editor::playback_baseline(&mut tx, id).await?;
+        tx.commit().await.repository()?;
+        Ok(result)
+    }
+
     async fn save_editor_task(
         &self,
         save: &ersatzrs_core::repositories::AddonMediaListEditorSave,
@@ -5702,6 +5716,28 @@ async fn addon_media_list_publication_readiness(
         &excluded,
     )
     .await?;
+    let tasks = downloads
+        .iter()
+        .map(|item| ((item.item_id, 1), item.artifact_id.is_some()))
+        .chain(
+            preparation
+                .iter()
+                .map(|item| ((item.item_id, 2), item.plan.is_some())),
+        )
+        .chain(
+            subtitles
+                .iter()
+                .map(|item| ((item.item_id, 3), item.artifacts.is_some())),
+        )
+        .collect();
+    let preparation_summary = crate::addon_media_list_preparation_status::preparation_summary(
+        pool,
+        list_id,
+        form.draft_revision,
+        &tasks,
+        Utc::now(),
+    )
+    .await?;
     let required_prepared_media_count = subtitles
         .iter()
         .filter(|item| item.artifacts.is_none())
@@ -5781,6 +5817,7 @@ async fn addon_media_list_publication_readiness(
         required_prepared_media_count,
         required_prepared_media_pending,
         required_prepared_media_failed,
+        preparation: preparation_summary,
         prepared_media_failures,
         optional_detail_total: progress.map_or(0, |progress| progress.detail_total),
         optional_detail_complete: progress.map_or(0, |progress| progress.detail_complete),
@@ -6082,6 +6119,7 @@ fn publication_blocker(
     count: u64,
 ) -> AddonMediaListPublicationBlocker {
     AddonMediaListPublicationBlocker {
+        item_id: None,
         kind,
         item_rank,
         item_title,
@@ -6093,12 +6131,14 @@ fn publication_item_blocker(
     kind: AddonMediaListPublicationBlockerKind,
     item: &AddonMediaListItemAdminRow,
 ) -> AddonMediaListPublicationBlocker {
-    publication_blocker(
+    let mut blocker = publication_blocker(
         kind,
         Some(item.rank.saturating_add(1)),
         Some(item.display_title.clone()),
         1,
-    )
+    );
+    blocker.item_id = Some(item.id);
+    blocker
 }
 
 async fn required_playback_detail_states(

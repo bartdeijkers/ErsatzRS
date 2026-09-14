@@ -124,6 +124,7 @@ enum DraftReviewCategory {
     MetadataChanged,
     Excluded,
     Unavailable,
+    Unknown,
     Conflicted,
     PendingRemoval,
     Reappeared,
@@ -136,6 +137,7 @@ fn draft_review_category(value: &str) -> Option<DraftReviewCategory> {
         "metadata_changed" => Some(DraftReviewCategory::MetadataChanged),
         "excluded" => Some(DraftReviewCategory::Excluded),
         "unavailable" => Some(DraftReviewCategory::Unavailable),
+        "unknown" => Some(DraftReviewCategory::Unknown),
         "conflicted" => Some(DraftReviewCategory::Conflicted),
         "pending_removal" => Some(DraftReviewCategory::PendingRemoval),
         "reappeared" => Some(DraftReviewCategory::Reappeared),
@@ -150,6 +152,7 @@ const fn draft_review_category_value(category: DraftReviewCategory) -> &'static 
         DraftReviewCategory::MetadataChanged => "metadata_changed",
         DraftReviewCategory::Excluded => "excluded",
         DraftReviewCategory::Unavailable => "unavailable",
+        DraftReviewCategory::Unknown => "unknown",
         DraftReviewCategory::Conflicted => "conflicted",
         DraftReviewCategory::PendingRemoval => "pending_removal",
         DraftReviewCategory::Reappeared => "reappeared",
@@ -163,6 +166,7 @@ const fn draft_review_category_text_key(category: DraftReviewCategory) -> TextKe
         DraftReviewCategory::MetadataChanged => TextKey::MetadataChanges,
         DraftReviewCategory::Excluded => TextKey::ExcludedItems,
         DraftReviewCategory::Unavailable => TextKey::Unavailable,
+        DraftReviewCategory::Unknown => TextKey::UnknownAvailability,
         DraftReviewCategory::Conflicted => TextKey::Conflicts,
         DraftReviewCategory::PendingRemoval => TextKey::PendingRemovals,
         DraftReviewCategory::Reappeared => TextKey::Reappearances,
@@ -179,6 +183,7 @@ fn draft_review_item_ids(
         DraftReviewCategory::MetadataChanged => &diff.metadata_changed_item_ids,
         DraftReviewCategory::Excluded => &diff.excluded_item_ids,
         DraftReviewCategory::Unavailable => &diff.unavailable_item_ids,
+        DraftReviewCategory::Unknown => &diff.unknown_item_ids,
         DraftReviewCategory::Conflicted => &diff.conflicted_item_ids,
         DraftReviewCategory::PendingRemoval => &diff.pending_removal_item_ids,
         DraftReviewCategory::Reappeared => &diff.reappeared_item_ids,
@@ -2783,6 +2788,7 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
             initial_reset_impact,
             initial_revisions,
             initial_revision_diff,
+            _load_status,
         )| {
             view! {
                 <AddonMediaListEditorIsland
@@ -2812,6 +2818,25 @@ pub fn AddonMediaListEditorPage() -> impl IntoView {
     )
 }
 
+#[derive(Clone, Debug, Default)]
+struct EditorLoadStatus {
+    incomplete: bool,
+    disabled_tasks: std::collections::BTreeSet<&'static str>,
+}
+
+#[cfg(feature = "ssr")]
+impl EditorLoadStatus {
+    fn retain<T: Default, E>(&mut self, result: Result<T, E>, tasks: &[&'static str]) -> T {
+        if let Ok(value) = result {
+            value
+        } else {
+            self.incomplete = true;
+            self.disabled_tasks.extend(tasks.iter().copied());
+            T::default()
+        }
+    }
+}
+
 type AddonMediaListEditorInitial = (
     Option<AddonMediaListForm>,
     Vec<AddonMediaListItemRow>,
@@ -2824,6 +2849,7 @@ type AddonMediaListEditorInitial = (
     AddonMediaListResetImpactRow,
     Vec<AddonMediaListRevisionSummaryRow>,
     Option<AddonMediaListRevisionDiffRow>,
+    EditorLoadStatus,
 );
 
 #[cfg(feature = "ssr")]
@@ -2833,60 +2859,107 @@ fn load_addon_media_list_editor_initial(
 ) -> Result<AddonMediaListEditorInitial, String> {
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(async move {
-            let form = get_addon_media_list_form(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let items = list_addon_media_list_items(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let readiness = get_addon_media_list_publication_readiness(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let history = get_addon_media_list_publication_history(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let show_nfo = get_addon_media_list_show_nfo(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let providers = list_addon_media_list_providers()
-                .await
-                .map_err(|error| error.to_string())?;
-            let source_probe = get_addon_media_list_source_probe(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let draft_diff = get_addon_media_list_saved_draft_diff(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let reset_impact = get_addon_media_list_reset_impact(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let revisions = get_addon_media_list_revision_history(id)
-                .await
-                .map_err(|error| error.to_string())?;
-            let revision_diff = if let Some((left, right)) = compare_revisions {
-                Some(
-                    compare_addon_media_list_revisions(id, left, right)
-                        .await
-                        .map_err(|error| error.to_string())?,
-                )
-            } else {
-                None
-            };
-            Ok((
-                form,
-                items,
-                readiness,
-                history,
-                show_nfo,
-                providers,
-                source_probe,
-                draft_diff,
-                reset_impact,
-                revisions,
-                revision_diff,
-            ))
+            consistent_editor_read(|| async {
+                let form = get_addon_media_list_form(id)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                let revision = form.as_ref().map(|form| form.draft_revision);
+                let mut status = EditorLoadStatus::default();
+                let items =
+                    status.retain(list_addon_media_list_items(id).await, &["items", "item"]);
+                let readiness_result = get_addon_media_list_publication_readiness(id).await;
+                let readiness_failed = readiness_result.is_err();
+                let mut readiness = status.retain(readiness_result, &[]);
+                let history = status.retain(
+                    get_addon_media_list_publication_history(id).await,
+                    &["activity"],
+                );
+                let show_nfo = status.retain(
+                    get_addon_media_list_show_nfo(id).await,
+                    &["settings", "artwork"],
+                );
+                let providers = status.retain(
+                    list_addon_media_list_providers().await,
+                    &["settings", "playback"],
+                );
+                let source_probe =
+                    status.retain(get_addon_media_list_source_probe(id).await, &["activity"]);
+                let draft_diff =
+                    status.retain(get_addon_media_list_saved_draft_diff(id).await, &["items"]);
+                let reset_impact =
+                    status.retain(get_addon_media_list_reset_impact(id).await, &["activity"]);
+                let revisions = status.retain(
+                    get_addon_media_list_revision_history(id).await,
+                    &["activity"],
+                );
+                let revision_diff = if let Some((left, right)) = compare_revisions {
+                    status.retain(
+                        compare_addon_media_list_revisions(id, left, right)
+                            .await
+                            .map(Some),
+                        &["activity"],
+                    )
+                } else {
+                    None
+                };
+                let final_form = get_addon_media_list_form(id).await;
+                let stable = final_form
+                    .as_ref()
+                    .is_ok_and(|form| form.as_ref().map(|form| form.draft_revision) == revision);
+                if readiness_failed || Some(readiness.saved_revision) != revision {
+                    // An invalid revision has no admissible publication action. The
+                    // existing readiness poll can replace it with authoritative data.
+                    readiness.saved_revision = -1;
+                    status.incomplete = true;
+                }
+                Ok((
+                    (
+                        form,
+                        items,
+                        readiness,
+                        history,
+                        show_nfo,
+                        providers,
+                        source_probe,
+                        draft_diff,
+                        reset_impact,
+                        revisions,
+                        revision_diff,
+                        status,
+                    ),
+                    stable,
+                ))
+            })
+            .await
         })
     })
+}
+
+#[cfg(feature = "ssr")]
+async fn consistent_editor_read<F, Fut>(mut read: F) -> Result<AddonMediaListEditorInitial, String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<(AddonMediaListEditorInitial, bool), String>>,
+{
+    let (first, stable) = read().await?;
+    if stable {
+        return Ok(first);
+    }
+    // Only one retry: ongoing background progress must not hide the form.
+    let (mut retained, stable) = if let Ok(retry) = read().await {
+        retry
+    } else {
+        // Keep the first form and explicitly mark this failed retry below.
+        (first, false)
+    };
+    if !stable {
+        retained.2.saved_revision = -1;
+        retained.11.incomplete = true;
+        retained.11.disabled_tasks.extend([
+            "items", "item", "settings", "playback", "artwork", "activity",
+        ]);
+    }
+    Ok(retained)
 }
 
 #[cfg(not(feature = "ssr"))]
@@ -3500,7 +3573,9 @@ fn publication_primary_action(
     settings_dirty: bool,
     readiness: &AddonMediaListPublicationReadiness,
 ) -> PublicationPrimaryAction {
-    if settings_dirty {
+    if readiness.saved_revision < 0 {
+        PublicationPrimaryAction::None
+    } else if settings_dirty {
         PublicationPrimaryAction::Save
     } else if let Some(publication) = readiness.publication.as_ref() {
         match publication.state {
@@ -6061,6 +6136,7 @@ fn AddonMediaListEditorIsland(
                     <div><dt>{tr(TextKey::MetadataChanges)}</dt><dd><a data-testid="draft-diff-metadata-changed" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::MetadataChanged))>{move || draft_diff.with(|value| value.metadata_changed)}</a></dd></div>
                     <div><dt>{tr(TextKey::ExcludedItems)}</dt><dd><a data-testid="draft-diff-excluded" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Excluded))>{move || draft_diff.with(|value| value.excluded)}</a></dd></div>
                     <div><dt>{tr(TextKey::Unavailable)}</dt><dd><a data-testid="draft-diff-unavailable" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Unavailable))>{move || draft_diff.with(|value| value.unavailable)}</a></dd></div>
+                    <div><dt>{tr(TextKey::UnknownAvailability)}</dt><dd><a data-testid="draft-diff-unknown" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Unknown))>{move || draft_diff.with(|value| value.unknown)}</a></dd></div>
                     <div><dt>{tr(TextKey::Conflicts)}</dt><dd><a data-testid="draft-diff-conflicted" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Conflicted))>{move || draft_diff.with(|value| value.conflicted)}</a></dd></div>
                     <div><dt>{tr(TextKey::PendingRemovals)}</dt><dd><a data-testid="draft-diff-pending-removals" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::PendingRemoval))>{move || draft_diff.with(|value| value.pending_removals)}</a></dd></div>
                     <div><dt>{tr(TextKey::Reappearances)}</dt><dd><a data-testid="draft-diff-reappeared" href=format!("?review_category={}#addon-list-items-heading", draft_review_category_value(DraftReviewCategory::Reappeared))>{move || draft_diff.with(|value| value.reappeared)}</a></dd></div>
@@ -7335,6 +7411,7 @@ mod tests {
             metadata_changed_item_ids: vec![12],
             excluded_item_ids: vec![13],
             unavailable_item_ids: vec![14],
+            unknown_item_ids: vec![19],
             conflicted_item_ids: vec![15],
             pending_removal_item_ids: vec![16],
             reappeared_item_ids: vec![17],
@@ -7350,12 +7427,13 @@ mod tests {
             ("pending_removal", 16),
             ("reappeared", 17),
             ("removal_candidate", 18),
+            ("unknown", 19),
         ] {
             let category = draft_review_category(value).unwrap();
             assert!(item_matches_draft_category(item_id, Some(category), &diff));
             assert!(!item_matches_draft_category(99, Some(category), &diff));
         }
-        assert_eq!(draft_review_category("unknown"), None);
+        assert_eq!(draft_review_category("not_a_category"), None);
         assert!(item_matches_draft_category(99, None, &diff));
     }
 
@@ -7756,6 +7834,7 @@ mod tests {
     fn publication_blockers_group_repeated_item_failures_without_losing_global_reasons() {
         let mut blockers = (0..48)
             .map(|rank| AddonMediaListPublicationBlocker {
+                item_id: None,
                 kind: AddonMediaListPublicationBlockerKind::SeasonEpisodeMissing,
                 item_rank: Some(rank + 1),
                 item_title: Some(format!("Episode {}", rank + 1)),
@@ -7763,6 +7842,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         blockers.push(AddonMediaListPublicationBlocker {
+            item_id: None,
             kind: AddonMediaListPublicationBlockerKind::CollectionTitleMissing,
             item_rank: None,
             item_title: None,
@@ -7795,7 +7875,7 @@ mod tests {
             let html = prepared_media_status(readiness).to_html();
             assert!(html.contains("data-prepared-media-status"));
             assert!(html.contains("role=\"status\""));
-            assert!(html.contains("Media files to prepare: 3"));
+            assert!(html.contains("Preparation tasks: 3"));
 
             readiness.update(|value| value.required_prepared_media_count = 0);
             let html = prepared_media_status(readiness).to_html();
@@ -7875,6 +7955,7 @@ mod tests {
         readiness.required_playback_detail_count = 0;
         readiness.required_playback_detail_pending = 0;
         readiness.blockers.push(AddonMediaListPublicationBlocker {
+            item_id: None,
             kind: AddonMediaListPublicationBlockerKind::NoIncludedItems,
             item_rank: None,
             item_title: None,
@@ -7993,5 +8074,67 @@ mod tests {
             ),
             TextKey::ErrorSharingViolation
         );
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod editor_load_tests {
+    use super::*;
+    use std::sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
+    };
+
+    #[tokio::test]
+    async fn editor_load_retries_concurrent_updates_once_and_retains_the_form() {
+        for updates in [1, 2] {
+            let revision = Arc::new(AtomicI32::new(1));
+            let mut calls = 0;
+            let result = consistent_editor_read(|| {
+                calls += 1;
+                let call = calls;
+                let revision = Arc::clone(&revision);
+                async move {
+                    let before = revision.load(Ordering::SeqCst);
+                    let mut snapshot = AddonMediaListEditorInitial::default();
+                    snapshot.0 = Some(AddonMediaListForm {
+                        draft_revision: before,
+                        name: "Retained fixture".into(),
+                        ..Default::default()
+                    });
+                    snapshot.2.saved_revision = before;
+                    if call <= updates {
+                        let writer = Arc::clone(&revision);
+                        tokio::spawn(async move {
+                            writer.fetch_add(1, Ordering::SeqCst);
+                        })
+                        .await
+                        .unwrap();
+                    }
+                    Ok((snapshot, before == revision.load(Ordering::SeqCst)))
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(calls, 2);
+            assert_eq!(result.0.as_ref().unwrap().name, "Retained fixture");
+            assert_eq!(result.0.as_ref().unwrap().draft_revision, 2);
+            assert_eq!(result.11.incomplete, updates == 2);
+            assert_eq!(result.11.disabled_tasks.contains("playback"), updates == 2);
+            assert_eq!(result.2.saved_revision, if updates == 2 { -1 } else { 2 });
+        }
+    }
+
+    #[test]
+    fn ancillary_failure_disables_only_dependent_tasks() {
+        let mut status = EditorLoadStatus::default();
+        let history: Vec<()> =
+            status.retain(Err::<Vec<()>, _>("storage unavailable"), &["activity"]);
+        assert!(history.is_empty());
+        assert!(status.incomplete);
+        assert!(status.disabled_tasks.contains("activity"));
+        assert!(!status.disabled_tasks.contains("playback"));
+        let values = status.retain(Ok::<_, ()>(vec!["saved input"]), &["playback"]);
+        assert_eq!(values, ["saved input"]);
     }
 }

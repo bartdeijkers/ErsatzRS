@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'Pre-O-01 baseline restored; O-01 withdrawn; existing AMM-N acceptance remains open'
+current_focus = 'AMM-N D01-D13 dogfood corrections locally verified; broader AMM-N gates remain open; O-01 withdrawn'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -60,6 +60,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-14: the resumed, accepted D01-D13 correction is implemented and locally
+verified across five reviewable checkpoints. Owning parity debts and amm-n-01b
+record native/browser/runtime evidence and its limits. The current live dogfood
+installation is untouched. Next action: review this uncommitted checkpoint, then
+select the remaining accepted AMM-N acceptance work; do not resume withdrawn
+O-01. Commit, push, exact-SHA CI, release and deployment remain separate gates.
+The TSDuck calibration direct-HLS skip and transitive future-compatibility
+warning remain explicit; no full AMM-N completion is claimed.
+
 2026-09-12 publication authorization: the maintainer requests commit, push to
 main and terminal green CI for the verified walkthrough corrections. Codex owns
 the commit/push and exact-SHA CI watch; Claude remains non-writing. Preserve the

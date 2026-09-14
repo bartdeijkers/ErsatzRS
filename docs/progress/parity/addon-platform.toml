@@ -230,3 +230,42 @@ evidence    = 'Tracked by the add-on NFO sidecar and local replacement closeout 
 adr         = '0066'
 resolved    = true
 resolution  = 'Merged into milestone amm-n-03 on 2026-09-13 (maintainer). Its Linux x64 and Windows x64 native/package acceptance owns packaged Windows add-on execution; this entry no longer tracks separate work.'
+
+[[debt]]
+id          = 'dogfood-d01-installation-dialog-viewport'
+description = 'Installation dialog controls become unreachable in a short viewport; constrain the shared Modal and retain keyboard access.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: shared Modal height/body scrolling passes tests/e2e/addons.spec.ts in Chromium and Firefox at 800x513 and 320x800, including reachable footer, keyboard activation, Tab containment, Escape and focus restoration. Existing wide-dialog behavior is retained."
+
+[[debt]]
+id          = 'dogfood-d02-repository-upload-next-action'
+description = 'Repository upload is confused with add-on installation; label it Add repository and announce the repository name, available count and browse link.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: committed repository receipts include source identity, name and offer count. tests/e2e/addons.spec.ts passes actual synthetic ZIP upload, receipt and scoped Browse navigation in both browsers and both failing viewports; installation and enablement remain separate explicit actions."
+
+[[debt]]
+id          = 'dogfood-d03-permission-summary'
+description = 'Raw duplicate capability lists obscure installation permissions; provide localized permission summaries with technical details.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: source review verifies localized network, media, managed FFmpeg, external-command and executable-update descriptions with one raw capability disclosure per permission surface. Both-browser installation/dialog scenarios pass; final web parity/localization checks pass for all nine cultures."
+
+[[debt]]
+id          = 'dogfood-d09-empty-installation-priority'
+description = 'With no installed add-ons, installation is hidden below pacing and defaults; promote the existing installation action.'
+discovered  = '2026-09-13'
+adr         = '0091'
+resolved    = true
+evidence    = "2026-09-14: the existing installation action precedes pacing and processor defaults in the empty Installed view. Both-browser first-time repository/install/enable workflows pass. Homepage and global navigation are unchanged."
+
+[[debt]]
+id          = 'transitive-proc-macro-error2-future-compatibility'
+description = 'proc-macro-error2 2.0.1 re-exports a private proc_macro extern crate and triggers Rust future-compatibility warning E0365.'
+discovered  = '2026-09-14'
+resolved    = false
+evidence    = 'cargo report future-incompatibilities --id 1 identifies the transitive dependency warning. Dependency upgrades are outside the accepted dogfood corrections; this is separate from the removed ignored Leptos env/watch metadata.'

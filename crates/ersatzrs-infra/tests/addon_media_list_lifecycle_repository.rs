@@ -620,7 +620,7 @@ async fn option_schema_digest_and_saved_binding_fail_closed() {
             .addon_media_lists
             .save_draft_options(&invalid_values)
             .await,
-        Err(RepositoryError::Conflict(_))
+        Err(RepositoryError::Validation { .. })
     ));
 
     let wrong_type = AddonMediaListDraftOptions {
@@ -635,7 +635,7 @@ async fn option_schema_digest_and_saved_binding_fail_closed() {
             .addon_media_lists
             .save_draft_options(&wrong_type)
             .await,
-        Err(RepositoryError::Conflict(_))
+        Err(RepositoryError::Validation { .. })
     ));
 }
 

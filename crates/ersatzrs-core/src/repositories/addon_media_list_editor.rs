@@ -39,11 +39,28 @@ pub struct AddonMediaListEditorItem {
     pub replacement: Option<Option<(EntityId, EntityId)>>,
 }
 
+/// Saved Playback & access values. Metadata revisions are deliberately excluded.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AddonMediaListPlaybackBaseline {
+    pub addon_id: String,
+    /// Digest of the installed declaration, including capabilities and package version.
+    pub installation_digest: String,
+    pub delivery_mode: AddonMediaListDeliveryMode,
+    pub cutoff_at: Option<String>,
+    pub cutoff_identity_id: Option<EntityId>,
+    pub disk_warning_gb: Option<u32>,
+    pub schema: Option<super::AddonMediaListOptionSchemaRef>,
+    pub list_values: super::AddonMediaListOptionValues,
+}
+
 /// One validated editing task committed under a single saved-revision fence.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddonMediaListEditorSave {
     pub list_id: EntityId,
     pub expected_revision: i32,
+    /// Only a playback-only task may use this narrower conflict fence.
+    #[serde(default)]
+    pub playback_baseline: Option<AddonMediaListPlaybackBaseline>,
     pub metadata: Option<AddonMediaListEditorMetadata>,
     pub settings: Option<AddonMediaListEditorSettings>,
     pub delivery_mode: Option<AddonMediaListDeliveryMode>,

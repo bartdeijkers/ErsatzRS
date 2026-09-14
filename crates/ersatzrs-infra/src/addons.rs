@@ -1109,7 +1109,7 @@ pub async fn scan_local_addon_repositories(pool: &DbPool) -> Result<usize, Addon
         let recorded_path = canonicalize_addon_path(&path).await.unwrap_or(path.clone());
         discovered_roots.insert(recorded_path.to_string_lossy().into_owned());
         match scan_local_repository_root(pool, &path, "checkout").await {
-            Ok(()) => scanned = scanned.saturating_add(1),
+            Ok(_) => scanned = scanned.saturating_add(1),
             Err(error) => {
                 record_local_source_scan_error(pool, &recorded_path, &error).await;
                 tracing::warn!(path = %path.display(), %error, "local add-on repository scan failed");
@@ -1288,6 +1288,14 @@ pub async fn load_local_addon_icon(
     }))
 }
 
+/// Receipt from the committed local repository scan, without private paths.
+#[derive(Debug)]
+pub struct LocalRepositoryImport {
+    pub id: String,
+    pub name: String,
+    pub available_count: usize,
+}
+
 /// Import a self-contained offline repository bundle.
 ///
 /// # Errors
@@ -1297,7 +1305,7 @@ pub async fn load_local_addon_icon(
 pub async fn install_local_repository_bundle(
     pool: &DbPool,
     archive: Vec<u8>,
-) -> Result<(), AddonError> {
+) -> Result<LocalRepositoryImport, AddonError> {
     if !unverified_sources_enabled(pool).await? {
         return Err(AddonError::Trust(
             "enable unknown sources before installing a local repository bundle".to_owned(),
@@ -1361,7 +1369,7 @@ pub async fn install_local_repository_bundle(
                 .await
                 .map_err(package_io_error)?;
         }
-        scan_local_repository_root(pool, &destination, "bundle").await?;
+        let receipt = scan_local_repository_root(pool, &destination, "bundle").await?;
         if let Some(previous_root) = previous_root.filter(|path| path != &destination) {
             if let Err(error) = tokio::fs::remove_dir_all(&previous_root).await {
                 tracing::warn!(
@@ -1371,7 +1379,7 @@ pub async fn install_local_repository_bundle(
                 );
             }
         }
-        Ok(())
+        Ok(receipt)
     }
     .await;
     if result.is_err() {
@@ -1630,7 +1638,7 @@ async fn scan_local_repository_root(
     pool: &DbPool,
     root: &Path,
     kind: &str,
-) -> Result<(), AddonError> {
+) -> Result<LocalRepositoryImport, AddonError> {
     let manifest = read_local_repository_manifest(root).await?;
     let canonical_root = canonicalize_addon_path(root)
         .await
@@ -1689,6 +1697,7 @@ async fn scan_local_repository_root(
         .execute(&mut *transaction)
         .await
         .map_err(database_error)?;
+    let available_count = offers.len();
     for (addon, relative, digest) in offers {
         let addon_json = serde_json::to_string(&addon).map_err(|_| {
             AddonError::Validation("add-on manifest could not be stored".to_owned())
@@ -1708,7 +1717,12 @@ async fn scan_local_repository_root(
         .await
         .map_err(database_error)?;
     }
-    transaction.commit().await.map_err(database_error)
+    transaction.commit().await.map_err(database_error)?;
+    Ok(LocalRepositoryImport {
+        id: manifest.id,
+        name: manifest.name,
+        available_count,
+    })
 }
 
 async fn collect_local_offers(

@@ -277,6 +277,9 @@ pub enum AddonMediaListPublicationBlockerKind {
 /// One publication blocker with bounded context for localized admin copy.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListPublicationBlocker {
+    /// Stable item identity for direct review; absent for list-level blockers.
+    #[serde(default)]
+    pub item_id: Option<i64>,
     pub kind: AddonMediaListPublicationBlockerKind,
     pub item_rank: Option<i32>,
     pub item_title: Option<String>,
@@ -290,6 +293,8 @@ pub struct AddonMediaListPublicationBlocker {
 /// optional enrichment completes.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonMediaListPublicationReadiness {
+    #[serde(default)]
+    pub preparation: ersatzrs_domain::AddonMediaListPreparationSummary,
     pub included_count: u64,
     /// Selected items omitted from this attempt because access is restricted.
     pub restricted_excluded_count: u64,
@@ -1050,6 +1055,16 @@ pub trait AddonMediaListRepository: Send + Sync {
         ))
     }
     /// Persist list-level descriptive metadata to `tvshow.nfo`.
+    /// Read a coherent playback baseline and its global revision.
+    async fn playback_baseline(
+        &self,
+        _id: EntityId,
+    ) -> Result<(i32, super::AddonMediaListPlaybackBaseline)> {
+        Err(RepositoryError::unavailable(
+            "read playback baseline",
+            "not implemented",
+        ))
+    }
     /// Save a complete editor task without exposing intermediate revisions.
     async fn save_editor_task(&self, _save: &super::AddonMediaListEditorSave) -> Result<i32> {
         Err(RepositoryError::unavailable(

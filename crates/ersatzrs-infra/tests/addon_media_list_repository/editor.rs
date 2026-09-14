@@ -19,6 +19,7 @@ fn command(revision: i32) -> AddonMediaListEditorSave {
     AddonMediaListEditorSave {
         list_id: 1,
         expected_revision: revision,
+        playback_baseline: None,
         metadata: None,
         settings: None,
         delivery_mode: None,
@@ -491,4 +492,92 @@ async fn editor_advisory_warning_does_not_dirty_the_publication_revision() {
     let after = repo.get_admin_form(1).await.unwrap().unwrap();
     assert_eq!(after.draft_revision, before.draft_revision);
     assert_eq!(after.review_state, before.review_state);
+}
+
+#[tokio::test]
+async fn playback_baseline_allows_metadata_progress_but_preserves_real_revision() {
+    let pool = fixture().await;
+    let repositories = make_repositories(pool.clone());
+    let repo = &repositories.addon_media_lists;
+    let (revision, baseline) = repo.playback_baseline(1).await.unwrap();
+    let published = repo
+        .get_admin_form(1)
+        .await
+        .unwrap()
+        .unwrap()
+        .published_revision;
+    sqlx::query(
+        r#"UPDATE "AddonMediaList" SET "DraftRevision" = "DraftRevision" + 1,
+        "ProviderMetadataJson" = '{"title":"Updated provider title"}' WHERE "Id" = 1"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let mut save = command(revision);
+    save.items.clear();
+    save.delivery_mode = Some(baseline.delivery_mode);
+    save.disk_warning_gb = Some(42);
+    save.playback_baseline = Some(baseline);
+    assert_eq!(repo.save_editor_task(&save).await.unwrap(), revision + 1);
+    assert_eq!(
+        repo.playback_baseline(1).await.unwrap().1.disk_warning_gb,
+        Some(42)
+    );
+    assert_eq!(
+        repo.get_admin_form(1)
+            .await
+            .unwrap()
+            .unwrap()
+            .published_revision,
+        published
+    );
+    assert!(repo.save_editor_task(&save).await.is_err());
+}
+
+#[tokio::test]
+async fn playback_baseline_rejects_schema_identity_cutoff_and_ownership_changes() {
+    for mutation in [
+        r#"UPDATE "AddonInstallation" SET "ManifestJson" = '{"capabilities":[]}'"#,
+        r#"UPDATE "AddonInstallation" SET "Enabled" = 0"#,
+        r#"UPDATE "AddonMediaList" SET "DeliveryMode" = 2, "DeliveryCutoffAt" = '2026-09-01 00:00:00', "DeliveryCutoffIdentityId" = 99"#,
+        r#"UPDATE "AddonMediaList" SET "DiskUsageWarningGb" = 99"#,
+    ] {
+        let pool = fixture().await;
+        let repositories = make_repositories(pool.clone());
+        let repo = &repositories.addon_media_lists;
+        let (revision, baseline) = repo.playback_baseline(1).await.unwrap();
+        let mut save = command(revision);
+        save.items.clear();
+        save.delivery_mode = Some(baseline.delivery_mode);
+        save.disk_warning_gb = Some(42);
+        save.playback_baseline = Some(baseline);
+        pool.execute(mutation).await.unwrap();
+        assert!(repo.save_editor_task(&save).await.is_err(), "{mutation}");
+        let warning: i64 = sqlx::query_scalar(
+            r#"SELECT "DiskUsageWarningGb" FROM "AddonMediaList" WHERE "Id" = 1"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_ne!(warning, 42);
+    }
+}
+
+#[tokio::test]
+async fn playback_baseline_cannot_relax_other_tasks_or_legacy_forms() {
+    let pool = fixture().await;
+    let repositories = make_repositories(pool.clone());
+    let repo = &repositories.addon_media_lists;
+    let (revision, baseline) = repo.playback_baseline(1).await.unwrap();
+    let mut mixed = command(revision);
+    mixed.playback_baseline = Some(baseline.clone());
+    mixed.delivery_mode = Some(baseline.delivery_mode);
+    assert!(repo.save_editor_task(&mixed).await.is_err());
+    pool.execute(r#"UPDATE "AddonMediaList" SET "DraftRevision" = "DraftRevision" + 1"#)
+        .await
+        .unwrap();
+    let mut legacy = command(revision);
+    legacy.items.clear();
+    legacy.delivery_mode = Some(baseline.delivery_mode);
+    assert!(repo.save_editor_task(&legacy).await.is_err());
 }

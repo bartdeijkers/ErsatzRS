@@ -4016,3 +4016,28 @@ display:none;
 [data-theme="light"] :global(.addon-workspace .item-review) { color-scheme:light; }
 /* Light-theme field edges must remain distinguishable from the page surface. */
 [data-theme="light"] :global(.addon-workspace .item-review) :is(input,select,textarea):not([type="hidden"]):not([type="radio"]):not([type="checkbox"]):not([aria-invalid="true"]) { border-color:var(--color-muted); }
+
+.workspace :global(.workspace-task-fields) {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+}
+
+/* A failed decorative image leaves the presentation icon visible, including without JS. */
+:global(.addon-workspace) :global(.row-art-placeholder) { position:relative; display:grid; place-items:center; }
+:global(.addon-workspace) :global(.row-thumbnail) { position:absolute; inset:0; background-size:cover; background-position:center; border-radius:inherit; }
+:global(.addon-workspace) :global(.fresh-cutoff-notice) { display:none; }
+:global(.addon-workspace) :global(.settings-layout):has(input[name="delivery_mode"][value="download_ahead_new_videos"]:checked) :global(.fresh-cutoff-notice):not([hidden]) { display:block; }
+@media (max-width: 48rem) {
+    :global(.addon-workspace) :global(.filter-row) { display:flex; flex-direction:column; align-items:stretch; }
+    :global(.addon-workspace) :global(.filter-row) > :global(.field),
+    :global(.addon-workspace) :global(.filter-row) > :global(.compact-field) { width:100%; flex:0 0 auto; }
+    :global(.addon-workspace) :global(.filter-row) select { width:100%; max-width:100%; }
+}
+
+/* Native selects cannot wrap; expose the complete selected label on narrow screens. */
+:global(.addon-workspace .selected-filter-label) { display:none; }
+@media (max-width: 48rem) {
+    :global(.addon-workspace .selected-filter-label) { display:block; white-space:normal; overflow-wrap:anywhere; }
+}

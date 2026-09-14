@@ -21,9 +21,63 @@ async function submit(page: Page, intent: string) {
 for (const javaScriptEnabled of [false, true]) {
   test.describe(`locked add-on list workspace (${javaScriptEnabled ? 'hydrated' : 'no JS'})`, () => {
     test.skip(!dbPath, 'An isolated E2E database is required');
+    test('saves playback after metadata progress and retains a competing edit', async ({ browser, baseURL }, info) => {
+      const seed = seedMetadataEditor(info);
+      const context = await browser.newContext({ baseURL, javaScriptEnabled });
+      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      const page = await context.newPage();
+      const other = await context.newPage();
+      if (javaScriptEnabled) { hydratedPages.add(page); hydratedPages.add(other); }
+      await page.goto(`/media/addon-lists/${seed.listId}/playback`);
+      await other.goto(`/media/addon-lists/${seed.listId}/playback`);
+      await settled(page); await settled(other);
+      await expect(page.locator('[data-workspace-save-status]')).toHaveText('Saved.');
+      await page.locator('[name="disk_warning_gb"]').fill('42');
+      if (javaScriptEnabled) await expect(page.locator('[data-workspace-save-status]')).toHaveText('Unsaved changes');
+      await other.locator('[name="disk_warning_gb"]').fill('43');
+      const published = sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${seed.listId};`);
+      sqlite(`UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=${seed.listId};`);
+      await submit(page, 'save');
+      await expect(page.locator('#workspace-errors')).toHaveCount(0);
+      await expect(page.locator('[data-workspace-save-status]')).toHaveText('Saved.');
+      expect(sqlite(`SELECT "DiskUsageWarningGb" FROM "AddonMediaList" WHERE "Id"=${seed.listId};`)).toBe('42');
+      expect(sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${seed.listId};`)).toBe(published);
+      await submit(other, 'save');
+      await expect(other.locator('#workspace-errors')).toBeVisible();
+      await expect(other.locator('[name="disk_warning_gb"]')).toHaveValue('43');
+      expect(sqlite(`SELECT "DiskUsageWarningGb" FROM "AddonMediaList" WHERE "Id"=${seed.listId};`)).toBe('42');
+      await context.close();
+    });
+
+    test('separates unknown entries and opens publication blockers directly', async ({ browser, baseURL }, info) => {
+      const seed = seedMetadataEditor(info);
+      sqlite(`UPDATE "AddonMediaListItem" SET "DurationSeconds"=NULL,"ProviderLiveness"=0,"EffectiveLiveness"=0 WHERE "Id"=${seed.secondItemId};`);
+      const context = await browser.newContext({ baseURL, javaScriptEnabled, viewport: { width: 320, height: 800 } });
+      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
+      const page = await context.newPage();
+      if (javaScriptEnabled) hydratedPages.add(page);
+      await page.goto(`/media/addon-lists/${seed.listId}`);
+      await settled(page);
+      const categories = page.locator('[name="category"]');
+      await expect(categories.locator('option[value="unknown"]')).toHaveText('Unknown (1)');
+      await expect(categories.locator('option[value="unavailable"]')).toHaveText('Unavailable (0)');
+      await categories.selectOption('unknown');
+      await submit(page, 'filter');
+      await expect(page.locator('.episode-row')).toHaveCount(1);
+      await expect(page.locator('.episode-row .runtime')).toContainText('Unknown');
+      const blocker = page.locator('.notice.error button').filter({ hasText: seed.secondTitle }).first();
+      await expect(blocker).toBeVisible();
+      await blocker.click();
+      await settled(page);
+      await expect(page).toHaveURL(new RegExp(`/items/${seed.secondItemId}$`));
+      expect(sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id"=${seed.secondItemId};`)).toBe('1');
+      await context.close();
+    });
+
     test('retains task input and commits only the selected task', async ({ browser, baseURL }, info) => {
       const seed = seedMetadataEditor(info);
       const context = await browser.newContext({ baseURL, javaScriptEnabled });
+      await context.request.post('/api/settings/ui/save', { form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0 });
       const page = await context.newPage();
       if(javaScriptEnabled) hydratedPages.add(page);
       const errors: string[] = [];

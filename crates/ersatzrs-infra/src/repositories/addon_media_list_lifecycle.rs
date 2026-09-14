@@ -3107,7 +3107,11 @@ async fn calculate_saved_draft_diff_in_tx(
             result.excluded += 1;
             result.excluded_item_ids.push(item_id);
         }
-        if availability != AddonMediaListItemAvailability::Available {
+        if availability == AddonMediaListItemAvailability::Unknown {
+            result.unknown += 1;
+            result.unknown_item_ids.push(item_id);
+        }
+        if availability == AddonMediaListItemAvailability::Unavailable {
             result.unavailable += 1;
             result.unavailable_item_ids.push(item_id);
         }
@@ -4243,7 +4247,7 @@ async fn register_option_schema_in_tx(
     Ok(())
 }
 
-async fn load_draft_options_in_tx(
+pub(super) async fn load_draft_options_in_tx(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     list_id: EntityId,
     expected_schema: Option<&AddonMediaListOptionSchemaRef>,
@@ -4505,10 +4509,9 @@ fn validate_stored_values(
                 AddonMediaListOptionValueScope::ItemOverride
             },
         )
-        .map_err(|error| {
-            RepositoryError::Conflict(format!(
-                "option values do not match the registered schema: {error}"
-            ))
+        .map_err(|error| RepositoryError::Validation {
+            field: "options",
+            message: format!("option values do not match the registered schema: {error}"),
         })
 }
 
@@ -4759,6 +4762,74 @@ mod default_binding_tests {
         .await
         .unwrap();
         pool
+    }
+
+    #[tokio::test]
+    async fn playback_baseline_option_save_is_atomic_and_publication_isolated() {
+        use ersatzrs_core::repositories::{
+            AddonMediaListEditorSave, AddonMediaListRepository as _,
+        };
+        use ersatzrs_domain::{AddonMediaListDeliveryMode, AddonMediaListOptionValue};
+        let pool = fixture(0, true).await;
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        SqliteAddonMediaListRepository::initialize_option_defaults_in_tx(&mut tx, 1)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let repository = SqliteAddonMediaListRepository(pool.clone());
+        let (revision, baseline) = repository.playback_baseline(1).await.unwrap();
+        sqlx::query(r#"INSERT INTO "AddonMediaListRevision" (
+            "AddonMediaListId", "Revision", "SourceDraftRevision", "CompletedAt", "OptionSchemaId", "OptionValuesJson")
+            SELECT 1, 1, "DraftRevision", '2026-09-01 00:00:00', "DraftOptionSchemaId", '{"enabled":true}'
+            FROM "AddonMediaList" WHERE "Id"=1"#).execute(&pool).await.unwrap();
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=1"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let mut options = repository.draft_options(1, None).await.unwrap().unwrap();
+        options
+            .list_values
+            .insert("enabled".into(), AddonMediaListOptionValue::Boolean(false));
+        let mut save = AddonMediaListEditorSave {
+            list_id: 1,
+            expected_revision: revision,
+            playback_baseline: Some(baseline),
+            metadata: None,
+            settings: None,
+            delivery_mode: Some(AddonMediaListDeliveryMode::Stream),
+            disk_warning_gb: Some(42),
+            options: Some(options),
+            items: Vec::new(),
+        };
+        assert_eq!(
+            repository.save_editor_task(&save).await.unwrap(),
+            revision + 2
+        );
+        let published: String = sqlx::query_scalar(
+            r#"SELECT "OptionValuesJson" FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=1"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(published, r#"{"enabled":true}"#);
+        assert!(repository.save_editor_task(&save).await.is_err());
+        let (current, baseline) = repository.playback_baseline(1).await.unwrap();
+        save.expected_revision = current;
+        save.playback_baseline = Some(baseline.clone());
+        save.disk_warning_gb = Some(99);
+        let options = save.options.as_mut().unwrap();
+        options.draft_revision = current;
+        options.list_values.insert(
+            "enabled".into(),
+            AddonMediaListOptionValue::Enum("invalid".into()),
+        );
+        assert!(repository.save_editor_task(&save).await.is_err());
+        assert_eq!(
+            repository.playback_baseline(1).await.unwrap(),
+            (current, baseline)
+        );
     }
 
     #[tokio::test]

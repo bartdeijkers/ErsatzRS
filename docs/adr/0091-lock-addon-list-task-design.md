@@ -74,6 +74,28 @@ storage. This prevents an upload from replacing bytes referenced by another
 open task. Stored bytes remain included in existing disk-usage accounting and
 are removed by the existing list/item cascade; no media eviction policy is added.
 
+## Addendum: Playback save conflicts (2026-09-13)
+
+The accepted dogfood correction narrows the conflict fence only for the
+Playback & access task. A submitted typed baseline must still match the saved
+delivery mode, cutoff timestamp and identity, disk warning, bound option schema
+and list values, and installed add-on identity. Metadata-only global revision
+movement may then coexist with Save. Other tasks and older forms without the
+baseline retain their strict revision and metadata checks.
+
+Option edits are validated against the current revision. The repository compares
+the complete baseline, checks the enabled installation and delivery capabilities,
+and enforces publication ownership in the same write transaction as the grouped
+save. A change after option validation causes a conflict; prepared values must
+never be relabelled with an unvalidated revision. Save and Undo use the revision
+actually committed. Save does not publish or alter the retained playback snapshot.
+
+The editor retries a moving initial read once. Ancillary failures retain the form
+and submitted input, explain the incomplete read, and disable affected actions
+until the necessary information is available. Publication admission remains an
+authoritative submission-time check. This changes neither provider pacing nor
+the SponsorBlock default and introduces no migration or workflow framework.
+
 ## Consequences
 
 Production has an objective reference but needs real draft retention, coherent

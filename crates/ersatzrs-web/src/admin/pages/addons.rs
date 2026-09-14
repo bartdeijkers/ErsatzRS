@@ -171,6 +171,7 @@ fn AddonsSettingsIsland(
         repository: NodeRef::<html::Input>::new(),
         repository_name: RwSignal::new(String::new()),
         repository_feedback: RwSignal::new(String::new()),
+        repository_browse: RwSignal::new(String::new()),
         repository_pending: RwSignal::new(false),
     };
     let unknown_sources_confirm_open = RwSignal::new(false);
@@ -211,7 +212,7 @@ fn AddonsSettingsIsland(
             pickers.addon_feedback.set(String::new());
             leptos::task::spawn_local(async move {
                 match upload_selected_file(input, "/api/addons/package").await {
-                    Ok(()) => {
+                    Ok(_) => {
                         toast.push(tr(TextKey::Install).to_owned(), ToastSeverity::Success);
                         overview.refetch();
                         pickers.addon_feedback.set(tr(TextKey::Saved).to_owned());
@@ -229,17 +230,29 @@ fn AddonsSettingsIsland(
         if let Some(input) = pickers.repository.get() {
             pickers.repository_pending.set(true);
             pickers.repository_feedback.set(String::new());
+            pickers.repository_browse.set(String::new());
             leptos::task::spawn_local(async move {
                 match upload_selected_file(input, "/api/addons/repository-bundle").await {
-                    Ok(()) => {
-                        toast.push(
-                            tr(TextKey::AddRepository).to_owned(),
-                            ToastSeverity::Success,
-                        );
+                    Ok(receipt) => {
+                        if let (Some(id), Some(name), Some(count)) = (
+                            receipt["repository"]["id"].as_str(),
+                            receipt["repository"]["name"].as_str(),
+                            receipt["repository"]["available_count"].as_u64(),
+                        ) {
+                            pickers.repository_feedback.set(format!(
+                                "{}: {name} · {}: {count}",
+                                tr(TextKey::AddRepository),
+                                tr(TextKey::AvailableAddons)
+                            ));
+                            pickers.repository_browse.set(format!(
+                                "/settings/addons?view=browse&state=repository%3A{id}"
+                            ));
+                        } else {
+                            pickers
+                                .repository_feedback
+                                .set(tr(TextKey::Saved).to_owned());
+                        }
                         overview.refetch();
-                        pickers
-                            .repository_feedback
-                            .set(tr(TextKey::Saved).to_owned());
                     }
                     Err(error) => pickers
                         .repository_feedback
@@ -334,6 +347,7 @@ struct FilePickers {
     repository: NodeRef<html::Input>,
     repository_name: RwSignal<String>,
     repository_feedback: RwSignal<String>,
+    repository_browse: RwSignal<String>,
     repository_pending: RwSignal<bool>,
 }
 
@@ -413,9 +427,19 @@ fn manager_body(
         })
         .cloned()
         .collect::<Vec<_>>();
+    let repository_filter = filter_value.strip_prefix("repository:");
+    let repository_label = repository_filter
+        .and_then(|id| {
+            data.repositories
+                .iter()
+                .find(|repository| repository.id == id)
+        })
+        .map(|repository| repository.name.clone())
+        .unwrap_or_default();
     let browse_cards = data
         .available
         .iter()
+        .filter(|item| repository_filter.is_none_or(|id| item.repository_id == id))
         .filter(|item| addon_matches(&localized(&item.addon.name), &item.addon.id, &query))
         .filter(|item| match filter_value {
             "compatible" => item.host_compatible && item.package_available,
@@ -455,12 +479,16 @@ fn manager_body(
             <label for="addon-state">{tr(TextKey::Status)}</label>
             <select id="addon-state" class=style::select name="state">
                 <option value="all" selected=filter_value == "all">{tr(TextKey::All)}</option>
+                <option value=filter_value.to_owned() hidden=repository_filter.is_none() selected=repository_filter.is_some()>{repository_label}</option>
                 {filter_options(view_name, filter_value)}
             </select>
             <button class=style::btn_primary type="submit">{tr(TextKey::Search)}</button>
         </form>
 
         <section style:display=if view_name == "installed" { "" } else { "none" }>
+            <p class=style::empty_setup hidden=installed_count != 0>
+                {tr(TextKey::AddonsSetupHelp)}" "<a href="/settings/addons?view=sources#install-from-file">{tr(TextKey::InstallFromFile)}</a>
+            </p>
             <form
                 class=style::section
                 data-testid="addon-detail-wait-settings"
@@ -556,9 +584,7 @@ fn manager_body(
                 <p class=style::section_help>{tr(TextKey::DefaultRemoteStreamAddonHelp)}</p>
             </div>
             {addon_grid(installed_cards.into_iter().map(installed_card).collect(), manager_empty_message(installed_count, TextKey::AddonsNoneInstalled))}
-            <p class=style::empty_setup hidden=installed_count != 0>
-                {tr(TextKey::AddonsSetupHelp)}" "<a href="/settings/addons?view=sources#install-from-file">{tr(TextKey::InstallFromFile)}</a>
-            </p>
+
         </section>
         <section style:display=if view_name == "browse" { "" } else { "none" }>
             {addon_grid(browse_cards.into_iter().map(|item| {
@@ -697,9 +723,9 @@ fn manager_body(
                             if name.is_empty() { tr(TextKey::NoFileSelected).to_owned() } else { name }
                         }}
                     </span>
-                    <button type="button" class=style::btn_secondary disabled=move || !unknown_enabled || pickers.repository_pending.get() on:click=upload_repository>{move || if pickers.repository_pending.get() { tr(TextKey::Loading) } else { tr(TextKey::Install) }}</button>
+                    <button type="button" class=style::btn_secondary disabled=move || !unknown_enabled || pickers.repository_pending.get() on:click=upload_repository>{move || if pickers.repository_pending.get() { tr(TextKey::Loading) } else { tr(TextKey::AddRepository) }}</button>
                 </div>
-                <p id="repository-package-feedback" class=style::action_feedback role="status">{move || pickers.repository_feedback.get()}</p>
+                <p id="repository-package-feedback" class=style::action_feedback role="status">{move || pickers.repository_feedback.get()}" "<a href=move || pickers.repository_browse.get() hidden=move || pickers.repository_browse.get().is_empty()>{tr(TextKey::BrowseAddons)}</a></p>
             </div>
         </section>
     }
@@ -1576,11 +1602,11 @@ fn permissions_view(capabilities: &[String], permissions: &AddonPermissions) -> 
     view! {
         <div class=style::permissions data-testid="addon-permissions">
             <h3>{tr(TextKey::Permissions)}</h3>
-            <p>{format!("{}: {}", tr(TextKey::Capabilities), capabilities.join(", "))}</p>
-            <p>{format!("{}: {}", tr(TextKey::Networks), value_or_no(&permissions.network_hosts))}</p>
-            <p>{format!("{}: {}", tr(TextKey::MediaReadAccess), yes_no(permissions.media_read))}</p>
-            <p>{format!("{}: {}", tr(TextKey::Ffmpeg), yes_no(permissions.managed_ffmpeg))}</p>
-            <p>{format!("{}: {}", tr(TextKey::ExternalCommands), value_or_no(&permissions.external_commands))}</p>
+            <details><summary>{tr(TextKey::TechnicalDetails)}</summary><p>{format!("{}: {}", tr(TextKey::Capabilities), capabilities.join(", "))}</p></details>
+            <p>{format!("{}: {}", tr(TextKey::AddonPermissionNetworkHelp), value_or_no(&permissions.network_hosts))}</p>
+            <p>{format!("{}: {}", tr(TextKey::AddonPermissionMediaHelp), yes_no(permissions.media_read))}</p>
+            <p>{format!("{}: {}", tr(TextKey::AddonPermissionFfmpegHelp), yes_no(permissions.managed_ffmpeg))}</p>
+            <p>{format!("{}: {}", tr(TextKey::AddonPermissionCommandHelp), value_or_no(&permissions.external_commands))}</p>
             <p data-testid="addon-tool-update-permission">{format!("{}: {}", tr(TextKey::AddonToolUpdatePermission), value_or_no(&permissions.tool_update))}</p>
         </div>
     }.into_any()
@@ -1653,7 +1679,7 @@ fn panel_view(panel: AddonPanel) -> AnyView {
 async fn upload_selected_file(
     input: web_sys::HtmlInputElement,
     endpoint: &str,
-) -> Result<(), String> {
+) -> Result<serde_json::Value, String> {
     use gloo_net::http::Request;
     use web_sys::FormData;
     let file = input
@@ -1679,7 +1705,7 @@ async fn upload_selected_file(
             .unwrap_or(tr(TextKey::RequestFailed))
             .to_owned());
     }
-    Ok(())
+    Ok(json)
 }
 
 fn reload_page() {

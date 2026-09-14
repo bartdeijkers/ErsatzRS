@@ -450,6 +450,14 @@ pub trait RemoteStreamPlaylistRuntime: Send + Sync {
     ) -> Result<RemoteStreamPlaylistTroubleshootingRead, RemoteStreamPlaylistRuntimeError>;
 }
 
+/// Exact repository and offer count committed by a bundle import.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AddonRepositoryImportRead {
+    pub id: String,
+    pub name: String,
+    pub available_count: usize,
+}
+
 /// One local checkout or offline bundle shown on the add-on settings page.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AddonRepositoryRead {
@@ -692,7 +700,10 @@ pub trait AddonRuntime: Send + Sync {
         addon_id: Option<String>,
     ) -> Result<(), AddonRuntimeError>;
     async fn install_from_package(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError>;
-    async fn install_repository_bundle(&self, archive: Vec<u8>) -> Result<(), AddonRuntimeError>;
+    async fn install_repository_bundle(
+        &self,
+        archive: Vec<u8>,
+    ) -> Result<AddonRepositoryImportRead, AddonRuntimeError>;
     async fn save_setting(&self, setting: AddonSettingEdit) -> Result<(), AddonRuntimeError>;
     async fn check(&self, addon_id: String) -> Result<String, AddonRuntimeError>;
     async fn enable(&self, addon_id: String) -> Result<String, AddonRuntimeError>;

@@ -6741,7 +6741,9 @@ fn scan_repository_failure(
 ) -> RequestScanOutcome {
     match error {
         RepositoryError::NotFound { .. } => RequestScanOutcome::Rejected(not_found),
-        RepositoryError::Decode { .. } | RepositoryError::Conflict(_) => {
+        RepositoryError::Decode { .. }
+        | RepositoryError::Validation { .. }
+        | RepositoryError::Conflict(_) => {
             RequestScanOutcome::Rejected(RequestScanRejection::InvalidLibraryState)
         }
         RepositoryError::Unavailable { message, .. }
@@ -6757,7 +6759,9 @@ fn scheduled_scan_repository_failure(
 ) -> RequestScheduledScanOutcome {
     match error {
         RepositoryError::NotFound { .. } => RequestScheduledScanOutcome::Rejected(not_found),
-        RepositoryError::Decode { .. } | RepositoryError::Conflict(_) => {
+        RepositoryError::Decode { .. }
+        | RepositoryError::Validation { .. }
+        | RepositoryError::Conflict(_) => {
             RequestScheduledScanOutcome::Rejected(RequestScanRejection::InvalidLibraryState)
         }
         RepositoryError::Unavailable { message, .. }

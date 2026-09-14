@@ -45,7 +45,7 @@ pub use addon_media_list::{
 };
 pub use addon_media_list_editor::{
     AddonMediaListEditorItem, AddonMediaListEditorMetadata, AddonMediaListEditorSave,
-    AddonMediaListEditorSettings,
+    AddonMediaListEditorSettings, AddonMediaListPlaybackBaseline,
 };
 pub use addon_media_list_lifecycle::{
     AddonMediaListArtifact, AddonMediaListDraftDiff, AddonMediaListDraftOptions,

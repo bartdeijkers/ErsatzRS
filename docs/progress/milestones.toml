@@ -4019,6 +4019,40 @@ playback and release gates remain unchanged; prototype reports cannot replace
 production acceptance.
 '''
 evidence = '''
+2026-09-14: the accepted D01-D13 dogfood corrections are locally verified in
+five reviewable checkpoints, documented in the execution plan. Each finding is
+closed separately in addon-platform or addon-metadata-management; this is not
+full AMM-N completion. O-01 remains withdrawn.
+
+Final cargo xtask parity-check web passes: progress, formatting, architecture,
+hydration lint, 655 web tests (six existing skips) and web Clippy. Focused
+infrastructure tests pass 235/235; editor/lifecycle repository integration tests
+pass 48/48; option-service tests pass 8/8. Core/app/infra all-target Clippy passes.
+The sibling add-ons unknown-duration regression passes for yt-dlp patch 0.11.2.
+No database migration, protocol change or dependency upgrade is introduced.
+
+Matched Chromium/Firefox evidence: the broad 64-case run retained 56 valid
+passes, including installation/enablement, blocker navigation, native editing,
+first television publication and the full both-theme seven-width/200%-zoom
+matrix. Its eight failures identified the quadratic display comparison and two
+incorrect fixtures; these are corrected. The final focused 16/16 closeout passes
+long Dutch/German labels, 1001-item forms, metadata-only playback saves, competing
+edit conflicts, exact sparse-option Undo with published options unchanged, and
+166-entry overlapping preparation/Activity counts. Both native and hydrated
+editor workflows pass. Installation uses the existing hydrated manager.
+Canonical browser artifacts: test-results/addon-dogfood-final and
+test-results/addon-dogfood-closeout. Source review resolved error erasure,
+asset routing, comparison cost, cutoff CSS and incomplete-read status findings;
+no actionable correction finding remains.
+
+Disposable-profile smoke passes MPEG-TS and both HLS endpoint probes. TSDuck
+passes 64 checks with zero failures for legacy/hybrid MPEG-TS and HLS segmenter,
+including continuity and audio cadence. Direct HLS produced no segments for the
+calibration source and was skipped by the existing gate; it is not claimed as
+validated here. The proc-macro-error2 2.0.1 future-compatibility warning remains
+separate open debt. N-01B broader acceptance and N-02/N-03 platform/release gates
+remain open. No live dogfood profile, commit, push, release or deployment changed.
+
 The 2026-09-11 integration correction restores live publication readiness after
 review exposed the native workspace's static action. A narrow island updates the
 state, counts, blockers and native Prepare/Publish submit from resolved readiness;

@@ -143,6 +143,8 @@ pub struct AddonMediaListDraftDiffRow {
     pub metadata_changed: u64,
     pub excluded: u64,
     pub unavailable: u64,
+    #[serde(default)]
+    pub unknown: u64,
     pub conflicted: u64,
     pub pending_removals: u64,
     pub reappeared: u64,
@@ -150,6 +152,8 @@ pub struct AddonMediaListDraftDiffRow {
     pub added_item_ids: Vec<i64>,
     pub metadata_changed_item_ids: Vec<i64>,
     pub excluded_item_ids: Vec<i64>,
+    #[serde(default)]
+    pub unknown_item_ids: Vec<i64>,
     pub unavailable_item_ids: Vec<i64>,
     pub conflicted_item_ids: Vec<i64>,
     pub pending_removal_item_ids: Vec<i64>,
@@ -262,6 +266,7 @@ mod lifecycle_transport {
                 metadata_changed: value.metadata_changed,
                 excluded: value.excluded,
                 unavailable: value.unavailable,
+                unknown: value.unknown,
                 conflicted: value.conflicted,
                 pending_removals: value.pending_removals,
                 reappeared: value.reappeared,
@@ -270,6 +275,7 @@ mod lifecycle_transport {
                 metadata_changed_item_ids: value.metadata_changed_item_ids,
                 excluded_item_ids: value.excluded_item_ids,
                 unavailable_item_ids: value.unavailable_item_ids,
+                unknown_item_ids: value.unknown_item_ids,
                 conflicted_item_ids: value.conflicted_item_ids,
                 pending_removal_item_ids: value.pending_removal_item_ids,
                 reappeared_item_ids: value.reappeared_item_ids,
@@ -346,6 +352,9 @@ pub enum AddonMediaListPublicationBlockerKind {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListPublicationBlocker {
+    /// Stable item identity for direct review; absent for list-level blockers.
+    #[serde(default)]
+    pub item_id: Option<i64>,
     pub kind: AddonMediaListPublicationBlockerKind,
     pub item_rank: Option<i32>,
     pub item_title: Option<String>,
@@ -354,6 +363,8 @@ pub struct AddonMediaListPublicationBlocker {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AddonMediaListPublicationReadiness {
+    #[serde(default)]
+    pub preparation: ersatzrs_domain::AddonMediaListPreparationSummary,
     pub included_count: u64,
     pub restricted_excluded_count: u64,
     pub blockers: Vec<AddonMediaListPublicationBlocker>,
@@ -565,6 +576,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationReadiness>
             required_prepared_media_count: value.required_prepared_media_count,
             required_prepared_media_pending: value.required_prepared_media_pending,
             required_prepared_media_failed: value.required_prepared_media_failed,
+            preparation: value.preparation,
             prepared_media_failures: value
                 .prepared_media_failures
                 .into_iter()
@@ -613,6 +625,7 @@ impl From<ersatzrs_core::repositories::AddonMediaListPublicationBlocker>
 {
     fn from(value: ersatzrs_core::repositories::AddonMediaListPublicationBlocker) -> Self {
         Self {
+            item_id: value.item_id,
             kind: match value.kind {
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::OverviewIncomplete => AddonMediaListPublicationBlockerKind::OverviewIncomplete,
                 ersatzrs_core::repositories::AddonMediaListPublicationBlockerKind::PublicationInProgress => AddonMediaListPublicationBlockerKind::PublicationInProgress,

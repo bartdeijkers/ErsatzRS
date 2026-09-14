@@ -38,7 +38,7 @@ pub fn AddonListOptions(list_id: i64, item_ids: Vec<i64>) -> impl IntoView {
         match result {
             Ok(Some(editor)) => editor_view(editor),
             Ok(None) => ().into_any(),
-            Err(()) => view! { <p role="alert">{tr(TextKey::AddonOptionsConflict)}</p> }.into_any(),
+            Err(_) => view! { <p role="alert">{tr(TextKey::AddonOptionsConflict)}</p> }.into_any(),
         }
     }
     #[cfg(not(feature = "ssr"))]
@@ -190,7 +190,7 @@ pub(crate) fn access_outcome_key(
         Outcome::ProfileLocked => TextKey::AddonAccessProfileLocked,
         Outcome::DecryptionFailed => TextKey::AddonAccessDecryptionFailed,
         Outcome::ProviderRestricted => TextKey::AddonAccessRestricted,
-        Outcome::Failed => TextKey::Failed,
+        Outcome::Failed => TextKey::AddonAccessUnknownFailure,
     }
 }
 

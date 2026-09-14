@@ -14,6 +14,12 @@ pub enum RepositoryError {
     /// The requested mutation conflicts with current persisted state.
     #[error("conflict: {0}")]
     Conflict(String),
+    /// Submitted values do not satisfy the current contract.
+    #[error("invalid {field}: {message}")]
+    Validation {
+        field: &'static str,
+        message: String,
+    },
     /// Persisted or provider data could not be decoded into the port type.
     #[error("failed to decode {kind}: {value}")]
     Decode { kind: &'static str, value: String },
@@ -68,6 +74,7 @@ impl RepositoryError {
             Self::UnavailableWithPublicationCause { cause, .. } => Some(*cause),
             Self::NotFound { .. }
             | Self::Conflict(_)
+            | Self::Validation { .. }
             | Self::Decode { .. }
             | Self::Unavailable { .. } => None,
         }
