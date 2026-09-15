@@ -182,6 +182,32 @@ stabilisation. Apply them every time you wire interactive UI:
    `libraries/mod.rs:81-95`: `gloo_timers::future::TimeoutFuture::new(1_500)`
    in a `loop`, behind `#[cfg(target_arch = "wasm32")]`.
 
+## Hydration startup regression
+
+`hydration-startup.spec.ts` withholds browser idle callbacks without consuming
+CPU or slowing I/O, then requires hydration within the existing 15-second
+bound and exercises real settings validation. It must run on Chromium and
+Firefox. A second scenario holds the WASM request behind a controllable barrier
+and verifies that document load is distinct from hydration readiness. The
+affected add-on specs share `tests/e2e/hydration.ts`, which reports
+document readiness, visibility, bootstrap phase and package-resource timings
+on failure without cookies, request bodies or full resource URLs.
+
+Required admin startup is owned by `admin/hydration.rs` and `hydration.js`.
+Leptos 0.8.20 gates its default islands loader on an unbounded
+`requestIdleCallback`; a local instrumented Chromium failure reached that gate
+but never started the loader. The adapter keeps nonce handling, package paths,
+SSR context setup, nested-island order and children callbacks, while starting
+module loading directly. It follows the existing unhashed, unsplit bundle
+contract and does not enable the islands router. Review this adapter against
+Leptos's bootstrap when updating Leptos; retain its MIT notice.
+
+The historical `__ersatzrs_hydrated` marker indicates that Rust initialized its
+hydration context, before JavaScript finishes traversing islands. A marker-only
+check is not proof that a specific control works: retain interaction assertions.
+The bootstrap phase reaches `ready` only after traversal completes. The shared
+island smoke requires both signals within the unchanged 15-second bound.
+
 ## Hydration and UI bug containment
 
 Use this playbook before changing Leptos hydration, islands, shared UI

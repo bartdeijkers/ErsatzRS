@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Start admin interactivity without waiting for browser idle time, which could
+  leave Chromium pages rendered but unresponsive. Keep existing browser
+  deadlines and cover startup with idle callbacks withheld.
+
 - Isolate synthetic add-on E2E provider hosts so unrelated scenarios do not
   inherit each other's admission waits. Preserve import deadlines and exact
   counts, add safe job-state diagnostics, await import-page navigation before

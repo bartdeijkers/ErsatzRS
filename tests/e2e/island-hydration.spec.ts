@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
 
 /**
@@ -14,9 +14,9 @@ import { DatabaseSync } from 'node:sqlite';
  * This spec visits every route that renders at least one `#[island]` and proves,
  * per route, that hydration ran to completion. The signals are:
  *
- *  1. `window.__ersatzrs_hydrated === true` — set in `crates/ersatzrs-web/src/lib.rs`
- *     right after `hydrate_islands()`. A marker-mismatch panic in any island on
- *     the page aborts before that line, so the flag stays unset.
+ *  1. The Rust hydration context is initialized AND the bootstrap phase is
+ *     `ready`: initial island traversal completed. The legacy Rust marker alone
+ *     precedes traversal and cannot prove that islands attached successfully.
  *  2. No uncaught page errors (wasm panics surface here).
  *  3. No hydration-signature console errors (`failed_to_cast_marker_node`, etc).
  *  4. The route did not fall through to the 404 catch-all, so the island under
@@ -27,6 +27,19 @@ import { DatabaseSync } from 'node:sqlite';
  * `/media/collections/:id`, `/schedules/:id/items`) are intentionally out of
  * scope for this no-fixture smoke; cover them in their own seeded specs.
  */
+
+function hydrationState(page: Page) {
+  return page.evaluate(() => {
+    const state = window as Window & {
+      __ersatzrs_hydrated?: boolean;
+      __ersatzrs_hydration_phase?: string;
+    };
+    return {
+      initialized: state.__ersatzrs_hydrated === true,
+      phase: state.__ersatzrs_hydration_phase ?? 'not-started',
+    };
+  });
+}
 
 type IslandRoute = {
   /** Route to load. */
@@ -174,11 +187,11 @@ for (const { route, islands } of ISLAND_ROUTES) {
 
     // Primary signal: island hydration ran to completion without panicking.
     await expect
-      .poll(() => page.evaluate(() => (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true), {
+      .poll(() => hydrationState(page), {
         timeout: 15_000,
-        message: `island hydration never completed on ${route} (window.__ersatzrs_hydrated stayed unset)`,
+        message: `island hydration never completed on ${route} (Rust initialization and traversal phase)`,
       })
-      .toBe(true);
+      .toEqual({ initialized: true, phase: 'ready' });
 
     // Uncaught wasm panics (hydration aborts) surface as page errors.
     expect(pageErrors, `uncaught page error(s) on ${route}${diag()}`).toEqual([]);
@@ -231,16 +244,8 @@ test('settings storage failure renders a stable error state without a submittabl
       ),
     ).toHaveCount(0);
     await expect
-      .poll(
-        () =>
-          page.evaluate(
-            () =>
-              (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated ===
-              true,
-          ),
-        { timeout: 15_000 },
-      )
-      .toBe(true);
+      .poll(() => hydrationState(page), { timeout: 15_000 })
+      .toEqual({ initialized: true, phase: 'ready' });
     expect(pageErrors).toEqual([]);
     expect(hydrationErrors).toEqual([]);
   } finally {

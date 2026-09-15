@@ -60,6 +60,15 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-15 hydration correction: required admin startup no longer waits for
+optional browser idle time. The owning admin-ui-failure-semantics parity debt
+records the natural and controlled reproductions, identical-build runner2 SSD
+probe, native checks, and complete serial Chromium/Firefox passes. The precise
+Chromium scheduler trigger and contribution of runner load remain unproven.
+2026-09-16: the maintainer authorizes a local commit only. Next action: await
+push authorization before publishing and checking exact-SHA CI. No release, live installation change, or broader
+AMM-N completion is claimed; the separately committed catch-up plan stays local.
+
 2026-09-14 publication follow-up: commit, push and terminal green CI are now
 authorized. Add-ons ba440f3 passes validation run 34852466201. Host 08aa9cf4
 passes non-browser CI gates, but the Chromium suite exposes Save after Undo

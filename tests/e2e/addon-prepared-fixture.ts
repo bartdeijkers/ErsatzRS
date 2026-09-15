@@ -1,3 +1,4 @@
+import { waitForHydration } from './hydration';
 import { expect, type Page } from '@playwright/test';
 import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
@@ -193,10 +194,8 @@ ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value";
 }
 
 export async function hydrated(page: Page, route?: string): Promise<void> {
-  // A cold debug WASM download belongs to navigation, not the hydration deadline.
+  // Finish navigation before applying the separate bounded hydration check.
   if (route) expect((await page.goto(route, { waitUntil: 'load', timeout: 30000 }))?.status()).toBe(200);
-  await expect.poll(() => page.evaluate(() =>
-    (window as Window & { __ersatzrs_hydrated?: boolean }).__ersatzrs_hydrated === true,
-  ), { timeout: 15000 }).toBe(true);
+  await waitForHydration(page);
   await expect(page.locator('[data-not-found]')).toHaveCount(0);
 }

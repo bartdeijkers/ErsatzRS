@@ -1,3 +1,4 @@
+import { waitForHydration } from './hydration';
 import { expect, test, type Page } from '@playwright/test';
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -68,32 +69,6 @@ function openDatabase(): DatabaseSync {
   const database = new DatabaseSync(DATABASE_PATH!);
   database.exec('PRAGMA busy_timeout=5000');
   return database;
-}
-
-async function waitForHydration(page: Page): Promise<void> {
-  try {
-    await expect
-      .poll(() => page.evaluate(() => window.__ersatzrs_hydrated === true), { timeout: 15_000 })
-      .toBe(true);
-  } catch (error) {
-    const diagnostics = await page.evaluate(() => ({
-      readyState: document.readyState,
-      visibility: document.visibilityState,
-      islandLoaderReady: typeof (window as Window & { __hydrateIsland?: unknown }).__hydrateIsland === 'function',
-      resources: performance.getEntriesByType('resource')
-        .filter(entry => /\/pkg\/[^/]+\.(wasm|js)$/.test(new URL(entry.name).pathname))
-        .map(entry => {
-          const resource = entry as PerformanceResourceTiming;
-          return {
-            file: new URL(resource.name).pathname.split('/').pop(),
-            duration: resource.duration,
-            responseEnd: resource.responseEnd,
-            transferSize: resource.transferSize,
-          };
-        }),
-    })).catch(() => ({ pageUnavailable: true }));
-    throw new Error(`Hydration did not complete: ${JSON.stringify(diagnostics)}`, { cause: error });
-  }
 }
 
 function resetFixtures(): void {

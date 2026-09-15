@@ -43,3 +43,38 @@ description = 'Eleven islands reported a failed server-executed `Resource` load 
 discovered  = '2026-07-25'
 evidence    = 'Fixed 2026-07-25. `ToastStore::push` is inert off-wasm, so a server-rendered toast is unrepresentable (unit coverage in `toast.rs`). All ten server-executed loaders now carry the failure in the resource value: `MediaBrowserPage` and `MembersSection` render it through `admin_result_view`; the six Plex/Jellyfin/Emby library and path islands surface it in an always-present error element and disable Save so a failed load cannot overwrite real data; the collection and smart-collection editors read the failure reactively from their blocking resource, so it is visible and the submit button is disabled in the SSR HTML while the `<form>` stays server-rendered for the no-JS fallback (`collections.spec.ts` "no-JS add form posts through the HTML fallback"). The eleventh finding, the watermark placement preview, was a false positive and is now typed as the `LocalResource` it always was. Two conditional error/success nodes in `jellyfin.rs` were converted to the stable `style:display` idiom in passing. `cargo xtask hydration-lint` rule-3 reports zero findings with no baseline entries; full Playwright suite 170 passed / 12 skipped / 0 failed.'
 resolved    = true
+
+[[debt]]
+id          = 'required-hydration-startup-waits-for-browser-idle'
+description = 'Required admin interactivity was gated on Leptos 0.8.20 requestIdleCallback without a deadline. Chromium can retain the rendered page while never entering the loader, so functional E2E scenarios fail before reaching their assertions.'
+discovered  = '2026-09-15'
+evidence    = '''
+Fixed locally 2026-09-15. CI run 34899058496 fails two hydration prerequisites,
+before the Save/Undo and pacing assertions. A local instrumented reproduction
+on fast storage recorded idle-requested but no idle-fired, loader or WASM
+initialization within 15 seconds. The deterministic hydration-startup.spec.ts
+reproduces the missing-idle condition without machine load and fails before the
+correction. The direct-start adapter preserves the Leptos island traversal and
+nonce/package contract; its two regressions prove real settings validation with
+idle callbacks withheld and distinguish document load from WASM readiness.
+The route smoke now requires both Rust initialization and completed traversal.
+
+Focused verification: 20 Chromium cases on the first corrected matched build;
+two final startup cases and 81 Firefox startup/neighbor/route cases passed.
+The identical final server/JS/WASM/CSS on runner2 storage passed both startup
+cases three times, with checksums verified before and after and owned staging
+removed. Three direct 100-MiB reads measured 0.039-0.040 seconds on runner1
+versus 0.262-0.277 on runner2; this bypasses guest cache, not necessarily host
+or device caches, and does not by itself explain the 15-second stall.
+
+Final serial wrapper gates: Chromium 219 passed / 4 existing skips (14.0m);
+Firefox 196 passed / 27 existing skips (17.8m). Native web selection: 655 passed /
+6 existing skips; corrected Clippy, architecture/hydration lint and structural
+web-bundle verification passed. Local artifacts are under the ignored
+test-results/hydration-investigation directory. Deadlines, retries, functional
+assertions, provider pacing and background concurrency are unchanged. The exact
+Chromium scheduler trigger and contribution of runner2 load remain unproven;
+this closes the demonstrated idle-gate dependency, not every possible source
+of CI intermittency. No new remote CI result or release is claimed.
+'''
+resolved    = true

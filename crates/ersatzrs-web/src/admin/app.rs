@@ -3,6 +3,8 @@ use leptos::prelude::*;
 use leptos_meta::provide_meta_context;
 use leptos_router::components::Router;
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::admin::hydration::AdminHydrationScripts;
 use crate::admin::i18n::provide_i18n_context;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::admin::i18n::UiLanguage;
@@ -49,7 +51,7 @@ pub fn shell(options: LeptosOptions, app_state: AppState) -> impl IntoView {
                 <link rel="stylesheet" href="/public/bundle.css"/>
                 <script type="module" src="/public/channel-preview.js"></script>
                 {hydration_assets_available.then(|| {
-                    view! { <HydrationScripts options=options.clone() islands=true/> }
+                    view! { <AdminHydrationScripts options=options.clone()/> }
                 })}
             </head>
             <body>
