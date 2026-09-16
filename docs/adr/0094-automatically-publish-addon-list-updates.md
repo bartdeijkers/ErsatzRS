@@ -10,7 +10,8 @@ Partial
 
 Tracked by AMM-P-01. Linux runtime acceptance, exact-SHA CI and Windows-only
 v1.0.34-beta packaging are verified. Native Windows acceptance remains open
-until the maintainer tests the draft package and reports the results.
+after v1.0.34-beta dogfood exposed optional thumbnail HTTP 404 aborting the
+publication scan. AMM-P-01 owns the correction and fresh package evidence.
 
 ## Context
 

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-P-01 Linux and exact-SHA CI verified; Windows-only beta ready for maintainer acceptance'
+current_focus = 'AMM-P-01 Windows dogfood: repair missing-thumbnail publication failure and reverify beta'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -64,8 +64,10 @@ AMM-P-01 implements ADR 0094 automatic publication, complete metadata transfer
 and the episode ContentRating repair. Linux native, browser, copied-profile and
 playback evidence is recorded in the milestone. Exact-SHA CI and Windows-only
 v1.0.34-beta packaging pass; the downloaded archive is independently verified.
-Next: the maintainer tests the draft Windows beta and yt-dlp 0.11.3 and reports
-in this session. Native Windows acceptance remains open. The original personal
+Windows dogfood reproduced optional remote thumbnail HTTP 404 aborting the
+publication scan after successful numbering and subtitle preparation. Next:
+verify the scanner correction, obtain exact-SHA CI, and prepare a new immutable
+Windows-only beta for publication acceptance. The original personal
 profile remains unchanged.
 2026-09-15 hydration correction: required admin startup no longer waits for
 optional browser idle time. The owning admin-ui-failure-semantics parity debt

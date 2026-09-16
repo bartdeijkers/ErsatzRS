@@ -13,7 +13,14 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.0.35-beta] - 2026-09-16
+
 ### Fixed
+
+- Keep add-on list publication working when an optional remote thumbnail is
+  missing or unavailable. Reuse verified local artwork before contacting the
+  image server, preserve operator replacements, and log artwork fetch failures
+  without rolling back otherwise valid media.
 
 - Automatically apply saved add-on imports, refreshes, metadata enrichment and
   edits, including pending drafts from older versions, without a review or
@@ -3015,7 +3022,8 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.34-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...HEAD
+[1.0.35-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.34-beta...v1.0.35-beta
 [1.0.34-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.33-beta...v1.0.34-beta
 [1.0.33-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.32-beta...v1.0.33-beta
 [1.0.28-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.27-beta...v1.0.28-beta

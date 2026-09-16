@@ -3131,51 +3131,59 @@ async fn sync_managed_artwork_role(
         clear_artwork_materialization(pool, manifest_path, provider_id, role).await?;
         return Ok(None);
     };
-    let (canonical_source, bytes, extension) =
-        if let Some(upload_id) = ersatzrs_infra::addon_artwork::upload_id(source) {
-            let role_value = artwork_role_value(role);
-            let row = sqlx::query_as::<_, (Vec<u8>, String)>(
-                r#"SELECT "upload"."Bytes", "upload"."ContentType"
-                   FROM "AddonMediaListArtworkUpload" AS "upload"
-                   JOIN "AddonMediaListLibrary" AS "managed"
-                     ON "managed"."AddonMediaListId" = "upload"."AddonMediaListId"
-                   JOIN "AddonMediaListItem" AS "item"
-                     ON "item"."Id" = "upload"."AddonMediaListItemId"
-                   WHERE "upload"."Id" = ? AND "managed"."ManifestPath" = ?
-                     AND "item"."ProviderId" = ? AND "upload"."Role" = ?"#,
+    let (canonical_source, bytes, extension) = if let Some(upload_id) =
+        ersatzrs_infra::addon_artwork::upload_id(source)
+    {
+        let (bytes, extension) =
+            load_uploaded_item_artwork(pool, manifest_path, provider_id, role, upload_id).await?;
+        (source.to_owned(), bytes, extension)
+    } else {
+        let canonical = validate_operator_source_url(source, network_hosts)
+            .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+        // Optional remote artwork must not prevent publication of playable
+        // media. Check local ownership and intact cached bytes before HTTP.
+        if let Some(operator) =
+            existing_operator_role_artwork(folder, definition_file, role, previous, &canonical)
+        {
+            if previous.is_some_and(|previous| previous.file != operator.file) {
+                remove_generated_artwork(folder, previous);
+            }
+            return reuse_managed_artwork_role(
+                pool,
+                manifest_path,
+                provider_id,
+                role,
+                Some(&operator),
             )
-            .bind(upload_id)
-            .bind(manifest_path.to_string_lossy().as_ref())
-            .bind(provider_id)
-            .bind(role_value)
-            .fetch_optional(pool)
-            .await
-            .map_err(|error| {
-                PlaylistError::Enumeration(format!("unable to load uploaded artwork: {error}"))
-            })?
-            .ok_or_else(|| {
-                PlaylistError::Enumeration(
-                    "selected artwork upload does not belong to this item and role".to_owned(),
-                )
-            })?;
-            let (_, extension) = ersatzrs_infra::addon_artwork::validate_image(&row.1, &row.0)
-                .map_err(|error| {
-                    PlaylistError::Enumeration(format!("uploaded artwork is invalid: {error}"))
-                })?;
-            (source.to_owned(), row.0, extension)
-        } else {
-            let canonical = validate_operator_source_url(source, network_hosts)
-                .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
-            let (bytes, extension) = download_artwork(client, &canonical)
-                .await
-                .map_err(PlaylistError::Enumeration)?;
-            (canonical, bytes, extension)
+            .await;
+        }
+        let intact =
+            previous.filter(|artwork| file_has_hash(&folder.join(&artwork.file), &artwork.sha256));
+        if intact.is_some_and(|artwork| artwork.url == canonical) {
+            return reuse_managed_artwork_role(pool, manifest_path, provider_id, role, intact)
+                .await;
+        }
+        let (bytes, extension) = match download_artwork(client, &canonical).await {
+            Ok(image) => image,
+            Err(error) => {
+                tracing::warn!(
+                    definition_file,
+                    artwork_role = ?role,
+                    failure_kind = "fetch",
+                    operation_message = %error,
+                    "optional add-on artwork was skipped; media publication continues"
+                );
+                return reuse_managed_artwork_role(pool, manifest_path, provider_id, role, intact)
+                    .await;
+            }
         };
+        (canonical, bytes, extension)
+    };
     if previous.is_some_and(|artwork| {
         artwork.url == canonical_source
             && file_has_hash(&folder.join(&artwork.file), &artwork.sha256)
     }) {
-        return Ok(previous.cloned());
+        return reuse_managed_artwork_role(pool, manifest_path, provider_id, role, previous).await;
     }
     let file = artwork_file_name(definition_file, role, extension).ok_or_else(|| {
         PlaylistError::Enumeration("unable to derive a safe artwork filename".to_owned())
@@ -3186,16 +3194,8 @@ async fn sync_managed_artwork_role(
         if previous.is_some_and(|previous| previous.file != operator.file) {
             remove_generated_artwork(folder, previous);
         }
-        record_artwork_materialization(
-            pool,
-            manifest_path,
-            provider_id,
-            role,
-            &canonical_source,
-            &operator,
-        )
-        .await?;
-        return Ok(Some(operator));
+        return reuse_managed_artwork_role(pool, manifest_path, provider_id, role, Some(&operator))
+            .await;
     }
     let path = folder.join(&file);
     if path.parent() != Some(folder) {
@@ -3213,16 +3213,71 @@ async fn sync_managed_artwork_role(
     if previous.is_some_and(|previous| previous.file != artwork.file) {
         remove_generated_artwork(folder, previous);
     }
-    record_artwork_materialization(
-        pool,
-        manifest_path,
-        provider_id,
-        role,
-        &canonical_source,
-        &artwork,
+    reuse_managed_artwork_role(pool, manifest_path, provider_id, role, Some(&artwork)).await
+}
+
+async fn load_uploaded_item_artwork(
+    pool: &DbPool,
+    manifest_path: &Path,
+    provider_id: &str,
+    role: ersatzrs_core::repositories::AddonMediaListArtworkRole,
+    upload_id: i64,
+) -> Result<(Vec<u8>, &'static str)> {
+    let role_value = artwork_role_value(role);
+    let row = sqlx::query_as::<_, (Vec<u8>, String)>(
+        r#"SELECT "upload"."Bytes", "upload"."ContentType"
+                   FROM "AddonMediaListArtworkUpload" AS "upload"
+                   JOIN "AddonMediaListLibrary" AS "managed"
+                     ON "managed"."AddonMediaListId" = "upload"."AddonMediaListId"
+                   JOIN "AddonMediaListItem" AS "item"
+                     ON "item"."Id" = "upload"."AddonMediaListItemId"
+                   WHERE "upload"."Id" = ? AND "managed"."ManifestPath" = ?
+                     AND "item"."ProviderId" = ? AND "upload"."Role" = ?"#,
     )
-    .await?;
-    Ok(Some(artwork))
+    .bind(upload_id)
+    .bind(manifest_path.to_string_lossy().as_ref())
+    .bind(provider_id)
+    .bind(role_value)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to load uploaded artwork: {error}"))
+    })?
+    .ok_or_else(|| {
+        PlaylistError::Enumeration(
+            "selected artwork upload does not belong to this item and role".to_owned(),
+        )
+    })?;
+    let (_, extension) =
+        ersatzrs_infra::addon_artwork::validate_image(&row.1, &row.0).map_err(|error| {
+            PlaylistError::Enumeration(format!("uploaded artwork is invalid: {error}"))
+        })?;
+    Ok((row.0, extension))
+}
+
+/// Carry only verified local artwork into the new revision. A missing optional
+/// image has no materialization receipt; database errors remain publication errors.
+async fn reuse_managed_artwork_role(
+    pool: &DbPool,
+    manifest_path: &Path,
+    provider_id: &str,
+    role: ersatzrs_core::repositories::AddonMediaListArtworkRole,
+    artwork: Option<&ManagedPlaylistArtwork>,
+) -> Result<Option<ManagedPlaylistArtwork>> {
+    if let Some(artwork) = artwork {
+        record_artwork_materialization(
+            pool,
+            manifest_path,
+            provider_id,
+            role,
+            &artwork.url,
+            artwork,
+        )
+        .await?;
+    } else {
+        clear_artwork_materialization(pool, manifest_path, provider_id, role).await?;
+    }
+    Ok(artwork.cloned())
 }
 
 fn artwork_file_name(
@@ -4731,6 +4786,81 @@ create_playlist: true
     }
 
     #[tokio::test]
+    async fn managed_artwork_role_missing_remote_image_preserves_valid_local_artwork() {
+        use ersatzrs_core::repositories::AddonMediaListArtworkRole;
+        use httpmock::{Method::GET, MockServer};
+
+        let server = MockServer::start_async().await;
+        let missing = server
+            .mock_async(|when, then| {
+                when.method(GET).path("/missing");
+                then.status(404);
+            })
+            .await;
+        let temporary = tempfile::tempdir().unwrap();
+        let pool = ersatzrs_infra::db::init(&format!(
+            "sqlite:{}",
+            temporary.path().join("artwork.db").display()
+        ))
+        .await
+        .unwrap();
+        let client = artwork_client().unwrap();
+        let manifest = temporary.path().join("list.playlist.yml");
+        let source = server.url("/missing");
+        let role = AddonMediaListArtworkRole::Thumb;
+        let sync = |previous| {
+            sync_managed_artwork_role(
+                &pool,
+                &manifest,
+                "one",
+                role,
+                &client,
+                temporary.path(),
+                "episode.yml",
+                Some(&source),
+                &[],
+                previous,
+            )
+        };
+        assert!(sync(None)
+            .await
+            .expect("optional missing artwork")
+            .is_none());
+        missing.assert_calls_async(1).await;
+
+        let previous = ManagedPlaylistArtwork {
+            url: server.url("/old"),
+            file: "episode.png".into(),
+            sha256: hex_hash(b"previous image"),
+            operator_owned: false,
+        };
+        std::fs::write(temporary.path().join(&previous.file), b"previous image").unwrap();
+        assert_eq!(sync(Some(&previous)).await.unwrap(), Some(previous.clone()));
+        missing.assert_calls_async(2).await;
+
+        let cached = ManagedPlaylistArtwork {
+            url: source.clone(),
+            ..previous.clone()
+        };
+        assert_eq!(sync(Some(&cached)).await.unwrap(), Some(cached.clone()));
+        missing.assert_calls_async(2).await;
+
+        std::fs::write(
+            temporary.path().join(&previous.file),
+            b"operator replacement",
+        )
+        .unwrap();
+        let operator = sync(Some(&previous)).await.unwrap().unwrap();
+        assert!(operator.operator_owned);
+        assert_eq!(operator.sha256, hex_hash(b"operator replacement"));
+        missing.assert_calls_async(2).await;
+
+        std::fs::remove_file(temporary.path().join(&previous.file)).unwrap();
+        assert!(sync(Some(&previous)).await.unwrap().is_none());
+        missing.assert_calls_async(3).await;
+    }
+
+    #[tokio::test]
     async fn managed_artwork_rejects_unbounded_and_non_image_responses() {
         use httpmock::{Method::GET, MockServer};
 
@@ -5898,11 +6028,41 @@ create_playlist: true
             .execute(&pool)
             .await
             .expect("stage publication");
+        // A source-removed item's optional thumbnail can disappear while its
+        // saved identity and metadata must remain publishable.
+        let artwork_server = httpmock::MockServer::start_async().await;
+        let missing_artwork = artwork_server
+            .mock_async(|when, then| {
+                when.method(httpmock::Method::GET)
+                    .path("/missing-thumbnail");
+                then.status(404);
+            })
+            .await;
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "ProviderMetadataJson" = ?,
+            "PublishedAvailability" = 1 WHERE "ProviderId" = 'two'"#,
+        )
+        .bind(
+            serde_json::json!({"title": "Two", "artwork": [{
+                "role": "thumb", "url": artwork_server.url("/missing-thumbnail"),
+                "width": null, "height": null, "language": null
+            }]})
+            .to_string(),
+        )
+        .execute(&pool)
+        .await
+        .expect("missing provider thumbnail");
         let publishing =
             sync_playlist_files(&pool, &manifest_path, manifest_bytes, &manifest, &runtime)
                 .await
                 .expect("publishing sync");
         assert!(!publishing.enumerated);
+        missing_artwork.assert_calls_async(1).await;
+        assert!(publishing.state.entries[1].artwork_roles.is_empty());
+        assert_eq!(
+            publishing.state.entries[1].availability,
+            AddonMediaListItemAvailability::Unavailable
+        );
         assert_eq!(
             publishing
                 .definitions

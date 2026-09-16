@@ -4813,4 +4813,19 @@ GitHub: e38a38df72d9ec97ac5c0c242c5e7dcccb3ecd5a6a942202e744917c088cced9.
 Release notes link the validated yt-dlp 0.11.3 add-on bundle and installation
 instructions. Native Windows application acceptance remains open for the
 maintainer's report in this session; the beta remains a draft pending that proof.
+Native Windows v1.0.34-beta dogfood exposed a publication blocker: the numbered
+list saved successfully and all subtitle preparation completed, but repeated
+verification scans rolled back with publication_scan_failed. A selected remote
+thumbnail returns HTTP 404; the reviewed-artwork path propagates this optional
+asset failure as a misleading playlist-enumeration error. The regression fails
+with that exact error before the correction; 51 playlist tests pass afterward,
+including staged publication without provider re-enumeration, unavailable-item
+retention, intact image reuse and operator replacement preservation. Workspace
+Clippy and canonical closeout pass: 2,819 tests, 37 conditional skips and all
+workspace doctests. Progress, format, architecture and hydration checks pass.
+Runtime smoke, exact-source CI and fresh Windows package acceptance remain
+required. Independent read-only Classic
+Refresh diagnosis found only future-day checkpoints after a media file whose
+container and saved version both report a 90-hour duration; no Reset or media
+file mutation was performed.
 '''
