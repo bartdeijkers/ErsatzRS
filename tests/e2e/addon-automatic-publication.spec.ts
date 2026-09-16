@@ -32,7 +32,11 @@ test('automatically projects thirteen episodes and applies native saved edits', 
   await expect.poll(() => sqlite(metadataCount), { timeout: 120000 }).toBe('13');
   await expect.poll(() => sqlite(`SELECT "ReviewState"=2 AND "PublishedRevision">0 AND "PublicationJournalJson" IS NULL
     FROM "AddonMediaList" WHERE "Id"=${listId};`), { timeout: 120000 }).toBe('1');
-  await hydrated(page, `/media/addon-lists/${listId}`);
+  // The import landing reloads itself when discovery finishes. Let that
+  // navigation settle instead of racing it with a second page.goto.
+  await expect(page.getByTestId('addon-import-landing')).toHaveCount(0, { timeout: 30000 });
+  await hydrated(page);
+  await expect(page).toHaveURL(new RegExp(`/media/addon-lists/${listId}(\\?import=1)?$`));
   await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeHidden();
   const parent = sqlite(`SELECT json_extract("MetadataJson",'$.content_ratings[0]') FROM "AddonMediaListRevision"
     WHERE "AddonMediaListId"=${listId} ORDER BY "Revision" DESC LIMIT 1;`);
