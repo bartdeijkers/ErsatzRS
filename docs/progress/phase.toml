@@ -65,10 +65,12 @@ and the episode ContentRating repair. Linux native, browser, copied-profile and
 playback evidence is recorded in the milestone. Exact-SHA CI and Windows-only
 v1.0.34-beta packaging pass; the downloaded archive is independently verified.
 Windows dogfood reproduced optional remote thumbnail HTTP 404 aborting the
-publication scan after successful numbering and subtitle preparation. Next:
-verify the scanner correction, obtain exact-SHA CI, and prepare a new immutable
-Windows-only beta for publication acceptance. The original personal
-profile remains unchanged.
+publication scan after successful numbering and subtitle preparation. The
+scanner correction passes Linux closeout, runtime smoke and exact-source CI
+35118917930. The immutable Windows-only v1.0.35-beta archive is independently
+verified. Next: install that candidate and retry the Windows list publication;
+native acceptance remains open. The original Linux personal profile remains
+unchanged; Windows numbering and playback options were saved as authorized.
 2026-09-15 hydration correction: required admin startup no longer waits for
 optional browser idle time. The owning admin-ui-failure-semantics parity debt
 records the natural and controlled reproductions, identical-build runner2 SSD

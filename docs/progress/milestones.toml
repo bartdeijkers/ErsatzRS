@@ -4823,8 +4823,19 @@ including staged publication without provider re-enumeration, unavailable-item
 retention, intact image reuse and operator replacement preservation. Workspace
 Clippy and canonical closeout pass: 2,819 tests, 37 conditional skips and all
 workspace doctests. Progress, format, architecture and hydration checks pass.
-Runtime smoke, exact-source CI and fresh Windows package acceptance remain
-required. Independent read-only Classic
+Runtime smoke passes all MPEG-TS and HLS probes. CI 35116538880 exposed an
+unrelated browser-test navigation race: the test navigated while the import
+landing reloaded itself. Waiting for that page-owned transition passes both
+focused browser cases. Corrected candidate 4dfd4bcf7feb3adfdb31f3e8144f45482840745d
+passes exact-source CI 35118917930, including 220 Chromium and 197 Firefox tests
+(4 and 27 conditional skips). Windows-only v1.0.35-beta is tagged at that
+candidate; Windows packaging run 35123447387 completed successfully, including
+startup registration and the matching SSR/WASM bundle gate. Its downloaded
+archive passes ZIP integrity, four x64 PE executable,
+runtime asset and exclusion checks: 66 files, 68,889,829 bytes, SHA-256
+77ab9be40f0b57925aa86e29039c8178f5f075065d6b4a6fa191015451af1143,
+matching the GitHub asset digest. Native Windows publication acceptance remains
+required; the release remains a draft. Independent read-only Classic
 Refresh diagnosis found only future-day checkpoints after a media file whose
 container and saved version both report a 90-hour duration; no Reset or media
 file mutation was performed.

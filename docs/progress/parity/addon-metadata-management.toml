@@ -912,4 +912,4 @@ discovered = '2026-09-16'
 resolved = false
 adr = '0094'
 description = 'AMM-P-01 replaces review gates with automatic publication, preserves source-removed local media, completes metadata transfer and repairs episode ContentRating. Acceptance and evidence are owned by AMM-P-01.'
-evidence = 'Automatic publication and metadata transfer are implemented; AMM-P-01 records verified Linux acceptance, exact-SHA CI and the independently checked Windows-only v1.0.34-beta draft. Native Windows dogfood exposed optional thumbnail HTTP 404 rolling back publication; the scanner correction and fresh Windows package acceptance remain open.'
+evidence = 'Automatic publication and metadata transfer are implemented. Windows v1.0.34-beta dogfood exposed optional thumbnail HTTP 404 rolling back publication. The correction passes Linux closeout, runtime smoke and exact-source CI 35118917930. AMM-P-01 records the independently verified Windows-only v1.0.35-beta archive; native Windows publication acceptance remains open.'
