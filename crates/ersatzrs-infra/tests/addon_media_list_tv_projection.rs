@@ -127,6 +127,7 @@ async fn seed_list_item(
         genres: vec!["Education".to_owned()],
         tags: vec!["Archive".to_owned(), "Teleac".to_owned()],
         studios: vec!["Fixture Studio".to_owned()],
+        content_ratings: vec!["age:12".to_owned(), "fixture:PG".to_owned()],
         music_labels: vec!["Fixture Label".to_owned()],
         languages: vec!["nl".to_owned()],
         people: vec![AddonMediaListNfoPerson {
@@ -1089,6 +1090,15 @@ async fn television_projection_projects_nfo_facets_and_materialized_artwork() {
            WHERE "link"."AddonMediaListItemId" = 10"#,
     )
     .await;
+    assert_eq!(
+        scalar::<String>(
+            &pool,
+            &format!(r#"SELECT "ContentRating" FROM "EpisodeMetadata" WHERE "Id" = {metadata_id}"#)
+        )
+        .await,
+        "age:12",
+        "the first rating survives repeated publication"
+    );
     for (table, expected) in [
         ("Genre", "Education"),
         ("Tag", "Archive"),
@@ -2121,7 +2131,7 @@ async fn staged_publication_rejects_concurrent_draft_mutations() {
         )
         .await
         .expect_err("existing title changes must remain review-only");
-    assert!(error.to_string().contains("requires review before staging"));
+    assert!(error.to_string().contains("input changed before staging"));
     assert_eq!(
         scalar::<i64>(
             &pool,

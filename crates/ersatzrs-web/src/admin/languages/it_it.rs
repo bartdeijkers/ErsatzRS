@@ -416,7 +416,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ItemNumberingHelp => "Un elemento numerato richiede entrambi i valori. La stagione 0 è per gli speciali.",
         TextKey::ItemMetadata => "Riassunto, generi e tag",
         TextKey::ItemMetadataHelp => "Altri titoli, lingue e crediti",
-        TextKey::ItemSaveHelp => "Salva qui. Pubblica da Elementi e revisione.",
+        TextKey::ItemSaveHelp => "Salva le modifiche per applicarle automaticamente.",
         TextKey::ItemEditNumbering => "Modifica numerazione nella lista",
         TextKey::ItemReplacementHelp => "Scegliere o rimuovere una sostituzione modifica questa bozza. Usa Salva elemento per conservarla.",
         TextKey::ItemReplacementPending => "La modifica della sostituzione non è salvata.",
@@ -440,13 +440,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonCheckPending => "Controllo del componente aggiuntivo…",
         TextKey::AddonWorkspaceIncludeSelected => "Includi gli elementi selezionati",
         TextKey::AddonWorkspaceExcludeSelected => "Escludi gli elementi selezionati",
-        TextKey::AddonWorkspaceInclusionHelp => "Le modifiche riguardano gli elementi selezionati, anche nelle altre pagine. Salva per conservarle; la pubblicazione cambia solo quando pubblichi.",
+        TextKey::AddonWorkspaceInclusionHelp => "Salva le modifiche alla selezione per applicarle automaticamente.",
         TextKey::AddonWorkspacePublicationFailed => "Pubblicazione non riuscita",
-        TextKey::AddonWorkspacePublicationRestoredHelp => "La revisione precedente è stata ripristinata. Le modifiche salvate sono conservate. Controlla Attività prima di pubblicare di nuovo.",
-        TextKey::AddonWorkspaceParentMetadataPreserved => "La pubblicazione è stata interrotta per conservare i metadati modificati o non validi di tvshow.nfo / artist.nfo nella cartella dell’elenco. Conserva una copia di sicurezza e riconcilia il file con i metadati principali nella cartella dei flussi analizzati prima di pubblicare di nuovo.",
+        TextKey::AddonWorkspacePublicationRestoredHelp => "La versione precedente è stata ripristinata. Le modifiche salvate vengono conservate e ritentate automaticamente. Attività mostra gli errori tecnici.",
+
+        TextKey::AddonWorkspaceParentMetadataPreserved => "Elaborazione interrotta per preservare i metadati NFO principali modificati o non validi. Correggi il file prima di riprovare.",
+
         TextKey::AddonWorkspaceImporting => "Importazione della lista…",
         TextKey::AddonWorkspaceImportingHelp => "La lista si aprirà automaticamente al termine della ricerca. Senza JavaScript, usa Aggiorna.",
-        TextKey::AddonWorkspaceImportSteps => "Importa il riepilogo, controlla e salva le modifiche, prepara i contenuti se necessario, quindi pubblica.",
+        TextKey::AddonWorkspaceImportSteps => "Importa la lista. I metadati e i contenuti necessari vengono elaborati e pubblicati automaticamente.",
         TextKey::AddonWorkspaceChooseProvider => "Scegli un componente aggiuntivo qui sotto se non ne viene rilevato uno per questo URL.",
         TextKey::AddonWorkspaceExcluded => "Escluso dalla pubblicazione",
         TextKey::ItemFromList => "Dalla lista",
@@ -467,7 +469,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceNoOptions => "Questo componente aggiuntivo non offre impostazioni di accesso o segmenti.",
         TextKey::AddonWorkspaceNewHelp => "Scarica i nuovi video importati; trasmetti quelli esistenti.",
         TextKey::AddonWorkspaceSizeLimit => "Questo modulo è troppo grande. Torna ai dati inseriti e salva una parte più piccola.",
-        TextKey::AddonWorkspaceItems => "Elementi e revisione",
+        TextKey::AddonWorkspaceItems => "Elementi",
         TextKey::AddonWorkspaceSettings => "Impostazioni elenco",
         TextKey::AddonWorkspacePlayback => "Riproduzione e accesso",
         TextKey::AddonWorkspaceActivity => "Attività e ripristino",
@@ -477,8 +479,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceSaveNumbering => "Salva numerazione",
         TextKey::AddonWorkspacePublish => "Pubblica modifiche salvate",
         TextKey::AddonWorkspacePublished => "Elenco pubblicato aggiornato",
-        TextKey::AddonWorkspacePending => "Modifiche salvate pronte per la pubblicazione",
-        TextKey::AddonWorkspacePreparationRequired => "Le modifiche salvate richiedono contenuti multimediali preparati prima della pubblicazione",
+        TextKey::AddonWorkspacePending => "Le modifiche salvate vengono applicate automaticamente",
+        TextKey::AddonWorkspacePreparationRequired => "I contenuti necessari vengono preparati automaticamente",
         TextKey::AddonWorkspacePreparing => "Preparazione dei contenuti multimediali per la pubblicazione",
         TextKey::AddonWorkspaceAddIncomplete => "Elenco aggiunto, ma alcune impostazioni non sono state salvate. Apri Impostazioni elenco, controllale e salva di nuovo.",
         TextKey::AddonWorkspacePreparationFailed => "Preparazione dei contenuti multimediali non riuscita",
@@ -522,7 +524,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::LastActivity => "Ultima attività",
         TextKey::AddonAccessUnknownFailure => "La causa di questo errore di accesso è sconosciuta. Controlla le impostazioni di accesso salvate, prova la fonte nel browser e ripeti la verifica.",
         TextKey::AddonWorkspaceRetained => "Impossibile salvare le modifiche. I dati inseriti sono conservati; controlla gli errori o ricarica la revisione corrente.",
-        TextKey::AddonWorkspaceNavigation => "La navigazione conserva le modifiche non salvate. Salvataggio e pubblicazione sono azioni separate.",
+        TextKey::AddonWorkspaceNavigation => "La navigazione mantiene le modifiche non salvate. Le modifiche salvate vengono applicate automaticamente.",
         TextKey::AddonWorkspaceSeasonOnly => "Modifica solo stagione",
         TextKey::AddonWorkspacePageSize => "Elementi per pagina",
 
@@ -546,15 +548,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonAccessProfileUnavailable => "Il profilo del browser selezionato non è disponibile per il server. Verifica il profilo salvato e ripeti il controllo di accesso.",
         TextKey::AddonAccessProfileLocked => "Il profilo del browser è bloccato. Chiudi il browser che usa questo profilo e ripeti il controllo di accesso.",
         TextKey::AddonAccessDecryptionFailed => "Il server non ha potuto decifrare le credenziali del browser. Verifica il profilo e l’account che esegue il server, poi riprova.",
+        TextKey::AddonDerivedMetadataLimited => "I metadati della serie hanno raggiunto il limite di dimensione. Quelli degli episodi rimangono completi.",
+        TextKey::AddonLocalPlaybackAvailable => "Copia locale riproducibile",
         TextKey::AddonAccessRestricted => "Il fornitore ha limitato l’accesso. Apri la fonte nel browser per verificare le restrizioni dell’account o della regione, poi ripeti il controllo di accesso.",
         TextKey::AddonAccessNextAttempt => "Prossimo tentativo:",
         TextKey::AddonAccessExpires => "Scadenza del risultato:",
         TextKey::AddonAccessRefresh => "Aggiorna stato",
         TextKey::AddonOptionsCurrentFilter => "Filtro corrente",
         TextKey::AddonOptions => "Opzioni del fornitore",
-        TextKey::AddonOptionsDraftHelp => {
-            "Le modifiche vengono salvate nella bozza. La riproduzione pubblicata mantiene le opzioni correnti fino alla pubblicazione."
-        }
+        TextKey::AddonOptionsDraftHelp => "Le opzioni salvate vengono applicate automaticamente. La riproduzione attuale resta disponibile durante l’elaborazione.",
         TextKey::AddonOptionsProvisional => {
             "Questi valori predefiniti del pacchetto sono provvisori. Salvare un’opzione li attiva per questa bozza."
         }
@@ -579,7 +581,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Addon => "Componente aggiuntivo",
         TextKey::PrimaryFeature => "Film principale",
         TextKey::MovieExtra => "Contenuto extra",
-        TextKey::NeedReview => "Da rivedere",
+        TextKey::NeedReview => "Avvisi",
+
         TextKey::ReviewRecommended => "Revisione consigliata",
         TextKey::PublicationReadiness => "Preparazione alla pubblicazione",
         TextKey::PublicationBlockers => "Blocchi",
@@ -788,10 +791,8 @@ pub fn text(key: TextKey) -> &'static str {
             "Importa solo la panoramica e richiedi manualmente i dettagli descrittivi. I dettagli tecnici necessari per la riproduzione vengono preparati automaticamente prima della pubblicazione."
         }
         TextKey::PlaybackDetailsQueued => "Dettagli di riproduzione in coda",
-        TextKey::PublishAgainAfterDetails => {
-            "Controlla i dettagli completati, quindi pubblica di nuovo."
-        }
-        TextKey::FetchDetails => "Recupera dettagli",
+        TextKey::PublishAgainAfterDetails => "I dettagli completati vengono applicati automaticamente.",
+TextKey::FetchDetails => "Recupera dettagli",
         TextKey::DetailsQueued => "Dettagli in coda",
         TextKey::DetailsLoading => "Caricamento dettagli",
         TextKey::RetryDetails => "Riprova dettagli",
@@ -799,7 +800,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DetailsSkipped => "Dettagli ignorati",
         TextKey::FindingProgrammes => "Ricerca programmi",
         TextKey::CheckingOverview => "Verifica panoramica",
-        TextKey::ReadyToReview => "Pronto per la revisione",
+        TextKey::ReadyToReview => "Elaborazione automatica",
+
         TextKey::LoadingItemDetails => "Caricamento dettagli elementi",
         TextKey::WaitingForProvider => "In attesa del provider",
         TextKey::OverviewOnly => "Solo panoramica",
@@ -845,16 +847,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Scope => "Ambito",
         TextKey::AllItems => "Tutti gli elementi",
         TextKey::CurrentPage => "Pagina corrente",
-        TextKey::ItemsNeedingReview => "Elementi da verificare",
+        TextKey::ItemsNeedingReview => "Elementi con avvisi",
+
         TextKey::KeepCurrentValue => "Mantieni il valore corrente",
         TextKey::UndoLastChange => "Annulla l’ultima modifica",
         TextKey::Undo => "Annulla",
         TextKey::ChangeUndone => "Modifica annullata",
         TextKey::MetadataConflicts => "Conflitti nei metadati",
-        TextKey::MetadataConflictsHelp => {
-            "Il fornitore ha modificato campi sostituiti dall’operatore. Controlla i valori prima della pubblicazione."
-        }
-        TextKey::PreviousProviderValue => "Valore precedente del fornitore",
+        TextKey::MetadataConflictsHelp => "Il fornitore ha modificato campi personalizzati. I valori salvati rimangono in uso.",
+TextKey::PreviousProviderValue => "Valore precedente del fornitore",
         TextKey::NewProviderValue => "Nuovo valore del fornitore",
         TextKey::OperatorValue => "Valore dell’operatore",
         TextKey::Discovered => "Rilevati",
@@ -896,19 +897,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PublishMetadata => "Pubblica",
         TextKey::IncludeItem => "Includi",
         TextKey::IncludeInPublication => "Includi nella pubblicazione",
-        TextKey::MetadataDraftNotice => {
-            "Controlla i metadati e gli elementi inclusi prima di pubblicare questo elenco."
-        }
-        TextKey::ApplyToAllItemsPrompt => {
+        TextKey::MetadataDraftNotice => "Metadati e selezioni salvati vengono applicati automaticamente.",
+TextKey::ApplyToAllItemsPrompt => {
             "Ogni elemento viene riclassificato con il tipo di contenuto selezionato, sostituendo i valori dedotti dal componente aggiuntivo o impostati manualmente."
         }
         TextKey::TelevisionEpisode => "Episodio televisivo",
         TextKey::CollectionTypeAuto => "Determina dagli elementi",
         TextKey::CurrentLibraryType => "Tipo di libreria attuale",
-        TextKey::CollectionTypeChangeHelp => {
-            "Puoi modificarlo dopo l’importazione. Salva e pubblica per riclassificare gli elementi esistenti senza importare nuovamente il componente aggiuntivo; ordine, inclusione e modifiche ai metadati vengono mantenuti."
-        }
-        TextKey::NonPlayableItems => "Elementi non riproducibili",
+        TextKey::CollectionTypeChangeHelp => "Salva per riorganizzare automaticamente gli elementi esistenti. Ordine, selezione e modifiche ai metadati vengono conservati.",
+TextKey::NonPlayableItems => "Elementi non riproducibili",
         TextKey::UnknownItems => "Elementi sconosciuti",
         TextKey::PlayableItems => "Elementi riproducibili",
         TextKey::ApplyToAllItems => "Applica a tutti gli elementi",
@@ -1054,11 +1051,9 @@ pub fn text(key: TextKey) -> &'static str {
         }
         TextKey::RefreshPublicationPolicy => "Pubblicazione dopo aggiornamento",
         TextKey::RefreshPublicationReview => "Verifica ogni aggiornamento",
-        TextKey::RefreshPublicationAutomatic => "Pubblica automaticamente le aggiunte sicure",
-        TextKey::RefreshPublicationPolicyHelp => {
-            "Solo per gli aggiornamenti pianificati dopo la prima pubblicazione. Aggiornamenti manuali, riconciliazioni e ripristini richiedono sempre una verifica. Modifiche o aggiunte non sicure restano da verificare."
-        }
-        TextKey::AutoPublicationHeld => "La pubblicazione automatica richiede una verifica",
+        TextKey::RefreshPublicationAutomatic => "Applica automaticamente le modifiche salvate",
+        TextKey::RefreshPublicationPolicyHelp => "Importazioni, aggiornamenti, metadati e modifiche salvate vengono applicati automaticamente.",
+        TextKey::AutoPublicationHeld => "L’elaborazione automatica richiede attenzione",
         TextKey::PreparationWorkerUnavailable => {
             "Il processo di preparazione dei contenuti multimediali non è disponibile. Riavvia il server prima di riprovare la preparazione."
         }

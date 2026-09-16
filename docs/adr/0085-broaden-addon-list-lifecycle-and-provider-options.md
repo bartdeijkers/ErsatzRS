@@ -9,6 +9,10 @@ by [ADR 0087](0087-stream-sponsorblock-intervals-without-playback-underruns.md)
 (2026-09-05, amended 2026-09-06). Streaming is AMM-M-01A; optional list-level
 Download ahead modes are AMM-M-01B. File-preparation requirements below apply
 only to those download paths, not the streaming default.
+The additions-only scheduled publication policy is superseded by
+[ADR 0094](0094-automatically-publish-addon-list-updates.md) (2026-09-16).
+Imports, refreshes, enrichment and saved edits now publish automatically; provider
+options and installation permission review retain their existing contracts.
 Other lifecycle and provider-option decisions remain accepted.
 
 The 2026-09-08 maintainer amendment limits AMM-M-03 to configurable per-list

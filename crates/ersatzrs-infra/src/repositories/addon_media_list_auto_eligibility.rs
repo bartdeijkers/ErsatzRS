@@ -32,7 +32,7 @@ pub(crate) async fn assess_auto_publication_in_tx(
     use AutoPublicationHoldReason as Reason;
 
     let row = sqlx::query(
-        r#"SELECT "DraftRevision", "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ?"#,
+        r#"SELECT "DraftRevision", "PublishedRevision", "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id" = ?"#,
     )
     .bind(list_id)
     .fetch_optional(&mut **tx)
@@ -44,11 +44,19 @@ pub(crate) async fn assess_auto_publication_in_tx(
     })?;
     let revision: i32 = row.try_get("PublishedRevision").repository()?;
     let draft_revision: i32 = row.try_get("DraftRevision").repository()?;
+    let automatic = row
+        .try_get::<i32, _>("RefreshPublicationPolicy")
+        .repository()?
+        == 2;
+    if revision <= 0 && automatic {
+        return Ok(Eligible);
+    }
     if revision <= 0 {
         return Ok(Hold(Reason::BaselineUnavailable));
     }
     let baseline = match load_valid_revision_snapshot_in_tx(tx, list_id, revision).await {
         Ok(Some(snapshot)) => snapshot,
+        Ok(None) if automatic => return Ok(Eligible),
         Ok(None) | Err(RepositoryError::Decode { .. }) => {
             return Ok(Hold(Reason::BaselineUnavailable));
         }
@@ -64,6 +72,31 @@ pub(crate) async fn assess_auto_publication_in_tx(
         &[],
     )
     .await?;
+    if automatic {
+        // Compare effective saved input, not publication-only artifact choices.
+        // A no-op save must not rescan or disturb an active playout.
+        let normalize =
+            |mut snapshot: ersatzrs_core::repositories::AddonMediaListRevisionSnapshot| {
+                snapshot.revision = 0;
+                snapshot.source_draft_revision = 0;
+                snapshot.options.revision = 0;
+                snapshot.options.source_draft_revision = None;
+                snapshot.files.clear();
+                snapshot.artifact_ids.clear();
+                snapshot.snapshot_digest.clear();
+                for item in &mut snapshot.items {
+                    item.prepared_artifact_id = None;
+                    item.playback_timeline = None;
+                    item.subtitle_artifact_ids.clear();
+                }
+                snapshot
+            };
+        return Ok(if normalize(current) == normalize(baseline) {
+            NoChanges
+        } else {
+            Eligible
+        });
+    }
     if current.name != baseline.name
         || current.description != baseline.description
         || current.generate_playlist != baseline.generate_playlist

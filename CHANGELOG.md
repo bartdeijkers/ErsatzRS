@@ -15,6 +15,15 @@ release section when tagging a release.
 
 ### Fixed
 
+- Automatically apply saved add-on imports, refreshes, metadata enrichment and
+  edits, including pending drafts from older versions, without a review or
+  publication step. Keep source-removed items and usable local media, retain
+  manual metadata overrides, and report technical failures through existing
+  recovery and health views.
+- Keep add-on NFO metadata refreshable after media projection, adopt external
+  field edits, derive missing show facets from included episodes, and preserve
+  content ratings when projecting television episodes.
+
 - Start admin interactivity without waiting for browser idle time, which could
   leave Chromium pages rendered but unresponsive. Keep existing browser
   deadlines and cover startup with idle callbacks withheld.

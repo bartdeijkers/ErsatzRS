@@ -74,6 +74,8 @@ export interface PreparedFixtureVariant {
   itemCount?: number;
   /** Adds a second editable string setting, DISPLAY_NOTE, for sibling-edit coverage. */
   extraSetting?: boolean;
+  /** Rich source metadata for automatic publication and parent derivation. */
+  richMetadata?: boolean;
 }
 
 export function preparedInvocationLog(dbPath: string, variant: PreparedFixtureVariant = {}): string {
@@ -102,6 +104,12 @@ export function installPreparedFixture(dbPath: string, pauseFirst = false, subti
       title: index === 0 ? 'Prepared calibration' : `Prepared calibration ${index + 1}`, kind: 'remote_stream',
       guids: [], source_url: index === 0 ? fixtureSourceUrl : `${fixtureSourceUrl}/${index + 1}`, availability: 'available', content_kind: 'other_video',
       liveness: 'finite', duration_seconds: subtitleFixture ? 90 : 120,
+      ...(variant.richMetadata ? { metadata: {
+        title: `Automatic episode ${index + 1}`, plot: `Full description ${index + 1}`,
+        season: 1, episode: index + 1, release_date: '2026-05-05',
+        genres: ['Documentary'], tags: ['Archive'], languages: ['en'],
+        studios: ['Fixture Channel'], content_ratings: [index === 12 ? 'age:18' : 'age:0'],
+      } } : {}),
     })),
   ];
   // No network client exists in this provider. A raw play attempt is recorded and fails.

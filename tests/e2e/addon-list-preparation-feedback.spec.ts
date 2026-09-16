@@ -99,30 +99,37 @@ test('untouched add-on defaults prepare and publish in both download modes', asy
     expect(sqlite(`SELECT "DraftOptionSchemaId" IS NOT NULL FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe('1');
 
     await hydrated(page, `/media/addon-lists/${listId}`);
-    // A02: zero blockers must not read as "ready to publish" while media is owed.
-    await expect(page.getByText('Saved changes need prepared media before publishing', { exact: true })).toBeVisible();
-    await expect(page.getByText('Saved changes ready to publish', { exact: true })).toHaveCount(0);
-
-    await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
-    await hydrated(page);
-    // The provider only succeeds when the host forwards processed=true, which
-    // this package declares solely as its default.
+    // Saved imports own preparation and publication without an extra action.
+    expect(sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe('2');
+    await expect(page.getByRole('button', { name: 'Prepare publication', exact: true })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeHidden();
     await expect.poll(() => preparationJobs(listId, 2), { timeout: 180000 }).toBe('1');
     expect(prepareInvocations(variant)).toBeGreaterThan(0);
     expect(preparationJobs(listId, 3)).toBe('0');
-
-    // Without a reload, heading and action agree once media is prepared.
-    await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeEnabled({ timeout: 20000 });
-    await expect(page.getByText('Saved changes ready to publish', { exact: true })).toBeVisible();
     await expect(page.getByTestId('addon-preparation-failed')).toBeHidden();
 
-    // The reported defect was a list that could not be published: publish and
-    // wait for the retained revision to complete with no journal left behind.
-    await page.getByRole('button', { name: 'Publish saved changes', exact: true }).click();
     await expect.poll(() => sqlite(`SELECT list."PublishedRevision"||','||list."ReviewState"||','||(list."PublicationJournalJson" IS NULL)||','||COUNT(r."Id")
 FROM "AddonMediaList" list
 LEFT JOIN "AddonMediaListRevision" r ON r."AddonMediaListId"=list."Id" AND r."Revision"=list."PublishedRevision" AND r."CompletedAt" IS NOT NULL
 WHERE list."Id"=${listId};`), { timeout: 90000 }).toBe('1,2,1,1');
+
+    // Replay a provider result reporting source loss after a local publication.
+    // It must publish automatically while keeping the validated file playable.
+    const artifact = sqlite(`SELECT "PreparedArtifactId" FROM "AddonMediaListRevisionItem" i
+      JOIN "AddonMediaListRevision" r ON r."Id"=i."AddonMediaListRevisionId"
+      WHERE r."AddonMediaListId"=${listId} AND r."Revision"=1;`);
+    expect(Number(artifact)).toBeGreaterThan(0);
+    sqlite(`UPDATE "AddonMediaListItem" SET "Availability"=1,"AvailabilityReasonCode"=NULL
+      WHERE "AddonMediaListId"=${listId};
+      UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1,"ReviewState"=1 WHERE "Id"=${listId};`);
+    await expect.poll(() => sqlite(`SELECT "PublishedRevision"||','||"ReviewState" FROM "AddonMediaList" WHERE "Id"=${listId};`), { timeout: 90000 }).toBe('2,2');
+    expect(sqlite(`SELECT "PreparedArtifactId" FROM "AddonMediaListRevisionItem" i
+      JOIN "AddonMediaListRevision" r ON r."Id"=i."AddonMediaListRevisionId"
+      WHERE r."AddonMediaListId"=${listId} AND r."Revision"=2;`)).toBe(artifact);
+    expect(sqlite(`SELECT m."State" FROM "MediaItem" m JOIN "AddonMediaListItem" i ON i."MediaItemId"=m."Id"
+      WHERE i."AddonMediaListId"=${listId};`)).toBe('0');
+    await hydrated(page, `/media/addon-lists/${listId}`);
+    await expect(page.getByText('Local copy playable', { exact: true })).toBeVisible();
   }
   expect(errors).toEqual([]);
 });
@@ -134,11 +141,7 @@ test('a failed preparation attempt is explained and retryable with and without J
   const variant = scenario(info, 'rejected-default', false);
   const listId = await importList(page, variant, 'download_ahead');
   await hydrated(page, `/media/addon-lists/${listId}`);
-  await expect(page.getByTestId('addon-preparation-failed')).toBeHidden();
-
-  await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
-  await hydrated(page);
-  await expect.poll(() => preparationJobs(listId, 3), { timeout: 180000 }).toBe('1');
+  await expect.poll(() => Number(preparationJobs(listId, 3)), { timeout: 180000 }).toBeGreaterThan(0);
   // The host validates schema and options before invoking the provider, so a
   // prepare invocation proves the untouched request itself was valid.
   expect(prepareInvocations(variant)).toBeGreaterThan(0);
@@ -168,8 +171,10 @@ test('a failed preparation attempt is explained and retryable with and without J
       plain.waitForEvent('framenavigated', frame => frame === plain.mainFrame()),
       plain.getByRole('button', { name: 'Retry preparation', exact: true }).click(),
     ]);
-    await expect.poll(() => preparationJobs(listId, 3), { timeout: 180000 }).toBe('2');
+    await expect.poll(() => prepareInvocations(variant), { timeout: 180000 }).toBeGreaterThan(attempts);
     expect(prepareInvocations(variant)).toBeGreaterThan(attempts);
+    await expect.poll(() => sqlite(`SELECT "State" FROM "AddonMediaListItemOperationJob"
+      WHERE "AddonMediaListId"=${listId} AND "Kind"=1 ORDER BY "Id" DESC LIMIT 1;`), { timeout: 180000 }).toBe('3');
 
     expect((await plain.goto(`/media/addon-lists/${listId}/activity`))?.status()).toBe(200);
     await expect(plain.getByTestId('addon-preparation-failures')).toContainText('Preparation tasks');
@@ -181,11 +186,12 @@ test('a failed preparation attempt is explained and retryable with and without J
   }
 });
 
-test('a legacy unbound draft adopts defaults on Prepare and keeps unsaved input at the returned revision', async ({ page }, info) => {
+test('a legacy unbound draft adopts defaults on retry and keeps unsaved input at the returned revision', async ({ page }, info) => {
   test.setTimeout(240000);
   const errors = watchErrors(page);
   const listId = await importList(page, scenario(info, 'legacy-unbound', false), 'download_ahead');
-  // Reproduce a draft saved before creation retained option defaults.
+  await expect.poll(() => Number(preparationJobs(listId, 3)), { timeout: 180000 }).toBeGreaterThan(0);
+  // Reproduce a failed draft saved before creation retained option defaults.
   sqlite(`UPDATE "AddonMediaList" SET "DraftOptionSchemaId"=NULL,"DraftOptionValuesJson"='{}' WHERE "Id"=${listId};
 UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson"='{}' WHERE "AddonMediaListId"=${listId};`);
   const revision = Number(sqlite(`SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`));
@@ -194,7 +200,7 @@ UPDATE "AddonMediaListItem" SET "DraftOptionOverridesJson"='{}' WHERE "AddonMedi
   // An unsaved task field carried by the native draft, not a submitted filter.
   await page.locator('.bulk-tools > summary').click();
   await page.locator('input[name="bulk_season"]').fill('7');
-  await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry preparation', exact: true }).click();
   await hydrated(page);
   await expect(page.locator('#workspace-errors')).toHaveCount(0);
   await expect(page.locator('input[name="bulk_season"]')).toHaveValue('7');

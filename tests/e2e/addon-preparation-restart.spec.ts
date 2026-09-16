@@ -125,7 +125,6 @@ test('actual host death drains preparation before one safe restart', async ({ br
     await hydrated(page);
     await expect(page.locator('#workspace-errors')).toHaveCount(0);
     await hydrated(page, `/media/addon-lists/${listId}`);
-    await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
     await expect.poll(() => calls().filter(call => call.command === 'paused').length, { timeout: 60000 }).toBe(1);
     const paused = calls().find(call => call.command === 'paused')!;
     expect(alive(paused.provider!)).toBe(true);
@@ -149,8 +148,6 @@ test('actual host death drains preparation before one safe restart', async ({ br
     expect(sql('SELECT COUNT(*) FROM "AddonMediaListArtifact" WHERE "State"=2 AND "DurationMilliseconds"=60000;')).toBe('1');
     expect(sql('SELECT COALESCE(SUM("ReservedBytes"),0) FROM "AddonMediaListArtifact";')).toBe('0');
     await hydrated(page, `/media/addon-lists/${listId}`);
-    await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeEnabled();
-    await page.getByRole('button', { name: 'Publish saved changes', exact: true }).click();
     await expect.poll(() => sql(`SELECT COUNT(*) FROM "AddonMediaListRevision" WHERE "AddonMediaListId"=${listId} AND "Revision"=1 AND "CompletedAt" IS NOT NULL;`), { timeout: 90000 }).toBe('1');
     expect(sql('SELECT COUNT(*) FROM "AddonMediaListRevisionArtifact";')).toBe('1');
     expect(calls().filter(call => call.command === 'prepare')).toHaveLength(2);

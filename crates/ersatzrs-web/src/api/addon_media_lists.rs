@@ -392,7 +392,7 @@ pub async fn add_addon_media_list_form(
                     id,
                     delivery_mode: input.delivery_mode,
                     refresh_cadence: input.refresh_cadence,
-                    refresh_publication_policy: AddonMediaListRefreshPublicationPolicy::Review,
+                    refresh_publication_policy: AddonMediaListRefreshPublicationPolicy::Automatic,
                     generate_playlist: input.generate_playlist,
                     content_kind_override: presentation_content_kind(input.presentation_kind),
                     chapter_input: input.chapter_input,
@@ -1096,7 +1096,7 @@ mod tests {
         assert_eq!(parsed.refresh_cadence, AddonMediaListRefreshCadence::Never);
         assert_eq!(
             parsed.refresh_publication_policy,
-            AddonMediaListRefreshPublicationPolicy::Review
+            AddonMediaListRefreshPublicationPolicy::Automatic
         );
         assert!(!parsed.generate_playlist);
         assert!(!parsed.load_item_details);
@@ -1128,7 +1128,7 @@ mod tests {
         assert_eq!(parsed.refresh_cadence, AddonMediaListRefreshCadence::Weekly);
         assert_eq!(
             parsed.refresh_publication_policy,
-            AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions
+            AddonMediaListRefreshPublicationPolicy::Automatic
         );
         assert!(serde_urlencoded::from_str::<AddonMediaListSaveForm>(
             "id=42&refresh_cadence=weekly&refresh_publication_policy=publish_everything",

@@ -63,10 +63,10 @@ Version 6 adds `availability_reason_code` for unavailable items. Its values are
 `authentication_required`, `content_restricted`, and `unavailable`. The add-on
 owns provider-specific recognition and may retain a bounded legacy
 `availability_reason`; the host never parses that free text. Authentication and
-content restrictions remain visible in review but are excluded from the next
-publication unless the operator selects a valid Local replacement. A provider
-refresh preserves the current published snapshot until the operator explicitly
-publishes the pending exclusion. Credentials, cookies, and raw provider stderr
+content restrictions remain visible without discarding saved item identities or
+local files. A validated local artifact or replacement remains playable when
+the source is unavailable. A provider refresh automatically updates the saved
+revision while preserving the last complete publication during processing. Credentials, cookies, and raw provider stderr
 must never be emitted in either field.
 
 ## Resumable import orchestration
@@ -283,34 +283,37 @@ userinfo, are limited to 2,048 bytes, and must include a host. These are input
 bounds; publication separately validates and materializes artwork rather than
 letting an NFO depend on an untrusted remote URL forever.
 
-## Review and publication
+## Automatic publication
 
-An initial storage-backed import persists provider documents as a `draft`.
-Provider snapshots and operator overrides stay separate; the editor shows their
-effective values, lets the operator include or exclude each item, and preserves
-provider rank for the optional original-order playlist. Only explicit
-**Publish** makes included rows visible to generated NFO/YAML, library
-projection, scanning, and playlist membership. Existing lists migrate as
-published so an upgrade does not silently withdraw working media.
+Every saved, valid import, refresh, enrichment result and editor change is
+published automatically through the durable managed-library worker. Browser
+edits that have not been saved are excluded. Provider snapshots and operator
+overrides stay separate; overrides, including explicit empty values, take
+precedence. Conflicts are informative and do not require a review click.
 
-Refresh replaces provider snapshots while preserving operator overrides and a
-movie's explicit primary/extra role. Newly discovered or changed data returns
-the list to review, and publication errors remain visible on the list and in
-Health Checks. Excluded items retain their provider identity and metadata so
-they can be reviewed and re-included later.
+Detail results are batched after 30 quiet seconds or at most 120 seconds of
+continuous arrivals. Identical effective metadata does not create a publication.
+Saved legacy policies and pending revisions migrate to automatic processing;
+existing journals recover before new work is admitted. Technical failures use
+bounded retries and remain visible in Activity and Health Checks. Optional
+retry controls appear after failure, not during routine processing.
 
-Provider values and operator overrides are compared per editable field. A
-refresh updates an untouched field, preserves an operator-owned value, and
-records a reviewable conflict when both sides changed. Large repeated fields,
-including tags, remain structured arrays even though the editor presents them
-as compact line-separated text.
-
-Publish stages the complete managed folder and database projection as one
+Publication stages the complete managed folder and database projection as one
 journaled revision. An exact backup remains available until NFO, artwork,
 playlist, projection, and revision advancement all succeed. Any failure restores
 the previous files and database state; startup recovery completes the same
 rollback for an interrupted publication. Revision guards reject stale or
 concurrent publishers.
+
+Show metadata uses explicit provider header fields, then operator overrides.
+Missing genres, tags, languages and studios fall back to a stable union of
+included root-item metadata, capped at 1,024 values per field and 64 KiB total;
+Health reports a reached limit. Missing show source-age ratings use the highest
+known `age:<number>` among included items. National ratings are never inferred.
+The yt-dlp add-on maps channel/uploader to studio and broadcaster, upload date
+to release date (with source release date as fallback), and explicit source age
+limits, including zero, to `age:<number>`. Episode ContentRating stores the first
+rating while NFO/provider metadata retain the full list.
 
 Artwork candidates may be bounded HTTPS URLs or bounded JPEG, PNG, and WebP
 uploads. ErsatzRS validates and materializes poster, fanart, thumb, and other
@@ -321,8 +324,9 @@ operator-owned and is not overwritten by provider refresh.
 The persisted `AddonMediaListChapter` row links the list, full source item, and
 fragment item and stores chapter index, title, start, and optional end. A
 refresh reconciles fragment items by provider ID, rebuilds these links, and
-deletes fragments omitted from the new chapter input. It does not retain an
-obsolete fragment as an `omitted_by_provider` tombstone.
+deletes fragments omitted from changed chapter input while their source item
+remains present. When the source item disappears, its existing fragments and
+retained local files remain available.
 
 An explicit `availability` value outside the three documented strings rejects
 the complete enumeration with a bounded provider-neutral contract error. The
@@ -340,8 +344,8 @@ duplicate item identity, duplicate rank, invalid UTF-8, malformed JSON, or a
 record beyond any bound rejects the complete enumeration before persistence.
 
 ErsatzRS keys persisted lists by add-on ID plus provider ID. Refresh reconciles
-items by provider ID, clears their previous local match, then reruns GUID and
-title/year/number matching. Generated playlists remain host-owned and keep the
+items by provider ID and reruns GUID and title/year/number matching, preserving
+retained source-removed identities. Generated playlists remain host-owned and keep the
 provider rank as playlist order. An existing item omitted from a later snapshot
 is retained after the current provider ranks with `unavailable` and reason
 `omitted_by_provider`. Its replacement mapping remains intact. Returning the
@@ -420,14 +424,17 @@ playlists retain the add-on playback URL while using television identity.
 
 The list folder contains `.ersatzrs-nfo-state.json`, which records generated
 hashes and ownership separately from the playlist sidecar. Provider output can
-update a generated NFO. Editing through administration or changing a valid NFO
-outside ErsatzRS adopts user ownership, after which refresh preserves it.
+update untouched fields in a generated NFO. Administration overrides and changes
+to a valid NFO outside ErsatzRS are preserved per field, including explicit
+empty values. Host projection does not mark generated metadata as user-owned.
+Legacy host-written NFOs use the previous publication as their merge baseline;
+files without a trustworthy baseline remain conservatively preserved.
 Invalid user XML is never replaced automatically. Admin saves use an ETag and
 fail on a concurrent file edit instead of overwriting it.
 
 Descriptive fields such as titles, plot, numbering, dates, ratings, genres,
 tags, people, studios, artwork, and GUIDs are stored in the NFO. Identity,
-title, plot, date, and episode numbering are projected into the television
+title, plot, date, ContentRating, and episode numbering are projected into the television
 tables used by browsing and scheduling; the NFO remains authoritative for the
 richer fields. Operational URL, availability, duration, and fragment bounds
 remain owned by provider/YAML state. Chapter text is configured on the

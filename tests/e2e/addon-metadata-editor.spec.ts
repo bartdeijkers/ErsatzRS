@@ -140,6 +140,17 @@ async function workspaceSubmit(page: Page, intent: string, hydrated = true): Pro
   await nativeNavigate(page, () => page.locator(selector).first().click(), hydrated);
 }
 
+async function saveAndWait(page: Page, listId: number, hydrated = true): Promise<void> {
+  await workspaceSubmit(page, 'save', hydrated);
+  if (await page.locator('#workspace-errors').count() === 0 &&
+      sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id"=${listId};`) === '2') {
+    await expect.poll(() => sqlite(`SELECT l."ReviewState"=2 OR EXISTS (
+      SELECT 1 FROM "AddonMediaListAutoPublication" a WHERE a."AddonMediaListId"=l."Id"
+      AND a."DraftRevision"=l."DraftRevision" AND a."Reason" IS NOT NULL)
+      FROM "AddonMediaList" l WHERE l."Id"=${listId};`), {timeout:60000}).toBe('1');
+  }
+}
+
 async function nativeNavigate(page: Page, action: () => Promise<void>, hydrated = true): Promise<void> {
   // Native forms replace the document. Observe navigation before polling the
   // new shell, rather than reading the old document's hydration flag.
@@ -307,7 +318,6 @@ UPDATE "AddonMediaList"
 SET "DeliveryMode" = 2, "DeliveryCutoffAt" = '${previousCutoff}', "DeliveryCutoffIdentityId" = 0
 WHERE "Id" = ${seed.listId};
 `);
-      const publishedRevision = sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`);
       const context = await browser.newContext({ javaScriptEnabled, baseURL });
       const page = await context.newPage();
       const runtimeErrors = watchRuntimeErrors(page);
@@ -319,7 +329,13 @@ WHERE "Id" = ${seed.listId};
           await page.goto(`/media/addon-lists/${seed.listId}/playback`);
         }
       };
-      const save = () => workspaceSubmit(page,'save',javaScriptEnabled);
+      const save = async () => {
+        await workspaceSubmit(page,'save',javaScriptEnabled);
+        await expect(page.locator('#workspace-errors')).toHaveCount(0);
+        if (savedDelivery().startsWith('0|')) {
+          await expect.poll(() => sqlite(`SELECT "ReviewState" FROM "AddonMediaList" WHERE "Id"=${seed.listId};`), {timeout:60000}).toBe('2');
+        }
+      };
       try {
         await forceEnglish(page);
         await openEditor();
@@ -354,7 +370,6 @@ WHERE "Id" = ${seed.listId};
         await expect(delivery).toHaveValue('download_ahead_new_videos');
         await expect(page.getByTestId('addon-delivery-cutoff')).toBeVisible();
         expect(Date.parse((await page.getByTestId('addon-delivery-cutoff').locator('time').getAttribute('datetime'))!)).toBe(Date.parse(freshCutoff));
-        expect(sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe(publishedRevision);
         expect(runtimeErrors).toEqual([]);
       } finally {
         await context.close();
@@ -560,10 +575,9 @@ WHERE "AddonMediaListId" = ${seed.listId};
     const seed = seedMetadataEditor(testInfo);
     await forceEnglish(page);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}/settings`);
-    const policy = page.getByRole('combobox', { name: 'Refresh publication', exact: true });
-    await expect(policy).toHaveValue('review');
-    await policy.selectOption('auto_publish_additions');
-    await expect(page.getByText('Applies only to scheduled refreshes after your first Publish.', { exact: false })).toBeVisible();
+    const policy = page.locator('input[name="refresh_publication_policy"]');
+    await expect(policy).toHaveValue('automatic');
+    await expect(page.getByRole('combobox', { name: 'Refresh publication', exact: true })).toHaveCount(0);
     // Saving reloads this same URL; wait for the new document before another goto.
     const savedNavigation = page.waitForEvent('framenavigated', {
       predicate: (frame) => frame === page.mainFrame(),
@@ -572,16 +586,17 @@ WHERE "AddonMediaListId" = ${seed.listId};
     await savedNavigation;
     await page.waitForLoadState('domcontentloaded');
     await waitUntilHydrated(page);
-    await expect.poll(() => sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('1');
+    await expect.poll(() => sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('2');
     sqlite(`INSERT INTO "AddonMediaListAutoPublication" (
       "AddonMediaListId", "DraftRevision", "PublishedRevision", "State", "Reason", "RecordedAt"
     ) SELECT "Id", "DraftRevision", "PublishedRevision", 'held', '"existing_changes"', '2026-09-04T12:00:00Z'
-      FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`);
+      FROM "AddonMediaList" WHERE "Id" = ${seed.listId}
+    ON CONFLICT ("AddonMediaListId") DO UPDATE SET "State"='held',"DraftRevision"=excluded."DraftRevision","PublishedRevision"=excluded."PublishedRevision","Reason"=excluded."Reason";`);
     try {
       await gotoHydrated(page, `/media/addon-lists/${seed.listId}/settings`);
-      await expect(policy).toHaveValue('auto_publish_additions');
+      await expect(policy).toHaveValue('automatic');
       await gotoHydrated(page, `/media/addon-lists/${seed.listId}/activity`);
-      await expect(page.getByTestId('automatic-publication-hold')).toContainText('Automatic publication needs review');
+      await expect(page.getByTestId('automatic-publication-hold')).toContainText('Automatic processing needs attention');
       expect(runtimeErrors).toEqual([]);
     } finally {
       sqlite(`DELETE FROM "AddonMediaListAutoPublication" WHERE "AddonMediaListId" = ${seed.listId};`);
@@ -627,7 +642,7 @@ WHERE "AddonMediaListId" = ${seed.listId};
     expect(errors).toEqual([]);
   });
 
-  test('keeps import, save, item review, and explicit publication usable without JavaScript', async ({
+  test('keeps import, save, item review, and automatic publication usable without JavaScript', async ({
     browser,
     baseURL,
   }, testInfo) => {
@@ -693,14 +708,14 @@ WHERE "AddonMediaListId" = ${seed.listId};
       ).toBeVisible();
       await noJsPage.locator('button[formaction$="/settings"]').click();
       await noJsPage.getByLabel('Title', { exact: true }).fill('No-JS collection title');
-      await noJsPage.getByRole('combobox', { name: 'Refresh publication', exact: true }).selectOption('auto_publish_additions');
-      await workspaceSubmit(noJsPage,'save',false);
+      await expect(noJsPage.locator('input[name="refresh_publication_policy"]')).toHaveValue('automatic');
+      await saveAndWait(noJsPage,seed.listId,false);
       await expect(noJsPage.locator('#workspace-errors')).toHaveCount(0);
-      await expect(noJsPage.getByRole('combobox', { name: 'Refresh publication', exact: true })).toHaveValue('auto_publish_additions');
-      expect(sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('1');
+      await expect(noJsPage.locator('input[name="refresh_publication_policy"]')).toHaveValue('automatic');
+      expect(sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('2');
       await noJsPage.locator(`button[formaction="/media/addon-lists/${seed.listId}/artwork"]`).click();
       await noJsPage.getByLabel('Poster', {exact:true}).fill('https://example.invalid/poster.jpg');
-      await workspaceSubmit(noJsPage,'save',false);
+      await saveAndWait(noJsPage,seed.listId,false);
       await expect(noJsPage.locator('#workspace-errors')).toHaveCount(0);
       expect(
         sqlite(`
@@ -714,7 +729,7 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
       await noJsPage.locator('#item-metadata > summary').click();
       await noJsPage.getByLabel('Title', { exact: true }).fill('No-JS reviewed item');
       await noJsPage.getByLabel('Tags', { exact: true }).fill('native\nreviewed');
-      await workspaceSubmit(noJsPage,'save',false);
+      await saveAndWait(noJsPage,seed.listId,false);
       await expect(noJsPage.locator('#workspace-errors')).toHaveCount(0);
       expect(
         sqlite(`
@@ -745,14 +760,13 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
             })),
           ),
       ).toEqual([]);
-      await workspaceSubmit(noJsPage,'save',false);
+      await saveAndWait(noJsPage,seed.listId,false);
       await expect(noJsPage.locator('#workspace-errors')).toHaveCount(0);
       expect(
         sqlite(`SELECT "AutoRefresh" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`),
       ).toBe('1');
 
       await noJsPage.locator(`button[formaction="/media/addon-lists/${seed.listId}"]`).click();
-      await workspaceSubmit(noJsPage,'publish',false);
       await expect(noJsPage.locator('#workspace-errors')).toHaveCount(0);
       await expect
         .poll(
@@ -770,7 +784,9 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
 `),
           { timeout: 30_000 },
         )
-        .toBe('2,1,3');
+        .toMatch(/^2,[1-9]\d*,3$/);
+      const firstRevision = Number(sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${seed.listId};`));
+      const secondRevision = firstRevision + 1;
 
       await noJsPage.goto(`/media/addon-lists/${seed.listId}/items/${seed.firstItemId}`);
       const fullDetail = noJsPage.locator('a[href^="/media/remote/streams/"]');
@@ -779,10 +795,9 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
       await fullDetail.click();
       await expect(noJsPage.locator('h1')).not.toContainText('Not found');
       await noJsPage.goto(`/media/addon-lists/${seed.listId}/activity`);
-      await expect(noJsPage.locator('button[value="compare"]')).toHaveCount(0);
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
 
-      const revisionOneContent = revisionLogicalContent(seed.listId, 1);
+      const revisionOneContent = revisionLogicalContent(seed.listId, firstRevision);
       expect(revisionOneContent).not.toBe('');
       sqlite(`
 UPDATE "AddonMediaListItem"
@@ -799,7 +814,6 @@ WHERE "Id" = ${seed.listId};
 
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       await noJsPage.locator(`button[formaction="/media/addon-lists/${seed.listId}"]`).click();
-      await workspaceSubmit(noJsPage,'publish',false);
       await expect(noJsPage.locator('#workspace-errors')).toHaveCount(0);
       await expect
         .poll(
@@ -817,17 +831,17 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
 `),
           { timeout: 30_000 },
         )
-        .toBe('2,3');
+        .toBe(`${secondRevision},3`);
 
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       await noJsPage.goto(`/media/addon-lists/${seed.listId}/activity`);
-      await expect(noJsPage.locator('button[value="restore-preview:2"]')).toBeDisabled();
-      await expect(noJsPage.locator('button[value="restore-preview:1"]')).toBeEnabled();
-      await noJsPage.locator('[name="compare_left"]').selectOption('2');
-      await noJsPage.locator('[name="compare_right"]').selectOption('1');
+      await expect(noJsPage.locator(`button[value="restore-preview:${secondRevision}"]`)).toBeDisabled();
+      await expect(noJsPage.locator(`button[value="restore-preview:${firstRevision}"]`)).toBeEnabled();
+      await noJsPage.locator('[name="compare_left"]').selectOption(String(secondRevision));
+      await noJsPage.locator('[name="compare_right"]').selectOption(String(firstRevision));
       await workspaceSubmit(noJsPage,'compare',false);
       await expect(noJsPage.getByTestId('revision-diff')).toBeVisible();
-      await workspaceSubmit(noJsPage,'restore-preview:1',false);
+      await workspaceSubmit(noJsPage,`restore-preview:${firstRevision}`,false);
       await noJsPage.locator('[name="acknowledged"][type="checkbox"]').check();
       await workspaceSubmit(noJsPage,'confirm-operation',false);
       await expect(noJsPage.locator('#workspace-errors')).toHaveCount(0);
@@ -848,8 +862,8 @@ LIMIT 1;
 `),
           { timeout: 30_000 },
         )
-        .toBe('3,3,1,3');
-      expect(revisionLogicalContent(seed.listId, 3)).toBe(revisionOneContent);
+        .toBe(`${secondRevision+1},${secondRevision+1},${firstRevision},3`);
+      expect(revisionLogicalContent(seed.listId, secondRevision+1)).toBe(revisionOneContent);
 
       await noJsPage.goto(`/media/addon-lists/${seed.listId}`);
       await noJsPage.goto(`/media/addon-lists/${seed.listId}/settings`);
@@ -1044,6 +1058,7 @@ WHERE "Id" = ${seed.listId};
     const suffix = testInfo.project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const providerHost = `e2e-duration-${suffix}.invalid`;
     sqlite(`
+UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2 WHERE "Id"=${seed.listId};
 UPDATE "AddonMediaListItem" SET "DurationSeconds" = NULL WHERE "Id" = ${seed.firstItemId};
 UPDATE "AddonMediaListItem" SET "Included" = 0 WHERE "Id" = ${seed.secondItemId};
 INSERT INTO "AddonMediaListImportJob" (
@@ -1071,9 +1086,8 @@ INSERT INTO "AddonProviderHostCooldown" (
     await forceEnglish(page);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
 
-    await workspaceSubmit(page,'publish');
     await expect(page.locator('#workspace-errors')).toHaveCount(0);
-    await expect(page.getByText('Preparing publication', {exact:true})).toBeVisible();
+    await expect(page.getByText('Required media is prepared automatically', {exact:true})).toBeVisible();
     await expect
       .poll(() =>
         sqlite(`
@@ -1322,7 +1336,7 @@ WHERE "Id" = ${seed.secondItemId};
     await itemMetadata.getByLabel('Languages', { exact: true }).fill('en, nl');
     await castAndCredits.fill('Presenter | Host');
     await itemEditor.getByLabel(/^tags/i).fill(manyTags);
-    await workspaceSubmit(page,'save');
+    await saveAndWait(page,seed.listId);
     await expect
       .poll(() =>
         sqlite(`
@@ -1338,7 +1352,7 @@ FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};
     // A second save from the same hydrated editor exercises the refreshed ETag.
     await expandMetadata();
     await itemMetadata.getByLabel('Original title', { exact: true }).fill('Second saved title');
-    await workspaceSubmit(page,'save');
+    await saveAndWait(page,seed.listId);
     await expect
       .poll(() =>
         sqlite(`
@@ -1368,13 +1382,13 @@ UPDATE "AddonMediaList"
 SET "MetadataOverrideJson" = json_set("MetadataOverrideJson", '$.sort_title', 'Concurrent writer')
 WHERE "Id" = ${seed.listId};
 `);
-    await workspaceSubmit(page,'save');
+    await saveAndWait(page,seed.listId);
     await expect(page.locator('#workspace-errors')).toBeVisible();
 
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}/settings`);
     await page.locator('[name="metadata_title"]').fill('Reviewed collection');
-    await workspaceSubmit(page,'save');
+    await saveAndWait(page,seed.listId);
     await expect
       .poll(() =>
         sqlite(`
@@ -1385,7 +1399,6 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
       .toBe('Reviewed collection');
 
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}`);
-    await workspaceSubmit(page,'publish');
     await expect
       .poll(
         () =>
@@ -1402,13 +1415,14 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
 `),
         { timeout: 30_000 },
       )
-      .toBe('2,1,3');
+      .toMatch(/^2,[1-9]\d*,3$/);
+    const firstRevision = Number(sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${seed.listId};`));
     expect(
       sqlite(`SELECT "Published" FROM "AddonMediaListItem" WHERE "Id" = ${seed.firstItemId};`),
     ).toBe('1');
     expect(
       sqlite(`SELECT "Published" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),
-    ).toBe('0');
+    ).toBe('1');
     expect(
       sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id" = ${seed.secondItemId};`),
     ).toBe('1');
@@ -1422,11 +1436,7 @@ SET "ReviewState" = 1, "DraftRevision" = "DraftRevision" + 1
 WHERE "Id" = ${seed.listId};
 `);
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
-    await page.locator('[name="category"]').selectOption('added');await workspaceSubmit(page,'filter');
-    await expect(page.locator('.episode-row')).toHaveCount(1);
-    await expect(page.locator('.episode-row')).toContainText(seed.secondTitle);
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}`);
-    await workspaceSubmit(page,'publish');
     await expect
       .poll(
         () =>
@@ -1445,13 +1455,13 @@ FROM "AddonMediaList" WHERE "Id" = ${seed.listId};
 `),
         { timeout: 30_000 },
       )
-      .toBe('2,1,3');
+      .toBe(`${firstRevision+1},1,3`);
 
     await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}/activity`);
-    await expect(page.locator('button[value="restore-preview:2"]')).toBeDisabled();
-    await expect(page.locator('button[value="restore-preview:1"]')).toBeEnabled();
-    await page.locator('[name="compare_left"]').selectOption('2');await page.locator('[name="compare_right"]').selectOption('1');
+    await expect(page.locator(`button[value="restore-preview:${firstRevision+1}"]`)).toBeDisabled();
+    await expect(page.locator(`button[value="restore-preview:${firstRevision}"]`)).toBeEnabled();
+    await page.locator('[name="compare_left"]').selectOption(String(firstRevision+1));await page.locator('[name="compare_right"]').selectOption(String(firstRevision));
     await workspaceSubmit(page,'compare');await expect(page.getByTestId('revision-diff')).toBeVisible();
     const staleRestore = await page.request.post('/api/addon-lists/restore-revision', {
       form: {
@@ -1494,17 +1504,15 @@ FROM (
     ]);
     const typeChangeHelp = page.getByTestId('addon-media-type-change-help');
     await expect(typeChangeHelp).toContainText('Current library type: Remote Streams');
-    await expect(typeChangeHelp).toContainText('without importing the add-on again');
+    await expect(typeChangeHelp).toContainText('Save to reorganize existing items automatically');
 
     await mediaType.selectOption('other_videos');
-    await workspaceSubmit(page,'save');
+    await saveAndWait(page,seed.listId);
     await expect(page.getByLabel('Collection Type', { exact: true })).toHaveValue('other_videos');
-    await expect(page.getByTestId('addon-media-type-change-help')).toContainText(
-      'Remote Streams → Other Videos',
-    );
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}/settings`);
+    await expect(page.getByTestId('addon-media-type-change-help')).toContainText('Current library type: Other Videos');
 
     await gotoHydrated(page,`/media/addon-lists/${seed.listId}`);
-    await workspaceSubmit(page,'publish');
     await expect
       .poll(
         () =>

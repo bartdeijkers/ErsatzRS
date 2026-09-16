@@ -58,6 +58,13 @@ impl HealthCheck for AddonMediaListHealthCheck {
         if let Some(result) = automatic_publication_hold_warning(&self.pool, self.title()).await? {
             return Ok(result);
         }
+        if let Some(id) = sqlx::query_scalar::<_, i64>(r#"SELECT "Id" FROM "AddonMediaList" WHERE "DerivedMetadataLimited"=1 ORDER BY "Id" LIMIT 1"#)
+            .fetch_optional(&self.pool).await.map_err(sqlx_error)? {
+            return Ok(HealthCheckResult::new(self.title(),HealthCheckStatus::Warning,
+                "Derived show metadata reached its size limit",
+                "Some episode facets exceed the bounded show metadata union. Episode metadata remains complete.")
+                .with_link(format!("/media/addon-lists/{id}")));
+        }
         if let Some(result) = configured.warning_result(self.title(), lifecycle_foundation) {
             return Ok(result);
         }
@@ -130,7 +137,7 @@ async fn automatic_publication_hold_warning(
         r#"SELECT "list"."Id"
            FROM "AddonMediaListAutoPublication" AS "auto"
            JOIN "AddonMediaList" AS "list" ON "list"."Id" = "auto"."AddonMediaListId"
-           WHERE "auto"."State" = 'held' AND "list"."RefreshPublicationPolicy" = 1
+           WHERE "auto"."State" = 'held' AND "list"."RefreshPublicationPolicy" IN (1, 2)
            ORDER BY "auto"."RecordedAt", "list"."Id" LIMIT 1"#,
     )
     .fetch_optional(pool)
@@ -140,8 +147,8 @@ async fn automatic_publication_hold_warning(
         HealthCheckResult::new(
             title,
             HealthCheckStatus::Warning,
-            "Automatic publication needs review",
-            "Automatic publication needs review",
+            "Automatic processing needs attention",
+            "Automatic processing needs attention",
         )
         .with_link(format!(
             "/media/addon-lists/{id}#addon-list-publication-activity"
@@ -468,7 +475,7 @@ async fn configured_list_activity_result(
             title,
             HealthCheckStatus::Warning,
             format!(
-                "{pending_review} add-on media list(s) await metadata review or publication; {} overview import(s) are active and {} detail item(s) are delayed by retry or provider pacing{publication_activity}",
+                "{pending_review} add-on media list(s) await automatic processing; {} overview import(s) are active and {} detail item(s) are delayed by retry or provider pacing{publication_activity}",
                 import_activity.active,
                 detail_activity.waiting,
             ),
@@ -1037,7 +1044,7 @@ async fn detail_wait_setting_failures(pool: &Pool<Db>) -> Vec<String> {
 async fn count_metadata_conflicts(pool: &Pool<Db>) -> Result<i64> {
     let list_count: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "AddonMediaList"
-           WHERE "MetadataConflictJson" IS NOT NULL
+           WHERE "MetadataConflictJson" IS NOT NULL AND "RefreshPublicationPolicy"<>2
              AND TRIM("MetadataConflictJson") NOT IN ('', '{}')"#,
     )
     .fetch_one(pool)
@@ -1045,7 +1052,8 @@ async fn count_metadata_conflicts(pool: &Pool<Db>) -> Result<i64> {
     .map_err(sqlx_error)?;
     let item_count: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM "AddonMediaListItem"
-           WHERE "MetadataConflictJson" IS NOT NULL
+           WHERE EXISTS (SELECT 1 FROM "AddonMediaList" WHERE "Id"="AddonMediaListItem"."AddonMediaListId" AND "RefreshPublicationPolicy"<>2)
+             AND "MetadataConflictJson" IS NOT NULL
              AND TRIM("MetadataConflictJson") NOT IN ('', '{}')"#,
     )
     .fetch_one(pool)
@@ -2808,7 +2816,7 @@ mod tests {
         let check = AddonMediaListHealthCheck::new(pool.clone());
         let result = check.check().await.expect("health result");
         assert_eq!(result.status, HealthCheckStatus::Warning);
-        assert_eq!(result.message, "Automatic publication needs review");
+        assert_eq!(result.message, "Automatic processing needs attention");
         assert_eq!(
             result.link.as_ref().map(|link| link.link.as_str()),
             Some("/media/addon-lists/42#addon-list-publication-activity")

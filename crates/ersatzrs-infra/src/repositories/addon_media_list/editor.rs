@@ -424,7 +424,9 @@ async fn save_settings(
     )
     .bind(settings.refresh_cadence == AddonMediaListRefreshCadence::Daily)
     .bind(encode_enum(settings.refresh_cadence))
-    .bind(encode_enum(settings.refresh_publication_policy))
+    .bind(encode_enum(
+        ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Automatic,
+    ))
     .bind(&due)
     .bind(changed)
     .bind(settings.generate_playlist)

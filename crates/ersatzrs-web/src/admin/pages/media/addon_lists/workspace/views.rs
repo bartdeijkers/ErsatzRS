@@ -6,8 +6,7 @@ use super::super::{
     AddonMediaListDraftDiffRow, AddonMediaListForm, AddonMediaListImportState,
     AddonMediaListItemRole, AddonMediaListItemRow, AddonMediaListNfoForm,
     AddonMediaListPresentationKind, AddonMediaListProviderRow, AddonMediaListPublicationHistoryRow,
-    AddonMediaListPublicationReadiness, AddonMediaListRefreshCadence,
-    AddonMediaListRefreshPublicationPolicy, AddonMediaListResetImpactRow,
+    AddonMediaListPublicationReadiness, AddonMediaListRefreshCadence, AddonMediaListResetImpactRow,
     AddonMediaListRevisionDiffRow, AddonMediaListRevisionSummaryRow,
     AddonMediaListSourceProbeOutcome, AddonMediaListSourceProbeRow, AddonMediaListSourceProbeState,
     IconName, MetadataConflictSummary, PublicationActivity, TextKey,
@@ -376,6 +375,7 @@ fn item_row(w: &Workspace, row: &AddonMediaListItemRow) -> AnyView {
         <div class="episode-identity"><span class="row-art-placeholder" aria-hidden="true"><span style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span><span class="row-thumbnail" style:background-image=row.thumbnail_url.as_ref().map(|url| format!("url({})",serde_json::to_string(url).expect("thumbnail URL serializes"))).unwrap_or_default()></span></span><div>
             <button class="button row-title" form=FORM name="intent" value="navigate" formaction=format!("/media/addon-lists/{}/items/{id}",w.form.id) formnovalidate>{title}</button>
             <small>{tr(if d.field("items", &format!("included_{id}"), row.included.to_string()) == "true" {TextKey::IncludeInPublication} else {TextKey::AddonWorkspaceExcluded})}</small>
+            <small hidden=!row.local_media_available>{tr(TextKey::AddonLocalPlaybackAvailable)}</small>
             {(row.metadata_conflict_count>0 || row.liveness_conflict).then(||view!{<small>{tr(TextKey::Conflicts)}</small>})}
         </div></div>
         <div class="episode-evidence"><div class="airdate"><span class="mobile-column" aria-hidden="true">{tr(TextKey::FirstAired)}</span><span class="sr-only">{tr(TextKey::FirstAired)}": "</span><time datetime=row.first_aired.clone()>{row.first_aired.clone().unwrap_or_else(||tr(TextKey::UnknownAvailability).into())}</time>{gap.map(|days|view!{<small class="gap-note">{format!("{days} d")}</small>})}</div>

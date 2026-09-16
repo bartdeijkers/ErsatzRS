@@ -40,10 +40,7 @@ async function baseline(page: Page, sql: (query: string) => string): Promise<num
   await Promise.all([page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
     page.getByRole('button', { name: 'Save settings', exact: true }).click()]);
   await hydrated(page, `/media/addon-lists/${id}`);
-  await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
   await expect.poll(() => sql(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${id} AND "Kind"=1 AND "State"=2;`), { timeout: 120000 }).toBe('1');
-  await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Publish saved changes', exact: true }).click();
   await expect.poll(() => sql(`SELECT "PublishedRevision"||','||("PublicationJournalJson" IS NULL) FROM "AddonMediaList" WHERE "Id"=${id};`), { timeout: 90000 }).toBe('1,1');
   return id;
 }
@@ -171,8 +168,7 @@ test('packaged Windows recovers publication after scheduled scan overlap and bro
     // definitions or unknown liveness. Its auxiliary path shares the library
     // lease but is outside the publication-managed tree.
     writeFileSync(join(auxiliary, 'barrier.yml'), `url: http://127.0.0.1:${address.port}/probe.mp4\ntitle: Synthetic scan barrier\nliveness: finite\nduration: "00:00:01"\n`);
-    sql(`INSERT INTO "LibraryPath" ("Path","LibraryId") VALUES (${quote(auxiliary)},${library});
-      UPDATE "AddonMediaList" SET "Name"='Recovered publication',"DraftRevision"="DraftRevision"+1 WHERE "Id"=${list};`);
+    sql(`INSERT INTO "LibraryPath" ("Path","LibraryId") VALUES (${quote(auxiliary)},${library});`);
     await hydrated(page, `/media/addon-lists/${list}`);
     sql(`UPDATE "Library" SET "LastScan"=NULL WHERE "Id"=${library};
       INSERT INTO "ConfigElement" ("Key","Value") VALUES ('scanner.library_refresh_interval','1'),
@@ -182,7 +178,7 @@ test('packaged Windows recovers publication after scheduled scan overlap and bro
     const scheduled = Number(sql(`SELECT "Id" FROM "ManagedLibraryOperation" WHERE "LibraryId"=${library} AND "Kind"=1 AND "State"=1 ORDER BY "Id" DESC LIMIT 1;`));
     expect(scheduled).toBeGreaterThan(0);
     mark('scheduled_scan_probe_held');
-    await page.getByRole('button', { name: 'Publish saved changes', exact: true }).click({ timeout: 5000 });
+    sql(`UPDATE "AddonMediaList" SET "Name"='Recovered publication',"DraftRevision"="DraftRevision"+1 WHERE "Id"=${list};`);
     await expect.poll(() => Number(sql(`SELECT COUNT(*) FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId"=${list} AND "TargetPublishedRevision"=2;`)), { timeout: 5000, intervals: [100] }).toBe(1);
     const identity = JSON.parse(sql(`SELECT json_object('operation',"OperationId",'job',"Id",'generation',"Generation") FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId"=${list} ORDER BY "Generation" DESC LIMIT 1;`));
     operation = identity.operation; job = identity.job; generation = identity.generation;

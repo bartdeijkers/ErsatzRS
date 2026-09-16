@@ -4727,3 +4727,65 @@ next applicable packaged-Windows dogfood and playback acceptance run, where
 they can be exercised with the broader runtime suite; no unrun check is
 represented as passing in this slice.
 '''
+
+[[milestone]]
+id = 'amm-p-01'
+phase = 'AMM-P — automatic add-on publication and complete metadata'
+title = 'Automatically publish complete add-on metadata while retaining local media'
+status = 'In progress'
+feature = 'addon-metadata-management'
+plan = 'plans/automatic-addon-publication.md'
+depends_on = []
+acceptance = '''
+Automatically publish initial imports, refreshes, enrichment and saved edits,
+including existing pending drafts, without review gates. Preserve overrides,
+inclusion, numbering, replacements, local artifacts and current playback.
+Retain source-removed items and distinguish source availability from local
+playability. Map yt-dlp metadata, studio and source age; derive missing show
+metadata and persist EpisodeMetadata.ContentRating. Use the durable fenced
+publication path with bounded batching, retries, restart recovery and truthful
+localized UI/Health. Prove the 13-item enrichment regression, metadata roundtrip,
+source removal with/without local playback, upgrades, concurrent changes and
+restart recovery; focused Rust/add-on tests, required closeout/parity/hydration
+and browser gates, runtime smoke and TSDuck on Linux. After Linux acceptance,
+prepare a new beta release containing only the Windows package; the maintainer
+performs native Windows acceptance and reports in the same session. Keep Windows
+acceptance open until that report. Preserve six-platform build compatibility.
+Add-on permission changes are excluded.
+'''
+evidence = '''
+Implementation started in isolated worktrees to avoid hot-reloading unfinished
+migrations into the maintainer profile. Runtime investigation confirmed complete
+provider detail documents but stale published NFO/episode metadata, plus missing
+episode ContentRating persistence. Linux workspace Clippy passes. Canonical
+nextest closeout passes all 2,818 tests (37 conditional skips), followed by
+successful workspace doctests. Focused migration/projection recovery passes
+66 tests, including restored-revision playback selection. Coverage includes NFO
+ownership/merge, retained local playback and the 13-item automatic-admission
+regression. The complete add-on suite passes 143 tests with 34 conditional skips
+using managed FFmpeg 9; its offline repository bundle builds successfully. One
+real yt-dlp enrichment confirms plot, date, tags, genre, language, studio and
+source ContentRating through the corrected mapper. An isolated copy of the
+existing 13-episode profile repairs stale NFOs automatically; the ordinary add-on
+upgrade to 0.11.3 requeues enrichment and reaches a completed third publication.
+All 13 NFOs and episode rows contain plot, release date and source rating; item
+and media identities remain unchanged. Browser inspection confirms show tags,
+genre, language, studio and age:0. Ten focused Chromium/Firefox scenarios pass,
+including native forms, preparation retries and source loss with retained local
+playback. Final Rust closeout again passes all 2,818 tests and workspace doctests. Linux
+IPTV/HLS smoke passes and the TSDuck gate passes 64 checks with no failures.
+Add-on commit 0857da471f185c879366ec760b1caa27d9655dc9 passes native Windows
+and Linux validation in CI run 35084593480. The CI bundle contains byte-identical
+payload entries to the bundle used in the real-profile recovery test.
+The matched-bundle browser run passes 124 scenarios with five conditional skips;
+one Firefox no-JS bulk test encountered the protected first-publication write
+lease. Starting that editing scenario after completed initial publication fixes
+the test setup; its Chromium and Firefox reruns both pass. All 125 executed
+scenarios are verified, including source loss without a local copy, retained
+local playback, native forms, metadata edits and automatic publication. Workspace
+Clippy, progress/format/architecture/hydration checks and the matching web bundle
+gate pass. Restarting the copied profile preserves all 13 enriched episodes and
+the completed revision without an extra publication. The original personal
+profile remains unchanged. Exact-SHA host CI, Windows packaging and maintainer
+acceptance remain open.
+'''

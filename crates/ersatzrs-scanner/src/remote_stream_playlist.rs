@@ -1051,6 +1051,7 @@ pub async fn stage_playlist_files(
         .await;
     }
     let reviewed_metadata = apply_reviewed_metadata(pool, manifest_path, &mut selected).await?;
+    let previous_metadata = previous_publication_metadata(pool, manifest_path).await?;
     if enumerated {
         if let Err(error) = append_item_chapter_fragments(
             pool,
@@ -1089,9 +1090,20 @@ pub async fn stage_playlist_files(
             entry.duration_seconds,
             playback_durations.get(provider_id).copied(),
         );
+        let mut playback_entry = entry.clone();
+        if playback_artifacts
+            .artifacts
+            .prepared_media
+            .contains_key(provider_id)
+        {
+            // Source status remains on the provider record. The selected local
+            // artifact is playable independently of that source (ADR 0094).
+            playback_entry.availability = WireAvailability::Available;
+            playback_entry.availability_reason = None;
+        }
         let definition_bytes = generated_definition_bytes_with_duration(
             manifest,
-            entry,
+            &playback_entry,
             playback_durations.get(provider_id).copied(),
         )?;
         let liveness = effective_entry_liveness(&manifest.manifest.defaults, entry)?;
@@ -1169,9 +1181,27 @@ pub async fn stage_playlist_files(
             || generated_nfo_bytes(manifest, entry),
             |metadata| generated_reviewed_nfo_bytes(manifest, entry, metadata, &artwork_roles),
         )?;
-        let nfo_bytes =
-            ersatzrs_infra::addon_media_nfo::reconcile_generated(&nfo_path, &generated_nfo)
-                .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+        let baseline = previous_metadata
+            .as_ref()
+            .and_then(|snapshot| {
+                snapshot
+                    .items
+                    .iter()
+                    .find(|item| item.provider_id == provider_id)
+                    .map(|item| (snapshot, item))
+            })
+            .map(|(snapshot, item)| {
+                legacy_projected_metadata(manifest, entry, snapshot, item, previous_entry)
+            })
+            .transpose()?;
+        let nfo_bytes = ersatzrs_infra::addon_media_nfo::reconcile_generated_metadata(
+            &nfo_path,
+            item_nfo_root(entry),
+            &generated_nfo,
+            baseline.as_ref(),
+        )
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+        adopt_external_metadata(pool, manifest_path, provider_id, &nfo_path, &nfo_bytes).await?;
         let definition_sha256 = hex_hash(&definition_bytes);
         let nfo_sha256 = hex_hash(&nfo_bytes);
         let mut entry_etag = playlist_entry_etag(&definition_sha256, &nfo_sha256);
@@ -2208,6 +2238,111 @@ fn stored_liveness(value: i32, provider_id: &str) -> Result<WireLiveness> {
     }
 }
 
+async fn adopt_external_metadata(
+    pool: &DbPool,
+    manifest_path: &Path,
+    provider_id: &str,
+    path: &Path,
+    bytes: &[u8],
+) -> Result<()> {
+    let edits = ersatzrs_infra::addon_media_nfo::external_overrides(path)
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+    if edits.is_empty() {
+        return Ok(());
+    }
+    let row = sqlx::query_as::<_, (i64, String)>(
+        r#"SELECT "item"."Id", "item"."MetadataOverrideJson"
+        FROM "AddonMediaListItem" AS "item" JOIN "AddonMediaListLibrary" AS "managed"
+        ON "managed"."AddonMediaListId"="item"."AddonMediaListId"
+        WHERE "managed"."ManifestPath"=? AND "item"."ProviderId"=? AND "item"."Published"=1"#,
+    )
+    .bind(manifest_path.to_string_lossy().as_ref())
+    .bind(provider_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+    let Some((id, before)) = row else {
+        return Ok(());
+    };
+    let mut overrides: BTreeMap<String, serde_json::Value> = serde_json::from_str(&before)
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+    overrides.extend(edits);
+    let after = serde_json::to_string(&overrides)
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+    let saved = sqlx::query(
+        r#"UPDATE "AddonMediaListItem" SET "MetadataOverrideJson"=?
+        WHERE "Id"=? AND "MetadataOverrideJson"=?"#,
+    )
+    .bind(after)
+    .bind(id)
+    .bind(before)
+    .execute(pool)
+    .await
+    .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+    if saved.rows_affected() != 1 {
+        return Err(PlaylistError::Enumeration(
+            "metadata changed while adopting external edits".into(),
+        ));
+    }
+    ersatzrs_infra::addon_media_nfo::acknowledge_external_overrides(path, &hex_hash(bytes))
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))
+}
+
+async fn previous_publication_metadata(
+    pool: &DbPool,
+    manifest_path: &Path,
+) -> Result<Option<ersatzrs_core::repositories::AddonMediaListRevisionSnapshot>> {
+    use ersatzrs_core::repositories::AddonMediaListLifecycleRepository as _;
+    let owner = sqlx::query_as::<_, (i64, i32)>(
+        r#"SELECT "list"."Id", "list"."PublishedRevision"
+        FROM "AddonMediaList" AS "list" JOIN "AddonMediaListLibrary" AS "managed"
+        ON "managed"."AddonMediaListId"="list"."Id" WHERE "managed"."ManifestPath"=?"#,
+    )
+    .bind(manifest_path.to_string_lossy().as_ref())
+    .fetch_optional(pool)
+    .await
+    .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+    let Some((id, revision)) = owner.filter(|(_, revision)| *revision > 0) else {
+        return Ok(None);
+    };
+    ersatzrs_infra::repositories::SqliteAddonMediaListRepository(pool.clone())
+        .revision_snapshot(id, revision)
+        .await
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))
+}
+
+fn legacy_projected_metadata(
+    manifest: &ValidatedPlaylistManifest,
+    entry: &PlaylistEntry,
+    snapshot: &ersatzrs_core::repositories::AddonMediaListRevisionSnapshot,
+    item: &ersatzrs_core::repositories::AddonMediaListRevisionItem,
+    previous: Option<&PlaylistSidecarEntry>,
+) -> Result<ersatzrs_core::repositories::AddonMediaListNfoMetadata> {
+    use ersatzrs_core::repositories::AddonMediaListNfoMetadata;
+    let mut metadata: AddonMediaListNfoMetadata = serde_json::from_str(&item.metadata_json)
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+    if metadata.title.trim().is_empty() {
+        metadata.title.clone_from(&item.title);
+    }
+    metadata.year = metadata.year.or(item.year);
+    if snapshot.presentation_kind == ersatzrs_domain::AddonMediaListPresentationKind::TelevisionShow
+    {
+        let parent: AddonMediaListNfoMetadata = serde_json::from_str(&snapshot.metadata_json)
+            .map_err(|error| PlaylistError::Enumeration(error.to_string()))?;
+        metadata.show_title = Some(if parent.title.trim().is_empty() {
+            snapshot.name.clone()
+        } else {
+            parent.title
+        });
+        metadata.season = metadata.season.or(item.season);
+        metadata.episode = metadata.episode.or(item.episode);
+    }
+    let artwork = previous.map_or_else(BTreeMap::new, |previous| previous.artwork_roles.clone());
+    let bytes = generated_reviewed_nfo_bytes(manifest, entry, &metadata, &artwork)?;
+    ersatzrs_infra::addon_media_nfo::parse(&bytes)
+        .map_err(|error| PlaylistError::Enumeration(error.to_string()))
+}
+
 /// Apply the provider snapshot plus field-level operator overrides retained by
 /// the shared metadata editor. This runs after add-on enrichment so both
 /// Beeld & Geluid and yt-dlp reach the exact same publication boundary.
@@ -2799,6 +2934,18 @@ fn generated_nfo_bytes(
     Ok(bytes)
 }
 
+fn item_nfo_root(entry: &PlaylistEntry) -> &'static str {
+    match entry.content_kind {
+        WireContentKind::TelevisionEpisode => "episodedetails",
+        WireContentKind::MusicVideo => "musicvideo",
+        WireContentKind::Auto
+        | WireContentKind::Movie
+        | WireContentKind::OtherVideo
+        | WireContentKind::Song
+        | WireContentKind::Image => "movie",
+    }
+}
+
 fn generated_reviewed_nfo_bytes(
     manifest: &ValidatedPlaylistManifest,
     entry: &PlaylistEntry,
@@ -2807,15 +2954,7 @@ fn generated_reviewed_nfo_bytes(
 ) -> Result<Vec<u8>> {
     use ersatzrs_core::repositories::AddonMediaListArtworkRole;
 
-    let root = match entry.content_kind {
-        WireContentKind::TelevisionEpisode => "episodedetails",
-        WireContentKind::MusicVideo => "musicvideo",
-        WireContentKind::Auto
-        | WireContentKind::Movie
-        | WireContentKind::OtherVideo
-        | WireContentKind::Song
-        | WireContentKind::Image => "movie",
-    };
+    let root = item_nfo_root(entry);
     let mut published = metadata.clone();
     published.tags = union_values(&manifest.manifest.tags, &published.tags);
     if published.year.is_none() {

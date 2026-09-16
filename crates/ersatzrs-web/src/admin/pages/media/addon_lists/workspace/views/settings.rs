@@ -2,9 +2,8 @@ use super::{
     button, checkbox, choice, format_progress_timestamp, icon_style, input, people_lines,
     presentation_text_key, save_bar, select, select_disabled, textarea, tr, value,
     AddonMediaListDeliveryMode, AddonMediaListDetailPolicy, AddonMediaListNfoForm,
-    AddonMediaListPresentationKind, AddonMediaListRefreshCadence,
-    AddonMediaListRefreshPublicationPolicy, Draft, IconName, MetadataConflictSummary, TextKey,
-    Workspace, FORM,
+    AddonMediaListPresentationKind, AddonMediaListRefreshCadence, Draft, IconName,
+    MetadataConflictSummary, TextKey, Workspace, FORM,
 };
 use leptos::prelude::*;
 
@@ -20,7 +19,7 @@ pub(super) fn settings(w: &Workspace) -> AnyView {
         <h2 class="section-title">{tr(TextKey::Source)}</h2><dl class="facts"><div><dt>{tr(TextKey::Source)}</dt><dd>{f.source_url.clone()}</dd></div><div><dt>{tr(TextKey::Addon)}</dt><dd>{f.addon_id.clone()}</dd></div></dl>
         <div class="grid-2">
             {select_disabled("refresh_cadence",TextKey::AutomaticRefresh,&d.field("settings","refresh_cadence",value(f.refresh_cadence)),vec![choice(AddonMediaListRefreshCadence::Adaptive,TextKey::RefreshCadenceAdaptive),choice(AddonMediaListRefreshCadence::Daily,TextKey::RefreshCadenceDaily),choice(AddonMediaListRefreshCadence::Weekly,TextKey::RefreshCadenceWeekly),choice(AddonMediaListRefreshCadence::Monthly,TextKey::RefreshCadenceMonthly),choice(AddonMediaListRefreshCadence::Yearly,TextKey::RefreshCadenceYearly),choice(AddonMediaListRefreshCadence::Never,TextKey::RefreshCadenceNever)],(!adaptive && f.refresh_cadence!=AddonMediaListRefreshCadence::Adaptive).then_some("adaptive"))}
-            {select("refresh_publication_policy",TextKey::RefreshPublicationPolicy,d.field("settings","refresh_publication_policy",value(f.refresh_publication_policy)),vec![choice(AddonMediaListRefreshPublicationPolicy::Review,TextKey::RefreshPublicationReview),choice(AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions,TextKey::RefreshPublicationAutomatic)])}
+            <input type="hidden" form=FORM name="refresh_publication_policy" value="automatic"/>
         </div>
         <p hidden=adaptive>{tr(TextKey::AdaptiveRefreshUnavailable)}</p><p>{tr(TextKey::RefreshPublicationPolicyHelp)}</p>
         {checkbox("load_item_details",TextKey::LoadItemDetailsAfterPublishing,d.field("settings","load_item_details",(f.detail_import_policy==AddonMediaListDetailPolicy::Automatic).to_string())=="true")}

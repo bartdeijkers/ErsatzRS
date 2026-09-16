@@ -79,21 +79,15 @@ test('prepared publication pins its generated file and plays it instead of raw p
   await hydrated(page);
   await expect(page.locator('#workspace-errors')).toHaveCount(0);
   await hydrated(page, `/media/addon-lists/${listId}`);
-  await expect(page.getByRole('button', { name: 'Prepare publication', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
   await hydrated(page);
   const unsavedFilter = page.getByRole('searchbox', { name: 'Search', exact: true });
   await unsavedFilter.fill('Unsubmitted filter');
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${listId} AND "Kind"=1 AND "State"=2;`), { timeout: 90000 }).toBe('1');
-  // Do not reload: preparation must update the action without losing draft input.
-  const publish = page.getByRole('button', { name: 'Publish saved changes', exact: true });
-  await expect(publish).toBeEnabled({ timeout: 20000 });
-  await expect(unsavedFilter).toHaveValue('Unsubmitted filter');
-  await publish.click();
   // PublishedRevision advances before verification; wait for retained completion.
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListRevision" r
 JOIN "AddonMediaList" list ON list."Id"=r."AddonMediaListId" AND list."PublishedRevision"=r."Revision"
 WHERE list."Id"=${listId} AND r."Revision"=1 AND r."CompletedAt" IS NOT NULL;`), { timeout: 90000 }).toBe('1');
+  await expect(unsavedFilter).toHaveValue('Unsubmitted filter');
   const pinned = `FROM "AddonMediaListRevisionItem" ri
 JOIN "AddonMediaListRevision" r ON r."Id"=ri."AddonMediaListRevisionId"
 JOIN "AddonMediaListArtifact" a ON a."Id"=ri."PreparedArtifactId"
@@ -106,14 +100,11 @@ AND r."Revision"=(SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "PlaylistItem" WHERE "PlaylistId"=${playlistId};`), { timeout: 60000 }).toBe('1');
   expect(sqlite(`SELECT "Duration" FROM "RemoteStream" WHERE "Id"=(SELECT "MediaItemId" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId});`)).toMatch(/^00:01:00(?:\.0+)?$/);
 
-  // A saved delivery change must leave the published file pinned and playable.
+  // Unsaved delivery input must leave the published file pinned and playable.
   await hydrated(page, `/media/addon-lists/${listId}/playback`);
   await page.locator('input[name="delivery_mode"][value="stream"]').check();
-  await Promise.all([
-    page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
-    page.getByRole('button', { name: 'Save settings', exact: true }).click(),
-  ]);
-  await expect.poll(() => sqlite(`SELECT "DeliveryMode" || '|' || "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe('0|1');
+  expect(sqlite(`SELECT "DeliveryMode" || '|' || "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe('1|1');
+  await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toHaveCount(0);
   expect(sqlite(`SELECT COUNT(*) ${pinned} AND a."State"=2;`)).toBe('1');
 
   // Scheduling UI is covered separately. Seed only one current entry referencing

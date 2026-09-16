@@ -18,7 +18,16 @@ async fn disk_warning_migration_defaults_existing_lists_without_revising_them() 
     );
     previous.run(&pool).await.unwrap();
     seed_legacy_lifecycle_rows(&pool).await;
-    migrations.run(&pool).await.unwrap();
+    sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version <= 202_609_080_900)
+            .cloned()
+            .collect(),
+    )
+    .run(&pool)
+    .await
+    .unwrap();
     let row: (i64, i64, i64) = sqlx::query_as(
         r#"SELECT "DiskUsageWarningGb", "DraftRevision", "PublishedRevision"
            FROM "AddonMediaList" WHERE "Id" = 1"#,
@@ -61,10 +70,16 @@ async fn lifecycle_foundation_backfills_only_truthful_legacy_state() {
     previous.run(&pool).await.expect("migrate legacy schema");
     seed_legacy_lifecycle_rows(&pool).await;
 
-    migrations
-        .run(&pool)
-        .await
-        .expect("apply lifecycle foundation migration");
+    sqlx::migrate::Migrator::with_migrations(
+        migrations
+            .iter()
+            .filter(|migration| migration.version < 202_609_161_200)
+            .cloned()
+            .collect(),
+    )
+    .run(&pool)
+    .await
+    .expect("apply lifecycle foundation migration");
     assert_lifecycle_foundation_backfill(&pool).await;
 }
 

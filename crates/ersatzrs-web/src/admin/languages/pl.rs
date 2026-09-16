@@ -1141,7 +1141,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ItemNumberingHelp => "Numerowany element wymaga obu wartości. Sezon 0 oznacza odcinki specjalne.",
         TextKey::ItemMetadata => "Opis, gatunki i tagi",
         TextKey::ItemMetadataHelp => "Dodatkowe tytuły, języki i twórcy",
-        TextKey::ItemSaveHelp => "Zapisz tutaj. Publikuj w sekcji Elementy i przegląd.",
+        TextKey::ItemSaveHelp => "Zapisz zmiany, aby zastosować je automatycznie.",
         TextKey::ItemEditNumbering => "Edytuj numerację na liście",
         TextKey::ItemReplacementHelp => "Wybranie lub usunięcie zamiennika zmienia ten szkic. Użyj Zapisz element, aby zachować zmianę.",
         TextKey::ItemReplacementPending => "Zmiana zamiennika nie została zapisana.",
@@ -1165,13 +1165,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonCheckPending => "Sprawdzanie dodatku…",
         TextKey::AddonWorkspaceIncludeSelected => "Uwzględnij zaznaczone elementy",
         TextKey::AddonWorkspaceExcludeSelected => "Wyklucz zaznaczone elementy",
-        TextKey::AddonWorkspaceInclusionHelp => "Zmiany dotyczą zaznaczonych elementów, również na innych stronach. Zapisz, aby je zachować; publikacja zmienia się dopiero po opublikowaniu.",
+        TextKey::AddonWorkspaceInclusionHelp => "Zapisz zmiany wyboru, aby zastosować je automatycznie.",
         TextKey::AddonWorkspacePublicationFailed => "Publikacja nie powiodła się",
-        TextKey::AddonWorkspacePublicationRestoredHelp => "Przywrócono poprzednią rewizję. Zapisane zmiany zostały zachowane. Sprawdź Aktywność przed ponowną publikacją.",
-        TextKey::AddonWorkspaceParentMetadataPreserved => "Publikację zatrzymano, aby zachować zmienione lub nieprawidłowe metadane tvshow.nfo / artist.nfo w folderze listy. Zachowaj kopię zapasową i uzgodnij ten plik z metadanymi nadrzędnymi w folderze przeskanowanych strumieni przed ponowną publikacją.",
+        TextKey::AddonWorkspacePublicationRestoredHelp => "Przywrócono poprzednią wersję. Zapisane zmiany są zachowane i ponawiane automatycznie. Błędy techniczne są widoczne w Aktywności.",
+
+        TextKey::AddonWorkspaceParentMetadataPreserved => "Przetwarzanie zatrzymano, aby zachować zmienione lub nieprawidłowe nadrzędne metadane NFO. Popraw plik przed ponowieniem.",
+
         TextKey::AddonWorkspaceImporting => "Importowanie listy…",
         TextKey::AddonWorkspaceImportingHelp => "Lista otworzy się automatycznie po zakończeniu wyszukiwania. Bez JavaScript użyj Odśwież.",
-        TextKey::AddonWorkspaceImportSteps => "Zaimportuj przegląd, sprawdź i zapisz zmiany, przygotuj multimedia w razie potrzeby, a następnie opublikuj.",
+        TextKey::AddonWorkspaceImportSteps => "Zaimportuj listę. Metadane i wymagane multimedia są przetwarzane i publikowane automatycznie.",
         TextKey::AddonWorkspaceChooseProvider => "Wybierz dodatek poniżej, jeśli żaden nie zostanie wykryty dla tego adresu URL.",
         TextKey::AddonWorkspaceExcluded => "Wykluczony z publikacji",
         TextKey::ItemFromList => "Z listy",
@@ -1192,7 +1194,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceNoOptions => "Ten dodatek nie udostępnia ustawień dostępu ani segmentów.",
         TextKey::AddonWorkspaceNewHelp => "Pobieraj nowo zaimportowane filmy; istniejące odtwarzaj strumieniowo.",
         TextKey::AddonWorkspaceSizeLimit => "Ten formularz jest zbyt duży. Wróć do wprowadzonych danych i zapisz mniejsze zadanie.",
-        TextKey::AddonWorkspaceItems => "Elementy i przegląd",
+        TextKey::AddonWorkspaceItems => "Elementy",
         TextKey::AddonWorkspaceSettings => "Ustawienia listy",
         TextKey::AddonWorkspacePlayback => "Odtwarzanie i dostęp",
         TextKey::AddonWorkspaceActivity => "Aktywność i odzyskiwanie",
@@ -1202,8 +1204,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceSaveNumbering => "Zapisz numerację",
         TextKey::AddonWorkspacePublish => "Opublikuj zapisane zmiany",
         TextKey::AddonWorkspacePublished => "Opublikowana lista jest aktualna",
-        TextKey::AddonWorkspacePending => "Zapisane zmiany gotowe do publikacji",
-        TextKey::AddonWorkspacePreparationRequired => "Zapisane zmiany wymagają przygotowanych multimediów przed publikacją",
+        TextKey::AddonWorkspacePending => "Zapisane zmiany są stosowane automatycznie",
+        TextKey::AddonWorkspacePreparationRequired => "Wymagane multimedia są przygotowywane automatycznie",
         TextKey::AddonWorkspacePreparing => "Przygotowywanie multimediów do publikacji",
         TextKey::AddonWorkspaceAddIncomplete => "Lista została dodana, ale część ustawień nie została zapisana. Otwórz Ustawienia listy, sprawdź je i zapisz ponownie.",
         TextKey::AddonWorkspacePreparationFailed => "Przygotowanie multimediów nie powiodło się",
@@ -1247,7 +1249,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::LastActivity => "Ostatnia aktywność",
         TextKey::AddonAccessUnknownFailure => "Przyczyna tego błędu dostępu jest nieznana. Sprawdź zapisane ustawienia dostępu, przetestuj źródło w przeglądarce i ponów sprawdzenie.",
         TextKey::AddonWorkspaceRetained => "Nie udało się zapisać zmian. Wprowadzone dane zachowano; sprawdź błędy lub wczytaj bieżącą wersję.",
-        TextKey::AddonWorkspaceNavigation => "Nawigacja zachowuje niezapisane zmiany. Zapisywanie i publikowanie to osobne działania.",
+        TextKey::AddonWorkspaceNavigation => "Nawigacja zachowuje niezapisane zmiany. Zapisane zmiany są stosowane automatycznie.",
         TextKey::AddonWorkspaceSeasonOnly => "Zmień tylko sezon",
         TextKey::AddonWorkspacePageSize => "Elementy na stronę",
 
@@ -1271,15 +1273,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonAccessProfileUnavailable => "Wybrany profil przeglądarki jest niedostępny dla serwera. Sprawdź zapisany profil i ponów sprawdzanie dostępu.",
         TextKey::AddonAccessProfileLocked => "Profil przeglądarki jest zablokowany. Zamknij przeglądarkę używającą tego profilu i ponów sprawdzanie dostępu.",
         TextKey::AddonAccessDecryptionFailed => "Serwer nie mógł odszyfrować danych logowania przeglądarki. Sprawdź profil i konto uruchamiające serwer, a następnie spróbuj ponownie.",
+        TextKey::AddonDerivedMetadataLimited => "Metadane serialu osiągnęły limit rozmiaru. Metadane odcinków pozostają kompletne.",
+        TextKey::AddonLocalPlaybackAvailable => "Kopia lokalna gotowa do odtwarzania",
         TextKey::AddonAccessRestricted => "Dostawca ograniczył dostęp. Otwórz źródło w przeglądarce, sprawdź ograniczenia konta lub regionu i ponów sprawdzanie dostępu.",
         TextKey::AddonAccessNextAttempt => "Następna próba:",
         TextKey::AddonAccessExpires => "Wynik wygasa:",
         TextKey::AddonAccessRefresh => "Odśwież stan",
         TextKey::AddonOptionsCurrentFilter => "Bieżący filtr",
         TextKey::AddonOptions => "Opcje dostawcy",
-        TextKey::AddonOptionsDraftHelp => {
-            "Zmiany są zapisywane w wersji roboczej. Opublikowane odtwarzanie zachowuje obecne opcje do czasu publikacji."
-        }
+        TextKey::AddonOptionsDraftHelp => "Zapisane opcje są stosowane automatycznie. Bieżące odtwarzanie pozostaje dostępne podczas przetwarzania.",
         TextKey::AddonOptionsProvisional => {
             "Te wartości domyślne pakietu są tymczasowe. Zapisanie opcji aktywuje je dla tej wersji roboczej."
         }
@@ -1304,7 +1306,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Addon => "Dodatek",
         TextKey::PrimaryFeature => "Film główny",
         TextKey::MovieExtra => "Materiał dodatkowy",
-        TextKey::NeedReview => "Wymaga sprawdzenia",
+        TextKey::NeedReview => "Powiadomienia",
+
         TextKey::ReviewRecommended => "Zalecane sprawdzenie",
         TextKey::PublicationReadiness => "Gotowość do publikacji",
         TextKey::PublicationBlockers => "Blokady",
@@ -1503,10 +1506,8 @@ pub fn text(key: TextKey) -> &'static str {
             "Zaimportuj tylko przegląd i ręcznie żądaj szczegółów opisowych. Szczegóły techniczne wymagane do odtwarzania są automatycznie przygotowywane przed publikacją."
         }
         TextKey::PlaybackDetailsQueued => "Szczegóły odtwarzania w kolejce",
-        TextKey::PublishAgainAfterDetails => {
-            "Sprawdź ukończone szczegóły, a następnie opublikuj ponownie."
-        }
-        TextKey::FetchDetails => "Pobierz szczegóły",
+        TextKey::PublishAgainAfterDetails => "Uzupełnione szczegóły są stosowane automatycznie.",
+TextKey::FetchDetails => "Pobierz szczegóły",
         TextKey::DetailsQueued => "Szczegóły w kolejce",
         TextKey::DetailsLoading => "Pobieranie szczegółów",
         TextKey::RetryDetails => "Ponów szczegóły",
@@ -1514,7 +1515,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DetailsSkipped => "Szczegóły pominięte",
         TextKey::FindingProgrammes => "Wyszukiwanie programów",
         TextKey::CheckingOverview => "Sprawdzanie przeglądu",
-        TextKey::ReadyToReview => "Gotowe do sprawdzenia",
+        TextKey::ReadyToReview => "Przetwarzanie automatyczne",
+
         TextKey::LoadingItemDetails => "Pobieranie szczegółów elementów",
         TextKey::WaitingForProvider => "Oczekiwanie na dostawcę",
         TextKey::OverviewOnly => "Tylko przegląd",
@@ -1560,16 +1562,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Scope => "Zakres",
         TextKey::AllItems => "Wszystkie pozycje",
         TextKey::CurrentPage => "Bieżąca strona",
-        TextKey::ItemsNeedingReview => "Pozycje wymagające sprawdzenia",
+        TextKey::ItemsNeedingReview => "Elementy z powiadomieniami",
+
         TextKey::KeepCurrentValue => "Zachowaj bieżącą wartość",
         TextKey::UndoLastChange => "Cofnij ostatnią zmianę",
         TextKey::Undo => "Cofnij",
         TextKey::ChangeUndone => "Zmiana została cofnięta",
         TextKey::MetadataConflicts => "Konflikty metadanych",
-        TextKey::MetadataConflictsHelp => {
-            "Dostawca zmienił pola zastąpione przez operatora. Sprawdź wartości przed publikacją."
-        }
-        TextKey::PreviousProviderValue => "Poprzednia wartość dostawcy",
+        TextKey::MetadataConflictsHelp => "Dostawca zmienił dostosowane pola. Twoje zapisane wartości pozostają w użyciu.",
+TextKey::PreviousProviderValue => "Poprzednia wartość dostawcy",
         TextKey::NewProviderValue => "Nowa wartość dostawcy",
         TextKey::OperatorValue => "Wartość operatora",
         TextKey::Discovered => "Wykryto",
@@ -1611,19 +1612,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PublishMetadata => "Opublikuj",
         TextKey::IncludeItem => "Uwzględnij",
         TextKey::IncludeInPublication => "Uwzględnij w publikacji",
-        TextKey::MetadataDraftNotice => {
-            "Sprawdź metadane i uwzględnione pozycje przed opublikowaniem tej listy."
-        }
-        TextKey::ApplyToAllItemsPrompt => {
+        TextKey::MetadataDraftNotice => "Zapisane metadane i zmiany wyboru są stosowane automatycznie.",
+TextKey::ApplyToAllItemsPrompt => {
             "Każda pozycja otrzyma wybrany rodzaj multimediów, zastępując wartości ustalone przez dodatek lub wprowadzone ręcznie."
         }
         TextKey::TelevisionEpisode => "Odcinek telewizyjny",
         TextKey::CollectionTypeAuto => "Ustal na podstawie pozycji",
         TextKey::CurrentLibraryType => "Bieżący typ biblioteki",
-        TextKey::CollectionTypeChangeHelp => {
-            "Możesz to zmienić po imporcie. Zapisz i opublikuj, aby przeklasyfikować istniejące pozycje bez ponownego importowania dodatku; kolejność, wybór pozycji i zmiany metadanych zostaną zachowane."
-        }
-        TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
+        TextKey::CollectionTypeChangeHelp => "Zapisz, aby automatycznie uporządkować istniejące elementy. Kolejność, wybór i zmiany metadanych zostaną zachowane.",
+TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         TextKey::UnknownItems => "Pozycje nieznane",
         TextKey::PlayableItems => "Pozycje odtwarzalne",
         TextKey::ApplyToAllItems => "Zastosuj do wszystkich pozycji",
@@ -1768,11 +1765,9 @@ pub fn text(key: TextKey) -> &'static str {
         }
         TextKey::RefreshPublicationPolicy => "Publikacja po odświeżeniu",
         TextKey::RefreshPublicationReview => "Sprawdzaj każde odświeżenie",
-        TextKey::RefreshPublicationAutomatic => "Automatycznie publikuj bezpieczne dodatki",
-        TextKey::RefreshPublicationPolicyHelp => {
-            "Dotyczy tylko zaplanowanych odświeżeń po pierwszej publikacji. Ręczne odświeżanie, uzgadnianie i resetowanie zawsze wymagają sprawdzenia. Zmiany lub niepewne dodatki pozostają do sprawdzenia."
-        }
-        TextKey::AutoPublicationHeld => "Automatyczna publikacja wymaga sprawdzenia",
+        TextKey::RefreshPublicationAutomatic => "Automatycznie stosuj zapisane zmiany",
+        TextKey::RefreshPublicationPolicyHelp => "Importy, aktualizacje, metadane i zapisane zmiany są stosowane automatycznie.",
+        TextKey::AutoPublicationHeld => "Automatyczne przetwarzanie wymaga uwagi",
         TextKey::PreparationWorkerUnavailable => {
             "Proces przygotowywania multimediów jest niedostępny. Uruchom ponownie serwer przed ponowną próbą przygotowania."
         }

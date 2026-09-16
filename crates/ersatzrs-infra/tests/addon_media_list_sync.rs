@@ -476,7 +476,7 @@ async fn refresh_publication_policy_saves_with_cadence_and_round_trips() {
             .unwrap()
             .unwrap()
             .refresh_publication_policy,
-        AddonMediaListRefreshPublicationPolicy::Review
+        AddonMediaListRefreshPublicationPolicy::Automatic
     );
     for (cadence, policy) in [
         (
@@ -502,7 +502,10 @@ async fn refresh_publication_policy_saves_with_cadence_and_round_trips() {
             .unwrap();
         let form = repository.get_admin_form(list_id).await.unwrap().unwrap();
         assert_eq!(form.refresh_cadence, cadence);
-        assert_eq!(form.refresh_publication_policy, policy);
+        assert_eq!(
+            form.refresh_publication_policy,
+            AddonMediaListRefreshPublicationPolicy::Automatic
+        );
         assert_eq!(
             form.next_refresh_at.is_none(),
             cadence == AddonMediaListRefreshCadence::Never
@@ -839,6 +842,77 @@ async fn unavailable_remote_item_uses_exact_local_replacement_until_provider_rec
     assert_playlist_selection(&pool, list_id, (10, 1, Some(10), Some(3))).await;
     publish_as_remote_streams(&pool, list_id).await;
     assert_playlist_selection(&pool, list_id, (70, 2, None, None)).await;
+}
+
+#[tokio::test]
+async fn automatic_refresh_retains_missing_items_without_replacements_and_preserves_rich_metadata()
+{
+    let pool = common::test_db().await;
+    seed_addon(&pool).await;
+    let source = "https://example.invalid/list";
+    let list_id = AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeRemoteStreamListProvider)
+        .add_or_refresh(
+            "org.example.lists",
+            source,
+            None,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
+        .await
+        .unwrap();
+    let id: i64 =
+        sqlx::query_scalar(r#"SELECT "Id" FROM "AddonMediaListItem" WHERE "AddonMediaListId"=?"#)
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    sqlx::query(r#"UPDATE "AddonMediaListItem" SET "Published"=1,
+        "ProviderMetadataJson"='{"title":"Fixture Remote Stream","plot":"Detailed description","languages":["en"]}',
+        "MetadataOverrideJson"='{"tags":["Personal"]}' WHERE "Id"=?"#)
+        .bind(id).execute(&pool).await.unwrap();
+    for _ in 0..2 {
+        AddonMediaListRemoteSynchronizer::new(pool.clone(), EmptyRemoteStreamListProvider)
+            .add_or_refresh(
+                "org.example.lists",
+                source,
+                None,
+                AddonMediaListContentKind::Auto,
+                "",
+            )
+            .await
+            .unwrap();
+        let row: (i64, i32, i32, i32, String) = sqlx::query_as(
+            r#"SELECT "Id","Included","Published","Availability","MetadataOverrideJson"
+            FROM "AddonMediaListItem" WHERE "AddonMediaListId"=?"#,
+        )
+        .bind(list_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(row, (id, 1, 1, 1, "{\"tags\":[\"Personal\"]}".into()));
+    }
+    AddonMediaListRemoteSynchronizer::new(pool.clone(), FakeRemoteStreamListProvider)
+        .add_or_refresh(
+            "org.example.lists",
+            source,
+            None,
+            AddonMediaListContentKind::Auto,
+            "",
+        )
+        .await
+        .unwrap();
+    let row: (i64, i32, String) = sqlx::query_as(
+        r#"SELECT "Id","Availability","ProviderMetadataJson"
+        FROM "AddonMediaListItem" WHERE "AddonMediaListId"=?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((row.0, row.1), (id, 0));
+    let metadata: AddonMediaListNfoMetadata = serde_json::from_str(&row.2).unwrap();
+    assert_eq!(metadata.plot.as_deref(), Some("Detailed description"));
+    assert_eq!(metadata.languages, ["en"]);
 }
 
 #[tokio::test]

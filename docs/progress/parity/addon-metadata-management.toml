@@ -1,10 +1,12 @@
-feature    = 'Reviewable add-on metadata management'
+feature    = 'Add-on metadata management'
 etv_source = 'ErsatzRS product extension; ErsatzTV has no repository-installed add-on draft equivalent'
 rs_target  = '`ersatzrs-addon-contract`, add-on list application/repository boundaries, the shared admin metadata editor, scanner publication, health, and the official add-ons repository'
 status     = 'In progress'
-adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091', '0092', '0093']
+adr        = ['0052', '0068', '0073', '0075', '0078', '0079', '0085', '0086', '0087', '0088', '0091', '0092', '0093', '0094']
 
 summary = '''
+ADR 0094 replaces mandatory review with automatic publication. AMM-P-01 owns
+the metadata correction and Linux/Windows acceptance; earlier evidence is historical.
 ADR 0075 adds provider-neutral drafts with NFOs, frozen contracts,
 provider/override snapshots, durable inclusion, atomic publication, localization,
 artwork and health. ADR 0092 retired Beeld & Geluid; prior results are historical.
@@ -39,10 +41,9 @@ provider-neutral access restrictions, item-scoped publication exclusion,
 redacted durable status, and guarded localized Retry/Restore actions for the
 hydrated and no-JavaScript editor. Focused acceptance is complete; AMM-N-03
 retains the integrated packaged Windows restart proof.
-AMM-J-04 and AMM-K close recovery and lifecycle. AMM-L completes cadences,
-transactional skip-known discovery, omission-safe rich headers, non-destructive
-reconciliation, and scheduler-only validated-additions publication with exact
-revision fences, retry-safe preparation, and localized Activity/Health holds.
+AMM-J-04 and AMM-K close recovery and lifecycle. AMM-L adds cadenced discovery,
+rich headers and non-destructive reconciliation; ADR 0094 supersedes its
+additions-only publication policy.
 AMM-M-01A is Complete under ADRs 0087/0088; its milestone owns the options,
 real MPEG-TS/HLS cut and cancellation evidence. Native yt-dlp replaces the
 Range adapter and remains preferred in later slices. HDR/unmapped-subtitle refusals
@@ -904,3 +905,11 @@ discovered  = '2026-09-13'
 adr         = '0091'
 resolved    = true
 evidence    = "2026-09-14: final Chromium/Firefox closeout proves Saved/Unsaved feedback, fresh-cutoff notice only for a new selection, native no-JS Save/Undo and responsive 1001-item forms. Display-only comparison is linear and its served bytes match source. Ignored Leptos env/watch metadata is removed; run.sh dev watch behavior is unchanged. The transitive future-compatibility warning remains separately tracked."
+
+[[debt]]
+id = 'automatic-publication-metadata'
+discovered = '2026-09-16'
+resolved = false
+adr = '0094'
+description = 'AMM-P-01 replaces review gates with automatic publication, preserves source-removed local media, completes metadata transfer and repairs episode ContentRating. Acceptance and evidence are owned by AMM-P-01.'
+evidence = 'Automatic publication and metadata transfer are implemented; AMM-P-01 owns Linux verification and the remaining exact-SHA CI, Windows beta and maintainer acceptance.'

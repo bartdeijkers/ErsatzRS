@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-N D01-D13 dogfood corrections locally verified; broader AMM-N gates remain open; O-01 withdrawn'
+current_focus = 'AMM-P-01 Linux verification complete; exact-SHA CI, Windows-only beta and maintainer acceptance next'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -60,14 +60,21 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+AMM-P-01 implements ADR 0094 automatic publication, complete metadata transfer
+and the episode ContentRating repair. Linux native, browser, copied-profile and
+playback evidence is recorded in the milestone. Next: commit the verified
+candidate, obtain terminal exact-SHA CI and prepare the authorized Windows-only
+beta. Native Windows acceptance stays open until the maintainer reports results
+in this session. The original personal profile remains unchanged.
 2026-09-15 hydration correction: required admin startup no longer waits for
 optional browser idle time. The owning admin-ui-failure-semantics parity debt
 records the natural and controlled reproductions, identical-build runner2 SSD
 probe, native checks, and complete serial Chromium/Firefox passes. The precise
 Chromium scheduler trigger and contribution of runner load remain unproven.
-2026-09-16: the maintainer authorizes a local commit only. Next action: await
-push authorization before publishing and checking exact-SHA CI. No release, live installation change, or broader
-AMM-N completion is claimed; the separately committed catch-up plan stays local.
+The earlier 2026-09-16 hydration checkpoint authorized a local commit only.
+That checkpoint did not claim release, live installation changes, or broader
+AMM-N completion. The later AMM-P-01 request separately authorizes implementation
+and a Windows-only beta after Linux acceptance.
 
 2026-09-14 publication follow-up: commit, push and terminal green CI are now
 authorized. Add-ons ba440f3 passes validation run 34852466201. Host 08aa9cf4

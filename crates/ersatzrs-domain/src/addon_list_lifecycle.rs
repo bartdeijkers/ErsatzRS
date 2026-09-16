@@ -35,13 +35,25 @@ pub enum AddonMediaListSourceCheckOutcome {
     PermanentFailure,
 }
 
-/// Whether a successful refresh always enters review or may publish pure additions.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// Publication policy. Legacy choices remain readable during rolling upgrades.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AddonMediaListRefreshPublicationPolicy {
-    #[default]
     Review,
     AutoPublishAdditions,
+    /// Automatically apply every saved valid revision (ADR 0094).
+    #[default]
+    Automatic,
+}
+
+impl<'de> Deserialize<'de> for AddonMediaListRefreshPublicationPolicy {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "automatic" | "review" | "auto_publish_additions" => Ok(Self::Automatic),
+            _ => Err(serde::de::Error::unknown_variant(&value, &["automatic"])),
+        }
+    }
 }
 
 /// Redacted reason a scheduled refresh requires explicit publication review.

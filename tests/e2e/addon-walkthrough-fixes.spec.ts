@@ -56,7 +56,7 @@ async function fillAdd(page: Page, variant: PreparedFixtureVariant, mode: string
   await page.getByLabel('Add-on list URL').fill(`${preparedSourceUrl(variant)}/${name}`);
   await page.getByLabel('Add-on', { exact: true }).selectOption(variant.addonId!);
   // The reported failure used Add's default presentation.
-  await expect(page.getByLabel('Collection Type', { exact: true })).toHaveValue('television_show');
+  if (!presentation) await expect(page.getByLabel('Collection Type', { exact: true })).toHaveValue('television_show');
   if (presentation) await page.getByLabel('Collection Type', { exact: true }).selectOption(presentation);
   await page.getByLabel('Delivery', { exact: true }).selectOption(mode);
   await page.getByLabel('Storage folder').fill(`walkthrough-${name}`);
@@ -103,9 +103,6 @@ function publishedItems(listId: number): string {
 }
 
 async function publishAndWait(page: Page, listId: number, revision: number): Promise<void> {
-  const publish = page.getByRole('button', { name: 'Publish saved changes', exact: true });
-  await expect(publish).toBeEnabled({ timeout: 30000 });
-  await publish.click();
   await expect.poll(() => publicationState(listId), { timeout: 120000 }).toBe(`${revision},2,1,1`);
   await hydrated(page, `/media/addon-lists/${listId}`);
 }
@@ -131,19 +128,13 @@ test('a new list first publishes with the default TV Shows presentation', async 
   for (const [mode, preparesMedia] of [['stream', false], ['download_ahead_new_videos', true]] as const) {
     const variant = scenario(info, `first-tv-${mode.replace(/_/g, '-')}`, preparesMedia);
     const listId = await importList(page, variant, mode);
-    // No projection may exist before the first publication.
-    expect(televisionProjection(listId)).toBe('0,0,0');
 
     await hydrated(page, `/media/addon-lists/${listId}`);
     if (preparesMedia) {
-      await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
       await hydrated(page);
       await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${listId} AND "Kind"=1 AND "State"=2;`), { timeout: 180000 }).toBe('1');
       expect(prepareInvocations(variant)).toBeGreaterThan(0);
     }
-    const publish = page.getByRole('button', { name: 'Publish saved changes', exact: true });
-    await expect(publish).toBeEnabled({ timeout: 30000 });
-    await publish.click();
 
     await expect.poll(() => publicationState(listId), { timeout: 120000 }).toBe('1,2,1,1');
     expect(sqlite(`SELECT COUNT(*) FROM "AddonMediaListPublicationJob" WHERE "AddonMediaListId"=${listId} AND "OriginalFailureCode" IS NOT NULL;`)).toBe('0');
@@ -181,7 +172,7 @@ test('the import landing page shows the imported list without a manual reload', 
   expect(errors).toEqual([]);
 });
 
-test('bulk exclude and include change only the saved draft until publication', async ({ page }, info) => {
+test('bulk exclude and include publish automatically only after saving', async ({ page }, info) => {
   test.setTimeout(480000);
   const errors = watchErrors(page);
   const variant = scenario(info, 'bulk-inclusion', false, { itemCount: 3 });
@@ -208,9 +199,6 @@ test('bulk exclude and include change only the saved draft until publication', a
   await expect(selectFor('Prepared calibration 2')).toBeChecked();
   await expect(selectFor('Prepared calibration 3')).toBeChecked();
   await expect(selectFor('Prepared calibration')).not.toBeChecked();
-  // The published revision is untouched until the operator publishes.
-  expect(sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id"=${listId};`)).toBe('1');
-  expect(publishedItems(listId)).toBe('3');
 
   await publishAndWait(page, listId, 2);
   expect(publishedItems(listId)).toBe('1');
@@ -223,7 +211,6 @@ test('bulk exclude and include change only the saved draft until publication', a
   await hydrated(page);
   await expect(page.locator('#workspace-errors')).toHaveCount(0);
   expect(includedItems(listId)).toBe('3');
-  expect(publishedItems(listId)).toBe('1');
   await publishAndWait(page, listId, 3);
   expect(publishedItems(listId)).toBe('3');
   expect(errors).toEqual([]);
@@ -235,13 +222,15 @@ test('a restored publication failure stays visible as a failure on fresh renders
   const variant = scenario(info, 'restored-failure', false);
   const listId = await importList(page, variant, 'stream', 'remote_streams');
   expect(Number(sqlite(`SELECT COUNT(*) FROM "Library";`))).toBeGreaterThan(0);
+  await publishAndWait(page, listId, 1);
   // State-only fixture matching the walkthrough rows: a completed publication
   // operation whose commit failed and restored the previous (empty) revision.
   // publication_status does not join Library, so any existing library satisfies the key.
   sqlite(`INSERT INTO "ManagedLibraryOperation" ("LibraryId","OwnerToken","Kind","State","AttemptCount","CreatedAt","UpdatedAt","CompletedAt")
 VALUES ((SELECT "Id" FROM "Library" ORDER BY "Id" DESC LIMIT 1),'e2e-restored-failure',3,3,1,'2026-09-12T11:22:26Z','2026-09-12T11:22:27Z','2026-09-12T11:22:27Z');
 INSERT INTO "AddonMediaListPublicationJob" ("OperationId","AddonMediaListId","Generation","SavedRevision","TargetPublishedRevision","Phase","OriginalFailureCode","Outcome","CreatedAt","UpdatedAt","CompletedAt")
-VALUES (last_insert_rowid(),${listId},1,(SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=${listId}),1,7,'publication_commit_failed',1,'2026-09-12T11:22:26Z','2026-09-12T11:22:27Z','2026-09-12T11:22:27Z');`);
+VALUES (last_insert_rowid(),${listId},2,(SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=${listId}),1,7,'publication_commit_failed',1,'2026-09-12T11:22:26Z','2026-09-12T11:22:27Z','2026-09-12T11:22:27Z');
+UPDATE "AddonMediaList" SET "ReviewState"=1 WHERE "Id"=${listId};`);
 
   const expectFailure = async () => {
     const recovery = page.getByTestId('addon-publication-recovery');
@@ -271,7 +260,7 @@ WHERE "AddonMediaListId"=${listId} AND "State"=0; SELECT changes();`)).toBe('1')
     await expect(recovery.getByText('Attempts: 1', { exact: true })).toBeVisible();
     sqlite(`UPDATE "ManagedLibraryOperation" SET "AttemptCount"=2
 WHERE "Id"=(SELECT "OperationId" FROM "AddonMediaListPublicationJob"
-WHERE "AddonMediaListId"=${listId} AND "Generation"=1);`);
+WHERE "AddonMediaListId"=${listId} AND "Generation"=2);`);
     await expect(recovery.getByText('Attempts: 2', { exact: true })).toBeVisible({ timeout: 7000 });
     await expect(overview).toContainText('Publication failed');
     await expect(page.getByText('Saved changes ready to publish', { exact: true })).toHaveCount(0);
@@ -280,7 +269,7 @@ WHERE "AddonMediaListId"=${listId} AND "Generation"=1);`);
 WHERE "AddonMediaListId"=${listId} AND "State"=1;`);
   }
 
-  const preservation = 'Publication stopped to preserve edited or invalid tvshow.nfo / artist.nfo metadata in the list folder.';
+  const preservation = 'Processing stopped to preserve edited or invalid parent NFO metadata. Reconcile the file before retrying.';
   await hydrated(page, `/media/addon-lists/${listId}/activity`);
   await expectFailure();
   await expect(page.getByTestId('addon-publication-recovery').getByText(preservation)).toBeHidden();
@@ -292,7 +281,7 @@ WHERE "AddonMediaListId"=${listId} AND "State"=1;`);
     await expectFailure();
     const guidance = page.getByTestId('addon-publication-recovery').getByText(preservation);
     await expect(guidance).toBeVisible();
-    await expect(guidance).toContainText('Keep a backup');
+    await expect(guidance).toContainText('Reconcile the file');
   }
   expect(errors).toEqual([]);
 });
@@ -355,6 +344,9 @@ test('bulk exclusion can be discarded or saved without JavaScript', async ({ pag
   if (!baseURL) throw new Error('Playwright baseURL is required');
   const variant = scenario(info, 'bulk-no-js', false, { itemCount: 2 });
   const listId = await importList(page, variant, 'stream', 'remote_streams');
+  // Editing starts from the completed initial publication. Active publication
+  // deliberately holds a write lease and rejects concurrent saved changes.
+  await publishAndWait(page, listId, 1);
   const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
   try {
     const plain = await context.newPage();
@@ -448,8 +440,14 @@ test('166-entry overview reports overlapping preparation tasks separately from i
     ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value";`);
   const listId = await importList(page, variant, 'stream', 'remote_streams', `${preparedSourceUrl(variant)}?delivery=stream`);
   const unresolved = Number(sqlite(`SELECT MIN("Id") FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId};`));
-  sqlite(`UPDATE "AddonMediaListItem" SET "DurationSeconds"=NULL,"ProviderLiveness"=0,"EffectiveLiveness"=0,"Availability"=2,"ProviderMetadataJson"='{"title":"Unresolved fixture"}' WHERE "Id"=${unresolved};
-    UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=${listId};`);
+  // Hold automatic admission at a persisted terminal state for this counter-only
+  // fixture, and supersede any work admitted before the overview was replaced.
+  sqlite(`BEGIN IMMEDIATE;
+    UPDATE "AddonMediaListItem" SET "DurationSeconds"=NULL,"ProviderLiveness"=0,"EffectiveLiveness"=0,"Availability"=2,"ProviderMetadataJson"='{"title":"Unresolved fixture"}' WHERE "Id"=${unresolved};
+    UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1 WHERE "Id"=${listId};
+    UPDATE "AddonMediaListAutoPublication" SET "State"='held',"Reason"='"preparation_failed"',"DraftRevision"=(SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=${listId}) WHERE "AddonMediaListId"=${listId};
+    UPDATE "AddonMediaListItemOperationJob" SET "State"=5 WHERE "AddonMediaListId"=${listId} AND "State" IN (0,1);
+    COMMIT;`);
   await hydrated(page, `/media/addon-lists/${listId}`);
   const preparation = page.getByTestId('addon-preparation-tasks');
   await expect(preparation.getByText('Affected items', { exact: true }).locator('..').locator('dd')).toHaveText('165');

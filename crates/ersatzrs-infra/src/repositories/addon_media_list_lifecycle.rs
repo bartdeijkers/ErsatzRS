@@ -168,7 +168,7 @@ impl AddonMediaListLifecycleRepository for SqliteAddonMediaListRepository {
                WHERE "Id" = ?"#,
         )
         .bind(encode_enum(settings.cadence))
-        .bind(encode_enum(settings.publication_policy))
+        .bind(encode_enum(ersatzrs_domain::AddonMediaListRefreshPublicationPolicy::Automatic))
         .bind(encode_optional_datetime(settings.next_refresh_at))
         .bind(encode_optional_datetime(settings.retry_at))
         .bind(encode_optional_datetime(settings.last_success_at))

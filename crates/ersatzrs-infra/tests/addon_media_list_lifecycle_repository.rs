@@ -663,7 +663,10 @@ async fn lifecycle_and_global_artifact_policy_round_trip_without_enabling_behavi
             .lifecycle_settings(1)
             .await
             .unwrap(),
-        Some(settings)
+        Some(AddonMediaListLifecycleSettings {
+            publication_policy: AddonMediaListRefreshPublicationPolicy::Automatic,
+            ..settings
+        })
     );
     // The retired Boolean projection must not describe monthly as daily.
     let legacy_auto_refresh: bool =

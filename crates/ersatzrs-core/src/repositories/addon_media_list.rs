@@ -165,6 +165,8 @@ pub struct AddonMediaListItemAdminRow {
     pub replacement_title: Option<String>,
     pub replacement_path: Option<String>,
     pub replacement_valid: bool,
+    /// A revision-pinned local prepared file is still readable even if the source is gone.
+    pub local_media_available: bool,
     pub title: String,
     pub year: Option<i32>,
     pub season: Option<i32>,

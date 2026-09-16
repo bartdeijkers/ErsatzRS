@@ -37,13 +37,10 @@ async function publish(page: Page, delivery: 'stream' | 'download_ahead'): Promi
   await hydrated(page);
   await expect(page.locator('#workspace-errors')).toHaveCount(0);
   await hydrated(page, `/media/addon-lists/${id}`);
-  await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
   // Streaming needs both interval metadata and captions. They share the provider
   // lease, so a queued caption job can outlive the first operation's completion.
   const completedKinds = delivery === 'stream' ? '2,3' : '1';
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${id} AND "Kind" IN (${completedKinds}) AND "State"=2;`), { timeout: 120000 }).toBe(delivery === 'stream' ? '2' : '1');
-  await expect(page.getByRole('button', { name: 'Publish saved changes', exact: true })).toBeEnabled({ timeout: 20000 });
-  await page.getByRole('button', { name: 'Publish saved changes', exact: true }).click();
   await expect.poll(() => sqlite(`SELECT COUNT(*) FROM "AddonMediaListRevision" r JOIN "AddonMediaList" l
     ON l."Id"=r."AddonMediaListId" AND l."PublishedRevision"=r."Revision"
     WHERE l."Id"=${id} AND r."CompletedAt" IS NOT NULL;`), { timeout: 90000 }).toBe('1');

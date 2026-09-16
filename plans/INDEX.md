@@ -20,6 +20,7 @@ public open-source project.
 | Changelog | Keep a Changelog in `CHANGELOG.md` | The root changelog is the main human-readable release overview and must stay current under `[Unreleased]`. |
 | Official Beeld & Geluid add-on | Retired by [ADR 0092](../docs/adr/0092-retire-official-beeld-en-geluid-addon.md) | No service-backed acceptance or new official support; preserve provider-neutral features and operator data. |
 | Saved add-on list folders | Withdrawn [ADR 0093](../docs/adr/0093-make-saved-addon-list-folders-authoritative.md) | `amm-o-01` withdrawn on 2026-09-13; pre-implementation baseline restored. No active implementation scope. |
+| Saved add-on updates | Automatic publication under [ADR 0094](../docs/adr/0094-automatically-publish-addon-list-updates.md) | AMM-P-01 replaces review gates, completes metadata transfer and retains local media after source disappearance. |
 | Documentation model | Diataxis | Docs are split into tutorials, how-to guides, reference, and explanation. |
 | Porting rule | ErsatzTV behavior by default | Deliberate deviations require ADRs. |
 | AI workflows | Canonical repo-local `skills/` with agent compatibility pointers | Skills travel with the repository and stay reviewable without diverging copies. |
@@ -147,6 +148,9 @@ changelog, and git history for evidence. The authoritative live state is always
   actions, automatic Ready-to-review materialization, explicit saved-revision
   and publication readiness, responsive item cards, contextual entry points,
   and bounded progress/copy defects under milestone `amm-i-01`.
+- [Automatic add-on publication](automatic-addon-publication.md) — AMM-P-01
+  implements ADR 0094; Linux acceptance precedes a Windows-only beta and
+  maintainer-owned native Windows verification.
 - `addon-list-publication-recovery.md` — corrective AMM-J plan for durable
   publication jobs, restart-safe Windows/POSIX rollback, localized recovery
   actions, and item-scoped continuation when provider authentication or age

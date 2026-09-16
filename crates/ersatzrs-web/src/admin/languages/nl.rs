@@ -1132,7 +1132,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ItemNumberingHelp => "Een genummerd item vereist beide waarden. Seizoen 0 is voor specials.",
         TextKey::ItemMetadata => "Samenvatting, genres en tags",
         TextKey::ItemMetadataHelp => "Aanvullende titels, talen en credits",
-        TextKey::ItemSaveHelp => "Sla wijzigingen hier op. Publiceer via Items en beoordeling.",
+        TextKey::ItemSaveHelp => "Sla wijzigingen op om ze automatisch toe te passen.",
         TextKey::ItemEditNumbering => "Nummering in lijst bewerken",
         TextKey::ItemReplacementHelp => "Een vervanging kiezen of verwijderen wijzigt dit concept. Gebruik Item opslaan om dit te bewaren.",
         TextKey::ItemReplacementPending => "De vervangingswijziging is niet opgeslagen.",
@@ -1156,13 +1156,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonCheckPending => "Add-on controleren…",
         TextKey::AddonWorkspaceIncludeSelected => "Geselecteerde items opnemen",
         TextKey::AddonWorkspaceExcludeSelected => "Geselecteerde items uitsluiten",
-        TextKey::AddonWorkspaceInclusionHelp => "Wijzigingen gelden voor geselecteerde items, ook op andere pagina’s. Sla ze op om ze te bewaren; publicatie verandert pas wanneer u publiceert.",
+        TextKey::AddonWorkspaceInclusionHelp => "Sla selectiewijzigingen op om ze automatisch toe te passen.",
         TextKey::AddonWorkspacePublicationFailed => "Publicatie mislukt",
-        TextKey::AddonWorkspacePublicationRestoredHelp => "De vorige revisie is hersteld. Uw opgeslagen wijzigingen zijn behouden. Bekijk Activiteit voordat u opnieuw publiceert.",
-        TextKey::AddonWorkspaceParentMetadataPreserved => "Publicatie is gestopt om gewijzigde of ongeldige tvshow.nfo / artist.nfo-metadata in de lijstmap te behouden. Maak een reservekopie en stem dit bestand af op de bovenliggende metadata in de map met gescande streams voordat u opnieuw publiceert.",
+        TextKey::AddonWorkspacePublicationRestoredHelp => "De vorige versie is hersteld. Opgeslagen wijzigingen blijven behouden en worden automatisch opnieuw geprobeerd. Activiteit toont technische fouten.",
+
+        TextKey::AddonWorkspaceParentMetadataPreserved => "De verwerking is gestopt om gewijzigde of ongeldige bovenliggende NFO-metadata te behouden. Herstel het bestand voordat je opnieuw probeert.",
+
         TextKey::AddonWorkspaceImporting => "Lijst importeren…",
         TextKey::AddonWorkspaceImportingHelp => "De lijst opent automatisch zodra het ophalen is voltooid. Gebruik Vernieuwen zonder JavaScript.",
-        TextKey::AddonWorkspaceImportSteps => "Importeer het overzicht, controleer en bewaar uw wijzigingen, bereid media voor indien nodig en publiceer daarna.",
+        TextKey::AddonWorkspaceImportSteps => "Importeer de lijst. Metadata en benodigde media worden automatisch verwerkt en gepubliceerd.",
         TextKey::AddonWorkspaceChooseProvider => "Kies hieronder een add-on als er geen wordt gevonden voor deze URL.",
         TextKey::AddonWorkspaceExcluded => "Uitgesloten van publicatie",
         TextKey::ItemFromList => "Van lijst",
@@ -1183,7 +1185,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceNoOptions => "Deze add-on biedt geen instellingen voor toegang of segmenten.",
         TextKey::AddonWorkspaceNewHelp => "Nieuwe geïmporteerde video’s downloaden; bestaande video’s streamen.",
         TextKey::AddonWorkspaceSizeLimit => "Dit formulier is te groot. Ga terug naar je invoer en sla een kleinere taak op.",
-        TextKey::AddonWorkspaceItems => "Items en beoordeling",
+        TextKey::AddonWorkspaceItems => "Items",
         TextKey::AddonWorkspaceSettings => "Lijstinstellingen",
         TextKey::AddonWorkspacePlayback => "Afspelen en toegang",
         TextKey::AddonWorkspaceActivity => "Activiteit en herstel",
@@ -1193,8 +1195,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceSaveNumbering => "Nummering opslaan",
         TextKey::AddonWorkspacePublish => "Opgeslagen wijzigingen publiceren",
         TextKey::AddonWorkspacePublished => "Gepubliceerde lijst is actueel",
-        TextKey::AddonWorkspacePending => "Opgeslagen wijzigingen klaar voor publicatie",
-        TextKey::AddonWorkspacePreparationRequired => "Opgeslagen wijzigingen hebben voorbereide media nodig vóór publicatie",
+        TextKey::AddonWorkspacePending => "Opgeslagen wijzigingen worden automatisch toegepast",
+        TextKey::AddonWorkspacePreparationRequired => "Benodigde media worden automatisch voorbereid",
         TextKey::AddonWorkspacePreparing => "Media worden voorbereid voor publicatie",
         TextKey::AddonWorkspaceAddIncomplete => "De lijst is toegevoegd, maar een deel van de instellingen is niet opgeslagen. Open Lijstinstellingen, controleer ze en sla opnieuw op.",
         TextKey::AddonWorkspacePreparationFailed => "Mediavoorbereiding mislukt",
@@ -1238,7 +1240,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::LastActivity => "Laatste activiteit",
         TextKey::AddonAccessUnknownFailure => "De oorzaak van deze toegangsfout is onbekend. Controleer de opgeslagen toegangsinstellingen, test de bron in uw browser en probeer de toegangscontrole opnieuw.",
         TextKey::AddonWorkspaceRetained => "Wijzigingen konden niet worden opgeslagen. Je invoer is bewaard; controleer de fouten of laad de huidige revisie opnieuw.",
-        TextKey::AddonWorkspaceNavigation => "Navigatie bewaart niet-opgeslagen bewerkingen. Opslaan en publiceren zijn afzonderlijke acties.",
+        TextKey::AddonWorkspaceNavigation => "Navigatie behoudt niet-opgeslagen wijzigingen. Opgeslagen wijzigingen worden automatisch toegepast.",
         TextKey::AddonWorkspaceSeasonOnly => "Alleen seizoen wijzigen",
         TextKey::AddonWorkspacePageSize => "Items per pagina",
 
@@ -1262,15 +1264,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonAccessProfileUnavailable => "Het geselecteerde browserprofiel is niet beschikbaar voor de server. Controleer het opgeslagen browserprofiel en controleer de toegang opnieuw.",
         TextKey::AddonAccessProfileLocked => "Het browserprofiel is vergrendeld. Sluit de browser die dit profiel gebruikt en probeer de toegangscontrole opnieuw.",
         TextKey::AddonAccessDecryptionFailed => "De server kon de browserreferenties niet ontsleutelen. Controleer het browserprofiel en het account waarmee de server draait en probeer opnieuw.",
+        TextKey::AddonDerivedMetadataLimited => "De metadata van de serie heeft de maximale omvang bereikt. De afleveringsmetadata blijft volledig.",
+        TextKey::AddonLocalPlaybackAvailable => "Lokale kopie afspeelbaar",
         TextKey::AddonAccessRestricted => "De provider heeft de toegang beperkt. Open de bron in je browser om account- of regiobeperkingen te controleren en probeer de toegangscontrole opnieuw.",
         TextKey::AddonAccessNextAttempt => "Volgende poging:",
         TextKey::AddonAccessExpires => "Resultaat verloopt:",
         TextKey::AddonAccessRefresh => "Status vernieuwen",
         TextKey::AddonOptionsCurrentFilter => "Huidig filter",
         TextKey::AddonOptions => "Provideropties",
-        TextKey::AddonOptionsDraftHelp => {
-            "Wijzigingen worden in het concept opgeslagen. Gepubliceerde weergave behoudt de huidige opties totdat u publiceert."
-        }
+        TextKey::AddonOptionsDraftHelp => "Opgeslagen opties worden automatisch toegepast. Bestaande playback blijft beschikbaar tijdens de verwerking.",
         TextKey::AddonOptionsProvisional => {
             "Deze pakketstandaarden zijn voorlopig. Door een optie op te slaan activeert u ze voor dit concept."
         }
@@ -1295,7 +1297,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Addon => "Add-on",
         TextKey::PrimaryFeature => "Hoofdfilm",
         TextKey::MovieExtra => "Filmextra",
-        TextKey::NeedReview => "Te beoordelen",
+        TextKey::NeedReview => "Meldingen",
+
         TextKey::ReviewRecommended => "Beoordeling aanbevolen",
         TextKey::PublicationReadiness => "Gereedheid voor publicatie",
         TextKey::PublicationBlockers => "Blokkades",
@@ -1490,10 +1493,8 @@ pub fn text(key: TextKey) -> &'static str {
             "Importeer alleen het overzicht en vraag beschrijvende details handmatig op. Technische details die nodig zijn voor afspelen worden vóór publicatie wel automatisch voorbereid."
         }
         TextKey::PlaybackDetailsQueued => "Afspeeldetails in wachtrij",
-        TextKey::PublishAgainAfterDetails => {
-            "Controleer de voltooide details en publiceer daarna opnieuw."
-        }
-        TextKey::FetchDetails => "Details ophalen",
+        TextKey::PublishAgainAfterDetails => "Voltooide details worden automatisch toegepast.",
+TextKey::FetchDetails => "Details ophalen",
         TextKey::DetailsQueued => "Details in wachtrij",
         TextKey::DetailsLoading => "Details laden",
         TextKey::RetryDetails => "Details opnieuw proberen",
@@ -1501,7 +1502,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DetailsSkipped => "Details overgeslagen",
         TextKey::FindingProgrammes => "Programma's zoeken",
         TextKey::CheckingOverview => "Overzicht controleren",
-        TextKey::ReadyToReview => "Klaar voor beoordeling",
+        TextKey::ReadyToReview => "Wordt automatisch verwerkt",
+
         TextKey::LoadingItemDetails => "Itemdetails laden",
         TextKey::WaitingForProvider => "Wachten op aanbieder",
         TextKey::OverviewOnly => "Alleen overzicht",
@@ -1547,16 +1549,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Scope => "Bereik",
         TextKey::AllItems => "Alle items",
         TextKey::CurrentPage => "Huidige pagina",
-        TextKey::ItemsNeedingReview => "Items die controle nodig hebben",
+        TextKey::ItemsNeedingReview => "Items met meldingen",
+
         TextKey::KeepCurrentValue => "Huidige waarde behouden",
         TextKey::UndoLastChange => "Laatste wijziging ongedaan maken",
         TextKey::Undo => "Ongedaan maken",
         TextKey::ChangeUndone => "Wijziging ongedaan gemaakt",
         TextKey::MetadataConflicts => "Metadataconflicten",
-        TextKey::MetadataConflictsHelp => {
-            "De aanbieder heeft velden gewijzigd die je had overschreven. Controleer de waarden voordat je publiceert."
-        }
-        TextKey::PreviousProviderValue => "Vorige aanbiederwaarde",
+        TextKey::MetadataConflictsHelp => "De aanbieder heeft velden gewijzigd die je hebt aangepast. Je opgeslagen waarden blijven gelden.",
+TextKey::PreviousProviderValue => "Vorige aanbiederwaarde",
         TextKey::NewProviderValue => "Nieuwe aanbiederwaarde",
         TextKey::OperatorValue => "Beheerderswaarde",
         TextKey::Discovered => "Gevonden",
@@ -1598,19 +1599,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PublishMetadata => "Publiceren",
         TextKey::IncludeItem => "Opnemen",
         TextKey::IncludeInPublication => "Opnemen bij publicatie",
-        TextKey::MetadataDraftNotice => {
-            "Controleer de metadata en opgenomen items voordat je deze lijst publiceert."
-        }
-        TextKey::ApplyToAllItemsPrompt => {
+        TextKey::MetadataDraftNotice => "Opgeslagen metadata en wijzigingen in de selectie worden automatisch toegepast.",
+TextKey::ApplyToAllItemsPrompt => {
             "Elk item krijgt de gekozen mediasoort, waarmee waarden die de add-on heeft afgeleid of die je zelf hebt ingesteld worden overschreven."
         }
         TextKey::TelevisionEpisode => "Televisieaflevering",
         TextKey::CollectionTypeAuto => "Bepalen uit de items",
         TextKey::CurrentLibraryType => "Huidig bibliotheektype",
-        TextKey::CollectionTypeChangeHelp => {
-            "Je kunt dit na de import wijzigen. Sla op en publiceer om de bestaande items opnieuw in te delen zonder de add-on opnieuw te importeren; volgorde, opnamekeuzes en metadata-aanpassingen blijven behouden."
-        }
-        TextKey::NonPlayableItems => "Niet-afspeelbare items",
+        TextKey::CollectionTypeChangeHelp => "Sla op om bestaande items automatisch te reorganiseren. Volgorde, selectie en metadatawijzigingen blijven behouden.",
+TextKey::NonPlayableItems => "Niet-afspeelbare items",
         TextKey::UnknownItems => "Onbekende items",
         TextKey::PlayableItems => "Afspeelbare items",
         TextKey::ApplyToAllItems => "Op alle items toepassen",
@@ -1757,11 +1754,9 @@ pub fn text(key: TextKey) -> &'static str {
         }
         TextKey::RefreshPublicationPolicy => "Publicatie na vernieuwing",
         TextKey::RefreshPublicationReview => "Elke vernieuwing beoordelen",
-        TextKey::RefreshPublicationAutomatic => "Veilige toevoegingen automatisch publiceren",
-        TextKey::RefreshPublicationPolicyHelp => {
-            "Geldt alleen voor geplande vernieuwingen na je eerste publicatie. Handmatig vernieuwen, afstemmen en resetten vereisen altijd beoordeling. Wijzigingen of onveilige toevoegingen blijven ter beoordeling."
-        }
-        TextKey::AutoPublicationHeld => "Automatische publicatie vereist beoordeling",
+        TextKey::RefreshPublicationAutomatic => "Opgeslagen wijzigingen automatisch toepassen",
+        TextKey::RefreshPublicationPolicyHelp => "Imports, verversingen, metadata en opgeslagen wijzigingen worden automatisch toegepast.",
+        TextKey::AutoPublicationHeld => "Automatische verwerking heeft aandacht nodig",
         TextKey::PreparationWorkerUnavailable => {
             "De achtergrondtaak voor mediavoorbereiding is niet beschikbaar. Start de server opnieuw voordat u de voorbereiding opnieuw probeert."
         }

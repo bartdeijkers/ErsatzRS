@@ -201,6 +201,91 @@ async fn require_current_revision(pool: &DbPool, list_id: i64, revision: i32) ->
     Ok(())
 }
 
+/// A source can disappear while a revision-pinned local file remains playable.
+/// A retained unavailable source has no work to fetch until it reappears.
+/// Its library membership and any usable local publication are independent.
+pub(crate) async fn unavailable_without_local_media(
+    pool: &DbPool,
+    list_id: i64,
+    item_id: i64,
+) -> Result<bool> {
+    let unavailable: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS (
+        SELECT 1 FROM "AddonMediaListItem" AS "item" JOIN "AddonMediaList" AS "list"
+        ON "list"."Id"="item"."AddonMediaListId" WHERE "item"."Id"=?
+        AND "list"."Id"=? AND "list"."RefreshPublicationPolicy"=2 AND "item"."Availability"=1)"#,
+    )
+    .bind(item_id)
+    .bind(list_id)
+    .fetch_one(pool)
+    .await
+    .repository()?;
+    Ok(unavailable && !has_published_local_media(pool, list_id, item_id).await?)
+}
+
+/// This checks ownership and the same confined file/size boundary as playback.
+pub(crate) async fn has_published_local_media(
+    pool: &DbPool,
+    list_id: i64,
+    item_id: i64,
+) -> Result<bool> {
+    Ok(published_local_artifact(
+        pool,
+        list_id,
+        item_id,
+        &crate::file_system_layout::addon_processed_media_folder(),
+    )
+    .await?
+    .is_some())
+}
+
+pub(crate) async fn published_local_artifact(
+    pool: &DbPool,
+    list_id: i64,
+    item_id: i64,
+    artifact_root: &Path,
+) -> Result<Option<i64>> {
+    let artifact: Option<i64> = sqlx::query_scalar(r#"SELECT "snapshot"."PreparedArtifactId"
+        FROM "AddonMediaListItem" AS "item"
+        JOIN "AddonMediaList" AS "list" ON "list"."Id"="item"."AddonMediaListId"
+        JOIN "AddonMediaListRevision" AS "revision" ON "revision"."AddonMediaListId"="list"."Id"
+            AND "revision"."Revision"="list"."PublishedRevision"
+        JOIN "AddonMediaListRevisionItem" AS "snapshot" ON "snapshot"."AddonMediaListRevisionId"="revision"."Id"
+            AND "snapshot"."ProviderId"="item"."ProviderId"
+        JOIN "AddonMediaListRevisionArtifact" AS "pin" ON "pin"."AddonMediaListRevisionId"="revision"."Id"
+            AND "pin"."AddonMediaListArtifactId"="snapshot"."PreparedArtifactId"
+        WHERE "item"."AddonMediaListId"=? AND "item"."Id"=?
+          AND "snapshot"."PreparedArtifactId" IS NOT NULL AND "snapshot"."Published"=1"#)
+        .bind(list_id).bind(item_id).fetch_optional(pool).await.repository()?.flatten();
+    let Some(artifact) = artifact else {
+        return Ok(None);
+    };
+    Ok(
+        prepared_artifact_available(pool, list_id, artifact, artifact_root)
+            .await?
+            .then_some(artifact),
+    )
+}
+
+pub(crate) async fn prepared_artifact_available(
+    pool: &DbPool,
+    list_id: i64,
+    artifact: i64,
+    artifact_root: &Path,
+) -> Result<bool> {
+    match resolve_prepared(pool, list_id, artifact, artifact_root, None).await {
+        Ok(_) => Ok(true),
+        Err(
+            RepositoryError::Conflict(_)
+            | RepositoryError::Unavailable {
+                operation: "published item playback",
+                ..
+            },
+        ) => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 async fn resolve_prepared(
     pool: &DbPool,
     list_id: i64,
@@ -319,6 +404,54 @@ mod tests {
             .await
             .unwrap();
         (temporary, pool)
+    }
+
+    #[tokio::test]
+    async fn local_playback_survives_source_removal_and_missing_files_are_not_reported_ready() {
+        let (temporary, pool) = fixture().await;
+        sqlx::raw_sql(r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2;
+            UPDATE "AddonMediaListItem" SET "Availability"=1,"AvailabilityReason"='omitted_by_provider';
+            UPDATE "AddonInstallation" SET "Enabled"=0;"#).execute(&pool).await.unwrap();
+        assert_eq!(
+            published_local_artifact(&pool, 1, 10, temporary.path())
+                .await
+                .unwrap(),
+            Some(1)
+        );
+        let stream = resolve_published_remote_stream(
+            &pool,
+            100,
+            &AddonRuntimeContext::default(),
+            temporary.path(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(!stream.uses_addon);
+        assert!(matches!(stream.source, RemoteStreamSource::Prepared(_)));
+        tokio::fs::remove_file(temporary.path().join("objects/prepared.media"))
+            .await
+            .unwrap();
+        assert_eq!(
+            published_local_artifact(&pool, 1, 10, temporary.path())
+                .await
+                .unwrap(),
+            None
+        );
+        assert!(resolve_published_remote_stream(
+            &pool,
+            100,
+            &AddonRuntimeContext::default(),
+            temporary.path()
+        )
+        .await
+        .is_err());
+        assert_eq!(
+            published_local_artifact(&pool, 1, 10, &temporary.path().join("missing-root"))
+                .await
+                .unwrap(),
+            None
+        );
     }
 
     #[tokio::test]

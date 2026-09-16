@@ -408,7 +408,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ItemNumberingHelp => "Un élément numéroté exige les deux valeurs. La saison 0 est réservée aux épisodes spéciaux.",
         TextKey::ItemMetadata => "Résumé, genres et étiquettes",
         TextKey::ItemMetadataHelp => "Autres titres, langues et crédits",
-        TextKey::ItemSaveHelp => "Enregistrez ici. Publiez depuis Éléments et vérification.",
+        TextKey::ItemSaveHelp => "Enregistrez vos modifications pour les appliquer automatiquement.",
         TextKey::ItemEditNumbering => "Modifier la numérotation dans la liste",
         TextKey::ItemReplacementHelp => "Choisir ou retirer un remplacement modifie ce brouillon. Utilisez Enregistrer l’élément pour le conserver.",
         TextKey::ItemReplacementPending => "Le changement de remplacement n’est pas enregistré.",
@@ -432,13 +432,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonCheckPending => "Vérification du module…",
         TextKey::AddonWorkspaceIncludeSelected => "Inclure les éléments sélectionnés",
         TextKey::AddonWorkspaceExcludeSelected => "Exclure les éléments sélectionnés",
-        TextKey::AddonWorkspaceInclusionHelp => "Les modifications concernent les éléments sélectionnés, même sur les autres pages. Enregistrez-les pour les conserver ; la publication ne change que lorsque vous publiez.",
+        TextKey::AddonWorkspaceInclusionHelp => "Enregistrez les changements de sélection pour les appliquer automatiquement.",
         TextKey::AddonWorkspacePublicationFailed => "Échec de la publication",
-        TextKey::AddonWorkspacePublicationRestoredHelp => "La révision précédente a été restaurée. Vos modifications enregistrées sont conservées. Consultez Activité avant de publier à nouveau.",
-        TextKey::AddonWorkspaceParentMetadataPreserved => "La publication a été arrêtée pour préserver les métadonnées modifiées ou invalides de tvshow.nfo / artist.nfo dans le dossier de la liste. Conservez une sauvegarde et harmonisez ce fichier avec les métadonnées parentes du dossier des flux analysés avant de publier à nouveau.",
+        TextKey::AddonWorkspacePublicationRestoredHelp => "La version précédente a été restaurée. Les modifications enregistrées sont conservées et réessayées automatiquement. Les erreurs techniques figurent dans Activité.",
+
+        TextKey::AddonWorkspaceParentMetadataPreserved => "Le traitement est arrêté pour préserver les métadonnées NFO parentes modifiées ou invalides. Corrigez le fichier avant de réessayer.",
+
         TextKey::AddonWorkspaceImporting => "Importation de la liste…",
         TextKey::AddonWorkspaceImportingHelp => "La liste s’ouvrira automatiquement après la découverte. Sans JavaScript, utilisez Actualiser.",
-        TextKey::AddonWorkspaceImportSteps => "Importez l’aperçu, vérifiez et enregistrez vos modifications, préparez les médias si nécessaire, puis publiez.",
+        TextKey::AddonWorkspaceImportSteps => "Importez la liste. Les métadonnées et les médias nécessaires sont traités et publiés automatiquement.",
         TextKey::AddonWorkspaceChooseProvider => "Choisissez un module ci-dessous si aucun n’est détecté pour cette URL.",
         TextKey::AddonWorkspaceExcluded => "Exclu de la publication",
         TextKey::ItemFromList => "De la liste",
@@ -459,7 +461,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceNoOptions => "Cette extension ne propose aucun réglage d’accès ou de segments.",
         TextKey::AddonWorkspaceNewHelp => "Télécharger les nouvelles vidéos importées ; diffuser les vidéos existantes.",
         TextKey::AddonWorkspaceSizeLimit => "Ce formulaire est trop volumineux. Revenez à votre saisie et enregistrez une tâche plus petite.",
-        TextKey::AddonWorkspaceItems => "Éléments et vérification",
+        TextKey::AddonWorkspaceItems => "Éléments",
         TextKey::AddonWorkspaceSettings => "Paramètres de la liste",
         TextKey::AddonWorkspacePlayback => "Lecture et accès",
         TextKey::AddonWorkspaceActivity => "Activité et récupération",
@@ -469,8 +471,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceSaveNumbering => "Enregistrer la numérotation",
         TextKey::AddonWorkspacePublish => "Publier les modifications enregistrées",
         TextKey::AddonWorkspacePublished => "La liste publiée est à jour",
-        TextKey::AddonWorkspacePending => "Modifications enregistrées prêtes à publier",
-        TextKey::AddonWorkspacePreparationRequired => "Les modifications enregistrées nécessitent des médias préparés avant la publication",
+        TextKey::AddonWorkspacePending => "Les modifications enregistrées sont appliquées automatiquement",
+        TextKey::AddonWorkspacePreparationRequired => "Les médias nécessaires sont préparés automatiquement",
         TextKey::AddonWorkspacePreparing => "Préparation des médias pour la publication",
         TextKey::AddonWorkspaceAddIncomplete => "La liste a été ajoutée, mais certains paramètres n’ont pas été enregistrés. Ouvrez Paramètres de la liste, vérifiez-les et enregistrez à nouveau.",
         TextKey::AddonWorkspacePreparationFailed => "La préparation des médias a échoué",
@@ -514,7 +516,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::LastActivity => "Dernière activité",
         TextKey::AddonAccessUnknownFailure => "La cause de cet échec d’accès est inconnue. Vérifiez les paramètres d’accès enregistrés, testez la source dans votre navigateur, puis relancez la vérification.",
         TextKey::AddonWorkspaceRetained => "Impossible d’enregistrer les modifications. Votre saisie est conservée ; vérifiez les erreurs ou rechargez la révision actuelle.",
-        TextKey::AddonWorkspaceNavigation => "La navigation conserve les saisies non enregistrées. Enregistrer et publier sont deux actions distinctes.",
+        TextKey::AddonWorkspaceNavigation => "La navigation conserve les modifications non enregistrées. Les modifications enregistrées sont appliquées automatiquement.",
         TextKey::AddonWorkspaceSeasonOnly => "Modifier uniquement la saison",
         TextKey::AddonWorkspacePageSize => "Éléments par page",
 
@@ -538,15 +540,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonAccessProfileUnavailable => "Le profil de navigateur sélectionné est inaccessible au serveur. Vérifiez le profil enregistré, puis relancez la vérification de l’accès.",
         TextKey::AddonAccessProfileLocked => "Le profil du navigateur est verrouillé. Fermez le navigateur qui utilise ce profil, puis relancez la vérification de l’accès.",
         TextKey::AddonAccessDecryptionFailed => "Le serveur n’a pas pu déchiffrer les identifiants du navigateur. Vérifiez le profil et le compte qui exécute le serveur, puis réessayez.",
+        TextKey::AddonDerivedMetadataLimited => "Les métadonnées de la série ont atteint leur taille maximale. Celles des épisodes restent complètes.",
+        TextKey::AddonLocalPlaybackAvailable => "Copie locale lisible",
         TextKey::AddonAccessRestricted => "Le fournisseur a restreint l’accès. Ouvrez la source dans votre navigateur pour vérifier les restrictions de compte ou de région, puis réessayez.",
         TextKey::AddonAccessNextAttempt => "Prochaine tentative :",
         TextKey::AddonAccessExpires => "Expiration du résultat :",
         TextKey::AddonAccessRefresh => "Actualiser l’état",
         TextKey::AddonOptionsCurrentFilter => "Filtre actuel",
         TextKey::AddonOptions => "Options du fournisseur",
-        TextKey::AddonOptionsDraftHelp => {
-            "Les modifications sont enregistrées dans le brouillon. La lecture publiée conserve ses options jusqu’à la publication."
-        }
+        TextKey::AddonOptionsDraftHelp => "Les options enregistrées sont appliquées automatiquement. La lecture actuelle reste disponible pendant le traitement.",
         TextKey::AddonOptionsProvisional => {
             "Ces valeurs par défaut du paquet sont provisoires. Enregistrer une option les active pour ce brouillon."
         }
@@ -571,7 +573,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Addon => "Extension",
         TextKey::PrimaryFeature => "Film principal",
         TextKey::MovieExtra => "Bonus du film",
-        TextKey::NeedReview => "À vérifier",
+        TextKey::NeedReview => "Avis",
+
         TextKey::ReviewRecommended => "Vérification recommandée",
         TextKey::PublicationReadiness => "État de préparation à la publication",
         TextKey::PublicationBlockers => "Blocages",
@@ -780,10 +783,8 @@ pub fn text(key: TextKey) -> &'static str {
             "Importez uniquement la vue d'ensemble et demandez manuellement les détails descriptifs. Les détails techniques requis pour la lecture sont préparés automatiquement avant publication."
         }
         TextKey::PlaybackDetailsQueued => "Détails de lecture mis en file d'attente",
-        TextKey::PublishAgainAfterDetails => {
-            "Vérifiez les détails terminés, puis publiez à nouveau."
-        }
-        TextKey::FetchDetails => "Récupérer les détails",
+        TextKey::PublishAgainAfterDetails => "Les détails obtenus sont appliqués automatiquement.",
+TextKey::FetchDetails => "Récupérer les détails",
         TextKey::DetailsQueued => "Détails en attente",
         TextKey::DetailsLoading => "Chargement des détails",
         TextKey::RetryDetails => "Réessayer les détails",
@@ -791,7 +792,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DetailsSkipped => "Détails ignorés",
         TextKey::FindingProgrammes => "Recherche des programmes",
         TextKey::CheckingOverview => "Vérification de la vue d'ensemble",
-        TextKey::ReadyToReview => "Prêt à vérifier",
+        TextKey::ReadyToReview => "Traitement automatique",
+
         TextKey::LoadingItemDetails => "Chargement des détails des éléments",
         TextKey::WaitingForProvider => "En attente du fournisseur",
         TextKey::OverviewOnly => "Vue d'ensemble uniquement",
@@ -839,16 +841,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Scope => "Portée",
         TextKey::AllItems => "Tous les éléments",
         TextKey::CurrentPage => "Page actuelle",
-        TextKey::ItemsNeedingReview => "Éléments à vérifier",
+        TextKey::ItemsNeedingReview => "Éléments avec avis",
+
         TextKey::KeepCurrentValue => "Conserver la valeur actuelle",
         TextKey::UndoLastChange => "Annuler la dernière modification",
         TextKey::Undo => "Annuler",
         TextKey::ChangeUndone => "Modification annulée",
         TextKey::MetadataConflicts => "Conflits de métadonnées",
-        TextKey::MetadataConflictsHelp => {
-            "Le fournisseur a modifié des champs que vous aviez remplacés. Vérifiez les valeurs avant la publication."
-        }
-        TextKey::PreviousProviderValue => "Ancienne valeur du fournisseur",
+        TextKey::MetadataConflictsHelp => "Le fournisseur a modifié des champs personnalisés. Vos valeurs enregistrées restent utilisées.",
+TextKey::PreviousProviderValue => "Ancienne valeur du fournisseur",
         TextKey::NewProviderValue => "Nouvelle valeur du fournisseur",
         TextKey::OperatorValue => "Valeur de l’opérateur",
         TextKey::Discovered => "Détectés",
@@ -890,19 +891,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PublishMetadata => "Publier",
         TextKey::IncludeItem => "Inclure",
         TextKey::IncludeInPublication => "Inclure dans la publication",
-        TextKey::MetadataDraftNotice => {
-            "Vérifiez les métadonnées et les éléments inclus avant de publier cette liste."
-        }
-        TextKey::ApplyToAllItemsPrompt => {
+        TextKey::MetadataDraftNotice => "Les métadonnées et sélections enregistrées sont appliquées automatiquement.",
+TextKey::ApplyToAllItemsPrompt => {
             "Chaque élément est reclassé avec le type de média sélectionné, remplaçant les valeurs déduites par l'extension ou saisies manuellement."
         }
         TextKey::TelevisionEpisode => "Épisode de télévision",
         TextKey::CollectionTypeAuto => "Déterminer d'après les éléments",
         TextKey::CurrentLibraryType => "Type actuel de la médiathèque",
-        TextKey::CollectionTypeChangeHelp => {
-            "Vous pouvez le modifier après l’importation. Enregistrez puis publiez pour reclasser les éléments existants sans réimporter l’extension ; l’ordre, l’inclusion et les modifications de métadonnées sont conservés."
-        }
-        TextKey::NonPlayableItems => "Éléments non lisibles",
+        TextKey::CollectionTypeChangeHelp => "Enregistrez pour réorganiser automatiquement les éléments existants. Leur ordre, leur sélection et les modifications de métadonnées sont conservés.",
+TextKey::NonPlayableItems => "Éléments non lisibles",
         TextKey::UnknownItems => "Éléments inconnus",
         TextKey::PlayableItems => "Éléments lisibles",
         TextKey::ApplyToAllItems => "Appliquer à tous les éléments",
@@ -1048,11 +1045,9 @@ pub fn text(key: TextKey) -> &'static str {
         }
         TextKey::RefreshPublicationPolicy => "Publication après actualisation",
         TextKey::RefreshPublicationReview => "Vérifier chaque actualisation",
-        TextKey::RefreshPublicationAutomatic => "Publier automatiquement les ajouts sûrs",
-        TextKey::RefreshPublicationPolicyHelp => {
-            "Uniquement pour les actualisations planifiées après votre première publication. Les actualisations manuelles, rapprochements et réinitialisations nécessitent toujours une vérification. Les modifications ou ajouts incertains restent à vérifier."
-        }
-        TextKey::AutoPublicationHeld => "La publication automatique nécessite une vérification",
+        TextKey::RefreshPublicationAutomatic => "Appliquer automatiquement les modifications enregistrées",
+        TextKey::RefreshPublicationPolicyHelp => "Les imports, actualisations, métadonnées et modifications enregistrées sont appliqués automatiquement.",
+        TextKey::AutoPublicationHeld => "Le traitement automatique nécessite votre attention",
         TextKey::PreparationWorkerUnavailable => {
             "Le processus de préparation des médias est indisponible. Redémarrez le serveur avant de réessayer la préparation."
         }

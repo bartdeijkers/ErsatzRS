@@ -412,7 +412,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ItemNumberingHelp => "A numbered item needs both values. Season 0 is for specials.",
         TextKey::ItemMetadata => "Summary, genres and tags",
         TextKey::ItemMetadataHelp => "Additional titles, languages and credits",
-        TextKey::ItemSaveHelp => "Save edits here. Publish from Items & review.",
+        TextKey::ItemSaveHelp => "Save your changes to apply them automatically.",
         TextKey::ItemEditNumbering => "Edit numbering in list",
         TextKey::ItemReplacementHelp => "Selecting or removing a replacement changes this draft. Use Save item to keep it.",
         TextKey::ItemReplacementPending => "Replacement change is unsaved.",
@@ -436,13 +436,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonCheckPending => "Checking add-on…",
         TextKey::AddonWorkspaceIncludeSelected => "Include selected items",
         TextKey::AddonWorkspaceExcludeSelected => "Exclude selected items",
-        TextKey::AddonWorkspaceInclusionHelp => "Changes apply to selected items, including other pages. Save to keep them; publication changes only when you publish.",
+        TextKey::AddonWorkspaceInclusionHelp => "Save selection changes to apply them automatically.",
         TextKey::AddonWorkspacePublicationFailed => "Publication failed",
-        TextKey::AddonWorkspacePublicationRestoredHelp => "The previous revision was restored. Your saved changes are retained. Review Activity before publishing again.",
-        TextKey::AddonWorkspaceParentMetadataPreserved => "Publication stopped to preserve edited or invalid tvshow.nfo / artist.nfo metadata in the list folder. Keep a backup and reconcile that file with the parent metadata in the scanned-stream folder before publishing again.",
+        TextKey::AddonWorkspacePublicationRestoredHelp => "The previous revision was restored. Saved changes are retained and retried automatically. Activity shows technical failures.",
+
+        TextKey::AddonWorkspaceParentMetadataPreserved => "Processing stopped to preserve edited or invalid parent NFO metadata. Reconcile the file before retrying.",
+
         TextKey::AddonWorkspaceImporting => "Importing list…",
         TextKey::AddonWorkspaceImportingHelp => "The list will open automatically when discovery finishes. Without JavaScript, use Refresh.",
-        TextKey::AddonWorkspaceImportSteps => "Import the overview, review and save your changes, prepare media if required, then publish.",
+        TextKey::AddonWorkspaceImportSteps => "Import the list. Metadata and required media are processed and published automatically.",
         TextKey::AddonWorkspaceChooseProvider => "Choose an add-on below if none is detected for this URL.",
         TextKey::AddonWorkspaceExcluded => "Excluded from publication",
         TextKey::ItemFromList => "From list",
@@ -463,7 +465,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceNoOptions => "This add-on does not provide access or segment settings.",
         TextKey::AddonWorkspaceNewHelp => "Download newly imported videos; stream existing ones.",
         TextKey::AddonWorkspaceSizeLimit => "This form is too large. Go back to your input and save a smaller task.",
-        TextKey::AddonWorkspaceItems => "Items & review",
+        TextKey::AddonWorkspaceItems => "Items",
         TextKey::AddonWorkspaceSettings => "List settings",
         TextKey::AddonWorkspacePlayback => "Playback & access",
         TextKey::AddonWorkspaceActivity => "Activity & recovery",
@@ -473,8 +475,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceSaveNumbering => "Save numbering",
         TextKey::AddonWorkspacePublish => "Publish saved changes",
         TextKey::AddonWorkspacePublished => "Published list is up to date",
-        TextKey::AddonWorkspacePending => "Saved changes ready to publish",
-        TextKey::AddonWorkspacePreparationRequired => "Saved changes need prepared media before publishing",
+        TextKey::AddonWorkspacePending => "Saved changes are being applied automatically",
+        TextKey::AddonWorkspacePreparationRequired => "Required media is prepared automatically",
         TextKey::AddonWorkspacePreparing => "Preparing media for publication",
         TextKey::AddonWorkspaceAddIncomplete => "The list was added, but some of its settings were not saved. Open List settings, check them and save again.",
         TextKey::AddonWorkspacePreparationFailed => "Media preparation failed",
@@ -518,7 +520,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::LastActivity => "Last activity",
         TextKey::AddonAccessUnknownFailure => "The cause of this access failure is unknown. Check the saved access settings, test the source in your browser, then retry the access check.",
         TextKey::AddonWorkspaceRetained => "Changes could not be saved. Your input has been retained; review the errors or reload the current revision.",
-        TextKey::AddonWorkspaceNavigation => "Navigation retains unsaved edits. Saving and publishing are separate actions.",
+        TextKey::AddonWorkspaceNavigation => "Navigation retains unsaved edits. Saved changes are applied automatically.",
         TextKey::AddonWorkspaceSeasonOnly => "Change season only",
         TextKey::AddonWorkspacePageSize => "Items per page",
 
@@ -542,15 +544,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonAccessProfileUnavailable => "The selected browser profile is unavailable to the server. Review the saved browser profile and check access again.",
         TextKey::AddonAccessProfileLocked => "The browser profile is locked. Close the browser using that profile, then retry the access check.",
         TextKey::AddonAccessDecryptionFailed => "The server could not decrypt the browser credentials. Review the browser profile and the account running the server, then retry.",
+        TextKey::AddonDerivedMetadataLimited => "Show metadata reached its size limit. Episode metadata remains complete.",
+        TextKey::AddonLocalPlaybackAvailable => "Local copy playable",
         TextKey::AddonAccessRestricted => "The provider restricted access. Open the source in your browser to review account or regional restrictions, then retry the access check.",
         TextKey::AddonAccessNextAttempt => "Next attempt:",
         TextKey::AddonAccessExpires => "Evidence expires:",
         TextKey::AddonAccessRefresh => "Refresh status",
         TextKey::AddonOptionsCurrentFilter => "Current filter",
         TextKey::AddonOptions => "Provider options",
-        TextKey::AddonOptionsDraftHelp => {
-            "Changes are saved to the draft. Published playback keeps its current options until you publish."
-        }
+        TextKey::AddonOptionsDraftHelp => "Saved options are applied automatically. Current playback remains available during processing.",
         TextKey::AddonOptionsProvisional => {
             "These package defaults are provisional. Saving an option activates them for this draft."
         }
@@ -575,7 +577,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Addon => "Add-on",
         TextKey::PrimaryFeature => "Main feature",
         TextKey::MovieExtra => "Movie extra",
-        TextKey::NeedReview => "Need review",
+        TextKey::NeedReview => "Notices",
+
         TextKey::ReviewRecommended => "Review recommended",
         TextKey::PublicationReadiness => "Publication readiness",
         TextKey::PublicationBlockers => "Blockers",
@@ -770,7 +773,8 @@ pub fn text(key: TextKey) -> &'static str {
             "Import the overview only and request descriptive details manually. Playback-required technical details are still prepared automatically before publication."
         }
         TextKey::PlaybackDetailsQueued => "Playback details queued",
-        TextKey::PublishAgainAfterDetails => "Review the completed details, then publish again.",
+        TextKey::PublishAgainAfterDetails => "Completed details are applied automatically.",
+
         TextKey::FetchDetails => "Fetch details",
         TextKey::DetailsQueued => "Details queued",
         TextKey::DetailsLoading => "Loading details",
@@ -779,7 +783,8 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::DetailsSkipped => "Details skipped",
         TextKey::FindingProgrammes => "Finding programmes",
         TextKey::CheckingOverview => "Checking overview",
-        TextKey::ReadyToReview => "Ready to review",
+        TextKey::ReadyToReview => "Processing automatically",
+
         TextKey::LoadingItemDetails => "Loading item details",
         TextKey::WaitingForProvider => "Waiting for provider",
         TextKey::OverviewOnly => "Overview only",
@@ -825,16 +830,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::Scope => "Scope",
         TextKey::AllItems => "All items",
         TextKey::CurrentPage => "Current page",
-        TextKey::ItemsNeedingReview => "Items needing review",
+        TextKey::ItemsNeedingReview => "Items with notices",
+
         TextKey::KeepCurrentValue => "Keep current value",
         TextKey::UndoLastChange => "Undo last change",
         TextKey::Undo => "Undo",
         TextKey::ChangeUndone => "Change undone",
         TextKey::MetadataConflicts => "Metadata conflicts",
-        TextKey::MetadataConflictsHelp => {
-            "The provider changed fields that you overrode. Review the values before publishing."
-        }
-        TextKey::PreviousProviderValue => "Previous provider value",
+        TextKey::MetadataConflictsHelp => "The provider changed fields you customized. Your saved values remain in use.",
+TextKey::PreviousProviderValue => "Previous provider value",
         TextKey::NewProviderValue => "New provider value",
         TextKey::OperatorValue => "Operator value",
         TextKey::Discovered => "Discovered",
@@ -876,19 +880,15 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::PublishMetadata => "Publish",
         TextKey::IncludeItem => "Include",
         TextKey::IncludeInPublication => "Include in publication",
-        TextKey::MetadataDraftNotice => {
-            "Review metadata and included items before publishing this list."
-        }
-        TextKey::ApplyToAllItemsPrompt => {
+        TextKey::MetadataDraftNotice => "Saved metadata and inclusion changes are applied automatically.",
+TextKey::ApplyToAllItemsPrompt => {
             "Every entry is reclassified with the selected media kind, replacing values the add-on derived or you set by hand."
         }
         TextKey::TelevisionEpisode => "Television Episode",
         TextKey::CollectionTypeAuto => "Determine from the items",
         TextKey::CurrentLibraryType => "Current library type",
-        TextKey::CollectionTypeChangeHelp => {
-            "You can change this after import. Save and publish to reorganize the existing items without importing the add-on again; order, inclusion, and metadata edits are retained."
-        }
-        TextKey::NonPlayableItems => "Non-playable items",
+        TextKey::CollectionTypeChangeHelp => "Save to reorganize existing items automatically. Order, inclusion and metadata edits are retained.",
+TextKey::NonPlayableItems => "Non-playable items",
         TextKey::UnknownItems => "Unknown items",
         TextKey::PlayableItems => "Playable items",
         TextKey::ApplyToAllItems => "Apply to all items",
@@ -1032,11 +1032,9 @@ pub fn text(key: TextKey) -> &'static str {
         }
         TextKey::RefreshPublicationPolicy => "Refresh publication",
         TextKey::RefreshPublicationReview => "Review every refresh",
-        TextKey::RefreshPublicationAutomatic => "Automatically publish safe additions",
-        TextKey::RefreshPublicationPolicyHelp => {
-            "Applies only to scheduled refreshes after your first Publish. Manual refresh, Reconcile, and Reset always require review. Changes or unsafe additions remain for review."
-        }
-        TextKey::AutoPublicationHeld => "Automatic publication needs review",
+        TextKey::RefreshPublicationAutomatic => "Automatically apply saved changes",
+        TextKey::RefreshPublicationPolicyHelp => "Imports, refreshes, metadata and saved edits are applied automatically.",
+        TextKey::AutoPublicationHeld => "Automatic processing needs attention",
         TextKey::PreparationWorkerUnavailable => {
             "Media preparation worker is unavailable. Restart the server before retrying preparation."
         }

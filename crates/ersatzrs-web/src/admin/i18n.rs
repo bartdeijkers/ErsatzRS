@@ -217,6 +217,8 @@ pub enum TextKey {
     AddonAccessProfileLocked,
     AddonAccessDecryptionFailed,
     AddonAccessRestricted,
+    AddonLocalPlaybackAvailable,
+    AddonDerivedMetadataLimited,
     AddonAccessNextAttempt,
     AddonAccessExpires,
     AddonAccessRefresh,
@@ -2175,6 +2177,8 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonAccessProfileLocked,
     TextKey::AddonAccessDecryptionFailed,
     TextKey::AddonAccessRestricted,
+    TextKey::AddonLocalPlaybackAvailable,
+    TextKey::AddonDerivedMetadataLimited,
     TextKey::AddonAccessNextAttempt,
     TextKey::AddonAccessExpires,
     TextKey::AddonAccessRefresh,
@@ -4624,7 +4628,12 @@ pub fn health_check_message_text(
             return lines.join("\n");
         }
     }
-    if title == "Add-on media lists" && displayed_message == "Automatic publication needs review" {
+    if title == "Add-on media lists"
+        && matches!(
+            displayed_message,
+            "Automatic publication needs review" | "Automatic processing needs attention"
+        )
+    {
         return text(language, TextKey::AutoPublicationHeld).to_owned();
     }
     if title == "Add-on media lists"
@@ -4638,6 +4647,11 @@ pub fn health_check_message_text(
             == "Media preparation worker is unavailable. Restart the server before retrying preparation."
     {
         return text(language, TextKey::PreparationWorkerUnavailable).to_owned();
+    }
+    if title == "Add-on media lists" && matches!(displayed_message,
+        "Derived show metadata reached its size limit" |
+        "Some episode facets exceed the bounded show metadata union. Episode metadata remains complete.") {
+        return text(language, TextKey::AddonDerivedMetadataLimited).to_owned();
     }
     if title == CLASSIC_PLAYOUT_STATE_TITLE {
         if let Some(playouts) = displayed_message

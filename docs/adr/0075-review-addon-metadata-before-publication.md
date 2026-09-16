@@ -6,7 +6,10 @@ Accepted (2026-08-21)
 
 ADR 0093 was withdrawn on 2026-09-13. Database ownership of saved drafts and
 publication snapshots remains governed by this decision, together with its
-explicit review, publication and current-playback safety requirements.
+publication and current-playback safety requirements. Mandatory review and the
+separate publication action are superseded by
+[ADR 0094](0094-automatically-publish-addon-list-updates.md) (2026-09-16): saved,
+valid changes use the same fenced publication coordinator automatically.
 
 ## Implementation
 

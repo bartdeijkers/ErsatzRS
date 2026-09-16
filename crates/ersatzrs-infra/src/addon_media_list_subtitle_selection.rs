@@ -99,6 +99,11 @@ pub(crate) async fn subtitle_requirements(
     let mut requirements = Vec::new();
     for row in rows {
         let item_id: i64 = row.try_get("Id").repository()?;
+        if crate::addon_media_list_playback::unavailable_without_local_media(pool, list_id, item_id)
+            .await?
+        {
+            continue;
+        }
         let provider_id: String = row.try_get("ProviderId").repository()?;
         if excluded_item_ids.contains(&item_id)
             || deliveries.get(&provider_id) == Some(&AddonMediaListDeliveryMode::DownloadAhead)

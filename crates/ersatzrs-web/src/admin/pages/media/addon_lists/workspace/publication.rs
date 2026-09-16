@@ -1,13 +1,5 @@
-//! Live publication readiness for the workspace publication summary.
-//!
-//! Restores the guarantee the island workspace had before the ADR 0091 task
-//! redesign: an operator watching a running preparation sees the primary action
-//! change from "Prepare publication" to "Publish saved changes" without
-//! reloading the page. The button stays a native `form=addon-list-workspace`
-//! `intent=publish` submit, so the no-JS fallback, the server's revision
-//! validation and unsaved input elsewhere in the form are unchanged. The action,
-//! state, counts, preparation failures and keyed blocker messages follow the
-//! same readiness snapshot.
+//! Automatic saved-revision progress and explicit recovery for failed work.
+//! Native forms save intent; publication is owned by the durable worker.
 
 use leptos::prelude::*;
 use std::fmt::Write as _;
@@ -38,7 +30,6 @@ const IDLE_POLL_MS: u32 = 5_000;
 const MAX_ERROR_DELAY_MS: u32 = 30_000;
 
 /// Whether a durable publication job is still moving on its own.
-#[cfg(any(target_arch = "wasm32", test))]
 fn publication_job_active(readiness: &AddonMediaListPublicationReadiness) -> bool {
     matches!(
         publication_primary_action(false, readiness),
@@ -63,10 +54,7 @@ fn settled(readiness: &AddonMediaListPublicationReadiness) -> bool {
     {
         return false;
     }
-    matches!(
-        publication_primary_action(false, readiness),
-        PublicationPrimaryAction::Publish | PublicationPrimaryAction::Save
-    ) || readiness.review_state == AddonMediaListReviewState::Published
+    readiness.review_state == AddonMediaListReviewState::Published
 }
 
 /// Operator guidance for one closed preparation failure category.
@@ -175,24 +163,21 @@ fn restored_failure(readiness: &AddonMediaListPublicationReadiness) -> bool {
     })
 }
 
-/// Primary-action label: "Prepare publication" only while preparation is owed,
-/// "Retry preparation" once the latest attempt failed.
+/// Optional recovery label after preparation or publication failed.
 fn action_key(readiness: &AddonMediaListPublicationReadiness) -> TextKey {
-    match publication_primary_action(false, readiness) {
-        PublicationPrimaryAction::Prepare if preparation_retry(readiness) => {
-            TextKey::RetryPreparation
-        }
-        PublicationPrimaryAction::Prepare => TextKey::PreparePublication,
-        _ => TextKey::AddonWorkspacePublish,
+    if restored_failure(readiness) {
+        TextKey::Retry
+    } else {
+        TextKey::RetryPreparation
     }
 }
 
-/// Whether the primary action can be submitted right now.
+/// Optional recovery is available only after a technical failure.
 fn action_enabled(readiness: &AddonMediaListPublicationReadiness) -> bool {
-    matches!(
-        publication_primary_action(false, readiness),
-        PublicationPrimaryAction::Prepare | PublicationPrimaryAction::Publish
-    )
+    preparation_retry(readiness)
+        || (restored_failure(readiness)
+            && !publication_job_active(readiness)
+            && readiness.blockers.is_empty())
 }
 
 /// Counts shown beside the heading. Media still to prepare is listed next to
@@ -337,6 +322,7 @@ fn overview_view(
                 form=FORM
                 name="intent"
                 value="publish"
+                hidden=move || readiness.with(|r| !action_enabled(r))
                 disabled=move || readiness.with(|r| !action_enabled(r))
                 formnovalidate
             >
@@ -456,7 +442,7 @@ mod tests {
         assert_eq!(state_key(&r), TextKey::AddonWorkspacePublicationFailed);
         assert!(
             action_enabled(&r),
-            "a new explicit publication remains available after completed recovery"
+            "a technical failure offers an optional retry after restoration"
         );
         r.saved_revision = 5;
         assert!(!restored_failure(&r));
@@ -488,10 +474,10 @@ mod tests {
         readiness.blockers.clear();
         readiness.required_prepared_media_count = 1;
         assert!(!settled(&readiness));
-        assert_eq!(action_key(&readiness), TextKey::PreparePublication);
+        assert_eq!(action_key(&readiness), TextKey::RetryPreparation);
         readiness.required_prepared_media_count = 0;
-        assert!(settled(&readiness));
-        assert!(action_enabled(&readiness));
+        assert!(!settled(&readiness));
+        assert!(!action_enabled(&readiness));
         readiness.optional_detail_pending = 1;
         assert!(!settled(&readiness));
     }
@@ -511,8 +497,8 @@ mod tests {
             state_key(&readiness),
             TextKey::AddonWorkspacePreparationRequired
         );
-        assert_eq!(action_key(&readiness), TextKey::PreparePublication);
-        assert!(action_enabled(&readiness));
+        assert_eq!(action_key(&readiness), TextKey::RetryPreparation);
+        assert!(!action_enabled(&readiness));
         assert!(counts_text(&readiness).contains(": 14"));
 
         readiness.required_prepared_media_pending = 14;
@@ -532,7 +518,7 @@ mod tests {
         readiness.required_prepared_media_count = 0;
         readiness.required_prepared_media_pending = 0;
         assert_eq!(state_key(&readiness), TextKey::AddonWorkspacePending);
-        assert_eq!(action_key(&readiness), TextKey::AddonWorkspacePublish);
+        assert_eq!(action_key(&readiness), TextKey::RetryPreparation);
         assert!(!counts_text(&readiness).contains(':'));
 
         readiness.review_state = AddonMediaListReviewState::Publishing;
@@ -567,7 +553,7 @@ mod tests {
             state_key(&readiness),
             TextKey::AddonWorkspacePreparationRequired
         );
-        assert_eq!(action_key(&readiness), TextKey::PreparePublication);
+        assert_eq!(action_key(&readiness), TextKey::RetryPreparation);
 
         readiness.required_prepared_media_failed = 14;
         readiness.prepared_media_failures.extend([

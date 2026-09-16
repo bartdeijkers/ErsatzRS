@@ -128,6 +128,11 @@ async fn classify_requirements(
     let mut requirements = Vec::new();
     for row in rows {
         let item_id: i64 = row.try_get("Id").repository()?;
+        if crate::addon_media_list_playback::unavailable_without_local_media(pool, list_id, item_id)
+            .await?
+        {
+            continue;
+        }
         if excluded.contains(&item_id) {
             continue;
         }
@@ -187,7 +192,7 @@ async fn classify_requirements(
             LEFT JOIN "AddonMediaListArtifact" AS "artifact" ON "artifact"."Id"="job"."ArtifactId"
               AND "artifact"."AddonMediaListId"=? AND "artifact"."AddonMediaListItemId"=? AND "artifact"."Kind"=1 AND "artifact"."State"=2
             WHERE "job"."Id" IN (
-                (SELECT MAX("Id") FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=? AND "AddonMediaListItemId"=? AND "SavedDraftRevision"=? AND "Kind"=? AND "State"=2),
+                (SELECT MAX("Id") FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=? AND "AddonMediaListItemId"=? AND "SavedDraftRevision"<=? AND "Kind"=? AND "State"=2),
                 (SELECT MAX("Id") FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=? AND "AddonMediaListItemId"=? AND "SavedDraftRevision"=? AND "Kind"=? AND "State" IN (0,1)))"#)
             .bind(list_id).bind(item_id).bind(list_id).bind(item_id).bind(saved_draft_revision).bind(kind)
             .bind(list_id).bind(item_id).bind(saved_draft_revision).bind(kind).fetch_all(pool).await.repository()?;
@@ -200,17 +205,36 @@ async fn classify_requirements(
             ) else {
                 continue;
             };
-            let Ok(runtime) =
-                InstalledItemRuntime::load(pool, input.addon_id()?, Some(&input.package_identity))
-                    .await
-            else {
-                continue;
+            let retained_local = if mode == SelectionMode::PreparedFile {
+                crate::addon_media_list_playback::published_local_artifact(
+                    pool,
+                    list_id,
+                    item_id,
+                    &crate::file_system_layout::addon_processed_media_folder(),
+                )
+                .await?
+                .is_some_and(|artifact| {
+                    job.try_get::<Option<i64>, _>("ArtifactId").ok().flatten() == Some(artifact)
+                })
+            } else {
+                false
             };
-            if options
-                .as_ref()
-                .is_some_and(|options| runtime.validate_options(options).is_err())
-            {
-                continue;
+            if !retained_local {
+                let Ok(runtime) = InstalledItemRuntime::load(
+                    pool,
+                    input.addon_id()?,
+                    Some(&input.package_identity),
+                )
+                .await
+                else {
+                    continue;
+                };
+                if options
+                    .as_ref()
+                    .is_some_and(|options| runtime.validate_options(options).is_err())
+                {
+                    continue;
+                }
             }
             let base_fingerprint = input.base_fingerprint()?;
             let fingerprint = match mode {

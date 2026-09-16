@@ -717,8 +717,8 @@ impl AddonMediaListImportCoordinator {
                     "AutoRefresh", "GeneratePlaylist", "ItemCount", "PlaylistId",
                     "LastUpdate", "LastMatch", "LastError", "ContentKindOverride",
                     "ChapterInput", "ProviderMetadataJson", "MetadataOverrideJson",
-                    "DetailImportPolicy"
-                   ) VALUES (?, ?, ?, ?, NULL, 0, 0, 0, NULL, NULL, NULL, NULL, ?, NULL, '{}', '{}', ?)"#,
+                    "DetailImportPolicy", "RefreshPublicationPolicy"
+                   ) VALUES (?, ?, ?, ?, NULL, 0, 0, 0, NULL, NULL, NULL, NULL, ?, NULL, '{}', '{}', ?, 2)"#,
             )
             .bind(addon_id)
             .bind(&context.source_url)
@@ -2848,6 +2848,7 @@ impl AddonMediaListImportCoordinator {
     /// Returns an error when claiming, invoking, checkpointing, or merging the
     /// selected detail job fails.
     pub async fn process_one_detail(&self) -> Result<bool> {
+        self.requeue_one_changed_package_detail().await?;
         if self.apply_one_checkpointed_detail().await? {
             return Ok(true);
         }
@@ -2943,6 +2944,47 @@ impl AddonMediaListImportCoordinator {
             }
         }
         Ok(true)
+    }
+
+    /// A package can fix metadata mapping without changing overview identities.
+    /// Reuse existing jobs and the shared cooldown; never reopen current-package failures.
+    async fn requeue_one_changed_package_detail(&self) -> Result<()> {
+        let mut tx = crate::db::begin_write(&self.pool).await.repository()?;
+        let row: Option<(i64,i64)> = sqlx::query_as(r#"SELECT "detail"."AddonMediaListItemId", "list"."Id"
+            FROM "AddonMediaListDetailJob" AS "detail"
+            JOIN "AddonMediaList" AS "list" ON "list"."Id"="detail"."AddonMediaListId"
+            JOIN "AddonMediaListItem" AS "item" ON "item"."Id"="detail"."AddonMediaListItemId"
+            JOIN "AddonInstallation" AS "addon" ON "addon"."AddonId"="list"."AddonId"
+            WHERE "list"."RefreshPublicationPolicy"=2 AND "list"."DetailImportPolicy"=0
+              AND "list"."DetailImportAuthorizedAt" IS NOT NULL AND "addon"."Enabled"=1
+              AND "list"."ReviewState"<>3 AND "list"."PublicationJournalJson" IS NULL
+              AND "item"."Included"=1 AND "item"."Availability"<>1 AND "detail"."State" IN (5,6,7)
+              AND json_valid("detail"."OptionContextJson")
+              AND json_extract("detail"."OptionContextJson",'$.package_content') IS NOT NULL
+              AND json_extract("detail"."OptionContextJson",'$.package_content')<>"addon"."ContentSha256"
+              AND NOT EXISTS (SELECT 1 FROM "AddonMediaListPublicationJob" AS "job"
+                JOIN "ManagedLibraryOperation" AS "operation" ON "operation"."Id"="job"."OperationId"
+                WHERE "job"."AddonMediaListId"="list"."Id" AND "operation"."State" IN (0,1,2))
+            ORDER BY "detail"."UpdatedAt","detail"."AddonMediaListItemId" LIMIT 1"#)
+            .fetch_optional(&mut *tx).await.repository()?;
+        if let Some((item_id, list_id)) = row {
+            let now = encode_datetime(Utc::now());
+            sqlx::query(
+                r#"UPDATE "AddonMediaListDetailJob" SET "State"=1,"ManualPriority"=0,
+                "OptionContextJson"=NULL,"OptionPurpose"=0,"AttemptCount"=0,"Outcome"=NULL,
+                "ResultRecordJson"=NULL,"Diagnostic"=NULL,"NextEligibleAt"=NULL,
+                "LeaseOwner"=NULL,"LeaseExpiresAt"=NULL,"StartedAt"=NULL,"CompletedAt"=NULL,
+                "RequestedAt"=?,"UpdatedAt"=? WHERE "AddonMediaListItemId"=?"#,
+            )
+            .bind(&now)
+            .bind(&now)
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await
+            .repository()?;
+            update_detail_progress(&mut tx, list_id, &now).await?;
+        }
+        tx.commit().await.repository()
     }
 
     /// Apply a validated provider result that was checkpointed before any
@@ -7893,6 +7935,57 @@ mod tests {
                 .diagnostic
                 .as_deref()
                 .is_some_and(|value| value.contains("changed repeatedly")));
+        }
+
+        #[tokio::test]
+        async fn automatic_package_update_reuses_detail_jobs_and_never_reopens_current_package_failures(
+        ) {
+            let (_temporary, pool, coordinator) = fixture().await;
+            let list_id = complete_single_page(
+                &coordinator,
+                "https://media.example.test/package",
+                AddonMediaListDetailPolicy::Automatic,
+                "fixture/package",
+                &["episode:1"],
+            )
+            .await;
+            let addon: String =
+                sqlx::query_scalar(r#"SELECT "AddonId" FROM "AddonMediaList" WHERE "Id"=?"#)
+                    .bind(list_id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            sqlx::query(r#"INSERT INTO "AddonInstallation" ("AddonId","Version","Enabled","PackageSha256","ContentSha256",
+                "ManifestJson","InstallPath","InstalledAt","UpdatedAt") VALUES (?, '2.0.0',1,'new','new','{}',
+                'addons/fixture','2026-09-16T00:00:00Z','2026-09-16T00:00:00Z') ON CONFLICT("AddonId") DO UPDATE SET "ContentSha256"='new'"#)
+                .bind(addon).execute(&pool).await.unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2,"DetailImportAuthorizedAt"='2026-09-16T00:00:00Z' WHERE "Id"=?"#)
+                .bind(list_id).execute(&pool).await.unwrap();
+            sqlx::query(r#"UPDATE "AddonMediaListDetailJob" SET "State"=5,"OptionContextJson"='{"package_content":"old"}',
+                "ResultRecordJson"='{}' WHERE "AddonMediaListId"=?"#)
+                .bind(list_id).execute(&pool).await.unwrap();
+            coordinator
+                .requeue_one_changed_package_detail()
+                .await
+                .unwrap();
+            let state: (i32, Option<String>, i32) = sqlx::query_as(
+                r#"SELECT "State","ResultRecordJson","AttemptCount"
+                FROM "AddonMediaListDetailJob" WHERE "AddonMediaListId"=?"#,
+            )
+            .bind(list_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+            assert_eq!(state, (1, None, 0));
+            sqlx::query(r#"UPDATE "AddonMediaListDetailJob" SET "State"=7,"AttemptCount"=4,"OptionContextJson"='{"package_content":"new"}' WHERE "AddonMediaListId"=?"#)
+                .bind(list_id).execute(&pool).await.unwrap();
+            coordinator
+                .requeue_one_changed_package_detail()
+                .await
+                .unwrap();
+            let state:(i32,i32)=sqlx::query_as(r#"SELECT "State","AttemptCount" FROM "AddonMediaListDetailJob" WHERE "AddonMediaListId"=?"#)
+                .bind(list_id).fetch_one(&pool).await.unwrap();
+            assert_eq!(state, (7, 4));
         }
 
         #[tokio::test]

@@ -749,6 +749,7 @@ db_enum!(AddonMediaListSourceCheckOutcome {
 db_enum!(AddonMediaListRefreshPublicationPolicy {
     0 => AddonMediaListRefreshPublicationPolicy::Review,
     1 => AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions,
+    2 => AddonMediaListRefreshPublicationPolicy::Automatic,
 });
 
 db_enum!(ersatzrs_domain::AddonMediaListDeliveryMode {

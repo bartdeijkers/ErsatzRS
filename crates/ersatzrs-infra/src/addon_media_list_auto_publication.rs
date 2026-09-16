@@ -1,4 +1,4 @@
-//! ADR 0085: scheduled refreshes may publish only validated additions.
+//! ADR 0094: publish saved changes through the existing fenced coordinator.
 //! The existing import worker advances one bounded list-owned assessment;
 //! actual publication continues through the managed-library coordinator.
 
@@ -232,6 +232,32 @@ async fn hold_in_tx(tx: &mut Transaction<'_, Db>, list_id: EntityId, reason: Rea
         kind: "automatic publication reason",
         value: error.to_string(),
     })?;
+    let automatic: bool = sqlx::query_scalar(
+        r#"SELECT "RefreshPublicationPolicy"=2 FROM "AddonMediaList" WHERE "Id"=?"#,
+    )
+    .bind(list_id)
+    .fetch_one(&mut **tx)
+    .await
+    .repository()?;
+    if automatic {
+        let attempts: i32 = sqlx::query_scalar(r#"SELECT "AttemptCount" FROM "AddonMediaListAutoPublication" WHERE "AddonMediaListId"=?"#)
+            .bind(list_id).fetch_one(&mut **tx).await.repository()?;
+        let retry = attempts < 4;
+        let delay = [5, 30, 120, 600][usize::try_from(attempts.clamp(0, 3)).unwrap_or(3)];
+        sqlx::query(
+            r#"UPDATE "AddonMediaListAutoPublication" SET "State"=?,"Reason"=?,
+            "AttemptCount"="AttemptCount"+1,"NextEligibleAt"=?,"OperationId"=NULL
+            WHERE "AddonMediaListId"=?"#,
+        )
+        .bind(if retry { "ready" } else { "held" })
+        .bind(&reason)
+        .bind(retry.then(|| encode_datetime(Utc::now() + chrono::Duration::seconds(delay))))
+        .bind(list_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
+        return Ok(());
+    }
     sqlx::query(
         r#"UPDATE "AddonMediaListAutoPublication"
            SET "State" = 'held', "RecordedAt" = CASE
@@ -258,7 +284,7 @@ pub(crate) async fn load_hold(
            FROM "AddonMediaListAutoPublication" AS "auto"
            JOIN "AddonMediaList" AS "list" ON "list"."Id" = "auto"."AddonMediaListId"
            WHERE "auto"."AddonMediaListId" = ? AND "auto"."State" = 'held'
-             AND "list"."RefreshPublicationPolicy" = 1"#,
+             AND "list"."RefreshPublicationPolicy" IN (1, 2)"#,
     ).bind(list_id).fetch_optional(pool).await.repository()?;
     row.map(|row| {
         let reason: String = row.try_get("Reason").repository()?;
@@ -278,6 +304,45 @@ pub(crate) async fn load_hold(
     .transpose()
 }
 
+/// Discover saved changes independently of refresh admission. This also repairs
+/// pre-upgrade drafts and survives a crash between a save and worker admission.
+async fn admit_saved_changes(pool: &DbPool, now: DateTime<Utc>) -> Result<()> {
+    let now = encode_datetime(now);
+    let admitted: Option<i64> = sqlx::query_scalar(r#"INSERT INTO "AddonMediaListAutoPublication" (
+        "AddonMediaListId", "DraftRevision", "PublishedRevision", "State",
+        "RecordedAt", "FirstPendingAt")
+        SELECT "list"."Id", "list"."DraftRevision", "list"."PublishedRevision",
+               'ready', ?, ?
+        FROM "AddonMediaList" AS "list"
+        JOIN "AddonMediaListLibrary" AS "library" ON "library"."AddonMediaListId" = "list"."Id"
+        LEFT JOIN "AddonMediaListAutoPublication" AS "pending" ON "pending"."AddonMediaListId" = "list"."Id"
+        WHERE "list"."RefreshPublicationPolicy" = 2 AND "list"."ReviewState" <> 3
+          AND ("list"."PublicationJournalJson" IS NULL OR TRIM("list"."PublicationJournalJson") = '')
+          AND ("pending"."AddonMediaListId" IS NULL OR "pending"."DraftRevision" <> "list"."DraftRevision"
+               OR "pending"."PublishedRevision" <> "list"."PublishedRevision")
+          AND NOT EXISTS (SELECT 1 FROM "AddonMediaListImportJob" AS "import"
+              WHERE "import"."AddonMediaListId" = "list"."Id" AND "import"."State" IN (0, 1, 2, 4, 5))
+          AND NOT EXISTS (SELECT 1 FROM "AddonMediaListPublicationJob" AS "job"
+              JOIN "ManagedLibraryOperation" AS "operation" ON "operation"."Id" = "job"."OperationId"
+              WHERE "job"."AddonMediaListId" = "list"."Id" AND "operation"."State" IN (0, 1, 2))
+        ORDER BY "list"."Id" LIMIT 1
+        ON CONFLICT ("AddonMediaListId") DO UPDATE SET
+          "DraftRevision" = excluded."DraftRevision", "PublishedRevision" = excluded."PublishedRevision",
+          "State" = 'ready', "Reason" = NULL, "InitialHoldReason" = NULL,
+          "OperationId" = NULL, "NextEligibleAt" = NULL, "AttemptCount" = 0,
+          "FirstPendingAt" = CASE WHEN "AddonMediaListAutoPublication"."State" IN ('ready', 'preparing')
+            THEN COALESCE("AddonMediaListAutoPublication"."FirstPendingAt", excluded."FirstPendingAt")
+            ELSE excluded."FirstPendingAt" END
+        RETURNING "AddonMediaListId""#)
+        .bind(&now).bind(&now).fetch_optional(pool).await.repository()?;
+    if let Some(list_id) = admitted {
+        crate::addon_media_list_import::AddonMediaListImportCoordinator::new(pool.clone())
+            .authorize_after_publish(list_id)
+            .await?;
+    }
+    Ok(())
+}
+
 /// Evaluate at most one completed scheduled import and durably admit its exact
 /// revision. Provider work stays in the existing detail/import coordinators.
 ///
@@ -285,13 +350,23 @@ pub(crate) async fn load_hold(
 /// Returns database/validation errors without losing the pending assessment.
 #[allow(clippy::too_many_lines)] // Keep the fenced assessment and its transaction exits together.
 pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
+    admit_saved_changes(pool, now).await?;
     let row = sqlx::query(
         r#"SELECT "AddonMediaListId" FROM "AddonMediaListAutoPublication"
-           WHERE "State" IN ('ready', 'preparing')
+           WHERE ("State" IN ('ready', 'preparing')
               OR ("State" = 'queued' AND EXISTS (SELECT 1 FROM "ManagedLibraryOperation"
-                  WHERE "Id" = "AddonMediaListAutoPublication"."OperationId" AND "State" = 4))
+                  WHERE "Id" = "AddonMediaListAutoPublication"."OperationId" AND ("State" = 4 OR
+                      ("State" = 3 AND EXISTS (SELECT 1 FROM "AddonMediaListPublicationJob" AS "job"
+                          WHERE "job"."OperationId"="ManagedLibraryOperation"."Id" AND "job"."Outcome"=1))))))
+             AND ("NextEligibleAt" IS NULL OR "NextEligibleAt" <= ?)
+             AND ("FirstPendingAt" IS NULL OR "FirstPendingAt" <= ? OR NOT EXISTS (
+                 SELECT 1 FROM "AddonMediaList" AS "list" WHERE "list"."Id" = "AddonMediaListId"
+                   AND "list"."DetailProjectionPendingAt" > ?))
            ORDER BY COALESCE("LastAssessedAt", "RecordedAt"), "AddonMediaListId" LIMIT 1"#,
     )
+    .bind(encode_datetime(now))
+    .bind(encode_datetime(now - chrono::Duration::seconds(120)))
+    .bind(encode_datetime(now - chrono::Duration::seconds(30)))
     .fetch_optional(pool)
     .await
     .repository()?;
@@ -311,17 +386,24 @@ pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
            LEFT JOIN "AddonMediaListLibrary" AS "managed" ON "managed"."AddonMediaListId" = "list"."Id"
            WHERE "auto"."AddonMediaListId" = ? AND ("auto"."State" IN ('ready', 'preparing')
                OR ("auto"."State" = 'queued' AND EXISTS (SELECT 1 FROM "ManagedLibraryOperation"
-                   WHERE "Id" = "auto"."OperationId" AND "State" = 4)))"#,
+                   WHERE "Id" = "auto"."OperationId" AND ("State" = 4 OR
+                     ("State" = 3 AND EXISTS (SELECT 1 FROM "AddonMediaListPublicationJob" AS "job"
+                        WHERE "job"."OperationId"="ManagedLibraryOperation"."Id" AND "job"."Outcome"=1))))))"#,
     ).bind(list_id).fetch_optional(&mut *tx).await.repository()?;
     let Some(row) = row else {
         return Ok(false);
     };
     sqlx::query(r#"UPDATE "AddonMediaListAutoPublication" SET "LastAssessedAt" = ? WHERE "AddonMediaListId" = ?"#)
         .bind(encode_datetime(now)).bind(list_id).execute(&mut *tx).await.repository()?;
-    if row
+    let automatic = row
         .try_get::<i32, _>("RefreshPublicationPolicy")
         .repository()?
-        != 1
+        == 2;
+    if !automatic
+        && row
+            .try_get::<i32, _>("RefreshPublicationPolicy")
+            .repository()?
+            != 1
     {
         sqlx::query(r#"UPDATE "AddonMediaListAutoPublication" SET "State" = 'done', "Reason" = NULL WHERE "AddonMediaListId" = ?"#)
             .bind(list_id).execute(&mut *tx).await.repository()?;
@@ -333,6 +415,10 @@ pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
     let current_draft: i32 = row.try_get("CurrentDraft").repository()?;
     let current_published: i32 = row.try_get("CurrentPublished").repository()?;
     if draft != current_draft || published != current_published {
+        if automatic {
+            tx.commit().await.repository()?;
+            return Ok(true); // The next admission captures the latest saved input.
+        }
         hold_in_tx(&mut tx, list_id, Reason::ConcurrentChange).await?;
         tx.commit().await.repository()?;
         return Ok(true);
@@ -364,6 +450,10 @@ pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
     .fetch_one(&mut *tx)
     .await
     .repository()?;
+    if active && automatic {
+        tx.commit().await.repository()?;
+        return Ok(false);
+    }
     let assessment = if active {
         AutoPublicationAssessment::Hold(Reason::ConcurrentChange)
     } else {
@@ -371,6 +461,19 @@ pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
     };
     match assessment {
         AutoPublicationAssessment::NoChanges => {
+            if automatic {
+                sqlx::query(
+                    r#"UPDATE "AddonMediaList" SET "ReviewState"=2,"ReviewError"=NULL,
+                    "DetailProjectionPendingAt"=NULL WHERE "Id"=? AND "DraftRevision"=?
+                    AND "PublishedRevision"=? AND "ReviewState"<>3"#,
+                )
+                .bind(list_id)
+                .bind(draft)
+                .bind(published)
+                .execute(&mut *tx)
+                .await
+                .repository()?;
+            }
             sqlx::query(r#"UPDATE "AddonMediaListAutoPublication" SET "State" = 'done', "Reason" = NULL WHERE "AddonMediaListId" = ?"#)
                 .bind(list_id).execute(&mut *tx).await.repository()?;
         }
@@ -386,7 +489,9 @@ pub async fn process_one(pool: &DbPool, now: DateTime<Utc>) -> Result<bool> {
                 tx.commit().await.repository()?;
                 return Ok(true);
             }
-            if !readiness.blockers.is_empty() || readiness.restricted_excluded_count > 0 {
+            if !readiness.blockers.is_empty()
+                || (!automatic && readiness.restricted_excluded_count > 0)
+            {
                 let reason = if readiness.blockers.iter().any(|blocker| {
                     matches!(
                         blocker.kind,
@@ -505,6 +610,10 @@ pub(crate) async fn published_in_tx(tx: &mut Transaction<'_, Db>, list_id: Entit
     .execute(&mut **tx)
     .await
     .repository()?;
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "DetailProjectionPendingAt"=NULL
+        WHERE "Id"=? AND "RefreshPublicationPolicy"=2 AND "DraftRevision"=(
+            SELECT "DraftRevision" FROM "AddonMediaListAutoPublication" WHERE "AddonMediaListId"=?)"#)
+        .bind(list_id).bind(list_id).execute(&mut **tx).await.repository()?;
     Ok(())
 }
 
@@ -512,6 +621,69 @@ pub(crate) async fn published_in_tx(tx: &mut Transaction<'_, Db>, list_id: Entit
 mod tests {
     use super::*;
     use ersatzrs_core::repositories::AddonMediaListLifecycleRepository as _;
+
+    #[tokio::test]
+    async fn automatic_migration_adopts_saved_drafts_without_breaking_active_journals() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        let migrations = sqlx::migrate!("../../migrations");
+        sqlx::migrate::Migrator::with_migrations(
+            migrations
+                .iter()
+                .filter(|migration| migration.version < 202_609_161_200)
+                .cloned()
+                .collect(),
+        )
+        .run(&pool)
+        .await
+        .unwrap();
+        sqlx::raw_sql(r#"
+            INSERT INTO "AddonInstallation" ("AddonId","Version","Enabled","PackageSha256","ContentSha256",
+                "ManifestJson","InstallPath","InstalledAt","UpdatedAt")
+            VALUES ('org.example.upgrade','1.0.0',1,'package','content','{}','addons/upgrade',
+                '2026-09-16T00:00:00Z','2026-09-16T00:00:00Z');
+            INSERT INTO "AddonMediaList" ("Id","AddonId","ProviderId","SourceUrl","Name",
+                "RefreshPublicationPolicy","DetailImportPolicy","DraftRevision","PublishedRevision",
+                "ReviewState","PublicationJournalJson") VALUES
+                (1,'org.example.upgrade','one','https://example.invalid/one','One',0,1,19,1,1,NULL),
+                (2,'org.example.upgrade','two','https://example.invalid/two','Two',1,0,8,4,3,'{"fence":"kept"}');
+            INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId","DisplayTitle","Title",
+                "Kind","Rank","Published","Included","MetadataOverrideJson")
+                VALUES (10,1,'video','Video','Video',4,0,1,1,'{"plot":null}');
+        "#).execute(&pool).await.unwrap();
+        migrations.run(&pool).await.unwrap();
+        let rows = sqlx::query_as::<_, (i64,i32,i32,i32,Option<String>)>(r#"
+            SELECT "Id","RefreshPublicationPolicy","DetailImportPolicy","DraftRevision","PublicationJournalJson"
+            FROM "AddonMediaList" ORDER BY "Id""#).fetch_all(&pool).await.unwrap();
+        assert_eq!(
+            rows,
+            vec![
+                (1, 2, 0, 20, None),
+                (2, 2, 0, 8, Some("{\"fence\":\"kept\"}".into()))
+            ]
+        );
+        let item: (i32, i32, String) = sqlx::query_as(
+            r#"SELECT "Published","Included","MetadataOverrideJson"
+            FROM "AddonMediaListItem" WHERE "Id"=10"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(item, (1, 1, "{\"plot\":null}".into()));
+        migrations.run(&pool).await.unwrap();
+        let revision: i32 =
+            sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=1"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            revision, 20,
+            "restarting does not repeatedly advance the draft"
+        );
+    }
 
     async fn fixture() -> DbPool {
         fixture_at("sqlite::memory:").await
@@ -593,6 +765,207 @@ mod tests {
         .fetch_one(pool)
         .await
         .unwrap()
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)] // Keep the original 13-item defect and its one-publication assertion together.
+    async fn thirteen_enriched_items_with_availability_and_duration_changes_publish_automatically()
+    {
+        use ersatzrs_core::addon_media_list::EnumeratedAddonMediaListItem;
+        use ersatzrs_core::repositories::AddonMediaListNfoMetadata;
+        use ersatzrs_domain::{
+            AddonMediaListContentKind, AddonMediaListItemAvailability, AddonMediaListItemKind,
+            AddonMediaListItemRole, RemoteStreamLiveness,
+        };
+        let pool = fixture().await;
+        sqlx::raw_sql(
+            r#"DELETE FROM "AddonMediaListItem";
+            UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2,"DraftRevision"=2;"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        for index in 0..13 {
+            let title = format!("Episode {index}");
+            let provider_id = format!("episode-{index}");
+            let source = format!("https://example.invalid/{provider_id}");
+            sqlx::query(
+                r#"INSERT INTO "AddonMediaListItem" (
+                "AddonMediaListId","ProviderId","DisplayTitle","Title","Kind","Rank",
+                "SourceUrl","Published","Availability","DurationSeconds","ProviderLiveness",
+                "EffectiveLiveness","ProviderMetadataJson") VALUES (1,?,?,?,4,?,?,1,2,601,1,1,?)"#,
+            )
+            .bind(&provider_id)
+            .bind(&title)
+            .bind(&title)
+            .bind(index)
+            .bind(&source)
+            .bind(serde_json::json!({"title":title}).to_string())
+            .execute(&pool)
+            .await
+            .unwrap();
+            let detail = EnumeratedAddonMediaListItem {
+                provider_id,
+                rank: index,
+                display_title: title.clone(),
+                title: title.clone(),
+                year: Some(2026),
+                season: Some(1),
+                episode: Some(index + 1),
+                kind: AddonMediaListItemKind::RemoteStream,
+                guids: vec![],
+                source_url: Some(source),
+                availability: AddonMediaListItemAvailability::Available,
+                availability_reason: None,
+                availability_reason_code: None,
+                content_kind: AddonMediaListContentKind::TelevisionEpisode,
+                collection_role: AddonMediaListItemRole::Auto,
+                duration_seconds: Some(if index < 8 { 600 } else { 601 }),
+                liveness: RemoteStreamLiveness::Finite,
+                parent_provider_id: None,
+                fragment_start_seconds: None,
+                fragment_end_seconds: None,
+                additional_image_urls: vec![],
+                metadata: AddonMediaListNfoMetadata {
+                    title,
+                    plot: Some(format!("Full description for episode {index}")),
+                    release_date: Some("2026-05-05".into()),
+                    genres: vec!["Entertainment".into()],
+                    tags: vec!["Archive".into()],
+                    languages: vec!["en".into()],
+                    studios: vec!["Fixture Channel".into()],
+                    content_ratings: vec!["age:0".into()],
+                    ..Default::default()
+                },
+            };
+            crate::addon_media_list_sync::AddonMediaListSynchronizer::new(pool.clone())
+                .merge_detail_item(1, &detail)
+                .await
+                .unwrap();
+        }
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM "AddonMediaListItem"
+            WHERE "Availability"=0 AND json_extract("ProviderMetadataJson",'$.plot') IS NOT NULL
+            AND json_extract("ProviderMetadataJson",'$.release_date')='2026-05-05'"#,
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count, 13);
+        let revised: i32 =
+            sqlx::query_scalar(r#"SELECT "DraftRevision" FROM "AddonMediaList" WHERE "Id"=1"#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(revised, 15);
+        let now = Utc::now();
+        assert!(
+            !process_one(&pool, now).await.unwrap(),
+            "wait for a quiet detail batch"
+        );
+        assert!(process_one(&pool, now + chrono::Duration::seconds(31))
+            .await
+            .unwrap());
+        assert_eq!(state(&pool).await, "queued");
+        assert!(!process_one(&pool, now + chrono::Duration::seconds(32))
+            .await
+            .unwrap());
+        let jobs: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaListPublicationJob""#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(jobs, 1, "one revision owns all thirteen results");
+    }
+
+    #[tokio::test]
+    async fn automatic_saved_changes_admit_without_scheduled_refresh_or_review() {
+        let pool = fixture().await;
+        sqlx::raw_sql(
+            r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2,
+            "DraftRevision"=2,"ReviewState"=1;
+            UPDATE "AddonMediaListItem" SET "Availability"=2,
+            "MetadataOverrideJson"='{"tags":["operator"]}',
+            "MetadataConflictJson"='{"tags":{"provider_before":[],"provider_after":["provider"],"operator_value":["operator"]}}';"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(process_one(&pool, Utc::now()).await.unwrap());
+        assert_eq!(state(&pool).await, "queued");
+        assert!(load_hold(&pool, 1).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn automatic_first_publication_does_not_require_a_baseline() {
+        let pool = fixture().await;
+        sqlx::raw_sql(
+            r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2,
+            "PublishedRevision"=0,"ReviewState"=1;
+            UPDATE "AddonMediaListItem" SET "Published"=0;"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(process_one(&pool, Utc::now()).await.unwrap());
+        assert_eq!(state(&pool).await, "queued");
+    }
+
+    #[tokio::test]
+    async fn automatic_noop_save_does_not_queue_publication() {
+        let pool = fixture().await;
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2,"DraftRevision"=2"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(process_one(&pool, Utc::now()).await.unwrap());
+        assert_eq!(state(&pool).await, "done");
+        assert!(!process_one(&pool, Utc::now()).await.unwrap());
+        let operations: i64 =
+            sqlx::query_scalar(r#"SELECT COUNT(*) FROM "AddonMediaListPublicationJob""#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(operations, 0);
+    }
+
+    #[tokio::test]
+    async fn automatic_detail_batch_waits_for_quiet_but_cannot_starve() {
+        let pool = fixture().await;
+        let now = Utc::now();
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2,
+            "DraftRevision"=2,"DetailProjectionPendingAt"=?,"Name"='Changed'"#,
+        )
+        .bind(encode_datetime(now))
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(!process_one(&pool, now).await.unwrap());
+        assert_eq!(state(&pool).await, "ready");
+        assert!(!process_one(&pool, now + chrono::Duration::seconds(29))
+            .await
+            .unwrap());
+        // A stream of newer details extends quiet time, but not first-pending time.
+        sqlx::query(
+            r#"UPDATE "AddonMediaList" SET "DraftRevision"=3,"DetailProjectionPendingAt"=?"#,
+        )
+        .bind(encode_datetime(now + chrono::Duration::seconds(115)))
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert!(process_one(&pool, now + chrono::Duration::seconds(120))
+            .await
+            .unwrap());
+        assert_eq!(state(&pool).await, "queued");
+        let revision: i32 =
+            sqlx::query_scalar(r#"SELECT "SavedRevision" FROM "AddonMediaListPublicationJob""#)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(revision, 3);
     }
 
     // The installed-package fixture uses POSIX; native Windows execution remains separate.

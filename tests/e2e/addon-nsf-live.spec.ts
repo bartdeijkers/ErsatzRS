@@ -486,13 +486,6 @@ FROM "AddonMediaListItem" WHERE "AddonMediaListId" = ${listId};
     await page.reload({ waitUntil: 'domcontentloaded' });
     await waitForHydration(page);
     await expect(page.locator('.episode-row .row-title').filter({ hasText: /^NSF Live$/ })).toBeVisible();
-    const publish = page.getByRole('button', { name: 'Publish saved changes', exact: true });
-    await expect(publish).toBeEnabled();
-    const publishNavigation = page.waitForEvent('framenavigated', { timeout: 120_000 });
-    await publish.click();
-    await publishNavigation;
-    await waitForHydration(page);
-
     await expect
       .poll(
         () =>

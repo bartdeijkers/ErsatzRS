@@ -1,5 +1,6 @@
 mod addon_media_list;
 pub(crate) mod addon_media_list_auto_eligibility;
+mod addon_media_list_derived_metadata;
 mod addon_media_list_lifecycle;
 pub(crate) mod addon_media_list_reset;
 pub(crate) mod addon_publication_fs;

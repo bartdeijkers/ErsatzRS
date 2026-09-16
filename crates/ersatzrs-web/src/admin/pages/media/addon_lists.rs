@@ -4270,7 +4270,8 @@ fn AddonMediaListEditorIsland(
     let delivery_mode = RwSignal::new(form.delivery_mode);
     let saved_delivery_mode = form.delivery_mode;
     let delivery_cutoff_at = form.delivery_cutoff_at.clone();
-    let refresh_publication_policy = RwSignal::new(form.refresh_publication_policy);
+    let refresh_publication_policy =
+        RwSignal::new(AddonMediaListRefreshPublicationPolicy::Automatic);
     let saved_refresh_publication_policy = form.refresh_publication_policy;
     let generate_playlist = RwSignal::new(form.generate_playlist);
     let detail_import_policy = RwSignal::new(form.detail_import_policy);
@@ -6435,25 +6436,7 @@ fn AddonMediaListEditorIsland(
                                         <div><dt>{tr(TextKey::NextScheduledRefresh)}</dt><dd>{next_refresh_at}</dd></div>
                                         <div><dt>{tr(TextKey::RefreshRetryAt)}</dt><dd>{refresh_retry_at}</dd></div>
                                     </dl>
-                                    <label class=style::source_field>
-                                        <span class=style::field_title>{tr(TextKey::RefreshPublicationPolicy)}</span>
-                                        <select
-                                            name="refresh_publication_policy"
-                                            class=style::boxed_input
-                                            aria-describedby="refresh-publication-policy-help"
-                                            prop:value=move || match refresh_publication_policy.get() {
-                                                AddonMediaListRefreshPublicationPolicy::Review => "review",
-                                                AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions => "auto_publish_additions",
-                                            }
-                                            on:change=move |event| refresh_publication_policy.set(match event_target_value(&event).as_str() {
-                                                "auto_publish_additions" => AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions,
-                                                _ => AddonMediaListRefreshPublicationPolicy::Review,
-                                            })
-                                        >
-                                            <option value="review" selected=saved_refresh_publication_policy == AddonMediaListRefreshPublicationPolicy::Review>{tr(TextKey::RefreshPublicationReview)}</option>
-                                            <option value="auto_publish_additions" selected=saved_refresh_publication_policy == AddonMediaListRefreshPublicationPolicy::AutoPublishAdditions>{tr(TextKey::RefreshPublicationAutomatic)}</option>
-                                        </select>
-                                    </label>
+                                    <input type="hidden" name="refresh_publication_policy" value="automatic"/>
                                     <p id="refresh-publication-policy-help">{tr(TextKey::RefreshPublicationPolicyHelp)}</p>
                                 </div>
                                 <p class=style::type_change_note data-testid="addon-media-type-change-help">
