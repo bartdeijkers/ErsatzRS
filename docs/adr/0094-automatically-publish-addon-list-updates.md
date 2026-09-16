@@ -8,9 +8,9 @@ Accepted 2026-09-16
 
 Partial
 
-Tracked by AMM-P-01. Linux runtime acceptance is verified. Exact-SHA release
-CI and packaging remain open; native Windows acceptance belongs to the
-maintainer after the Windows-only beta package is built.
+Tracked by AMM-P-01. Linux runtime acceptance, exact-SHA CI and Windows-only
+v1.0.34-beta packaging are verified. Native Windows acceptance remains open
+until the maintainer tests the draft package and reports the results.
 
 ## Context
 

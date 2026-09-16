@@ -4799,6 +4799,18 @@ heading after automatic admission has already advanced to active preparation.
 The fixture now atomically stages its inputs, proves durable admission before
 opening the workspace and verifies the active heading without changing polling
 or assertion deadlines. Three fresh-profile Chromium/Firefox repetitions pass
-(six checks). Full exact-SHA CI is repeated for this correction. Windows
-packaging and maintainer acceptance remain open.
+(six checks). Final source 94373d21d007b248ca3a8c9adefa5ebeabd4f294 passes
+terminal exact-SHA CI https://github.com/bartdeijkers/ErsatzRS/actions/runs/35091895246:
+all required jobs execute successfully, including 220 Chromium passes (four
+conditional skips), 197 Firefox passes (27 conditional skips), and 2,818 Rust
+passes (37 conditional skips). Immutable v1.0.34-beta targets that same source.
+Windows-only packaging succeeds in
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/35095997394.
+The draft prerelease contains only ersatzrs-v1.0.34-beta-win-x64.zip, independently
+downloaded and checked: ZIP integrity, four x64 PE executables, required web
+assets and package exclusions pass (66 files, 68,880,702 bytes). SHA-256 matches
+GitHub: e38a38df72d9ec97ac5c0c242c5e7dcccb3ecd5a6a942202e744917c088cced9.
+Release notes link the validated yt-dlp 0.11.3 add-on bundle and installation
+instructions. Native Windows application acceptance remains open for the
+maintainer's report in this session; the beta remains a draft pending that proof.
 '''

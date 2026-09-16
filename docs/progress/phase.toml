@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-P-01 Linux verification complete; exact-SHA CI, Windows-only beta and maintainer acceptance next'
+current_focus = 'AMM-P-01 Linux and exact-SHA CI verified; Windows-only beta ready for maintainer acceptance'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -62,10 +62,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 next_steps = '''
 AMM-P-01 implements ADR 0094 automatic publication, complete metadata transfer
 and the episode ContentRating repair. Linux native, browser, copied-profile and
-playback evidence is recorded in the milestone. Next: commit the verified
-candidate, obtain terminal exact-SHA CI and prepare the authorized Windows-only
-beta. Native Windows acceptance stays open until the maintainer reports results
-in this session. The original personal profile remains unchanged.
+playback evidence is recorded in the milestone. Exact-SHA CI and Windows-only
+v1.0.34-beta packaging pass; the downloaded archive is independently verified.
+Next: the maintainer tests the draft Windows beta and yt-dlp 0.11.3 and reports
+in this session. Native Windows acceptance remains open. The original personal
+profile remains unchanged.
 2026-09-15 hydration correction: required admin startup no longer waits for
 optional browser idle time. The owning admin-ui-failure-semantics parity debt
 records the natural and controlled reproductions, identical-build runner2 SSD

@@ -912,4 +912,4 @@ discovered = '2026-09-16'
 resolved = false
 adr = '0094'
 description = 'AMM-P-01 replaces review gates with automatic publication, preserves source-removed local media, completes metadata transfer and repairs episode ContentRating. Acceptance and evidence are owned by AMM-P-01.'
-evidence = 'Automatic publication and metadata transfer are implemented; AMM-P-01 owns Linux verification and the remaining exact-SHA CI, Windows beta and maintainer acceptance.'
+evidence = 'Automatic publication and metadata transfer are implemented; AMM-P-01 records verified Linux acceptance, exact-SHA CI and the independently checked Windows-only v1.0.34-beta draft. Native Windows maintainer acceptance remains open.'
