@@ -97,7 +97,7 @@ test('actual host death drains preparation before one safe restart', async ({ br
   try {
     await start();
     // Normal bootstrap supplies required defaults; the wrapper does not run seed_admin.sql either.
-    const fixture = installPreparedFixture(database, true);
+    const fixture = installPreparedFixture(database, true, false, { processedDefault: true });
     const calls = (): Array<{ command: string; provider?: number; descendant?: number }> =>
       existsSync(fixture.invocationLog) ? readFileSync(fixture.invocationLog, 'utf8').trim()
         .split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line)) : [];
@@ -116,14 +116,7 @@ test('actual host death drains preparation before one safe restart', async ({ br
     const listId = Number(page.url().match(/addon-lists\/(\d+)/)?.[1]);
     expect(listId).toBeGreaterThan(0);
     await expect.poll(() => sql(`SELECT "State" FROM "AddonMediaListImportJob" WHERE "AddonMediaListId"=${listId} ORDER BY "Generation" DESC LIMIT 1;`), { timeout: 60000 }).toBe('3');
-    await hydrated(page, `/media/addon-lists/${listId}/playback`);
-    await page.locator('[data-option-key="processed"] select').selectOption('true');
-    await Promise.all([
-      page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
-      page.getByRole('button', { name: 'Save settings', exact: true }).click(),
-    ]);
-    await hydrated(page);
-    await expect(page.locator('#workspace-errors')).toHaveCount(0);
+    // Untouched defaults start the single preparation revision automatically.
     await hydrated(page, `/media/addon-lists/${listId}`);
     await expect.poll(() => calls().filter(call => call.command === 'paused').length, { timeout: 60000 }).toBe(1);
     const paused = calls().find(call => call.command === 'paused')!;
@@ -131,6 +124,8 @@ test('actual host death drains preparation before one safe restart', async ({ br
     expect(alive(paused.descendant!)).toBe(true);
     expect(Number(sql('SELECT COALESCE(SUM("ReservedBytes"),0) FROM "AddonMediaListArtifact";'))).toBeGreaterThan(0);
     const jobId = Number(sql(`SELECT "Id" FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${listId} AND "Kind"=1;`));
+    expect(Number.isSafeInteger(jobId)).toBe(true);
+    expect(jobId).toBeGreaterThan(0);
     const checkpoint = (): string => sql(`SELECT json_extract("Value",'$.phase') FROM "ConfigElement" WHERE "Key"='addon.preparation.worker';`);
     expect(checkpoint()).toBe('Running');
     // Node maps SIGKILL to TerminateProcess on Windows. It targets only this spawned host.

@@ -84,9 +84,13 @@ INSERT INTO "AddonProviderHostCooldown" ("ProviderHost","NextEligibleAt","Sample
           for (const width of [390,3840]) {
             await page.setViewportSize({width,height:1080});
             if(width<768 && javaScriptEnabled) await expect.poll(()=>page.locator('[data-nav-drawer]').evaluate(e=>e.getBoundingClientRect().right)).toBeLessThanOrEqual(1);
-            const access = await page.locator('.access-stack').boundingBox();
-            const browserBox = await option(page,'browser').boundingBox();
-            const segmentBox = await option(page,'sponsorblock_remove').boundingBox();
+            // Measure one layout frame: desktop drawer expansion can move the
+            // whole stack between separate asynchronous boundingBox requests.
+            const { access, browserBox, segmentBox } = await page.locator('.access-stack').evaluate(stack => ({
+              access: stack.getBoundingClientRect().toJSON(),
+              browserBox: stack.querySelector('[data-option-key="browser"]')!.getBoundingClientRect().toJSON(),
+              segmentBox: stack.querySelector('[data-option-key="sponsorblock_remove"]')!.getBoundingClientRect().toJSON(),
+            }));
             expect(access!.width).toBeLessThanOrEqual(768);
             expect(segmentBox!.y).toBeGreaterThanOrEqual(browserBox!.y+browserBox!.height);
             expect(Math.abs(browserBox!.x-segmentBox!.x)).toBeLessThanOrEqual(1);

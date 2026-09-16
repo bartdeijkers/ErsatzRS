@@ -587,11 +587,18 @@ WHERE "AddonMediaListId" = ${seed.listId};
     await page.waitForLoadState('domcontentloaded');
     await waitUntilHydrated(page);
     await expect.poll(() => sqlite(`SELECT "RefreshPublicationPolicy" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`)).toBe('2');
-    sqlite(`INSERT INTO "AddonMediaListAutoPublication" (
-      "AddonMediaListId", "DraftRevision", "PublishedRevision", "State", "Reason", "RecordedAt"
-    ) SELECT "Id", "DraftRevision", "PublishedRevision", 'held', '"existing_changes"', '2026-09-04T12:00:00Z'
+    // Let the saved settings finish publishing before injecting a terminal
+    // failure for a subsequent revision; completion must not erase the fixture.
+    await expect.poll(() => sqlite(`SELECT "ReviewState" || '|' || ("PublicationJournalJson" IS NULL)
+      FROM "AddonMediaList" WHERE "Id"=${seed.listId};`), { timeout: 60000 }).toBe('2|1');
+    sqlite(`BEGIN IMMEDIATE;
+    UPDATE "AddonMediaList" SET "DraftRevision"="DraftRevision"+1,"ReviewState"=1 WHERE "Id"=${seed.listId};
+    INSERT INTO "AddonMediaListAutoPublication" (
+      "AddonMediaListId", "DraftRevision", "PublishedRevision", "State", "Reason", "RecordedAt", "AttemptCount"
+    ) SELECT "Id", "DraftRevision", "PublishedRevision", 'held', '"preparation_failed"', '2026-09-04T12:00:00Z', 5
       FROM "AddonMediaList" WHERE "Id" = ${seed.listId}
-    ON CONFLICT ("AddonMediaListId") DO UPDATE SET "State"='held',"DraftRevision"=excluded."DraftRevision","PublishedRevision"=excluded."PublishedRevision","Reason"=excluded."Reason";`);
+    ON CONFLICT ("AddonMediaListId") DO UPDATE SET "State"='held',"DraftRevision"=excluded."DraftRevision","PublishedRevision"=excluded."PublishedRevision","Reason"=excluded."Reason","AttemptCount"=5;
+    COMMIT;`);
     try {
       await gotoHydrated(page, `/media/addon-lists/${seed.listId}/settings`);
       await expect(policy).toHaveValue('automatic');

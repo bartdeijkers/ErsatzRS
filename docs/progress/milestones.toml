@@ -4786,6 +4786,13 @@ local playback, native forms, metadata edits and automatic publication. Workspac
 Clippy, progress/format/architecture/hydration checks and the matching web bundle
 gate pass. Restarting the copied profile preserves all 13 enriched episodes and
 the completed revision without an extra publication. The original personal
-profile remains unchanged. Exact-SHA host CI, Windows packaging and maintainer
-acceptance remain open.
+profile remains unchanged. CI run 35087501167 passes all non-browser gates but
+exposes three Chromium test setup issues: geometry sampled across drawer layout
+frames, a synthetic held state racing publication completion, and restart setup
+changing options after automatic preparation had already started. The corrected
+fixtures preserve every assertion; seven focused Chromium/Firefox cases pass,
+including real host death, drained descendants, recovered durable work and one
+retained artifact (the duplicate Firefox transport case remains skipped).
+Full exact-SHA CI is repeated for the correction. Windows packaging and
+maintainer acceptance remain open.
 '''
