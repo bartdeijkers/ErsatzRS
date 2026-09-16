@@ -4793,6 +4793,12 @@ changing options after automatic preparation had already started. The corrected
 fixtures preserve every assertion; seven focused Chromium/Firefox cases pass,
 including real host death, drained descendants, recovered durable work and one
 retained artifact (the duplicate Firefox transport case remains skipped).
-Full exact-SHA CI is repeated for the correction. Windows packaging and
-maintainer acceptance remain open.
+CI run 35089411760 passes all non-browser gates and 219 Chromium cases with four
+conditional skips. Its only failure expects a transient preparation-required
+heading after automatic admission has already advanced to active preparation.
+The fixture now atomically stages its inputs, proves durable admission before
+opening the workspace and verifies the active heading without changing polling
+or assertion deadlines. Three fresh-profile Chromium/Firefox repetitions pass
+(six checks). Full exact-SHA CI is repeated for this correction. Windows
+packaging and maintainer acceptance remain open.
 '''

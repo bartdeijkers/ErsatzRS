@@ -1057,7 +1057,7 @@ WHERE "Id" = ${seed.listId};
     expect(runtimeErrors).toEqual([]);
   });
 
-  test('queues a missing finite duration before publication instead of failing save', async ({
+  test('automatically queues a missing finite duration before publication', async ({
     page,
   }, testInfo) => {
     const runtimeErrors = watchRuntimeErrors(page);
@@ -1065,6 +1065,7 @@ WHERE "Id" = ${seed.listId};
     const suffix = testInfo.project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const providerHost = `e2e-duration-${suffix}.invalid`;
     sqlite(`
+BEGIN IMMEDIATE;
 UPDATE "AddonMediaList" SET "RefreshPublicationPolicy"=2 WHERE "Id"=${seed.listId};
 UPDATE "AddonMediaListItem" SET "DurationSeconds" = NULL WHERE "Id" = ${seed.firstItemId};
 UPDATE "AddonMediaListItem" SET "Included" = 0 WHERE "Id" = ${seed.secondItemId};
@@ -1089,12 +1090,8 @@ INSERT INTO "AddonProviderHostCooldown" (
   '${providerHost}', '2099-01-01T00:00:00Z', 16,
   '2026-08-26T10:00:00Z', '2026-08-26T10:00:00Z'
 );
+COMMIT;
 `);
-    await forceEnglish(page);
-    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
-
-    await expect(page.locator('#workspace-errors')).toHaveCount(0);
-    await expect(page.getByText('Required media is prepared automatically', {exact:true})).toBeVisible();
     await expect
       .poll(() =>
         sqlite(`
@@ -1103,6 +1100,12 @@ FROM "AddonMediaListDetailJob" WHERE "AddonMediaListItemId" = ${seed.firstItemId
 `),
       )
       .toMatch(/^[12],1$/);
+    // Admission is autonomous, before any workspace visit. The cooldown keeps
+    // the task active so SSR can report the durable state without a poll race.
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/addon-lists/${seed.listId}`);
+    await expect(page.locator('#workspace-errors')).toHaveCount(0);
+    await expect(page.getByText('Preparing media for publication', {exact:true})).toBeVisible();
     expect(
       sqlite(`SELECT "PublishedRevision" FROM "AddonMediaList" WHERE "Id" = ${seed.listId};`),
     ).toBe('0');
