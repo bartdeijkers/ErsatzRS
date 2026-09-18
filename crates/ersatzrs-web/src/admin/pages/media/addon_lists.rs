@@ -3500,6 +3500,32 @@ fn parse_first_aired(value: Option<&str>) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()
 }
 
+/// Order numbering candidates oldest first. Providers such as channel upload
+/// feeds list newest first, so provider rank alone would number the newest
+/// item as episode 1. An undated item keeps its provider neighbour by taking
+/// the date of the preceding dated item (or the first dated item when none
+/// precedes it); ties keep provider order.
+fn order_by_first_aired<'a>(
+    items: impl IntoIterator<Item = &'a AddonMediaListItemRow>,
+) -> Vec<&'a AddonMediaListItemRow> {
+    let items = items.into_iter().collect::<Vec<_>>();
+    let first_known = items
+        .iter()
+        .find_map(|item| parse_first_aired(item.first_aired.as_deref()));
+    let mut known = first_known;
+    let mut dated = items
+        .into_iter()
+        .map(|item| {
+            if let Some(date) = parse_first_aired(item.first_aired.as_deref()) {
+                known = Some(date);
+            }
+            (known, item)
+        })
+        .collect::<Vec<_>>();
+    dated.sort_by_key(|(date, _)| *date);
+    dated.into_iter().map(|(_, item)| item).collect()
+}
+
 fn auto_detect_episode_assignments(
     items: &[AddonMediaListItemRow],
     start_item_id: Option<i64>,
@@ -3511,10 +3537,11 @@ fn auto_detect_episode_assignments(
     let mut season = starting_season;
     let mut episode = 0_i32;
     let mut previous_known_date = None;
-    for item in numbering_candidates(items, start_item_id)
-        .into_iter()
-        .take(count)
-    {
+    for item in order_by_first_aired(
+        numbering_candidates(items, start_item_id)
+            .into_iter()
+            .take(count),
+    ) {
         let first_aired = parse_first_aired(item.first_aired.as_deref());
         if let (Some(previous), Some(current)) = (previous_known_date, first_aired) {
             if current.signed_duration_since(previous).num_days() >= minimum_gap_days {
@@ -7638,6 +7665,12 @@ mod tests {
         assert_eq!(
             auto_detect_episode_assignments(&items, None, 1, 90, 4),
             BTreeMap::from([(1, (1, 1)), (2, (1, 2)), (3, (1, 3)), (4, (2, 1)),])
+        );
+        let newest_first = items.iter().rev().cloned().collect::<Vec<_>>();
+        assert_eq!(
+            // The undated item follows its provider predecessor, item 3.
+            auto_detect_episode_assignments(&newest_first, None, 1, 90, 4),
+            BTreeMap::from([(1, (1, 1)), (2, (1, 3)), (3, (1, 2)), (4, (2, 1)),])
         );
         assert_eq!(
             episode_numbering_preview_assignments(&items, Some(3), 4, 7, 2, true),

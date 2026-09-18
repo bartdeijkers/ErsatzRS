@@ -228,6 +228,9 @@ fn preview(
     if season < 0 || episode < 0 || gap < 1 {
         return Err(TextKey::NumberEpisodes);
     }
+    if intent == "auto-number" {
+        targets = super::super::super::order_by_first_aired(targets);
+    }
     let mut previous_date = None;
     let mut changed = fields.clone();
     for row in targets {
@@ -499,6 +502,41 @@ mod tests {
         assert_eq!(result.get("episode_4").map(String::as_str), Some("4"));
         assert!(!result.contains_key("season_1"));
         assert!(!result.contains_key("episode_3"));
+    }
+    #[test]
+    fn auto_numbering_a_newest_first_list_starts_with_the_oldest_item() {
+        let d = Draft {
+            selected: BTreeSet::from([1, 2, 3]),
+            page_size: 10,
+            ..Default::default()
+        };
+        let rows = [(1, "2026-08-22"), (2, "2026-07-29"), (3, "2013-01-23")]
+            .into_iter()
+            .map(|(id, first_aired)| AddonMediaListItemRow {
+                first_aired: Some(first_aired.into()),
+                ..row(id, Some(1), Some(1))
+            })
+            .collect::<Vec<_>>();
+        let mut f = fields();
+        f.insert("gap_days".into(), "90".into());
+        let result = preview(
+            &d,
+            &f,
+            "auto-number",
+            &rows,
+            AddonMediaListPresentationKind::TelevisionShow,
+            &AddonMediaListDraftDiffRow::default(),
+        )
+        .unwrap();
+        let pair = |id: i64| {
+            (
+                result[&format!("season_{id}")].clone(),
+                result[&format!("episode_{id}")].clone(),
+            )
+        };
+        assert_eq!(pair(3), ("1".into(), "1".into()));
+        assert_eq!(pair(2), ("2".into(), "1".into()));
+        assert_eq!(pair(1), ("2".into(), "2".into()));
     }
     #[test]
     fn invalid_range_or_season_only_pair_returns_no_partial_preview() {

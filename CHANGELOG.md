@@ -19,6 +19,10 @@ release section when tagging a release.
   after the publication commit no longer re-stamps unchanged thumbnails with a
   newer revision, which made verification fail until recovery gave up with
   `publication_recovery_exhausted`.
+- Number episodes oldest first with "Auto-detect seasons from first-air dates",
+  also for lists the provider returns newest first (such as channel uploads).
+  Previously the newest upload became episode 1 and no season breaks were
+  detected.
 
 ## [1.0.35-beta] - 2026-09-16
 
