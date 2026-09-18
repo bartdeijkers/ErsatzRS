@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed (2026-09-18). **Phases 1, 2 and 3 implemented on 2026-09-18** at
-the maintainer's request; phase 4 remains proposed.
+Proposed (2026-09-18). **All four phases implemented on 2026-09-18** at the
+maintainer's request.
 
 Phase 1 delivered:
 
@@ -107,6 +107,51 @@ e2e case `reviews bulk numbering beside its panels and applies or cancels it`
 `addon-metadata-editor.spec.ts` pass 62/62 in Chromium and Firefox; the other
 specs that drive the bulk tools (`addon-list-options`, `addon-walkthrough-fixes`,
 `addon-list-preparation-feedback`) pass 34/34.
+
+Phase 4 delivered:
+
+- 4.1 An applied category or search shows as chips in an "Active filter" row
+  with one Clear filters action (native `clear-filter` intent: resets query,
+  category and page, keeps every other draft field). With JavaScript,
+  `workspace-auto-apply.js` submits a pointer-picked category through the
+  existing Search button, so the whole draft is posted as without JavaScript,
+  and returns focus to the select after the reload. Arrow keys on a closed
+  select fire a change per step, so keyboard changes apply with Enter or the
+  visible button instead of reloading on each step.
+- 4.2 The pager adds First page, Last page and "Page X of Y"; page size is
+  applied on a pointer pick the same way. Direct page-number input was not
+  added (the plan allowed input or first/last).
+- 4.3 Save item is also offered at the top of the item page, in the item
+  navigation row, so it is reachable without scrolling past metadata or tools.
+  A sticky bottom save bar was tried first and rejected: it covered controls
+  near the bottom edge (a browser test could not click the "Season & episode"
+  radio under it). The replacement panel's "Save item" was
+  a link that only scrolled to that bar; it is now a real Save item button,
+  shown once a replacement is chosen. Numbered/Unnumbered already hid the
+  season and episode inputs when Unnumbered is chosen (and the server ignores
+  them), so no change was needed; the audit observation was out of date.
+
+Evidence: `addon-list-workspace.spec.ts` (32 cases, including the new
+`shows and clears the active filter and jumps to the first and last page` and
+`offers Save item at the top of the item page and hides numbers when
+unnumbered`), `addon-list-item-form.spec.ts`, the add-on cases of
+`hydration-pending-routes.spec.ts`, the long-filter case of
+`addon-list-workspace-visual.spec.ts` and five `addon-metadata-editor.spec.ts`
+cases pass 80/80 in Chromium and Firefox, with and without JavaScript. On the
+dogfood copy (list 10), picking Unnumbered applies it, keeps focus on the
+select and shows the chip; Clear filters returns to "Page 1 of 17".
+
+Open finding (not caused by phase 4, not yet fixed): on the dogfood copy, once
+preparation and the publication job are complete, both publication islands
+fail to hydrate (`publication.rs:386` on Items, `publication.rs:465` on
+Activity: "expected a marker node") and the WebAssembly module aborts. It
+reproduces with `workspace-auto-apply.js` blocked. The e2e suites only watch
+uncaught page errors, not console hydration errors, and their seeded lists do
+not reach this state. The lines predate today, but phases 1 and 2 changed this
+island, so the phase 1 "no hydration errors" evidence only covers the state
+measured then. Next action: reproduce with a seeded completed publication and
+a console-error assertion, then compare the client-side readiness with the
+server-rendered props.
 
 ## Context and Purpose
 

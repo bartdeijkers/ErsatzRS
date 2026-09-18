@@ -4187,3 +4187,18 @@ outline:none;
 :global(.addon-workspace) :global(.bulk-preview):focus-visible {
 outline:2px solid var(--color-primary); outline-offset:2px;
 }
+
+/* Filters and pager (plans/addon-list-workspace-ux-refinements.md, phase 4). */
+:global(.addon-workspace) :global(.active-filter) {
+display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 12px; font-size:13px;
+}
+:global(.addon-workspace) :global(.filter-chip) {
+display:inline-flex; align-items:center; min-height:24px; padding:2px 10px; border-radius:999px;
+border:1px solid var(--color-border); background:var(--color-surface); color:var(--color-text-primary);
+}
+:global(.addon-workspace) :global(.page-jump) {
+display:flex; flex-wrap:wrap; align-items:center; gap:var(--control-gap);
+}
+:global(.addon-workspace) :global(.page-position) {
+padding:0 4px; font-size:13px; color:var(--color-text-secondary); white-space:nowrap;
+}

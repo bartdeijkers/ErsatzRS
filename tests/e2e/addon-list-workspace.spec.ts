@@ -18,6 +18,23 @@ async function submit(page: Page, intent: string) {
   await settled(page);
 }
 
+/** Picks a filter category or page size. With JavaScript the choice applies
+ *  itself; without it the native button submits the draft. */
+async function choose(page: Page, name: 'category' | 'page_size', value: string) {
+  await settled(page);
+  const select = page.locator(`[name="${name}"]`);
+  if (hydratedPages.has(page) && await select.inputValue() !== value) {
+    await Promise.all([
+      page.waitForEvent('framenavigated', f => f === page.mainFrame()),
+      select.selectOption(value),
+    ]);
+    await settled(page);
+  } else {
+    await select.selectOption(value);
+    await submit(page, name === 'category' ? 'filter' : 'page-size');
+  }
+}
+
 for (const javaScriptEnabled of [false, true]) {
   test.describe(`locked add-on list workspace (${javaScriptEnabled ? 'hydrated' : 'no JS'})`, () => {
     test.skip(!dbPath, 'An isolated E2E database is required');
@@ -61,8 +78,7 @@ for (const javaScriptEnabled of [false, true]) {
       const categories = page.locator('[name="category"]');
       await expect(categories.locator('option[value="unknown"]')).toHaveText('Unknown (1)');
       await expect(categories.locator('option[value="unavailable"]')).toHaveText('Unavailable (0)');
-      await categories.selectOption('unknown');
-      await submit(page, 'filter');
+      await choose(page, 'category', 'unknown');
       await expect(page.locator('.episode-row')).toHaveCount(1);
       await expect(page.locator('.episode-row .runtime')).toContainText('Unknown');
       const blocker = page.locator('.notice.error button').filter({ hasText: seed.secondTitle }).first();
@@ -161,7 +177,7 @@ for (const javaScriptEnabled of [false, true]) {
       await submit(page,'save');
       await expect(page.locator('#workspace-errors')).toHaveCount(0);
       expect(sqlite(`SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${seed.listId} AND json_extract("MetadataOverrideJson",'$.season')=3;`)).toBe('2');
-      await page.locator('[name="page_size"]').selectOption('0');await submit(page,'page-size');
+      await choose(page,'page_size','0');
       await expect(page.locator('.episode-row')).toHaveCount(165);
       await context.close();
     });
@@ -177,7 +193,7 @@ UPDATE "AddonMediaList" SET "ItemCount"=1001 WHERE "Id"=${seed.listId};`);
       try {
         await page.goto(`/media/addon-lists/${seed.listId}`);await settled(page);
         for(const size of [10,25,50,100,0]) {
-          await page.locator('[name="page_size"]').selectOption(String(size));await submit(page,'page-size');
+          await choose(page,'page_size',String(size));
           await expect(page.locator('.episode-row')).toHaveCount(size||1001);
         }
         const payloadBytes=await page.locator('#addon-list-workspace').evaluate(form=>new TextEncoder().encode(new URLSearchParams(new FormData(form as HTMLFormElement) as any).toString()).length);
@@ -384,6 +400,65 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
       await expect(page.locator('#workspace-errors')).toHaveCount(0);
       await expect(review).toHaveCount(0);
       expect(saved()).toBe('1,1;5,5');
+      }finally{await context.close();}
+    });
+
+    test('shows and clears the active filter and jumps to the first and last page',async({browser,baseURL},info)=>{
+      const seed=seedMetadataEditor(info);
+      for(let i=2;i<25;i++){
+        const id=seed.secondItemId+i;
+        sqlite(`INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","Included","ProviderMetadataJson") VALUES (${id},${seed.listId},'pager-${i}','Pager item ${i}',4,${i},'Pager item ${i}',1,'{"title":"Pager item ${i}"}');`);
+      }
+      const context=await browser.newContext({baseURL,javaScriptEnabled});
+      await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+      try{
+      const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
+      await page.goto(`/media/addon-lists/${seed.listId}`);await settled(page);
+      const active=page.getByTestId('active-filter');
+      await expect(active).toHaveCount(0);
+      await expect(page.locator('.page-position')).toHaveText('Page 1 of 3');
+      await submit(page,'page:2');
+      await expect(page.locator('.page-position')).toHaveText('Page 3 of 3');
+      await expect(page.locator('button[name="intent"]').filter({hasText:'Last page'})).toBeDisabled();
+      await submit(page,'page:0');
+      await expect(page.locator('.page-position')).toHaveText('Page 1 of 3');
+      // An applied category and search show as chips with one Clear action.
+      await page.locator('#workspace-query').fill('Pager item 1');
+      await choose(page,'category','unnumbered');
+      await expect(active).toContainText('Unnumbered');
+      await expect(active).toContainText('\u201cPager item 1\u201d');
+      await expect(page.locator('.episode-row')).toHaveCount(10);
+      if(javaScriptEnabled)await expect(page.locator('[name="category"]')).toBeFocused();
+      await submit(page,'clear-filter');
+      await expect(active).toHaveCount(0);
+      await expect(page.locator('[name="category"]')).toHaveValue('');
+      await expect(page.locator('#workspace-query')).toHaveValue('');
+      await expect(page.locator('.page-position')).toHaveText('Page 1 of 3');
+      }finally{await context.close();}
+    });
+
+    test('offers Save item at the top of the item page and hides numbers when unnumbered',async({browser,baseURL},info)=>{
+      const seed=seedMetadataEditor(info);
+      const context=await browser.newContext({baseURL,javaScriptEnabled,viewport:{width:1440,height:700}});
+      await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+      try{
+      const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
+      await page.goto(`/media/addon-lists/${seed.listId}/items/${seed.firstItemId}`);await settled(page);
+      // Save item is in the first viewport, beside the item navigation.
+      const topSave=page.locator('.item-navigation [data-save-indicator]');
+      await expect(topSave).toHaveText('Save item');
+      const box=await topSave.boundingBox();
+      expect(box!.y+box!.height).toBeLessThanOrEqual(700);
+      // Without a chosen replacement there is no extra Save beside the search.
+      await expect(page.locator('#item-replacement [data-save-indicator]')).toBeHidden();
+      // Unnumbered hides the number inputs instead of leaving them editable.
+      await page.locator('[name="numbering_mode"][value="none"]').check();
+      await expect(page.locator('.item-numbering [name="season"]')).toBeHidden();
+      await page.locator('[name="metadata_title"]').fill('Saved from the top');
+      await Promise.all([page.waitForEvent('framenavigated',f=>f===page.mainFrame()),topSave.click()]);
+      await settled(page);
+      await expect(page.locator('#workspace-errors')).toHaveCount(0);
+      expect(sqlite(`SELECT json_extract("MetadataOverrideJson",'$.title') FROM "AddonMediaListItem" WHERE "Id"=${seed.firstItemId};`)).toBe('Saved from the top');
       }finally{await context.close();}
     });
 

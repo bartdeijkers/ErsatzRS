@@ -1184,6 +1184,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BulkApplyNumbering => "Nummering toepassen",
         TextKey::BulkApplyChanges => "Wijzigingen toepassen",
         TextKey::BulkCancelPreview => "Voorbeeld annuleren",
+        TextKey::ActiveFilter => "Actief filter",
         TextKey::AddonWorkspaceLengthFilter => "Filteren op medialengte",
         TextKey::AddonWorkspaceMinimumLength => "Minimumlengte",
         TextKey::AddonWorkspaceMaximumLength => "Maximumlengte",

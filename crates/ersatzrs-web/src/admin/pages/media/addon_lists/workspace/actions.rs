@@ -416,6 +416,15 @@ async fn execute(
             field(&fields, "category").clone_into(&mut d.category);
             d.page = 0;
         }
+        "clear-filter" => {
+            d.query.clear();
+            d.category.clear();
+            d.page = 0;
+            if let Some(items) = d.groups.get_mut("items") {
+                items.remove("query");
+                items.remove("category");
+            }
+        }
         "page-size" => {
             let size = field(&fields, "page_size")
                 .parse()

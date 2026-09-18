@@ -101,6 +101,9 @@ pub(super) fn item(w: &Workspace) -> AnyView {
             }).collect_view()}
             {options.trigger}
             <button class="button secondary" form=FORM name="intent" value="navigate" formaction=format!("/media/addon-lists/{}#item-{id}",w.form.id) formnovalidate>{tr(TextKey::ItemBack)}</button>
+            // Save item is reachable from the top of the page as well as below
+            // the form, so long metadata or tools never hide it.
+            {save_button(w,TextKey::AddonWorkspaceSaveItem)}
         </nav>
         <section class="item-edit" aria-labelledby="item-review-heading">
             <header class="section-heading"><h2 id="item-review-heading">{tr(TextKey::ReviewItem)}</h2>
@@ -158,7 +161,9 @@ pub(super) fn item(w: &Workspace) -> AnyView {
                     <div class="action-row">{button("replacement-search",TextKey::Search,false)}{button("replacement-clear",TextKey::ItemRemoveReplacement,false)}</div>
                     <p role="status" hidden={!w.submission.replacement_searched || !w.submission.replacement_results.is_empty()}>{tr(TextKey::NoMatchingRecordsFound)}</p>
                     {w.submission.replacement_results.iter().map(|r|view!{<div class="replacement-result"><span>{r.title.clone()}</span><small>{r.path.clone()}</small><button class="button secondary" form=FORM name="intent" value=format!("replacement:{}:{}",r.media_item_id,r.media_version_id) formnovalidate>{tr(TextKey::Select)}</button></div>}).collect_view()}
-                    <a class="button secondary" href="#item-save">{tr(TextKey::AddonWorkspaceSaveItem)}</a>
+                    // A chosen replacement is saved from here as well; the
+                    // item's own save bar may be far away on narrow screens.
+                    <div class="action-row" hidden=pending_replacement.is_none()>{save_button(w,TextKey::AddonWorkspaceSaveItem)}</div>
                 </div>
             </details>
             <details class="disclosure" id="item-information" data-disclosure-kind="section">

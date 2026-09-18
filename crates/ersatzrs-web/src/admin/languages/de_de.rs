@@ -470,6 +470,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BulkApplyNumbering => "Nummerierung anwenden",
         TextKey::BulkApplyChanges => "Änderungen anwenden",
         TextKey::BulkCancelPreview => "Vorschau abbrechen",
+        TextKey::ActiveFilter => "Aktiver Filter",
         TextKey::AddonWorkspaceLengthFilter => "Nach Medienlänge filtern",
         TextKey::AddonWorkspaceMinimumLength => "Mindestlänge",
         TextKey::AddonWorkspaceMaximumLength => "Höchstlänge",

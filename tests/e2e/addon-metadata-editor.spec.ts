@@ -1308,7 +1308,8 @@ WHERE "Id" = ${seed.secondItemId};
     await expect(page.getByText('Provider original')).toBeVisible();
     await expect(page.getByText('Provider refreshed')).toBeVisible();
     await nativeNavigate(page, () => page.locator(`button[formaction="/media/addon-lists/${seed.listId}"]`).click());
-    await page.locator('[name="category"]').selectOption('review');await workspaceSubmit(page,'filter');
+    // With JavaScript, picking a category applies the filter.
+    await nativeNavigate(page, async () => { await page.locator('[name="category"]').selectOption('review'); });
     const itemsTable=page.locator('.episode-editor');
     await expect(itemsTable).toContainText(seed.secondTitle);
     await expect(itemsTable.getByText(seed.firstTitle)).toHaveCount(0);

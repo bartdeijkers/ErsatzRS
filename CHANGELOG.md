@@ -39,6 +39,13 @@ release section when tagging a release.
   preview is reviewed inside the tools with "Apply numbering changes", which
   saves (and therefore publishes) exactly the values listed, and "Cancel
   preview", which restores your earlier unsaved edits.
+- The add-on list Items page shows the applied filter and search as chips with
+  one "Clear filters" button, and the pager gains First page, Last page and a
+  "Page X of Y" position. With JavaScript, picking a filter category or page
+  size with the mouse applies it straight away and keeps focus on that control;
+  keyboard changes still apply with Enter or the button. An item's page offers
+  Save item at the top as well as below the form, and a chosen local
+  replacement can be saved from the replacement panel itself.
 - Add-on list items are now stored as `{title}-{id}` files (for example
   `My Episode-dQw4w9WgXcQ.yml` with its `.nfo`, artwork, and subtitles), so
   episodes can be found by name on disk. Titles are reduced to characters that

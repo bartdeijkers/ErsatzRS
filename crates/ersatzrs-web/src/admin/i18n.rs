@@ -116,6 +116,7 @@ pub enum TextKey {
     BulkApplyNumbering,
     BulkApplyChanges,
     BulkCancelPreview,
+    ActiveFilter,
 
     AddonWorkspaceLengthFilter,
     AddonWorkspaceMinimumLength,
@@ -2093,6 +2094,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::BulkApplyNumbering,
     TextKey::BulkApplyChanges,
     TextKey::BulkCancelPreview,
+    TextKey::ActiveFilter,
     TextKey::AddonWorkspaceLengthFilter,
     TextKey::AddonWorkspaceMinimumLength,
     TextKey::AddonWorkspaceMaximumLength,

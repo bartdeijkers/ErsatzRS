@@ -131,6 +131,7 @@ pub(super) fn render(w: &Workspace) -> AnyView {
             // resting state; other notices still need their banner.
             {w.submission.notice.filter(|key| *key != TextKey::Saved).map(|key| view! { <p class="notice success" role="status">{tr(key)}</p> })}
             <script src="/public/workspace-draft-status.js" defer></script>
+            <script src="/public/workspace-auto-apply.js" defer></script>
 
             {detail::confirmation(w)}
             {w.submission.draft.option_undo.as_ref().map(|_|button("undo-options",TextKey::UndoLastChange,false))}
@@ -393,6 +394,7 @@ fn items(w: &Workspace) -> AnyView {
                 {input("query",TextKey::Search,d.query.clone(),"search")}
                 {button("filter",TextKey::Search,false)}
             </div>
+            {active_filter(w)}
             // A pending bulk proposal keeps the tools open so its review, with
             // Apply and Cancel, stays beside the panel that produced it.
             <details class="disclosure group-actions-disclosure bulk-tools" data-disclosure-kind="section" open=d.expanded_bulk || d.undo.is_some()>
@@ -420,8 +422,13 @@ fn items(w: &Workspace) -> AnyView {
             <footer class="pager"><span class="page-summary">{format!("{}–{} / {}",if rows.is_empty() {0} else {page*size+1},((page+1)*size).min(rows.len()),rows.len())}</span>
                 {select("page_size",TextKey::AddonWorkspacePageSize,d.page_size.to_string(),[10,25,50,100,0].into_iter().map(|n|(n.to_string(),if n==0 {tr(TextKey::All).to_owned()} else {n.to_string()})).collect())}
                 {button("page-size",TextKey::Apply,false)}
-                <button class="button secondary" form=FORM name="intent" value=format!("page:{}",page.saturating_sub(1)) disabled={page==0} formnovalidate>{tr(TextKey::PreviousPage)}</button>
-                <button class="button secondary" form=FORM name="intent" value=format!("page:{}",page+1) disabled={page+1>=pages} formnovalidate>{tr(TextKey::NextPage)}</button>
+                <div class="page-jump">
+                    <button class="button secondary" form=FORM name="intent" value="page:0" disabled={page==0} formnovalidate>{tr(TextKey::FirstPage)}</button>
+                    <button class="button secondary" form=FORM name="intent" value=format!("page:{}",page.saturating_sub(1)) disabled={page==0} formnovalidate>{tr(TextKey::PreviousPage)}</button>
+                    <span class="page-position">{crate::admin::i18n::page_of(u32::try_from(page+1).unwrap_or(u32::MAX),u32::try_from(pages).unwrap_or(u32::MAX))}</span>
+                    <button class="button secondary" form=FORM name="intent" value=format!("page:{}",page+1) disabled={page+1>=pages} formnovalidate>{tr(TextKey::NextPage)}</button>
+                    <button class="button secondary" form=FORM name="intent" value=format!("page:{}",pages-1) disabled={page+1>=pages} formnovalidate>{tr(TextKey::LastPage)}</button>
+                </div>
             </footer>
         </section>
     }.into_any()
@@ -516,6 +523,30 @@ fn liveness_select(name: &str, current: String) -> AnyView {
         .map(|(v, k)| (v.to_owned(), tr(k).to_owned()))
         .collect(),
     )
+}
+
+/// The applied filter, shown beside the filter controls with one action that
+/// clears it. Unapplied edits of the filter fields are not a filter yet.
+fn active_filter(w: &Workspace) -> Option<AnyView> {
+    let d = &w.submission.draft;
+    if d.category.is_empty() && d.query.is_empty() {
+        return None;
+    }
+    let category = (!d.category.is_empty())
+        .then(|| {
+            category_choices(w)
+                .into_iter()
+                .find(|(value, _)| *value == d.category)
+                .map(|(_, label)| view! { <span class="filter-chip">{label}</span> })
+        })
+        .flatten();
+    // Matching uses the query exactly as applied, so it is shown unchanged.
+    let query = (!d.query.is_empty()).then(
+        || view! { <span class="filter-chip">{format!("\u{201c}{}\u{201d}", d.query)}</span> },
+    );
+    Some(view! {
+        <div class="active-filter" data-testid="active-filter"><span>{tr(TextKey::ActiveFilter)}": "</span>{category}{query}{button("clear-filter",TextKey::ClearFilters,false)}</div>
+    }.into_any())
 }
 
 fn category_choices(w: &Workspace) -> Vec<(String, String)> {

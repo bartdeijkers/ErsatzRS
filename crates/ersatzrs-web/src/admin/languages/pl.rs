@@ -1193,6 +1193,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BulkApplyNumbering => "Zastosuj numerację",
         TextKey::BulkApplyChanges => "Zastosuj zmiany",
         TextKey::BulkCancelPreview => "Anuluj podgląd",
+        TextKey::ActiveFilter => "Aktywny filtr",
         TextKey::AddonWorkspaceLengthFilter => "Filtruj według długości",
         TextKey::AddonWorkspaceMinimumLength => "Minimalna długość",
         TextKey::AddonWorkspaceMaximumLength => "Maksymalna długość",

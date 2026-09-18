@@ -468,6 +468,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BulkApplyNumbering => "Applica numerazione",
         TextKey::BulkApplyChanges => "Applica modifiche",
         TextKey::BulkCancelPreview => "Annulla anteprima",
+        TextKey::ActiveFilter => "Filtro attivo",
         TextKey::AddonWorkspaceLengthFilter => "Filtra per durata",
         TextKey::AddonWorkspaceMinimumLength => "Durata minima",
         TextKey::AddonWorkspaceMaximumLength => "Durata massima",

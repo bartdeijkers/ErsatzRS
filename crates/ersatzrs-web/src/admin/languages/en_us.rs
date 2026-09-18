@@ -464,6 +464,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::BulkApplyNumbering => "Apply numbering changes",
         TextKey::BulkApplyChanges => "Apply changes",
         TextKey::BulkCancelPreview => "Cancel preview",
+        TextKey::ActiveFilter => "Active filter",
         TextKey::AddonWorkspaceLengthFilter => "Filter by media length",
         TextKey::AddonWorkspaceMinimumLength => "Minimum length",
         TextKey::AddonWorkspaceMaximumLength => "Maximum length",

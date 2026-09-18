@@ -66,7 +66,12 @@ test('long Dutch and German selected filters stay readable at 320 pixels', async
       await page.waitForFunction(() => (window as any).__ersatzrs_hydrated === true);
       const longestValue = await page.locator('[name="category"] option').evaluateAll(options =>
         (options.reduce((a, b) => (b.textContent?.length ?? 0) > (a.textContent?.length ?? 0) ? b : a) as HTMLOptionElement).value);
-      await page.locator('[name="category"]').selectOption(longestValue);
+      // Picking a category applies it; the reloaded page keeps the choice.
+      await Promise.all([
+        page.waitForEvent('framenavigated', f => f === page.mainFrame()),
+        page.locator('[name="category"]').selectOption(longestValue),
+      ]);
+      await page.waitForFunction(() => (window as any).__ersatzrs_hydrated === true);
       const selected = await page.locator('[name="category"] option:checked').textContent();
       await expect(page.locator('.selected-filter-label')).toHaveText(selected!);
       await expect(page.locator('.selected-filter-label')).toBeVisible();

@@ -38,8 +38,13 @@ episodes and Detect seasons panels; season detection uses its own first season
 and no longer reads the manual Count. A pending bulk proposal is reviewed
 inside the tools with one Apply action, which is Save changes for the Items
 task and therefore lists every value that save writes, and Cancel preview,
-which restores the draft from before the proposal. The frozen reference is not
-edited; these are recorded deviations from it.
+which restores the draft from before the proposal. Phase 4 adds an applied
+filter summary with Clear filters, First/Last page and a page position, a
+progressive-enhancement script that applies a pointer-picked filter category
+or page size through the same native submit buttons (keyboard changes wait for
+Enter or the button), a Save item action in the item navigation row and a
+real Save item action beside a chosen replacement. The frozen reference is not edited; these are recorded
+deviations from it.
 
 ## Context
 
