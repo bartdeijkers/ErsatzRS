@@ -89,6 +89,13 @@ pub(crate) async fn manual_refresh_in_tx(
     if pending {
         hold_in_tx(tx, list_id, Reason::ConcurrentChange).await?;
     }
+    // Only a manual refresh rechecks subtitles; earlier outcomes stop being reusable.
+    sqlx::query(r#"UPDATE "AddonMediaList" SET "SubtitleRecheckRequestedAt" = ? WHERE "Id" = ?"#)
+        .bind(encode_datetime(Utc::now()))
+        .bind(list_id)
+        .execute(&mut **tx)
+        .await
+        .repository()?;
     Ok(())
 }
 

@@ -96,6 +96,23 @@ until the necessary information is available. Publication admission remains an
 authoritative submission-time check. This changes neither provider pacing nor
 the SponsorBlock default and introduces no migration or workflow framework.
 
+## Addendum: Subtitle check reuse across saved revisions (2026-09-18)
+
+Native Windows dogfood showed every metadata-only save, such as renumbering
+episodes, re-running one provider subtitle check per available item (156 yt-dlp
+calls, about 15 minutes) with byte-identical input and an identical outcome. The
+maintainer approved reuse. Preparation stays exact-revision: each saved revision
+still owns its own completed subtitle receipt. Automatic admission records an
+earlier completed outcome as that receipt when the persisted operation input,
+including source, add-on package identity, tool version, options and requested
+languages, is identical and its subtitle artifacts still validate.
+
+Reuse is unbounded in time. Only a manual list refresh requests a recheck: it
+records `SubtitleRecheckRequestedAt`, and outcomes completed before that instant
+are no longer reused. Scheduled refreshes reuse outcomes; items new to the list
+have no earlier outcome and are always checked. Explicit manual admission of a
+subtitle task still asks the provider.
+
 ## Consequences
 
 Production has an objective reference but needs real draft retention, coherent

@@ -491,6 +491,22 @@ impl AddonMediaListItemJobQueue {
             sqlx::query(r#"UPDATE "AddonMediaListItemOperationJob" SET "State"=5,"CompletedAt"=?,"UpdatedAt"=? WHERE "Id"=?"#)
                 .bind(&time).bind(&time).bind(id).execute(&mut *tx).await.repository()?;
         }
+        if kind == ItemOperationKind::Subtitles && !retry_terminal {
+            if let Some(id) = adopt_subtitle_outcome(
+                &mut tx,
+                list_id,
+                item_id,
+                expected_revision,
+                &input,
+                &json,
+                &time,
+            )
+            .await?
+            {
+                tx.commit().await.repository()?;
+                return Ok(id);
+            }
+        }
         let id = sqlx::query(
             r#"
             INSERT INTO "AddonMediaListItemOperationJob" ("AddonMediaListId",
@@ -928,7 +944,15 @@ impl AddonMediaListItemJobQueue {
                 if stored != *subtitle_artifact_ids {
                     return Err(conflict());
                 }
-                validate_subtitle_artifacts(&mut tx, job, subtitle_artifact_ids, 1).await?;
+                validate_subtitle_artifacts(
+                    &mut tx,
+                    job.list_id,
+                    job.item_id,
+                    &job.input,
+                    subtitle_artifact_ids,
+                    1,
+                )
+                .await?;
                 (Some(*artifact_id), None)
             }
             ItemOperationCompletion::IntervalPlan { plan }
@@ -946,7 +970,15 @@ impl AddonMediaListItemJobQueue {
             ItemOperationCompletion::Subtitles { artifact_ids }
                 if job.kind == ItemOperationKind::Subtitles && artifact_ids.len() <= 2 =>
             {
-                validate_subtitle_artifacts(&mut tx, job, artifact_ids, 0).await?;
+                validate_subtitle_artifacts(
+                    &mut tx,
+                    job.list_id,
+                    job.item_id,
+                    &job.input,
+                    artifact_ids,
+                    0,
+                )
+                .await?;
                 (None, None)
             }
             ItemOperationCompletion::Failed(_) => (None, None),
@@ -1166,7 +1198,9 @@ async fn owned_claim(
 #[allow(clippy::too_many_lines)] // Verify saved identity, installation, liveness and exact timing together.
 async fn validate_subtitle_artifacts(
     tx: &mut sqlx::Transaction<'_, Db>,
-    job: &ClaimedItemOperation,
+    list_id: i64,
+    item_id: i64,
+    input: &ItemOperationInput,
     artifact_ids: &[i64],
     timeline: i32,
 ) -> Result<()> {
@@ -1183,9 +1217,9 @@ async fn validate_subtitle_artifacts(
             AND "CompletedAt" IS NOT NULL"#,
         )
         .bind(artifact_id)
-        .bind(job.list_id)
-        .bind(job.item_id)
-        .bind(&job.input.context_fingerprint)
+        .bind(list_id)
+        .bind(item_id)
+        .bind(&input.context_fingerprint)
         .bind(timeline)
         .fetch_optional(&mut **tx)
         .await
@@ -1194,19 +1228,87 @@ async fn validate_subtitle_artifacts(
         let primary = ersatzrs_addon_contract::subtitle_logical_language(&language)
             .map_err(|_| conflict())?;
         if !languages.insert(primary.clone())
-            || !job
-                .input
-                .requested_subtitle_languages
-                .iter()
-                .any(|requested| {
-                    ersatzrs_addon_contract::subtitle_logical_language(requested)
-                        .is_ok_and(|requested| requested == primary)
-                })
+            || !input.requested_subtitle_languages.iter().any(|requested| {
+                ersatzrs_addon_contract::subtitle_logical_language(requested)
+                    .is_ok_and(|requested| requested == primary)
+            })
         {
             return Err(conflict());
         }
     }
     Ok(())
+}
+
+/// Record an identical earlier automatic subtitle check as this revision's own
+/// completed receipt instead of asking the provider again.
+///
+/// Saving numbering or other metadata creates a new revision without changing
+/// what the provider reports. Any change to the persisted input (source, tool,
+/// add-on, options or languages) never matches, and a manual list refresh stops
+/// reuse of every outcome completed before it.
+async fn adopt_subtitle_outcome(
+    tx: &mut sqlx::Transaction<'_, Db>,
+    list_id: i64,
+    item_id: i64,
+    revision: i32,
+    input: &ItemOperationInput,
+    json: &str,
+    time: &str,
+) -> Result<Option<i64>> {
+    let outcome: Option<String> = sqlx::query_scalar(
+        r#"SELECT "job"."OutcomeJson"
+            FROM "AddonMediaListItemOperationJob" AS "job"
+            JOIN "AddonMediaList" AS "list" ON "list"."Id"="job"."AddonMediaListId"
+            WHERE "job"."AddonMediaListId"=? AND "job"."AddonMediaListItemId"=?
+              AND "job"."Kind"=? AND "job"."SavedDraftRevision"<? AND "job"."State"=2
+              AND "job"."ArtifactId" IS NULL AND "job"."OutcomeJson" IS NOT NULL
+              AND "job"."InputJson"=? AND "job"."ContextFingerprint"=?
+              AND "job"."CompletedAt">=COALESCE("list"."SubtitleRecheckRequestedAt",'')
+            ORDER BY "job"."Id" DESC LIMIT 1"#,
+    )
+    .bind(list_id)
+    .bind(item_id)
+    .bind(ItemOperationKind::Subtitles.code())
+    .bind(revision)
+    .bind(json)
+    .bind(&input.context_fingerprint)
+    .fetch_optional(&mut **tx)
+    .await
+    .repository()?;
+    let Some(outcome) = outcome else {
+        return Ok(None);
+    };
+    let Ok(ItemOperationCompletion::Subtitles { artifact_ids }) =
+        serde_json::from_str::<ItemOperationCompletion>(&outcome)
+    else {
+        return Ok(None);
+    };
+    match validate_subtitle_artifacts(tx, list_id, item_id, input, &artifact_ids, 0).await {
+        Ok(()) => {}
+        Err(RepositoryError::Conflict(_)) => return Ok(None),
+        Err(error) => return Err(error),
+    }
+    let id = sqlx::query(
+        r#"INSERT INTO "AddonMediaListItemOperationJob" ("AddonMediaListId",
+            "AddonMediaListItemId", "Kind", "SavedDraftRevision", "InputJson",
+            "ContextFingerprint", "State", "OutcomeJson", "CompletedAt", "CreatedAt", "UpdatedAt")
+            VALUES (?,?,?,?,?,?,2,?,?,?,?)"#,
+    )
+    .bind(list_id)
+    .bind(item_id)
+    .bind(ItemOperationKind::Subtitles.code())
+    .bind(revision)
+    .bind(json)
+    .bind(&input.context_fingerprint)
+    .bind(&outcome)
+    .bind(time)
+    .bind(time)
+    .bind(time)
+    .execute(&mut **tx)
+    .await
+    .repository()?
+    .last_insert_rowid();
+    Ok(Some(id))
 }
 
 #[allow(clippy::too_many_lines)] // Validate the complete saved job identity in one transaction.
@@ -1403,5 +1505,132 @@ mod subtitle_input_tests {
         assert!(validate_mode(ItemOperationKind::Subtitles, &input).is_err());
         input.requested_subtitle_languages.clear();
         assert!(validate_mode(ItemOperationKind::Subtitles, &input).is_err());
+    }
+}
+
+#[cfg(test)]
+mod subtitle_reuse_tests {
+    use super::*;
+
+    const ADDON: &str = "org.ersatzrs.addon.fixture";
+
+    async fn job(pool: &DbPool, id: i64) -> (i32, i32, Option<String>) {
+        let row = sqlx::query(
+            r#"SELECT "State", "SavedDraftRevision", "OutcomeJson"
+               FROM "AddonMediaListItemOperationJob" WHERE "Id"=?"#,
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        (
+            row.get("State"),
+            row.get("SavedDraftRevision"),
+            row.get("OutcomeJson"),
+        )
+    }
+
+    async fn set_revision(pool: &DbPool, revision: i32) {
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "DraftRevision"=? WHERE "Id"=1"#)
+            .bind(revision)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn identical_subtitle_checks_are_reused_until_a_manual_refresh() {
+        let directory = tempfile::tempdir().unwrap();
+        let pool = crate::db::init(&format!(
+            "sqlite:{}",
+            directory.path().join("jobs.db").display()
+        ))
+        .await
+        .unwrap();
+        sqlx::raw_sql(
+            r#"INSERT INTO "AddonInstallation" ("AddonId","Version","Enabled","PackageSha256","ContentSha256","ManifestJson","InstallPath","InstalledAt","UpdatedAt")
+               VALUES ('org.ersatzrs.addon.fixture','1',1,'package','content','{}','addons/fixture','2026-09-18T00:00:00Z','2026-09-18T00:00:00Z');
+               INSERT INTO "AddonMediaList" ("Id","AddonId","ProviderId","SourceUrl","Name")
+               VALUES (1,'org.ersatzrs.addon.fixture','list','https://example.test/list','Fixture');
+               INSERT INTO "AddonMediaListItem" ("Id","AddonMediaListId","ProviderId","DisplayTitle","Kind","Rank","Title","SourceUrl","ProviderLiveness")
+               VALUES (10,1,'item','Fixture',4,0,'Fixture','https://example.test/item',1);"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(r#"INSERT INTO "ConfigElement" ("Key","Value") VALUES (?,'eng')"#)
+            .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_PREFERRED_SUBTITLE_LANGUAGE_CODE)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut input = ItemOperationInput {
+            source_url: "https://example.test/item".into(),
+            provider_id: "item".into(),
+            context_fingerprint: String::new(),
+            schema: None,
+            definition: None,
+            options: None,
+            addon_id: Some(ADDON.into()),
+            preparation_v2: None,
+            package_identity: crate::addon_media_list_item_runtime::package_identity_for_parts(
+                ADDON, "1", "package", "content", "initial",
+            ),
+            tool_version: "1.0".into(),
+            item_is_finite: true,
+            max_video_height: None,
+            requested_timing: None,
+            requested_subtitle_languages: vec!["en".into()],
+        };
+        input.context_fingerprint = input.base_fingerprint().unwrap();
+        let queue = AddonMediaListItemJobQueue::new(pool.clone());
+        let now = Utc::now() - Duration::minutes(5);
+        let outcome = r#"{"Subtitles":{"artifact_ids":[]}}"#;
+
+        // Revision 0 checked subtitles and found none.
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItemOperationJob" ("AddonMediaListId","AddonMediaListItemId",
+                "Kind","SavedDraftRevision","InputJson","ContextFingerprint","State","OutcomeJson",
+                "CompletedAt","CreatedAt","UpdatedAt")
+               VALUES (1,10,?,0,?,?,2,?,?,?,?)"#,
+        )
+        .bind(ItemOperationKind::Subtitles.code())
+        .bind(serde_json::to_string(&input).unwrap())
+        .bind(&input.context_fingerprint)
+        .bind(outcome)
+        .bind(encode_datetime(now))
+        .bind(encode_datetime(now))
+        .bind(encode_datetime(now))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // A metadata-only save adopts that outcome as its own completed receipt.
+        set_revision(&pool, 1).await;
+        let adopted = queue
+            .enqueue_once(1, 10, 1, ItemOperationKind::Subtitles, input.clone(), now)
+            .await
+            .unwrap();
+        assert_eq!(job(&pool, adopted).await, (2, 1, Some(outcome.into())));
+
+        // Explicit manual admission still asks the provider again.
+        let manual = queue
+            .enqueue(1, 10, 1, ItemOperationKind::Subtitles, input.clone(), now)
+            .await
+            .unwrap();
+        assert_ne!(manual, adopted);
+        assert_eq!(job(&pool, manual).await.0, 0);
+
+        // A manual list refresh requests a recheck of every earlier outcome.
+        set_revision(&pool, 2).await;
+        let mut tx = crate::db::begin_write(&pool).await.unwrap();
+        crate::addon_media_list_auto_publication::manual_refresh_in_tx(&mut tx, 1)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        let rechecked = queue
+            .enqueue_once(1, 10, 2, ItemOperationKind::Subtitles, input, now)
+            .await
+            .unwrap();
+        assert_eq!(job(&pool, rechecked).await.0, 0);
     }
 }

@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Saving add-on list edits such as episode numbering no longer repeats the
+  provider subtitle check for every item. An identical earlier check is reused
+  until the next manual refresh of the list; scheduled refreshes reuse it too,
+  and newly imported items are always checked. Adds a database migration.
+
 ### Fixed
 
 - Finish add-on list publication when existing artwork is reused. A rescan
