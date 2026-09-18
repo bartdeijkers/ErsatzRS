@@ -913,3 +913,39 @@ resolved = false
 adr = '0094'
 description = 'AMM-P-01 replaces review gates with automatic publication, preserves source-removed local media, completes metadata transfer and repairs episode ContentRating. Acceptance and evidence are owned by AMM-P-01.'
 evidence = 'Automatic publication and metadata transfer are implemented. Windows v1.0.34-beta dogfood exposed optional thumbnail HTTP 404 rolling back publication. The correction passes Linux closeout, runtime smoke and exact-source CI 35118917930. AMM-P-01 records the independently verified Windows-only v1.0.35-beta archive; native Windows publication acceptance remains open.'
+
+[[debt]]
+id          = 'addon-access-next-attempt-after-completion'
+description = 'P1 (false UI information): the item access panel showed "Next attempt" with a past time for a completed, failed, cancelled or stale access check, announcing an attempt that never happens.'
+discovered  = '2026-09-18'
+resolved    = true
+evidence    = 'Windows dogfood item 638: completed job 866 (outcome accessible, evidence expired) still rendered "Next attempt: 2026-09-18T07:00:58Z" hours later because both access views rendered the retained NextEligibleAt regardless of state. Resolved 2026-09-18: access_next_attempt shows it only for Queued or Waiting checks, in the options panel and the item workspace; regression tests cover every finished state.'
+
+[[debt]]
+id          = 'health-unavailable-remote-stream-wording'
+description = 'P1 (false UI information): the Unavailable health check said add-on Remote Streams were unavailable because ErsatzTV cannot find them on disk, while their definitions exist and the provider reported them as not playable; projected TV episodes also counted every stream twice.'
+discovered  = '2026-09-18'
+resolved    = true
+evidence    = 'Windows dogfood reported 20 items for 10 age-restricted or removed videos whose .yml files were present. Resolved 2026-09-18: local and media-server items keep the ErsatzTV wording; Remote Stream backed items (including projected episodes) are counted once per stream with a provider-not-playable message. Regression test in health/checks/unavailable.rs.'
+
+[[debt]]
+id          = 'health-optional-item-artwork-severity'
+description = 'P2: the add-on list health check failed on remote item artwork that could not be downloaded, although publication treats that artwork as optional since 3fb60626.'
+discovered  = '2026-09-18'
+resolved    = true
+evidence    = 'Windows dogfood: 14 published items whose provider thumbnail (maxresdefault.webp) returns HTTP 404 turned the check into an error. Resolved 2026-09-18: unmaterialized remote item artwork is a warning naming the affected items; list-level artwork and uploads, which still block publication, remain failures. Regression test in health/checks/addon_media_list.rs.'
+
+[[debt]]
+id          = 'addon-ytdlp-needs-auth-despite-cookies'
+description = 'P1 (false UI information, official yt-dlp add-on): age-restricted videos stay Unavailable even with Browser cookies = Firefox, while Test access reports Accessible for the same item.'
+discovered  = '2026-09-18'
+resolved    = false
+adr         = '0094'
+evidence    = 'yt-dlp 2026.08.19 without cookies: "Sign in to confirm your age" for fLBn3RJUkQ8, XNY6HlDKLgk and 5jPtkjxU5jg; with --cookies-from-browser firefox extraction succeeds (age_limit=18) but still reports availability=needs_auth. The add-on maps needs_auth to unavailable in both flat discovery and cookie-enabled enrich (media-list-import.ts availability()), so the item cannot become available. Item 638 shows Unavailable while access job 867 completed Accessible. Correction belongs in the official add-ons repository: treat a successful cookie-enabled extraction with playable formats as available. eEKKVSjw6JY is genuinely removed ("Video unavailable").'
+
+[[debt]]
+id          = 'addon-ytdlp-missing-maxres-thumbnail'
+description = 'P2 (official yt-dlp add-on): the selected item thumbnail is maxresdefault.webp even when YouTube has no such size, so the item publishes without artwork.'
+discovered  = '2026-09-18'
+resolved    = false
+evidence    = 'Windows dogfood: 14 published Best of the Worst items; maxresdefault.webp returns HTTP 404 while hqdefault.jpg returns 200 for every sampled id. Correction belongs in the official add-ons repository: choose an existing thumbnail from the yt-dlp thumbnails list or fall back to a smaller size.'

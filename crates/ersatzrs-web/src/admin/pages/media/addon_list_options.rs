@@ -165,6 +165,20 @@ pub fn editor_view(editor: crate::admin::server_fns::addon_list_options::OptionE
     }.into_any()
 }
 
+/// A job keeps its last `next_eligible_at` after it finishes. Only a queued or
+/// waiting check still has an attempt ahead; showing that time for a
+/// completed, failed, cancelled or stale check would announce an attempt
+/// that never happens.
+#[cfg(feature = "ssr")]
+pub(crate) fn access_next_attempt(
+    status: &ersatzrs_app::ports::AddonItemAccessRead,
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    use ersatzrs_app::ports::AddonItemAccessState as State;
+    matches!(status.state, State::Queued | State::Waiting)
+        .then_some(status.next_eligible_at)
+        .flatten()
+}
+
 #[cfg(feature = "ssr")]
 pub(crate) fn access_state_key(state: ersatzrs_app::ports::AddonItemAccessState) -> TextKey {
     use ersatzrs_app::ports::AddonItemAccessState as State;
@@ -225,7 +239,7 @@ fn access_view(
     let job_id = status.as_ref().map_or(0, |status| status.job_id);
     let retry = status
         .as_ref()
-        .and_then(|status| status.next_eligible_at)
+        .and_then(access_next_attempt)
         .map(|time| time.to_rfc3339());
     let expires = status
         .as_ref()
@@ -538,6 +552,32 @@ mod tests {
             .next()
             .unwrap();
         assert!(!cancel_form.contains("hidden"));
+    }
+
+    #[test]
+    fn finished_access_checks_never_announce_a_next_attempt() {
+        use ersatzrs_app::ports::{AddonItemAccessRead, AddonItemAccessState as State};
+        let retained = chrono::DateTime::parse_from_rfc3339("2026-09-18T07:00:58Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        for state in [
+            State::Complete,
+            State::Failed,
+            State::Cancelled,
+            State::Stale,
+        ] {
+            let status = AddonItemAccessRead {
+                job_id: 866,
+                state,
+                outcome: None,
+                next_eligible_at: Some(retained),
+                expires_at: None,
+            };
+            let owner = Owner::new();
+            let html = owner.with(|| access_view(10, 638, 176, false, Ok(Some(status))).to_html());
+            assert!(!html.contains("2026-09-18T07:00:58"), "{state:?}");
+            assert!(!html.contains("Next attempt"), "{state:?}");
+        }
     }
 
     #[test]

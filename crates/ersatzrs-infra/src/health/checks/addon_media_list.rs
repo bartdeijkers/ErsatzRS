@@ -185,6 +185,7 @@ async fn addon_media_list_health_rows(pool: &Pool<Db>) -> Result<Vec<crate::db::
 struct ConfiguredListHealth {
     failures: Vec<String>,
     warnings: Vec<String>,
+    artwork_warning: Option<String>,
     import_failure_link: Option<String>,
     coordinator_activity: Vec<String>,
 }
@@ -219,16 +220,27 @@ impl ConfiguredListHealth {
         title: &'static str,
         lifecycle_foundation: LifecycleFoundationHealth,
     ) -> Option<HealthCheckResult> {
-        (!self.warnings.is_empty()).then(|| {
+        let brief = if self.warnings.is_empty() {
+            "Provider artwork could not be downloaded for some items"
+        } else {
+            "Review the affected add-on or choose another refresh cadence"
+        };
+        let warnings = self
+            .warnings
+            .iter()
+            .chain(&self.artwork_warning)
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        (!warnings.is_empty()).then(|| {
             HealthCheckResult::new(
                 title,
                 HealthCheckStatus::Warning,
                 format!(
                     "{}; {}",
-                    self.warnings.join("; "),
+                    warnings.join("; "),
                     lifecycle_foundation.summary()
                 ),
-                "Review the affected add-on or choose another refresh cadence",
+                brief,
             )
             .with_link("/media/addon-lists")
         })
@@ -302,7 +314,7 @@ async fn configured_list_health(
         .chain(coordinator_failures)
         .chain(lifecycle_foundation.failures())
         .chain(invalid_metadata)
-        .chain(missing_artwork)
+        .chain(missing_artwork.failures.iter().cloned())
         .chain(import_failures.into_iter().map(|(_, message)| message))
         .chain(detail_worker_failures)
         .chain(detail_wait_setting_failures)
@@ -311,6 +323,7 @@ async fn configured_list_health(
         .collect();
     Ok(ConfiguredListHealth {
         failures,
+        artwork_warning: missing_artwork.optional_warning(),
         warnings: cadence_warnings,
         import_failure_link,
         coordinator_activity,
@@ -1086,7 +1099,30 @@ async fn invalid_metadata(pool: &Pool<Db>) -> Result<Vec<String>> {
     Ok(failures)
 }
 
-async fn missing_artwork(pool: &Pool<Db>) -> Result<Vec<String>> {
+/// Selected artwork without a materialized file. List-level and uploaded
+/// artwork block publication, so they are failures. Remote item artwork is
+/// optional: publication continues without it when the provider image cannot
+/// be downloaded (for example a provider thumbnail size that does not exist).
+#[derive(Default)]
+struct MissingArtwork {
+    failures: Vec<String>,
+    optional: Vec<String>,
+    optional_total: usize,
+}
+
+impl MissingArtwork {
+    fn optional_warning(&self) -> Option<String> {
+        (self.optional_total > 0).then(|| {
+            format!(
+                "Provider artwork could not be downloaded for {} items, which are published without it: {}",
+                self.optional_total,
+                self.optional.join("; ")
+            )
+        })
+    }
+}
+
+async fn missing_artwork(pool: &Pool<Db>) -> Result<MissingArtwork> {
     use std::collections::HashSet;
 
     let materialized = sqlx::query(
@@ -1105,7 +1141,7 @@ async fn missing_artwork(pool: &Pool<Db>) -> Result<Vec<String>> {
         ))
     })
     .collect::<HashSet<_>>();
-    let mut failures = Vec::new();
+    let mut missing = MissingArtwork::default();
     for row in publication_metadata_rows(pool).await? {
         let list_id = row
             .try_get::<i64, _>("AddonMediaListId")
@@ -1129,25 +1165,44 @@ async fn missing_artwork(pool: &Pool<Db>) -> Result<Vec<String>> {
         let Ok(metadata) = merged_metadata(&provider, &overrides) else {
             continue;
         };
-        let mut roles = metadata
+        // Role -> whether its selected source is an operator upload.
+        let mut roles = std::collections::HashMap::new();
+        for candidate in metadata
             .artwork
             .iter()
             .filter(|candidate| !candidate.url.trim().is_empty())
-            .map(|candidate| artwork_role_value(candidate.role))
-            .collect::<HashSet<_>>();
-        if !metadata.artwork_urls.is_empty() {
-            roles.insert(artwork_role_value(
-                ersatzrs_core::repositories::AddonMediaListArtworkRole::Thumb,
-            ));
+        {
+            let uploaded = crate::addon_artwork::upload_id(&candidate.url).is_some();
+            *roles
+                .entry(artwork_role_value(candidate.role))
+                .or_insert(false) |= uploaded;
         }
-        for role in roles {
-            if !materialized.contains(&(list_id, scope_item_id, role)) {
-                failures.push(format!("{name}: selected artwork is not materialized"));
-                break;
+        if !metadata.artwork_urls.is_empty() {
+            roles
+                .entry(artwork_role_value(
+                    ersatzrs_core::repositories::AddonMediaListArtworkRole::Thumb,
+                ))
+                .or_insert(false);
+        }
+        let unmaterialized = roles
+            .into_iter()
+            .filter(|(role, _)| !materialized.contains(&(list_id, scope_item_id, *role)))
+            .collect::<Vec<_>>();
+        if unmaterialized.is_empty() {
+            continue;
+        }
+        if scope_item_id == 0 || unmaterialized.iter().any(|(_, uploaded)| *uploaded) {
+            missing
+                .failures
+                .push(format!("{name}: selected artwork is not materialized"));
+        } else {
+            missing.optional_total += 1;
+            if missing.optional.len() < 5 {
+                missing.optional.push(name);
             }
         }
     }
-    Ok(failures)
+    Ok(missing)
 }
 
 const fn artwork_role_value(role: ersatzrs_core::repositories::AddonMediaListArtworkRole) -> i64 {
@@ -3036,6 +3091,63 @@ mod tests {
         assert!(result
             .message
             .contains("selected artwork is not materialized"));
+    }
+
+    #[tokio::test]
+    async fn missing_remote_item_artwork_is_optional_but_uploads_still_fail() {
+        let pool = fixture_pool().await;
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaList" (
+                    "Id", "AddonId", "Name", "ReviewState", "ProviderMetadataJson"
+               ) VALUES (1, 'org.example.list', 'Fixture', 2, '{"title":"Fixture"}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("list");
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListItem" (
+                   "Id", "AddonMediaListId", "DisplayTitle", "Published", "ProviderMetadataJson"
+               ) VALUES (10, 1, 'Episode One', 1,
+                   '{"title":"Episode One","artwork":[{"url":"https://example.test/missing.webp","role":"thumb"}]}')"#,
+        )
+        .execute(&pool)
+        .await
+        .expect("item with provider artwork");
+
+        let result = AddonMediaListHealthCheck::new(pool.clone())
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Warning);
+        assert_eq!(
+            result.brief_message,
+            "Provider artwork could not be downloaded for some items"
+        );
+        assert!(result.message.contains(
+            "Provider artwork could not be downloaded for 1 items, which are published without it: Episode One"
+        ));
+
+        sqlx::query(
+            r#"UPDATE "AddonMediaListItem" SET "ProviderMetadataJson" = ? WHERE "Id" = 10"#,
+        )
+        .bind(
+            serde_json::json!({"title": "Episode One", "artwork": [{
+                "url": format!("{}7", crate::addon_artwork::UPLOAD_URL_PREFIX),
+                "role": "thumb"
+            }]})
+            .to_string(),
+        )
+        .execute(&pool)
+        .await
+        .expect("uploaded artwork");
+        let result = AddonMediaListHealthCheck::new(pool)
+            .check()
+            .await
+            .expect("health result");
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert!(result
+            .message
+            .contains("Episode One: selected artwork is not materialized"));
     }
 
     #[tokio::test]

@@ -250,7 +250,9 @@ fn access_controls(
     provisional: bool,
     compact: bool,
 ) -> AnyView {
-    use crate::admin::pages::media::addon_list_options::{access_outcome_key, access_state_key};
+    use crate::admin::pages::media::addon_list_options::{
+        access_next_attempt, access_outcome_key, access_state_key,
+    };
     use ersatzrs_app::ports::AddonItemAccessState;
     let failed = access.status.is_err();
     let status = access.status.as_ref().ok().and_then(|s| s.as_ref());
@@ -265,7 +267,7 @@ fn access_controls(
     view!{<section id="addon-item-access" class="settings-section" data-testid="addon-item-access"><h3>{tr(TextKey::AddonAccessTest)}</h3>
         <p>{tr(TextKey::AddonAccessHelp)}</p><p hidden={compact || !provisional}>{tr(TextKey::AddonAccessSaveFirst)}</p><p role="alert" hidden=!failed>{tr(TextKey::AddonAccessError)}</p>
         <p role="status">{tr(status.as_ref().map_or(TextKey::AddonAccessNotChecked,|s|access_state_key(s.state)))}{status.as_ref().and_then(|s|s.outcome).map(|outcome|format!(" · {}",tr(access_outcome_key(outcome))))}</p>
-        {status.as_ref().and_then(|s|s.next_eligible_at).map(|date|view!{<p>{tr(TextKey::AddonAccessNextAttempt)}" "{date.to_rfc3339()}</p>})}
+        {status.as_ref().and_then(|s|access_next_attempt(s)).map(|date|view!{<p>{tr(TextKey::AddonAccessNextAttempt)}" "{date.to_rfc3339()}</p>})}
         {status.as_ref().and_then(|s|s.expires_at).map(|date|view!{<p>{tr(TextKey::AddonAccessExpires)}" "{date.to_rfc3339()}</p>})}
         <input form=FORM type="hidden" name="access_item_id" value=access.item_id.to_string()/>
         <input form=FORM type="hidden" name="access_job_id" value=status.as_ref().map_or(0,|s|s.job_id).to_string()/>
@@ -299,4 +301,49 @@ fn access_target(w: &Workspace, provisional: bool) -> AnyView {
         {button("navigate",TextKey::Select,false)}
         {access_controls(&crate::admin::server_fns::addon_list_options::ItemAccessEditor {item_id:target,saved_revision:w.form.draft_revision,status},provisional,false)}
     </section>}.into_any()
+}
+
+#[cfg(test)]
+mod tests {
+    use ersatzrs_app::ports::{AddonItemAccessRead, AddonItemAccessState as State};
+    use leptos::prelude::*;
+
+    use super::access_controls;
+    use crate::admin::server_fns::addon_list_options::ItemAccessEditor;
+
+    fn rendered(state: State) -> String {
+        let retained = chrono::DateTime::parse_from_rfc3339("2026-09-18T07:00:58Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let access = ItemAccessEditor {
+            item_id: 638,
+            saved_revision: 176,
+            status: Ok(Some(AddonItemAccessRead {
+                job_id: 866,
+                state,
+                outcome: None,
+                next_eligible_at: Some(retained),
+                expires_at: None,
+            })),
+        };
+        Owner::new().with(|| access_controls(&access, false, false).to_html())
+    }
+
+    #[test]
+    fn next_attempt_is_shown_only_while_an_attempt_is_pending() {
+        for state in [
+            State::Complete,
+            State::Failed,
+            State::Cancelled,
+            State::Stale,
+        ] {
+            assert!(
+                !rendered(state).contains("2026-09-18T07:00:58"),
+                "{state:?}"
+            );
+        }
+        for state in [State::Queued, State::Waiting] {
+            assert!(rendered(state).contains("2026-09-18T07:00:58"), "{state:?}");
+        }
+    }
 }

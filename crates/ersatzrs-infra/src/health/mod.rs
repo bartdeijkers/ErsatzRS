@@ -331,18 +331,43 @@ async fn media_state_result(
     brief_template: &str,
     link: Option<&str>,
 ) -> Result<HealthCheckResult> {
-    let count =
-        sqlx::query_scalar::<_, i64>(r#"SELECT COUNT(*) FROM "MediaItem" WHERE "State" = ?"#)
-            .bind(state)
-            .fetch_one(pool)
-            .await
-            .map_err(sqlx_error)?;
-
+    let (count, items) = media_state_sample(pool, state, "").await?;
     if count == 0 {
         return Ok(HealthCheckResult::pass(title));
     }
 
-    let rows = sqlx::query(
+    let message = message_template
+        .replace("{count}", &count.to_string())
+        .replace("{items}", &items.join(", "));
+    let brief = brief_template.replace("{count}", &count.to_string());
+    let result = HealthCheckResult::new(title, HealthCheckStatus::Warning, message, brief);
+
+    Ok(if let Some(link) = link {
+        result.with_link(link)
+    } else {
+        result
+    })
+}
+
+/// Count media items in `state` and name up to five of them by path. The
+/// optional `predicate` is a static SQL condition over the `mi` alias.
+async fn media_state_sample(
+    pool: &Pool<Db>,
+    state: i32,
+    predicate: &'static str,
+) -> Result<(i64, Vec<String>)> {
+    let count = sqlx::query_scalar::<_, i64>(crate::db::assert_sql_safe(format!(
+        r#"SELECT COUNT(*) FROM "MediaItem" AS mi WHERE mi."State" = ? {predicate}"#
+    )))
+    .bind(state)
+    .fetch_one(pool)
+    .await
+    .map_err(sqlx_error)?;
+    if count == 0 {
+        return Ok((0, Vec::new()));
+    }
+
+    let rows = sqlx::query(crate::db::assert_sql_safe(format!(
         r#"SELECT mi."Id", mf."Path"
            FROM "MediaItem" mi
            LEFT JOIN "Movie" m ON m."Id" = mi."Id"
@@ -360,10 +385,10 @@ async fn media_state_result(
                 OR mv."ImageId" = i."Id"
                 OR mv."RemoteStreamId" = rs."Id"
            LEFT JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
-           WHERE mi."State" = ?
+           WHERE mi."State" = ? {predicate}
            ORDER BY mi."Id", mf."Id"
            LIMIT 5"#,
-    )
+    )))
     .bind(state)
     .fetch_all(pool)
     .await
@@ -383,18 +408,7 @@ async fn media_state_result(
                 })
         })
         .collect::<Vec<_>>();
-
-    let message = message_template
-        .replace("{count}", &count.to_string())
-        .replace("{items}", &items.join(", "));
-    let brief = brief_template.replace("{count}", &count.to_string());
-    let result = HealthCheckResult::new(title, HealthCheckStatus::Warning, message, brief);
-
-    Ok(if let Some(link) = link {
-        result.with_link(link)
-    } else {
-        result
-    })
+    Ok((count, items))
 }
 
 async fn missing_metadata_result(

@@ -34,6 +34,15 @@ release section when tagging a release.
 
 ### Fixed
 
+- The Unavailable health check no longer claims that add-on Remote Streams are
+  missing from disk. Streams the provider reports as not playable (for example
+  age-restricted videos) get their own message and are counted once, even when
+  they also appear as TV episodes.
+- A provider thumbnail that cannot be downloaded is now a health warning instead
+  of an error, because the item is still published without it. Missing list
+  artwork and uploaded artwork remain errors.
+- The item "Test access" panel no longer shows a past "Next attempt" time for a
+  check that has already finished.
 - Finish add-on list publication when existing artwork is reused. A rescan
   after the publication commit no longer re-stamps unchanged thumbnails with a
   newer revision, which made verification fail until recovery gave up with
