@@ -3364,11 +3364,45 @@ async fn record_artwork_materialization(
         return Ok(());
     };
     let role_value = artwork_role_value(role);
-    let updated = sqlx::query(
+    // An unchanged receipt keeps its revision: a scan after the publication
+    // commit reuses the same artwork and must not move it past the revision
+    // that convergence verification expects.
+    sqlx::query(
         r#"UPDATE "AddonMediaListArtworkMaterialization"
            SET "Source" = ?, "FileName" = ?, "Sha256" = ?, "PublishedRevision" = ?
-           WHERE "AddonMediaListId" = ? AND "ScopeItemId" = ? AND "Role" = ?"#,
+           WHERE "AddonMediaListId" = ? AND "ScopeItemId" = ? AND "Role" = ?
+             AND ("Source" <> ? OR "FileName" <> ? OR "Sha256" <> ?)"#,
     )
+    .bind(source)
+    .bind(&artwork.file)
+    .bind(&artwork.sha256)
+    .bind(revision.saturating_add(1))
+    .bind(list_id)
+    .bind(item_id)
+    .bind(role_value)
+    .bind(source)
+    .bind(&artwork.file)
+    .bind(&artwork.sha256)
+    .execute(pool)
+    .await
+    .map_err(|error| {
+        PlaylistError::Enumeration(format!("unable to update artwork publication: {error}"))
+    })?;
+    sqlx::query(
+        r#"INSERT INTO "AddonMediaListArtworkMaterialization" (
+               "AddonMediaListId", "AddonMediaListItemId", "ScopeItemId", "Role",
+               "Source", "FileName", "Sha256", "PublishedRevision"
+           )
+           SELECT ?, ?, ?, ?, ?, ?, ?, ?
+           WHERE NOT EXISTS (
+               SELECT 1 FROM "AddonMediaListArtworkMaterialization"
+               WHERE "AddonMediaListId" = ? AND "ScopeItemId" = ? AND "Role" = ?
+           )"#,
+    )
+    .bind(list_id)
+    .bind(item_id)
+    .bind(item_id)
+    .bind(role_value)
     .bind(source)
     .bind(&artwork.file)
     .bind(&artwork.sha256)
@@ -3379,29 +3413,8 @@ async fn record_artwork_materialization(
     .execute(pool)
     .await
     .map_err(|error| {
-        PlaylistError::Enumeration(format!("unable to update artwork publication: {error}"))
+        PlaylistError::Enumeration(format!("unable to record artwork publication: {error}"))
     })?;
-    if updated.rows_affected() == 0 {
-        sqlx::query(
-            r#"INSERT INTO "AddonMediaListArtworkMaterialization" (
-                   "AddonMediaListId", "AddonMediaListItemId", "ScopeItemId", "Role",
-                   "Source", "FileName", "Sha256", "PublishedRevision"
-               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(list_id)
-        .bind(item_id)
-        .bind(item_id)
-        .bind(role_value)
-        .bind(source)
-        .bind(&artwork.file)
-        .bind(&artwork.sha256)
-        .bind(revision.saturating_add(1))
-        .execute(pool)
-        .await
-        .map_err(|error| {
-            PlaylistError::Enumeration(format!("unable to record artwork publication: {error}"))
-        })?;
-    }
     Ok(())
 }
 
@@ -4858,6 +4871,80 @@ create_playlist: true
         std::fs::remove_file(temporary.path().join(&previous.file)).unwrap();
         assert!(sync(Some(&previous)).await.unwrap().is_none());
         missing.assert_calls_async(3).await;
+    }
+
+    #[tokio::test]
+    async fn reused_artwork_keeps_the_committed_publication_revision() {
+        use ersatzrs_core::repositories::AddonMediaListArtworkRole;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let package_root = temporary.path().join("addon-package");
+        std::fs::create_dir_all(&package_root).unwrap();
+        let pool = fixture_addon_pool(&package_root).await;
+        let manifest = temporary.path().join("list.playlist.yml");
+        for statement in [
+            r#"INSERT INTO "MediaSource" ("Id") VALUES (1)"#,
+            r#"INSERT INTO "Library" ("Id", "Name", "MediaKind", "MediaSourceId")
+               VALUES (1, 'Managed', 7, 1)"#,
+            r#"INSERT INTO "AddonMediaList" (
+                   "Id", "AddonId", "ProviderId", "SourceUrl", "Name", "ReviewState"
+               ) VALUES (1, 'org.ersatzrs.addon.fixture', 'fixture/list',
+                         'https://example.test/playlist', 'Managed', 1)"#,
+            r#"INSERT INTO "AddonMediaListItem" (
+                   "AddonMediaListId", "ProviderId", "DisplayTitle", "Kind", "Rank",
+                   "Title", "SourceUrl", "Published", "ProviderMetadataJson"
+               ) VALUES (1, 'one', 'One', 4, 0, 'One', 'https://example.test/one', 0, '{}')"#,
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        sqlx::query(
+            r#"INSERT INTO "AddonMediaListLibrary" (
+                   "AddonMediaListId", "LibraryId", "FolderName", "ManifestPath"
+               ) VALUES (1, 1, 'Managed', ?)"#,
+        )
+        .bind(manifest.to_string_lossy().as_ref())
+        .execute(&pool)
+        .await
+        .unwrap();
+        let revision = || async {
+            sqlx::query_scalar::<_, i32>(
+                r#"SELECT "PublishedRevision" FROM "AddonMediaListArtworkMaterialization""#,
+            )
+            .fetch_all(&pool)
+            .await
+            .unwrap()
+        };
+        let artwork = ManagedPlaylistArtwork {
+            url: "https://example.test/one.jpg".into(),
+            file: "one.jpg".into(),
+            sha256: hex_hash(b"image"),
+            operator_owned: false,
+        };
+        let role = AddonMediaListArtworkRole::Thumb;
+        reuse_managed_artwork_role(&pool, &manifest, "one", role, Some(&artwork))
+            .await
+            .unwrap();
+        assert_eq!(revision().await, [1]);
+
+        // The publication commit sets the list revision; the verification scan
+        // then reuses the same artwork and must leave its receipt untouched.
+        sqlx::query(r#"UPDATE "AddonMediaList" SET "PublishedRevision" = 1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        reuse_managed_artwork_role(&pool, &manifest, "one", role, Some(&artwork))
+            .await
+            .unwrap();
+        assert_eq!(revision().await, [1]);
+
+        let replaced = ManagedPlaylistArtwork {
+            sha256: hex_hash(b"new image"),
+            ..artwork
+        };
+        reuse_managed_artwork_role(&pool, &manifest, "one", role, Some(&replaced))
+            .await
+            .unwrap();
+        assert_eq!(revision().await, [2]);
     }
 
     #[tokio::test]

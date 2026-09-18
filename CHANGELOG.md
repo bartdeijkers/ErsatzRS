@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Finish add-on list publication when existing artwork is reused. A rescan
+  after the publication commit no longer re-stamps unchanged thumbnails with a
+  newer revision, which made verification fail until recovery gave up with
+  `publication_recovery_exhausted`.
+
 ## [1.0.35-beta] - 2026-09-16
 
 ### Fixed
