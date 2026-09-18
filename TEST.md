@@ -149,6 +149,13 @@ stabilisation. Apply them every time you wire interactive UI:
    `BlockEditorIsland`). The `Modal` and `DeleteDialog` primitives use `style:display`
    internally — never reintroduce `<Show>` in them.
    Reference: `crates/ersatzrs-web/src/admin/pages/libraries/mod.rs`.
+   A helper that returns different `.into_any()` views depending on a flag
+   broke hydration of both add-on list publication islands on every workspace
+   load (`preparation_view(readiness, only_attention)`, 2026-09-19); two
+   separate functions with concrete view types fixed it. The page flag
+   `__ersatzrs_hydrated` was already `true` when that mismatch was logged, so
+   seeded island specs must also watch console errors for a few seconds after
+   the flag (`tests/e2e/addon-list-publication-island.spec.ts`).
 3. **No prop-bearing islands across unresolved `Suspense` boundaries.** A
    wrapper may resolve data before rendering an island, or the island may own a
    `Resource::new_blocking` and seed its signals from `data.get_untracked()`.

@@ -141,17 +141,22 @@ cases pass 80/80 in Chromium and Firefox, with and without JavaScript. On the
 dogfood copy (list 10), picking Unnumbered applies it, keeps focus on the
 select and shows the chip; Clear filters returns to "Page 1 of 17".
 
-Open finding (not caused by phase 4, not yet fixed): on the dogfood copy, once
-preparation and the publication job are complete, both publication islands
-fail to hydrate (`publication.rs:386` on Items, `publication.rs:465` on
-Activity: "expected a marker node") and the WebAssembly module aborts. It
-reproduces with `workspace-auto-apply.js` blocked. The e2e suites only watch
-uncaught page errors, not console hydration errors, and their seeded lists do
-not reach this state. The lines predate today, but phases 1 and 2 changed this
-island, so the phase 1 "no hydration errors" evidence only covers the state
-measured then. Next action: reproduce with a seeded completed publication and
-a console-error assertion, then compare the client-side readiness with the
-server-rendered props.
+Publication-island hydration (fixed 2026-09-19): both publication islands
+aborted hydration on every workspace load ("expected a marker node", then a
+WebAssembly abort), reproduced on a freshly seeded list by the new
+`tests/e2e/addon-list-publication-island.spec.ts`, which watches console errors
+for a few seconds after `__ersatzrs_hydrated` (the page flag is set before the
+islands are traversed). Cause: phase 1 turned `preparation_view` into a helper
+returning two different `.into_any()` views selected by a flag. Fix: two
+functions with concrete view types (`preparation_line_view` for Items,
+`preparation_view` for Activity). Evidence: the new spec plus
+`addon-list-preparation-feedback`, `addon-walkthrough-fixes` and
+`addon-list-workspace` pass 94/94 in Chromium and Firefox; on the dogfood copy
+(list 10) Items and Activity log no hydration errors. During the investigation
+a manual test instance briefly ran a server binary rebuilt by clippy/nextest
+next to a cargo-leptos WebAssembly bundle, which produced a separate,
+artificial mismatch (erased client children against a typed server); manual
+instances must copy binary and site from the same `cargo leptos build`.
 
 ## Context and Purpose
 

@@ -309,23 +309,19 @@ fn watch_readiness(list_id: i64, readiness: RwSignal<AddonMediaListPublicationRe
     }
 }
 
-/// Preparation counters. `only_attention` limits them to unfinished or failed
-/// work (Items); Activity passes `false` to keep the complete history.
-fn preparation_view(
-    readiness: RwSignal<AddonMediaListPublicationReadiness>,
-    only_attention: bool,
-) -> impl IntoView {
-    use super::super::{elapsed_between, format_progress_timestamp};
-    if only_attention {
-        // Items continues the counts line; Activity & recovery owns the full
-        // counters.
-        return view! {
-            <span class="preparation-line" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0 || !preparation_needs_attention(r))>
-                {move || readiness.with(preparation_line)}
-            </span>
-        }
-        .into_any();
+/// Unfinished or failed preparation, continuing the Items counts line.
+/// Activity & recovery owns the full counters.
+fn preparation_line_view(readiness: RwSignal<AddonMediaListPublicationReadiness>) -> impl IntoView {
+    view! {
+        <span class="preparation-line" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0 || !preparation_needs_attention(r))>
+            {move || readiness.with(preparation_line)}
+        </span>
     }
+}
+
+/// Complete preparation counters for Activity & recovery.
+fn preparation_view(readiness: RwSignal<AddonMediaListPublicationReadiness>) -> impl IntoView {
+    use super::super::{elapsed_between, format_progress_timestamp};
     view! {
         <section class="settings-section" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0)>
             <h3>{tr(TextKey::PreparationTasks)}</h3>
@@ -343,7 +339,6 @@ fn preparation_view(
             </dl>
         </section>
     }
-    .into_any()
 }
 
 /// Preparation progress appended to the Items counts line: completed of
@@ -384,7 +379,7 @@ fn overview_view(
         <div class="publication-overview">
             <div class="publication-state">
                 <strong>{move || readiness.with(|r| tr(state_key(r)))}</strong>
-                <span>{move || readiness.with(counts_text)}{preparation_view(readiness, true)}</span>
+                <span>{move || readiness.with(counts_text)}{preparation_line_view(readiness)}</span>
             </div>
             <button
                 class="button primary"
@@ -448,7 +443,7 @@ pub fn PublicationRecoveryIsland(
 ) -> impl IntoView {
     let readiness = RwSignal::new(initial);
     watch_readiness(list_id, readiness);
-    view! { <PublicationRecovery readiness list_id only_attention=false/>{preparation_view(readiness, false)} }
+    view! { <PublicationRecovery readiness list_id only_attention=false/>{preparation_view(readiness)} }
 }
 
 /// Latest publication job with its recovery actions. With `only_attention`

@@ -59,6 +59,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- The add-on list publication status on Items and Activity & recovery is live
+  again: a hydration error on page load stopped it from updating in the
+  browser.
 - The Unavailable health check no longer claims that add-on Remote Streams are
   missing from disk. Streams the provider reports as not playable (for example
   age-restricted videos) get their own message and are counted once, even when
