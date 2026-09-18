@@ -4839,4 +4839,23 @@ required; the release remains a draft. Independent read-only Classic
 Refresh diagnosis found only future-day checkpoints after a media file whose
 container and saved version both report a 90-hour duration; no Reset or media
 file mutation was performed.
+Native Windows v1.0.35-beta dogfood then exhausted publication recovery at the
+verifying phase. The v1.0.35 artwork-reuse path re-recorded unchanged receipts
+on every scan with the list revision plus one, so the post-commit verification
+scan moved 152 of 153 receipts past the target revision. Unchanged receipts now
+keep their revision; the new regression fails on the old behavior. The
+workspace auto-detect numbered newest-first provider lists in reverse; it now
+orders by first-aired date. Focused scanner and web tests plus both crates'
+all-target Clippy pass. A locally built Windows binary with these changes plus
+a one-time correction of the stale receipt revisions (database backed up
+first) let the stuck publication converge, and a subsequent fresh automatic
+publication converged on its first attempt. Uncommitted; exact-source CI and a
+packaged Windows candidate remain required.
+The same dogfood proved each metadata-only save re-ran 156 identical provider
+subtitle checks (byte-identical input and outcome across three revisions). The
+maintainer approved reuse recorded in ADR 0091's 2026-09-18 addendum: automatic
+admission adopts an identical earlier outcome as the new revision's receipt
+until a manual refresh. A focused regression covers adoption, explicit manual
+admission and the manual-refresh recheck; infra all-target Clippy passes. Native
+Windows proof of the reuse build is pending.
 '''
