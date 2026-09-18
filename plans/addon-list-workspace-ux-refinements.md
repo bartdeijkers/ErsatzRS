@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed (2026-09-18). **Phases 1 and 2 implemented on 2026-09-18** at the
-maintainer's request; phases 3–4 remain proposed.
+Proposed (2026-09-18). **Phases 1, 2 and 3 implemented on 2026-09-18** at
+the maintainer's request; phase 4 remains proposed.
 
 Phase 1 delivered:
 
@@ -70,6 +70,43 @@ concurrency fence as List settings, and the fence is refreshed across List
 settings, list artwork and Items after each save. Evidence: new e2e case
 `renames the list from the Items heading` (no JS and hydrated), full spec
 52/52, and 4 rows remain visible at 1440×900.
+
+Phase 3 delivered (maintainer decisions of 2026-09-18 included):
+
+- The numbering tools are three bordered panels: **Items to change** (scope,
+  range start/end with Select and Clear selection, the length filter), **Number
+  episodes** (season, first episode, count, replace existing, season only,
+  Preview and Unnumbered) and **Detect seasons** (its own first season, gap
+  days, season per calendar year and the existing help). Inclusion and media
+  kind follow as their own panels; Provider options keeps its button.
+- Maintainer decision: season detection reads its own `detect_season` field
+  and no longer the manual Season or Count; the length filter is shared by
+  numbering and detection. Count now applies only to manual numbering and
+  Unnumbered, so media kind changes no longer use it either.
+- A pending bulk proposal is reviewed inside the tools, directly below the
+  numbering panels, and takes focus after the round trip. Maintainer decision:
+  **Apply** is Save changes for the Items task, so the table compares saved
+  values with everything that save writes (earlier unsaved row edits, a title
+  change, and a note for pending provider options). The button reads "Apply
+  numbering changes" when only numbering changes, otherwise "Apply changes",
+  and is disabled with an explanation when nothing would change. **Cancel
+  preview** restores the draft from before the proposal; the save bar no
+  longer repeats that Undo. Saved-review undo is unchanged.
+- Not done: rows below the review stay editable (the locked design shows a
+  read-only review); an edit made there after previewing is saved by Apply
+  too and is marked as an unsaved row.
+
+Evidence: on the dogfood database copy (list 10) at 1440×900 the panels render
+side by side with no horizontal overflow, a page-scope preview lists 10 rows
+with focus on the review and both actions visible, and Cancel restores the
+list; at 320 px the panels stack, nothing overflows and every bulk button is at
+least 44×44 px. New unit test
+`season_detection_uses_its_own_first_season_and_ignores_manual_count` and new
+e2e case `reviews bulk numbering beside its panels and applies or cancels it`
+(no JS and hydrated). `addon-list-workspace.spec.ts` (28 cases) plus the three bulk cases of
+`addon-metadata-editor.spec.ts` pass 62/62 in Chromium and Firefox; the other
+specs that drive the bulk tools (`addon-list-options`, `addon-walkthrough-fixes`,
+`addon-list-preparation-feedback`) pass 34/34.
 
 ## Context and Purpose
 

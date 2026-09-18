@@ -32,8 +32,14 @@ screen readers only). Phase 2 adds fixed S/E row
 symbols with localized accessible names, a visible unsaved-row marker, and a
 separate new-tab link beside the title; the title itself remains the
 draft-retaining submit button. The Items heading also edits the list title in
-place as an Items field under the list metadata fence. The frozen reference is not edited; these are
-recorded deviations from it.
+place as an Items field under the list metadata fence. Phase 3 splits the
+numbering tools into Items to change (scope, range, length filter), Number
+episodes and Detect seasons panels; season detection uses its own first season
+and no longer reads the manual Count. A pending bulk proposal is reviewed
+inside the tools with one Apply action, which is Save changes for the Items
+task and therefore lists every value that save writes, and Cancel preview,
+which restores the draft from before the proposal. The frozen reference is not
+edited; these are recorded deviations from it.
 
 ## Context
 

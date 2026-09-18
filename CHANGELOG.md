@@ -32,6 +32,13 @@ release section when tagging a release.
   inclusion changes, and offer an "open in a new tab" link beside each title.
 - The add-on list title can be edited directly in the Items heading and is
   saved with Save changes.
+- The add-on list bulk tools are split into three panels: Items to change
+  (scope, range and length filter), Number episodes and Detect seasons. Season
+  detection now has its own first season and ignores the manual numbering
+  Count, and media kind changes no longer use that Count either. A numbering
+  preview is reviewed inside the tools with "Apply numbering changes", which
+  saves (and therefore publishes) exactly the values listed, and "Cancel
+  preview", which restores your earlier unsaved edits.
 - Add-on list items are now stored as `{title}-{id}` files (for example
   `My Episode-dQw4w9WgXcQ.yml` with its `.nfo`, artwork, and subtitles), so
   episodes can be found by name on disk. Titles are reduced to characters that

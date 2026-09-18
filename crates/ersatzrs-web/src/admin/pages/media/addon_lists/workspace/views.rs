@@ -58,8 +58,7 @@ pub(super) fn render(w: &Workspace) -> AnyView {
                 "metadata_year" => TextKey::Year,
                 "chapter_input" => TextKey::UseChaptersAsMediaItems,
                 value
-                    if value == "season"
-                        || value == "bulk_season"
+                    if matches!(value, "season" | "bulk_season" | "detect_season")
                         || value.starts_with("season_") =>
                 {
                     TextKey::Season
@@ -394,31 +393,26 @@ fn items(w: &Workspace) -> AnyView {
                 {input("query",TextKey::Search,d.query.clone(),"search")}
                 {button("filter",TextKey::Search,false)}
             </div>
-            <details class="disclosure group-actions-disclosure bulk-tools" data-disclosure-kind="section" open=d.expanded_bulk>
+            // A pending bulk proposal keeps the tools open so its review, with
+            // Apply and Cancel, stays beside the panel that produced it.
+            <details class="disclosure group-actions-disclosure bulk-tools" data-disclosure-kind="section" open=d.expanded_bulk || d.undo.is_some()>
                 <summary><span class="disclosure-label">{tr(TextKey::AddonWorkspaceBulk)}</span><span class="disclosure-toggle" aria-hidden="true"></span></summary><div class="disclosure-body">
-                    <div class="action-row">{button("include-selected",TextKey::AddonWorkspaceIncludeSelected,false)}{button("exclude-selected",TextKey::AddonWorkspaceExcludeSelected,false)}</div>
-                    <p>{tr(TextKey::AddonWorkspaceInclusionHelp)}</p>
-                    {button("clear-selection",TextKey::ClearSelection,false)}<div class="bulk-task-grid"><section><h3>{tr(TextKey::NumberEpisodes)}</h3>
-                        {select("bulk_scope",TextKey::Scope,d.field("items","bulk_scope","selected"),vec![("selected".into(),tr(TextKey::AddonWorkspaceSelected).to_owned()),("page".into(),tr(TextKey::AddonWorkspacePage).to_owned()),("matching".into(),tr(TextKey::AddonWorkspaceMatching).to_owned()),("all".into(),tr(TextKey::All).to_owned())])}
-                        <div class="grid-3">{input("bulk_season",TextKey::Season,d.field("items","bulk_season","1"),"number")}{input("bulk_episode",TextKey::Episode,d.field("items","bulk_episode","1"),"number")}{input("bulk_count",TextKey::Count,d.field("items","bulk_count",""),"number")}</div>
-                        <div class="grid-2">{select("start_item",TextKey::RangeStart,d.field("items","start_item",""),std::iter::once((String::new(),tr(TextKey::FirstIncludedItem).into())).chain(rows.iter().map(|r|(r.id.to_string(),r.display_title.clone()))).collect())}{select("end_item",TextKey::RangeEnd,d.field("items","end_item",""),std::iter::once((String::new(),tr(TextKey::AllRemaining).into())).chain(rows.iter().map(|r|(r.id.to_string(),r.display_title.clone()))).collect())}</div>
-                        {button("select-range",TextKey::Select,false)}
-                        {checkbox("replace_existing",TextKey::ReplaceExistingEpisodeNumbers,d.field("items","replace_existing","false")=="true")}
-                        {checkbox("season_only",TextKey::AddonWorkspaceSeasonOnly,d.field("items","season_only","false") == "true")}
-                        <details class="length-filter"><summary>{tr(TextKey::AddonWorkspaceLengthFilter)}</summary><div class="length-fields">
-                            {input("minimum_length",TextKey::AddonWorkspaceMinimumLength,d.field("items","minimum_length",""),"text")}{input("maximum_length",TextKey::AddonWorkspaceMaximumLength,d.field("items","maximum_length",""),"text")}
-                        </div>{checkbox("include_unknown_length",TextKey::AddonWorkspaceUnknownLength,d.field("items","include_unknown_length","false")=="true")}<p>{tr(TextKey::AddonWorkspaceLengthHelp)}</p></details>
-                        {button("number",TextKey::Preview,false)}
-                        {input("gap_days",TextKey::MinimumSeasonGapDays,d.field("items","gap_days","90"),"number")}
-                        {checkbox("season_per_year",TextKey::AddonWorkspaceSeasonPerYear,d.field("items","season_per_year","false")=="true")}
-                        {button("auto-number",TextKey::AutoDetectSeasons,false)}{button("clear-numbering",TextKey::Unnumbered,false)}
-                    </section><section><h3>{tr(TextKey::MediaKind)}</h3>{kind_select("bulk_kind",d.field("items","bulk_kind","__unchanged"))}{liveness_select("bulk_liveness",d.field("items","bulk_liveness","__unchanged"))}{button("classify",TextKey::Preview,false)}</section></div>
-                    {button("bulk-options",TextKey::AddonOptions,false)}
+                    {bulk::numbering_panels(w,&rows)}
+                    {bulk::preview(w)}
+                    <div class="bulk-task-grid">
+                        <section class="bulk-panel" aria-labelledby="bulk-panel-inclusion"><h3 id="bulk-panel-inclusion">{tr(TextKey::IncludeInPublication)}</h3>
+                            <div class="action-row">{button("include-selected",TextKey::AddonWorkspaceIncludeSelected,false)}{button("exclude-selected",TextKey::AddonWorkspaceExcludeSelected,false)}</div>
+                            <p class="bulk-help">{tr(TextKey::AddonWorkspaceInclusionHelp)}</p>
+                        </section>
+                        <section class="bulk-panel" aria-labelledby="bulk-panel-kind"><h3 id="bulk-panel-kind">{tr(TextKey::MediaKind)}</h3>{kind_select("bulk_kind",d.field("items","bulk_kind","__unchanged"))}{liveness_select("bulk_liveness",d.field("items","bulk_liveness","__unchanged"))}<div class="action-row">{button("classify",TextKey::Preview,false)}</div></section>
+                    </div>
+                    <div class="action-row">{button("bulk-options",TextKey::AddonOptions,false)}</div>
                     {d.groups.get("items").and_then(|f|f.get("option_targets")).and_then(|v|crate::admin::server_fns::addon_list_options::parse_option_items(v).ok()).filter(|ids|!ids.is_empty()).map(|ids|view!{<section class="settings-section"><h3>{tr(TextKey::AddonOptions)}</h3><p>{crate::admin::i18n::selected_count(ids.len())}</p>{option_controls(w,ids)}</section>})}
                 </div>
             </details>
-            {bulk::preview(w)}
-            <div class="numbering-actions editor-savebar numbering-save-bar">{d.undo.as_ref().map(|_|button("undo",TextKey::UndoLastChange,false))}{d.saved_review_undo.as_ref().filter(|u|d.undo.is_none() && u.expected_revision==d.revision).map(|_|button("undo-saved-review",TextKey::UndoLastChange,false))}{save_button(w,TextKey::SaveChanges)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<span>{format!("{}: {} · {}: {}",tr(TextKey::AddonWorkspaceSelection),d.selected.len(),tr(TextKey::AddonWorkspaceOffPage),d.selected.len().saturating_sub(selected_here))}</span></div>
+            // Cancel preview inside the review replaces the bar's Undo for a
+            // pending bulk proposal.
+            <div class="numbering-actions editor-savebar numbering-save-bar">{d.saved_review_undo.as_ref().filter(|u|d.undo.is_none() && u.expected_revision==d.revision).map(|_|button("undo-saved-review",TextKey::UndoLastChange,false))}{save_button(w,TextKey::SaveChanges)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<span>{format!("{}: {} · {}: {}",tr(TextKey::AddonWorkspaceSelection),d.selected.len(),tr(TextKey::AddonWorkspaceOffPage),d.selected.len().saturating_sub(selected_here))}</span></div>
             <div class="episode-list"><div class="episode-column-head" aria-hidden="true"><span></span><span>{tr(TextKey::Name)}</span><span>{tr(TextKey::FirstAired)}</span><span>{tr(TextKey::Duration)}</span><span>{tr(TextKey::Season)}" / "{tr(TextKey::Episode)}</span><span></span></div>
                 <ol class="episode-rows">{visible.iter().map(|row| item_row(w,row)).collect_view()}</ol>
                 <p hidden=!rows.is_empty()>{tr(TextKey::NoItems)}</p>

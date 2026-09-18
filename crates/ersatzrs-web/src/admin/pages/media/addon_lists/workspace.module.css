@@ -4141,3 +4141,49 @@ border-color:var(--color-error);
 @media (max-width:520px) {
 :global(.addon-workspace) :global(.media-masthead) h1:global(.list-title-heading) { font-size:22px; }
 }
+
+/* Bulk tools (plans/addon-list-workspace-ux-refinements.md, phase 3): items to
+   change, manual numbering and season detection as separate panels, then the
+   review of a pending proposal with its own Apply and Cancel. */
+:global(.addon-workspace) :global(.bulk-task-grid) {
+display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr)); gap:var(--layout-gap); margin:0 0 var(--layout-gap);
+}
+:global(.addon-workspace) :global(.bulk-panel) {
+display:grid; align-content:start; gap:10px; padding:12px 14px;
+border:1px solid var(--color-table-line); border-radius:8px;
+}
+:global(.addon-workspace) :global(.bulk-panel) > h3 {
+margin:0; font-size:14px;
+}
+:global(.addon-workspace) :global(.bulk-panel) :is(:global(.field),:global(.grid-2),:global(.grid-3)) {
+margin:0;
+}
+/* Inputs share a baseline when one label wraps to two lines. */
+:global(.addon-workspace) :global(.bulk-panel) :is(:global(.grid-2),:global(.grid-3)) {
+align-items:end;
+}
+:global(.addon-workspace) :global(.bulk-help) {
+margin:0; font-size:12px; color:var(--color-text-secondary);
+}
+:global(.addon-workspace) :global(.bulk-preview) {
+margin:0 0 var(--layout-gap); padding:12px 14px;
+border:1px solid var(--color-table-line); border-left:3px solid var(--color-primary); border-radius:8px;
+}
+:global(.addon-workspace) :global(.bulk-preview) > h3 {
+margin:0 0 4px; font-size:14px;
+}
+:global(.addon-workspace) :global(.bulk-preview) > p {
+margin:0 0 10px;
+}
+:global(.addon-workspace) :global(.bulk-preview) > :global(.table-scroll)[hidden] {
+display:none;
+}
+:global(.addon-workspace) :global(.bulk-preview) > :global(.action-row) {
+margin-top:10px;
+}
+:global(.addon-workspace) :global(.bulk-preview):focus {
+outline:none;
+}
+:global(.addon-workspace) :global(.bulk-preview):focus-visible {
+outline:2px solid var(--color-primary); outline-offset:2px;
+}

@@ -62,6 +62,9 @@ pub struct Submission {
     /// Error carried into a fresh page load by a redirect, such as an add whose
     /// list was created but whose settings were not saved.
     pub arrival_error: Option<crate::admin::i18n::TextKey>,
+    /// This response produced a bulk proposal; its review takes focus so it is
+    /// in view after the round trip. Later round trips keep the review in place.
+    pub focus_bulk_preview: bool,
     pub replacement_searched: bool,
     pub replacement_results:
         Vec<crate::admin::server_fns::addon_media_lists::AddonMediaListReplacementRow>,

@@ -342,6 +342,51 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
       }
     });
 
+    test('reviews bulk numbering beside its panels and applies or cancels it',async({browser,baseURL},info)=>{
+      const seed=seedMetadataEditor(info);const context=await browser.newContext({baseURL,javaScriptEnabled});
+      await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+      try{
+      const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
+      await page.goto(`/media/addon-lists/${seed.listId}`);await settled(page);
+      await page.locator('.bulk-tools > summary').click();
+      // Three numbering panels, each holding only its own inputs.
+      const panels=page.locator('.bulk-numbering-panels > .bulk-panel');
+      await expect(panels.locator('h3')).toHaveText(['Items to change','Number episodes','Detect seasons']);
+      for(const name of ['bulk_scope','start_item','end_item','minimum_length'])await expect(panels.nth(0).locator(`[name="${name}"]`)).toHaveCount(1);
+      for(const name of ['bulk_season','bulk_episode','bulk_count'])await expect(panels.nth(1).locator(`[name="${name}"]`)).toHaveCount(1);
+      for(const name of ['detect_season','gap_days'])await expect(panels.nth(2).locator(`[name="${name}"]`)).toHaveCount(1);
+      const first=page.locator(`[name="season_${seed.firstItemId}"]`),second=page.locator(`[name="season_${seed.secondItemId}"]`);
+      const saved=()=>sqlite(`SELECT group_concat(COALESCE(json_extract("MetadataOverrideJson",'$.season'),'-') || ',' || COALESCE(json_extract("MetadataOverrideJson",'$.episode'),'-'),';') FROM (SELECT * FROM "AddonMediaListItem" WHERE "Id" IN (${seed.firstItemId},${seed.secondItemId}) ORDER BY "Id")`);
+      const before=saved();
+      // An unsaved row edit made before the proposal is part of what Apply saves.
+      await second.fill('5');await page.locator(`[name="episode_${seed.secondItemId}"]`).fill('5');
+      await page.locator('[name="bulk_scope"]').selectOption('all');
+      await submit(page,'number');
+      const review=page.getByTestId('bulk-preview');
+      await expect(review).toBeFocused();
+      await expect(review.locator('tbody tr')).toHaveCount(2);
+      await expect(review.locator('button[value="save"]')).toHaveText('Apply numbering changes');
+      await expect(page.locator('.numbering-save-bar button[value="undo"]')).toHaveCount(0);
+      // Cancel restores the draft from before the proposal and saves nothing.
+      await submit(page,'undo');
+      await expect(review).toHaveCount(0);
+      await expect(first).toHaveValue('');await expect(second).toHaveValue('5');
+      expect(saved()).toBe(before);
+      // Season detection starts from its own first season, not the manual one.
+      await page.locator('[name="detect_season"]').fill('3');
+      await submit(page,'auto-number');
+      await expect(review.locator('tbody')).toContainText('Season: 3');
+      await submit(page,'undo');
+      await expect(second).toHaveValue('5');
+      await submit(page,'number');
+      await Promise.all([page.waitForEvent('framenavigated',f=>f===page.mainFrame()),review.locator('button[value="save"]').click()]);
+      await settled(page);
+      await expect(page.locator('#workspace-errors')).toHaveCount(0);
+      await expect(review).toHaveCount(0);
+      expect(saved()).toBe('1,1;5,5');
+      }finally{await context.close();}
+    });
+
     test('retains invalid input and refuses a stale task without partial writes',async({browser,baseURL},info)=>{
       const seed=seedMetadataEditor(info);const context=await browser.newContext({baseURL,javaScriptEnabled});const page=await context.newPage(); if(javaScriptEnabled) hydratedPages.add(page);
       await page.goto(`/media/addon-lists/${seed.listId}/items/${seed.firstItemId}`);

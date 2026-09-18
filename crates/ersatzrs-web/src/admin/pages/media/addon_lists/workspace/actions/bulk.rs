@@ -121,7 +121,11 @@ fn preview(
     if end < start {
         return Err(TextKey::Range);
     }
-    let count = if field(fields, "bulk_count").is_empty() {
+    // Count belongs to the manual numbering panel; season detection and media
+    // kind changes cover the whole scope and range.
+    let count = if !matches!(intent, "number" | "clear-numbering")
+        || field(fields, "bulk_count").is_empty()
+    {
         eligible.len()
     } else {
         parse::<usize>(fields, "bulk_count")?
@@ -211,8 +215,11 @@ fn preview(
             occupied.insert((s, e));
         }
     }
-    let mut season = if matches!(intent, "number" | "auto-number") {
+    // Season detection has its own first season in its panel.
+    let mut season = if intent == "number" {
         parse::<i32>(fields, "bulk_season")?
+    } else if intent == "auto-number" {
+        parse::<i32>(fields, "detect_season")?
     } else {
         0
     };
@@ -430,6 +437,7 @@ mod tests {
             ("bulk_scope", "selected"),
             ("bulk_season", "1"),
             ("bulk_episode", "1"),
+            ("detect_season", "1"),
             ("replace_existing", "true"),
         ]
         .into_iter()
@@ -589,6 +597,44 @@ mod tests {
         assert_eq!(pair(2), ("2", "2"));
         assert_eq!(pair(3), ("2", "3"));
         assert_eq!(pair(1), ("3", "1"));
+    }
+    #[test]
+    fn season_detection_uses_its_own_first_season_and_ignores_manual_count() {
+        let d = Draft {
+            selected: BTreeSet::from([1, 2, 3]),
+            page_size: 10,
+            ..Default::default()
+        };
+        let rows = [(1, "2020-01-01"), (2, "2020-01-08"), (3, "2021-06-01")]
+            .into_iter()
+            .map(|(id, first_aired)| AddonMediaListItemRow {
+                first_aired: Some(first_aired.into()),
+                ..row(id, None, None)
+            })
+            .collect::<Vec<_>>();
+        let mut f = fields();
+        f.insert("bulk_season".into(), "7".into());
+        f.insert("bulk_count".into(), "1".into());
+        f.insert("detect_season".into(), "2".into());
+        f.insert("gap_days".into(), "90".into());
+        let result = preview(
+            &d,
+            &f,
+            "auto-number",
+            &rows,
+            AddonMediaListPresentationKind::TelevisionShow,
+            &AddonMediaListDraftDiffRow::default(),
+        )
+        .unwrap();
+        let pair = |id: i64| {
+            (
+                result[&format!("season_{id}")].as_str(),
+                result[&format!("episode_{id}")].as_str(),
+            )
+        };
+        assert_eq!(pair(1), ("2", "1"));
+        assert_eq!(pair(2), ("2", "2"));
+        assert_eq!(pair(3), ("3", "1"));
     }
     #[test]
     fn invalid_range_or_season_only_pair_returns_no_partial_preview() {

@@ -147,7 +147,7 @@ pub async fn post(State(state): State<AppState>, request: Request<Body>) -> Resp
                 if group.starts_with("item:") {
                     vec!["season".into(), "episode".into()]
                 } else {
-                    number_error_fields(&fields)
+                    number_error_fields(&fields, intent)
                 }
             }
             _ => Vec::new(),
@@ -429,6 +429,7 @@ async fn execute(
         "number" | "classify" | "auto-number" | "clear-numbering" | "include-selected"
         | "exclude-selected" => {
             preview_bulk(state, d, &fields, intent).await?;
+            submission.focus_bulk_preview = true;
         }
         "save" => {
             let (command, mut undo) = save_command(state, d, group, &fields).await?;
@@ -469,6 +470,7 @@ async fn execute(
                                     | "maximum_length"
                                     | "include_unknown_length"
                                     | "gap_days"
+                                    | "detect_season"
                                     | "season_per_year"
                                     | "option_targets"
                             )
@@ -655,6 +657,7 @@ async fn execute(
             let fields = d.groups.entry("items".into()).or_default();
             fields.insert(format!("season_{id}"), String::new());
             fields.insert(format!("episode_{id}"), String::new());
+            submission.focus_bulk_preview = true;
         }
         _ if intent.starts_with("range-start:") => {
             let id = intent[12..].parse::<i64>().map_err(|_| TextKey::Range)?;
@@ -1335,7 +1338,7 @@ async fn saved_review_undo(
     }))
 }
 
-fn number_error_fields(fields: &Fields) -> Vec<String> {
+fn number_error_fields(fields: &Fields, intent: &str) -> Vec<String> {
     let mut invalid = Vec::new();
     for key in fields.keys().filter(|k| {
         k.strip_prefix("season_")
@@ -1347,10 +1350,12 @@ fn number_error_fields(fields: &Fields) -> Vec<String> {
             invalid.extend([key.clone(), episode]);
         }
     }
-    if invalid.is_empty() {
-        vec!["bulk_season".into(), "bulk_episode".into()]
-    } else {
+    if !invalid.is_empty() {
         invalid
+    } else if intent == "auto-number" {
+        vec!["detect_season".into()]
+    } else {
+        vec!["bulk_season".into(), "bulk_episode".into()]
     }
 }
 
