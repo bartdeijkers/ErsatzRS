@@ -21,6 +21,12 @@ release section when tagging a release.
 
 ### Changed
 
+- Add-on list items are now stored as `{title}-{id}` files (for example
+  `My Episode-dQw4w9WgXcQ.yml` with its `.nfo`, artwork, and subtitles), so
+  episodes can be found by name on disk. Titles are reduced to characters that
+  are safe on Windows, macOS, and Linux. Existing `{id}` files are renamed once
+  on the next sync, keeping operator edits and scheduling history; after that a
+  file name no longer changes when the title does.
 - Saving add-on list edits such as episode numbering no longer repeats the
   provider subtitle check for every item. An identical earlier check is reused
   until the next manual refresh of the list; scheduled refreshes reuse it too,

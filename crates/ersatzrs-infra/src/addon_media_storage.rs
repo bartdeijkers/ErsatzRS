@@ -443,7 +443,7 @@ fn safe_folder_name(name: &str) -> String {
         if output.chars().count() == 80 {
             break;
         }
-        if character.is_alphanumeric() || matches!(character, ' ' | '-' | '_') {
+        if is_portable_name_character(character) {
             output.push(character);
             separator = false;
         } else if !separator {
@@ -464,7 +464,42 @@ fn safe_folder_name(name: &str) -> String {
     }
 }
 
-fn is_windows_reserved_name(name: &str) -> bool {
+/// Portable file-name stem for untrusted display text such as a provider
+/// title. Only Unicode letters/digits, spaces, `-` and `_` survive; every
+/// other run (path separators, `.`, Windows-reserved punctuation, control and
+/// format characters) becomes one `-`. The result is a single path component
+/// on every supported OS, trimmed of Windows-hostile leading/trailing dots
+/// and spaces, and truncated on a character boundary to `max_bytes`.
+#[must_use]
+pub fn portable_title_stem(title: &str, max_bytes: usize) -> Option<String> {
+    let mut output = String::with_capacity(title.len().min(max_bytes));
+    for character in title.chars() {
+        let mapped = if character.is_whitespace() {
+            ' '
+        } else if is_portable_name_character(character) {
+            character
+        } else {
+            '-'
+        };
+        if matches!(mapped, ' ' | '-') && output.ends_with(mapped) {
+            continue;
+        }
+        if output.len() + mapped.len_utf8() > max_bytes {
+            break;
+        }
+        output.push(mapped);
+    }
+    let output = output.trim_matches([' ', '.', '-', '_']);
+    (!output.is_empty()).then(|| output.to_owned())
+}
+
+fn is_portable_name_character(character: char) -> bool {
+    character.is_alphanumeric() || matches!(character, ' ' | '-' | '_')
+}
+
+/// Whether `name` is a Windows device name that cannot be used as a file stem.
+#[must_use]
+pub fn is_windows_reserved_name(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
         || upper
@@ -637,7 +672,7 @@ mod tests {
 
     use super::{
         ensure_list_library, ensure_media_source_in_transaction, is_windows_reserved_name,
-        safe_folder_name, validated_folder_name, EntityId, RepositoryError,
+        portable_title_stem, safe_folder_name, validated_folder_name, EntityId, RepositoryError,
     };
 
     #[test]
@@ -648,6 +683,38 @@ mod tests {
         );
         assert_eq!(safe_folder_name("CON"), "_CON");
         assert!(is_windows_reserved_name("lpt9"));
+    }
+
+    #[test]
+    fn title_stems_cannot_escape_or_break_a_file_name() {
+        for (title, expected) in [
+            ("Star Trek: TNG / Best?", Some("Star Trek- TNG - Best")),
+            ("../../etc/passwd", Some("etc-passwd")),
+            ("C:\\evil\\name", Some("C-evil-name")),
+            ("a<b>c|d*e\"f", Some("a-b-c-d-e-f")),
+            ("a\u{202E}gpj.exe", Some("a-gpj-exe")),
+            ("zero\u{200B}width", Some("zero-width")),
+            ("line\nbreak\u{1b}[31m", Some("line break-31m")),
+            ("  Trailing dots...  ", Some("Trailing dots")),
+            ("日本語 — タイトル", Some("日本語 - タイトル")),
+            ("Één aflevering", Some("Één aflevering")),
+            ("  ...  ", None),
+            ("???", None),
+        ] {
+            assert_eq!(
+                portable_title_stem(title, 200).as_deref(),
+                expected,
+                "{title:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn title_stems_truncate_on_character_boundaries() {
+        let stem = portable_title_stem(&"é".repeat(100), 51).expect("stem");
+        assert_eq!(stem, "é".repeat(25));
+        assert_eq!(portable_title_stem("abc def", 4).as_deref(), Some("abc"));
+        assert_eq!(portable_title_stem("abc", 0), None);
     }
 
     fn storage_manifest(addon_id: &str) -> (AddonManifest, AddonMediaListStorage) {

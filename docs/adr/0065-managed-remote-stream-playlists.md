@@ -103,8 +103,22 @@ URL.
 Playlist synchronization is serialized by the existing scan worker. It applies
 manifest defaults, explicit exclusions, title and duration filters, maximum
 item count, and selected ordering before writing files. The enumeration entry
-`id` is the stable identity and determines a filesystem-safe generated file
-name; ordinal position never determines identity. A versioned
+`id` is the stable identity; ordinal position never determines identity.
+Amended 2026-09-18: a generated definition is named `{title}-{id}.yml` so
+operators can find items by name, and its NFO, artwork, and subtitle files
+share that stem. Only Unicode letters and digits, spaces, `-`, and `_` from the
+untrusted title survive (every other run becomes `-`); the stem is bounded
+and portable to Windows, macOS, and Linux, and ids that are not already
+filesystem-safe are hashed. The name is fixed once chosen and does not follow
+later title changes. Because ids such as chapter fragments vary in length, a
+titled name that another entry owns (compared case-insensitively) or that an
+unrelated file occupies is never used; the entry falls back to a hash of its
+id. A pre-title `{id}.yml` entry is renamed once, with its derived files and
+its NFO ownership record, using the title recorded in the previous sidecar;
+the rename waits for an ordinary synchronization so publication builds and
+verification replays stay byte-stable against the sealed tree. A
+host-generated definition for the same provider item left by an interrupted
+synchronization is adopted instead of duplicated. A versioned
 `.ersatzrs-playlist.json`
 sidecar records manifest and ordered-playlist hashes, timestamps, last outcome,
 entry order, managed file names, validated effective liveness, exclusions, and

@@ -5985,7 +5985,7 @@ create_playlist: true
         seed_managed_remote_stream_playlist(&pool, &library_root, &package_root).await;
         let managed_folder = library_root.join("Fixture");
         std::fs::create_dir_all(&managed_folder).expect("managed folder");
-        let blocked_nfo = managed_folder.join("one.nfo");
+        let blocked_nfo = managed_folder.join("OldMatch-one.nfo");
         std::fs::create_dir(&blocked_nfo).expect("NFO publication blocker");
 
         let failed = super::scan_local_library(
@@ -6014,7 +6014,7 @@ create_playlist: true
         assert!(failed_resolution
             .get::<Option<String>, _>("Diagnostic")
             .is_some());
-        assert!(!managed_folder.join("one.yml").is_file());
+        assert!(!managed_folder.join("OldMatch-one.yml").is_file());
 
         std::fs::remove_dir(&blocked_nfo).expect("remove NFO publication blocker");
         let replayed = super::scan_local_library(
@@ -6027,7 +6027,7 @@ create_playlist: true
         .await
         .expect("restart replay");
         assert_eq!(replayed.failed_files, 0, "issues: {:?}", replayed.issues);
-        assert!(managed_folder.join("one.yml").is_file());
+        assert!(managed_folder.join("OldMatch-one.yml").is_file());
         assert!(blocked_nfo.is_file());
         let replayed_resolution = sqlx::query(
             r#"SELECT "Generation", "State", "Reason", "Diagnostic"
@@ -6150,7 +6150,7 @@ create_playlist: true
             baseline_sidecar,
             "the ownership sidecar must not move at the database boundary"
         );
-        assert!(managed_folder.join("two.yml").is_file());
+        assert!(managed_folder.join("Second-two.yml").is_file());
         let committed_playlist_items: i64 =
             sqlx::query_scalar(r#"SELECT COUNT(*) FROM "PlaylistItem" WHERE "PlaylistId" = ?"#)
                 .bind(playlist_id)
@@ -6283,7 +6283,7 @@ create_playlist: true
             .await
             .expect("initial scan");
         assert_eq!(first.failed_files, 0, "{:?}", first.issues);
-        let removed = library_root.join("Fixture/two.yml");
+        let removed = library_root.join("Fixture/Second-two.yml");
         assert!(removed.is_file());
         pool.execute(
             r#"UPDATE "AddonMediaListItem" SET "Published"=0
@@ -6317,7 +6317,7 @@ create_playlist: true
 
         // A failed manifest confers no handled-path exemption on its definitions.
         std::fs::write(library_root.join("Fixture.playlist.yml"), b"[").expect("invalid manifest");
-        std::fs::write(library_root.join("Fixture/one.yml"), b"[")
+        std::fs::write(library_root.join("Fixture/OldMatch-one.yml"), b"[")
             .expect("invalid previously managed definition");
         let failed = super::scan_local_library(&pool, &config)
             .await
@@ -6357,7 +6357,7 @@ create_playlist: true
             .await
             .expect("finish staged publication");
 
-        let nfo_path = library_root.join("Fixture").join("one.nfo");
+        let nfo_path = library_root.join("Fixture").join("OldMatch-one.nfo");
         let old_nfo = std::fs::read_to_string(&nfo_path).expect("generated NFO");
         let new_nfo = old_nfo.replace("<title>OldMatch</title>", "<title>NewMatch</title>");
         assert_ne!(new_nfo, old_nfo);
@@ -7543,7 +7543,7 @@ defaults:
             .await
             .expect("persisted content kind");
             assert_eq!(persisted_kind, expected_kind);
-            let nfo = std::fs::read_to_string(library_root.join("Fixture").join("first.nfo"))
+            let nfo = std::fs::read_to_string(library_root.join("Fixture").join("First-first.nfo"))
                 .expect("generated NFO");
             assert!(nfo.contains(&format!("<{expected_root} ")));
         }

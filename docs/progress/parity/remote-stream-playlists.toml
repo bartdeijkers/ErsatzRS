@@ -61,6 +61,8 @@ and durable intents survive restart. A marker spans generated-file mutation,
 database commit, and sidecar publication. SQLite and MySQL host-path proofs
 preserve shuffled Classic continuity and unrelated state; aggregate health
 reports stale or failed work.
+
+Managed files use a portable, fixed `{title}-{id}` stem (ADR 0065).
 '''
 
 [[debt]]
