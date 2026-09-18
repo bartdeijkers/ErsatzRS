@@ -202,6 +202,30 @@ fn counts_text(readiness: &AddonMediaListPublicationReadiness) -> String {
     text
 }
 
+/// Whether preparation counters describe work the operator may need to watch.
+/// Finished history stays on Activity & recovery instead of pushing the item
+/// list below the fold on Items.
+fn preparation_needs_attention(readiness: &AddonMediaListPublicationReadiness) -> bool {
+    let p = &readiness.preparation;
+    publication_preparation_active(readiness)
+        || p.queued_tasks > 0
+        || p.running_tasks > 0
+        || p.waiting_tasks > 0
+        || p.unqueued_tasks > 0
+        || p.failed_tasks > 0
+}
+
+/// Whether the latest publication job still needs to be shown on Items: it is
+/// in flight, stopped without completing, or completed only by restoring the
+/// previous revision after a failure.
+fn publication_needs_attention(readiness: &AddonMediaListPublicationReadiness) -> bool {
+    use ersatzrs_domain::AddonMediaListPublicationState;
+    readiness.publication.as_ref().is_some_and(|p| {
+        p.state != AddonMediaListPublicationState::Complete
+            || p.outcome == Some(AddonMediaListPublicationOutcome::RestoredAfterFailure)
+    })
+}
+
 /// Failed count shown in the preparation failure notice.
 fn failed_count_text(readiness: &AddonMediaListPublicationReadiness) -> String {
     format!(
@@ -285,10 +309,15 @@ fn watch_readiness(list_id: i64, readiness: RwSignal<AddonMediaListPublicationRe
     }
 }
 
-fn preparation_view(readiness: RwSignal<AddonMediaListPublicationReadiness>) -> impl IntoView {
+/// Preparation counters. `only_attention` limits them to unfinished or failed
+/// work (Items); Activity passes `false` to keep the complete history.
+fn preparation_view(
+    readiness: RwSignal<AddonMediaListPublicationReadiness>,
+    only_attention: bool,
+) -> impl IntoView {
     use super::super::{elapsed_between, format_progress_timestamp};
     view! {
-        <section class="settings-section" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0)>
+        <section class="settings-section" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0 || (only_attention && !preparation_needs_attention(r)))>
             <h3>{tr(TextKey::PreparationTasks)}</h3>
             <dl class="facts">
                 {[(TextKey::PreparationAffectedItems,0),(TextKey::PreparationIntervals,1),(TextKey::PreparationDownloads,2),(TextKey::PreparationSubtitles,3),(TextKey::PreparationQueued,4),(TextKey::PreparationRunning,5),(TextKey::PreparationWaiting,6),(TextKey::Completed,7),(TextKey::Failed,8),(TextKey::PreparationNotQueued,9)].into_iter().map(|(key,index)| view! {
@@ -311,7 +340,7 @@ fn overview_view(
     readiness: RwSignal<AddonMediaListPublicationReadiness>,
 ) -> impl IntoView {
     view! {
-        {preparation_view(readiness)}
+        {preparation_view(readiness, true)}
         <div class="publication-overview">
             <div class="publication-state">
                 <strong>{move || readiness.with(|r| tr(state_key(r)))}</strong>
@@ -329,7 +358,7 @@ fn overview_view(
                 {move || readiness.with(|r| tr(action_key(r)))}
             </button>
         </div>
-        <PublicationRecovery readiness list_id/>
+        <PublicationRecovery readiness list_id only_attention=true/>
         <div
             class="notice error"
             data-testid="addon-preparation-failed"
@@ -379,17 +408,20 @@ pub fn PublicationRecoveryIsland(
 ) -> impl IntoView {
     let readiness = RwSignal::new(initial);
     watch_readiness(list_id, readiness);
-    view! { <PublicationRecovery readiness list_id/>{preparation_view(readiness)} }
+    view! { <PublicationRecovery readiness list_id only_attention=false/>{preparation_view(readiness, false)} }
 }
 
+/// Latest publication job with its recovery actions. With `only_attention`
+/// (Items) a successfully completed job is hidden; Activity always shows it.
 #[component]
 fn PublicationRecovery(
     readiness: RwSignal<AddonMediaListPublicationReadiness>,
     list_id: i64,
+    only_attention: bool,
 ) -> impl IntoView {
     use super::super::publication_phase_text_key;
     view! {
-        <section class=move || readiness.with(|r| if r.publication.as_ref().is_some_and(|p| p.outcome == Some(AddonMediaListPublicationOutcome::RestoredAfterFailure)) {"notice error"} else {"notice"}) hidden=move || readiness.with(|r| r.publication.is_none()) data-testid="addon-publication-recovery">
+        <section class=move || readiness.with(|r| if r.publication.as_ref().is_some_and(|p| p.outcome == Some(AddonMediaListPublicationOutcome::RestoredAfterFailure)) {"notice error"} else {"notice"}) hidden=move || readiness.with(|r| r.publication.is_none() || (only_attention && !publication_needs_attention(r))) data-testid="addon-publication-recovery">
             <strong>{move || readiness.with(|r| r.publication.as_ref().map(|p| tr(if p.outcome == Some(AddonMediaListPublicationOutcome::RestoredAfterFailure) {TextKey::AddonWorkspacePublicationFailed} else {publication_state_text_key(p.state)})))}</strong>
             <p>{move || readiness.with(|r| r.publication.as_ref().map(|p| tr(if p.outcome == Some(AddonMediaListPublicationOutcome::RestoredAfterFailure) {TextKey::AddonWorkspacePublicationRestoredHelp} else {publication_phase_text_key(p.phase)})))}</p>
             <p hidden=move || readiness.with(|r| !r.publication.as_ref().is_some_and(|p| p.outcome == Some(AddonMediaListPublicationOutcome::RestoredAfterFailure) && p.diagnostic_code.as_deref() == Some("parent_nfo_preservation_required")))>{tr(TextKey::AddonWorkspaceParentMetadataPreserved)}</p>
@@ -452,6 +484,73 @@ mod tests {
             !restored_failure(&r),
             "retained original diagnostics do not override a successful retry"
         );
+    }
+
+    #[test]
+    fn items_hide_finished_history_but_keep_work_that_needs_attention() {
+        use super::super::super::{
+            AddonMediaListPublicationPhase, AddonMediaListPublicationState,
+            AddonMediaListPublicationStatus,
+        };
+        let mut r = AddonMediaListPublicationReadiness::default();
+        r.preparation.affected_items = 156;
+        r.preparation.subtitle_tasks = 156;
+        r.preparation.completed_tasks = 156;
+        assert!(
+            !preparation_needs_attention(&r),
+            "finished preparation is Activity history"
+        );
+        for pending in [
+            |r: &mut AddonMediaListPublicationReadiness| r.preparation.queued_tasks = 1,
+            |r: &mut AddonMediaListPublicationReadiness| r.preparation.running_tasks = 1,
+            |r: &mut AddonMediaListPublicationReadiness| r.preparation.waiting_tasks = 1,
+            |r: &mut AddonMediaListPublicationReadiness| r.preparation.unqueued_tasks = 1,
+            |r: &mut AddonMediaListPublicationReadiness| r.preparation.failed_tasks = 1,
+            |r: &mut AddonMediaListPublicationReadiness| r.required_prepared_media_pending = 1,
+        ] {
+            let mut attention = r.clone();
+            pending(&mut attention);
+            assert!(preparation_needs_attention(&attention));
+        }
+
+        let job = |state, outcome| AddonMediaListPublicationStatus {
+            job_id: 1,
+            operation_id: 1,
+            generation: 1,
+            saved_revision: 4,
+            target_published_revision: 1,
+            phase: AddonMediaListPublicationPhase::Complete,
+            state,
+            outcome,
+            attempt_count: 1,
+            last_progress_at: String::new(),
+            diagnostic_code: None,
+            recovery_diagnostic_present: false,
+            can_retry: false,
+            can_restore: true,
+        };
+        assert!(!publication_needs_attention(&r));
+        r.publication = Some(job(
+            AddonMediaListPublicationState::Complete,
+            Some(AddonMediaListPublicationOutcome::Published),
+        ));
+        assert!(
+            !publication_needs_attention(&r),
+            "a successful job is history"
+        );
+        for (state, outcome) in [
+            (AddonMediaListPublicationState::Queued, None),
+            (AddonMediaListPublicationState::Publishing, None),
+            (AddonMediaListPublicationState::Failed, None),
+            (AddonMediaListPublicationState::Expired, None),
+            (
+                AddonMediaListPublicationState::Complete,
+                Some(AddonMediaListPublicationOutcome::RestoredAfterFailure),
+            ),
+        ] {
+            r.publication = Some(job(state, outcome));
+            assert!(publication_needs_attention(&r), "{state:?} {outcome:?}");
+        }
     }
 
     #[test]

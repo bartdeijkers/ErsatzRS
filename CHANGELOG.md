@@ -21,6 +21,11 @@ release section when tagging a release.
 
 ### Changed
 
+- The add-on list Items page starts with its items: the publication state now
+  sits beside the list title, and finished preparation counters and completed
+  publication jobs are shown only under Activity & recovery. Work that is still
+  running or failed stays visible. The saved/unsaved status moved into each
+  page's save bar.
 - Add-on list items are now stored as `{title}-{id}` files (for example
   `My Episode-dQw4w9WgXcQ.yml` with its `.nfo`, artwork, and subtitles), so
   episodes can be found by name on disk. Titles are reduced to characters that

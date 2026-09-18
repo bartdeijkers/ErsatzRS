@@ -4041,3 +4041,48 @@ display:none;
 @media (max-width: 48rem) {
     :global(.addon-workspace .selected-filter-label) { display:block; white-space:normal; overflow-wrap:anywhere; }
 }
+
+/* Items heading: publication state lives beside the title so the item list
+   starts above the fold (plans/addon-list-workspace-ux-refinements.md, phase 1). */
+:global(.addon-workspace) :global(.media-masthead) {
+align-items:flex-start; flex-wrap:nowrap; margin-bottom:10px;
+}
+:global(.addon-workspace) :global(.media-masthead) :global(.masthead-body) {
+flex:1 1 auto; min-width:0; display:grid; gap:6px;
+}
+:global(.addon-workspace) :global(.publication-fieldset) {
+border:0; margin:0; padding:0; min-width:0;
+}
+:global(.addon-workspace) :global(.media-masthead) :global(.publication-summary) {
+padding:0; border-bottom:0;
+}
+:global(.addon-workspace) :global(.media-masthead) :global(.publication-summary) > :global(.quiet-details) {
+margin:2px 0 0; border:0; background:transparent; box-shadow:none;
+}
+/* Readiness facts are secondary: a compact inline disclosure, not a full-width bar. */
+:global(.addon-workspace) :global(.media-masthead) :global(.publication-summary) > :global(.quiet-details) > summary {
+display:inline-flex; align-items:center; gap:6px; width:auto; min-height:24px; padding:0;
+border:0; background:transparent; font-size:12px; color:var(--color-text-secondary);
+}
+:global(.addon-workspace) :global(.media-masthead) :global(.publication-summary) > :global(.quiet-details) > :global(.disclosure-body) {
+padding:6px 0 0;
+}
+/* Draft status sits beside the task's Save action instead of floating under the heading. */
+:global(.addon-workspace) :global(.save-status) {
+display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:2px 10px;
+border:1px solid var(--color-border); border-radius:999px; font-size:12px;
+color:var(--color-text-secondary); white-space:nowrap;
+}
+:global(.addon-workspace) :global(.save-status)::before {
+content:"\2713"; font-weight:700; color:var(--color-success);
+}
+:global(.addon-workspace) :global(.save-status)[data-dirty="true"] {
+border-color:var(--color-warning); color:var(--color-text-primary);
+}
+:global(.addon-workspace) :global(.save-status)[data-dirty="true"]::before {
+content:"\25CF"; color:var(--color-warning);
+}
+@media (max-width:520px) {
+:global(.addon-workspace) :global(.media-masthead) { flex-wrap:wrap; }
+:global(.addon-workspace) :global(.save-status) { white-space:normal; }
+}

@@ -39,7 +39,7 @@ pub(super) fn settings(w: &Workspace) -> AnyView {
         {metadata_fields(d,"settings",&w.metadata,false)}
 <button class="button secondary" form=FORM formaction=format!("/media/addon-lists/{}/artwork",f.id) name="intent" value="navigate" formnovalidate>{tr(TextKey::Artwork)}</button>
         </section>
-        {save_bar(TextKey::AddonWorkspaceSaveSettings)}
+        {save_bar(w,TextKey::AddonWorkspaceSaveSettings)}
         <section class="work-section"><h3>{tr(TextKey::AddonMediaListFolder)}</h3><p>{f.folder_name.clone()}</p>{button("reset-preview",TextKey::ResetAndReload,false)}</section>
     </div> }.into_any()
 }
@@ -111,7 +111,7 @@ pub(super) fn playback(w: &Workspace) -> AnyView {
         </section><section class="work-section storage-settings"><h3>{tr(TextKey::AddonListDiskWarnings)}</h3>
         {match warning {Ok(n)=>input("disk_warning_gb",TextKey::AddonListDiskWarningGb,d.field("playback","disk_warning_gb",n.to_string()),"number"),Err(_)=>view! {<p role="alert">{tr(TextKey::AddonListDiskWarningFailed)}</p>}.into_any()}}
         <p>{tr(TextKey::AddonListDiskWarningHelp)}</p>
-        </section>{save_bar(TextKey::AddonWorkspaceSaveSettings)}
+        </section>{save_bar(w,TextKey::AddonWorkspaceSaveSettings)}
     </div> }.into_any()
 }
 

@@ -88,23 +88,27 @@ pub(super) fn render(w: &Workspace) -> AnyView {
             view! {<li><a href=format!("#workspace-{name}")>{label}</a></li>}
         })
         .collect_view();
+    let import_landing = w.form.published_revision == 0
+        && w.submission.draft.groups.is_empty()
+        && w.form
+            .import_progress
+            .as_ref()
+            .is_some_and(|p| super::import::active(p.state));
     let task_view = match w.task.as_str() {
         "settings" => settings(w),
         "playback" => playback(w),
         "activity" => activity(w),
         _ if w.task.starts_with("artwork") => artwork(w),
         _ if w.item_id.is_some() => item(w),
-        _ if w.form.published_revision == 0
-            && w.submission.draft.groups.is_empty()
-            && w.form
-                .import_progress
-                .as_ref()
-                .is_some_and(|p| super::import::active(p.state)) =>
-        {
+        _ if import_landing => {
             view! { <super::import::ImportLandingIsland list_id=w.form.id/> }.into_any()
         }
         _ => items(w),
     };
+    // Items keeps its publication state beside the heading so the item list
+    // starts above the fold; it is not a separate block between them.
+    let publication = (w.task == "items" && w.item_id.is_none() && !import_landing)
+        .then(|| publication_summary(w));
     let view_class = match w.task.split(':').next().unwrap_or("items") {
         "playback" => "options",
         "item" => "detail",
@@ -123,11 +127,10 @@ pub(super) fn render(w: &Workspace) -> AnyView {
                     view! { <button class="tab-link" form=FORM name="intent" value="navigate" formaction=url formnovalidate aria-current=(w.task == task || (task == "items" && w.task.starts_with("item:"))).then_some("page")>{tr(key)}</button> }
                 }).collect_view()}
             </nav>
-            <div class=if w.task=="items" {"page-heading media-masthead"} else {"page-heading"}>{(w.task=="items").then(||view!{<div class="cover-art"><span aria-hidden="true" style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span></div>})}<div><h1>{heading}</h1></div></div>
+            <div class=if w.task=="items" {"page-heading media-masthead"} else {"page-heading"}>{(w.task=="items").then(||view!{<div class="cover-art"><span aria-hidden="true" style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span></div>})}<div class="masthead-body"><h1>{heading}</h1>{publication}</div></div>
             {w.submission.arrival_error.map(|key| view! { <div class="notice error" role="alert" data-testid="addon-list-arrival-error"><p>{tr(key)}</p><button class="button secondary" form=FORM name="intent" value="navigate" formaction=format!("{base}/settings") formnovalidate>{tr(TextKey::AddonWorkspaceSettings)}</button></div> })}
             {w.submission.error.clone().map(|error| view! { <div class="notice error" role="alert" tabindex="-1" autofocus id="workspace-errors"><strong>{tr(TextKey::AddonWorkspaceRetained)}</strong><p>{error}</p><ul>{error_links}</ul>{button("review-current",TextKey::AddonWorkspaceReviewLatest,false)}</div> })}
             {w.submission.notice.map(|key| view! { <p class="notice success" role="status">{tr(key)}</p> })}
-            <p data-workspace-save-status data-retained=retained_edits(w).to_string() data-saved=tr(TextKey::Saved) data-unsaved=tr(TextKey::UnsavedChanges) role="status">{tr(if retained_edits(w) {TextKey::UnsavedChanges} else {TextKey::Saved})}</p>
             <script src="/public/workspace-draft-status.js" defer></script>
 
             {detail::confirmation(w)}
@@ -258,8 +261,35 @@ fn button(intent: &str, label: TextKey, primary: bool) -> AnyView {
     view! { <button type="submit" class=if primary { "button primary" } else { "button secondary" } form=FORM name="intent" value=intent.to_owned() formnovalidate>{tr(label)}</button> }.into_any()
 }
 
-fn save_bar(key: TextKey) -> AnyView {
-    view! { <div class="apply-bar">{button("save",key,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<small>{tr(TextKey::AddonWorkspaceNavigation)}</small></div> }.into_any()
+fn save_bar(w: &Workspace, key: TextKey) -> AnyView {
+    view! { <div class="apply-bar">{save_status(w)}{button("save",key,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<small>{tr(TextKey::AddonWorkspaceNavigation)}</small></div> }.into_any()
+}
+
+/// Draft status anchored beside the Save action of the current task. The
+/// server renders the retained state; `workspace-draft-status.js` refines it
+/// while the operator edits. Each task page has exactly one save bar.
+fn save_status(w: &Workspace) -> AnyView {
+    let dirty = retained_edits(w);
+    view! {
+        <span class="save-status" data-workspace-save-status data-retained=dirty.to_string() data-dirty=dirty.to_string() data-saved=tr(TextKey::Saved) data-unsaved=tr(TextKey::UnsavedChanges) role="status">{tr(if dirty {TextKey::UnsavedChanges} else {TextKey::Saved})}</span>
+    }.into_any()
+}
+
+/// Publication state, counts, the Publish action and readiness details for
+/// the Items heading. Disabled with the Items task while it cannot load.
+fn publication_summary(w: &Workspace) -> AnyView {
+    let r = &w.readiness;
+    view! {
+        <fieldset class="publication-fieldset" disabled=w.load_status.disabled_tasks.contains("items")>
+            <section class="publication-summary" aria-label=tr(TextKey::PublicationReadiness)>
+                <super::publication::PublicationOverviewIsland list_id=w.form.id initial=r.clone()/>
+                <details class="disclosure quiet-details" data-disclosure-kind="section"><summary><span class="disclosure-label">{tr(TextKey::PublicationReadiness)}</span><span class="disclosure-toggle" aria-hidden="true"></span></summary><div class="disclosure-body"><dl class="facts"><div><dt>{tr(TextKey::SavedRevision)}</dt><dd>{w.form.draft_revision}</dd></div><div><dt>{tr(TextKey::Published)}</dt><dd>{w.form.published_revision}</dd></div></dl>
+                    {detail::import_progress(w)}
+                </div></details>
+                <p hidden={r.restricted_excluded_count==0}>{tr(TextKey::RestrictedItemsExcluded)}": "{r.restricted_excluded_count}</p>
+            </section>
+        </fieldset>
+    }.into_any()
 }
 
 fn value<T: serde::Serialize>(value: T) -> String {
@@ -303,15 +333,7 @@ fn items(w: &Workspace) -> AnyView {
         .iter()
         .filter(|row| d.selected.contains(&row.id))
         .count();
-    let r = &w.readiness;
     view! {
-        <section class="publication-summary" aria-label=tr(TextKey::PublicationReadiness)>
-            <super::publication::PublicationOverviewIsland list_id=w.form.id initial=r.clone()/>
-            <details class="disclosure quiet-details" data-disclosure-kind="section"><summary><span class="disclosure-label">{tr(TextKey::PublicationReadiness)}</span><span class="disclosure-toggle" aria-hidden="true"></span></summary><div class="disclosure-body"><dl class="facts"><div><dt>{tr(TextKey::SavedRevision)}</dt><dd>{w.form.draft_revision}</dd></div><div><dt>{tr(TextKey::Published)}</dt><dd>{w.form.published_revision}</dd></div></dl>
-                {detail::import_progress(w)}
-            </div></details>
-            <p hidden={r.restricted_excluded_count==0}>{tr(TextKey::RestrictedItemsExcluded)}": "{r.restricted_excluded_count}</p>
-        </section>
         <section class="panel episode-editor" aria-label=tr(TextKey::AddonWorkspaceItems)>
             <div class="filter-row">
                 {select("category",TextKey::Filters,d.category.clone(),category_choices(w))}
@@ -342,7 +364,7 @@ fn items(w: &Workspace) -> AnyView {
                 </div>
             </details>
             {bulk::preview(w)}
-            <div class="numbering-actions editor-savebar numbering-save-bar">{d.undo.as_ref().map(|_|button("undo",TextKey::UndoLastChange,false))}{d.saved_review_undo.as_ref().filter(|u|d.undo.is_none() && u.expected_revision==d.revision).map(|_|button("undo-saved-review",TextKey::UndoLastChange,false))}{button("save",TextKey::SaveChanges,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<span>{format!("{}: {} · {}: {}",tr(TextKey::AddonWorkspaceSelection),d.selected.len(),tr(TextKey::AddonWorkspaceOffPage),d.selected.len().saturating_sub(selected_here))}</span></div>
+            <div class="numbering-actions editor-savebar numbering-save-bar">{save_status(w)}{d.undo.as_ref().map(|_|button("undo",TextKey::UndoLastChange,false))}{d.saved_review_undo.as_ref().filter(|u|d.undo.is_none() && u.expected_revision==d.revision).map(|_|button("undo-saved-review",TextKey::UndoLastChange,false))}{button("save",TextKey::SaveChanges,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<span>{format!("{}: {} · {}: {}",tr(TextKey::AddonWorkspaceSelection),d.selected.len(),tr(TextKey::AddonWorkspaceOffPage),d.selected.len().saturating_sub(selected_here))}</span></div>
             <div class="episode-list"><div class="episode-column-head" aria-hidden="true"><span></span><span>{tr(TextKey::Name)}</span><span>{tr(TextKey::FirstAired)}</span><span>{tr(TextKey::Duration)}</span><span>{tr(TextKey::Season)}" / "{tr(TextKey::Episode)}</span><span></span></div>
                 <ol class="episode-rows">{visible.iter().map(|row| item_row(w,row)).collect_view()}</ol>
                 <p hidden=!rows.is_empty()>{tr(TextKey::NoItems)}</p>

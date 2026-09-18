@@ -219,6 +219,9 @@ changelog, and git history for evidence. The authoritative live state is always
 
 ### Reference material kept alongside the plans
 
+- `addon-list-workspace-ux-refinements.md` — proposed plan to refine live add-on list
+  workspace UX/UI hierarchy, bulk tooling, and row ergonomics following audit
+  against `plans/admin-ux-organize`.
 - `amm-n-01b-addon-list-design-adaptation.md` — completed source/capability map
   linked by the frozen add-on list reference. Milestone `amm-n-01b` owns current
   acceptance, including the item-form correction; its finished focused plan is

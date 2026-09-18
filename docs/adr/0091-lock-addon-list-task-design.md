@@ -23,6 +23,12 @@ transactional saves and immutable artwork retain their functional evidence. The
 explicit numbering, concise option guidance and restrained disclosure boundaries.
 Milestone `amm-n-01b` owns current validation; N-02/N-03 remain separate and open.
 The accepted design and its frozen reference are unchanged.
+Maintainer-authorized refinement (2026-09-18, phase 1 of
+`plans/addon-list-workspace-ux-refinements.md`): on Items the publication
+summary sits inside the heading beside the title, finished preparation and
+successful publication history appear only on Activity & recovery, and the
+draft status is a pill in each task's save bar. The frozen reference is not
+edited; these are recorded deviations from it.
 
 ## Context
 

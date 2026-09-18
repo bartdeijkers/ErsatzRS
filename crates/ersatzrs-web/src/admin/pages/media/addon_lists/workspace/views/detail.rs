@@ -1,7 +1,7 @@
 use super::{
     artwork_value, button, checkbox, choice, content_kind_value, detail_state_text_key, filtered,
     import_can_retry, import_discovery_summary, input, kind_select, liveness_select,
-    metadata_fields, revision_can_restore, save_bar, select, textarea, tr, value,
+    metadata_fields, revision_can_restore, save_bar, save_status, select, textarea, tr, value,
     AddonMediaListArtworkRole, AddonMediaListContentKind, AddonMediaListImportState,
     AddonMediaListItemRole, AddonMediaListSourceProbeOutcome, AddonMediaListSourceProbeState,
     PublicationActivity, TextKey, Workspace, FORM,
@@ -138,7 +138,7 @@ pub(super) fn item(w: &Workspace) -> AnyView {
                 </div>
             </details>
             <div id="item-save" tabindex="-1" class="apply-bar">
-                {button("save",TextKey::AddonWorkspaceSaveItem,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<small>{tr(TextKey::ItemSaveHelp)}</small>
+                {save_status(w)}{button("save",TextKey::AddonWorkspaceSaveItem,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<small>{tr(TextKey::ItemSaveHelp)}</small>
             </div>
         </section>
         <section class="item-tools" aria-labelledby="item-tools-heading">
@@ -212,7 +212,7 @@ pub(super) fn artwork(w: &Workspace) -> AnyView {
         }).collect_view()}
         {metadata.metadata.artwork.iter().filter(|a|a.role==AddonMediaListArtworkRole::Other).map(|a|view!{<figure><img class="artwork-preview" src=artwork_preview_url(&a.url) alt=tr(TextKey::Artwork)/><figcaption>{a.language.clone()}</figcaption></figure>}).collect_view()}
         <input type="hidden" form=FORM name="metadata_etag" value=w.submission.draft.field(group,"metadata_etag",metadata.etag.clone())/>
-        {save_bar(TextKey::AddonWorkspaceSaveSettings)}
+        {save_bar(w,TextKey::AddonWorkspaceSaveSettings)}
     </section>}.into_any()
 }
 
