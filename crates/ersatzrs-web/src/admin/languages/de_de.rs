@@ -528,6 +528,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceRetained => "Änderungen konnten nicht gespeichert werden. Ihre Eingaben bleiben erhalten; prüfen Sie die Fehler oder laden Sie die aktuelle Revision neu.",
         TextKey::AddonWorkspaceNavigation => "Die Navigation behält ungespeicherte Änderungen. Gespeicherte Änderungen werden automatisch angewendet.",
         TextKey::AddonWorkspaceSeasonOnly => "Nur Staffel ändern",
+        TextKey::AddonWorkspaceSeasonPerYear => "Neue Staffel pro Kalenderjahr",
         TextKey::AddonWorkspacePageSize => "Einträge pro Seite",
 
         TextKey::AddonAccessTest => "Zugriff testen",

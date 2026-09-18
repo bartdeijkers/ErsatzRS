@@ -334,6 +334,7 @@ fn items(w: &Workspace) -> AnyView {
                         </div>{checkbox("include_unknown_length",TextKey::AddonWorkspaceUnknownLength,d.field("items","include_unknown_length","false")=="true")}<p>{tr(TextKey::AddonWorkspaceLengthHelp)}</p></details>
                         {button("number",TextKey::Preview,false)}
                         {input("gap_days",TextKey::MinimumSeasonGapDays,d.field("items","gap_days","90"),"number")}
+                        {checkbox("season_per_year",TextKey::AddonWorkspaceSeasonPerYear,d.field("items","season_per_year","false")=="true")}
                         {button("auto-number",TextKey::AutoDetectSeasons,false)}{button("clear-numbering",TextKey::Unnumbered,false)}
                     </section><section><h3>{tr(TextKey::MediaKind)}</h3>{kind_select("bulk_kind",d.field("items","bulk_kind","__unchanged"))}{liveness_select("bulk_liveness",d.field("items","bulk_liveness","__unchanged"))}{button("classify",TextKey::Preview,false)}</section></div>
                     {button("bulk-options",TextKey::AddonOptions,false)}

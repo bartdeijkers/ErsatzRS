@@ -5,6 +5,7 @@ use super::{
 use crate::admin::server_fns::addon_media_lists::{
     AddonMediaListDraftDiffRow, AddonMediaListItemRow,
 };
+use chrono::Datelike as _;
 use std::collections::BTreeSet;
 
 pub(super) async fn preview_bulk(
@@ -228,10 +229,11 @@ fn preview(
     if season < 0 || episode < 0 || gap < 1 {
         return Err(TextKey::NumberEpisodes);
     }
+    let season_per_year = intent == "auto-number" && field(fields, "season_per_year") == "true";
     if intent == "auto-number" {
         targets = super::super::super::order_by_first_aired(targets);
     }
-    let mut previous_date = None;
+    let mut previous_date: Option<chrono::NaiveDate> = None;
     let mut changed = fields.clone();
     for row in targets {
         if !row_has_edits(fields, row.id) {
@@ -262,7 +264,12 @@ fn preview(
             if intent == "auto-number" {
                 let date = super::super::super::parse_first_aired(row.first_aired.as_deref());
                 if let (Some(previous), Some(current)) = (previous_date, date) {
-                    if current.signed_duration_since(previous).num_days() >= gap {
+                    let new_season = if season_per_year {
+                        current.year() != previous.year()
+                    } else {
+                        current.signed_duration_since(previous).num_days() >= gap
+                    };
+                    if new_season {
                         season = season.checked_add(1).ok_or(TextKey::NumberEpisodes)?;
                         episode = 1;
                     }
@@ -537,6 +544,51 @@ mod tests {
         assert_eq!(pair(3), ("1".into(), "1".into()));
         assert_eq!(pair(2), ("2".into(), "1".into()));
         assert_eq!(pair(1), ("2".into(), "2".into()));
+    }
+    #[test]
+    fn auto_numbering_can_start_a_season_each_calendar_year() {
+        let d = Draft {
+            selected: BTreeSet::from([1, 2, 3, 4, 5]),
+            page_size: 10,
+            ..Default::default()
+        };
+        // Newest first; item 3 is undated and follows its provider neighbour.
+        let rows = [
+            (1, Some("2015-01-02")),
+            (2, Some("2014-12-30")),
+            (3, None),
+            (4, Some("2014-01-05")),
+            (5, Some("2013-12-31")),
+        ]
+        .into_iter()
+        .map(|(id, first_aired)| AddonMediaListItemRow {
+            first_aired: first_aired.map(Into::into),
+            ..row(id, None, None)
+        })
+        .collect::<Vec<_>>();
+        let mut f = fields();
+        f.insert("gap_days".into(), "90".into());
+        f.insert("season_per_year".into(), "true".into());
+        let result = preview(
+            &d,
+            &f,
+            "auto-number",
+            &rows,
+            AddonMediaListPresentationKind::TelevisionShow,
+            &AddonMediaListDraftDiffRow::default(),
+        )
+        .unwrap();
+        let pair = |id: i64| {
+            (
+                result[&format!("season_{id}")].as_str(),
+                result[&format!("episode_{id}")].as_str(),
+            )
+        };
+        assert_eq!(pair(5), ("1", "1"));
+        assert_eq!(pair(4), ("2", "1"));
+        assert_eq!(pair(2), ("2", "2"));
+        assert_eq!(pair(3), ("2", "3"));
+        assert_eq!(pair(1), ("3", "1"));
     }
     #[test]
     fn invalid_range_or_season_only_pair_returns_no_partial_preview() {

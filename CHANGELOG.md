@@ -13,6 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Add a "New season each calendar year" option to add-on list episode
+  auto-detection, numbering each year's items as one season in first-aired
+  order (for example, one season per year of a web series).
+
 ### Changed
 
 - Saving add-on list edits such as episode numbering no longer repeats the

@@ -1242,6 +1242,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceRetained => "Wijzigingen konden niet worden opgeslagen. Je invoer is bewaard; controleer de fouten of laad de huidige revisie opnieuw.",
         TextKey::AddonWorkspaceNavigation => "Navigatie behoudt niet-opgeslagen wijzigingen. Opgeslagen wijzigingen worden automatisch toegepast.",
         TextKey::AddonWorkspaceSeasonOnly => "Alleen seizoen wijzigen",
+        TextKey::AddonWorkspaceSeasonPerYear => "Nieuw seizoen per kalenderjaar",
         TextKey::AddonWorkspacePageSize => "Items per pagina",
 
         TextKey::AddonAccessTest => "Toegang testen",

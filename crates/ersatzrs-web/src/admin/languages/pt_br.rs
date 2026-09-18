@@ -1265,6 +1265,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceRetained => "Não foi possível salvar as alterações. Seus dados foram mantidos; revise os erros ou recarregue a revisão atual.",
         TextKey::AddonWorkspaceNavigation => "A navegação mantém as alterações não salvas. As alterações salvas são aplicadas automaticamente.",
         TextKey::AddonWorkspaceSeasonOnly => "Alterar apenas temporada",
+        TextKey::AddonWorkspaceSeasonPerYear => "Nova temporada por ano civil",
         TextKey::AddonWorkspacePageSize => "Itens por página",
 
         TextKey::AddonAccessTest => "Testar acesso",

@@ -459,6 +459,7 @@ async fn execute(
                                     | "maximum_length"
                                     | "include_unknown_length"
                                     | "gap_days"
+                                    | "season_per_year"
                                     | "option_targets"
                             )
                     })

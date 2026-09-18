@@ -1251,6 +1251,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceRetained => "Nie udało się zapisać zmian. Wprowadzone dane zachowano; sprawdź błędy lub wczytaj bieżącą wersję.",
         TextKey::AddonWorkspaceNavigation => "Nawigacja zachowuje niezapisane zmiany. Zapisane zmiany są stosowane automatycznie.",
         TextKey::AddonWorkspaceSeasonOnly => "Zmień tylko sezon",
+        TextKey::AddonWorkspaceSeasonPerYear => "Nowy sezon dla każdego roku kalendarzowego",
         TextKey::AddonWorkspacePageSize => "Elementy na stronę",
 
         TextKey::AddonAccessTest => "Sprawdź dostęp",

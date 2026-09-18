@@ -522,6 +522,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceRetained => "Changes could not be saved. Your input has been retained; review the errors or reload the current revision.",
         TextKey::AddonWorkspaceNavigation => "Navigation retains unsaved edits. Saved changes are applied automatically.",
         TextKey::AddonWorkspaceSeasonOnly => "Change season only",
+        TextKey::AddonWorkspaceSeasonPerYear => "New season each calendar year",
         TextKey::AddonWorkspacePageSize => "Items per page",
 
         TextKey::AddonAccessTest => "Test access",

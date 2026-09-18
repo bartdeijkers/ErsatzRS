@@ -518,6 +518,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::AddonWorkspaceRetained => "Impossible d’enregistrer les modifications. Votre saisie est conservée ; vérifiez les erreurs ou rechargez la révision actuelle.",
         TextKey::AddonWorkspaceNavigation => "La navigation conserve les modifications non enregistrées. Les modifications enregistrées sont appliquées automatiquement.",
         TextKey::AddonWorkspaceSeasonOnly => "Modifier uniquement la saison",
+        TextKey::AddonWorkspaceSeasonPerYear => "Nouvelle saison par année civile",
         TextKey::AddonWorkspacePageSize => "Éléments par page",
 
         TextKey::AddonAccessTest => "Tester l’accès",
