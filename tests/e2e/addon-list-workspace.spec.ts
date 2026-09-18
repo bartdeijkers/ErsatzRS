@@ -281,6 +281,67 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
       await context.close();
     });
 
+    test('renames the list from the Items heading',async({browser,baseURL},info)=>{
+      const seed=seedMetadataEditor(info);const context=await browser.newContext({baseURL,javaScriptEnabled});const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
+      const base=`/media/addon-lists/${seed.listId}`;
+      await page.goto(base);await settled(page);
+      const title=page.locator('h1 #workspace-metadata_title');
+      await expect(title).toBeVisible();
+      const saveButton=page.locator('button[data-save-indicator]');
+      await expect(saveButton).toHaveAttribute('data-dirty','false');
+      await expect(saveButton).toHaveClass(/secondary/);
+      await title.fill('Renamed from Items');
+      if(javaScriptEnabled){
+        await expect(page.locator('[data-workspace-save-status]')).toHaveText('Unsaved changes');
+        await expect(saveButton).toHaveClass(/primary/);
+      }
+      // A native round trip keeps the unsaved title.
+      await submit(page,'filter');
+      await expect(title).toHaveValue('Renamed from Items');
+      // A retained draft makes the Save button primary without JavaScript too.
+      await expect(saveButton).toHaveAttribute('data-dirty','true');
+      await submit(page,'save');
+      await expect(page.locator('#workspace-errors')).toHaveCount(0);
+      await expect(title).toHaveValue('Renamed from Items');
+      await expect(page.locator('[data-workspace-save-status]')).toHaveText('Saved.');
+      await expect(saveButton).toHaveAttribute('data-dirty','false');
+      await expect(page.locator('.notice.success')).toHaveCount(0);
+      await page.goto(`${base}/settings`);await settled(page);
+      await expect(page.locator('[name="metadata_title"]')).toHaveValue('Renamed from Items');
+      await context.close();
+    });
+
+    test('marks edited rows and opens items in a new tab without losing the draft',async({browser,baseURL},info)=>{
+      const seed=seedMetadataEditor(info);const context=await browser.newContext({baseURL,javaScriptEnabled});
+      await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'nl'},maxRedirects:0});
+      try{
+      const page=await context.newPage();if(javaScriptEnabled)hydratedPages.add(page);
+      const base=`/media/addon-lists/${seed.listId}`;
+      await page.goto(base);await settled(page);
+      const row=page.locator(`#item-${seed.firstItemId}`);
+      // Fixed S/E symbols in every language; the accessible names stay localized.
+      await expect(row.locator('.inline-pair label > span[aria-hidden="true"]')).toHaveText(['S','E']);
+      await expect(row.locator(`[name="episode_${seed.firstItemId}"]`)).toHaveAttribute('aria-label',/^Aflevering: /);
+      await expect(row).not.toHaveClass(/row-dirty/);
+      const season=row.locator(`[name="season_${seed.firstItemId}"]`);
+      await season.fill('9');
+      if(javaScriptEnabled){
+        await expect(row).toHaveClass(/row-dirty/);await expect(row.locator('.row-dirty-note')).toBeVisible();
+      }
+      // A retained draft stays marked after a native round trip.
+      await submit(page,'filter');
+      await expect(season).toHaveValue('9');
+      await expect(row).toHaveClass(/row-dirty/);await expect(row.locator('.row-dirty-note')).toBeVisible();
+      const link=row.locator('a.row-open-tab');
+      await expect(link).toHaveAttribute('href',`${base}/items/${seed.firstItemId}`);
+      await expect(link).toHaveAttribute('target','_blank');
+      }finally{
+        // The UI language is global; later tests expect English.
+        await context.request.post('/api/settings/ui/save',{form:{is_dark_mode:'true',language:'en-us'},maxRedirects:0});
+        await context.close();
+      }
+    });
+
     test('retains invalid input and refuses a stale task without partial writes',async({browser,baseURL},info)=>{
       const seed=seedMetadataEditor(info);const context=await browser.newContext({baseURL,javaScriptEnabled});const page=await context.newPage(); if(javaScriptEnabled) hydratedPages.add(page);
       await page.goto(`/media/addon-lists/${seed.listId}/items/${seed.firstItemId}`);

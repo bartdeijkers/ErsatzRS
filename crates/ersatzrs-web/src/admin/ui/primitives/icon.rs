@@ -42,6 +42,7 @@ pub enum IconName {
     MusicNote,
     Image,
     Radio,
+    OpenInNew,
 }
 
 /// Returns inline style for a static icon span.
@@ -96,6 +97,7 @@ fn icon_path(name: IconName) -> &'static str {
         IconName::MusicNote => "M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6",
         IconName::Image => "M3 5h18v14H3zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM3 17l5-5 4 4 2-2 7 5",
         IconName::Radio => "M5 6h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM8 3l8-2M8 14a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 10h2M16 14h2",
+        IconName::OpenInNew => "M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
     }
 }
 

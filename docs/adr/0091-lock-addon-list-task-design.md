@@ -27,8 +27,13 @@ Maintainer-authorized refinement (2026-09-18, phase 1 of
 `plans/addon-list-workspace-ux-refinements.md`): on Items the publication
 summary sits inside the heading beside the title, finished preparation and
 successful publication history appear only on Activity & recovery, and the
-draft status is a pill in each task's save bar. The frozen reference is not
-edited; these are recorded deviations from it.
+Save button is the visible draft indicator (the status text remains for
+screen readers only). Phase 2 adds fixed S/E row
+symbols with localized accessible names, a visible unsaved-row marker, and a
+separate new-tab link beside the title; the title itself remains the
+draft-retaining submit button. The Items heading also edits the list title in
+place as an Items field under the list metadata fence. The frozen reference is not edited; these are
+recorded deviations from it.
 
 ## Context
 

@@ -449,12 +449,10 @@ test('166-entry overview reports overlapping preparation tasks separately from i
     UPDATE "AddonMediaListItemOperationJob" SET "State"=5 WHERE "AddonMediaListId"=${listId} AND "State" IN (0,1);
     COMMIT;`);
   await hydrated(page, `/media/addon-lists/${listId}`);
+  // Items continues its counts line; Activity & recovery owns the full counters.
   const preparation = page.getByTestId('addon-preparation-tasks');
-  await expect(preparation.getByText('Affected items', { exact: true }).locator('..').locator('dd')).toHaveText('165');
-  await expect(preparation.getByText('Interval / SponsorBlock tasks', { exact: true }).locator('..').locator('dd')).toHaveText('165');
-  await expect(preparation.getByText('Subtitle tasks', { exact: true }).locator('..').locator('dd')).toHaveText('165');
-  await expect(preparation.getByText('Download tasks', { exact: true }).locator('..').locator('dd')).toHaveText('0');
-  await expect(preparation.getByText('Not queued', { exact: true }).locator('..').locator('dd')).toHaveText('330');
+  await expect(preparation).toContainText('Completed 0/165');
+  await expect(preparation).toContainText('Not queued 330');
   await expect(page.locator('[name="category"] option[value="unknown"]')).toHaveText('Unknown (1)');
   // Stable durable states exercise Activity without racing or accelerating the worker.
   const pendingItem = Number(sqlite(`SELECT MIN("Id") FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId} AND "Id"<>${unresolved};`));
@@ -468,6 +466,9 @@ test('166-entry overview reports overlapping preparation tasks separately from i
   await hydrated(page);
   const activity = page.getByTestId('addon-preparation-tasks');
   await expect(activity.getByText('Affected items', { exact: true }).locator('..').locator('dd')).toHaveText('165');
+  await expect(activity.getByText('Interval / SponsorBlock tasks', { exact: true }).locator('..').locator('dd')).toHaveText('165');
+  await expect(activity.getByText('Subtitle tasks', { exact: true }).locator('..').locator('dd')).toHaveText('165');
+  await expect(activity.getByText('Download tasks', { exact: true }).locator('..').locator('dd')).toHaveText('0');
   await expect(activity.getByText('Running', { exact: true }).locator('..').locator('dd')).toHaveText('1');
   await expect(activity.getByText('Waiting', { exact: true }).locator('..').locator('dd')).toHaveText('1');
   await expect(activity.getByText('Not queued', { exact: true }).locator('..').locator('dd')).toHaveText('328');

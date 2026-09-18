@@ -105,6 +105,7 @@ pub enum TextKey {
     ItemPackageDefault,
     ItemPreviewOptions,
     ItemAccessActive,
+    OpenItemInNewTab,
 
     AddonWorkspaceLengthFilter,
     AddonWorkspaceMinimumLength,
@@ -2071,6 +2072,7 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::ItemPackageDefault,
     TextKey::ItemPreviewOptions,
     TextKey::ItemAccessActive,
+    TextKey::OpenItemInNewTab,
     TextKey::AddonWorkspaceLengthFilter,
     TextKey::AddonWorkspaceMinimumLength,
     TextKey::AddonWorkspaceMaximumLength,

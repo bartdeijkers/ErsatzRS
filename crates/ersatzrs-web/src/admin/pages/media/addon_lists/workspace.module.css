@@ -4067,22 +4067,77 @@ border:0; background:transparent; font-size:12px; color:var(--color-text-seconda
 :global(.addon-workspace) :global(.media-masthead) :global(.publication-summary) > :global(.quiet-details) > :global(.disclosure-body) {
 padding:6px 0 0;
 }
-/* Draft status sits beside the task's Save action instead of floating under the heading. */
-:global(.addon-workspace) :global(.save-status) {
-display:inline-flex; align-items:center; gap:6px; min-height:28px; padding:2px 10px;
-border:1px solid var(--color-border); border-radius:999px; font-size:12px;
-color:var(--color-text-secondary); white-space:nowrap;
+/* Title row: the heading plus the screen-reader-only draft status. */
+:global(.addon-workspace) :global(.title-row) {
+display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 14px; min-width:0;
 }
-:global(.addon-workspace) :global(.save-status)::before {
-content:"\2713"; font-weight:700; color:var(--color-success);
+:global(.addon-workspace) :global(.title-row) > :global(.list-title-heading) {
+flex:0 1 auto; min-width:0; max-width:100%;
 }
-:global(.addon-workspace) :global(.save-status)[data-dirty="true"] {
-border-color:var(--color-warning); color:var(--color-text-primary);
-}
-:global(.addon-workspace) :global(.save-status)[data-dirty="true"]::before {
-content:"\25CF"; color:var(--color-warning);
+/* The draft status is announced to screen readers only; the Save button
+   (primary with changes, outlined without) is its visible indicator. */
+:global(.addon-workspace) :global(.preparation-line)[hidden] {
+display:none;
 }
 @media (max-width:520px) {
 :global(.addon-workspace) :global(.media-masthead) { flex-wrap:wrap; }
-:global(.addon-workspace) :global(.save-status) { white-space:normal; }
+}
+
+/* Item rows (plans/addon-list-workspace-ux-refinements.md, phase 2). */
+:global(.addon-workspace) :global(.row-title-line) {
+display:flex; align-items:center; gap:4px; min-width:0;
+}
+:global(.addon-workspace) :global(.row-title-line) :global(.row-title) {
+min-width:0;
+}
+/* A real link next to the draft-retaining title button: middle-click and
+   "open in new tab" work without discarding unsaved edits on this page. */
+:global(.addon-workspace) :global(.row-open-tab) {
+display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
+min-width:28px; min-height:28px; border-radius:6px; color:var(--color-text-secondary);
+}
+:global(.addon-workspace) :global(.row-open-tab):hover,
+:global(.addon-workspace) :global(.row-open-tab):focus-visible {
+color:var(--color-text-primary); background:var(--color-surface);
+}
+/* Rows whose numbering or inclusion differs from the saved list. The note keeps
+   the state perceivable without color. */
+:global(.addon-workspace) :global(.episode-row):global(.row-dirty) {
+box-shadow:inset 3px 0 0 var(--color-warning);
+}
+:global(.addon-workspace) :global(.row-dirty-note) {
+display:block; color:var(--color-warning); font-size:11px; font-weight:600;
+}
+:global(.addon-workspace) :global(.row-dirty-note)[hidden] {
+display:none;
+}
+@media (max-width:520px) {
+:global(.addon-workspace) :global(.row-open-tab) { min-width:44px; min-height:44px; }
+}
+
+/* List title edited in place on Items: reads as the page heading and shows
+   its field frame on hover and focus. The selector outranks the generic
+   `input:not([type=checkbox])` field rules of this workspace. */
+:global(.addon-workspace) :global(.list-title-heading) {
+margin:0; min-width:0;
+}
+:global(.addon-workspace) :global(.list-title-heading) input:global(.list-title-input) {
+display:inline-block; vertical-align:baseline; box-sizing:content-box; width:auto; max-width:calc(100% - 14px); field-sizing:content; min-width:12ch; min-height:0; height:auto; margin:0 0 0 -6px;
+/* Browsers size the field slightly under the rendered bold heading glyphs;
+   the extra right padding keeps the last letter visible. */
+padding:0 0.5em 0 6px;
+font:inherit; letter-spacing:inherit; line-height:1.2; color:inherit;
+background:transparent; border:1px solid transparent; border-radius:6px; box-shadow:none;
+}
+:global(.addon-workspace) :global(.list-title-heading) input:global(.list-title-input):hover {
+border-color:var(--color-border);
+}
+:global(.addon-workspace) :global(.list-title-heading) input:global(.list-title-input):focus-visible {
+border-color:var(--color-primary); outline:2px solid var(--color-primary); outline-offset:1px;
+}
+:global(.addon-workspace) :global(.list-title-heading) input:global(.list-title-input)[aria-invalid="true"] {
+border-color:var(--color-error);
+}
+@media (max-width:520px) {
+:global(.addon-workspace) :global(.media-masthead) h1:global(.list-title-heading) { font-size:22px; }
 }

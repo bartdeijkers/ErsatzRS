@@ -232,6 +232,16 @@ fn merge(draft: &mut Draft, group: &str, fields: &Fields) {
             }
         }
     }
+    // The Items heading edits the list title in place. Its metadata fence has a
+    // baseline, so it is retained only together with a retained title edit.
+    if group == "items"
+        && stored.contains_key("metadata_title")
+        && !stored.contains_key("metadata_etag")
+    {
+        if let Some(etag) = fields.get("metadata_etag") {
+            stored.insert("metadata_etag".into(), etag.clone());
+        }
+    }
     // Keep the radio choice with edited numbers, even when that choice itself
     // still matches the rendered baseline. Unnumbered must ignore stale inputs.
     if group.starts_with("item:")
@@ -844,6 +854,26 @@ async fn save_command(
             (save.options, undo) = options(state, &validation_draft, fields, Vec::new()).await?;
         }
         "items" => {
+            if fields.contains_key("metadata_title") {
+                // Only the title is edited here; every other list metadata
+                // field keeps its saved value under the same fence.
+                let current = state
+                    .application
+                    .get_addon_media_list_show_nfo(d.list_id)
+                    .await
+                    .map_err(|_| TextKey::EditMetadata)?;
+                let title = Fields::from([
+                    (
+                        "metadata_title".into(),
+                        field(fields, "metadata_title").to_owned(),
+                    ),
+                    (
+                        "metadata_etag".into(),
+                        field(fields, "metadata_etag").to_owned(),
+                    ),
+                ]);
+                save.metadata = Some(metadata(&title, current.metadata)?);
+            }
             if let Some(value) = fields.get("option_targets") {
                 let ids = crate::admin::server_fns::addon_list_options::parse_option_items(value)
                     .map_err(|_| TextKey::Scope)?;
@@ -1336,13 +1366,15 @@ async fn refresh_related_metadata_fence(
     group: &str,
     previous: &str,
 ) {
-    let (paired, etag) = if matches!(group, "settings" | "artwork") {
+    let (paired, etag) = if matches!(group, "settings" | "artwork" | "items") {
         (
-            if group == "settings" {
-                "artwork".to_owned()
-            } else {
-                "settings".to_owned()
-            },
+            // List-level metadata is edited on List settings, list artwork and
+            // the Items heading; each retained fence follows a save of another.
+            ["settings", "artwork", "items"]
+                .into_iter()
+                .filter(|other| *other != group)
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
             state
                 .application
                 .get_addon_media_list_show_nfo(d.list_id)
@@ -1351,11 +1383,11 @@ async fn refresh_related_metadata_fence(
         )
     } else if let Ok(id) = item_id(group) {
         (
-            if group.starts_with("item:") {
+            vec![if group.starts_with("item:") {
                 format!("artwork:{id}")
             } else {
                 format!("item:{id}")
-            },
+            }],
             state
                 .application
                 .get_addon_media_list_item(d.list_id, id)
@@ -1369,17 +1401,21 @@ async fn refresh_related_metadata_fence(
         // The task is already saved. Keep the paired draft, but require an
         // explicit review when its refreshed concurrency fence is unavailable.
         tracing::warn!("Saved add-on task metadata fence could not be refreshed");
-        if d.groups.contains_key(&paired) {
-            d.stale_groups.insert(paired);
+        for paired in paired {
+            if d.groups.contains_key(&paired) {
+                d.stale_groups.insert(paired);
+            }
         }
         return;
     };
-    if let Some(fields) = d.groups.get_mut(&paired) {
-        if fields
-            .get("metadata_etag")
-            .is_some_and(|etag| etag == previous)
-        {
-            fields.insert("metadata_etag".into(), etag);
+    for paired in paired {
+        if let Some(fields) = d.groups.get_mut(&paired) {
+            if fields
+                .get("metadata_etag")
+                .is_some_and(|retained| retained == previous)
+            {
+                fields.insert("metadata_etag".into(), etag.clone());
+            }
         }
     }
 }
@@ -1420,6 +1456,35 @@ mod tests {
         assert_eq!(
             item_numbering(&fields, (Some(1), Some(3))).unwrap(),
             (None, None)
+        );
+    }
+
+    #[test]
+    fn items_title_edit_retains_its_metadata_fence_only_with_the_edit() {
+        let token = super::super::input_token;
+        let posted = |title: &str| {
+            Fields::from([
+                ("metadata_title".into(), title.into()),
+                ("baseline_metadata_title".into(), token("Saved list")),
+                ("metadata_etag".into(), "etag-1".into()),
+                ("baseline_metadata_etag".into(), token("etag-1")),
+            ])
+        };
+        let mut draft = Draft::default();
+        merge(&mut draft, "items", &posted("Saved list"));
+        let items = &draft.groups["items"];
+        assert!(!items.contains_key("metadata_title"));
+        assert!(
+            !items.contains_key("metadata_etag"),
+            "an unedited title keeps no fence"
+        );
+
+        merge(&mut draft, "items", &posted("Renamed list"));
+        let items = &draft.groups["items"];
+        assert_eq!(items["metadata_title"], "Renamed list");
+        assert_eq!(
+            items["metadata_etag"], "etag-1",
+            "the fence the title was edited against"
         );
     }
 

@@ -2,8 +2,8 @@
 
 ## Status
 
-Proposed (2026-09-18). **Phase 1 implemented locally on 2026-09-18** at the
-maintainer's request; phases 2–4 remain proposed.
+Proposed (2026-09-18). **Phases 1 and 2 implemented on 2026-09-18** at the
+maintainer's request; phases 3–4 remain proposed.
 
 Phase 1 delivered:
 
@@ -13,10 +13,18 @@ Phase 1 delivered:
   Activity & recovery still shows both. Unfinished or failed preparation, and a
   queued, running, failed, expired or restored-after-failure publication job,
   still appear on Items.
-- The floating draft status paragraph became a status pill inside each task's
-  save bar (Items numbering bar, settings, playback, artwork and item save).
-  It keeps the `data-workspace-save-status` contract and "Saved." /
-  "Unsaved changes" texts; pages without a save bar no longer show it.
+- The floating draft status paragraph is no longer visible. After manual
+  testing the maintainer rejected both a pill and a status text beside the
+  title: the task's Save button is the indicator instead (outlined while the
+  page matches the saved list, primary once anything on the page, including
+  item rows, differs; server-rendered for retained drafts, updated live by
+  `workspace-draft-status.js`). The `data-workspace-save-status` element remains
+  as screen-reader-only text with the "Saved." / "Unsaved changes" contract;
+  Activity has nothing to save and shows none. The full-width "Saved." banner
+  after a save is no longer shown; other notices keep their banner.
+- While preparation still has work, Items appends its progress to the counts
+  line (for example "Completed 0/156 · Not queued 156"); the 13 counters stay on
+  Activity & recovery.
 - The publication summary keeps its own fieldset with the Items load-status
   `disabled` condition, so Publish is disabled exactly as before.
 
@@ -27,8 +35,41 @@ console or hydration errors; no-JavaScript rendering unchanged in function.
 `tests/e2e/addon-list-workspace.spec.ts` passes 44/44 (Chromium and Firefox,
 no JS and hydrated). Deliberately not in phase 1: the disclosure still expands
 in place (native `<details>`), and no layout was changed for tasks other than
-the status pill.
+the Save button state.
+
 Originates from a comparative UX/UI audit between the live production workspace at `/media/addon-lists/:id` (e.g. `http://127.0.0.1:8409/media/addon-lists/10` implemented in [`crates/ersatzrs-web/src/admin/pages/media/addon_lists/workspace/`](../crates/ersatzrs-web/src/admin/pages/media/addon_lists/workspace/)) and the accepted reference design artifact in [`plans/admin-ux-organize`](admin-ux-organize/LOCK.md).
+
+Phase 2 delivered (maintainer decisions of 2026-09-18 included):
+
+- 2.1 Save vs Publish is superseded by ADR 0094: every saved change is
+  published automatically and the only remaining Publish-intent button is the
+  retry after a failure. Nothing was built; the Save button shows whether
+  edits are saved.
+- 2.2 Row numbering shows fixed `S` / `E` symbols in every language; the
+  inputs keep localized accessible names (for example "Seizoen" / "Aflevering").
+- 2.3 A row whose numbering or inclusion differs from the saved list gets
+  `.row-dirty` (amber edge) and a visible "Unsaved changes" note, so the state
+  is not conveyed by color alone. The server renders it for retained drafts
+  (also without JavaScript); `workspace-draft-status.js` updates it live and
+  clears it when the value returns to the saved one.
+- 2.4 Adapted by maintainer decision: the title stays the draft-retaining
+  submit button required by ADR 0091, and a separate "open in a new tab" icon
+  link (`target="_blank"`, localized label, 44×44 px at 320 px) supports
+  middle-click and right-click without discarding edits on the list.
+
+Evidence: verified on the database copy in Dutch and English (hydrated and
+no JavaScript, middle-click opens the item while the list stays); the new
+`marks edited rows and opens items in a new tab without losing the draft` case
+and the full `tests/e2e/addon-list-workspace.spec.ts` pass 48/48 in Chromium
+and Firefox.
+
+Follow-up requested during manual testing (2026-09-18): the list title in the
+Items heading is edited in place. It is an Items-task field with a baseline;
+Save changes stores it through the same list metadata command and
+concurrency fence as List settings, and the fence is refreshed across List
+settings, list artwork and Items after each save. Evidence: new e2e case
+`renames the list from the Items heading` (no JS and hydrated), full spec
+52/52, and 4 rows remain visible at 1440×900.
 
 ## Context and Purpose
 

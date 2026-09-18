@@ -46,18 +46,7 @@ pub(super) fn render(w: &Workspace) -> AnyView {
     } else {
         title.clone()
     };
-    let heading = match w.task.as_str() {
-        "settings" => tr(TextKey::AddonWorkspaceSettings).to_owned(),
-        "playback" => tr(TextKey::AddonWorkspacePlayback).to_owned(),
-        "activity" => tr(TextKey::AddonWorkspaceActivity).to_owned(),
-        _ if w.task.starts_with("artwork") => tr(TextKey::Artwork).to_owned(),
-        _ if w.item_id.is_some() => w
-            .items
-            .iter()
-            .find(|r| Some(r.id) == w.item_id)
-            .map_or(title.clone(), |r| r.display_title.clone()),
-        _ => title.clone(),
-    };
+    let heading = heading_text(w, &title);
     provide_context(w.submission.clone());
     let error_links = w
         .submission
@@ -107,8 +96,17 @@ pub(super) fn render(w: &Workspace) -> AnyView {
     };
     // Items keeps its publication state beside the heading so the item list
     // starts above the fold; it is not a separate block between them.
-    let publication = (w.task == "items" && w.item_id.is_none() && !import_landing)
-        .then(|| publication_summary(w));
+    let items_heading = w.task == "items" && w.item_id.is_none() && !import_landing;
+    let publication = items_heading.then(|| publication_summary(w));
+    let heading = if items_heading {
+        list_title_editor(w)
+    } else {
+        view! { <h1>{heading}</h1> }.into_any()
+    };
+    // One draft status per page, beside the heading it describes. Activity has
+    // nothing to save; the import landing replaces the Items task.
+    let status =
+        (w.task != "activity" && !(w.task == "items" && import_landing)).then(|| save_status(w));
     let view_class = match w.task.split(':').next().unwrap_or("items") {
         "playback" => "options",
         "item" => "detail",
@@ -127,10 +125,12 @@ pub(super) fn render(w: &Workspace) -> AnyView {
                     view! { <button class="tab-link" form=FORM name="intent" value="navigate" formaction=url formnovalidate aria-current=(w.task == task || (task == "items" && w.task.starts_with("item:"))).then_some("page")>{tr(key)}</button> }
                 }).collect_view()}
             </nav>
-            <div class=if w.task=="items" {"page-heading media-masthead"} else {"page-heading"}>{(w.task=="items").then(||view!{<div class="cover-art"><span aria-hidden="true" style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span></div>})}<div class="masthead-body"><h1>{heading}</h1>{publication}</div></div>
+            <div class=if w.task=="items" {"page-heading media-masthead"} else {"page-heading"}>{(w.task=="items").then(||view!{<div class="cover-art"><span aria-hidden="true" style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span></div>})}<div class="masthead-body"><div class="title-row">{heading}{status}</div>{publication}</div></div>
             {w.submission.arrival_error.map(|key| view! { <div class="notice error" role="alert" data-testid="addon-list-arrival-error"><p>{tr(key)}</p><button class="button secondary" form=FORM name="intent" value="navigate" formaction=format!("{base}/settings") formnovalidate>{tr(TextKey::AddonWorkspaceSettings)}</button></div> })}
             {w.submission.error.clone().map(|error| view! { <div class="notice error" role="alert" tabindex="-1" autofocus id="workspace-errors"><strong>{tr(TextKey::AddonWorkspaceRetained)}</strong><p>{error}</p><ul>{error_links}</ul>{button("review-current",TextKey::AddonWorkspaceReviewLatest,false)}</div> })}
-            {w.submission.notice.map(|key| view! { <p class="notice success" role="status">{tr(key)}</p> })}
+            // A successful save is shown by the Save button returning to its
+            // resting state; other notices still need their banner.
+            {w.submission.notice.filter(|key| *key != TextKey::Saved).map(|key| view! { <p class="notice success" role="status">{tr(key)}</p> })}
             <script src="/public/workspace-draft-status.js" defer></script>
 
             {detail::confirmation(w)}
@@ -138,6 +138,22 @@ pub(super) fn render(w: &Workspace) -> AnyView {
             <fieldset class="workspace-task-fields" disabled=w.load_status.disabled_tasks.contains(w.task.split(':').next().unwrap_or("items"))>{task_view}</fieldset>
         </div>
     }.into_any()
+}
+
+/// Heading for tasks whose title is not edited in place.
+fn heading_text(w: &Workspace, title: &str) -> String {
+    match w.task.as_str() {
+        "settings" => tr(TextKey::AddonWorkspaceSettings).to_owned(),
+        "playback" => tr(TextKey::AddonWorkspacePlayback).to_owned(),
+        "activity" => tr(TextKey::AddonWorkspaceActivity).to_owned(),
+        _ if w.task.starts_with("artwork") => tr(TextKey::Artwork).to_owned(),
+        _ if w.item_id.is_some() => w
+            .items
+            .iter()
+            .find(|r| Some(r.id) == w.item_id)
+            .map_or_else(|| title.to_owned(), |r| r.display_title.clone()),
+        _ => title.to_owned(),
+    }
 }
 
 fn retained_edits(w: &Workspace) -> bool {
@@ -262,16 +278,54 @@ fn button(intent: &str, label: TextKey, primary: bool) -> AnyView {
 }
 
 fn save_bar(w: &Workspace, key: TextKey) -> AnyView {
-    view! { <div class="apply-bar">{save_status(w)}{button("save",key,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<small>{tr(TextKey::AddonWorkspaceNavigation)}</small></div> }.into_any()
+    view! { <div class="apply-bar">{save_button(w,key)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<small>{tr(TextKey::AddonWorkspaceNavigation)}</small></div> }.into_any()
 }
 
-/// Draft status anchored beside the Save action of the current task. The
-/// server renders the retained state; `workspace-draft-status.js` refines it
-/// while the operator edits. Each task page has exactly one save bar.
+/// The task's Save action doubles as its draft indicator: outlined while the
+/// page matches the saved list, primary once anything on the page (including
+/// item rows) differs. The server renders the retained state;
+/// `workspace-draft-status.js` updates it while the operator edits.
+fn save_button(w: &Workspace, label: TextKey) -> AnyView {
+    let dirty = retained_edits(w);
+    view! { <button type="submit" class=if dirty { "button primary" } else { "button secondary" } form=FORM name="intent" value="save" data-save-indicator data-dirty=dirty.to_string() formnovalidate>{tr(label)}</button> }.into_any()
+}
+
+/// Screen-reader announcement of the same draft state; visually the Save
+/// button carries it.
 fn save_status(w: &Workspace) -> AnyView {
     let dirty = retained_edits(w);
     view! {
-        <span class="save-status" data-workspace-save-status data-retained=dirty.to_string() data-dirty=dirty.to_string() data-saved=tr(TextKey::Saved) data-unsaved=tr(TextKey::UnsavedChanges) role="status">{tr(if dirty {TextKey::UnsavedChanges} else {TextKey::Saved})}</span>
+        <span class="save-status sr-only" data-workspace-save-status data-retained=dirty.to_string() data-dirty=dirty.to_string() data-saved=tr(TextKey::Saved) data-unsaved=tr(TextKey::UnsavedChanges) role="status">{tr(if dirty {TextKey::UnsavedChanges} else {TextKey::Saved})}</span>
+    }.into_any()
+}
+
+/// The Items heading edits the list title in place. It is part of the Items
+/// task, so Save changes stores it with the other Items edits through the same
+/// list metadata command and concurrency fence as List settings.
+fn list_title_editor(w: &Workspace) -> AnyView {
+    let d = &w.submission.draft;
+    let value = d.field("items", "metadata_title", w.metadata.metadata.title.clone());
+    let etag = d.field("items", "metadata_etag", w.metadata.etag.clone());
+    let invalid = w
+        .submission
+        .error_fields
+        .iter()
+        .any(|name| name == "metadata_title");
+    // Width follows the title so the draft status sits right after it;
+    // `field-sizing: content` keeps it following while the operator types.
+    let size = value
+        .chars()
+        .count()
+        .max(w.form.name.chars().count())
+        .clamp(8, 80)
+        + 1;
+    view! {
+        <h1 class="list-title-heading">
+            {baseline("metadata_title", &value)}
+            <input id="workspace-metadata_title" class="list-title-input" type="text" form=FORM name="metadata_title" size=size value=value placeholder=w.form.name.clone() required aria-label=tr(TextKey::Title) aria-invalid=invalid.then_some("true") aria-describedby=invalid.then_some("workspace-errors")/>
+        </h1>
+        {baseline("metadata_etag", &etag)}
+        <input type="hidden" form=FORM name="metadata_etag" value=etag/>
     }.into_any()
 }
 
@@ -364,7 +418,7 @@ fn items(w: &Workspace) -> AnyView {
                 </div>
             </details>
             {bulk::preview(w)}
-            <div class="numbering-actions editor-savebar numbering-save-bar">{save_status(w)}{d.undo.as_ref().map(|_|button("undo",TextKey::UndoLastChange,false))}{d.saved_review_undo.as_ref().filter(|u|d.undo.is_none() && u.expected_revision==d.revision).map(|_|button("undo-saved-review",TextKey::UndoLastChange,false))}{button("save",TextKey::SaveChanges,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<span>{format!("{}: {} · {}: {}",tr(TextKey::AddonWorkspaceSelection),d.selected.len(),tr(TextKey::AddonWorkspaceOffPage),d.selected.len().saturating_sub(selected_here))}</span></div>
+            <div class="numbering-actions editor-savebar numbering-save-bar">{d.undo.as_ref().map(|_|button("undo",TextKey::UndoLastChange,false))}{d.saved_review_undo.as_ref().filter(|u|d.undo.is_none() && u.expected_revision==d.revision).map(|_|button("undo-saved-review",TextKey::UndoLastChange,false))}{save_button(w,TextKey::SaveChanges)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<span>{format!("{}: {} · {}: {}",tr(TextKey::AddonWorkspaceSelection),d.selected.len(),tr(TextKey::AddonWorkspaceOffPage),d.selected.len().saturating_sub(selected_here))}</span></div>
             <div class="episode-list"><div class="episode-column-head" aria-hidden="true"><span></span><span>{tr(TextKey::Name)}</span><span>{tr(TextKey::FirstAired)}</span><span>{tr(TextKey::Duration)}</span><span>{tr(TextKey::Season)}" / "{tr(TextKey::Episode)}</span><span></span></div>
                 <ol class="episode-rows">{visible.iter().map(|row| item_row(w,row)).collect_view()}</ol>
                 <p hidden=!rows.is_empty()>{tr(TextKey::NoItems)}</p>
@@ -392,11 +446,25 @@ fn item_row(w: &Workspace, row: &AddonMediaListItemRow) -> AnyView {
         .zip(parse_first_aired(row.first_aired.as_deref()))
         .map(|(a, b)| b.signed_duration_since(a).num_days());
     let menu = format!("row-commands-{id}");
-    view!{<li class="episode-row" id=format!("item-{id}")>
+    let item_url = format!("/media/addon-lists/{}/items/{id}", w.form.id);
+    let saved_number = |value: Option<i32>| value.map(|n| n.to_string()).unwrap_or_default();
+    // Retained draft values that differ from the saved row. The draft-status
+    // script refines this while the operator edits; without JavaScript the
+    // server-rendered state is shown after every retained round trip.
+    let inclusion_changed = d.field("items", &format!("included_{id}"), row.included.to_string())
+        != row.included.to_string();
+    let dirty = inclusion_changed
+        || [("season", row.season), ("episode", row.episode)]
+            .into_iter()
+            .any(|(name, saved)| {
+                d.field("items", &format!("{name}_{id}"), saved_number(saved))
+                    != saved_number(saved)
+            });
+    view!{<li class=if dirty {"episode-row row-dirty"} else {"episode-row"} id=format!("item-{id}") data-inclusion-changed=inclusion_changed.to_string()>
         <input type="hidden" form=FORM name=format!("review_snapshot_{id}") value=super::review_snapshot(row)/>
         <label class="row-pick"><input type="hidden" form=FORM name=select_name.clone() value="false"/><input type="checkbox" form=FORM name=select_name value="true" checked=d.selected.contains(&id) aria-label=format!("{}: {title}",tr(TextKey::AddonWorkspaceSelection))/><span aria-hidden="true">{format!("{:02}",rank+1)}</span></label>
         <div class="episode-identity"><span class="row-art-placeholder" aria-hidden="true"><span style=icon_style(presentation_icon(w.form.presentation_kind),"2rem")></span><span class="row-thumbnail" style:background-image=row.thumbnail_url.as_ref().map(|url| format!("url({})",serde_json::to_string(url).expect("thumbnail URL serializes"))).unwrap_or_default()></span></span><div>
-            <button class="button row-title" form=FORM name="intent" value="navigate" formaction=format!("/media/addon-lists/{}/items/{id}",w.form.id) formnovalidate>{title}</button>
+            <span class="row-title-line"><button class="button row-title" form=FORM name="intent" value="navigate" formaction=item_url.clone() formnovalidate>{title.clone()}</button><a class="row-open-tab" href=item_url target="_blank" rel="noopener" aria-label=format!("{}: {title}",tr(TextKey::OpenItemInNewTab)) title=tr(TextKey::OpenItemInNewTab)><span aria-hidden="true" style=icon_style(IconName::OpenInNew,"0.95rem")></span></a></span>
             <small>{tr(if d.field("items", &format!("included_{id}"), row.included.to_string()) == "true" {TextKey::IncludeInPublication} else {TextKey::AddonWorkspaceExcluded})}</small>
             <small hidden=!row.local_media_available>{tr(TextKey::AddonLocalPlaybackAvailable)}</small>
             {(row.metadata_conflict_count>0 || row.liveness_conflict).then(||view!{<small>{tr(TextKey::Conflicts)}</small>})}
@@ -404,8 +472,8 @@ fn item_row(w: &Workspace, row: &AddonMediaListItemRow) -> AnyView {
         <div class="episode-evidence"><div class="airdate"><span class="mobile-column" aria-hidden="true">{tr(TextKey::FirstAired)}</span><span class="sr-only">{tr(TextKey::FirstAired)}": "</span><time datetime=row.first_aired.clone()>{row.first_aired.clone().unwrap_or_else(||tr(TextKey::UnknownAvailability).into())}</time>{gap.map(|days|view!{<small class="gap-note">{format!("{days} d")}</small>})}</div>
         <div class="runtime"><span class="mobile-column" aria-hidden="true">{tr(TextKey::Duration)}</span><span class="sr-only">{tr(TextKey::Duration)}": "</span><span>{row.duration_seconds.map_or_else(||tr(TextKey::UnknownAvailability).into(),|n|format!("{}:{:02}",n/60,n%60))}</span></div></div>
         <div class="row-numbering"><div class="inline-pair">
-            {[("season",TextKey::Season,row.season),("episode",TextKey::Episode,row.episode)].into_iter().map(|(name,key,saved)|view!{<label>{baseline(&format!("{name}_{id}"),&d.field("items",&format!("{name}_{id}"),saved.map(|n|n.to_string()).unwrap_or_default()))}<span aria-hidden="true">{tr(key).chars().next().map(|c|c.to_string())}</span><input id=format!("workspace-{name}_{id}") type="number" min="0" max="2147483647" form=FORM name=format!("{name}_{id}") value=d.field("items",&format!("{name}_{id}"),saved.map(|n|n.to_string()).unwrap_or_default()) placeholder="—" aria-invalid=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("true") aria-describedby=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("workspace-errors") aria-label=format!("{}: {}",tr(key),row.display_title)/></label>}).collect_view()}
-        </div><small>{tr(TextKey::ItemSavedValue)}": "{match (row.season,row.episode){(Some(s),Some(e))=>format!("S{s:02}E{e:02}"),_=>tr(TextKey::Unnumbered).into()}}</small></div>
+            {[("season",TextKey::Season,row.season,"S"),("episode",TextKey::Episode,row.episode,"E")].into_iter().map(|(name,key,saved,symbol)|view!{<label>{baseline(&format!("{name}_{id}"),&d.field("items",&format!("{name}_{id}"),saved_number(saved)))}<span aria-hidden="true">{symbol}</span><input id=format!("workspace-{name}_{id}") type="number" min="0" max="2147483647" form=FORM name=format!("{name}_{id}") value=d.field("items",&format!("{name}_{id}"),saved_number(saved)) data-saved=saved_number(saved) placeholder="—" aria-invalid=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("true") aria-describedby=w.submission.error_fields.contains(&format!("{name}_{id}")).then_some("workspace-errors") aria-label=format!("{}: {}",tr(key),row.display_title)/></label>}).collect_view()}
+        </div><small>{tr(TextKey::ItemSavedValue)}": "{match (row.season,row.episode){(Some(s),Some(e))=>format!("S{s:02}E{e:02}"),_=>tr(TextKey::Unnumbered).into()}}</small><small class="row-dirty-note" hidden=!dirty>{tr(TextKey::UnsavedChanges)}</small></div>
         <button class="row-command-trigger" type="button" popovertarget=menu.clone() aria-label=format!("{}: {}",tr(TextKey::Actions),row.display_title)>{tr(TextKey::Actions)}</button>
         <div id=menu class="row-commands" popover="auto" role="group" aria-label=tr(TextKey::Actions)><p class="command-context">{row.display_title.clone()}</p><div class="command-list">
             {button(&format!("start:{id}"),TextKey::StartHere,false)}

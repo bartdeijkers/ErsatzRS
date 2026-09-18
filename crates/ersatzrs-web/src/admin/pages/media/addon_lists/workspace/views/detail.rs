@@ -1,7 +1,7 @@
 use super::{
     artwork_value, button, checkbox, choice, content_kind_value, detail_state_text_key, filtered,
     import_can_retry, import_discovery_summary, input, kind_select, liveness_select,
-    metadata_fields, revision_can_restore, save_bar, save_status, select, textarea, tr, value,
+    metadata_fields, revision_can_restore, save_bar, save_button, select, textarea, tr, value,
     AddonMediaListArtworkRole, AddonMediaListContentKind, AddonMediaListImportState,
     AddonMediaListItemRole, AddonMediaListSourceProbeOutcome, AddonMediaListSourceProbeState,
     PublicationActivity, TextKey, Workspace, FORM,
@@ -138,7 +138,7 @@ pub(super) fn item(w: &Workspace) -> AnyView {
                 </div>
             </details>
             <div id="item-save" tabindex="-1" class="apply-bar">
-                {save_status(w)}{button("save",TextKey::AddonWorkspaceSaveItem,true)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<small>{tr(TextKey::ItemSaveHelp)}</small>
+                {save_button(w,TextKey::AddonWorkspaceSaveItem)}{button("discard",TextKey::AddonWorkspaceDiscard,false)}<small>{tr(TextKey::ItemSaveHelp)}</small>
             </div>
         </section>
         <section class="item-tools" aria-labelledby="item-tools-heading">

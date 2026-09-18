@@ -24,8 +24,14 @@ release section when tagging a release.
 - The add-on list Items page starts with its items: the publication state now
   sits beside the list title, and finished preparation counters and completed
   publication jobs are shown only under Activity & recovery. Work that is still
-  running or failed stays visible. The saved/unsaved status moved into each
-  page's save bar.
+  running or failed stays visible as a short progress note. The Save button now
+  shows whether the page has unsaved changes (highlighted only when it does),
+  replacing the separate saved/unsaved text and the "Saved." banner.
+- Add-on list rows use S and E for season and episode in every language (Dutch
+  previously showed "A" for episode), mark rows with unsaved numbering or
+  inclusion changes, and offer an "open in a new tab" link beside each title.
+- The add-on list title can be edited directly in the Items heading and is
+  saved with Save changes.
 - Add-on list items are now stored as `{title}-{id}` files (for example
   `My Episode-dQw4w9WgXcQ.yml` with its `.nfo`, artwork, and subtitles), so
   episodes can be found by name on disk. Titles are reduced to characters that

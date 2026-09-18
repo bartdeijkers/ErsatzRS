@@ -449,6 +449,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ItemPackageDefault => "Valeur du paquet ; pas encore activée",
         TextKey::ItemPreviewOptions => "Aperçu des modifications d’options",
         TextKey::ItemAccessActive => "Une vérification d’accès est déjà en cours.",
+        TextKey::OpenItemInNewTab => "Ouvrir dans un nouvel onglet",
         TextKey::AddonWorkspaceLengthFilter => "Filtrer par durée",
         TextKey::AddonWorkspaceMinimumLength => "Durée minimale",
         TextKey::AddonWorkspaceMaximumLength => "Durée maximale",

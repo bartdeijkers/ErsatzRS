@@ -453,6 +453,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ItemPackageDefault => "Package default; not yet activated",
         TextKey::ItemPreviewOptions => "Preview option changes",
         TextKey::ItemAccessActive => "An access check is already in progress.",
+        TextKey::OpenItemInNewTab => "Open in a new tab",
         TextKey::AddonWorkspaceLengthFilter => "Filter by media length",
         TextKey::AddonWorkspaceMinimumLength => "Minimum length",
         TextKey::AddonWorkspaceMaximumLength => "Maximum length",

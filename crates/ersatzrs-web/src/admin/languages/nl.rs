@@ -1173,6 +1173,7 @@ pub fn text(key: TextKey) -> &'static str {
         TextKey::ItemPackageDefault => "Pakketstandaard; nog niet geactiveerd",
         TextKey::ItemPreviewOptions => "Optiewijzigingen bekijken",
         TextKey::ItemAccessActive => "Er wordt al een toegangscontrole uitgevoerd.",
+        TextKey::OpenItemInNewTab => "Openen in een nieuw tabblad",
         TextKey::AddonWorkspaceLengthFilter => "Filteren op medialengte",
         TextKey::AddonWorkspaceMinimumLength => "Minimumlengte",
         TextKey::AddonWorkspaceMaximumLength => "Maximumlengte",

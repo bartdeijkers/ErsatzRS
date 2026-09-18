@@ -316,8 +316,18 @@ fn preparation_view(
     only_attention: bool,
 ) -> impl IntoView {
     use super::super::{elapsed_between, format_progress_timestamp};
+    if only_attention {
+        // Items continues the counts line; Activity & recovery owns the full
+        // counters.
+        return view! {
+            <span class="preparation-line" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0 || !preparation_needs_attention(r))>
+                {move || readiness.with(preparation_line)}
+            </span>
+        }
+        .into_any();
+    }
     view! {
-        <section class="settings-section" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0 || (only_attention && !preparation_needs_attention(r)))>
+        <section class="settings-section" data-testid="addon-preparation-tasks" hidden=move || readiness.with(|r| r.preparation.affected_items == 0)>
             <h3>{tr(TextKey::PreparationTasks)}</h3>
             <dl class="facts">
                 {[(TextKey::PreparationAffectedItems,0),(TextKey::PreparationIntervals,1),(TextKey::PreparationDownloads,2),(TextKey::PreparationSubtitles,3),(TextKey::PreparationQueued,4),(TextKey::PreparationRunning,5),(TextKey::PreparationWaiting,6),(TextKey::Completed,7),(TextKey::Failed,8),(TextKey::PreparationNotQueued,9)].into_iter().map(|(key,index)| view! {
@@ -333,6 +343,37 @@ fn preparation_view(
             </dl>
         </section>
     }
+    .into_any()
+}
+
+/// Preparation progress appended to the Items counts line: completed of
+/// affected work plus every other non-zero counter. The counts already name
+/// "Preparation tasks" while prepared media is required.
+fn preparation_line(readiness: &AddonMediaListPublicationReadiness) -> String {
+    let p = &readiness.preparation;
+    let label = if readiness.required_prepared_media_count > 0 {
+        String::new()
+    } else {
+        format!("{}: ", tr(TextKey::PreparationTasks))
+    };
+    let mut text = format!(
+        " · {label}{} {}/{}",
+        tr(TextKey::Completed),
+        p.completed_tasks,
+        p.affected_items
+    );
+    for (key, count) in [
+        (TextKey::PreparationRunning, p.running_tasks),
+        (TextKey::PreparationWaiting, p.waiting_tasks),
+        (TextKey::PreparationQueued, p.queued_tasks),
+        (TextKey::PreparationNotQueued, p.unqueued_tasks),
+        (TextKey::Failed, p.failed_tasks),
+    ] {
+        if count > 0 {
+            write!(text, " · {} {count}", tr(key)).expect("writing a string is infallible");
+        }
+    }
+    text
 }
 
 fn overview_view(
@@ -340,11 +381,10 @@ fn overview_view(
     readiness: RwSignal<AddonMediaListPublicationReadiness>,
 ) -> impl IntoView {
     view! {
-        {preparation_view(readiness, true)}
         <div class="publication-overview">
             <div class="publication-state">
                 <strong>{move || readiness.with(|r| tr(state_key(r)))}</strong>
-                <span>{move || readiness.with(counts_text)}</span>
+                <span>{move || readiness.with(counts_text)}{preparation_view(readiness, true)}</span>
             </div>
             <button
                 class="button primary"
