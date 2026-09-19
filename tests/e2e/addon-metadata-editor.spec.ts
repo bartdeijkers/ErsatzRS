@@ -1147,7 +1147,8 @@ WHERE "Id" = ${seed.firstItemId};
     expect(new Set([...firstIds,...secondIds]).size).toBe(firstIds.length+secondIds.length);
     await expect(items.locator('.episode-row').first().locator('[name^="episode_"]')).toHaveValue('10');
     await page.setViewportSize({width:390,height:844});
-    await expect(page.locator('button[value="page:0"]')).toBeVisible();
+    // First page and Previous page both lead to page 0 from the second page.
+    await expect(page.getByRole('button',{name:'Previous page',exact:true})).toBeVisible();
     expect(await items.locator('.episode-row').first().evaluate(e=>getComputedStyle(e).transitionDuration)).toBe('0s');
     await workspaceSubmit(page,'save');await expect(page.locator('#workspace-errors')).toHaveCount(0);
     expect(sqlite(`SELECT COUNT(*) FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${seed.listId} AND json_extract("MetadataOverrideJson",'$.season')=1`)).toBe('27');
