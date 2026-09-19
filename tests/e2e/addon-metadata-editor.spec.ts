@@ -562,7 +562,8 @@ WHERE "AddonMediaListId" = ${seed.listId};
     await expect(collection.locator('.episode-row')).toHaveCount(2);
     await expect(collection.getByRole('button',{name:seed.firstTitle,exact:true})).toBeVisible();
     await expect(collection.getByRole('button',{name:seed.secondTitle,exact:true})).toBeVisible();
-    await expect(page.getByRole('heading',{level:1})).toHaveText('Glamourland');
+    // The Items heading edits the list title in place; its value is the title.
+    await expect(page.locator('h1 #workspace-metadata_title')).toHaveValue('Glamourland');
     const ids = await collection
       .locator('.episode-row')
       .evaluateAll((items) => items.map((item) => item.id.replace('item-','')));
