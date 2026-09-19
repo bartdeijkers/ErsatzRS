@@ -27,7 +27,7 @@ These plans include proposals and deferred work, not blanket implementation appr
 - [Teletext](teletext-support.md) — Phase 9, starting with the product/standards ADR.
 - [Video jukebox](application-layer-and-video-jukebox.md) — Phase 10, after teletext.
 - [Channel packages](channel-packages.md) — Phase 11 draft; product/feed ADR first.
-- [Upstream catch-up](ErsatzRS_catchup.md) — proposed per-commit parity reconciliation.
+- [Upstream catch-up](upstream-catch-up.md) — latest-upstream ledger and per-commit procedure; original triage remains in [the seed plan](ErsatzRS_catchup.md).
 - [Hardware residue](phase-8-hardware-residue.md) — deferred hardware-dependent proof and Vulkan decision.
 - [Prebuilt Docker images](docker-prebuilt-binary-images.md) — assemble release images from native artifacts.
 - [Persistent Docker cache](docker-persistent-build-cache.md) — retain BuildKit work between attempts.

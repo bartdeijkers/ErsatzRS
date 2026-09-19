@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Changed
 
+- Track upstream ErsatzTV catch-up through a ledger refreshed to the latest
+  upstream commit each run (currently 162 commits) and milestone gates before
+  teletext. Keep the current parity pin unchanged during
+  bootstrap and propose native-pipeline handling of ErsatzTV Next in ADR 0095.
+  Use substantive Codex review for catch-up; retain AMM-N-03 acceptance as the
+  prerequisite for the first upstream step.
+
 - Keep detailed future work in `plans/`, completion history and evidence in
   progress TOMLs, and reusable design artifacts under documentation. Milestones
   may omit a standalone plan; supplied plan links are still validated. The

@@ -1,5 +1,14 @@
 # Plan: Catch ErsatzRS up with upstream ErsatzTV, one commit at a time
 
+> Historical seed plan. The [live ledger](upstream-catch-up.md) and structured
+> milestones govern execution. The maintainer's 2026-09-19 amendment replaces
+> the fixed `495e3799` cutoff with the latest fetched upstream tip on every run
+> (currently 162 commits). Next-engine ADR references to 0094 below refer to
+> newly allocated Proposed ADR 0095; ADR 0094 owns automatic publication.
+> Each task processes at most one upstream commit, including N/A rows.
+> The 2026-09-20 decision requires direct substantive Codex review only;
+> historical review instructions below do not govern the active procedure.
+
 ## Context
 
 ErsatzRS measures parity against a fixed upstream snapshot:

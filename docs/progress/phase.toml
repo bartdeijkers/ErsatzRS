@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-P-01 Windows dogfood: repair missing-thumbnail publication failure and reverify beta'
+current_focus = 'UCU bootstrap reviewed; complete AMM-N-03 native acceptance before the first upstream step'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -17,7 +17,8 @@ controller, localized editor, health coverage, and decoded Windows/WSL runtime
 proof. AMM-I closes the add-on-list import/review UX correction with automatic
 Ready materialization, authoritative publication readiness, faithful no-JS
 forms, compact responsive review cards, and keyboard-safe navigation. Phase 9
-teletext is now unblocked. Redacted Windows dogfood reopened the atomic
+teletext now also waits for the latest-upstream catch-up program.
+Redacted Windows dogfood reopened the atomic
 add-on-list publication contract under AMM-J: an interrupted scan followed by
 a one-shot directory-rename failure can leave a valid journal permanently
 blocked without startup or admin recovery. AMM-J-01 now moves exact-revision
@@ -60,6 +61,18 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-20: reviewed bootstrap; fetched upstream tip remains 4e951c17
+(162 pending commits). Refresh the target and append new rows each run.
+The live ledger is plans/upstream-catch-up.md; no upstream row is processed.
+The maintainer removed Claude from the active catch-up workflow; substantive
+Codex review replaces cross-review. Historical failed reviews are not blockers.
+UCU-00 remains In progress while its AMM-N-03 prerequisite is open.
+Complete AMM-N-03 before per-commit execution, obtain acceptance of Proposed
+ADR 0095 before relying on its exclusions, then process ucu-01 through ucu-09
+in order. Teletext p9a-01 waits for ucu-09 as well as its existing dependencies.
+Earlier release/CI authorizations below are historical and do not authorize
+push, CI dispatch or tagging for this catch-up task.
+
 AMM-P-01 implements ADR 0094 automatic publication, complete metadata transfer
 and the episode ContentRating repair. Linux native, browser, copied-profile and
 playback evidence is recorded in the milestone. Exact-SHA CI and Windows-only

@@ -955,7 +955,7 @@ title      = 'Decide the teletext product and standards contract'
 status     = 'Not started'
 feature    = 'teletext-support'
 plan       = 'plans/teletext-support.md'
-depends_on = ['p8e-03', 'p8f-01', 'dtx-a-02']
+depends_on = ['p8e-03', 'p8f-01', 'dtx-a-02', 'ucu-09']
 acceptance = '''
 An accepted ADR distinguishes source DVB teletext subtitles, full-page
 browsing, generated channel pages, burn-in, and MPEG-TS carriage; defines the
@@ -4863,3 +4863,278 @@ until a manual refresh. A focused regression covers adoption, explicit manual
 admission and the manual-refresh recheck; infra all-target Clippy passes. Native
 Windows proof of the reuse build is pending.
 '''
+
+[[milestone]]
+id         = 'ucu-00'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Set up latest-upstream catch-up tracking'
+status     = 'In progress'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['amm-n-03']
+acceptance = """
+Register the current 162-row ledger with per-run upstream target refresh, Proposed native-pipeline ADR, parity record,
+chained ucu-00..ucu-09 milestones and teletext dependency. Preserve the pin.
+Validate with cargo xtask progress check, git diff --check, exact ledger
+SHA/subject comparison against upstream git log, and substantive Codex review.
+AMM-N-03 acceptance remains required before per-commit execution.
+"""
+evidence = """
+2026-09-19 bootstrap: fetched origin/main at
+4e951c1724d7f42324462a0ae70db3589b599938; all 162 ledger SHA/subjects match
+upstream git log order, with empty verdict/owner/commit cells. Relative links
+resolve; the dependency chain and existing p9a-01 dependencies are preserved.
+cargo xtask progress check and git diff --check pass. Codex reviewed the
+bootstrap and corrected the plan path format and stale fixed-target text.
+The maintainer explicitly authorized sending the documentation diff to Claude
+on 2026-09-19. Two full review calls timed out after 120 seconds without output
+(exit 124), including an invocation with hooks, settings sources, skills and
+MCP integrations disabled. A minimal prompt returned READY (exit 0), but a
+focused review packet also timed out after 180 seconds (exit 124). No review
+findings or approval were returned. Cross-review was unproven at that
+checkpoint; the then-required Claude review prevented landing. This historical
+requirement was superseded by the 2026-09-20 maintainer decision below. AMM-N-03 remains
+open; ADR 0095 remains Proposed. No upstream row processed or commit made;
+pin and upstream HEAD remain 0d301df5. The latest-target policy follows the
+maintainer's explicit amendment, with one processed upstream row per run.
+
+2026-09-20 documentation checkpoint: the maintainer removed Claude from the
+active catch-up workflow and authorized one local bootstrap commit. Codex
+performed the substantive review directly, without replacement review agents.
+Corrected the baseline rules' missing catch-up exception, the row-0 fallback
+wording, and the missing explicit AMM-N-03 gate in the execution procedure.
+Active milestone criteria now require substantive Codex review; the failed
+Claude calls above remain history, not an acceptance blocker.
+Fetched origin/main again: target remains 4e951c1724d7f42324462a0ae70db3589b599938.
+Exact full-SHA resolution and subject/order comparison against upstream git log
+passes for all 162 unique rows; verdict/owner/commit fields remain empty.
+Pin, initial ledger position and upstream HEAD remain 0d301df5. Milestone
+chain, release-window boundaries, teletext dependencies and local links pass
+review; cargo xtask progress check and git diff --check pass.
+Bootstrap documentation is reviewed; ucu-00 remains In progress because its
+AMM-N-03 prerequisite is still open (integrated packaged browser-profile
+acceptance and remaining native/release proof in that milestone). ADR 0095
+remains Proposed with Not implemented status and unresolved decision debt.
+No product build, browser check, full test gate, upstream step, push, CI or tag
+is part of this documentation checkpoint; no milestone acceptance is claimed.
+"""
+
+[[milestone]]
+id         = 'ucu-01'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through a74896df'
+status     = 'Not started'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-00']
+acceptance = """
+Process every ledger row in this release window through a74896df in order,
+with a justified verdict, Rust code/test evidence and ADR-backed deviations.
+Append newly fetched upstream commits to the ucu-09 tail; no unapproved
+deferrals are included. Preserve
+subtitle and alternate-audio parity. Focused checks and substantive Codex review
+pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
+cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
+TSDuck passes if the pipeline changed. Require green exact-SHA CI through
+separate authorization; never launch CI as part of a one-commit task.
+Pin, last processed ledger row and upstream HEAD agree.
+"""
+evidence = """
+Not started. All window rows remain pending; no implementation or gate evidence claimed.
+"""
+
+[[milestone]]
+id         = 'ucu-02'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through 290f991b'
+status     = 'Not started'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-01']
+acceptance = """
+Process every ledger row in this release window through 290f991b in order,
+with a justified verdict, Rust code/test evidence and ADR-backed deviations.
+Append newly fetched upstream commits to the ucu-09 tail; no unapproved
+deferrals are included. Preserve
+subtitle and alternate-audio parity. Focused checks and substantive Codex review
+pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
+cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
+TSDuck passes if the pipeline changed. Require green exact-SHA CI through
+separate authorization; never launch CI as part of a one-commit task.
+Pin, last processed ledger row and upstream HEAD agree.
+"""
+evidence = """
+Not started. All window rows remain pending; no implementation or gate evidence claimed.
+"""
+
+[[milestone]]
+id         = 'ucu-03'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through 637e6be8'
+status     = 'Not started'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-02']
+acceptance = """
+Process every ledger row in this release window through 637e6be8 in order,
+with a justified verdict, Rust code/test evidence and ADR-backed deviations.
+Append newly fetched upstream commits to the ucu-09 tail; no unapproved
+deferrals are included. Preserve
+subtitle and alternate-audio parity. Focused checks and substantive Codex review
+pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
+cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
+TSDuck passes if the pipeline changed. Require green exact-SHA CI through
+separate authorization; never launch CI as part of a one-commit task.
+Pin, last processed ledger row and upstream HEAD agree.
+"""
+evidence = """
+Not started. All window rows remain pending; no implementation or gate evidence claimed.
+"""
+
+[[milestone]]
+id         = 'ucu-04'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through 0b44ad47'
+status     = 'Not started'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-03']
+acceptance = """
+Process every ledger row in this release window through 0b44ad47 in order,
+with a justified verdict, Rust code/test evidence and ADR-backed deviations.
+Append newly fetched upstream commits to the ucu-09 tail; no unapproved
+deferrals are included. Preserve
+subtitle and alternate-audio parity. Focused checks and substantive Codex review
+pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
+cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
+TSDuck passes if the pipeline changed. Require green exact-SHA CI through
+separate authorization; never launch CI as part of a one-commit task.
+Pin, last processed ledger row and upstream HEAD agree.
+"""
+evidence = """
+Not started. All window rows remain pending; no implementation or gate evidence claimed.
+"""
+
+[[milestone]]
+id         = 'ucu-05'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through 35b5a259'
+status     = 'Not started'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-04']
+acceptance = """
+Process every ledger row in this release window through 35b5a259 in order,
+with a justified verdict, Rust code/test evidence and ADR-backed deviations.
+Append newly fetched upstream commits to the ucu-09 tail; no unapproved
+deferrals are included. Preserve
+subtitle and alternate-audio parity. Focused checks and substantive Codex review
+pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
+cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
+TSDuck passes if the pipeline changed. Require green exact-SHA CI through
+separate authorization; never launch CI as part of a one-commit task.
+Pin, last processed ledger row and upstream HEAD agree.
+"""
+evidence = """
+Not started. All window rows remain pending; no implementation or gate evidence claimed.
+"""
+
+[[milestone]]
+id         = 'ucu-06'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through 7b7a19a2'
+status     = 'Not started'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-05']
+acceptance = """
+Process every ledger row in this release window through 7b7a19a2 in order,
+with a justified verdict, Rust code/test evidence and ADR-backed deviations.
+Append newly fetched upstream commits to the ucu-09 tail; no unapproved
+deferrals are included. Preserve
+subtitle and alternate-audio parity. Focused checks and substantive Codex review
+pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
+cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
+TSDuck passes if the pipeline changed. Require green exact-SHA CI through
+separate authorization; never launch CI as part of a one-commit task.
+Pin, last processed ledger row and upstream HEAD agree.
+"""
+evidence = """
+Not started. All window rows remain pending; no implementation or gate evidence claimed.
+"""
+
+[[milestone]]
+id         = 'ucu-07'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through 49b68314'
+status     = 'Not started'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-06']
+acceptance = """
+Process every ledger row in this release window through 49b68314 in order,
+with a justified verdict, Rust code/test evidence and ADR-backed deviations.
+Append newly fetched upstream commits to the ucu-09 tail; no unapproved
+deferrals are included. Preserve
+subtitle and alternate-audio parity. Focused checks and substantive Codex review
+pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
+cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
+TSDuck passes if the pipeline changed. Require green exact-SHA CI through
+separate authorization; never launch CI as part of a one-commit task.
+Pin, last processed ledger row and upstream HEAD agree.
+"""
+evidence = """
+Not started. All window rows remain pending; no implementation or gate evidence claimed.
+"""
+
+[[milestone]]
+id         = 'ucu-08'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through 5bb3ddfc'
+status     = 'Not started'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-07']
+acceptance = """
+Process every ledger row in this release window through 5bb3ddfc in order,
+with a justified verdict, Rust code/test evidence and ADR-backed deviations.
+Append newly fetched upstream commits to the ucu-09 tail; no unapproved
+deferrals are included. Preserve
+subtitle and alternate-audio parity. Focused checks and substantive Codex review
+pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
+cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
+TSDuck passes if the pipeline changed. Require green exact-SHA CI through
+separate authorization; never launch CI as part of a one-commit task.
+Pin, last processed ledger row and upstream HEAD agree.
+"""
+evidence = """
+Not started. All window rows remain pending; no implementation or gate evidence claimed.
+"""
+
+[[milestone]]
+id         = 'ucu-09'
+phase      = 'UCU — Upstream ErsatzTV catch-up'
+title      = 'Reconcile upstream through the latest fetched tip'
+status     = 'Not started'
+feature    = 'upstream-baseline-catch-up'
+plan       = 'plans/upstream-catch-up.md'
+depends_on = ['ucu-08']
+acceptance = """
+Process every ledger row in this release window through 4e951c17 (latest fetched tip) in order,
+with a justified verdict, Rust code/test evidence and ADR-backed deviations.
+Append newly fetched upstream commits to the ucu-09 tail; no unapproved
+deferrals are included. Preserve
+subtitle and alternate-audio parity. Focused checks and substantive Codex review
+pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
+cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
+TSDuck passes if the pipeline changed. Require green exact-SHA CI through
+separate authorization; never launch CI as part of a one-commit task.
+Pin, last processed ledger row and upstream HEAD agree.
+Every row through the latest fetched upstream tip is justified (currently 162).
+Refresh upstream before claiming completion; new rows reopen this tail while
+preserving earlier evidence. ADR 0095 is Accepted with accurate Implementation,
+and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
+"""
+evidence = """
+Not started. All window rows remain pending; no implementation or gate evidence claimed.
+"""
