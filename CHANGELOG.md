@@ -13,8 +13,6 @@ release section when tagging a release.
 
 ## [Unreleased]
 
-## [1.0.36-beta] - 2026-09-19
-
 ### Added
 
 - Add a "New season each calendar year" option to add-on list episode
@@ -3091,8 +3089,7 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.36-beta...HEAD
-[1.0.36-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...v1.0.36-beta
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...HEAD
 [1.0.35-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.34-beta...v1.0.35-beta
 [1.0.34-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.33-beta...v1.0.34-beta
 [1.0.33-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.32-beta...v1.0.33-beta
