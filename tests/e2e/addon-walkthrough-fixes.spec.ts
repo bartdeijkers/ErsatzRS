@@ -451,11 +451,18 @@ test('166-entry overview reports overlapping preparation tasks separately from i
   await hydrated(page, `/media/addon-lists/${listId}`);
   // Items continues its counts line; Activity & recovery owns the full counters.
   const preparation = page.getByTestId('addon-preparation-tasks');
-  await expect(preparation).toContainText('Completed 0/165');
-  await expect(preparation).toContainText('Not queued 330');
+  // The worker can finish a task between the import and the hold above, and
+  // a finished result stays complete. Tasks, not items, must add up: 165 items
+  // with an interval and a subtitle task each are 330 tasks.
+  await expect(preparation).toContainText(/Completed \d+\/165/);
+  const counts = (await preparation.textContent()) ?? '';
+  const completed = Number(/Completed (\d+)\/165/.exec(counts)?.[1]);
+  const notQueued = Number(/Not queued (\d+)/.exec(counts)?.[1]);
+  expect(completed + notQueued).toBe(330);
   await expect(page.locator('[name="category"] option[value="unknown"]')).toHaveText('Unknown (1)');
   // Stable durable states exercise Activity without racing or accelerating the worker.
-  const pendingItem = Number(sqlite(`SELECT MIN("Id") FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId} AND "Id"<>${unresolved};`));
+  // The last item is the one the worker reaches last, so its tasks are open.
+  const pendingItem = Number(sqlite(`SELECT MAX("Id") FROM "AddonMediaListItem" WHERE "AddonMediaListId"=${listId} AND "Id"<>${unresolved};`));
   sqlite(`INSERT INTO "AddonMediaListItemOperationJob"
     ("AddonMediaListId","AddonMediaListItemId","Kind","SavedDraftRevision","InputJson","ContextFingerprint","State","NextEligibleAt","LeaseExpiresAt","CreatedAt","UpdatedAt")
     SELECT ${listId},${pendingItem},2,"DraftRevision",'{}','activity-running',1,NULL,datetime('now','+1 hour'),datetime('now','-1 minute'),datetime('now') FROM "AddonMediaList" WHERE "Id"=${listId};
@@ -471,6 +478,8 @@ test('166-entry overview reports overlapping preparation tasks separately from i
   await expect(activity.getByText('Download tasks', { exact: true }).locator('..').locator('dd')).toHaveText('0');
   await expect(activity.getByText('Running', { exact: true }).locator('..').locator('dd')).toHaveText('1');
   await expect(activity.getByText('Waiting', { exact: true }).locator('..').locator('dd')).toHaveText('1');
-  await expect(activity.getByText('Not queued', { exact: true }).locator('..').locator('dd')).toHaveText('328');
+  const activityCount = async (label: string): Promise<number> =>
+    Number(await activity.getByText(label, { exact: true }).locator('..').locator('dd').textContent());
+  expect((await activityCount('Completed')) + (await activityCount('Not queued'))).toBe(328);
   expect(sqlite(`SELECT "Included" FROM "AddonMediaListItem" WHERE "Id"=${unresolved};`)).toBe('1');
 });
