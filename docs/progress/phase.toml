@@ -321,6 +321,11 @@ and exact-candidate CI is green, the maintainer authorizes a new beta release
 containing only the Windows package. Do not publish before those gates.
 Resume Phase 9A at p9a-01 after the corrective program by accepting the teletext
 product and standards contract before implementation.
+
+Deferred maintainer tooling (retained from the former plan index): evaluate
+mdBook or another documentation build system, and validate the Claude hook
+schema before enabling further hook automation. Neither item is active product
+scope or a prerequisite for the current corrective milestone.
 '''
 
 [[blocking_decision]]

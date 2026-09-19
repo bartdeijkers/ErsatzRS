@@ -8,7 +8,6 @@ phase      = 'AMM-O — portable file-backed add-on lists'
 title      = 'Withdrawn: rebuild add-on lists from authoritative saved folders'
 status     = 'Deferred'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-m-01b']
 acceptance = '''
 Withdrawn by the maintainer on 2026-09-13. No active acceptance or implementation
@@ -28,7 +27,6 @@ phase      = 'Phase 7A — Guardrails and failure semantics'
 title      = 'Decide and enforce the application boundary'
 status     = 'Complete'
 feature    = 'application-use-case-layer'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = []
 acceptance = '''
 An accepted ADR defines the application/composition boundaries, and a
@@ -54,7 +52,6 @@ phase      = 'Phase 7A — Guardrails and failure semantics'
 title      = 'Make playback and HLS data-access failures explicit'
 status     = 'Complete'
 feature    = 'runtime-data-access-error-semantics'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = []
 acceptance = '''
 Playback metadata, HLS configuration/current-item, and transcode-capacity
@@ -83,7 +80,6 @@ phase      = 'Phase 7A — Guardrails and failure semantics'
 title      = 'Introduce typed admin load and error states'
 status     = 'Complete'
 feature    = 'admin-ui-failure-semantics'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = []
 acceptance = '''
 The complete `/settings/*` and `/media/libraries` route families render through
@@ -122,7 +118,6 @@ phase      = 'Phase 7A — Guardrails and failure semantics'
 title      = 'Close development-route and tracker drift'
 status     = 'Complete'
 feature    = 'developer-surface-hardening'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = []
 acceptance = '''
 Development routes require an explicit non-production opt-in, TEST.md agrees
@@ -150,7 +145,6 @@ phase      = 'Phase 7B — Application-layer extraction'
 title      = 'Build the application service foundation'
 status     = 'Complete'
 feature    = 'application-use-case-layer'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7a-01']
 acceptance = '''
 ersatzrs-app contains documented command/query/application-error modules,
@@ -177,7 +171,6 @@ phase      = 'Phase 7B — Application-layer extraction'
 title      = 'Migrate playout-build orchestration'
 status     = 'Complete'
 feature    = 'application-use-case-layer'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7b-01']
 acceptance = '''
 One RequestPlayoutBuild use case owns admission and typed outcomes; all web/API
@@ -208,7 +201,6 @@ phase      = 'Phase 7B — Application-layer extraction'
 title      = 'Migrate scan-operation orchestration'
 status     = 'Complete'
 feature    = 'application-use-case-layer'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7b-01']
 acceptance = '''
 Application services own library/show scan admission, FIFO queueing, locking,
@@ -247,7 +239,6 @@ phase      = 'Phase 7B — Application-layer extraction'
 title      = 'Replace simplified block preview with the real engine'
 status     = 'Complete'
 feature    = 'block-scheduling-ui'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7a-02', 'p7a-03', 'p7b-01']
 acceptance = '''
 Unsaved block preview constructs upstream-shaped temporary scheduling state,
@@ -281,7 +272,6 @@ phase      = 'Phase 7B — Application-layer extraction'
 title      = 'Migrate remaining admin use cases and queries'
 status     = 'Complete'
 feature    = 'application-use-case-layer'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7b-02', 'p7b-03', 'p7b-04']
 acceptance = '''
 Collection, playlist, channel, schedule, settings, Trakt, and media handlers
@@ -329,7 +319,6 @@ phase      = 'Phase 7C — Secondary stopgap closeout'
 title      = 'Split local Trakt work from remote refresh'
 status     = 'Complete'
 feature    = 'trakt-lists'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7b-05']
 acceptance = '''
 Local matching/generated-playlist operations do not accept a remote API
@@ -352,7 +341,6 @@ phase      = 'Phase 7C — Secondary stopgap closeout'
 title      = 'Make watermark preview claims truthful'
 status     = 'Complete'
 feature    = 'watermark-editor'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7a-03']
 acceptance = '''
 Watermark Actual Size uses selected-asset dimensions or is explicitly
@@ -394,7 +382,6 @@ phase      = 'Phase 7C — Secondary stopgap closeout'
 title      = 'Resolve deferred search and browser behavior'
 status     = 'Complete'
 feature    = 'media-browsers'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7a-03']
 acceptance = '''
 Search thumbnail sizing is wired; deferred See All detail/library-filter
@@ -426,7 +413,6 @@ phase      = 'Phase 7C — Secondary stopgap closeout'
 title      = 'Split large modules after boundary extraction'
 status     = 'Complete'
 feature    = 'application-use-case-layer'
-plan       = 'plans/application-layer-and-video-jukebox.md'
 depends_on = ['p7b-05', 'p7c-01', 'p7c-02', 'p7c-03']
 acceptance = '''
 The module-split survey uses current measurements; reduced web transport,
@@ -791,7 +777,6 @@ phase      = 'Phase 8D — Remote Stream playlist ingest'
 title      = 'Decide the Remote Stream playlist ingest contract'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/INDEX.md'
 depends_on = ['p8a-02', 'p8b-02', 'p8c-01', 'p8c-02', 'p8c-03']
 acceptance = '''
 An accepted ADR records this feature as an ErsatzRS extension with no ErsatzTV
@@ -809,7 +794,6 @@ phase      = 'Phase 8D — Remote Stream playlist ingest'
 title      = 'Install and resolve provider add-ons on all six targets'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/INDEX.md'
 depends_on = ['p8d-01']
 acceptance = '''
 Provider add-ons install only from explicitly trusted signed repositories with
@@ -833,7 +817,6 @@ phase      = 'Phase 8D — Remote Stream playlist ingest'
 title      = 'Recognize and validate playlist manifests during scan'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/INDEX.md'
 depends_on = ['p8d-02']
 acceptance = '''
 Remote Stream scans recognize playlist manifests, exclude them from the
@@ -855,7 +838,6 @@ phase      = 'Phase 8D — Remote Stream playlist ingest'
 title      = 'Synchronize playlists into Remote Stream definitions'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/INDEX.md'
 depends_on = ['p8d-03']
 acceptance = '''
 A serialized sync enumerates through the resolved add-on capability, applies filters,
@@ -881,7 +863,6 @@ phase      = 'Phase 8E — Remote Stream playlist management'
 title      = 'Report playlist sync health and troubleshooting'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/INDEX.md'
 depends_on = ['p8d-04']
 acceptance = '''
 A persisted health check reports missing, disabled, incompatible, or modified add-ons, failed or
@@ -903,7 +884,6 @@ phase      = 'Phase 8E — Remote Stream playlist management'
 title      = 'Expose localized playlist management in the admin UI'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/INDEX.md'
 depends_on = ['p8d-04']
 acceptance = '''
 Remote Stream library detail lists manifests with state and Sync now; playlist
@@ -926,7 +906,6 @@ phase      = 'Phase 8E — Remote Stream playlist management'
 title      = 'Materialize and schedule upstream playlist order'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/INDEX.md'
 depends_on = ['p8e-01', 'p8e-02']
 acceptance = '''
 create_playlist maintains an ordered, sync-owned ErsatzRS Playlist through the
@@ -951,7 +930,6 @@ phase      = 'Phase 8F — Admin UI closeout'
 title      = 'Gate mirror options on the selected playout source'
 status     = 'Complete'
 feature    = 'channels-admin-ui'
-plan       = 'plans/INDEX.md'
 depends_on = []
 acceptance = '''
 The channel editor enables mirror source channel and playout offset only while
@@ -1937,7 +1915,6 @@ phase      = 'AMM-G — Overview-first imports and deferred details'
 title      = 'Retain unavailable Beeld & Geluid series episodes'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-replacement-ux.md'
 depends_on = ['amm-g-05']
 acceptance = '''
 The resumable discover path and legacy fallback preserve every operator-supplied
@@ -1981,7 +1958,6 @@ phase      = 'AMM-G — Overview-first imports and deferred details'
 title      = 'Accept direct and aggregate official add-on-list URLs'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-source-url-acceptance.md'
 depends_on = ['amm-g-05']
 acceptance = '''
 Both official add-ons accept every frozen source shape in the plan's seven-URL
@@ -2030,7 +2006,6 @@ phase      = 'CRF — Classic refresh continuity'
 title      = 'Generate and restore real Classic refresh checkpoints'
 status     = 'Complete'
 feature    = 'classic-scheduling'
-plan       = 'plans/playout-refresh-and-addon-tv-deduplication.md'
 depends_on = []
 acceptance = '''
 A fresh production-shaped Classic build persists dated day checkpoints for
@@ -2071,7 +2046,6 @@ phase      = 'CRF — Classic refresh continuity'
 title      = 'Scope scan invalidation to dependent playouts'
 status     = 'Complete'
 feature    = 'remote-stream-playlists'
-plan       = 'plans/playout-refresh-and-addon-tv-deduplication.md'
 depends_on = ['crf-01']
 acceptance = '''
 Remote Stream membership reconciliation reports the changed library and stable
@@ -2112,7 +2086,6 @@ phase      = 'AMM-H — Projection idempotency and display uniqueness'
 title      = 'Deduplicate projected artwork and television rows'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/playout-refresh-and-addon-tv-deduplication.md'
 depends_on = ['amm-g-05']
 acceptance = '''
 Add-on television publication canonicalizes artwork candidates by metadata
@@ -2145,7 +2118,6 @@ phase      = 'AMM-I — Import and review UX correction'
 title      = 'Make add-on-list import and publication state self-explanatory'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-import-review-ux.md'
 depends_on = ['amm-g-07', 'amm-h-01']
 acceptance = '''
 A completed overview populates the review collection with the exact committed
@@ -2182,7 +2154,6 @@ phase      = 'AMM-J — Crash-safe publication recovery'
 title      = 'Move add-on publication into a durable recovery coordinator'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-publication-recovery.md'
 depends_on = ['amm-i-01']
 acceptance = '''
 Publish persists one exact-revision job and returns without owning the scan or
@@ -2227,7 +2198,6 @@ phase      = 'AMM-J — Crash-safe publication recovery'
 title      = 'Make publication rollback atomic on Windows and POSIX'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-publication-recovery.md'
 depends_on = ['amm-j-01']
 acceptance = '''
 Journal markers and observable directory state make every partial swap
@@ -2270,7 +2240,6 @@ phase      = 'AMM-J — Crash-safe publication recovery'
 title      = 'Expose recovery and keep restricted items item-scoped'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-publication-recovery.md'
 depends_on = ['amm-j-02']
 acceptance = '''
 The localized hydrated and no-JavaScript editor distinguishes active, waiting,
@@ -2307,7 +2276,6 @@ phase      = 'AMM-J — Crash-safe publication recovery'
 title      = 'Persist a redacted causal publication and recovery history'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-publication-recovery.md'
 depends_on = ['amm-j-03']
 acceptance = '''
 Every publication/recovery job persists one ordered causal event stream with a
@@ -2350,7 +2318,6 @@ phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Persist provider-neutral options and complete list lifecycle state'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-j-04']
 acceptance = '''
 ADR 0085 option schemas, list/item draft and published values, refresh cadence,
@@ -2384,7 +2351,6 @@ phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Add clean reset, always-visible metadata, and optional numbering'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-01']
 acceptance = '''
 Reset and reload source URL durably unpublishes and removes every derived list
@@ -2433,7 +2399,6 @@ phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Open Remote Stream details from add-on-list search results'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-02']
 acceptance = '''
 Remote Stream search cards have a canonical /media/remote/streams/:id href and
@@ -2468,7 +2433,6 @@ phase      = 'AMM-K — Operator-safe list lifecycle and navigation'
 title      = 'Preview list impact and retain bounded publication revisions'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-03']
 acceptance = '''
 The detail page offers durable non-mutating Test source, an exact saved-draft
@@ -2507,7 +2471,6 @@ phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Replace daily auto-refresh with fixed and adaptive cadences'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-01']
 acceptance = '''
 Adaptive, daily, weekly, monthly, yearly, and never are localized select values
@@ -2549,7 +2512,6 @@ phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Use a transactional yt-dlp archive for new-item discovery'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-01']
 acceptance = '''
 Import v2 supports full and incremental generations, a list record plus zero
@@ -2595,7 +2557,6 @@ phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Refresh complete playlist metadata independently of item deltas'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-02']
 acceptance = '''
 The official yt-dlp package performs bounded playlist-header extraction and
@@ -2629,7 +2590,6 @@ phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Reconcile a complete source without erasing operator work'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-03']
 acceptance = '''
 Reconcile entire source runs a complete scratch generation and staged full
@@ -2670,7 +2630,6 @@ phase      = 'AMM-L — Cadenced incremental refresh and rich headers'
 title      = 'Make refresh publication policy explicit and safe'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-04']
 acceptance = '''
 Each list persists Review changes before publishing by default and may opt into
@@ -2710,7 +2669,6 @@ phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
 title      = 'Stream yt-dlp videos with SponsorBlock intervals removed'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-04', 'amm-l-05']
 acceptance = '''
 The schema-rendered editor offers list defaults and nullable item overrides for
@@ -3433,7 +3391,6 @@ phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
 title      = 'Add generic list-level streaming and Download ahead modes'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-m-01a']
 acceptance = '''
 Add a provider-neutral delivery setting as a labeled native HTML select at list
@@ -3657,7 +3614,6 @@ phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
 title      = 'Repair current CI failures before starting AMM-M-02'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-l-05']
 acceptance = '''
 Repair every actionable failure in CI run 33957746900 at a5959357, including
@@ -3756,7 +3712,6 @@ phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
 title      = 'Publish human-authored yt-dlp subtitles into channel playback'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-m-01b', 'amm-ci-01']
 acceptance = '''
 The official package requests only configured global default/fallback subtitle
@@ -3837,7 +3792,6 @@ phase      = 'AMM-M — yt-dlp item access, SponsorBlock, and subtitles'
 title      = 'Warn about per-list and combined add-on-list disk usage'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-m-02']
 acceptance = '''
 Only configurable disk-usage health warnings are in scope. Persist a per-list
@@ -3898,7 +3852,6 @@ phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
 title      = 'Run controlled yt-dlp self-update on startup and daily'
 status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-k-01']
 acceptance = '''
 After permission review, every enabled tool.update.v1 package receives one
@@ -4244,6 +4197,49 @@ Route/hydration/component records, TEST.md, ADR 0091 and changelog are updated.
 N-02 and N-03 remained open at this checkpoint. The subsequent 2026-09-11
 maintainer amendment narrows N-02 to the stale-after-failed-update add-on
 health warning; the owning milestone below records the current scope.
+
+Historical workspace refinement evidence transferred on 2026-09-19:
+2026-09-18 phase 1 moved completed preparation details to Activity, retained
+unfinished/failed status on Items, and used Save-button state plus accessible
+saved/unsaved text. A disposable dogfood database copy showed the first row at
+y=563 instead of y=810 at 1440x900, four visible rows, no overflow at 320/768,
+and 44/44 workspace cases across Chromium/Firefox and hydrated/no-JS paths.
+Phase 2 added localized dirty-row feedback, fixed S/E symbols, separate item
+new-tab links preserving drafts, and in-place list-title save through the shared
+revision fence. Recorded suites progressed to 48/48 then 52/52 cases.
+Phase 3 split bulk scope, numbering and season detection; detection owns its
+season and ignores manual Count. Inline Apply saves the reviewed Items draft;
+Cancel restores the pre-preview draft. Recorded workspace/bulk suites passed
+62/62 and related option/feedback suites 34/34, with 320px controls at least
+44px and desktop/mobile geometry checks. Rows remained editable after preview;
+that difference from the locked read-only review was explicitly not closed.
+
+The phase 4 note records active-filter chips/Clear filters, pointer-triggered
+native form submission with focus restoration, first/last paging, and top/item-
+replacement Save actions. It reports 80/80 focused browser cases; this is
+historical recorded evidence, not a new run or final phase 4 acceptance.
+A 2026-09-19 publication-island correction replaced AnyView branch selection
+with concrete preparation_line_view/preparation_view functions. The seeded
+addon-list-publication-island.spec.ts watches console errors after the page
+hydration flag. The note records 94/94 related Chromium/Firefox cases and clean
+Items/Activity console output on a disposable database copy. A separately
+observed mismatched SSR/WASM build was not product evidence. Keep bundles matched.
+The maintainer states phase 4 is entering testing; retain remaining acceptance
+in plans/addon-list-workspace-ux-refinements.md and do not mark it complete.
+
+Prototype review history (not production acceptance): the retained synthetic
+artifact reports cover local-action cancellation without lost edits, bounded
+bulk scope, consistent numbering drafts and duplicate rejection, complete
+source/recovery/metadata states, task-level saves, compact rows, stable revision
+identities, artwork editing, confirmation, and conditional help. Follow-up
+review corrected wrong-scope Undo and shared item/list numbering. Native no-JS
+checks used synthetic lists, both themes, 320-1440px and all page sizes; access
+layout reports record 16 checks through 3840px, 48rem groups and 44px controls.
+Reports and screenshots remain in the design-artifact bundle, including
+review-evidence.json, replacement-*-verification.json and
+access-stack-verification.json. These do not prove real persistence, providers,
+localization or production performance. ADR 0091 and its unchanged hash lock
+own the baseline; historical Apply/checkbox screenshots are not current designs.
 '''
 
 [[milestone]]
@@ -4684,6 +4680,15 @@ release once CI is green for the final commit, publishing only the Windows
 win-x64 package, and explicitly pre-approved that conditional beta publication.
 No second release-approval prompt is required. This follow-through is recorded
 in the live plan; the amended Linux x64/Windows x64 acceptance above still applies.
+
+Plan consolidation, 2026-09-19: this milestone also owns the former
+NFO/local-replacement closeout's remaining packaged Windows add-on execution.
+Verify the exact installed yt-dlp package's entrypoints and imported helpers,
+v2 metadata/content-kind and unavailable-item retention, and host integration
+on native Windows; static script assertions are not execution proof. Historical
+generic host and POSIX results are summarized in remote-stream-playlists.toml.
+MySQL and retired Beeld & Geluid acceptance remain withdrawn (ADRs 0080/0092).
+This documentation cleanup does not complete any remaining platform gate.
 '''
 
 [[milestone]]
@@ -4692,7 +4697,6 @@ phase      = 'Streaming reliability correction'
 title      = 'Detect and prevent live HLS delivery starvation'
 status     = 'Complete'
 feature    = 'hls-variant-playlists-segmenter'
-plan       = 'plans/hls-live-delivery-starvation.md'
 depends_on = []
 acceptance = '''
 The manual TSDuck URL gate fails structurally clean under-delivery by comparing

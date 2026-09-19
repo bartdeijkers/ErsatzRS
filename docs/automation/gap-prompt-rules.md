@@ -110,8 +110,8 @@ the first one that is empty:
    implementation slice and, when it has no slug yet, name the slug it will
    create (e.g. ADR 0018 → `content-variants`).
 5. **Active plan goals:** `plans/*.md` files whose status is active/proposed and
-   whose goal is not yet built, plus the `plans/INDEX.md` "Deferred Contract
-   Work" list once the thing it was waiting on now exists.
+   whose goal is not yet built. `plans/INDEX.md` lists detailed future plans;
+   small plans and deferred tooling live in the progress TOMLs.
 6. **Open phase TODOs:** `docs/progress/phase.toml` `next_steps` items and
    `[[known_todo]]` notes that are still open.
 

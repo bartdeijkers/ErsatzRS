@@ -213,6 +213,6 @@ M-03. This decision does not start those later slices.
 
 - [ADR 0085](0085-broaden-addon-list-lifecycle-and-provider-options.md)
 - [ADR 0086](0086-isolate-addon-preparation-process-ownership.md)
-- [M-01A streaming plan](../../plans/addon-list-lifecycle-broadening.md#amm-m-01a--streaming-with-sponsorblock-intervals-removed)
-- [M-01B Download ahead plan](../../plans/addon-list-lifecycle-broadening.md#amm-m-01b--list-level-download-ahead-modes)
+- [M-01A streaming acceptance and evidence](../progress/milestones.toml)
+- [M-01B Download ahead acceptance and evidence](../progress/milestones.toml)
 - [Structured progress](../progress/README.md)

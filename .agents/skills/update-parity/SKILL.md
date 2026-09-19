@@ -18,16 +18,21 @@ Use the existing milestone record:
   conditions and any mandated proof method.
 - `evidence`: current results mapped to those conditions, with references,
   relevant revision/environment, failures and remaining gaps.
-- `plan`: implementation sequence and unresolved decisions; link to acceptance
-  and evidence rather than copying them.
+- `plan`: optional pointer to detailed future implementation work under
+  `plans/`. Omit it for any status when the plan fits in the milestone TOML;
+  a supplied pointer must resolve. Link to acceptance and evidence rather than
+  copying them into Markdown.
 
 Detailed current milestone evidence belongs in that milestone's `evidence`.
 Parity files retain feature status and owning debt; debt entries link to
 milestone evidence where shared. Sessions summarize checkpoints. ADRs own
 decisions. Other documents link or summarize briefly.
 
-Apply this convention prospectively. Do not migrate historical records or
-change agreed acceptance merely to fit the format.
+Keep history in the owning TOML. When pruning a completed or superseded plan,
+transfer unique results, revision/test references and remaining limitations
+before removing it. Do not change agreed acceptance or infer completion from
+implementation notes. ADRs retain decisions; reusable design references live
+outside `plans/`.
 
 ## Workflow
 
@@ -70,9 +75,10 @@ When runtime evidence disproves a completed claim:
    that implementation token to `Partial` and explain the reopened gap. Do not
    change an accepted decision's Status unless the decision itself changed.
 4. Reuse the owning milestone and live plan when they cover the correction.
-   Reopen a completed milestone if its acceptance is disproven, and retain or
-   restore a live plan for it. Add a new milestone only for separately agreed
-   delivery scope; a missing plan does not require a new milestone.
+   Reopen a completed milestone if its acceptance is disproven; retain or
+   restore a live plan only when future detail needs Markdown. Add a new
+   milestone only for separately agreed delivery scope; a missing plan does
+   not require a new milestone.
    Put release-critical corrective work in `phase.toml` next steps.
 5. Update `[Unreleased]` and run `cargo xtask progress check`. Use the
    existing Session Handoff mechanism in `AGENTS.md` at handoff.

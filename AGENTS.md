@@ -22,8 +22,8 @@ relevant ones before starting non-trivial work:
   pointer at it. Prefer the `progress` queries over reading large files.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** for the crate layout and
   dependency rules.
-- **[plans/INDEX.md](plans/INDEX.md)** for locked decisions, the contract
-  index, and deferred work.
+- **[plans/INDEX.md](plans/INDEX.md)** for detailed future plans. Milestone
+  acceptance and history belong in `docs/progress/`; decisions belong in ADRs.
 
 ## Delivery accountability
   
@@ -391,7 +391,7 @@ This is primarily a porting project, not greenfield design. When implementing a 
 ## Reference paths (on this machine)
 
 - ErsatzTV source tree: `$ERSATZTV_SRC/` (see [PORTING.md](PORTING.md) for the env-var contract)
-- Project contract index: [plans/INDEX.md](plans/INDEX.md)
+- Future plan index: [plans/INDEX.md](plans/INDEX.md)
 - Porting progress (source of truth): [`docs/progress/`](docs/progress/README.md) — query with `cargo xtask progress next`
 - HDHR protocol notes (internal to ErsatzTV repo): `$ERSATZTV_SRC/hdhr.md`
 

@@ -186,10 +186,8 @@ struct Milestone {
     title: String,
     status: String,
     feature: String,
-    /// Live plan document under `plans/`. A milestone that is still open must
-    /// name one; a completed milestone may drop it, because `plans/` holds only
-    /// work that still needs doing and the completion evidence lives here, in
-    /// the parity files, the ADRs, the changelog, and git history.
+    /// Optional detailed future-work document under `plans/`. Milestones may
+    /// keep their entire plan in TOML; acceptance and evidence live here.
     #[serde(default)]
     plan: Option<String>,
     #[serde(default)]
@@ -1418,19 +1416,13 @@ fn milestone_ids_are_unique(milestones: &[Milestone]) -> bool {
 
 /// Validate a milestone's pointer at its plan document.
 ///
-/// `plans/` carries only work that still needs doing: once a plan is fully
-/// implemented its substance moves into `docs/progress/` and the document is
-/// pruned. A milestone that is still open must therefore name a live plan, and
-/// a `Complete` milestone is allowed to have none.
+/// `plans/` carries detailed future work that does not fit in the milestone.
+/// Every status may omit the pointer, but a supplied pointer must remain live.
 fn milestone_plan_error(milestone: &Milestone, exists: impl Fn(&str) -> bool) -> Option<String> {
     match milestone.plan.as_deref() {
         Some(plan) if !plan.starts_with("plans/") || !exists(plan) => Some(format!(
             "milestone `{}`: plan `{}` must be an existing file under plans/",
             milestone.id, plan
-        )),
-        None if milestone.status != "Complete" => Some(format!(
-            "milestone `{}`: status `{}` requires a plan under plans/; only a Complete milestone may omit one",
-            milestone.id, milestone.status
         )),
         _ => None,
     }
@@ -1567,12 +1559,27 @@ mod tests {
     }
 
     #[test]
-    fn an_open_milestone_must_name_a_live_plan() {
-        let mut open = milestone("p1-01", &[]);
-        open.plan = None;
-        let error = milestone_plan_error(&open, |_| true).expect("an open milestone needs a plan");
-        assert!(error.contains("only a Complete milestone may omit one"));
+    fn every_milestone_status_may_keep_its_plan_in_toml() {
+        for status in [
+            "Not started",
+            "In progress",
+            "Complete",
+            "Blocked",
+            "Deferred",
+        ] {
+            let mut entry = milestone("p1-01", &[]);
+            entry.status = status.to_owned();
+            entry.plan = None;
+            assert!(
+                milestone_plan_error(&entry, |_| false).is_none(),
+                "{status}"
+            );
+        }
+    }
 
+    #[test]
+    fn a_supplied_milestone_plan_must_name_a_live_plan() {
+        let mut open = milestone("p1-01", &[]);
         open.plan = Some("plans/gone.md".to_owned());
         let error =
             milestone_plan_error(&open, |_| false).expect("a named plan must actually exist");

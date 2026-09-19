@@ -2,7 +2,7 @@
 //! workspace, and a fixed-priority policy for the nightly clippy-cleanup
 //! routine (see `docs/automation/clippy-cleanup-routine.md`).
 //!
-//! Regenerates `plans/clippy-exemption-ledger.html` from the checked-in
+//! Regenerates `docs/reference/clippy-exemption-ledger.html` from the checked-in
 //! template in `xtask/assets/clippy_ledger_template.html` (the derived HTML
 //! is gitignored, so this must work from a fresh clone every time). `--next`
 //! picks exactly one safe, mechanical target so the nightly agent never has
@@ -21,7 +21,7 @@ use serde::Serialize;
 use walkdir::WalkDir;
 
 const TEMPLATE_PATH: &str = "xtask/assets/clippy_ledger_template.html";
-const OUTPUT_PATH: &str = "plans/clippy-exemption-ledger.html";
+const OUTPUT_PATH: &str = "docs/reference/clippy-exemption-ledger.html";
 const PLACEHOLDER: &str = "__CLIPPY_LEDGER_DATA__";
 const GREP_COMMAND: &str = "cargo xtask clippy-ledger";
 
@@ -655,7 +655,9 @@ fn print_help() {
     eprintln!("USAGE:");
     eprintln!("    cargo xtask clippy-ledger [--next [--skip <file>[,<file>...]] | --json | --tune-batch-cap]");
     eprintln!();
-    eprintln!("    (no flags)        regenerate plans/clippy-exemption-ledger.html from the");
+    eprintln!(
+        "    (no flags)        regenerate docs/reference/clippy-exemption-ledger.html from the"
+    );
     eprintln!("                      checked-in template and print a one-line summary");
     eprintln!(
         "    --next            print the next deterministic, safe-to-fix target (or `tier=none`)"

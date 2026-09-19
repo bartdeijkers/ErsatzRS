@@ -128,9 +128,22 @@ id          = 'addon-nfo-v2-closeout'
 description = 'Close the generic v2 NFO and local-replacement slice without moving provider or language assets into the host.'
 discovered  = '2026-08-15'
 adr         = '0068'
-evidence    = 'The working tree has corrected metadata binds, four-kind NFO round trips, complete managed-pair failure and healing coverage, Remote Stream search/XMLTV classification, one shared Local replacement resolver, bounded provider values, omission tombstones, and Chromium/Firefox proof for import/edit overrides plus the replacement lifecycle. plans/addon-nfo-sidecars-and-local-replacements-closeout.md retains only the live MySQL migration and packaged Windows execution gaps.'
+evidence    = '''
+The working tree has corrected metadata binds, four-kind NFO round trips, complete managed-pair failure and healing coverage, Remote Stream search/XMLTV classification, one shared Local replacement resolver, bounded provider values, omission tombstones, and Chromium/Firefox proof for import/edit overrides plus the replacement lifecycle. Milestone amm-n-03 retains packaged Windows execution; ADR 0080 retired MySQL acceptance.
+
+Historical evidence transferred on 2026-09-19; no new gate run:
+The former NFO/local-replacement closeout recorded corrected Title/SortTitle
+binds, four-kind NFO round trips, transactional YAML/NFO pair failure/healing,
+scanner/search/XMLTV content semantics, exact-version replacement validity,
+omission tombstones and generic hydrated/no-JS replacement coverage in Chromium
+and Firefox. Its historical closeout passed workspace Clippy, focused suites,
+web parity, matched Leptos assets and streaming smoke; three sandbox-denied HTTP
+mocks passed unrestricted. Packaged Windows add-on execution remains owned by
+amm-n-03. ADR 0080 retired MySQL acceptance; ADR 0092 retired official Beeld &
+Geluid support. Neither retired requirement is reintroduced by this transfer.
+'''
 resolved    = true
-resolution  = 'Merged into plans/addon-nfo-sidecars-and-local-replacements-closeout.md on 2026-09-13 (maintainer). The plan status owns the remaining packaged Windows add-on execution blocker, now tracked by amm-n-03; ADR 0080 retired the MySQL proof requirement.'
+resolution  = 'Consolidated into this feature summary and milestone amm-n-03 during the 2026-09-19 plan cleanup. The packaged Windows add-on execution blocker remains open under amm-n-03; ADR 0080 retired the MySQL proof requirement.'
 
 [[debt]]
 id          = 'addon-list-media-kind-is-list-wide'
@@ -145,7 +158,7 @@ resolution  = 'Each entry owns its classification in storage, in the NFO root it
 id          = 'addon-list-presentation-covers-two-of-seven-library-kinds'
 description = 'An imported add-on list can only be presented as Remote Streams or a Television Show. The operator-facing collection type must offer Auto plus every LibraryMediaKind — TV Shows, Movies, Music Videos, Other Videos, Songs, Images, Remote Streams — with a real projection behind each.'
 discovered  = '2026-08-19'
-evidence    = 'The collection type offers Auto plus every `LibraryMediaKind`, and `AddonMediaListPresentationKind::is_projected` names the boundary: `request_presentation` refuses a kind with no projection instead of storing it, covered by `unprojected_presentations_are_refused_rather_than_stored`. Auto derives the presentation from the entry classifications and only enters a projection every entry agrees on. Every presentation is projected: Television Show (ADR 0071), the parentless kinds Movies, Other Videos, Songs, and Images behind one shared `FlatProjection` description, and Music Videos with its managed Artist parent (migrations 202608191400 through 202608191800). Covered by projection, idempotence, revert, outside-reference, projection-switch, all-kinds round-trip, unnamed-parent refusal, and artist-cleanup tests. Planned in plans/addon-list-editor-item-classification.md.'
+evidence    = 'The collection type offers Auto plus every `LibraryMediaKind`, and `AddonMediaListPresentationKind::is_projected` names the boundary: `request_presentation` refuses a kind with no projection instead of storing it, covered by `unprojected_presentations_are_refused_rather_than_stored`. Auto derives the presentation from the entry classifications and only enters a projection every entry agrees on. Every presentation is projected: Television Show (ADR 0071), the parentless kinds Movies, Other Videos, Songs, and Images behind one shared `FlatProjection` description, and Music Videos with its managed Artist parent (migrations 202608191400 through 202608191800). Covered by projection, idempotence, revert, outside-reference, projection-switch, all-kinds round-trip, unnamed-parent refusal, and artist-cleanup tests. The finished implementation plan was pruned after its evidence was consolidated here.'
 adr         = '0073'
 resolved    = true
 resolution  = 'Every collection type the operator can choose is projected: Television Show, Movies, Music Videos, Other Videos, Songs, Images, and Remote Streams, with Auto derived from the entry classifications.'

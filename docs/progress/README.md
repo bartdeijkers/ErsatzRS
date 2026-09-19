@@ -54,11 +54,11 @@ sqlite3 progress.db "SELECT feature, status FROM parity WHERE status != 'Ported'
   feature). See the `update-parity` skill.
 - Milestone change: edit `milestones.toml`. Use only the validated statuses
   `Not started`, `In progress`, `Complete`, `Blocked`, and `Deferred`; add
-  concrete `evidence` before marking a milestone `Complete`. A milestone that
-  is still open must name a live `plan` under `plans/`; a `Complete` milestone
-  may omit it, because `plans/` carries only work that still needs doing and a
-  finished plan is pruned once its substance lives here. Drop the pointer in
-  the same change that prunes the plan.
+  concrete `evidence` before marking a milestone `Complete`. Every status may
+  omit `plan` when the future work fits in the TOML. A supplied pointer must
+  name an existing file under `plans/`, reserved for detailed future work.
+  Preserve unique completion history and evidence in the owning TOML before
+  pruning a finished plan, and drop its pointer in the same change.
 - New session/handoff entry: `cargo xtask progress add-session --agent "…"
   --summary "…"` (appends one NDJSON line), or edit `sessions.ndjson` directly.
 - Validate before committing: `cargo xtask progress check`.

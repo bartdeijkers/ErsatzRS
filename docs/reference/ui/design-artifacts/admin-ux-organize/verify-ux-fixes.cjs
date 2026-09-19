@@ -1,5 +1,5 @@
 // Run against preview_server.py, never the production host:
-// node plans/admin-ux-organize/verify-ux-fixes.cjs http://127.0.0.1:8412 chromium
+// node docs/reference/ui/design-artifacts/admin-ux-organize/verify-ux-fixes.cjs http://127.0.0.1:8412 chromium
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');

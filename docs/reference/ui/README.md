@@ -7,6 +7,8 @@ exists in source from one that is consistently adopted across routes.
 - [Visual language](visual-language.md)
 - [Component evidence inventory](component-inventory.md)
 - [Component catalog](components/README.md)
+- [Retained design artifacts](design-artifacts/README.md)
+- [Upstream UX complaint inventory](ux-complaint-inventory.md)
 
 The Rust and CSS sources remain authoritative for implemented behavior. The
 catalog records known limitations explicitly and does not imply WCAG conformance

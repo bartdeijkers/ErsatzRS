@@ -46,7 +46,7 @@ Project contracts and decisions:
 - [STATUS.md](STATUS.md) — current phase, checklist, gaps, session log.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — crate layout, dependency rules.
 - [PORTING.md](PORTING.md) — ErsatzTV porting workflow and critical files.
-- [plans/INDEX.md](plans/INDEX.md) — locked decisions and deferred work.
+- [plans/INDEX.md](plans/INDEX.md) — detailed future implementation plans.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contribution workflow.
 - [STYLE.md](STYLE.md) — Rust/SQL naming, errors, parity code rules.
 - [TEST.md](TEST.md) — Leptos hydration rules and test playbook format.

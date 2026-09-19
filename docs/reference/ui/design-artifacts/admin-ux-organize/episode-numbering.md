@@ -188,8 +188,8 @@ that boundary. No production implementation is authorized by this artifact.
 - Verify keyboard operation, open/closed menus, selection visibility, both
   themes, long titles and 320-pixel reflow with scripting disabled.
 
-Sources: [current editor](../../crates/ersatzrs-web/src/admin/pages/media/addon_lists.rs),
-[row DTO and atomic adapter](../../crates/ersatzrs-web/src/admin/server_fns/addon_media_lists.rs),
+Sources: [current editor](../../../../../crates/ersatzrs-web/src/admin/pages/media/addon_lists.rs),
+[row DTO and atomic adapter](../../../../../crates/ersatzrs-web/src/admin/server_fns/addon_media_lists.rs),
 [MDN form ownership](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/form),
 [MDN :has()](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/:has),
 [MDN details content](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/::details-content),

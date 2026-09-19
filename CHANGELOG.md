@@ -13,6 +13,13 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Changed
+
+- Keep detailed future work in `plans/`, completion history and evidence in
+  progress TOMLs, and reusable design artifacts under documentation. Milestones
+  may omit a standalone plan; supplied plan links are still validated. The
+  generated Clippy ledger now lives under `docs/reference/`.
+
 ### Added
 
 - Add a "New season each calendar year" option to add-on list episode

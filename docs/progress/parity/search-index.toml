@@ -22,4 +22,15 @@ Phrase, Wildcard, and Fuzzy value kinds across structured edits, while initial
 projection and durable saves reject incomplete branches. Named reusable queries
 store that same canonical string as authoring drafts separate from smart
 collections.
+
+Historical production visual review, 2026-08-30 (consolidated 2026-09-19):
+Chromium/Firefox search at 1280x720 and 390x844 and composer at 1280x720 and
+320x800 covered mobile drawer closure/inertness, distinct localized Add All
+collection/playlist names, visible query fields, count chips, header reflow and
+saved-query labels. Dark-theme helper contrast measured about 6.49:1 and primary
+button text 4.82:1. collections.spec.ts and search-see-all.spec.ts retain the
+executable query handoff, save and hydrated/no-JS regressions. No deceptive
+patterns were found in that review. Limits: screenshots were English/dark-theme
+with synthetic artwork; light contrast was source-reviewed only, and no
+all-culture image/real-library cropping acceptance was claimed.
 '''

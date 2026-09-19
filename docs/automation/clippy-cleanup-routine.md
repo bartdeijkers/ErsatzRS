@@ -106,11 +106,11 @@ file.
 
 ### 1. Regenerate and republish the ledger artifact
 
-1. `cargo xtask clippy-ledger` — regenerates `plans/clippy-exemption-ledger.html`
+1. `cargo xtask clippy-ledger` — regenerates `docs/reference/clippy-exemption-ledger.html`
    from the checked-in template (the file itself is gitignored; this always
    works from a fresh clone).
 2. Publish it with the `Artifact` tool, `file_path:
-   plans/clippy-exemption-ledger.html`, and `url:
+   docs/reference/clippy-exemption-ledger.html`, and `url:
    https://claude.ai/code/artifact/3fca4e2b-b674-4163-965c-d65bca3d4799` so it
    updates in place at the same link. Keep the favicon and title stable. If
    the `Artifact` tool is unavailable in this session, skip publishing, note

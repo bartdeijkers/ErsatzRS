@@ -1,8 +1,8 @@
 # Locked add-on list design: AMM-N-01B, revision 1
 
 Accepted by the maintainer on 2026-09-09. Production adaptation is governed by
-[ADR 0091](../../docs/adr/0091-lock-addon-list-task-design.md) and the
-[AMM-N-01B plan](../amm-n-01b-addon-list-design-adaptation.md).
+[ADR 0091](../../../../adr/0091-lock-addon-list-task-design.md) and the
+[AMM-N-01B plan](../../../../../plans/amm-n-01b-addon-list-design-adaptation.md).
 
 ## Reference authority
 
@@ -19,7 +19,7 @@ UI. Account for the real shell when comparing content geometry.
 Verify the baseline from the repository root:
 
 ```bash
-python3 plans/admin-ux-organize/verify_lock.py
+python3 docs/reference/ui/design-artifacts/admin-ux-organize/verify_lock.py
 ```
 
 Do not edit frozen files or overwrite reference screenshots during the port.
@@ -66,6 +66,12 @@ images outside the manifest are not acceptance baselines.
   from the installed provider schema, not a hard-coded browser list.
 - Show actionable recovery outside diagnostics and feedback beneath the heading.
   Conflicts and blockers cannot disappear into optional content.
+
+## Reference mapping
+
+The [production source map](production-source-map.md) identifies the existing
+owners and capability boundaries. Detailed historical prototype outcomes are
+recorded under `amm-n-01b` in `docs/progress/milestones.toml`.
 
 ## Production adaptation boundary
 

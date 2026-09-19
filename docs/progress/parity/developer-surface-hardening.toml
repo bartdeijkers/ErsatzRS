@@ -12,6 +12,18 @@ progress validator rejects a reintroduced route table plus TEST-only or
 hydration-only route mismatches. The durable playout browser workflow covers
 list/detail actions, filler visibility persistence, troubleshooting context,
 schedule reset, external JSON editing, deletion, and Reset All feedback.
+
+2026-09-19 plan cleanup: every milestone status may omit a standalone plan;
+supplied pointers still require an existing file under plans/. Completed-plan
+history was consolidated into owning TOMLs, reusable design bundles moved to
+docs/reference/ui/design-artifacts/, and the generated Clippy ledger moved to
+docs/reference/. All 99 milestone statuses, acceptance clauses and dependencies
+were preserved; phase 4 workspace acceptance remains open. Six focused milestone
+tests, the canonical skill/mirror test, xtask all-target Clippy, workspace format
+check and progress validation passed. Markdown/HTML target checks found no
+missing links; all 139 pinned design hashes and moved image bytes were preserved.
+A disposable relocated preview returned HTTP 200 for five task pages, CSS and
+artwork. No product test gate, CI, commit or release acceptance is implied.
 '''
 
 [[debt]]

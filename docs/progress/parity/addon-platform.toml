@@ -58,6 +58,14 @@ executable trust boundary. The host keeps every discover/enrich process
 bounded, persists validated checkpoints and worker leases, and recovers jobs
 after transient failure or restart. The older one-shot capabilities remain a
 frozen compatibility path.
+
+Historical Sources-view rebuild (transferred from its finished plan on
+2026-09-19): the repository table exposed catalog freshness and offer counts,
+localized file selection, named edit/delete dialogs and explained disabled
+actions; the default Remote Stream processor moved to Installed. The changelog
+records delivery. ADR 0081 subsequently replaced public catalog acquisition with
+local checkout/offline bundles, so the old signed-catalog layout is history,
+not a current interface or an outstanding requirement.
 '''
 
 [[debt]]

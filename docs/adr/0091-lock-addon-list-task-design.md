@@ -50,7 +50,7 @@ deviations from it.
 
 The add-on list editor combines configuration, item review, numbering, provider
 options, publication and recovery in one large view. Repeated visual and
-no-JavaScript reviews produced the approved artifact in `plans/admin-ux-organize/`.
+no-JavaScript reviews produced the approved artifact in `docs/reference/ui/design-artifacts/admin-ux-organize/`.
 It clarifies Save versus Publish, keeps routine settings visible, limits optional
 disclosures and stacks access settings on wide displays. Design iteration is over.
 
@@ -63,7 +63,7 @@ and editing flow, not provider, publication or playback semantics.
 ## Decision
 
 1. Freeze the artifact through the SHA-256 manifest described in
-   [the design lock](../../plans/admin-ux-organize/LOCK.md). Its rendered content,
+   [the design lock](../reference/ui/design-artifacts/admin-ux-organize/LOCK.md). Its rendered content,
    task order, responsive geometry and interaction states are the reference.
 2. Implement Items & review, List settings, Playback & access, Activity & recovery,
    item review and artwork in the real `/media/addon-lists` route family.

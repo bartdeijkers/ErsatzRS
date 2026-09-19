@@ -22,7 +22,7 @@ The source paths in the table are under
 
 The [section disclosure](components/disclosure.md) remains a shared-component candidate
 implemented locally in the add-on list task pages from the locked
-`plans/admin-ux-organize/` reference: bulk actions, publication details,
+`docs/reference/ui/design-artifacts/admin-ux-organize/` reference: bulk actions, publication details,
 and optional metadata use native details/summary semantics. Routine settings,
 storage thresholds and managed locations stay visible. Compact Help and
 row-command popovers remain distinct patterns. This

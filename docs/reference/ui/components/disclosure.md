@@ -5,9 +5,9 @@
 
 ## Sources
 
-- `plans/admin-ux-organize/{index,settings,options,item-1,activity}.html`
-- `plans/admin-ux-organize/{styles,organize,alignment}.css`
-- `plans/admin-ux-organize/verify-ux-fixes.cjs`
+- `docs/reference/ui/design-artifacts/admin-ux-organize/{index,settings,options,item-1,activity}.html`
+- `docs/reference/ui/design-artifacts/admin-ux-organize/{styles,organize,alignment}.css`
+- `docs/reference/ui/design-artifacts/admin-ux-organize/verify-ux-fixes.cjs`
 - `crates/ersatzrs-web/src/admin/pages/media/addon_lists/workspace/`
 - `tests/e2e/addon-list-workspace.spec.ts`
 - `tests/e2e/addon-list-workspace-visual.spec.ts`

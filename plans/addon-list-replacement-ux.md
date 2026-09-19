@@ -1,81 +1,10 @@
-# Plan: make Local replacement discoverable in both directions
+# Local replacement workflow improvements
 
-## Implementation status
-
-The replacement UX remains not started. Written 2026-08-17 after fixing the
-defect that made the replacement picker return no candidates at all, and after
-walking the flow end to end against a real unavailable episode. Updated
-2026-08-23 with the blocking provider-enumeration regression tracked by
-`amm-g-06`; that blocker was completed on 2026-08-25 by official Beeld & Geluid
-add-on 0.9.1 and its durable host repair regression.
-
-## Context
-
-An add-on list item can be unavailable at the provider while the operator holds
-a local copy. `AddonMediaListItemReplacement` maps that list item to a scanned
-local media version, and playback then uses the local file.
-
-The mechanism works. Confirmed on 2026-08-17: Teleac item 49 (rank 6, reported
-`unavailable` / `not_playable`) now resolves to a local `.mp4` through the
-existing picker, and the row reports the replacement.
-
-### Blocking provider-enumeration regression
-
-The replacement flow cannot help when discovery omits or misclassifies the
-unavailable provider item. A live reproduction on 2026-08-23 used:
-
-`https://schatkamer.beeldengeluid.nl/serie/2101608030022428031/strip-en-cartoontekenen?alleenafspeelbaar=nee`
-
-The requested overview contains eight episodes. Provider item
-`2101608050040897831`, **Les 7: Cartoon, strook en paginaverhaal**, first aired
-1993-03-07, is explicitly `isPlayable=false`; the default overview contains
-only the seven playable episodes.
-
-Two paths currently violate the same operator-visible contract:
-
-- the legacy Windows series paginator reconstructs the page URL from only the
-  path and therefore drops `alleenafspeelbaar=nee` before adding `pagina`;
-- the v0.9.0 resumable parser sees all eight items, but its first-wins merge
-  keeps an earlier optimistic HTML-card availability value instead of the
-  later explicit `isPlayable=false` embedded-JSON evidence.
-
-Complete `amm-g-06` before accepting the replacement UX:
-
-- preserve every input query parameter for series, list, and search discovery,
-  replacing only the pagination parameter;
-- merge duplicate candidates by stable provider identity, with explicit
-  provider availability taking precedence over structural defaults while
-  retaining the richest overview metadata;
-- persist the affected item as `unavailable` / `not_playable` without a detail
-  request, so it remains visible and eligible for a Local replacement;
-- freeze the exact eight-item case in deterministic POSIX and Windows tests for
-  both resumable discovery and the legacy fallback;
-- add a host import/review regression and prove refresh or reimport repairs an
-  affected seven-item snapshot without duplicates or order drift.
-
-Getting there exposed how hard the feature is to actually use.
-
-### What the flow costs an operator today
-
-1. **The picker is detached from the item.** Selecting **Replace** on a row
-   opens a search panel at the bottom of the page. Nothing in that panel names
-   the item being replaced, so with eight similarly-titled episodes on screen
-   there is no way to confirm the right target. Driving this flow required
-   tagging DOM nodes to keep track of which row was in play.
-2. **The pre-filled query is actively counterproductive.** The panel pre-fills
-   the provider title. For an unavailable item that title is often a
-   placeholder — here it was `STRIP- EN CARTOONTEKENEN - Deze video bekijken?`
-   ("watch this video?"), which matches nothing. The default state of the
-   picker is therefore an empty result list, and the operator has to clear the
-   field and guess a term.
-3. **The operator must already know the answer.** There are no suggested
-   candidates. Nothing uses the signals the host already holds: the item's
-   duration, its episode number, the list name, or the folder the operator
-   just scanned.
-4. **The reverse direction does not exist.** With a folder of replacement files
-   in hand, the only route is item-by-item from the list page. There is no way
-   to start from the file.
-5. **Replacing several items is entirely manual** — search, select, repeat.
+Future generic UX work. The completed `amm-g-06` enumeration blocker is recorded
+in [milestones](../docs/progress/milestones.toml); it does not complete this
+workflow. ADRs 0068 and 0091 own existing replacement and task-design behavior.
+Recheck each proposal against the current item workspace before implementing it;
+retain completed behavior and implement only the remaining gaps.
 
 ### What already supports a better design
 
@@ -168,10 +97,10 @@ explicit confirmation.
 - Focused `ersatzrs-web` and `ersatzrs-infra` tests, then the workspace gate.
 - Browser proof for the picker and the reverse assignment, per TEST.md.
 
-## Related
 
-- ADR 0068 — add-on metadata sidecars and Local replacements.
-- ADR 0079 — overview-first discovery and deferred detail enrichment.
-- Milestone `amm-g-06` — retain unavailable Beeld & Geluid series episodes.
-- `docs/progress/parity/remote-stream-playlists.toml` — owns add-on list
-  behaviour.
+## Owners
+
+The provider-neutral contract and history belong to
+[Remote Stream playlists](../docs/progress/parity/remote-stream-playlists.toml).
+Keep bulk matching and reverse-entry placement as explicit future product
+choices; this cleanup does not approve their implementation.

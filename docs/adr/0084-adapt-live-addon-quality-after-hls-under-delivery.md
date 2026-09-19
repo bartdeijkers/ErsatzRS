@@ -74,7 +74,7 @@ health warnings but cannot receive the generic quality ceiling.
 
 ## References
 
-- [../plans/hls-live-delivery-starvation.md](../../plans/hls-live-delivery-starvation.md)
+- [../docs/progress/milestones.toml](../progress/milestones.toml)
 - [0057-direct-remote-stream-pipelines-and-playlist-actions.md](0057-direct-remote-stream-pipelines-and-playlist-actions.md)
 - [0066-repository-backed-add-ons.md](0066-repository-backed-add-ons.md)
 - [../progress/parity/remote-stream-playback.toml](../progress/parity/remote-stream-playback.toml)

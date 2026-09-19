@@ -137,7 +137,7 @@ reflow.
 
 ## References
 
-- [Variant 4 design study](../../plans/artifacts/search-collection-design-variants.html)
+- [Variant 4 design study](../reference/ui/design-artifacts/artifacts/search-collection-design-variants.html)
 - [Admin UI visual language](../reference/ui/visual-language.md)
 - [ADR 0009: SQL-backed search and no Elasticsearch backend](0009-sql-backed-search-and-no-elasticsearch.md)
 - [ErsatzTV deviation index](../explanation/deviations.md)

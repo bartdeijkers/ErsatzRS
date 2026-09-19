@@ -19,7 +19,7 @@ keeps global `/search` results-first, then carries one canonical query into a
 dedicated smart-collection composer using group cards and focused editing only
 when nesting requires it.
 
-The [production search UX/UI visual review](search-ux-ui-visual-review.md)
+The [recorded production search UX/UI visual review](../../../../progress/parity/search-index.toml)
 records the final Chromium/Firefox desktop and mobile assessment, the resolved
 hierarchy, contrast, control-label, and drawer-state findings, and the remaining
 visual-proof limits.
@@ -41,7 +41,7 @@ visual-proof limits.
 
 ## Browser evidence
 
-The screenshots under [screenshots](screenshots/) capture the desktop and
+The screenshots under [screenshots](screenshots) capture the desktop and
 mobile iterations used to validate hierarchy, spacing, accordion behavior,
 Beeld & Geluid series metadata, and the yt-dlp playlist flow. Files containing
 `final` are the final artifact states; the remaining captures document the

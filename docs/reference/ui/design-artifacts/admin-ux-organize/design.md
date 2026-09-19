@@ -2,7 +2,7 @@
 
 Status: locked for AMM-N-01B on 2026-09-09; see [LOCK.md](LOCK.md).
 The locked pages take precedence over historical design notes below and the
-[whole-artifact review](review.md).
+[AMM-N-01B review evidence](../../../../progress/milestones.toml).
 The draft [admin-ux-organize skill](skill/admin-ux-organize/SKILL.md) now groups
 visible Apply actions around user tasks and evaluates the complete editing flow.
 It is not installed as a repository-wide skill.
@@ -12,7 +12,7 @@ It is not installed as a repository-wide skill.
 Run from the repository root:
 
 ```bash
-python3 plans/admin-ux-organize/preview_server.py --port 8412
+python3 docs/reference/ui/design-artifacts/admin-ux-organize/preview_server.py --port 8412
 ```
 
 Open `http://127.0.0.1:8412/index.html`. Start at [Items & review](index.html),
@@ -282,18 +282,18 @@ publication, recovery or file upload processing.
 
 ## Verification
 
-The [follow-up closure review](review.md#follow-up-closure-review) records the
+The [follow-up closure review](../../../../progress/milestones.toml) records the
 subsequent P1/P2 corrections and skill contradiction review.
 
-See [verification.md](verification.md) and
+See [AMM-N-01B prototype evidence](../../../../progress/milestones.toml) and
 [revision-verification.json](revision-verification.json) for the latest browser
 results, layout measurements and screenshots. Browser checks establish native
 interaction and layout behavior, not observed human ease or WCAG conformance.
 
 Source references:
 
-- [Current list editor](../../crates/ersatzrs-web/src/admin/pages/media/addon_lists.rs)
-- [Provider option forms](../../crates/ersatzrs-web/src/admin/pages/media/addon_list_options.rs)
-- [Native option handlers](../../crates/ersatzrs-web/src/api/addon_list_options.rs)
-- [Remote Stream information groups](../../crates/ersatzrs-web/src/admin/pages/media/remote_stream_detail.rs)
-- [Original review and research](review.md)
+- [Current list editor](../../../../../crates/ersatzrs-web/src/admin/pages/media/addon_lists.rs)
+- [Provider option forms](../../../../../crates/ersatzrs-web/src/admin/pages/media/addon_list_options.rs)
+- [Native option handlers](../../../../../crates/ersatzrs-web/src/api/addon_list_options.rs)
+- [Remote Stream information groups](../../../../../crates/ersatzrs-web/src/admin/pages/media/remote_stream_detail.rs)
+- [Original review and research](../../../../progress/milestones.toml)

@@ -130,8 +130,8 @@ Rewrite `docs/top-three-gaps-to-fill-prompts.md` following
      Status is `Proposed` or whose Built column is `Not implemented`. Map each
      to its plan and to the next coherent implementation slice; note the parity
      slug it will create when it has none yet.
-   - Active plan goals not yet built (`plans/*.md`) and now-unblocked items from
-     `plans/INDEX.md` "Deferred Contract Work".
+   - Active plan goals not yet built (`plans/*.md`), indexed in
+     `plans/INDEX.md`; small plans and deferred tooling live in progress TOMLs.
    - Open `phase.toml` `next_steps` items and `[[known_todo]]` notes.
    If the union of all of these is empty, the specs are fully implemented; only
    then may the file carry fewer than three prompts. A clear `progress gaps`

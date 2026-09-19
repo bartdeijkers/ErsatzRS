@@ -82,7 +82,7 @@ Start with the repository contracts that govern the kind of change:
 - [Admin UI and hydration testing](../TEST.md)
 - [Current structured progress](progress/README.md)
 - [Automation contracts](automation/README.md)
-- [Plan and decision index](../plans/INDEX.md)
+- [Future plan index](../plans/INDEX.md)
 - [Architecture decision records](adr/README.md)
 
 Contributor how-to guides:
