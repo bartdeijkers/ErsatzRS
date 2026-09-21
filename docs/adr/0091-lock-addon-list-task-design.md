@@ -96,6 +96,23 @@ storage. This prevents an upload from replacing bytes referenced by another
 open task. Stored bytes remain included in existing disk-usage accounting and
 are removed by the existing list/item cascade; no media eviction policy is added.
 
+## Addendum: Editable numbering review (2026-09-21)
+
+Accepted by the maintainer: retain the current editable numbering review as an
+explicit deviation from the locked read-only proposal. Rows remain editable
+while the review is visible. Apply saves the current complete Items task,
+including row edits made after generating the proposal; it is not restricted
+to the values displayed when that proposal was generated. Existing task
+validation, revision fences and atomic save behavior remain authoritative.
+Cancel preview restores the draft from before the proposal and writes nothing.
+
+This is a scoped amendment to Decision 6: record this accepted production
+deviation here without rewriting the frozen artifact or its checksum manifest.
+The original reference remains available for all unaffected design requirements.
+No product behavior change is requested. Source inspection confirms that Apply
+uses the existing save intent; explicit post-proposal edit verification belongs
+to AMM-N-01B. The decision alone does not complete that milestone or AMM-N-03.
+
 ## Addendum: Playback save conflicts (2026-09-13)
 
 The accepted dogfood correction narrows the conflict fence only for the

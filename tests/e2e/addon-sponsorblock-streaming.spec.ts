@@ -47,11 +47,18 @@ async function installCheckout(page: Page): Promise<void> {
   const sourceId = sqlite(`SELECT "SourceId" FROM "AddonSourceOffer" WHERE "AddonId"=${quote(addonId)};`);
   await hydrated(page, `/settings/addons/${addonId}?source=${encodeURIComponent(sourceId)}`);
   await page.getByRole('button', { name: 'Install', exact: true }).click();
-  await confirm(page, 'addon-install-dialog');
+  await Promise.all([
+    page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+    confirm(page, 'addon-install-dialog'),
+  ]);
+  await hydrated(page);
   await expect.poll(() => sqlite(`SELECT "TrustTier" FROM "AddonInstallation" WHERE "AddonId"=${quote(addonId)};`), { timeout: 30_000 }).toBe('local');
-  await hydrated(page, `/settings/addons/${addonId}`);
   await page.getByRole('button', { name: 'Enable', exact: true }).click();
-  await confirm(page, 'addon-toggle-dialog');
+  await Promise.all([
+    page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
+    confirm(page, 'addon-toggle-dialog'),
+  ]);
+  await hydrated(page);
   await expect.poll(() => sqlite(`SELECT "Enabled" FROM "AddonInstallation" WHERE "AddonId"=${quote(addonId)};`), { timeout: 30_000 }).toBe('1');
   expect(sqlite(`SELECT COUNT(*) FROM "AddonMediaSource" a JOIN "LocalMediaSource" l ON l."Id"=a."MediaSourceId" WHERE a."AddonId"=${quote(addonId)};`)).toBe('1');
 }

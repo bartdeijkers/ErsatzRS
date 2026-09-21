@@ -239,7 +239,11 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
         expect(sqlite(`SELECT "MetadataOverrideJson" FROM "AddonMediaListItem" WHERE "Id"=${seed.firstItemId}`)).toBe('{}');
         await page.locator('[name="chapter_input"]').fill('0:00 Introduction\n10:00 Operator chapter');await submit(page,'save');
         await expect(page.locator('#workspace-errors')).toHaveCount(0);
-        expect(sqlite(`SELECT json_extract("MetadataOverrideJson",'$.title') || '|' || "ChapterInput" FROM "AddonMediaListItem" WHERE "Id"=${seed.firstItemId}`).replace(/\r\n/g,'\n')).toBe('Title and chapters together|0:00 Introduction\n10:00 Operator chapter');
+        // JSON escapes stored newlines before the Windows sqlite CLI can
+        // translate them again while writing stdout.
+        const saved = JSON.parse(sqlite(`SELECT json_array(json_extract("MetadataOverrideJson",'$.title'), "ChapterInput") FROM "AddonMediaListItem" WHERE "Id"=${seed.firstItemId}`)) as [string, string];
+        expect(saved[0]).toBe('Title and chapters together');
+        expect(saved[1].replace(/\r\n/g,'\n')).toBe('0:00 Introduction\n10:00 Operator chapter');
         expect(Number(sqlite(`SELECT COUNT(*) FROM "AddonMediaListLifecycleJob" WHERE "AddonMediaListId"=${seed.listId}`))).toBeGreaterThan(0);
         await page.locator('details').filter({has:page.locator('[name="chapter_input"]')}).locator('summary').click();
         await submit(page,'restore-chapters');
@@ -383,6 +387,10 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
       await expect(review.locator('tbody tr')).toHaveCount(2);
       await expect(review.locator('button[value="save"]')).toHaveText('Apply numbering changes');
       await expect(page.locator('.numbering-save-bar button[value="undo"]')).toHaveCount(0);
+      // The accepted editable review permits later edits; Cancel still
+      // restores the complete draft from before the proposal.
+      await expect(second).toBeEditable();
+      await second.fill('9');
       // Cancel restores the draft from before the proposal and saves nothing.
       await submit(page,'undo');
       await expect(review).toHaveCount(0);
@@ -395,11 +403,15 @@ CREATE TRIGGER "workspace_chapters_${seed.listId}" AFTER INSERT ON "AddonMediaLi
       await submit(page,'undo');
       await expect(second).toHaveValue('5');
       await submit(page,'number');
+      // Apply saves the current Items task, including post-proposal edits.
+      await expect(second).toBeEditable();
+      await second.fill('6');
+      await page.locator(`[name="episode_${seed.secondItemId}"]`).fill('7');
       await Promise.all([page.waitForEvent('framenavigated',f=>f===page.mainFrame()),review.locator('button[value="save"]').click()]);
       await settled(page);
       await expect(page.locator('#workspace-errors')).toHaveCount(0);
       await expect(review).toHaveCount(0);
-      expect(saved()).toBe('1,1;5,5');
+      expect(saved()).toBe('1,1;6,7');
       }finally{await context.close();}
     });
 

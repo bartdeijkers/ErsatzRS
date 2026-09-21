@@ -15,6 +15,13 @@ release section when tagging a release.
 
 ### Changed
 
+- Accept editable numbering reviews: Apply saves the current Items task,
+  including edits made after the proposal; Cancel restores the pre-proposal draft.
+- Align Windows beta acceptance with ADR 0066's installed add-on entrypoints;
+  retain midpoint seeking, output, failure diagnostics and package identity gates.
+- Record native archive proof for the local yt-dlp 0.11.4 correction to Windows
+  batch error reporting. The installed 0.11.3 package remains affected; earlier
+  profile and playback checks do not replace acceptance of the current candidate.
 - Track upstream ErsatzTV catch-up through a ledger refreshed to the latest
   upstream commit each run (currently 162 commits) and milestone gates before
   teletext. Keep the current parity pin unchanged during
@@ -73,6 +80,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Native Windows acceptance tests compare canonical paths before checking
+  backup containment and wait for Save/install/enable and disk-warning reloads
+  to hydrate before navigating. Chapter assertions use JSON to preserve stored
+  newlines across Windows SQLite output. These test corrections retain isolation
+  safeguards, persisted-content checks and browser-error assertions.
 - The add-on list publication status on Items and Activity & recovery is live
   again: a hydration error on page load stopped it from updating in the
   browser.

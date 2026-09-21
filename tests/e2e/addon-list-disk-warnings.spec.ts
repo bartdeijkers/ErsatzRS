@@ -1,6 +1,7 @@
 import { expect, Page, test } from '@playwright/test';
 import { randomUUID } from 'crypto';
 import { execFileSync } from 'child_process';
+import { waitForHydration } from './hydration';
 
 const dbPath = process.env.E2E_DB_PATH ?? process.env.ERSATZRS_DB_PATH;
 
@@ -64,13 +65,15 @@ INSERT INTO "AddonMediaList" (
   return [first, first + 1];
 }
 
-async function save(page: Page, value: string): Promise<void> {
+async function save(page: Page, value: string, javaScriptEnabled: boolean): Promise<void> {
   const workspace=await page.locator('.addon-workspace').count()>0;
   const form=workspace?page.locator('.storage-settings'):page.getByTestId('addon-list-disk-warning-settings');
   await form.locator('input[type="number"]').fill(value);
   await Promise.all([page.waitForEvent('framenavigated',f=>f===page.mainFrame()),workspace?page.locator('button[name="intent"][value="save"]').click():form.locator('button[type="submit"]').click()]);
+  if (javaScriptEnabled) await waitForHydration(page);
   await expect(page.locator('#workspace-errors')).toHaveCount(0);
   await page.reload();
+  if (javaScriptEnabled) await waitForHydration(page);
   await expect(form.locator('input[type="number"]')).toHaveValue(value);
 }
 
@@ -87,7 +90,7 @@ test.describe('advisory add-on list disk warnings', () => {
       const page = await context.newPage();
       const runtimeErrors: string[] = [];
       page.on('pageerror', (error) => {
-        const text = error.stack ?? error.message;
+        const text = error.stack || error.message;
         // Native form navigations cancel the surrounding editor's pending reads.
         if (!(text.includes('AbortError') && text.toLowerCase().includes('operation was aborted'))
           && !text.includes('NetworkError when attempting to fetch resource')) {
@@ -129,20 +132,20 @@ test.describe('advisory add-on list disk warnings', () => {
             path: test.info().outputPath(`disk-warning-${width}.png`),
           });
         }
-        await save(page, '300');
+        await save(page, '300', javaScriptEnabled);
         await visit(first);
         await expect(input).toHaveValue('25');
-        await save(page, '30');
+        await save(page, '30', javaScriptEnabled);
         await visit(second);
         await expect(input).toHaveValue('25');
         await visit(first);
-        await save(page, '0');
+        await save(page, '0', javaScriptEnabled);
         await visit();
         await expect(input).toHaveValue('300');
-        await save(page, '0');
+        await save(page, '0', javaScriptEnabled);
         await visit(second);
         await expect(input).toHaveValue('25');
-        await save(page, '40');
+        await save(page, '40', javaScriptEnabled);
         await visit();
         await expect(input).toHaveValue('0');
         await visit(first);
@@ -153,6 +156,7 @@ test.describe('advisory add-on list disk warnings', () => {
         expect(invalid.status()).toBe(303);
         expect(invalid.headers().location).toContain('disk_warning=error');
         await page.goto(invalid.headers().location);
+        if (javaScriptEnabled) await waitForHydration(page);
         await expect(page.locator('#workspace-errors')).toBeVisible();
         await expect(input).toHaveValue('0');
         expect(sqlite(revisionSql)).toBe(before);

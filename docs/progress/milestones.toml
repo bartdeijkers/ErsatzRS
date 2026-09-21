@@ -3934,7 +3934,7 @@ feature    = 'addon-metadata-management'
 plan       = 'plans/amm-n-01b-addon-list-design-adaptation.md'
 depends_on = ['amm-n-01']
 acceptance = '''
-Strictly adapt the ADR 0091 locked artifact to real /media/addon-lists routes:
+Adapt the ADR 0091 locked artifact and its accepted amendments to real /media/addon-lists routes:
 Items/review, List settings, Playback/access, Activity/recovery, item review and
 artwork, with compatible overview/create and existing deep links. Preserve every
 current conditional capability, validation, provider-schema option and full
@@ -3942,7 +3942,10 @@ media-detail destination. Keep the production shell and all supported cultures.
 Match the locked content structure, visual hierarchy and responsive geometry;
 retain restrained disclosures, visible routine settings, vertically stacked
 48rem access/segments, fixed visible Previous/Next slots, one numbering action
-bar and 10/25/50/100/All paging. No synthetic data/results or Python runtime ship.
+bar and 10/25/50/100/All paging. Under the 2026-09-21 amendment, numbering review
+keeps rows editable and Apply saves the current Items task, including later row
+edits; Cancel restores the pre-proposal draft without saving. The frozen artifact
+remains unchanged. No synthetic data/results or Python runtime ship.
 
 Native forms and hydrated actions share real application commands. Preserve
 unsaved values and selection through validation, paging/filtering, task/item/
@@ -3972,6 +3975,43 @@ playback and release gates remain unchanged; prototype reports cannot replace
 production acceptance.
 '''
 evidence = '''
+2026-09-21 numbering-review decision accepted:
+The maintainer explicitly retains editable rows during review and Apply saving
+later row edits as an ADR 0091 design amendment. The design-choice blocker is
+closed. The focused bulk review test now edits rows after the proposal before
+both Apply and Cancel. All four native Windows Chromium/Firefox hydrated/no-JS
+cases pass against the unchanged matched 980b0bce candidate in 25.235 seconds.
+Apply persists the later values; Cancel restores the pre-proposal draft with
+an unchanged database. Evidence: test-results/n03-20260921-host/
+native-numberingreview-report.json and native-numberingreview-result.json.
+The isolated host stops afterward. No product behavior or locked artifact changes.
+Milestone-wide acceptance remains distinct from this focused pass.
+
+2026-09-21 current packaged Windows UI revalidation:
+Seven workspace/item/visual/publication-island/metadata/disk-warning/options
+specs are exercised on the matched 980b0bce archive in isolated native Windows
+Chromium and Firefox, including hydrated and no-JavaScript workflows. The broad
+124-case run retains 118 valid passes, five failures and one dependent skip.
+One failure was an immediate test reload interrupting WASM compilation; four
+were the Windows SQLite CLI translating stored CRLF into CRCRLF on stdout.
+A synthetic in-memory SQLite control proves that JSON preserves the original
+value. Test-only corrections wait for save/reload hydration and compare JSON-
+decoded chapter text with the existing CRLF normalization. Persistence,
+containment and browser-error assertions remain; no product code changes.
+All 16 focused cases then pass, covering the corrected disk-warning/chapter
+paths and eight additional options scenarios. Together these runs provide
+passing evidence for 132 distinct cases; repeated cases are not counted twice.
+Filters, native selection/focus, First/Last paging, top/replacement Save,
+numbered/unnumbered fields, off-page drafts, publication islands, warning
+independence and published-option isolation pass. Both-theme seven-width,
+200%-zoom and long localized 320px checks pass; representative mobile dark and
+desktop light captures are inspected. The 139-file lock remains unchanged.
+Evidence: test-results/n03-20260921-host/native-workspaceacceptance*,
+native-workspacefocused* and sqlite-newline-control.json. Temporary hosts stop.
+This is current UI evidence, not milestone completion. The numbering-review
+decision and explicit later-edit verification were subsequently completed above;
+remaining integrated acceptance retains its own evidence requirements.
+
 2026-09-14 CI follow-up: host commit 08aa9cf4 and add-ons commit ba440f3 were
 pushed with maintainer authorization. Add-ons validation run 34852466201 passes
 Windows entrypoints, Linux validation and bundle construction. Host run
@@ -4326,6 +4366,390 @@ Existing command-level regression coverage remains. yt-dlp, native recovery
 and the other Windows release gates remain required.
 '''
 evidence = '''
+2026-09-21 native installed playback entrypoint passes:
+The isolated Windows 0.11.4 installation is compared byte-for-byte against the
+already verified provider ZIP, including all imported helpers. Its actual
+addon.bat play entrypoint produces a finite midpoint fragment: first media
+arrives at 3.643 seconds, exit is zero, stderr is empty and strict FFmpeg 9
+audio/video decoding passes. Output duration is 8.292 seconds for the requested
+eight-second window. Read-only Windows process observation confirms yt-dlp
+receives the producer-side ffmpeg_i:-ss 422 -t 8 arguments. A local HTTP 404
+source exercises the real provider failure path: exit 69, zero media bytes,
+and exactly one concise provider-unreachable JSON diagnostic. No browser
+cookies or operator profile are used. Evidence:
+test-results/n03-20260921-host/native-entrypoint-result.json and its retained
+capture/stderr files; the operational probe is native_entrypoint_probe.py.
+This proves the isolated candidate entrypoint, not deployed-package equality:
+the live installation remains 0.11.3. Candidate/deployed identity and the
+remaining draft/publication acceptance must not be marked passed.
+
+2026-09-21 Linux runtime gates pass with the existing direct-HLS limitation:
+cargo xtask smoke --keep-temp passes MPEG-TS legacy/hybrid and segmenter HLS
+against disposable state with FFmpeg 9. The first attempt built successfully
+but its sandbox denied localhost binding; it is retained separately and is not
+runtime proof. The unchanged gate passes with local network access enabled.
+The serial scripts/e2e/tsduck-playback-gate.sh gate --keep --frames run passes
+64 checks with zero failures. Transport continuity and the measured HLS audio
+pip cadence pass; VBR PCR jitter retains its informational policy. HLS Direct
+has no segments within the existing twenty-second bound and remains the
+conditional skip, not a passed pipeline. The temporary hosts stop after each
+gate. Evidence: test-results/n03-20260921-linux/smoke.log, tsduck-gate.log and
+tsduck-evidence/manifest.json with retained captures, analysis and frame images.
+The final cargo xtask parity-check web --skip-tests also passes progress,
+formatting, architecture/hydration lint and all-target web Clippy. Its test
+step reuses the already completed 2839-case canonical workspace closeout and
+doctests rather than repeating them. Evidence: parity-web.log in the same
+Linux artifact directory. The existing proc-macro-error2 future-compatibility
+notice is retained. No milestone dependency or release gate is waived.
+
+2026-09-21 matched Linux UI and native preparation recovery pass:
+The current cargo leptos build and packaged web-bundle consistency check pass;
+both JavaScript and WASM return HTTP 200. On that matched Linux server/site,
+the nine selected workspace, item-form, visual, publication, metadata, disk,
+options, maintenance and automatic-publication specs pass all 138 Chromium/
+Firefox cases with one worker and zero retries. Evidence lives under
+test-results/n03-20260921-linux: leptos-build.log, matched-build.sha256,
+bundle-verification.log, ui-run.log and ui/playwright-results.json.
+The unchanged addon-preparation-restart.spec.ts also passes on packaged Windows
+980b0bce in 39.759 seconds. It kills its disposable host during preparation,
+verifies worker/provider/descendant cleanup and zero reservations, then resumes
+the same job after one restart with exactly two preparation calls and one
+published artifact. No operator host or database is changed. Evidence:
+test-results/n03-20260921-host/native-preparation-restart*.
+
+2026-09-21 real-caption viewing passes with explicit timing limits:
+On the same packaged Windows host and isolated local 0.11.4 provider, a public
+source with manual captions imports and automatically publishes one pinned
+English sidecar and a frozen 12460-ms introductory exclusion. Four midpoint
+captures cover Stream primary/fallback selection over MPEG-TS and HLS. The
+fallback channels request Dutch while only English is materialized and the
+configured fallback is English. All four inspected frames show the English
+caption; all four strict FFmpeg 9 audio/video decodes and 76 existing transport
+checks pass. MPEG-TS first decoded video arrives at 14.499 and 12.924 seconds;
+HLS presentation starts at 10.913 and 10.634 seconds. The twenty-second maximum
+passes; the ten-second target is not universally achieved. PCR jitter remains
+informational for VBR under the unchanged gate. This is rendered real-caption
+selection evidence, not an independent exact-frame subtitle/source timing
+comparison or real Download-ahead repetition. The separate synthetic matrix
+and independently correlated real SponsorBlock captures retain their scope.
+Evidence: test-results/n03-20260921-host/native-real-captions*,
+real-caption-verification/verification.log and its four frame images.
+The first probe incorrectly compared draft and publication counters; the
+correct assertion checks SourceDraftRevision. The initial failure is retained;
+the successful probe reuses the completed publication without database repair.
+
+2026-09-21 initial real-caption audit (superseded by viewing proof above):
+The current synthetic eight-capture subtitle matrix proves rendered selection
+and frozen-cut timing; the separate real-provider SponsorBlock captures prove
+source content. The N-03 execution plan also requires real-provider caption
+viewing. A bounded metadata-only native yt-dlp probe confirms that the existing
+SponsorBlock source offers no manual tracks (157 automatic languages), so those
+captures cannot prove that clause. One public alternate source exposes manual
+English and Dutch tracks. At that point actual publication and primary/fallback
+viewing were unverified; automatic captions were not accepted as a substitute.
+Probe evidence: test-results/n03-20260921-host/real-caption-languages.json and
+real-caption-ted-languages.json. No operator browser profile is accessed.
+
+2026-09-21 current provider contracts and native maintenance UI pass:
+The canonical Linux ./run.sh test-closeout succeeds: 2839 nextest cases pass,
+37 existing cases are skipped, and the workspace doctest phase exits zero.
+An initial run's six managed-runtime failures were caused by the invocation's
+explicit FFmpeg override. Removing only those override variables preserves
+FFmpeg 9 on PATH and allows the unchanged fake-runtime tests to pass. Both
+attempts are retained under test-results/n03-20260921-linux/test-closeout*.
+Workspace all-target Clippy with warnings denied, formatting, architecture lint
+and hydration lint pass; the existing 32 hydration baseline suppressions are
+unchanged. The immutable design lock still verifies all 139 files.
+The complete official-provider unittest discovery runs against local 0.11.4:
+Linux executes 109 tests with 34 existing skips; native Windows executes 64
+with 79 existing skips. Both runs discover 143 tests and exit successfully.
+Platform-specific and withdrawn-service skips are not passed checks. Windows
+uses the byte-verified extracted candidate ZIP and copied current test sources
+in temporary state; no operator tool is updated. Both platforms pass the real
+offline FFmpeg 9 merge/conversion/subtitle-cut fixture. The native Windows
+source-check/update PowerShell fixtures also pass, including
+bounded subprocess deadlines and stale-warning clearance. The pinned manifest
+validator checksum and the current manifest validate successfully. The source-check bundle
+test now expects the explicit CRLF batch packaging contract while preserving
+byte-exact comparisons for other files. The initial Linux failures from a stale
+FFmpeg shell path and the old LF expectation remain recorded.
+The unchanged addon-tool-maintenance.spec.ts also passes all four native
+Chromium/Firefox hydrated/no-JavaScript cases on packaged host 980b0bce, including
+failed-and-stale warning, version/remediation text, private-prose redaction and
+clearance after repair. The disabled synthetic package never invokes an updater;
+the isolated host stops after the run. Evidence: test-results/n03-20260921-linux/
+provider-contracts.log and test-results/n03-20260921-host/native-provider-contracts*,
+native-provider-process-checks.json and native-maintenance*.
+AMM-N-01B's numbering-review decision is accepted under ADR 0091 and its
+post-proposal edit verification passes in four native browser cases. AMM-N-02 and
+AMM-N-03 are not marked complete by these focused results.
+
+2026-09-21 current native real-provider SponsorBlock proof passes:
+The existing manual addon-sponsorblock-streaming.spec.ts passes in 131.3 seconds
+on the unchanged packaged 980b0bce Windows host, using the verified local 0.11.4
+provider ZIP extracted into disposable state and a private yt-dlp copy. Real
+provider discovery, interval metadata, automatic publication and scheduled
+MPEG-TS/HLS playback retain the frozen late exclusion 943460-1033640 ms without
+a full-download prepared artifact. Both transport paths and bounded host-log
+checks pass. MPEG-TS first decoded video/audio arrive at 14.394/14.393 seconds;
+HLS first presentation is 11.222 seconds. Both meet the approved twenty-second
+maximum but miss the ten-second aspirational target. Both original captures
+pass strict FFmpeg 9 audio/video decoding and 38 existing TSDuck checks with
+zero failures; no threshold is relaxed.
+
+Independent native yt-dlp requests acquire only two short source windows,
+939.460-946.460 and 1031.640-1037.640 seconds, without SponsorBlock processing.
+Four retained 0.4-second audio samples per capture correlate above 0.956, and
+corresponding decoded video samples correlate above 0.9995. Four excluded-source
+audio controls per capture remain below 0.433 when searched across the entire
+capture. After removing the frozen 90.180-second interval, the four retained
+audio positions agree at the comparison's 8 kHz sample resolution within each
+capture. Source/container rounding still limits absolute timing claims; this
+is sampled independent content/timeline proof, not subjective listening or
+exact-frame boundary precision. Original capture/reference digests, the fixed
+correlation thresholds, sample coordinates and results are retained.
+
+Two probe corrections are distinguished from product behavior. The first
+provider run raced the existing install reload with a new navigation; the test
+now awaits install/enable navigation and the existing hydration gate while
+retaining its persistence/playback assertions. The first correlation attempt's
+3 ms fine-search radius selected lower local correlation peaks. Expanding only
+the diagnostic search to 30 ms finds consistent positions and passes the same
+unchanged positive/negative thresholds; the failed result is retained.
+Codex source review confirms both corrected UI actions reload on success and
+that comparison controls would reject retained excluded audio or an unremoved
+interval. No application code, personal profile or deployed package is changed.
+The isolated host stops. Evidence in test-results/n03-20260921-host:
+native-sponsorblock-result.json, native-sponsorblock-results,
+native-sponsorblock-decode.json, sponsorblock-tsduck.log,
+source-reference-download.json and source-comparison/correlation.json.
+AMM-N-03 remains In progress pending the remaining contract/UI, Linux and
+release closeout audit; these playback results do not close another milestone.
+
+2026-09-21 current Windows candidate subtitle/cut playback passes:
+The unchanged addon-subtitle-playback.spec.ts passes in 441.5 seconds against
+packaged 980b0bce on native Windows Chromium with disposable database/state and
+synthetic media. All eight Stream/Download ahead x primary/fallback x MPEG-TS/HLS
+combinations publish revision-pinned human-caption artifacts and play the frozen
+processed timeline. The native fixture asserts one subtitle operation, one
+preparation operation, four native range calls and no raw provider play call.
+The eight captured originals pass strict FFmpeg 9 audio/video decoding with
+exit 0 and empty error output. Existing TSDuck structure, continuity and PCR
+checks pass 152 assertions with zero failures and unchanged thresholds; PCR
+jitter retains the existing informational VBR policy.
+
+Codex inspects decoded before/after pairs from every capture: MANUAL BEFORE
+appears on retained red and MANUAL AFTER on retained blue. Identical pair hashes
+are verified across equivalent selections. Every capture's sampled blue
+transition is at second 35; the original pixel assertions reject excluded green
+and error slates. Caption ownership, source-clock artifact versus published
+sidecar alignment, primary selection and unavailable-primary/English fallback
+assertions all pass. MPEG-TS first decoded video is 5.946-7.311 seconds; HLS first
+presentation is 0.287-4.990 seconds. All bounded host-log windows pass. This is
+current native synthetic-content viewing proof, not real-provider source
+correlation, subjective audio or exact-frame boundary precision.
+
+The initial runner attempt failed before browser launch because isolation also
+changed Playwright's binary search root; the runner now selects the installed
+browser binaries explicitly. A retained first transport wrapper exited early
+on an informational branch due to extra shell errexit; rerunning with the
+existing gate shell flags completes all checks without threshold changes.
+No product/test source or deployed state changes are needed. The isolated host
+stops. Evidence in test-results/n03-20260921-host: native-subtitles-result.json,
+native-subtitles-results, native-subtitles-decode.json,
+native-subtitles-visual-review.json and subtitle-tsduck-final.log.
+AMM-N-03 stays open for real-provider playback and remaining integrated gates.
+
+2026-09-21 current-candidate native publication recovery passes:
+The existing opt-in addon-publication-restart.spec.ts passes on native Windows
+Chromium against the unchanged packaged 980b0bce server and site in 201 seconds,
+with one worker and no retries. It proves scheduled scan contention, publication
+waiting on that scan, an actual NTFS held-handle failure (OS error 32), browser
+disconnect, exhausted bounded retries retaining the journal, host termination,
+restart and UI Retry. Exactly revision 2 completes under the same publication
+job/generation, with one revision record, one playlist item, no stranded journal,
+lease or active operation, no manual repair and zero browser errors. Owned host,
+preparation workers, browser and fault helper are stopped by the passing cleanup.
+The live instance remains on the verified host, healthy, with provider 0.11.3.
+
+Three failed probe attempts remain retained. The first exposed lexical path
+comparison against a Windows verbatim path. The second showed that ordinary
+realpathSync also fails with EISDIR; a native control proves realpathSync.native
+handles the path while rejecting the root itself and parent escape. The third
+completed recovery but caught a WASM download aborted by the probe navigating
+again two milliseconds after the Save response. The test now waits for that
+response's existing hydration gate before navigating. Only test code changes;
+containment, zero-error, timeout, retry and recovery assertions remain intact.
+Codex review confirms the unchanged package is exercised and these corrections
+do not suppress product failures or alter application behavior.
+Evidence: test-results/n03-20260921-host/native-recovery-result.json,
+native-recovery.log, native-recovery-results/*/publication-restart-proof.json,
+trace.zip, native-recovery-attempt1/2/3-* and path-control.json. Process provenance
+records the product source and test-source digest. This supplies current local
+candidate recovery evidence; playback, remaining contract/UI gates and release
+acceptance are not inferred. AMM-N-03 remains In progress.
+
+2026-09-21 native browser-profile acceptance on the current candidate:
+The independently extracted 980b0bce host runs through its packaged launcher
+with disposable database/state/data/browser roots; bootstrap, child executable
+SHA-256 and migration 202609180900 are verified. Native Windows Chromium imports
+the previously verified local 0.11.4 repository ZIP through Sources, installs
+and enables the provider, and checks a private yt-dlp executable copy.
+A fresh empty native Firefox profile is held with an exclusive NTFS cookie-file
+handle. Hydrated native Chromium saves the Firefox item option and proves the
+profile_locked result and English recovery guidance with zero console/page
+errors. Removing only that disposable profile then proves profile_unavailable
+through native Windows Firefox with JavaScript disabled, also with zero errors.
+The final two jobs (9 and 10) each complete in one attempt without a lease.
+Earlier probe errors are retained: select values required the displayed label,
+and reloading the POST response unintentionally resubmitted the test form.
+The corrected observer uses GET-only navigation; no application assertion was
+weakened. All ten synthetic jobs are terminal; no manual job repair occurred.
+The disposable host/browser processes stop and the cookie handle is released.
+The live instance remains healthy on the same verified host with provider 0.11.3;
+no production package/settings/database changes are made by these probes.
+Evidence in test-results/n03-20260921-host: candidate-runtime-initial.json,
+native-profile-locked.json, native-profile-missing.json,
+native-profile-persisted.json, profile-probe-notes.json, candidate-cleanup.json,
+profile-probe-cleanup.json and final-check.json. This closes the current local
+candidate's two browser-profile scenarios, not integrated lifecycle/playback or
+release acceptance. AMM-N-03 and its other requirements remain open.
+
+2026-09-21 authorized local Windows host build and deployment:
+Built clean source 980b0bce2bb454ea799d49044e760bd1961e8480 with matching
+release frontend and the four native Windows executables. Both build steps
+exit 0 with the repository's existing release settings and configured target.
+Archive ersatzrs-candidate-980b0bce-win-x64.zip is 66,183,152 bytes, SHA-256
+f3c2d752323667356154f316fbc2f99f8809ec29ccb06e43e611b98823b05f67.
+Independent extraction verifies every byte, x64 PE binaries, required web/
+preview/font assets and exclusion of runtime tools and private state.
+The native structural bundle gate passes with a disposable database and both
+referenced hydration assets returning HTTP 200.
+
+Under the maintainer's explicit deployment/start authorization, the existing
+program directory and a consistent SQLite backup are retained before installing
+the verified package. Backup quick_check passes. The packaged launcher starts
+the installed server, whose SHA-256 is
+c991819cc6f168cc9b776e30d186f198ab5a57d606be7990a9c3a115e4dc1c3b.
+Readiness returns HTTP 200. Normal startup advances the existing database from
+migration 202609161200 to 202609180900, establishing that subtitle-outcome reuse
+is now deployed. Read-only Chromium checks through WSL verify Home, Add-on
+Lists, Add-ons, and an existing list's Items/Activity pages: all HTTP 200,
+hydration complete, zero console/page errors. This is startup/UI proof, not
+new subtitle, SponsorBlock, browser-profile or integrated recovery acceptance.
+
+The original Windows source branch and tracked/untracked work are restored
+and verified against the retained recovery snapshot. The new host is left
+running in the operator-selected directory. The provider package remains
+0.11.3; the separate local 0.11.4 correction is not installed by this host step.
+Evidence: test-results/n03-20260921-host (frontend.result.json,
+native-release.result.json, host-package.json, bundle-verification.json,
+deployment.json, browser-check.json, windows-restoration.json, final-check.json).
+AMM-N-03 remains In progress. Remaining exact-candidate integrated acceptance
+and release gates are unchanged; no milestone or upstream row is closed.
+
+2026-09-20 corrected-package checkpoint (deadline 23:55 Europe/Amsterdam):
+The official add-on bundle producer now normalizes Windows .bat/.cmd bytes to
+CRLF while preserving other content and executable modes. The local 0.11.4
+candidate is based on ErsatzRS-addons 0857da471f185c879366ec760b1caa27d9655dc9
+plus the reviewed, uncommitted packaging/test/version/changelog patch retained
+as addon-source.patch in test-results/n03-20260920-candidate. Its repository ZIP
+SHA-256 is d6b6305d0483fb02165056b08a9a9c7003413a6827aa47c45ffdb6aa39cb94d6.
+Six focused contracts pass on Linux and six on native Windows, without skips.
+Windows tests use byte-verified files extracted from that exact archive and
+cover the v2 error record, incremental discovery, shared metadata, restrictions
+and rebuilding an already-CRLF package. The new ZIP regression fails before
+the correction and passes afterward; manifest validation and diff checks pass.
+An initial probe cleanup failure was corrected and the native suite rerun with
+exit 0. This is package evidence, not publication or production adoption.
+The host candidate targets source 980b0bce2bb454ea799d49044e760bd1961e8480
+in a clean native checkout. Its release frontend build passes. The first
+PowerShell wrapper lost the exit code; a corrected runner reuses the cache and
+records exit 0. The unchanged release-profile native build does not finish:
+the bounded runner stops its process tree at 23:45 while web compilation is
+still active, reserving time for restoration before the 23:55 session deadline.
+No compiler failure was reported before that timeout. No current host ZIP,
+structural bundle pass, packaged-launcher pass or current-host UI/profile pass
+is claimed. Existing build-tree executables must not stand in for that missing
+candidate. A read-only exact-source CI query finds no runs; none are started.
+
+The original Windows main branch at 98693e0c and all tracked/untracked work are
+restored and verified against the recovery snapshot, which is retained.
+The installed server executable digest remains unchanged. At the final check,
+the old launcher/server are absent and port 8409 is unreachable. The runtime
+log records graceful Ctrl+C shutdown at 22:57:37 Europe/Amsterdam; the maintainer
+confirms deliberately stopping it during this timebox. It remains stopped.
+Evidence: frontend.result.json, native-release.stderr.log, build-timebox.json,
+windows-restoration.json, exact-source-ci.json and final-windows-check.json in
+test-results/n03-20260920-candidate. Next: finish the native release build from
+980b0bce with sufficient build time, assemble a matched archive, then execute
+its bundle/launcher/profile checks and the remaining integrated acceptance.
+The provider correction is local only; there is no product commit, deployment,
+live-service restart, push, tag, publication or upstream processing.
+AMM-N-03 remains open; this checkpoint does not accept another milestone.
+
+2026-09-20 timeboxed Windows acceptance (deadline 23:00 Europe/Amsterdam):
+AMM-N-03 remains In progress. The deployed server SHA-256 is
+fe84076c4d67db8262a95227d306a9a87bddb36709d3467c7d0d3231f27d6e70,
+byte-identical to the local Windows release executable dated 2026-09-17.
+Its checkout has base 98693e0c and uncommitted scanner/web corrections; an exact
+source SHA and independently packaged current candidate are not established.
+The active database lacks migration 202609180900 from subtitle-outcome reuse
+commit 66697a47. Current checkout 980b0bce includes that fix and subsequent
+publication-island, scanner and health changes. Playback on the older installed
+build cannot establish acceptance of those changes.
+
+The requested existing channel plays through the hydrated preview at 1920x1080.
+A 167.752-second observation records 156.025 seconds of media-clock advancement,
+3,741 additional decoded frames, zero dropped frames and no observed waiting,
+stalled, seeking or video-error events. This is bounded preview evidence, not
+cold-start latency, subjective audio, SponsorBlock boundary or primary/fallback
+subtitle proof. Existing TSDuck URL gates pass against its configured HLS
+segmenter outputs: HLS 23 checks and MPEG-TS 21 checks, no failures, unchanged
+thresholds. Both short captures lack a periodic rolling-delivery sample; PCR
+jitter retains the existing informational policy. Strict FFmpeg 9 audio/video
+decode passes for the HLS capture. The raw MPEG-TS capture fails strict decode
+at its truncated final audio PES (182 of 2,574 declared bytes captured); retain
+that failure separately from the passing transport checks and tail diagnostic.
+A diagnostic derivative omitting only the final incomplete 188-byte TS packet
+passes the same strict decode; the original capture remains unchanged and its
+failed full-file decode is not relabelled as passed.
+
+Native provider 0.11.3 tests use a byte-identical temporary package copy and
+synthetic input. Complete shared metadata, unknown/zero duration, resumable
+discovery/enrichment and restricted-item mapping pass (four tests). The v2
+staged-archive test fails on its invalid-item error record: the installed LF
+addon.bat cannot resolve its fail label. A native-directory repeat excludes
+the initial UNC working-directory warning. A diagnostic copy changing only
+addon.bat to CRLF passes the unchanged v2 test; the installed package remains
+unchanged. Owning debt: windows-ytdlp-batch-import-error-record.
+
+The same server and site run separately with a new database and explicitly
+isolated state/data/APPDATA/LOCALAPPDATA. Native Firefox creates an empty
+disposable profile; no personal profile or cookie contents are inspected.
+A held NTFS cookie-database handle produces a completed host access job with
+profile_locked. Removing only that disposable profile produces a completed
+profile_unavailable job through the no-JavaScript form. Each finishes in one
+attempt. The Windows host uses real yt-dlp 2026.08.19; the second control uses
+a private executable copy configured through the admin UI. Chromium automation
+from WSL verifies English locked-profile guidance and Dutch locked/missing
+guidance, including no-JavaScript rendering and submission. This is integrated
+host/profile/UI evidence for this older build, not an independently downloaded
+current archive or native Windows browser-automation proof. The disposable host
+and owned Firefox processes stop; the original launcher/server remain running.
+
+Evidence: test-results/n03-20260920-timebox (live-playback-final.json,
+live-hls-tsduck.log, live-ts-tsduck.log, strict-decode.json, ts-pes-tail.json,
+native-provider-tests.json, native-provider-v2-localcwd.log,
+native-provider-v2-crlf.json, profile-control-persisted.json,
+profile-locked-nl.json, profile-unavailable-nl.json and profile-host-cleanup.json).
+Next: correct and verify the provider Windows package, establish a matched
+current Windows candidate and its required exact-source evidence, then verify
+remaining integrated acceptance and reuse only applicable earlier captures.
+No production database edit, deployment, live-service restart, build, commit,
+push, CI, tag, release or UCU acceptance is performed by this checkpoint.
+
+Historical candidate evidence follows; its individual limits still apply.
 Reserved by Codex on 2026-09-11. Planning and independent plan review are complete.
 Current candidate: immutable annotated v1.0.33-beta resolves to
 0fe8be29dffa949cbf3b550f4da2205632034604, matching local/tracking/live main at

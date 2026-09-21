@@ -17,10 +17,12 @@ acceptance. ADR 0091 owns the design and ADR 0094 owns automatic publication.
 - Recheck publication-island console errors after the page hydration flag using
   `tests/e2e/addon-list-publication-island.spec.ts`. Use a matched SSR/WASM build;
   a separately rebuilt server is not valid hydration evidence.
-- Resolve the explicitly unclosed difference: rows remain editable below the
-  numbering review, and Apply saves later row edits too. Compare with the
-  locked read-only review and obtain a recorded design decision before changing
-  that contract or claiming acceptance. Preserve Cancel's pre-preview draft.
+- Verify the accepted 2026-09-21 ADR 0091 amendment: rows remain editable below
+  the numbering review, and Apply saves the current Items task including later
+  row edits. Explicitly exercise post-proposal edits in hydrated/no-JS Chromium
+  and Firefox. Preserve Cancel's pre-preview draft and unchanged database.
+  The decision and four native browser cases now pass; the milestone owns
+  evidence. Keep the original frozen reference unchanged.
 - Check item visibility, filter/tool geometry, focus, contrast and principal
   controls at 320px and desktop, both themes and long localized text. Preserve
   paging/filter draft retention, off-page selections, independent season

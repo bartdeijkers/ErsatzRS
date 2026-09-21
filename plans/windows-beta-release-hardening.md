@@ -100,7 +100,8 @@ First run the repository closeout gates, push the exact candidate SHA, and
 require terminal successful CI for that SHA. Then create and push a new
 annotated beta tag and wait for the Windows draft build. Download its ZIP into
 a fresh temporary directory; verify its digest, ZIP integrity, four executables,
-web/extractor assets, and excluded build/private trees. Check that the tag,
+web assets, and excluded build/private trees. Verify the separately installed
+provider package and its entrypoints as required below. Check that the tag,
 workflow, local commit and live remote ref identify the intended candidate.
 
 Run these gates against that independently downloaded draft archive and its
@@ -113,10 +114,12 @@ The existing
 in `crates/ersatzrs-ffmpeg/tests/pipeline_snapshots.rs` remains command-level
 coverage, not proof of decoded native GPU output.
 
-1. Exercise a finite YouTube definition near its midpoint with the optional
-   manual extractor. Prove producer-side seek, prompt valid output, quiet
-   success, a concise failing diagnostic, and candidate/deployed wrapper
-   identity.
+1. Exercise a finite YouTube definition near its midpoint through the installed
+   yt-dlp add-on. Prove producer-side seek, prompt valid output, quiet success,
+   a concise failing diagnostic, and candidate/deployed provider-package and
+   entrypoint identity. Accepted ADR 0066 removed manual extractors and bundled
+   wrappers; this uses their supported replacement without waiving any of the
+   playback, diagnostic or identity requirements.
 2. Re-run direct IPTV and segmenter HLS smoke after the temporary live setup.
 3. Complete the current milestone's integrated Windows acceptance, including
    native add-on process containment tests for the candidate's dependencies.

@@ -8,7 +8,8 @@ ADR 0091 owns the locked design and its recorded amendments.
 ## Remaining work
 
 1. Complete [workspace refinement testing](addon-list-workspace-ux-refinements.md),
-   retaining phase 4 and the editable numbering-review difference as outstanding.
+   mapping phase 4 to retained evidence. Editable numbering review is accepted
+   by the 2026-09-21 ADR 0091 amendment and passes focused native browser checks.
 2. Compare the real workspace against the
    [locked reference](../docs/reference/ui/design-artifacts/admin-ux-organize/LOCK.md), using its source/capability map.
    Do not infer missing production capability from a synthetic omission.

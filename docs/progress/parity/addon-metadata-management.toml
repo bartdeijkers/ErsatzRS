@@ -25,9 +25,8 @@ items are admitted only where a deterministic live boundary is available.
 AMM-G (ADR 0079): paginated discovery precedes publication; durable optional
 details share a randomized provider-host limiter. Localized 2–16 second defaults
 apply without restart and preserve cooldowns. The editor supports manual imports,
-detail jobs and accessible numbering. Historical G-06/G-07 evidence covers retained
-unavailable items, the seven-URL matrix, provider order/identity, live/finite
-behavior and invalid-output rejection. Retry preserves operator state and replaces
+detail jobs and accessible numbering. G-06/G-07 own retained-item, source-matrix
+and live/finite acceptance. Retry preserves operator state and replaces
 only an incomplete generation. NSF live acceptance covers publication, scheduling,
 playout, MPEG-TS and HLS.
 AMM-H closes Windows television-cardinality regressions with canonical artwork,
@@ -35,12 +34,11 @@ deterministic reads, restart-safe exact-duplicate repairs and aggregate health.
 AMM-I closes the import/review UX gaps under `amm-i-01`.
 After Windows dogfood exposed a stranded journal, AMM-J-01 adds restart-safe
 exact-revision jobs, shared managed-library leases, and legacy-journal adoption.
-AMM-J-02 completes atomic recovery, including native Windows held-handle proof
-at exact commit `9196c4f`. AMM-J-03 implements typed
+AMM-J-02 owns atomic recovery and native Windows held-handle proof.
+AMM-J-03 implements typed
 provider-neutral access restrictions, item-scoped publication exclusion,
 redacted durable status, and guarded localized Retry/Restore actions for the
-hydrated and no-JavaScript editor. Focused acceptance is complete; AMM-N-03
-retains the integrated packaged Windows restart proof.
+hydrated and no-JavaScript editor. AMM-N-03 owns integrated restart evidence.
 AMM-J-04 and AMM-K close recovery and lifecycle. AMM-L adds cadenced discovery,
 rich headers and non-destructive reconciliation; ADR 0094 supersedes its
 additions-only publication policy.
@@ -52,13 +50,46 @@ M-01B delivers the native Stream/Download ahead/New videos only select, with a
 visible UTC cutoff renewed on re-enabling. Published playback stays frozen;
 existing videos stream and enabled SponsorBlock applies in every mode.
 M-02 completes ADR 0052 manual primary/fallback captions, revision-pinned files
-and aligned MPEG-TS/transcoded HLS captions in both delivery modes. Its milestone
-owns evidence. M-03 is complete; N-01 is pushed with green CI (see milestone):
+and aligned MPEG-TS/transcoded HLS captions in both delivery modes.
+M-03 is complete; N-01 is pushed with green CI (see milestone):
 permission-reviewed yt-dlp -U, playback-first deferral and offline crash recovery.
-A01-A10 and the confirmed walkthrough publication/setup defects are fixed locally;
-M-01B is complete. N-01B retains broader responsive/accessibility closeout.
-N-02 evidence is retained; N-01B blocks closeout. N-03 owns native ZIP/playback proof;
-Packaged browser-profile and release gates are open.
+Milestones own walkthrough, UI and N-02 evidence. AMM-N-03 remains open.
+Windows 980b0bce passes package, profile, restart, caption and real-provider
+playback checks (2026-09-21). Local 0.11.4 fixes batch errors; live 0.11.3 remains.
+Provider contracts pass on both platforms; 2839 Rust cases and doctests pass.
+132 native workspace and 138 matched Linux UI cases pass.
+Linux smoke/TSDuck and web parity pass. Editable numbering review is accepted
+under ADR 0091; later edits pass four UI cases. Release acceptance remains.
+'''
+
+[[debt]]
+id          = 'windows-ytdlp-batch-import-error-record'
+description = 'The installed yt-dlp 0.11.3 Windows package loses the structured import error record on an unmappable v2 item: cmd.exe cannot find the fail batch label with the shipped LF line endings.'
+discovered  = '2026-09-20'
+resolved    = false
+adr         = '0085'
+evidence    = '''
+AMM-N-03 timeboxed native acceptance runs the existing provider v2 staged-archive
+test against a byte-identical temporary copy of the installed package. Four
+other focused contracts pass; v2 fails because stderr ends with a missing batch
+label diagnostic instead of the required JSON error record. Repeating from a
+native temporary working directory excludes the initial UNC warning as cause.
+Changing only addon.bat line endings to CRLF in another temporary copy makes
+the unchanged v2 test pass. No installed package or product source was modified.
+Preserve Windows batch line endings in package production and verify the exact
+corrected archive on Windows before resolving this debt. Malformed input remains
+rejected; the demonstrated failure is the error-reporting contract, not accepted
+invalid media or a failed ordinary import. Milestone amm-n-03 and
+test-results/n03-20260920-timebox own the detailed evidence.
+
+The subsequent 0.11.4 local candidate normalizes batch bytes in the official
+ZIP producer. Six focused contracts pass on Linux and six on native Windows
+against its verified extraction, including the original v2 case and a new
+packaged error-record regression. Milestone amm-n-03 records the exact ZIP,
+source patch and review evidence under test-results/n03-20260920-candidate.
+The correction is committed as add-ons 4cd0f29, awaiting CI and publication;
+the deployed 0.11.3 package is
+unchanged, so its observed error-reporting defect remains present.
 '''
 
 [[debt]]

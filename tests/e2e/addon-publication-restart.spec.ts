@@ -2,9 +2,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { spawn, execFileSync, type ChildProcess } from 'child_process';
 import { createHash } from 'crypto';
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, writeFileSync } from 'fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'fs';
 import { createServer, type ServerResponse } from 'http';
-import { dirname, join, relative, resolve, isAbsolute } from 'path';
+import { dirname, join, relative, isAbsolute } from 'path';
 import { tmpdir } from 'os';
 import { addonId, sourceUrl, hydrated, installPreparedFixture, preparedSqlite } from './addon-prepared-fixture';
 
@@ -39,6 +39,8 @@ async function baseline(page: Page, sql: (query: string) => string): Promise<num
   await page.locator('[data-option-key="processed"] select').selectOption('true');
   await Promise.all([page.waitForEvent('framenavigated', frame => frame === page.mainFrame()),
     page.getByRole('button', { name: 'Save settings', exact: true }).click()]);
+  // Finish hydrating the save response before starting the next navigation.
+  await hydrated(page);
   await hydrated(page, `/media/addon-lists/${id}`);
   await expect.poll(() => sql(`SELECT COUNT(*) FROM "AddonMediaListItemOperationJob" WHERE "AddonMediaListId"=${id} AND "Kind"=1 AND "State"=2;`), { timeout: 120000 }).toBe('1');
   await expect.poll(() => sql(`SELECT "PublishedRevision"||','||("PublicationJournalJson" IS NULL) FROM "AddonMediaList" WHERE "Id"=${id};`), { timeout: 90000 }).toBe('1,1');
@@ -191,7 +193,9 @@ test('packaged Windows recovers publication after scheduled scan overlap and bro
     expect(journal.operation_id).toBe(operation);
     expect(journal.generation).toBe(generation);
     const backup = journal.backup_folder as string;
-    const child = relative(resolve(root), resolve(backup));
+    // Rust may persist a verbatim Windows path; compare existing canonical paths
+    // so the same directory spelling does not look like a different volume.
+    const child = relative(realpathSync.native(root), realpathSync.native(backup));
     expect(child !== '' && child !== '..' && !child.startsWith('..\\') && !child.startsWith('../') && !isAbsolute(child)).toBe(true);
     const locked = firstFile(backup);
     expect(locked).not.toBe('');
