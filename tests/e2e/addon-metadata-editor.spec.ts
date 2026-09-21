@@ -1044,6 +1044,7 @@ WHERE "Id" = ${seed.listId};
     await page.locator('.quiet-details > summary').click();
     const progress=page.locator('#addon-list-import-progress');
     await expect(progress).toContainText('Loading item details');
+    await expect(progress.getByRole('progressbar')).toHaveAccessibleName('Loading item details');
     await expect(progress.getByRole('progressbar')).toHaveAttribute('aria-valuemax','2');
     await expect(progress.getByRole('progressbar')).toHaveAttribute('aria-valuenow','0');
     await expect(progress.locator('[aria-live="polite"]')).toContainText('Loading item details');

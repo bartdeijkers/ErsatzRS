@@ -327,7 +327,7 @@ pub(super) fn import_progress(w: &Workspace) -> AnyView {
         let (_,current,total)=super::super::super::progress_sample(p);
         let phase=super::super::super::import_progress_phase(p,w.form.published_revision>0,w.form.detail_import_policy);
         view!{<section class="settings-section" id="addon-list-import-progress" data-import-state=format!("{:?}",p.state)><h3>{tr(phase)}</h3><p aria-live="polite">{tr(phase)}" · "{import_discovery_summary(p)}</p>
-            {total.map(|total|view!{<progress role="progressbar" max=total.max(1).to_string() value=current.min(total).to_string() aria-valuemin="0" aria-valuemax=total.to_string() aria-valuenow=current.min(total).to_string()></progress>})}
+            {total.map(|total|view!{<progress role="progressbar" aria-label=tr(phase) max=total.max(1).to_string() value=current.min(total).to_string() aria-valuemin="0" aria-valuemax=total.to_string() aria-valuenow=current.min(total).to_string()></progress>})}
             <p>{format!("{} / {} {} · {} {} · {} {}",p.detail_complete,p.detail_total,tr(TextKey::DetailsComplete),p.detail_skipped,tr(TextKey::DetailsSkipped),p.detail_failed,tr(TextKey::ItemDetailsFailed))}</p>
             <p>{p.last_progress_at.clone()}</p>
             <div class="action-row">{actions.into_iter().map(|(intent,key)|button(&format!("import:{intent}"),key,false)).collect_view()}{button("navigate",TextKey::Refresh,false)}</div>

@@ -3975,6 +3975,20 @@ playback and release gates remain unchanged; prototype reports cannot replace
 production acceptance.
 '''
 evidence = '''
+2026-09-21 detail-progress accessibility audit:
+W30 remains reproducible in source: the existing import/detail progress element
+has values and nearby phase text but no accessible name. The scoped correction
+uses the existing translated phase as aria-label and extends the existing
+durable-detail browser case with an explicit accessible-name assertion.
+Hydration map: /media/addon-lists/:id uses the workspace SSR view and
+workspace/views/detail.rs::import_progress; it consumes the existing import
+progress DTO and native form flow. No island, server function, shared primitive
+or data mutation changes; hydrated and no-JavaScript HTML share the name.
+Browser target: addon-metadata-editor.spec.ts, durable detail progress case.
+Source review, formatting and diff checks pass. Matched-build browser execution
+is pending; the older successful suites did not assert this name. W30 remains
+open until that proof exists. No playback gate is invalidated by this label.
+
 2026-09-21 numbering-review decision accepted:
 The maintainer explicitly retains editable rows during review and Apply saving
 later row edits as an ADR 0091 design amendment. The design-choice blocker is

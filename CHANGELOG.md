@@ -80,6 +80,7 @@ release section when tagging a release.
 
 ### Fixed
 
+- Give add-on list detail progress its localized task name for screen readers.
 - Native Windows acceptance tests compare canonical paths before checking
   backup containment and wait for Save/install/enable and disk-warning reloads
   to hydrate before navigating. Chapter assertions use JSON to preserve stored
