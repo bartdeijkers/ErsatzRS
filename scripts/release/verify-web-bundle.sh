@@ -26,11 +26,21 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-PORT="${ERSATZRS_VERIFY_PORT:-8409}"
+PORT="${ERSATZRS_VERIFY_PORT:-18479}"
 BASE_URL="http://127.0.0.1:${PORT}"
 
 log() { printf '\033[1;34m[verify-web-bundle]\033[0m %s\n' "$*"; }
 err() { printf '\033[1;31m[verify-web-bundle]\033[0m %s\n' "$*" >&2; }
+
+# Never accept an already running host as the candidate's readiness response.
+[[ "$PORT" =~ ^[0-9]{1,5}$ ]] && (( 10#$PORT > 0 && 10#$PORT <= 65535 )) || {
+  err "ERSATZRS_VERIFY_PORT must be between 1 and 65535"
+  exit 1
+}
+if (: </dev/tcp/127.0.0.1/"$PORT") 2>/dev/null; then
+  err "verification port $PORT is already in use; select a free ERSATZRS_VERIFY_PORT"
+  exit 1
+fi
 
 WINDOWS_POSIX=0
 case "$(uname -s)" in
@@ -102,9 +112,16 @@ TMP_ROOT_ENV="$(native_env_path "$TMP_ROOT")"
 SITE_ROOT_ENV="$(native_env_path "$SITE_ROOT")"
 LOG_PATH="$TMP_ROOT/server.log"
 SERVER_PID=""
+SERVER_WINPID=""
 cleanup() {
   if [[ -n "$SERVER_PID" ]]; then
-    kill "$SERVER_PID" 2>/dev/null || true
+    if [[ "$WINDOWS_POSIX" -eq 1 && -n "$SERVER_WINPID" ]] && kill -0 "$SERVER_PID" 2>/dev/null; then
+      # A Git Bash PID is not a native PID. Stop the captured native wrapper
+      # and its descendants; killing only env.exe can orphan the server.
+      MSYS_NO_PATHCONV=1 taskkill.exe /PID "$SERVER_WINPID" /T /F >/dev/null 2>&1 || true
+    else
+      kill "$SERVER_PID" 2>/dev/null || true
+    fi
     wait "$SERVER_PID" 2>/dev/null || true
   fi
   for _ in $(seq 1 20); do
@@ -150,6 +167,10 @@ fi
 log "booting server on $BASE_URL…"
 env "${SRV_ENV[@]}" "$SERVER_BIN" >"$LOG_PATH" 2>&1 &
 SERVER_PID=$!
+if [[ "$WINDOWS_POSIX" -eq 1 ]]; then
+  SERVER_WINPID="$(ps -l -p "$SERVER_PID" | awk 'NR == 1 { for (i=1; i<=NF; i++) if ($i == "WINPID") column=i } NR > 1 && column { print $column }')"
+  [[ "$SERVER_WINPID" =~ ^[0-9]+$ ]] || { err "could not identify the native candidate process"; exit 1; }
+fi
 
 for _ in $(seq 1 120); do
   kill -0 "$SERVER_PID" 2>/dev/null || { err "server exited during startup:"; tail -n 30 "$LOG_PATH" >&2; exit 1; }

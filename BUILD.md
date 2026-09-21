@@ -526,7 +526,13 @@ several releases. Two distinct failure modes:
 binary against a site-assets directory and fails if any `/pkg` asset the shell
 HTML references does not resolve (HTTP 200). The release workflow runs it against
 the real release artifacts (linux-x64) before publishing, so a checksum mismatch
-fails the release instead of shipping. The gate binds only to loopback. Under
+fails the release instead of shipping. The gate binds only to loopback, defaults
+to port 18479, and refuses an occupied port before starting a candidate. Set
+`ERSATZRS_VERIFY_PORT` to another free port when needed. Windows cleanup resolves
+the Git Bash process to its native PID and stops that candidate's process tree.
+Run the offline port regressions with
+`python3 scripts/release/test-verify-web-bundle.py`; on native Windows, use
+Python with `BUNDLE_TEST_BASH` pointing to Git Bash's `bash.exe`. Under
 Git Bash/MSYS it keeps POSIX paths for shell cleanup but converts every path
 passed to the native Windows server into drive-letter form, so its temporary
 SQLite database and assembled site are usable without a Firewall prompt. Run it

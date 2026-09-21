@@ -87,7 +87,9 @@ ZIP producer. Six focused contracts pass on Linux and six on native Windows
 against its verified extraction, including the original v2 case and a new
 packaged error-record regression. Milestone amm-n-03 records the exact ZIP,
 source patch and review evidence under test-results/n03-20260920-candidate.
-The correction is committed as add-ons 4cd0f29, awaiting CI and publication;
+The correction is committed as add-ons 4cd0f29 with green exact-commit CI
+35651550770 and an independently verified downloaded bundle; publication and
+live update are not yet claimed;
 the deployed 0.11.3 package is
 unchanged, so its observed error-reporting defect remains present.
 '''
@@ -104,9 +106,11 @@ evidence    = 'Independent real walkthrough: publication revision1 completes fro
 id          = 'addon-narrow-filter-readability'
 description = 'UX follow-up W28: at 320 CSS pixels the list filter shrinks beside Search to about 53 pixels and truncates the current All label to Al; the separate Search button adds avoidable vertical space.'
 discovered  = '2026-09-12'
-resolved    = false
+resolved    = true
 adr         = '0091'
 evidence    = 'Claude independently measured no page overflow at 320/390 but observed the unreadable filter; Codex independently reviewed ui-fixed-22-list-preparing-320.png. Suggested correction: stack the existing filter/search controls at the narrow breakpoint and keep their values readable. No new control framework or broader layout redesign is needed. Retained as follow-up after the authorized confirmed-fix batch, not a blocker to the verified publication correction.'
+
+resolution  = 'Verified 2026-09-21 on packaged Windows 980b0bce: workspace.module.css stacks filter controls below 48rem and gives the select full width; the full selected label is also displayed. Existing long Dutch/German 320px browser cases pass in Chromium and Firefox in both themes. Native Firefox Dutch dark capture is inspected and the complete label is readable. Evidence: test-results/n03-20260921-host/native-workspaceacceptance-report.json and native-workspaceacceptance-results, filter-nl-dark.png. The same cases pass in the matched 138-case Linux UI run. No new layout change is introduced by closing this stale debt.'
 
 [[debt]]
 id          = 'addon-bulk-retained-state-feedback'
@@ -120,9 +124,11 @@ evidence    = 'Real UI-only 14-item review: Exclude changes retained inputs, not
 id          = 'addon-detail-progress-task-label'
 description = 'UX follow-up W30: the readiness details show a progress element without a programmatic name; its 14/14 count concerns detail discovery, not media preparation, and is ambiguous beside preparation status.'
 discovered  = '2026-09-12'
-resolved    = false
+resolved    = true
 adr         = '0091'
 evidence    = 'Claude DOM/visual review of the real preparing list at narrow widths. Suggested correction: give the existing progress element an associated localized detail-discovery label, retaining the separate authoritative preparation state. Screen-reader speech was not tested; no new progress subsystem is proposed.'
+
+resolution  = 'Resolved by host 8eede3f835c081b0eea953256435a37760c7d84d: the existing progress element uses the translated detail-discovery phase as its accessible name. Exact-commit CI 35651394350 passes the explicit accessible-name assertion in Chromium and Firefox with zero retries. Downloaded reports are retained under test-results/n03-20260921-host/ci-35651394350-chromium and ci-35651394350-firefox. Preparation state remains separate; no new progress subsystem or screen-reader speech claim is introduced.'
 
 [[debt]]
 id          = 'addon-publication-failed-child-scan-recovery-drain'

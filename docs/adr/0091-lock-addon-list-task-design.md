@@ -12,8 +12,10 @@ hidden preparation failures and misleading post-create failure navigation.
 Those A02/A03/A05 defects and the subsequently authorized A06-A10 guidance,
 validation-label and accessibility corrections are now verified locally.
 The focused joint walkthrough also fixes stale import landing, bulk inclusion
-and recovered-failure feedback. Narrow filter readability, retained-versus-saved
-bulk feedback and detail-progress labelling remain recorded UX follow-ups;
+and recovered-failure feedback. Narrow filter readability is verified on the
+current Linux and Windows candidates (2026-09-21). Detail-progress naming is
+verified in both browsers on host 8eede3f8. Retained-versus-saved bulk feedback
+retains its owning follow-up record;
 full responsive/accessibility closeout is not inferred from the focused pass.
 The accepted design remains unchanged; the owning parity debts track repair.
 Previously, live publication readiness was restored under AMM-N-01B

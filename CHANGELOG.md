@@ -80,6 +80,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Release bundle verification uses a dedicated port, refuses an occupied port,
+  and cleans up the native Windows candidate process tree after verification.
+
 - Give add-on list detail progress its localized task name for screen readers.
 - Native Windows acceptance tests compare canonical paths before checking
   backup containment and wait for Save/install/enable and disk-warning reloads

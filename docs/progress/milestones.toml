@@ -3985,9 +3985,18 @@ workspace/views/detail.rs::import_progress; it consumes the existing import
 progress DTO and native form flow. No island, server function, shared primitive
 or data mutation changes; hydrated and no-JavaScript HTML share the name.
 Browser target: addon-metadata-editor.spec.ts, durable detail progress case.
-Source review, formatting and diff checks pass. Matched-build browser execution
-is pending; the older successful suites did not assert this name. W30 remains
-open until that proof exists. No playback gate is invalidated by this label.
+Source review, formatting and diff checks pass. Exact host commit
+8eede3f835c081b0eea953256435a37760c7d84d passes Chromium in CI 35651394350:
+232 passed, four existing skips, no failures or flaky cases. The downloaded
+playwright-e2e-chromium report explicitly records the durable detail progress
+case passing with zero retries, including the new accessible-name assertion.
+Evidence: test-results/n03-20260921-host/ci-35651394350-chromium/
+test-results/chromium/playwright-results.json. Firefox also passes: 209 passed,
+27 existing skips, no failures or flaky cases; its downloaded report records
+the same accessible-name case passing with zero retries. Firefox evidence is
+under ci-35651394350-firefox/test-results/firefox/playwright-results.json in
+the same artifact directory. W30 is resolved. No playback gate is invalidated
+by this label.
 
 2026-09-21 numbering-review decision accepted:
 The maintainer explicitly retains editable rows during review and Apply saving
@@ -4380,6 +4389,58 @@ Existing command-level regression coverage remains. yt-dlp, native recovery
 and the other Windows release gates remain required.
 '''
 evidence = '''
+2026-09-22 beta v1.0.36-beta gate failure (not accepted):
+Windows workflow 35656000317 builds all binaries and passes startup registration,
+but fails the bundle gate before archiving. Its default port 8409 answers from
+the existing live server immediately, before the disposable candidate creates
+its database/log directory. The explicit isolation assertion correctly fails;
+this is not a WASM mismatch or accepted archive. Git Bash leaves the temporary
+env/server/worker tree running after its script parent exits. Read-only process
+provenance identifies that orphaned gate tree; only those processes are cleaned
+up, preserving the live launcher/server. The terminal failure and raw log are
+retained under test-results/n03-20260921-host/beta-35656000317-failed.log.
+The pending gate correction selects dedicated port 18479, rejects an occupied
+port before launch and maps Git Bash PID to native WINPID for tree cleanup.
+Linux and native Windows port-isolation regressions pass, including rejection
+of an already listening endpoint before candidate lookup. The corrected gate
+passes against the exact built Windows binary/site in 11.449 seconds, with
+JavaScript/WASM HTTP 200 and its port closed after cleanup. Removing WASM only
+from a temporary site copy produces the required gate failure and also closes
+the port (10.929 seconds). Evidence: gate-fix-native-result.json,
+gate-fix-native-negative-result.json and their logs under the same artifact
+root. The first Linux attempt lacked sandbox socket permission; the first
+Windows invocation did not inherit its Git Bash selector and is not a product
+failure. Corrected invocations retain the same test assertions.
+v1.0.36-beta remains immutable and consumed; no draft archive or publication
+is claimed. A corrected candidate requires fresh exact-
+commit CI and a new beta tag. AMM-N-03 remains In progress.
+
+2026-09-21 final host CI and beta draft build:
+Host 8eede3f835c081b0eea953256435a37760c7d84d has terminal successful CI
+35651394350. All seven required jobs succeed: Format, Clippy, Test, Chromium,
+Firefox, Cargo deny and Documentation links. Downloaded browser reports show
+232 Chromium passes/four existing skips and 209 Firefox passes/27 existing
+skips, with no unexpected or flaky results. Local, tracking and live remote
+main agree before tagging. The new annotated v1.0.36-beta tag names that exact
+commit and starts Windows-only draft workflow 35656000317. Archive acceptance
+and publication remain pending; a tag is not package or milestone acceptance.
+Evidence: test-results/n03-20260921-host/host-ci-35651394350-result.json and
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/35651394350.
+
+2026-09-21 provider exact-commit CI and downloaded bundle pass:
+Add-ons commit 4cd0f2909a356bf5db0b7ba10072879c7f67ffa5 has terminal green
+CI 35651550770: native Windows entrypoints and Linux validation/bundle jobs
+succeed. Manual dispatch intentionally skips release attachment; no provider
+release publication is claimed. The downloaded 21-file artifact passes ZIP
+integrity and every extracted file is byte-identical to the locally tested
+0.11.4 archive, with matching entry metadata. Compressed sizes differ, so the
+archive hashes are deliberately distinguished: CI artifact SHA-256 is
+c3439d11eb58ffea35f20339ff7dc069e98110f5d93b47e53242cd12a2c53627;
+the earlier local archive retains its d6b6305d digest. Evidence:
+https://github.com/bartdeijkers/ErsatzRS-addons/actions/runs/35651550770 and
+test-results/n03-20260921-host/addons-ci-35651550770-verification.json,
+addons-ci-35651550770-zip-differences.json. The live provider is still 0.11.3.
+
 2026-09-21 native installed playback entrypoint passes:
 The isolated Windows 0.11.4 installation is compared byte-for-byte against the
 already verified provider ZIP, including all imported helpers. Its actual
