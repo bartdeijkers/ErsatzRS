@@ -15,8 +15,9 @@ is Covered: native uploads already use github.token and Next downloads need
 no token. Row 8 ports channel-only packaging beside the server executable,
 retaining Next license and provenance separately. Row 9 is Covered: the stray
 upstream workflow line was already excluded during row 8. Row 10 is N/A for
-upstream changelog publication. UCU-01 full-window gates remain open and block
-starting UCU-02.
+upstream changelog publication. UCU-01 is Complete after all local gates;
+UCU-02 is In progress at row 11. The first consolidated CI is authorized after
+UCU-03 smoke, per the maintainer amendment.
 UCU-01 owns their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows

@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-01: verify full-window acceptance before starting UCU-02'
+current_focus = 'UCU-02: reconcile optional Next engine selection and integration'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,6 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22: UCU-01 Complete after all local acceptance gates, including
+MPEG-TS/HLS smoke. UCU-02 starts at row 11 (ea4d3b65). The first consolidated
+CI remains authorized after UCU-03 smoke; no early CI is required.
+
 2026-09-22 maintainer amendment: defer UCU-01/UCU-02 CI to the first
 consolidated, explicitly authorized exact-SHA CI after UCU-03 smoke. Continue
 through UCU-02/UCU-03 after each preceding window meets its local gates.

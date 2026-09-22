@@ -5637,7 +5637,7 @@ its decision and per-row/milestone execution gates remain required.
 id         = 'ucu-01'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through a74896df'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-00']
@@ -5980,8 +5980,11 @@ with localhost permitted: all 2839 executed tests pass (37 configured skips),
 then Cargo doctests pass; the wrapper exits zero. cargo leptos build in the
 web crate passes, including WASM/JS generation and the SSR server binary.
 The target cache exceeded 40 GiB during these gates; cleanup is applied only
-after the running build completes, per repository policy. parity-check, smoke
-and exact-SHA CI remain open.
+after the running build completes, per repository policy (54.9 GiB removed).
+The full cargo xtask parity-check then passes: progress, fmt, architecture,
+hydration (no new findings; 32 baseline suppressions), all 662 executed web
+tests (6 configured skips), and scoped all-target Clippy. Smoke is running.
+CI follows the maintainer amendment below.
 
 2026-09-22 maintainer amendment: defer individual UCU-01 and UCU-02 CI gates
 and continue through UCU-03 once each window's local acceptance is proven.
@@ -5989,13 +5992,29 @@ The first consolidated exact-SHA CI is explicitly authorized after UCU-03
 smoke; it remains required for UCU-03 closure. Earlier evidence describing
 separate CI as a UCU-01 blocker is superseded by this decision. Local gates,
 per-row review, ordered pin advancement and playback acceptance are unchanged.
+
+2026-09-22 final local acceptance: cargo xtask smoke passes with FFmpeg 9
+against a temporary database: MPEG-TS returns HTTP 200 with 8192 bytes,
+segmenter variant playlist returns HTTP 200, and session HLS returns HTTP 200
+with initial segments. Wrapper exit zero; no playback failure signature.
+All ten window rows resolve to unique reviewed local commits in ledger order,
+with substantive findings and focused evidence above. Pin, last processed row
+and upstream HEAD agree at a74896df. The only native Rust change in this window
+is the HDHomeRun repository URL; no subtitle/audio or pipeline changes exist.
+Workspace Clippy, complete test-closeout, Leptos build, complete parity-check
+and smoke all pass on the unchanged window product tree; subsequent changes
+only record evidence and the maintainer's CI cadence amendment. No serious
+open row-review finding remains. Conditional TSDuck is not triggered.
+UCU-01 is Complete under the amended acceptance. No CI run, push or release
+was performed; the authorized first consolidated CI remains required after
+UCU-03 smoke. Next: UCU-02 row 11 (ea4d3b65), channel engine selection.
 """
 
 [[milestone]]
 id         = 'ucu-02'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 290f991b'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-01']
@@ -6014,7 +6033,9 @@ evidence and ordered ledger review without a separate CI run.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
-Not started. All window rows remain pending; no implementation or gate evidence claimed.
+2026-09-22: UCU-01 local acceptance is Complete under the amended CI cadence.
+Start ordered review at row 11 (ea4d3b65); all UCU-02 rows remain pending.
+No implementation, playback or window gate evidence is claimed yet.
 """
 
 [[milestone]]
