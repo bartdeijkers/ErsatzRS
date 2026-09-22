@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 169 commits: seventeen reconciled and 152 pending,
+The refreshed ledger registers 169 commits: eighteen reconciled and 151 pending,
 tracked by ucu-00 through ucu-09. UCU-01 is Complete after all local gates:
 HDHomeRun repository-link correction and channel-only Next packaging are ported,
 with checksum/license/provenance, six-RID artifact and Docker startup evidence.
@@ -16,10 +16,7 @@ repository/application and Chromium/Firefox tests pass, including no-JS forms.
 Row 12 menu bindings are Covered by browser regressions. Row 13 is Adapt (ADR 0095): wire types,
 executable discovery, atomic publication, profile mapping and managed-process
 startup/stop have focused tests. Real Linux Next HLS proves the selected alternate
-audio and burned external subtitle. Database-backed item selection also proves
-preference precedence, exact pins and decoded silence/subtitles-off. Locked
-schedule reads preserve mirror offsets and one media binding per item; real
-Next decoding now starts from persisted schedules. Per-channel publication
+audio and burned external subtitle. Persisted selection proves preference precedence, exact pins and silence. Locked schedule reads preserve mirror offsets and one media binding per item. Per-channel publication
 serializes reads and replacement, including cancellation of the awaiting task.
 Host startup/rebuild now shares publisher ownership and retries busy source locks. Provider/graphics projection,
 complete endpoint and platform playback acceptance remain open. The Next HLS session adapter now owns startup/readiness, heartbeat, idle
@@ -43,7 +40,9 @@ macOS RID mapping and executable-adjacent archive staging; packaging fixtures
 pass, while active macOS release/native-runtime proof remains open. Row 16 is
 Covered: explicit upload shells already prevent the upstream Windows shell bug.
 Row 17 fixes negative mirror offsets in channel upsert and verifies consistent
-XMLTV actual/guide-window projection without changing source items.
+XMLTV actual/guide-window projection without changing source items. Row 18
+verifies atomic Next JSON publication on native Windows/NTFS (seven tests);
+full Windows Next playback remains open.
 UCU-01 and UCU-02 own their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows

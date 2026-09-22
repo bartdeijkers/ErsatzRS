@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `6ea0a29638946b35c27948f26afd77dcb49dabae` |
-| **Commit subject** | `fix: consistently apply playout offset when generating xmltv (#2863)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6ea0a29638946b35c27948f26afd77dcb49dabae |
+| **Pinned commit** | `f2706f32087d75f47f6dcf076d5ddc2d22ddcc84` |
+| **Commit subject** | `feat: support playout json on windows (#2864)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f2706f32087d75f47f6dcf076d5ddc2d22ddcc84 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

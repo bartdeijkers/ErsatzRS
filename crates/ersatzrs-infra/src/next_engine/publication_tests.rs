@@ -175,3 +175,37 @@ fn simultaneous_readers_observe_only_complete_generations() {
         }
     });
 }
+
+// Windows sharing flags can forbid replacement even when the file is writable.
+// Unix keeps open inode handles valid across rename; the portable reader test
+// above covers its counterpart without imposing Windows sharing semantics.
+#[cfg(windows)]
+#[test]
+fn windows_sharing_denial_preserves_generation_until_reader_releases_file() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join(PLAYOUT_FILENAME);
+    publish_playout(folder.path(), &schedule("old")).unwrap();
+    let previous = std::fs::read(&path).unwrap();
+    let held = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1) // FILE_SHARE_READ, deliberately excludes FILE_SHARE_DELETE.
+        .open(&path)
+        .unwrap();
+    let error = publish_playout(folder.path(), &schedule("new")).unwrap_err();
+    assert!(matches!(
+        error,
+        PublicationError::Io {
+            operation: "replace",
+            ..
+        }
+    ));
+    assert_eq!(std::fs::read(&path).unwrap(), previous);
+    assert_eq!(std::fs::read_dir(folder.path()).unwrap().count(), 1);
+    drop(held);
+    publish_playout(folder.path(), &schedule("new")).unwrap();
+    let read: Playout = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(read.items[0].id, "new");
+    assert_eq!(std::fs::read_dir(folder.path()).unwrap().count(), 1);
+}

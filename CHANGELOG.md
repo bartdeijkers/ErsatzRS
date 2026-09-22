@@ -51,6 +51,9 @@ release section when tagging a release.
   channel-update propagation and bundled runtime discovery against upstream PR #2855.
   Verify executable-adjacent Next archive staging for both macOS architectures
   (upstream PR #2856); active macOS release and runtime acceptance remain open.
+  Verify atomic Next playout publication on Windows/NTFS, preserving the previous
+  generation when sharing blocks replacement and allowing publication after release
+  (upstream PR #2864).
   Add a separate Next engine check inside CI, with runtime provenance, decoded
   playback tests and HTTP/preview smoke diagnostics.
   Remove the obsolete MySQL migration-directory build watch to prevent

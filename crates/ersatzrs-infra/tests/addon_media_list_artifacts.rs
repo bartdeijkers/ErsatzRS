@@ -3,7 +3,7 @@ mod common;
 use std::fmt::Write as _;
 
 use chrono::Duration;
-use ersatzrs_addon_contract::{AddonCapability, MediaListPrepareResult};
+use ersatzrs_addon_contract::AddonCapability;
 use ersatzrs_infra::{
     addon_media_list_item_jobs::*, addon_media_list_options::load_draft_item_options,
 };
@@ -335,7 +335,7 @@ async fn artifact_promotes_verified_file_and_never_replaces_ready_artifact() {
     tokio::fs::write(reservation.staging_directory.join("video.mkv"), bytes)
         .await
         .unwrap();
-    let mut result = MediaListPrepareResult {
+    let mut result = ersatzrs_addon_contract::MediaListPrepareResult {
         provider_id: job.input.provider_id.clone(),
         context_fingerprint: job.input.context_fingerprint.clone(),
         tool_version: job.input.tool_version.clone(),

@@ -96,12 +96,15 @@ remain authoritative for coverage. Empty schedules explicitly withdraw old
 items. Temporary filenames cannot match the loader's filename parser.
 
 This implements the complete-generation visibility intended by upstream
-`SyncNextPlayoutHandler` without its Unix symlink rename or Windows early return.
+`SyncNextPlayoutHandler` without Unix symlink or Windows junction switches.
+Upstream row 18 adds junction replacement on Windows; the accepted atomic-file
+strategy remains unchanged.
 It does not create another scheduling authority: SQLite remains authoritative,
 and the integration must regenerate this derived file after restart. The caller
 must serialize schedule reads and publication to prevent stale generations
-from overwriting newer ones. Runtime wiring and native Windows verification
-remain open; portable implementation alone is not platform acceptance.
+from overwriting newer ones. UCU-02 row 18 proves native Windows/NTFS complete
+replacement, concurrent reads and preservation/recovery after sharing denial.
+This verifies publication only; full native Windows Next playback remains open.
 
 ### Profile and process boundary implementation
 

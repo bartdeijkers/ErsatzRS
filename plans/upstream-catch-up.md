@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-22): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
   — feat: next engine rotation (#3034).
-- Ledger: **169 commits**, **152 pending**. The original plan covered 152 through
+- Ledger: **169 commits**, **151 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -15,7 +15,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **17**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **18**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -139,7 +139,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 15 | `f7853e80` | bundle ersatztv-channel binary with macos app (#2856) | Covered | upstream-baseline-catch-up | `docs(release): reconcile Next macOS bundling` | ucu-02; both macOS RID mappings and executable-adjacent archive staging already exist; six offline tests and actual relocation/archive snippets pass. Active macOS release/runtime acceptance remains explicit. See ucu-02 evidence. |
 | 16 | `5cef7775` | fix duplicate windows zips on develop release | Covered | upstream-baseline-catch-up | `docs(release): reconcile Windows upload shell selection` | ucu-02; native upload already explicitly selects Bash with clobber; beta uses explicit PowerShell; no moving develop-tag cleanup. Workflow lint passes with declared self-hosted labels. See ucu-02 evidence. |
 | 17 | `6ea0a296` | fix: consistently apply playout offset when generating xmltv (#2863) | Port | xmltv-guide | `fix(infra): preserve signed mirror offsets on channel upsert` | ucu-02; retain existing four-timestamp projection and fix negative-offset persistence; actual/guide windows, both signs and unchanged source items verified. See ucu-02 evidence. |
-| 18 | `f2706f32` | feat: support playout json on windows (#2864) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
+| 18 | `f2706f32` | feat: support playout json on windows (#2864) | Adapt (ADR 0095) | upstream-baseline-catch-up | `test(infra): verify Next publication on Windows` | ucu-02; accepted atomic-file publication passes seven native Windows/NTFS tests, including sharing-denial recovery, and six Linux tests. Full Windows Next playback remains open. See ucu-02 evidence. |
 | 19 | `9882b008` | tweak streaming engine editor | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
 | 20 | `bb493670` | feat: support media server items in next streaming engine  (#2865) | | | | ucu-02; provisional: Next behavior triage. |
 | 21 | `e6496bbc` | feat: select audio streams for next engine during playout build (#2866) | | | | ucu-02; provisional: Next behavior triage. |

@@ -1,6 +1,6 @@
 //! Publish a complete schedule without exposing a partially written generation.
 //!
-//! Upstream `SyncNextPlayoutHandler` swaps a directory symlink and skips Windows.
+//! Upstream `SyncNextPlayoutHandler` swaps Unix symlinks or Windows junctions.
 //! Next's loader reopens the matching JSON on each item selection, so one stable,
 //! broad-window filename permits an atomic file replacement on every platform.
 //! Item timestamps, rather than the filename, still determine actual coverage.

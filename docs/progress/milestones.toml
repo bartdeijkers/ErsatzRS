@@ -6592,6 +6592,58 @@ only the encoder binding and its regression fixture; no FFmpeg output changes.
 Pin and ledger land together at 6ea0a296, followed by upstream checkout alignment:
 17 reconciled / 152 pending. Next: row 18 (f2706f32). UCU-02 remains In progress.
 
+Row 18 source review in progress (f2706f32, #2864): the full diff changes only
+SyncNextPlayoutHandler. It removes the Windows early return, creates a versioned
+JSON directory, deletes the old current junction only when it is a reparse point,
+then invokes cmd.exe /c mklink /j and logs failure. Real directories are retained.
+Unix symlink replacement stays unchanged; no upstream tests or changelog change.
+
+ADR 0095 already accepts a stable broad-window JSON filename and same-directory
+atomic replacement instead of symlink/junction switches. Production publication
+has no Windows early return or shell process. The pinned tempfile 3.27.0 Windows
+implementation uses MoveFileExW with MOVEFILE_REPLACE_EXISTING; its error path
+leaves the previous destination intact. Existing publication tests cover complete
+replacement/withdrawal, invalid input, interrupted writes, failed replacement,
+filename bounds and concurrent complete-generation reads. All six pass on Linux.
+Add a Windows-only sharing-denial regression: hold the current JSON without
+FILE_SHARE_DELETE, require a redacted replacement error with unchanged old bytes
+and no temporary-file leak, then release the handle and require successful new
+publication. The Unix counterpart remains the existing concurrent-reader test.
+The module comment now reflects upstream's new junction support.
+
+Native Windows verification is being prepared using the existing Rust 1.97.1
+MSVC toolchain and Visual Studio Build Tools. Only a temporary official nextest
+0.9 runner is added to the process PATH; no global tool installation is needed.
+Invoke run.ps1 with explicit CommandArgs to avoid PowerShell's -p common-parameter
+ambiguity. Linux proof does not establish Windows sharing behavior. Keep row 18,
+the pin and upstream checkout unchanged until the native result is reviewed.
+
+Row 18 native result: all seven publication tests pass on Windows x64/NTFS
+(2.346 seconds, nextest run a712e8c4-51e1-46af-af87-5cb23b4448c0), including
+simultaneous complete-generation readers and the new sharing-denial/recovery
+case. The temporary-file filesystem was independently confirmed as NTFS.
+Rust/cargo 1.97.1 and nextest 0.9.146 ran through the existing run.ps1 wrapper
+with explicit CommandArgs, target x86_64-pc-windows-msvc and the repository's
+configured target directory. The first native build hit unsupported incremental
+session-lock creation over the WSL filesystem; process-local CARGO_INCREMENTAL=0
+resolved it without redirecting target output or changing the test contract.
+Six Linux publication tests also pass (0.915 seconds).
+
+Verdict: Adapt (ADR 0095). Keep the accepted same-directory complete-file
+replacement; do not port the upstream remove-then-create junction gap or require
+cmd.exe to publish schedules. The native tests prove this row's filesystem
+contract, not Windows Next process execution, decoded playback, or other-platform
+acceptance. Full optional-engine debt remains open. No production behavior change
+is needed here, so the earlier Next/native playback smoke remains applicable.
+The fetched target still matches all 169 ledger SHA/subjects. Land row 18 and
+pin together, then align upstream HEAD: 18 reconciled / 151 pending. Next is
+row 19 (9882b008), the streaming-engine editor adjustment. UCU-02 stays In progress.
+Native Windows infra all-target Clippy passes with -D warnings. The first run
+found a pre-existing unconditional MediaListPrepareResult import used only by a
+Unix test; qualifying the type at its existing Unix-only use site removes the
+Windows unused import without excluding a test or changing its behavior.
+Linux infra all-target Clippy also passes after this correction.
+
 """
 
 [[milestone]]
