@@ -6285,6 +6285,24 @@ serialize publication with rebuilds, attach graphics/watermarks, integrate
 session admission/idle/shutdown/health and authenticated endpoints, then run the
 window playback gates. Ledger and pin remain unchanged.
 
+Row 13 persisted-schedule checkpoint: read all source-channel playouts through
+the canonical repository, holding existing scheduler locks until the caller
+finishes projection/publication. Apply signed mirror offsets to the query and
+playback/guide timestamps. Bind exactly one media version/file per logical item,
+respect exact version pins, and retain remote identity for later resolution.
+Missing media fails the whole read; busy reads retain the previous publication;
+empty successful reads remain distinguishable. Membership is rechecked around
+loading; locks do not claim a transaction snapshot of metadata/admin changes.
+Five migrated-database tests pass: duplicate files/versions and exact pins,
+positive/negative mirror offsets, busy/empty reads and partial lock release,
+missing-file failure cleanup, and indexed SQLite query plans. The real Next test
+now reads persisted PlayoutItem/MediaFile rows before track projection and atomic
+publication; both selected 880-Hz audio/subtitle and pinned silence/subtitles-off
+runs pass against the same recorded release binary (1.954 seconds).
+Remaining: provider/graphics projection, per-channel publication coordination,
+rebuild triggers and host session/health/authenticated endpoints, then window
+playback acceptance. Row 13 remains pending; ledger and pin are unchanged.
+
 """
 
 [[milestone]]

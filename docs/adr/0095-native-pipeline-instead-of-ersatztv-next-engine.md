@@ -23,7 +23,8 @@ These helpers are not yet connected to live channel startup or scheduling
 completion; host session, health and authenticated delivery acceptance remain open.
 Item track projection reuses native database selectors and subtitle-path
 resolution, with decoded Linux proof for alternate audio/subtitles and explicit
-silence/subtitles-off. Complete schedule/source/graphics projection remains open.
+silence/subtitles-off. Locked schedule reads preserve mirror offsets and bind
+one media file per item. Provider/graphics projection and host integration remain open.
 
 ## Context
 
@@ -124,6 +125,15 @@ hint, following Next's own synthetic-input contract; it does not restore source
 audio. Sidecar and extracted subtitle paths use the existing native resolver,
 and item in/out points remain on the original media timeline. Prepared provider
 intervals, graphics/watermarks and schedule refresh still need integration.
+
+Schedule loading reuses the canonical playout repository and shared scheduler
+locks, retaining one logical row per item and choosing its pinned version or the
+first version/file by ID. Mirror offsets apply to query, playback and guide times.
+Busy reads retain the previous publication; empty successful reads can withdraw
+it. Missing media fails the complete read. The caller must retain these locks
+through publication and separately serialize publishers per channel. These are
+scheduler build locks, not a transaction snapshot across metadata or admin edits.
+Remote bindings still require provider resolution before publication.
 
 ## Consequences
 

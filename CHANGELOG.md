@@ -27,6 +27,8 @@ release section when tagging a release.
   output codecs and HDR settings instead of silently changing them.
   Reuse persisted audio/subtitle selection for Next item projection, retaining
   preference precedence, exact pins, source seek points and explicit silence.
+  Read persisted schedules with mirror offsets and deterministic media-file
+  binding while retaining scheduler locks through projection/publication.
   Live Next playback integration remains pending.
 
 - Retain form-action selection counts and Select all under Edit multiple items

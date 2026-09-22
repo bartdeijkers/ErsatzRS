@@ -9,4 +9,5 @@ pub mod process;
 pub mod protocol;
 pub mod publication;
 pub mod runtime;
+pub mod schedule;
 pub mod selection;

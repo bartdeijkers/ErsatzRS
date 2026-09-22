@@ -7,7 +7,7 @@ use ersatzrs_domain::{
 };
 use tokio::io::AsyncReadExt;
 
-use crate::next_engine::{config, protocol, publication, selection};
+use crate::next_engine::{config, protocol, publication, schedule, selection};
 use crate::playback::PlaybackProfile;
 
 #[allow(clippy::disallowed_methods)] // Explicit opt-in test runtime locations, never production configuration.
@@ -88,9 +88,21 @@ async fn generate_clip(ffmpeg: &Path, clip: &Path) {
 }
 
 async fn publish(folder: &Path, clip: &Path, muted: bool) {
-    use ersatzrs_domain::{Channel, ChannelSubtitleMode, PinnedStreamSelection};
-    let pool = selection::tests::fixture_pool().await;
+    use ersatzrs_core::repositories::PlayoutRepository;
+    use ersatzrs_domain::{ChannelSubtitleMode, PinnedStreamSelection};
+    let (pool, locker, mut channel, _) = schedule::tests::fixture().await;
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path" = ? WHERE "Id" = 1"#)
+        .bind(clip.to_str().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"DELETE FROM "PlayoutItem""#)
+        .execute(&pool)
+        .await
+        .unwrap();
     let mut item = selection::tests::item();
+    item.id = 1;
+    item.playout_id = 1;
     item.in_point = chrono::Duration::zero();
     item.out_point = chrono::Duration::seconds(60);
     if muted {
@@ -101,19 +113,28 @@ async fn publish(folder: &Path, clip: &Path, muted: bool) {
             subtitle_stream_index: None,
         });
     }
-    let channel = Channel {
-        preferred_audio_language_code: Some("nld".to_owned()),
-        preferred_subtitle_language_code: Some("nld".to_owned()),
-        subtitle_mode: ChannelSubtitleMode::Default,
-        ..Default::default()
-    };
+    channel.preferred_audio_language_code = Some("nld".to_owned());
+    channel.preferred_subtitle_language_code = Some("nld".to_owned());
+    channel.subtitle_mode = ChannelSubtitleMode::Default;
+    crate::repositories::make_repositories(pool.clone())
+        .playout
+        .upsert_item(&item)
+        .await
+        .unwrap();
+    let scheduled = schedule::read_locked(&pool, &locker, &channel, item.start, item.finish)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(scheduled.items.len(), 1);
+    let media = &scheduled.items[0];
+    assert!(media.remote_stream_id.is_none());
     let projected = selection::project_item(
         &pool,
         &channel,
-        &item,
-        100,
+        &media.item,
+        media.media_version_id,
         protocol::Source::Local {
-            path: clip.to_str().unwrap().to_owned(),
+            path: media.path.clone(),
             in_point_ms: None,
             out_point_ms: None,
         },
