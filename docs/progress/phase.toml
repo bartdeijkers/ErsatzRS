@@ -80,8 +80,9 @@ silence/subtitles-off. Locked persisted schedule reads now preserve mirror offse
 and bind one source per item, with real Next decoding proof. Next: complete
 provider/graphics projection. The per-channel publisher now serializes reads and
 replacement, retaining locks through cancelled filesystem work. Connect rebuild
-triggers, session lifecycle/health
-and authenticated endpoints, then prove integrated playback.
+triggers and authenticated endpoints, then prove integrated playback. The Next
+HLS session adapter now covers startup, heartbeat, idle expiry and stop, with
+registry/capacity ownership and health still awaiting web-host integration.
 The upstream pin remains ddc8ef7f. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 

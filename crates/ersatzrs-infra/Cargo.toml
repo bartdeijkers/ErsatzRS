@@ -51,7 +51,7 @@ win32job = "=2.0.3"
 [dev-dependencies]
 httpmock = "0.8"
 insta = { version = "1", features = ["json", "redactions"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "test-util"] }
 
 [lints]
 workspace = true

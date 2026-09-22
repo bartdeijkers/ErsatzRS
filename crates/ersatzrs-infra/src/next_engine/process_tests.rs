@@ -6,7 +6,7 @@ use ersatzrs_domain::{
 const HELPER_MODE: &str = "ERSATZRS_NEXT_PROCESS_TEST_MODE";
 const HELPER_FOLDER: &str = "ERSATZRS_NEXT_PROCESS_TEST_FOLDER";
 
-fn config() -> ChannelConfig {
+pub(super) fn config() -> ChannelConfig {
     super::super::config::channel_config(
         &crate::playback::PlaybackProfile {
             profile: FFmpegProfile {
@@ -27,7 +27,7 @@ fn config() -> ChannelConfig {
     .unwrap()
 }
 
-fn fixture_command(mode: &str, folder: &Path) -> Command {
+pub(super) fn fixture_command(mode: &str, folder: &Path) -> Command {
     let mut command = Command::new(std::env::current_exe().unwrap());
     command
         .args([
@@ -60,11 +60,14 @@ fn fixture_child() {
     if mode == "fail" {
         std::process::exit(7);
     }
-    if mode == "ready" {
+    if mode == "ready" || mode == "ready-exit" {
         std::fs::write(folder.join(".ready"), b"").unwrap();
     }
     loop {
-        std::thread::sleep(Duration::from_secs(1));
+        if mode == "ready-exit" && folder.join("exit-request").exists() {
+            std::process::exit(9);
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
 }
 

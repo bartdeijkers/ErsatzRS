@@ -6324,6 +6324,32 @@ rebuild triggers. Provider process lifetimes/retained intervals, graphics,
 session/health and authenticated endpoints remain open. No additional upstream
 row is processed; pin/ledger remain at ddc8ef7f and CI remains after UCU-03 smoke.
 
+Row 13 session checkpoint: NextSession implements the shared HlsSessionHandle
+used by the existing registry and stop controls. It supervises bounded startup,
+readiness, heartbeat, monotonic demand/idle expiry, process exit and shutdown.
+Rebuild notifications coalesce and execute alongside supervision; cancellation
+and heartbeat remain responsive while a refresh awaits publication. Terminal
+paths, including task abort, hide the bounded live.m3u8 playlist. The session
+cannot be started twice or acknowledge readiness after its original deadline.
+Six portable regressions pass: cancel before startup, pending refresh with
+heartbeat/stop, refreshed idle demand using Tokio's dev-only test clock, bounded
+playlist/abort behavior, startup deadline and unexpected exit status. The real
+Next Linux test now registers this handle before actual process startup, waits
+for readiness, reads its playlist, touches/stops via the shared registry and
+removes the handle after process cleanup. Both alternate-audio/subtitle and
+silent/subtitles-off runs pass (1.951 seconds), preserving the earlier decoded
+assertions. Source map: upstream NextSessionWorker to next_engine/session.rs;
+reuse core::hls and InMemoryHlsSessionRegistry rather than a second registry.
+Four existing process regressions remain green after extending their portable
+child fixture. Review verifies single-run admission, terminal state on unwinding,
+concurrent refresh/heartbeat, strict readiness deadline and bounded playlist reads.
+Infra all-target Clippy, formatting, architecture lint, progress and diff checks
+pass; the only new dependency feature is Tokio test-util under dev-dependencies.
+Host engine dispatch, registry/capacity ownership, output cleanup, rebuild
+publication, provider/graphics projection, health and HTTP authentication still
+require integration. This is session-boundary proof, not served-web acceptance.
+Row 13, pin and ledger remain unchanged; first CI remains after UCU-03 smoke.
+
 """
 
 [[milestone]]

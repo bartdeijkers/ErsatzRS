@@ -79,8 +79,13 @@ Schedule items and media-file bindings are read from an isolated migrated
 database under scheduler locks; the per-channel publisher reloads channel
 preferences, runs native track selection and atomically publishes on its blocking
 worker. Separate coordinator regressions cover queued reads, retained old
-publications, empty schedules and cancellation before/during filesystem work. A second startup uses an exact silent/subtitles-off pin and verifies
-decoded silence and the absence of glyphs. Both managed processes are stopped.
+publications, empty schedules and cancellation before/during filesystem work.
+A second startup uses an exact silent/subtitles-off pin and verifies
+decoded silence and the absence of glyphs. Each process is supervised through
+the Next HLS handle, registered before startup, touched and stopped through the
+shared registry, then removed after process cleanup. Its playlist is unavailable
+after stop. Separate session regressions use portable child fixtures and a test clock
+for idle expiry, startup deadlines, refresh responsiveness and terminal states.
 It uses no personal library or production database.
 This is engine-boundary proof; it does not replace web endpoint, authentication,
 scheduling, native smoke or platform acceptance gates.

@@ -29,8 +29,10 @@ schedule reads preserve mirror offsets and one media binding per item; real
 Next decoding now starts from persisted schedules. Per-channel publication
 serializes reads and replacement, including cancellation of the awaiting task.
 Host startup/rebuild ownership of publishers remains open. Provider/graphics projection,
-host session, endpoint/health and persisted
-scheduling integration remain open.
+web-host dispatch, endpoint/health and persisted scheduling integration remain
+open. The Next HLS session adapter now owns startup/readiness, heartbeat, idle
+expiry, concurrent refresh notification and shutdown; host registry/capacity and
+rebuild wiring remain unconnected.
 The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment.
 UCU-01 owns their evidence;

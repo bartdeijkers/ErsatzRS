@@ -25,8 +25,9 @@ Item track projection reuses native database selectors and subtitle-path
 resolution, with decoded Linux proof for alternate audio/subtitles and explicit
 silence/subtitles-off. Locked schedule reads preserve mirror offsets and bind
 one media file per item. Per-channel publication now serializes reads and writes,
-including cancellation during filesystem work. Provider/graphics projection and
-host integration remain open.
+including cancellation during filesystem work. A Next HLS session adapter now
+handles readiness, heartbeat, idle expiry, refresh notification and shutdown.
+Provider/graphics projection and web-host dispatch remain open.
 
 ## Context
 
@@ -139,6 +140,15 @@ awaiting refresh is cancelled. The host must share one publisher per channel
 across startup and rebuild triggers, retaining its stable channel-ID folder. These are
 scheduler build locks, not a transaction snapshot across metadata or admin edits.
 Remote bindings still require provider resolution before publication.
+
+The session adapter implements the existing HLS handle: requests renew demand,
+stop wakes supervision, and rebuild notifications coalesce while publication is
+in flight. Heartbeat and cancellation remain responsive during refresh work.
+Startup has one deadline; terminal paths hide the playlist, including task abort.
+Playlist reads are bounded and use Next's `live.m3u8`. The host still owns registry
+reservation/removal, shared transcode admission, output-folder cleanup and
+startup/rebuild publication wiring. The adapter alone does not enable HTTP Next
+playback or provide health acceptance.
 
 ## Consequences
 

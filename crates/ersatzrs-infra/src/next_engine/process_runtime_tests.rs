@@ -2,12 +2,13 @@
 //! `ERSATZRS_NEXT_TEST_BIN`, `ERSATZRS_NEXT_TEST_FFMPEG`, `ERSATZRS_NEXT_TEST_FFPROBE`.
 
 use super::*;
+use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry, HlsStartupReadiness};
 use ersatzrs_domain::{
     FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
 };
 use tokio::io::AsyncReadExt;
 
-use crate::next_engine::{config, coordinator, protocol, schedule, selection};
+use crate::next_engine::{config, coordinator, protocol, schedule, selection, session};
 use crate::playback::PlaybackProfile;
 
 #[allow(clippy::disallowed_methods)] // Explicit opt-in test runtime locations, never production configuration.
@@ -272,28 +273,71 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
     let config = config::channel_config(&profile, &playout.join("1"), &ffmpeg, &ffprobe).unwrap();
     for muted in [false, true] {
         publish(&playout, &clip, muted).await;
-        let mut process = NextProcess::start(
-            &binary,
-            "1",
-            &output,
-            &config,
-            Instant::now() + Duration::from_secs(30),
-        )
-        .await
-        .unwrap();
-        process.touch().await.unwrap();
-        let playlist = std::fs::read_to_string(output.join("live.m3u8")).unwrap();
-        assert!(playlist.starts_with("#EXTM3U"));
-        let segment = playlist
-            .lines()
-            .find(|line| {
-                !line.starts_with('#')
-                    && Path::new(line)
-                        .extension()
-                        .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
-            })
-            .expect("Next must publish an MPEG-TS segment");
-        assert_audio_and_subtitle(&ffmpeg, &ffprobe, &output.join(segment), muted).await;
-        process.stop().await.unwrap();
+        assert_next_session(&binary, &config, &output, &ffmpeg, &ffprobe, muted).await;
     }
+}
+
+async fn assert_next_session(
+    binary: &Path,
+    config: &ChannelConfig,
+    output: &Path,
+    ffmpeg: &Path,
+    ffprobe: &Path,
+    muted: bool,
+) {
+    let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let handle = std::sync::Arc::new(session::NextSession::new(
+        "1".into(),
+        output.to_owned(),
+        deadline,
+    ));
+    assert!(registry.try_insert(handle.clone()).await);
+    let running = handle.clone();
+    let running_registry = registry.clone();
+    let executable = binary.to_owned();
+    let running_output = output.to_owned();
+    let running_config = config.clone();
+    let task = tokio::spawn(async move {
+        let outcome = running
+            .run(
+                NextProcess::start(&executable, "1", &running_output, &running_config, deadline),
+                None,
+                || async { Ok(()) },
+            )
+            .await;
+        running_registry.remove("1").await;
+        outcome
+    });
+    timeout(Duration::from_secs(30), async {
+        loop {
+            match handle.startup_readiness() {
+                HlsStartupReadiness::Ready => break,
+                HlsStartupReadiness::Failed => panic!("Next session startup failed"),
+                _ => tokio::time::sleep(Duration::from_millis(10)).await,
+            }
+        }
+    })
+    .await
+    .unwrap();
+    registry.try_get("1").await.unwrap().touch();
+    let playlist = handle.trim_playlist().await.unwrap();
+    assert!(playlist.starts_with("#EXTM3U"));
+    let segment = playlist
+        .lines()
+        .find(|line| {
+            !line.starts_with('#')
+                && Path::new(line)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
+        })
+        .expect("Next must publish an MPEG-TS segment");
+    assert_audio_and_subtitle(ffmpeg, ffprobe, &output.join(segment), muted).await;
+    assert!(registry.stop_channel("1").await);
+    assert_eq!(
+        task.await.unwrap().unwrap(),
+        session::SessionExit::Cancelled
+    );
+    assert!(registry.try_get("1").await.is_none());
+    assert!(handle.trim_playlist().await.is_none());
 }

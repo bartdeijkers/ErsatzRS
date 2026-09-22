@@ -31,7 +31,9 @@ release section when tagging a release.
   binding while retaining scheduler locks through projection/publication.
   Serialize refreshes per channel and retain write ownership through cancellation
   so a newer schedule cannot be overwritten by an abandoned publication.
-  Live Next playback integration remains pending.
+  Add the Next HLS session adapter with bounded startup, heartbeat, demand-based
+  idle expiry, concurrent rebuild notification and managed shutdown.
+  Live web-host Next playback integration remains pending.
 
 - Retain form-action selection counts and Select all under Edit multiple items
   > Items to change as an explicitly accepted design choice; Save-button and row

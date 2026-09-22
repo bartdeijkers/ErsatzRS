@@ -208,3 +208,17 @@ mod tests;
 #[cfg(test)]
 #[path = "process_runtime_tests.rs"]
 mod runtime_tests;
+
+#[cfg(test)]
+pub(super) async fn fixture_process(
+    folder: &Path,
+    mode: &str,
+) -> Result<NextProcess, ProcessError> {
+    NextProcess::start_command(
+        tests::fixture_command(mode, folder),
+        folder,
+        &tests::config(),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await
+}
