@@ -28,6 +28,8 @@ mod persistence;
 mod projection;
 mod sync;
 
+pub(crate) use sync::load_active_emby_connection_config;
+
 pub use client::EmbyService;
 pub use persistence::{replace_emby_path_infos, sync_emby_libraries};
 pub use sync::{

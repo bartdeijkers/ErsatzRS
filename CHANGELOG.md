@@ -44,8 +44,11 @@ release section when tagging a release.
   playlist tokens and reject MPEG-TS requests for Next channels. Report missing
   Next executables and unsupported profiles through health checks. Use Next for
   channel previews with browser-compatible H.264/AAC and independent capacity
-  and cleanup; forward playout rebuilds to preview-only sessions as well. Provider and
-  graphics projection, complete HTTP playback and platform acceptance remain open.
+  and cleanup; forward playout rebuilds to preview-only sessions as well.
+  Add media-server input resolution with server-specific local paths and
+  authenticated Plex/Jellyfin/Emby HTTP playback, preserving selected audio and
+  subtitles (upstream PR #2865). Connection refresh/failover acceptance, graphics
+  projection, complete HTTP playback and platform acceptance remain open.
   Publish continued schedules to active Next channels and mirrors while preserving
   native playback continuity (upstream PR #2854). Verify existing mirror offsets,
   channel-update propagation and bundled runtime discovery against upstream PR #2855.

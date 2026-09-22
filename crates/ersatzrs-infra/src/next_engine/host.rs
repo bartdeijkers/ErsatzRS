@@ -4,13 +4,13 @@ use super::{
     config,
     coordinator::{ChannelPublisher, RefreshError, RefreshOutcome},
     process::{NextProcess, ProcessError},
-    protocol, selection,
+    selection,
     session::NextSession,
+    source,
 };
 use crate::{
     db::DbPool,
     playback::load_channel_playback_profile,
-    repositories::SqlxResultExt,
     transcode_capacity::{
         load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
         DEFAULT_ACTIVE_TRANSCODE_LIMIT,
@@ -20,7 +20,7 @@ use chrono::Utc;
 use ersatzrs_core::{
     hls::{HlsAdmissionStatus, HlsSessionRegistry},
     locking::EntityLocker,
-    path_replacement::{replace_path, PathPlatform, PathReplacement},
+    path_replacement::PathReplacement,
     repositories::RepositoryError,
 };
 use ersatzrs_domain::{ChannelMusicVideoCreditsMode, StreamingEngine};
@@ -180,27 +180,57 @@ impl NextHost {
         loop {
             let finish =
                 chrono::DateTime::from_timestamp(253_402_300_799, 0).ok_or(RefreshError::Read)?;
-            let outcome = publisher.refresh(Utc::now(), finish, |channel, media| async move {
-                if channel.streaming_engine != StreamingEngine::Next { return Err(unavailable("engine changed")); }
-                let profile = load_channel_playback_profile(&self.pool, channel_id).await?.ok_or_else(|| unavailable("profile unavailable"))?;
-                let mut items = Vec::with_capacity(media.len());
-                for media in media {
-                    let local: bool = sqlx::query_scalar(r#"SELECT EXISTS (SELECT 1 FROM "MediaItem" m JOIN "LibraryPath" p ON p."Id"=m."LibraryPathId" JOIN "LocalLibrary" l ON l."Id"=p."LibraryId" WHERE m."Id"=?)"#)
-                        .bind(media.item.media_item_id).fetch_one(&self.pool).await.repository()?;
-                    if !local || media.remote_stream_id.is_some() { return Err(unavailable("provider projection is not integrated")); }
-                    let selection_time = crate::channel_playout::ChannelPlayoutContext::for_channel(&channel).source_time(media.item.start)?;
-                    let watermarks = crate::playback::select_playback_watermarks(&self.pool, &channel, media.item.id, media.item.disable_watermarks, selection_time).await?;
-                    let graphics = crate::playback::select_playback_graphics(&self.pool, &channel, media.item.id, selection_time).await?;
-                    if !watermarks.is_empty() || !graphics.is_empty()
-                        || channel.music_video_credits_mode != ChannelMusicVideoCreditsMode::None {
-                        return Err(unavailable("graphics projection is not integrated"));
+            let outcome = publisher
+                .refresh(Utc::now(), finish, |channel, media| async move {
+                    if channel.streaming_engine != StreamingEngine::Next {
+                        return Err(unavailable("engine changed"));
                     }
-                    let path = replace_path(replacements, &media.path, host_platform());
-                    items.push(selection::project_item(&self.pool, &channel, &media.item, media.media_version_id,
-                        protocol::Source::Local { path, in_point_ms: None, out_point_ms: None }, &profile.resolution).await?);
-                }
-                Ok(items)
-            }).await?;
+                    let profile = load_channel_playback_profile(&self.pool, channel_id)
+                        .await?
+                        .ok_or_else(|| unavailable("profile unavailable"))?;
+                    let mut items = Vec::with_capacity(media.len());
+                    for media in media {
+                        let source = source::resolve(&self.pool, &media, replacements).await?;
+                        let selection_time =
+                            crate::channel_playout::ChannelPlayoutContext::for_channel(&channel)
+                                .source_time(media.item.start)?;
+                        let watermarks = crate::playback::select_playback_watermarks(
+                            &self.pool,
+                            &channel,
+                            media.item.id,
+                            media.item.disable_watermarks,
+                            selection_time,
+                        )
+                        .await?;
+                        let graphics = crate::playback::select_playback_graphics(
+                            &self.pool,
+                            &channel,
+                            media.item.id,
+                            selection_time,
+                        )
+                        .await?;
+                        if !watermarks.is_empty()
+                            || !graphics.is_empty()
+                            || channel.music_video_credits_mode
+                                != ChannelMusicVideoCreditsMode::None
+                        {
+                            return Err(unavailable("graphics projection is not integrated"));
+                        }
+                        items.push(
+                            selection::project_item(
+                                &self.pool,
+                                &channel,
+                                &media.item,
+                                media.media_version_id,
+                                source,
+                                &profile.resolution,
+                            )
+                            .await?,
+                        );
+                    }
+                    Ok(items)
+                })
+                .await?;
             if matches!(outcome, RefreshOutcome::Published { .. }) {
                 return Ok(());
             }
@@ -213,17 +243,6 @@ impl NextHost {
 
 fn unavailable(message: &str) -> RepositoryError {
     RepositoryError::unavailable("Next projection", message)
-}
-
-const fn host_platform() -> PathPlatform {
-    #[cfg(windows)]
-    {
-        PathPlatform::Windows
-    }
-    #[cfg(not(windows))]
-    {
-        PathPlatform::Unix
-    }
 }
 
 /// Resolve the installed runtime only when a Next channel is requested.

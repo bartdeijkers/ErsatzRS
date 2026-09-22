@@ -130,12 +130,17 @@ silence track. Wire-model renames consolidate shared and per-track sources.
   complete sources for selected tracks and inserts finite silence without
   reconstructing the video source. The upstream no-audio branch copies only
   source type/path; do not lose the HTTP URI when applying that behavior.
-- Integration gap: `next_engine/host.rs::refresh` rejects non-local libraries.
-  The native web `stream.rs::load_path_replacements` collects replacements from
-  all servers, so it cannot provide source isolation for this projection.
-  Existing native playback does not provide the upstream internal redirect
-  routes. Review provider connection/authentication and HTTP delivery before
-  wiring this path; do not assume a reusable native HTTP resolver exists.
+- Integration: `next_engine/source.rs` now resolves provider-scoped paths and
+  direct authenticated HTTP through existing provider connection readers; the
+  host invokes it during publication. The native web replacement list remains
+  for local libraries only. Scoped credentials take precedence; the legacy
+  global fallback is restricted to a single configured server of that kind.
+  Next consumes private runtime JSON, including transport headers. This avoids
+  adding a separate server process, but connection refresh/failover behavior
+  still needs reconciliation: upstream resolves its internal redirect when
+  opening an item and the Plex handler can select a new reachable connection.
+  The checkpoint resolves connection values at publication instead. Complete
+  that behavior and its acceptance before marking this row reconciled.
 - Side effects and evidence: keep complete atomic schedule publication,
   mirror timing, exact stream pins, redacted errors, session ownership and
   cancellation. Test overlapping paths across servers, selected file/version

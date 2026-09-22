@@ -91,9 +91,11 @@ explicit release-upload shells. Row 17 preserves negative mirror offsets on
 channel upsert and verifies XMLTV actual/guide-window projection. Row 18 proves
 atomic Next JSON publication on Windows/NTFS, including sharing-denial recovery.
 Row 19 is Covered by existing immediate Next-to-Segmenter editor normalization.
-Next: row 20 (bb493670), media-server sources in Next. Authenticated/browser
-and platform acceptance remain open; provider/graphics capabilities belong to
-later ordered rows. The first consolidated
+Row 20 (bb493670) now has scoped local paths and authenticated HTTP sources
+for Plex/Jellyfin/Emby, with decoded synthetic-server playback proof. Next:
+reconcile late connection resolution and Plex failover before accepting the row.
+Authenticated/browser and platform acceptance remain open; Remote Stream/add-on
+and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 
 2026-09-22 maintainer amendment: defer UCU-01/UCU-02 CI to the first

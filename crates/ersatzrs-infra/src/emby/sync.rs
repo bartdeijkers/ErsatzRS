@@ -758,7 +758,7 @@ async fn load_target_emby_show_scan(
     })
 }
 
-async fn load_active_emby_connection_config(
+pub(crate) async fn load_active_emby_connection_config(
     pool: &DbPool,
     media_source_id: i64,
 ) -> Result<EmbyConnectionConfig> {

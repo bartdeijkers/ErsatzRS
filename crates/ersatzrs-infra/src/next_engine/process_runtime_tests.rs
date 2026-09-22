@@ -169,9 +169,16 @@ async fn assert_audio_and_subtitle(
     let info: serde_json::Value = serde_json::from_slice(&tool(probe).await).unwrap();
     let streams = info["streams"].as_array().unwrap();
     assert!(streams.iter().any(|stream| stream["codec_name"] == "h264"));
-    assert!(streams
-        .iter()
-        .any(|stream| stream["codec_name"] == codec && stream["sample_rate"] == "48000"));
+    assert!(
+        streams
+            .iter()
+            .any(|stream| stream["codec_name"] == codec && stream["sample_rate"] == "48000"),
+        "unexpected synthetic output codecs: {:?}",
+        streams
+            .iter()
+            .map(|s| (&s["codec_name"], &s["sample_rate"]))
+            .collect::<Vec<_>>()
+    );
     let mut audio = Command::new(ffmpeg);
     audio
         .args(["-v", "error", "-nostdin", "-i"])
@@ -291,6 +298,16 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
         };
         assert_next_session(&host, request, muted).await;
     }
+    assert_media_server_sessions(
+        &binary,
+        &ffmpeg,
+        &ffprobe,
+        &clip,
+        &subtitle,
+        &profile.profile,
+        root.path(),
+    )
+    .await;
     let mut ac3_profile = profile.profile;
     ac3_profile.audio_format = FFmpegProfileAudioFormat::Ac3;
     let (pool, locker) = prepare_schedule(&clip, false, &ac3_profile).await;
@@ -325,6 +342,147 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
             .audio_format,
         FFmpegProfileAudioFormat::Ac3
     );
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn assert_media_server_sessions(
+    binary: &Path,
+    ffmpeg: &Path,
+    ffprobe: &Path,
+    clip: &Path,
+    subtitle: &Path,
+    profile: &FFmpegProfile,
+    root: &Path,
+) {
+    use crate::next_engine::source;
+    use ersatzrs_core::repositories::RemoteMediaSourceKind;
+    let server = httpmock::MockServer::start_async().await;
+    let bytes = std::sync::Arc::new(tokio::fs::read(clip).await.unwrap());
+    for kind in RemoteMediaSourceKind::ALL {
+        eprintln!("checking Next {} HTTP playback", kind.provider_name());
+        let (pool, locker) = prepare_schedule(clip, false, profile).await;
+        sqlx::query(r#"DELETE FROM "LocalLibrary""#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        source::tests::seed_provider(&pool, kind).await;
+        // An inaccessible server path forces HTTP; the local subtitle is a
+        // separately resolved source and must still burn into the output.
+        sqlx::query(r#"UPDATE "MediaFile" SET "Path" = 'server-only/fixture.mkv' WHERE "Id" = 1"#)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"UPDATE "Subtitle" SET "Path" = ? WHERE "Id" = 2"#)
+            .bind(subtitle.to_str().unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (path, header, value) = match kind {
+            RemoteMediaSourceKind::Plex => {
+                ("/library/parts/11/file.mkv", "X-Plex-Token", "<token>")
+            }
+            RemoteMediaSourceKind::Jellyfin => (
+                "/Videos/fixture-item/stream",
+                "Authorization",
+                "MediaBrowser Token=\"<api-key>\"",
+            ),
+            RemoteMediaSourceKind::Emby => {
+                ("/Videos/fixture-item/stream", "X-Emby-Token", "<api-key>")
+            }
+        };
+        let mock = server
+            .mock_async(|when, then| {
+                when.method(httpmock::Method::GET)
+                    .path(path)
+                    .header(header, value);
+                let bytes = std::sync::Arc::clone(&bytes);
+                then.respond_with(move |request| fixture_range_response(request, &bytes));
+            })
+            .await;
+        let update = match kind {
+            RemoteMediaSourceKind::Plex => r#"UPDATE "PlexConnection" SET "Uri" = ?"#,
+            RemoteMediaSourceKind::Jellyfin => r#"UPDATE "JellyfinConnection" SET "Address" = ?"#,
+            RemoteMediaSourceKind::Emby => r#"UPDATE "EmbyConnection" SET "Address" = ?"#,
+        };
+        sqlx::query(update)
+            .bind(server.base_url())
+            .execute(&pool)
+            .await
+            .unwrap();
+        if kind != RemoteMediaSourceKind::Plex {
+            sqlx::query(r#"UPDATE "ConfigElement" SET "Key" = ? WHERE "Key" LIKE '%.api_key.%'"#)
+                .bind(format!(
+                    "{}.api_key.{}",
+                    kind.provider_name().to_lowercase(),
+                    server.base_url()
+                ))
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let host = std::sync::Arc::new(host::NextHost::new(
+            pool,
+            locker,
+            root.join("remote-playout"),
+        ));
+        assert_next_session(
+            &host,
+            host::NextStart {
+                channel_id: 1,
+                preview: false,
+                number: "1".into(),
+                executable: binary.to_owned(),
+                output: root.join("remote-output"),
+                ffmpeg: ffmpeg.to_owned(),
+                ffprobe: ffprobe.to_owned(),
+                replacements: Vec::new(),
+                idle_timeout: None,
+                deadline: Instant::now() + Duration::from_secs(30),
+            },
+            false,
+        )
+        .await;
+        assert!(
+            mock.calls_async().await > 0,
+            "Next must fetch authenticated media"
+        );
+        mock.delete_async().await;
+    }
+}
+
+fn fixture_range_response(
+    request: &httpmock::HttpMockRequest,
+    bytes: &[u8],
+) -> httpmock::HttpMockResponse {
+    let response = httpmock::HttpMockResponse::builder()
+        .header("Content-Type", "video/x-matroska")
+        .header("Accept-Ranges", "bytes");
+    let headers = request.headers();
+    let Some(range) = headers.get("range") else {
+        return response.status(200).body(bytes.to_vec()).build();
+    };
+    let range = range.to_str().unwrap().strip_prefix("bytes=").unwrap();
+    let (start, end) = range.split_once('-').unwrap();
+    let start: usize = start.parse().unwrap();
+    let end = if end.is_empty() {
+        bytes.len() - 1
+    } else {
+        end.parse::<usize>().unwrap().min(bytes.len() - 1)
+    };
+    if start > end {
+        return response
+            .status(416)
+            .header("Content-Range", format!("bytes */{}", bytes.len()))
+            .build();
+    }
+    response
+        .status(206)
+        .header(
+            "Content-Range",
+            format!("bytes {start}-{end}/{}", bytes.len()),
+        )
+        .body(bytes[start..=end].to_vec())
+        .build()
 }
 
 async fn assert_next_session(

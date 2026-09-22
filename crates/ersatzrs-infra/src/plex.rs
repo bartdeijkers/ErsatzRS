@@ -3170,7 +3170,7 @@ async fn load_target_plex_show_scan(
     })
 }
 
-async fn load_active_plex_connection_config(
+pub(crate) async fn load_active_plex_connection_config(
     pool: &DbPool,
     media_source_id: i64,
 ) -> Result<PlexConnectionConfig> {

@@ -29,6 +29,8 @@ mod persistence;
 mod projection;
 mod sync;
 
+pub(crate) use sync::load_active_jellyfin_connection_config;
+
 pub use client::{
     fetch_server_information, format_jellyfin_auth_header, JellyfinServerInformation,
     JellyfinService,

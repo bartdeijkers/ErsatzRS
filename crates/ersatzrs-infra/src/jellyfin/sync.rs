@@ -569,7 +569,7 @@ async fn load_target_jellyfin_show_scan(
     })
 }
 
-async fn load_active_jellyfin_connection_config(
+pub(crate) async fn load_active_jellyfin_connection_config(
     pool: &DbPool,
     media_source_id: i64,
 ) -> Result<JellyfinConnectionConfig> {

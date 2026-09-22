@@ -30,7 +30,14 @@ silence/subtitles-off. Locked schedule reads preserve mirror offsets and bind
 one media file per item. Per-channel publication now serializes reads and writes,
 including cancellation during filesystem work. A Next HLS session adapter now
 handles readiness, heartbeat, idle expiry, refresh notification and shutdown.
-Provider/graphics projection and full playback acceptance remain open.
+The row-20 checkpoint adds provider-scoped local paths and direct authenticated
+Plex/Jellyfin/Emby HTTP sources, with synthetic-server decoded Linux proof.
+It reuses Next HTTP headers rather than introducing another server process.
+Provider values are private runtime playout state, never diagnostic output;
+publication retains its restrictive temporary-file permissions on Unix and
+inherits the data directory ACL on Windows. Connection refresh/failover parity
+remains under review before row acceptance. Graphics projection and full
+playback acceptance remain open.
 
 ## Context
 

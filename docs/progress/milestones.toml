@@ -6708,6 +6708,66 @@ the integrated provider slice.
 This preparatory checkpoint leaves row 20, pin and upstream HEAD unchanged at
 9882b008: 19 reconciled / 150 pending. UCU-02 remains In progress.
 
+Row 20 integration checkpoint: next_engine/source.rs now resolves the owning
+library's provider, uses only that source's path replacements, prefers an
+existing local file, and otherwise produces a typed authenticated HTTP source.
+The host invokes this adapter; Remote Stream/add-on lifetimes and graphics
+remain explicitly unsupported. Plex uses the exact bound MediaFile/version/path
+and its provider key, rejecting a key that leaves the configured origin.
+Jellyfin/Emby use their own movie/episode identities and preserve server base
+paths. Connection data comes from the existing provider readers. Headers are
+checked against control-character injection and accidental Next environment
+template expansion. Errors omit addresses, paths and credential values.
+
+Review corrected a concrete credential isolation hazard: a global Jellyfin
+Authorization value could override a source-specific API key, and legacy global
+fallbacks could cross servers. The Next adapter now prioritizes scoped values
+and accepts legacy global credentials only for a single configured server of
+that provider kind; existing scanner behavior is unchanged. Seven source tests
+cover all providers, local preference without credentials, overlapping paths,
+file identity/staleness, cross-origin rejection, legacy/scoped credential
+precedence, episode identities, URI escaping and transport validation.
+
+The complete dedicated Next selection passes locally: 49/49 tests, 6.133 seconds,
+using ./run.sh test -p ersatzrs-infra --lib --run-ignored all with expression
+`test(next_engine::) and not test(fixture_child)`. The real-engine test extends
+the existing local/pinned-silence/preview proof with authenticated synthetic
+Plex, Jellyfin and Emby servers. It forces HTTP fallback and decodes output to
+verify H.264/AAC, 48 kHz audio, selected 880 Hz Dutch audio and visible subtitle
+glyphs; capacity, duplicate admission, process/output/registry cleanup and
+normal AC3 versus preview AAC remain asserted. Runtime identity was rechecked:
+Next source 946aa528c3a44e1079c702901b32d4d817ca1a12 (clean checkout), executable
+SHA-256 0b500c71e9714d7db8d7192ef0a3516d6af5c6378626132719f73e9e98020362,
+and FFmpeg n9.0-20260805. Infra all-target Clippy passes with -D warnings
+(16.18 seconds). The first HTTP fixture returned
+200 for byte-range requests and produced unusable seeked audio; implementing
+correct 206/Content-Range responses fixed the fixture without weakening any
+playback assertion. No actual provider credentials or private media were used.
+
+Remaining row-20 review finding: upstream InternalController resolves current
+connection data when an item is opened; GetPlexConnectionParametersHandler also
+pings the active connection and can activate another. Direct Next HTTP inputs
+currently capture connection values at schedule publication, so a later
+credential/address change or failed active connection can leave the published
+input stale. This is not accepted as a deviation or deferred to another row.
+Next action: reconcile late connection resolution/failover and its bounded
+lifetime, tests and health implications before row acceptance. Runtime JSON
+contains transport headers and must remain private application data; no raw
+engine output is logged. The source map and ADR implementation distinguish this
+working checkpoint from complete upstream behavior. Keep row 20 pending and the
+pin unchanged; no CI dispatch or push is due before UCU-03.
+
+The required local Next HTTP smoke passes after rebuilding the actual web host:
+variant/session playlists return HTTP 200; normal and preview segments contain
+656872 and 632620 bytes respectively; MPEG-TS is refused with 404; both normal
+and preview output folders disappear after idle expiry. Command: cargo xtask
+smoke --next --keep-temp with the same Next executable and managed FFmpeg 9.
+The host build takes 3m09s; target remains below the maintainer's cleanup limit.
+Existing native playback evidence is not invalidated by these Next-only changes
+and provider-reader visibility adjustments. Progress validation, formatting,
+diff checks and substantive source/test review pass. This is an authorized
+local engineering checkpoint, not row-20 or UCU-02 completion.
+
 """
 
 [[milestone]]

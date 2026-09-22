@@ -4,12 +4,11 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 169 commits: nineteen reconciled and 150 pending,
+The ledger registers 169 commits: nineteen reconciled and 150 pending,
 tracked by ucu-00 through ucu-09. UCU-01 is Complete after all local gates:
 HDHomeRun repository-link correction and channel-only Next packaging are ported,
 with checksum/license/provenance, six-RID artifact and Docker startup evidence.
-Its reviewed upstream tooling/dependency/release-note rows are reconciled in
-the ledger; UCU-01 owns their individual verdicts and evidence.
+UCU-01 owns the evidence for its reconciled tooling and release-note rows.
 UCU-02 is In progress: row 11 ports persisted engine selection, retained native
 defaults, Next mode normalization and the localized SSR editor. Migration,
 repository/application and Chromium/Firefox tests pass, including no-JS forms.
@@ -18,7 +17,7 @@ executable discovery, atomic publication, profile mapping and managed-process
 startup/stop have focused tests. Real Linux Next HLS proves the selected alternate
 audio and burned external subtitle. Persisted selection proves preference precedence, exact pins and silence. Locked schedule reads preserve mirror offsets and one media binding per item. Per-channel publication
 serializes reads and replacement, including cancellation of the awaiting task.
-Host startup/rebuild now shares publisher ownership and retries busy source locks. Provider/graphics projection,
+Host startup/rebuild shares publisher ownership and retries busy source locks. Provider refresh, graphics,
 complete endpoint and platform playback acceptance remain open. The Next HLS session adapter now owns startup/readiness, heartbeat, idle
 expiry, concurrent refresh notification and shutdown. Local-video HTTP dispatch,
 shared capacity, registry/output cleanup and rebuild notification wiring are now
@@ -27,8 +26,9 @@ capacity/output cleanup and shared rebuild publication. Normal AC3 and preview A
 Linux HTTP lifecycle smoke and 40 dedicated Next CI tests pass locally. Continue publishes appended schedules to dependent Next
 channels and previews while preserving native continuity;
 authenticated browser and platform proof remain open. Runtime/profile health
-checks cover enabled Next channels. Provider
-and graphics sources are explicitly refused until their projection is implemented.
+checks cover enabled Next channels. Row 20 adds scoped local/HTTP media-server
+inputs with decoded proof; connection refresh/failover remains open. Remote
+Stream/add-on and graphics inputs remain refused.
 The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment. Row 14 is Covered: existing mirror
 offsets, post-save notifications and executable-relative discovery match the
@@ -68,4 +68,4 @@ description = 'Implement Next as an optional second engine alongside the native 
 discovered  = '2026-09-22'
 resolved    = false
 adr         = '0095'
-evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 preparation retains exact file identity and verifies HTTP track options with missing audio; provider HTTP integration and decoded acceptance remain open in UCU-02. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
+evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 connects scoped local paths and authenticated HTTP for all three media servers, retaining exact Plex file identity and selected tracks, with decoded Linux proof. Connection refresh/failover still differs from upstream late resolution and remains required before row acceptance in UCU-02. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
