@@ -60,6 +60,7 @@ fn config_uses_upstream_lowercase_codecs_and_optional_acceleration() {
             },
             "video": {
                 "format": "hevc", "bit_depth": 10, "width": 1920, "height": 1080,
+                "scaling_mode": "scale_and_pad", "deinterlace": false,
                 "bitrate_kbps": 2000, "buffer_kbps": 4000, "accel": "vaapi",
                 "filters": {
                     "libplacebo": {"tonemapping": "linear"},

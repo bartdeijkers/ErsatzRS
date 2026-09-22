@@ -6219,6 +6219,47 @@ Remaining: profile and persisted-playout mapping, serialized refresh wiring,
 supervised process/session lifecycle, health, authenticated HLS delivery and
 real Next/native playback proof. No upstream row, pin or checkout advances.
 
+Row 13 profile/process checkpoint: map persisted profile dimensions, bit depth,
+audio/video bitrates and buffers, channel count, kHz-to-Hz sample rate, loudness,
+tone-map filters, scaling, deinterlacing and supported accelerator/driver values.
+Unsupported explicit codecs, HDR output, V4L2M2M and Nouveau are typed failures,
+not silent output substitutions. The packaged API has no equivalent for every
+native encoding policy; operator validation/health and that remaining mapping
+review are still open. Unit coverage includes codec/accelerator matrices,
+numeric bounds, inactive loudness and all tone-map/scaling choices.
+NextProcess reuses the existing managed process-group/job owner, sends bounded
+JSON on stdin, rejects stale readiness, shares the startup deadline across
+input/readiness and confirms whole-tree cleanup on stop or startup failure.
+Raw child output is discarded; errors contain no private source/path/config.
+All 20 focused next_engine tests pass, including portable subprocess fixtures
+for stdin EOF, readiness, heartbeat, stale-marker timeout, early exit and stop.
+
+Real engine proof: the opt-in test documented in docs/how-to/testing.md passes
+against the maintainer-built Next executable (version 0.1.0; SHA-256
+0b500c71e9714d7db8d7192ef0a3516d6af5c6378626132719f73e9e98020362), with FFmpeg and
+ffprobe n9.0-20260805. It uses an isolated generated blue clip, English 440-Hz
+and Dutch 880-Hz audio tracks, an external subtitle and the real atomic publisher,
+profile mapper and managed process. Next publishes live.m3u8 and MPEG-TS segments;
+ffprobe confirms H.264/AAC at 48 kHz, decoded PCM confirms the selected 880-Hz
+track, and decoded bottom-frame pixels confirm burned subtitle glyphs.
+Managed stop completes. This is Linux engine-boundary proof, not host HTTP,
+authentication, database selection, real-library, Windows or window acceptance.
+The first attempt inside the sandbox hit EPERM while Next read configuration.
+The host run reached playback and exposed an odd-height YUV420 test crop; changed
+the crop from 45 to 48 rows, retaining the exact byte-count and visible-glyph
+assertions. The corrected test passes; no product acceptance was weakened.
+Checkpoint review covers explicit output rejection, unit conversion/overflow,
+redacted diagnostics, stdin EOF, stale readiness, early exit and managed cleanup.
+Infra all-target Clippy passes after documentation/extension-comparison lint
+corrections; formatting, architecture lint, progress and diff checks pass.
+The unchanged 20-test component result remains valid; the corrected real-engine
+regression supplies the separate playback result. No full-window or CI result
+is claimed by this reviewed local checkpoint.
+Remaining: database-to-playout mapping and serialized refresh, session admission,
+idle/shutdown ownership, health/troubleshooting and authenticated endpoint wiring,
+then integrated Next and native playback gates. Pin/ledger/upstream checkout stay
+at ddc8ef7f; row 13 is still pending acceptance.
+
 """
 
 [[milestone]]

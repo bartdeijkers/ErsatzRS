@@ -59,6 +59,26 @@ audio/video PIDs are part of the change:
 scripts/e2e/tsduck-playback-gate.sh gate
 ```
 
+### Check the optional Next process boundary
+
+Set `ERSATZRS_NEXT_TEST_BIN` to the Next channel executable,
+`ERSATZRS_NEXT_TEST_FFMPEG` to the FFmpeg 9 executable, and
+`ERSATZRS_NEXT_TEST_FFPROBE` to its matching ffprobe executable. These are
+test-only variables; use executable paths, not source or installation folders.
+On Windows, include the `.exe` filename.
+
+```bash
+./run.sh test -p ersatzrs-infra next_engine::process::runtime_tests::real_next_hls_preserves_selected_audio_and_burns_external_subtitles --run-ignored ignored-only
+```
+
+The test creates disposable blue video with 440-Hz and 880-Hz audio tracks and
+an external subtitle. It publishes the playout through the real adapter, starts
+Next with profile-derived configuration, waits for readiness, decodes a generated
+HLS segment, checks the selected 880-Hz audio and visible subtitle glyphs, then
+stops the managed process. It uses no personal library or application database.
+This is engine-boundary proof; it does not replace web endpoint, authentication,
+scheduling, native smoke or platform acceptance gates.
+
 ## Close out the Rust test suite
 
 Run the canonical local closeout once after focused tests pass:

@@ -22,6 +22,9 @@ release section when tagging a release.
   native engine and Next selections use HLS Segmenter. Support the upstream
   `ETV_NEXT_FOLDER` override. Prepare executable discovery, JSON exchange and
   atomic playout publication that retains the previous schedule on failure.
+  Add profile-to-Next configuration and managed process startup with bounded
+  readiness, heartbeat and process-tree cleanup; reject unsupported explicit
+  output codecs and HDR settings instead of silently changing them.
   Live Next playback integration remains pending.
 
 - Retain form-action selection counts and Select all under Edit multiple items

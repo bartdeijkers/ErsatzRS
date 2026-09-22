@@ -4,6 +4,8 @@
 //! Runtime compatibility is checked against the separately packaged Next engine;
 //! these types do not replace the native `FFmpeg` pipeline or scheduler.
 
+pub mod config;
+pub mod process;
 pub mod protocol;
 pub mod publication;
 pub mod runtime;

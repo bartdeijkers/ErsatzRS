@@ -1,0 +1,151 @@
+use super::*;
+use ersatzrs_domain::{
+    FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
+};
+
+const HELPER_MODE: &str = "ERSATZRS_NEXT_PROCESS_TEST_MODE";
+const HELPER_FOLDER: &str = "ERSATZRS_NEXT_PROCESS_TEST_FOLDER";
+
+fn config() -> ChannelConfig {
+    super::super::config::channel_config(
+        &crate::playback::PlaybackProfile {
+            profile: FFmpegProfile {
+                audio_format: FFmpegProfileAudioFormat::Aac,
+                video_format: FFmpegProfileVideoFormat::H264,
+                ..Default::default()
+            },
+            resolution: Resolution {
+                width: 320,
+                height: 180,
+                ..Default::default()
+            },
+        },
+        Path::new("playouts/current"),
+        Path::new("ffmpeg"),
+        Path::new("ffprobe"),
+    )
+    .unwrap()
+}
+
+fn fixture_command(mode: &str, folder: &Path) -> Command {
+    let mut command = Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--exact",
+            "next_engine::process::tests::fixture_child",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env(HELPER_MODE, mode)
+        .env(HELPER_FOLDER, folder);
+    command
+}
+
+// A fresh instance of the test executable is a portable process fixture. It
+// avoids shell dependencies and uses the real process-group/job implementation.
+#[test]
+#[ignore = "invoked only by the managed Next process tests"]
+#[allow(clippy::disallowed_methods)] // Test-only environment selects isolated child behavior.
+fn fixture_child() {
+    use std::io::Read;
+    let Ok(mode) = std::env::var(HELPER_MODE) else {
+        return;
+    };
+    let folder = PathBuf::from(std::env::var_os(HELPER_FOLDER).unwrap());
+    let mut bytes = Vec::new();
+    std::io::stdin().read_to_end(&mut bytes).unwrap();
+    // Emitting readiness requires complete stdin delivery, including EOF.
+    let _: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    std::fs::write(folder.join("received.json"), bytes).unwrap();
+    if mode == "fail" {
+        std::process::exit(7);
+    }
+    if mode == "ready" {
+        std::fs::write(folder.join(".ready"), b"").unwrap();
+    }
+    loop {
+        std::thread::sleep(Duration::from_secs(1));
+    }
+}
+
+#[tokio::test]
+async fn readiness_requires_complete_stdin_and_stop_reaps_the_managed_child() {
+    let folder = tempfile::tempdir().unwrap();
+    let config = config();
+    let mut process = NextProcess::start_command(
+        fixture_command("ready", folder.path()),
+        folder.path(),
+        &config,
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    let received: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(folder.path().join("received.json")).unwrap())
+            .unwrap();
+    assert_eq!(received, serde_json::to_value(config).unwrap());
+    process.touch().await.unwrap();
+    assert!(folder.path().join(".heartbeat").is_file());
+    process.stop().await.unwrap();
+    assert!(!process.wait().await.unwrap().success());
+}
+
+#[tokio::test]
+async fn stale_readiness_cannot_acknowledge_a_hung_new_process() {
+    let folder = tempfile::tempdir().unwrap();
+    std::fs::write(folder.path().join(".ready"), b"old session").unwrap();
+    let result = NextProcess::start_command(
+        fixture_command("wait", folder.path()),
+        folder.path(),
+        &config(),
+        Instant::now() + Duration::from_millis(500),
+    )
+    .await;
+    assert!(matches!(result, Err(ProcessError::StartupTimeout)));
+    assert!(!folder.path().join(".ready").exists());
+}
+
+#[tokio::test]
+async fn early_exit_is_reported_without_waiting_for_the_startup_deadline() {
+    let folder = tempfile::tempdir().unwrap();
+    let result = NextProcess::start_command(
+        fixture_command("fail", folder.path()),
+        folder.path(),
+        &config(),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        Err(ProcessError::ExitedBeforeReady(Some(7)))
+    ));
+}
+
+#[tokio::test]
+async fn expired_deadline_and_missing_binary_return_redacted_errors() {
+    let folder = tempfile::tempdir().unwrap();
+    let missing = folder.path().join("private-missing-executable");
+    let expired = NextProcess::start(&missing, "1", folder.path(), &config(), Instant::now()).await;
+    assert!(matches!(expired, Err(ProcessError::StartupTimeout)));
+    let error = NextProcess::start(
+        &missing,
+        "1",
+        folder.path(),
+        &config(),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await
+    .err()
+    .unwrap();
+    assert!(matches!(
+        error,
+        ProcessError::Io {
+            operation: "spawn",
+            ..
+        }
+    ));
+    assert!(!error.to_string().contains("private-missing-executable"));
+    assert!(!error
+        .to_string()
+        .contains(&folder.path().display().to_string()));
+}

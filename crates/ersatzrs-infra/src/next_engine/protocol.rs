@@ -57,6 +57,10 @@ pub struct Video {
     pub bit_depth: u8,
     pub width: u32,
     pub height: u32,
+    #[serde(default)]
+    pub scaling_mode: ScalingMode,
+    #[serde(default)]
+    pub deinterlace: bool,
     pub bitrate_kbps: Option<u32>,
     pub buffer_kbps: Option<u32>,
     pub accel: Option<Acceleration>,
@@ -101,11 +105,22 @@ pub enum VideoFormat {
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Acceleration {
+    Amf,
     Cuda,
     Qsv,
+    Rkmpp,
     Vaapi,
     Videotoolbox,
     Vulkan,
+}
+
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScalingMode {
+    #[default]
+    ScaleAndPad,
+    Stretch,
+    Crop,
 }
 
 #[derive(Clone, Copy, Serialize, Deserialize)]

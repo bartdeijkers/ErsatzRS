@@ -21,8 +21,10 @@ defaults, Next mode normalization and the localized SSR editor. Migration,
 repository/application and Chromium/Firefox tests pass, including no-JS forms.
 Row 12 is Covered: native menu/action bindings already work, verified with
 four focused Chromium/Firefox regressions. Row 13 is in progress: wire types,
-executable discovery and atomic publication have focused test and actual Next
-parser proof; live process/session and scheduling integration remain open.
+executable discovery, atomic publication, profile mapping and managed-process
+startup/stop have focused tests. Real Linux Next HLS proves the selected alternate
+audio and burned external subtitle. Host session, endpoint/health and persisted
+scheduling integration remain open.
 The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment.
 UCU-01 owns their evidence;
@@ -53,4 +55,4 @@ description = 'Implement Next as an optional second engine alongside the native 
 discovered  = '2026-09-22'
 resolved    = false
 adr         = '0095'
-evidence    = 'ADR 0095 is accepted by maintainer direction; implementation and runtime proof remain open. Reconcile the Next integration rows in UCU-01 through UCU-09; a working native path does not close Next acceptance.'
+evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 has isolated Linux HLS/audio/subtitle proof, but host session/endpoint/health and persisted-playout integration remain open. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'

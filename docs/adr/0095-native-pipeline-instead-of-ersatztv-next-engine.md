@@ -17,8 +17,10 @@ normalization for Next, verified through migration, repository and browser
 tests. Runtime supervision and Next playback acceptance remain open.
 
 The UCU-02 row 13 infrastructure checkpoint adds executable discovery, typed
-JSON exchange and atomic complete-schedule publication. These helpers are not
-yet connected to live channel startup or scheduling completion.
+JSON exchange and atomic complete-schedule publication. Profile conversion and
+a managed process adapter add bounded startup/readiness, heartbeat and cleanup.
+These helpers are not yet connected to live channel startup or scheduling
+completion; host session, health and authenticated delivery acceptance remain open.
 
 ## Context
 
@@ -90,6 +92,26 @@ and the integration must regenerate this derived file after restart. The caller
 must serialize schedule reads and publication to prevent stale generations
 from overwriting newer ones. Runtime wiring and native Windows verification
 remain open; portable implementation alone is not platform acceptance.
+
+### Profile and process boundary implementation
+
+Map profile dimensions, codecs, bit depth, bitrates, kHz-to-Hz audio rate,
+loudness, scale/crop/stretch, deinterlacing and supported hardware selections
+to the packaged Next API. Its current output contract supports H.264/HEVC and
+AAC/AC3 SDR normalization. Reject explicit unsupported codecs, HDR output,
+V4L2M2M and Nouveau selections instead of inheriting the original integration's
+silent codec or acceleration substitutions. User-facing validation and health
+for those failures remain part of integration acceptance. Native encoding
+policy fields without Next API equivalents still require reconciliation before
+claiming equal output behavior.
+
+Reuse the existing managed Unix process group and Windows Job Object owner.
+Send configuration on stdin, remove stale readiness before spawn, share one
+startup deadline across configuration delivery and readiness, and await bounded
+whole-tree cleanup on startup failure or normal stop. Raw child stdout/stderr
+are discarded because they can contain private source URLs; adapter errors
+contain static operation labels, error kinds and exit codes. The host session
+must own admission, idle policy, shutdown and heartbeat scheduling.
 
 ## Consequences
 
