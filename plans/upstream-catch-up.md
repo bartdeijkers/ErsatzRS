@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-22): `558855083c7602b6f50ed63675ff61d1d325f98d`
   — prep for release v26.10.0 [no ci].
-- Ledger: **168 commits**, **163 pending**. The original plan covered 152 through
+- Ledger: **168 commits**, **162 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits, retaining the original ledger as an exact prefix.
@@ -14,7 +14,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **5**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **6**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -108,7 +108,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 3 | `5d779635` | update last dependencies (#2849) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream dependency maintenance` | ucu-01; only YamlDotNet/Refit package-version attributes change; native Cargo dependencies do not consume them. See ucu-01 evidence. |
 | 4 | `47885758` | bundle ersatztv next artifacts (#2850) | Port | upstream-baseline-catch-up | `build(release): bundle optional Next engine artifacts` | ucu-01; verified artifact staging, license/provenance and Docker startup. Runtime integration remains open under ADR 0095. See ucu-01 evidence. |
 | 5 | `1b292b5f` | try to fix github token | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream workflow token references` | ucu-01; token-only workflow correction; native uploads already use github.token and public Next staging needs no token. See ucu-01 evidence. |
-| 6 | `f69761cb` | more gh token tweaks | | | | ucu-01; provisional: Upstream tooling candidate. |
+| 6 | `f69761cb` | more gh token tweaks | Covered | upstream-baseline-catch-up | `docs(porting): reconcile upstream CLI artifact publication` | ucu-01; native asset upload already uses gh release; upstream develop cleanup and reusable-token wiring do not apply. See ucu-01 evidence. |
 | 7 | `b76d8f8e` | more token alignment | | | | ucu-01; provisional: Upstream tooling candidate. |
 | 8 | `30c361db` | only bundle the ersatztv-channel binary (#2851) | | | | ucu-01; provisional: Upstream tooling candidate. |
 | 9 | `74a21abd` | fix workflow | | | | ucu-01; provisional: Upstream tooling candidate. |

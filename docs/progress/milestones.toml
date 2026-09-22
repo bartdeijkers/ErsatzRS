@@ -5818,6 +5818,40 @@ Landing subject: docs(porting): reconcile upstream workflow token references.
 Pin and ledger advance together to 1b292b5f, followed by upstream checkout and
 agreement verification. Next pending row: f69761cb, more gh token tweaks.
 UCU-01 remains In progress; full-window gates and exact-SHA CI remain open.
+
+2026-09-22 row 6: f69761cb3123113c0cc5c67f2b3a79c4bd9bcda9,
+more gh token tweaks. Before advancing, pin/landed row/upstream HEAD agree at
+1b292b5f. AMM-N-03 and UCU-00 remain Complete. The refreshed upstream target
+is unchanged at 55885508; all 168 ledger SHA/subjects match its ordered log.
+Source map: full four-file diff and artifact/download surrounding code reviewed.
+artifacts.yml replaces three delete-release-assets actions with gh release
+view/delete-asset pipelines, still only for the develop tag, and replaces three
+asset-publishing action-gh-release steps with gh release upload. It also reverts
+two Next-download GH_TOKEN expressions to the reusable workflow secret.
+ci.yml/release.yml revert the passed token expression, and docker.yml reverts
+its Next-download token expression. No tests, changelog, schemas, product code,
+playback or workflow permission changes occur in this row.
+Native mapping: release.yml's Upload to release already calls gh release upload
+with github.token and --clobber. stage-beta-draft.ps1 uses gh release create
+for an absent draft and upload --clobber for an existing draft, rejecting an
+already-published beta. The remaining action-gh-release@v3 creates the release
+and generates its notes; it does not perform the replaced asset-upload job.
+Native release.yml triggers version tags, with no rolling develop publication
+or wildcard cleanup contract. Therefore the upstream-specific develop cleanup
+is not needed here. Next staging uses the public HTTP helper already verified
+in row 4, with no reusable gh_token input or token forwarding to repair.
+Verdict Covered, owner upstream-baseline-catch-up: the applicable CLI asset
+upload mechanism already exists; upstream-only cleanup/token wiring needs no
+native edit. Direct Codex review explicitly checked the additional publication
+hunks instead of treating the subject as a token-only change. No actionable
+serious native omission remains; ADR 0095 is not used as an exclusion.
+Documentation only; affected-checks selects progress validation, progress check
+and git diff --check pass. No hosted upload/delete call, CI dispatch, runtime
+or Rust test was needed or performed; source coverage is not new release proof.
+Landing subject: docs(porting): reconcile upstream CLI artifact publication.
+Pin and ledger advance together to f69761cb, followed by upstream checkout and
+agreement verification. Next pending row: b76d8f8e, more token alignment.
+Full UCU-01 acceptance and exact-SHA CI remain open.
 """
 
 [[milestone]]

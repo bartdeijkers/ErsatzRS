@@ -61,6 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22: UCU-01 row 6 (f69761cb) is Covered for CLI artifact uploads;
+upstream develop cleanup and token wiring do not apply to native workflows.
+Continue at row 7 (b76d8f8e); full-window acceptance remains open.
+
 2026-09-22: UCU-01 row 5 (1b292b5f) is N/A for upstream workflow token
 references; the milestone records the exact diff and native mapping. Continue
 at row 6 (f69761cb); full-window acceptance and Next integration remain open.

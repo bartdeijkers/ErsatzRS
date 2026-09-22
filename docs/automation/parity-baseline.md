@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `1b292b5fd042a056cea125e41da465a259f2b356` |
-| **Commit subject** | `try to fix github token` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/1b292b5fd042a056cea125e41da465a259f2b356 |
+| **Pinned commit** | `f69761cb3123113c0cc5c67f2b3a79c4bd9bcda9` |
+| **Commit subject** | `more gh token tweaks` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f69761cb3123113c0cc5c67f2b3a79c4bd9bcda9 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

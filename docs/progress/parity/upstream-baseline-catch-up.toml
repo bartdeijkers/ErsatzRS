@@ -4,12 +4,14 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 168 commits: five reconciled and 163 pending,
+The refreshed ledger registers 168 commits: six reconciled and 162 pending,
 tracked by ucu-00 through ucu-09. Row 1 is Covered; row 2 ports the HDHomeRun repository-link correction.
 Row 3 is N/A for .NET-only dependency maintenance. Row 4 ports Next artifact
 bundling with checksum/license/provenance and Docker startup proof. Row 5 is
 N/A for upstream workflow token references: native uploads already use the job
-token and public Next staging needs no token. UCU-01 owns their evidence;
+token and public Next staging needs no token. Row 6 is Covered: native asset
+uploads already use the CLI; upstream develop cleanup does not apply.
+UCU-01 owns their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows
 each run. The 2026-09-22 fetch adds six commits after the verified bootstrap prefix;
