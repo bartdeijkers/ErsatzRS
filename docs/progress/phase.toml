@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-01: continue ordered upstream reconciliation with optional Next integration'
+current_focus = 'UCU-01: verify full-window acceptance before starting UCU-02'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,6 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22: UCU-01 row 10 (a74896df) is N/A for upstream changelog
+publication. All ten window rows are reconciled; full-window local checks and
+separately authorized exact-SHA CI remain required before UCU-02 can start.
+
 2026-09-22: UCU-01 row 9 (74a21abd) is Covered: it removes only the
 invalid upstream workflow line excluded during row 8. Continue at row 10
 (a74896df), then require the full UCU-01 window gates and authorized exact-SHA CI.

@@ -1,6 +1,6 @@
 <!--
 generated: 2026-09-22
-parity_baseline_commit: 74a21abdba5e300ed3ebe4fdf4106d455556e68a
+parity_baseline_commit: a74896dfcdb425e4759ebb3cc17b1e1d9d8921cc
 generator: reviewed catch-up pin advancement
 rules: docs/automation/gap-prompt-rules.md
 -->
@@ -19,10 +19,10 @@ front-matter value is a generated checkpoint, not permission to reset a newer pi
 
 ### Workflow
 
-Follow AGENTS.md and `plans/upstream-catch-up.md`. Fully reconcile exactly the
-first pending ledger row without stopgaps; the current candidate is a74896df,
-`prep for release v26.4.0 [no ci]`. This is an explicitly authorized
-post-pin catch-up task, not an ordinary pinned-baseline parity gap.
+Follow AGENTS.md and `plans/upstream-catch-up.md`. Complete UCU-01 acceptance through `a74896df` before processing the first
+pending row (`ea4d3b65`, UCU-02). Run the recorded full-window gates; exact-SHA
+CI requires separate authorization. Only after UCU-01 is Complete may the
+next one-row post-pin catch-up task begin.
 
 ### Before editing
 

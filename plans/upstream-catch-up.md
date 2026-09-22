@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-22): `558855083c7602b6f50ed63675ff61d1d325f98d`
   — prep for release v26.10.0 [no ci].
-- Ledger: **168 commits**, **159 pending**. The original plan covered 152 through
+- Ledger: **168 commits**, **158 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits, retaining the original ledger as an exact prefix.
@@ -14,7 +14,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **9**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **10**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -112,7 +112,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 7 | `b76d8f8e` | more token alignment | Covered | upstream-baseline-catch-up | `docs(porting): reconcile upstream job-token alignment` | ucu-01; native uploads already bind github.token; Next downloads need no token and upstream develop cleanup does not apply. See ucu-01 evidence. |
 | 8 | `30c361db` | only bundle the ersatztv-channel binary (#2851) | Port | upstream-baseline-catch-up | `build(release): bundle only the Next channel executable` | ucu-01; only channel binary beside server, with license/provenance retained. Packaging tests and Docker probe pass. See ucu-01 evidence. |
 | 9 | `74a21abd` | fix workflow | Covered | upstream-baseline-catch-up | `docs(porting): reconcile upstream workflow syntax repair` | ucu-01; removes the stray workflow line already excluded during row 8. See ucu-01 evidence. |
-| 10 | `a74896df` | prep for release v26.4.0 [no ci] | | | | ucu-01; provisional: Upstream tooling candidate. |
+| 10 | `a74896df` | prep for release v26.4.0 [no ci] | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream April release notes` | ucu-01; upstream changelog publication only. Window acceptance gates remain open; do not start UCU-02 yet. |
 | 11 | `ea4d3b65` | add channel streaming engine setting (#2852) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
 | 12 | `ddc8ef7f` | fix: add playout button should open drop down menu (#2853) | | | | ucu-02; provisional: Port candidate. |
 | 13 | `2ed432f9` | feat: enable ersatztv next streaming engine (#2854) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |

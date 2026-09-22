@@ -5939,6 +5939,31 @@ docs(porting): reconcile upstream workflow syntax repair.
 Pin and ledger advance together to 74a21abd, then upstream checkout and
 agreement verification. Next pending row a74896df closes this release window;
 full UCU-01 gates and separately authorized exact-SHA CI remain required.
+
+2026-09-22 row 10: a74896dfcdb425e4759ebb3cc17b1e1d9d8921cc,
+prep for release v26.4.0 [no ci]. Pin/row/upstream HEAD agree at 74a21abd
+before advancing; prerequisite milestones remain Complete. Fetch retains
+55885508; all 168 ledger SHA/subjects match the ordered upstream log.
+Source map: only CHANGELOG.md changes. Full diff examined, with exact content
+comparison after repository-link normalization to expose all substantive edits:
+add the dated 26.4.0 heading, mention Legacy rebranding and removed home-screen
+changelog, advance the Unreleased comparison and add the release comparison.
+Historical links change to legacy/legacy-ffmpeg. Other release-note items are
+unchanged pre-existing text; there are no source, tests, schema or build edits.
+Native mapping: ErsatzRS has its own version/changelog and repository links;
+row 1 owns the removed home-screen release-note surface. Publishing upstream
+release notes does not require a native release or product change.
+Verdict N/A (upstream tooling), owner upstream-baseline-catch-up. Direct Codex
+review confirms no previously unexamined behavioral change is hidden among the
+historical link replacements. No serious actionable row finding remains.
+Focused documentation validation: progress check and git diff --check pass.
+Landing subject: docs(porting): reconcile upstream April release notes.
+Pin and ledger advance together to a74896df, then upstream checkout and
+agreement verification. All ten UCU-01 rows are reconciled, but UCU-01 remains
+In progress: workspace Clippy, test-closeout, Leptos build, parity-check, smoke
+and separately authorized exact-SHA CI still require window-close evidence.
+No FFmpeg/pipeline code changed in this window, so conditional TSDuck is not
+triggered. Next pending row ea4d3b65 belongs to UCU-02 and must wait for UCU-01.
 """
 
 [[milestone]]
