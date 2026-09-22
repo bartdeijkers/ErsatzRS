@@ -6040,6 +6040,96 @@ evidence = """
 2026-09-22: UCU-01 local acceptance is Complete under the amended CI cadence.
 Start ordered review at row 11 (ea4d3b65); all UCU-02 rows remain pending.
 No implementation, playback or window gate evidence is claimed yet.
+
+2026-09-22 row 11 source map in progress (ea4d3b65; pin not advanced):
+Pin/last row/upstream HEAD agree at a74896df; fetched target remains 55885508
+and all 168 ledger SHA/subjects match. Read the full non-generated diff. Both
+new EF Designer BuildTargetModel bodies exactly equal their corresponding
+new snapshots after whitespace normalization; snapshot diffs contain only the
+StreamingEngine column and EF ProductVersion update. No hidden schema change.
+Upstream UI/view models: ChannelEditor.razor and ChannelEditViewModel add engine
+selection, round-trip it, default to Legacy, and restrict Next to HLS Segmenter.
+Handlers: CreateChannelHandler and UpdateChannelHandler persist the field and
+force Segmenter for Next; request records, ChannelViewModel and Mapper carry it.
+Domain: StreamingEngine Legacy=0, Next=1; Channel owns the property. SQLite and
+MySQL migrations add a non-null integer column with default 0. ErsatzRS ports
+only SQLite per the existing architecture. SystemEnvironment adds ETV_NEXT_FOLDER;
+launchSettings adds a developer-only path, which must not be copied literally.
+No upstream test file changes. Reviewed surrounding create/update validation
+(name, unique number, related profile/watermark/filler and mirror source),
+mirror restrictions, subtitle extraction, channel-list and EPG invalidation.
+The added field does not alter those contracts; native save still requests
+subtitle extraction through the application boundary and invalidates HLS sessions.
+Native targets: domain/channel.rs, core/repositories/channel.rs,
+infra/repositories/channel.rs (upsert, editor reads/writes, normalization),
+web/admin/server_fns/channels.rs, channels/editor.rs and localized text catalogs;
+additive SQLite migration and focused repository/migration/browser regressions.
+Visual source map: upstream inserts a responsive MudStack label/select row
+immediately before Streaming Mode; no action-bar or page-width change. Reuse
+the native channel form's select_i32_field, existing form spacing and controls.
+Hydration map: the current channel editor is an SSR component with standard
+multipart submission and small dependency scripts (not an island). Preserve
+that boundary; engine-dependent options retain stable nodes and server-side
+normalization. Browser proof must cover create/edit, engine/mode dependency,
+reopen persistence, and no-JS save without changing unrelated channel fields.
+ADR 0095 requires explicit choice, preservation of existing native channels,
+and truthful incomplete Next integration. This row adds selection; actual Next
+process/playout integration belongs to subsequent rows and is not yet proven.
+
+Implementation checkpoint: added the additive SQLite StreamingEngine column
+with default 0 and a full-schema upgrade regression that preserves existing
+streaming mode, audio/subtitle preferences, explicit Next choice across a
+migration rerun, and the non-null constraint. The focused migration test is
+passed (1/1). Domain/core/form/API propagation, database enum mapping, editor
+read/write, and Next-to-Segmenter normalization are implemented. The SSR form
+adds an engine field and stable mode options with a dependency script; all
+nine cultures have the field label. The web typecheck passes. Repository
+regressions for create/update/upsert/reopen and invalid-engine rejection passed
+(17/17 channel repository tests). The startup configuration boundary now exposes
+the upstream ETV_NEXT_FOLDER override without a machine-specific default.
+Existing database dirty-migration and checksum health checks cover the additive
+schema change. Next process availability/version and execution health remain
+explicit debt with the runtime integration; this setting-only row cannot prove
+them. Hydration lint passes with no new findings (32 baseline suppressions).
+Browser proof remains required before this row can be reviewed and landed. Actual Next
+playback is still pending subsequent integration rows; do not claim it works. The ledger
+and pin remain unchanged; this is not row acceptance.
+
+Review correction: added engine validation and Next mode normalization to the
+application-owned channel boundary, retaining repository protection. The focused
+application/web channel selection passes (24/24 executed, 733 filtered out).
+Initial browser run: Chromium and Firefox JavaScript cases pass, but both no-JS
+cases expose an existing out-of-order SSR fallback that leaves the editor at
+Loading. Corrected only channel add/edit routes to InOrder, following locked
+leptos_router 0.8.15 source; Context7 was quota-limited. The unchanged browser
+regression awaits a rebuilt SSR/WASM pair. Target exceeded 40 GiB after tests;
+required cargo clean removed 46.5 GiB before rebuilding. No failed test has been
+weakened or retried against an unchanged build.
+PORTING.md distinguishes the maintainer-provided ERSATZTV_NEXT_SRC source
+checkout from ETV_NEXT_FOLDER executable discovery. The supplied source checkout
+is at 946aa52; merely locating it is not Next runtime acceptance.
+
+Final browser correction proof: rebuilt matching SSR/WASM assets and ran the
+same four tests in tests/e2e/channel-streaming-engine.spec.ts unchanged. All
+pass (Chromium/Firefox, JavaScript enabled/disabled): create, save, reopen,
+Next-to-Segmenter normalization and return to native. The temporary server is
+stopped. Both the engine label and invalid-engine error are localized in all
+nine cultures. Focused all-target Clippy passes for domain/core/infra/app/web
+after extracting the engine validator to retain the existing function-length
+limit. The two focused engine repository tests pass again after that behavior-preserving
+extraction (2/2). Formatting and diff checks pass.
+
+Substantive row review: Port. Checked schema defaults/nullability and unchanged
+audio/subtitle values, both database write paths, application validation, old
+form defaults, API propagation, SSR option selection and no-JS persistence.
+Corrected application ownership, no-JS rendering, translated invalid-engine
+feedback and validator length; no actionable row defect remains. This is
+setting acceptance only: Next execution, supervision and health remain open
+under ADR 0095. Pin advances a74896df -> ea4d3b65 with row 11; ledger has
+11 reconciled / 157 pending. Next row: ddc8ef7f. UCU-02 window gates remain open;
+no CI has been dispatched, per the authorized UCU-03 checkpoint.
+Final progress and architecture checks pass; hydration lint still has no new
+findings (32 unchanged baseline suppressions).
 """
 
 [[milestone]]

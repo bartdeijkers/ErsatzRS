@@ -9,6 +9,15 @@ pub const ERSATZRS_DATABASE_URL_ENV_VAR: &str = "ErsatzRS_DATABASE__URL";
 /// Uppercase variant commonly exported by shells and orchestrators.
 pub const ERSATZRS_DATABASE_URL_ENV_VAR_UPPER: &str = "ERSATZRS_DATABASE__URL";
 
+/// Optional directory containing the ErsatzTV Next channel executable.
+/// Preserves the upstream runtime override without a developer-specific path.
+#[must_use]
+pub fn next_folder() -> Option<PathBuf> {
+    environment_variable("ETV_NEXT_FOLDER")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
 /// Startup configuration needed before the database-backed settings table is
 /// available.
 #[derive(Debug, Clone, PartialEq, Eq)]

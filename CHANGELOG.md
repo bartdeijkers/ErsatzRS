@@ -18,7 +18,9 @@ release section when tagging a release.
 - Bundle the optional ErsatzTV Next channel executable beside the server in
   release archives and Docker images (upstream PRs #2850, #2851), excluding
   unused Next executables while retaining checksum, license and provenance.
-  Engine selection and Next playback integration remain pending.
+  Add persisted per-channel engine selection (upstream PR #2852); existing channels retain the
+  native engine and Next selections use HLS Segmenter. Support the upstream
+  `ETV_NEXT_FOLDER` override. Next playback integration remains pending.
 
 - Retain form-action selection counts and Select all under Edit multiple items
   > Items to change as an explicitly accepted design choice; Save-button and row
@@ -51,6 +53,9 @@ release section when tagging a release.
   generated Clippy ledger now lives under `docs/reference/`.
 
 ### Fixed
+
+- Render channel add/edit forms in order so they remain usable with JavaScript
+  disabled, including engine selection and server-side mode normalization.
 
 - Correct the HDHomeRun discovery manufacturer link to the ErsatzRS repository,
   following the repository-link correction in ErsatzTV PR #2848.

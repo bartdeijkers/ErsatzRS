@@ -106,6 +106,8 @@ pub struct ChannelEditorForm {
     pub playout_mode: i32,
     pub mirror_source_channel_id: Option<EntityId>,
     pub playout_offset: Option<Duration>,
+    #[serde(default)]
+    pub streaming_engine: i32,
     pub streaming_mode: i32,
     pub watermark_id: Option<EntityId>,
     pub fallback_filler_id: Option<EntityId>,

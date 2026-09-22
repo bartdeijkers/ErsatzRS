@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `a74896dfcdb425e4759ebb3cc17b1e1d9d8921cc` |
-| **Commit subject** | `prep for release v26.4.0 [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/a74896dfcdb425e4759ebb3cc17b1e1d9d8921cc |
+| **Pinned commit** | `ea4d3b651d56a2950624b1b7ee02d3e087ebd917` |
+| **Commit subject** | `add channel streaming engine setting (#2852)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/ea4d3b651d56a2950624b1b7ee02d3e087ebd917 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

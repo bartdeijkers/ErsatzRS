@@ -115,6 +115,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route
                 path=(StaticSegment("channels"), StaticSegment("add"))
                 view=ChannelEditorPage
+                ssr=SsrMode::InOrder
             />
             <Route
                 path=(StaticSegment("channels"), StaticSegment("numbers"))
@@ -128,7 +129,7 @@ pub fn AdminRoutes() -> impl IntoView {
                 )
                 view=ChannelWatchPage
             />
-            <Route path=(StaticSegment("channels"), ParamSegment("id")) view=ChannelEditorPage/>
+            <Route path=(StaticSegment("channels"), ParamSegment("id")) view=ChannelEditorPage ssr=SsrMode::InOrder/>
 
             <Route path=StaticSegment("ffmpeg") view=FfmpegProfilesListPage/>
             <Route

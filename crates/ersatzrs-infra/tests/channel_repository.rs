@@ -1035,3 +1035,90 @@ fn assert_has_error(errors: &[ersatzrs_core::repositories::ChannelValidationErro
         "expected validation error for {field}, got {errors:?}"
     );
 }
+
+#[tokio::test]
+async fn channel_streaming_engine_editor_round_trip_normalizes_next_on_create_and_update() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+    let mut form = editor_form("81", "Engine selection");
+    form.streaming_engine = 1;
+    form.streaming_mode = 5;
+    form.preferred_audio_language_code = Some("nl".to_owned());
+    form.preferred_subtitle_language_code = Some("en".to_owned());
+    let saved = repos.channel.save_editor_form(form).await.unwrap();
+    assert!(saved.validation_errors.is_empty());
+    let id = saved.id;
+    let loaded = repos.channel.get_with_profile(id).await.unwrap();
+    assert_eq!(
+        loaded.streaming_engine,
+        ersatzrs_domain::StreamingEngine::Next
+    );
+    assert_eq!(
+        loaded.streaming_mode,
+        ersatzrs_domain::StreamingMode::HttpLiveStreamingSegmenter
+    );
+    let mut form = repos
+        .channel
+        .get_editor_state(Some(id))
+        .await
+        .unwrap()
+        .unwrap()
+        .form;
+    assert_eq!(form.streaming_engine, 1);
+    assert_eq!(form.streaming_mode, 4);
+    assert_eq!(form.preferred_audio_language_code.as_deref(), Some("nl"));
+    assert_eq!(form.preferred_subtitle_language_code.as_deref(), Some("en"));
+    form.streaming_mode = 2;
+    let saved = repos.channel.save_editor_form(form).await.unwrap();
+    assert!(saved.validation_errors.is_empty());
+    let mut form = repos
+        .channel
+        .get_editor_state(Some(id))
+        .await
+        .unwrap()
+        .unwrap()
+        .form;
+    assert_eq!(
+        form.streaming_mode, 4,
+        "Next is normalized on update as well"
+    );
+    form.streaming_engine = 0;
+    form.streaming_mode = 5;
+    let saved = repos.channel.save_editor_form(form).await.unwrap();
+    assert!(saved.validation_errors.is_empty());
+    let loaded = repos.channel.get_with_profile(id).await.unwrap();
+    assert_eq!(
+        loaded.streaming_engine,
+        ersatzrs_domain::StreamingEngine::Legacy
+    );
+    assert_eq!(
+        loaded.streaming_mode,
+        ersatzrs_domain::StreamingMode::TransportStreamHybrid
+    );
+    let mut loaded = loaded;
+    loaded.streaming_engine = ersatzrs_domain::StreamingEngine::Next;
+    loaded.streaming_mode = ersatzrs_domain::StreamingMode::HttpLiveStreamingSegmenter;
+    repos.channel.upsert(&loaded).await.unwrap();
+    assert_eq!(
+        repos
+            .channel
+            .get_by_number("81")
+            .await
+            .unwrap()
+            .streaming_engine,
+        ersatzrs_domain::StreamingEngine::Next
+    );
+}
+
+#[tokio::test]
+async fn channel_streaming_engine_editor_rejects_unknown_engine_without_creating_channel() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    seed_editor_dependencies(&pool, &repos).await;
+    let mut form = editor_form("82", "Invalid engine");
+    form.streaming_engine = 99;
+    let result = repos.channel.save_editor_form(form).await.unwrap();
+    assert_has_error(&result.validation_errors, "streaming_engine");
+    assert!(repos.channel.get_by_number("82").await.is_err());
+}

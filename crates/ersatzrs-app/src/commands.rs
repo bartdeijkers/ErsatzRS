@@ -5521,6 +5521,9 @@ fn normalize_channel_form(
     mut form: ChannelEditorForm,
     state: &ChannelValidationState,
 ) -> ChannelEditorForm {
+    if form.streaming_engine == 1 {
+        form.streaming_mode = 4;
+    }
     form.name = form.name.trim().to_owned();
     form.number = form.number.trim().to_owned();
     form.group = form.group.trim().to_owned();
@@ -5568,6 +5571,12 @@ fn validate_channel_form(
     state: &ChannelValidationState,
 ) -> Vec<ChannelValidationError> {
     let mut errors = Vec::new();
+    if !matches!(form.streaming_engine, 0 | 1) {
+        errors.push(ChannelValidationError::new(
+            "streaming_engine",
+            "Invalid streaming engine",
+        ));
+    }
 
     if form.id > 0 && !state.channels.iter().any(|channel| channel.id == form.id) {
         errors.push(ChannelValidationError::new("id", "Channel does not exist."));
@@ -10134,6 +10143,8 @@ mod tests {
                 name: " Existing ".to_owned(),
                 group: " Group ".to_owned(),
                 ffmpeg_profile_id: 10,
+                streaming_engine: 1,
+                streaming_mode: 5,
                 playout_source: 1,
                 mirror_source_channel_id: Some(2),
                 playout_offset: Some(chrono::Duration::hours(1)),
@@ -10147,11 +10158,14 @@ mod tests {
         assert_eq!(form.number, "1");
         assert_eq!(form.name, "Existing");
         assert_eq!(form.group, "Group");
+        assert_eq!(form.streaming_engine, 1);
+        assert_eq!(form.streaming_mode, 4);
         assert_eq!(form.playout_source, 0, "an existing playout wins");
         assert_eq!(form.mirror_source_channel_id, None);
         assert!(validate_channel_form(&form, &state).is_empty());
 
         let invalid = ChannelEditorForm {
+            streaming_engine: 99,
             number: "1.234".to_owned(),
             name: String::new(),
             group: String::new(),
@@ -10168,6 +10182,7 @@ mod tests {
         assert_eq!(
             fields,
             [
+                "streaming_engine",
                 "number",
                 "name",
                 "group",

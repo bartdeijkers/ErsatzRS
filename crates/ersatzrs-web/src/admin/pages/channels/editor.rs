@@ -27,7 +27,10 @@ pub fn ChannelEditorPage() -> impl IntoView {
             "" => String::new(),
             "save" => tr(TextKey::ChannelCouldNotBeSaved).to_string(),
             "upload" => tr(TextKey::ChannelLogoUploadFailed).to_string(),
-            message => message.to_string(),
+            message => message.replace(
+                "Invalid streaming engine",
+                tr(TextKey::InvalidStreamingEngine),
+            ),
         }
     });
 
@@ -72,7 +75,12 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
     let playout_offset_hours = RwSignal::new(initial_form.playout_offset_hours);
     let is_enabled = RwSignal::new(initial_form.is_enabled);
     let show_in_epg = RwSignal::new(initial_form.show_in_epg);
-    let streaming_mode = RwSignal::new(initial_form.streaming_mode);
+    let streaming_engine = RwSignal::new(initial_form.streaming_engine);
+    let streaming_mode = RwSignal::new(if initial_form.streaming_engine == 1 {
+        4
+    } else {
+        initial_form.streaming_mode
+    });
     let ffmpeg_profile_id = RwSignal::new(initial_form.ffmpeg_profile_id);
     let slug_seconds = RwSignal::new(
         initial_form
@@ -263,18 +271,35 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                     </div>
 
                     {select_i32_field(
-                        tr(TextKey::StreamingMode),
-                        "streaming_mode",
-                        streaming_mode,
+                        tr(TextKey::StreamingEngine),
+                        "streaming_engine",
+                        streaming_engine,
                         Signal::derive(|| vec![
-                            (5, channel_streaming_mode_label(5)),
-                            (1, channel_streaming_mode_label(1)),
-                            (2, channel_streaming_mode_label(2)),
-                            (4, channel_streaming_mode_label(4)),
+                            (0, "ErsatzRS".to_owned()),
+                            (1, "ErsatzTV Next".to_owned()),
                         ]),
                         None,
                         "",
                     )}
+                    <div class=style::field>
+                        <label class=style::label>{tr(TextKey::StreamingMode)}</label>
+                        <select
+                            name="streaming_mode"
+                            class=format!("{} {}", style::input, style::select)
+                        >
+                            {[5, 1, 2, 4].into_iter().map(|mode| view! {
+                                <option
+                                    value=mode.to_string()
+                                    selected=mode == streaming_mode.get_untracked()
+                                    disabled=streaming_engine.get_untracked() == 1 && mode != 4
+                                    hidden=streaming_engine.get_untracked() == 1 && mode != 4
+                                >
+                                    {channel_streaming_mode_label(mode)}
+                                </option>
+                            }).collect_view()}
+                        </select>
+                    </div>
+                    <script inner_html=streaming_engine_dependency_script()></script>
 
                     {select_i64_field(
                         tr(TextKey::FfmpegProfile),
@@ -713,6 +738,29 @@ fn select_string_field(
             <span class=style::error></span>
         </div>
     }
+}
+
+fn streaming_engine_dependency_script() -> &'static str {
+    r#"
+(() => {
+  const form = document.querySelector('form[action="/api/channels/save-multipart"]');
+  if (!form) return;
+  const engine = form.querySelector('select[name="streaming_engine"]');
+  const mode = form.querySelector('select[name="streaming_mode"]');
+  if (!engine || !mode) return;
+  const sync = () => {
+    const next = engine.value === "1";
+    for (const option of mode.options) {
+      option.disabled = next && option.value !== "4";
+      option.hidden = option.disabled;
+    }
+    if (next) mode.value = "4";
+    mode.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  sync();
+  engine.addEventListener("change", sync);
+})();
+"#
 }
 
 fn playout_source_dependency_script() -> &'static str {

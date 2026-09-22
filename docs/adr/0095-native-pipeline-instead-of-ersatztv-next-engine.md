@@ -11,8 +11,10 @@ its original native-only wording is superseded by this decision.
 ## Implementation
 
 Partial — release and Docker packaging stage the upstream artifacts with
-checksum, license and provenance (UCU-01 row 4). Engine selection, runtime
-supervision and playback acceptance remain open.
+checksum, license and provenance (UCU-01 row 4). UCU-02 row 11 adds persisted
+per-channel engine selection with retained native defaults and HLS Segmenter
+normalization for Next, verified through migration, repository and browser
+tests. Runtime supervision and Next playback acceptance remain open.
 
 ## Context
 

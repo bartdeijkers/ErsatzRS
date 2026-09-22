@@ -19,6 +19,13 @@ maintainer's local filesystem layout leaks into committed files.
 - Never commit absolute paths from a maintainer's machine. See
   [CONTRIBUTING.md](CONTRIBUTING.md) ground rules.
 
+For Next integration under ADR 0095, `ERSATZTV_NEXT_SRC` identifies a checkout
+of [ErsatzTV/next](https://github.com/ErsatzTV/next) for source review. It is
+separate from the runtime override `ETV_NEXT_FOLDER`, which identifies the
+directory containing the built `ersatztv-channel` executable. A source checkout
+alone is not an installed runtime. Use `$ERSATZTV_NEXT_SRC/<relative path>` in
+source references and record the reviewed revision in milestone evidence.
+
 ## Procedure
 
 1. Find and read the relevant ErsatzTV source under `$ERSATZTV_SRC/`.

@@ -4,6 +4,14 @@ use uuid::Uuid;
 
 use crate::{EntityId, FFmpegProfile, FillerPreset, GraphicsElement, StreamingMode};
 
+/// Persisted channel engine selection, matching upstream Legacy=0 and Next=1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum StreamingEngine {
+    #[default]
+    Legacy,
+    Next,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ChannelIdleBehavior {
     #[default]
@@ -115,6 +123,8 @@ pub struct Channel {
     pub watermark_id: Option<EntityId>,
     pub fallback_filler_id: Option<EntityId>,
     pub fallback_filler: Option<FillerPreset>,
+    #[serde(default)]
+    pub streaming_engine: StreamingEngine,
     pub streaming_mode: StreamingMode,
     pub playout_ids: Vec<EntityId>,
     pub artwork_ids: Vec<EntityId>,
@@ -170,6 +180,7 @@ impl Default for Channel {
             watermark_id: None,
             fallback_filler_id: None,
             fallback_filler: None,
+            streaming_engine: StreamingEngine::default(),
             streaming_mode: StreamingMode::default(),
             playout_ids: Vec::new(),
             artwork_ids: Vec::new(),

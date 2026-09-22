@@ -34,13 +34,13 @@ static CHANNEL_UPSERT_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::ne
         r#"INSERT INTO "Channel" (
                 "Id", "UniqueId", "Number", "SortNumber", "Name", "Group", "Categories",
                 "FFmpegProfileId", "SlugSeconds", "WatermarkId", "FallbackFillerId",
-                "StreamingMode", "StreamSelectorMode", "StreamSelector",
+                "StreamingEngine", "StreamingMode", "StreamSelectorMode", "StreamSelector",
                 "PreferredAudioLanguageCode", "PreferredAudioTitle",
                 "PreferredSubtitleLanguageCode", "SubtitleMode",
                 "MusicVideoCreditsMode", "MusicVideoCreditsTemplate",
                 "SongVideoMode", "PlayoutSource", "PlayoutMode", "MirrorSourceChannelId",
                 "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         &[&["Id"], &["Number"]],
     )
 });
@@ -119,6 +119,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .bind(channel.slug_seconds)
             .bind(channel.watermark_id)
             .bind(channel.fallback_filler_id)
+            .bind(encode_enum(channel.streaming_engine))
             .bind(encode_enum(channel.streaming_mode))
             .bind(encode_enum(channel.stream_selector_mode))
             .bind(&channel.stream_selector)
@@ -218,13 +219,13 @@ impl ChannelRepository for SqliteChannelRepository {
                 r#"INSERT INTO "Channel" (
                     "UniqueId", "Number", "SortNumber", "Name", "Group", "Categories",
                     "FFmpegProfileId", "SlugSeconds", "WatermarkId", "FallbackFillerId",
-                    "StreamingMode", "StreamSelectorMode", "StreamSelector",
+                    "StreamingEngine", "StreamingMode", "StreamSelectorMode", "StreamSelector",
                     "PreferredAudioLanguageCode", "PreferredAudioTitle",
                     "PreferredSubtitleLanguageCode", "SubtitleMode",
                     "MusicVideoCreditsMode", "MusicVideoCreditsTemplate",
                     "SongVideoMode", "PlayoutSource", "PlayoutMode", "MirrorSourceChannelId",
                     "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             )
             .bind(Uuid::new_v4().to_string())
             .bind(&normalized.number)
@@ -236,6 +237,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .bind(normalized.slug_seconds)
             .bind(normalized.watermark_id)
             .bind(normalized.fallback_filler_id)
+            .bind(normalized.streaming_engine)
             .bind(normalized.streaming_mode)
             .bind(normalized.stream_selector_mode)
             .bind(&normalized.stream_selector)
@@ -262,7 +264,7 @@ impl ChannelRepository for SqliteChannelRepository {
                 r#"UPDATE "Channel" SET
                     "Number" = ?, "SortNumber" = ?, "Name" = ?, "Group" = ?,
                     "Categories" = ?, "FFmpegProfileId" = ?, "SlugSeconds" = ?,
-                    "WatermarkId" = ?, "FallbackFillerId" = ?, "StreamingMode" = ?,
+                    "WatermarkId" = ?, "FallbackFillerId" = ?, "StreamingEngine" = ?, "StreamingMode" = ?,
                     "StreamSelectorMode" = ?, "StreamSelector" = ?,
                     "PreferredAudioLanguageCode" = ?, "PreferredAudioTitle" = ?,
                     "PreferredSubtitleLanguageCode" = ?, "SubtitleMode" = ?,
@@ -282,6 +284,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .bind(normalized.slug_seconds)
             .bind(normalized.watermark_id)
             .bind(normalized.fallback_filler_id)
+            .bind(normalized.streaming_engine)
             .bind(normalized.streaming_mode)
             .bind(normalized.stream_selector_mode)
             .bind(&normalized.stream_selector)
@@ -1124,6 +1127,7 @@ async fn load_editor_form(
             playout_mode: row.try_get("PlayoutMode").repository()?,
             mirror_source_channel_id: row.try_get("MirrorSourceChannelId").repository()?,
             playout_offset,
+            streaming_engine: row.try_get("StreamingEngine").repository()?,
             streaming_mode: row.try_get("StreamingMode").repository()?,
             watermark_id: row.try_get("WatermarkId").repository()?,
             fallback_filler_id: row.try_get("FallbackFillerId").repository()?,
@@ -1309,11 +1313,24 @@ async fn next_channel_number(pool: &Pool<crate::db::Db>) -> Result<String> {
     Ok((max_number + 1).to_string())
 }
 
+fn validate_editor_streaming_engine(
+    form: &ChannelEditorForm,
+    errors: &mut Vec<ChannelValidationError>,
+) {
+    if !matches!(form.streaming_engine, 0 | 1) {
+        errors.push(ChannelValidationError::new(
+            "streaming_engine",
+            "Invalid streaming engine",
+        ));
+    }
+}
+
 async fn validate_editor_form(
     pool: &Pool<crate::db::Db>,
     form: &ChannelEditorForm,
 ) -> Result<Vec<ChannelValidationError>> {
     let mut errors = Vec::new();
+    validate_editor_streaming_engine(form, &mut errors);
 
     if form.id > 0 {
         let exists: i64 = sqlx::query_scalar(r#"SELECT COUNT(*) FROM "Channel" WHERE "Id" = ?"#)
@@ -1494,6 +1511,10 @@ async fn normalize_editor_form(
     mut form: ChannelEditorForm,
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
 ) -> Result<ChannelEditorForm> {
+    if form.streaming_engine == 1 {
+        form.streaming_mode = 4;
+    }
+
     form.name = form.name.trim().to_owned();
     form.number = form.number.trim().to_owned();
     form.group = form.group.trim().to_owned();
@@ -1649,6 +1670,7 @@ fn map_channel(row: &DbRow) -> Result<Channel> {
         watermark_id: row.try_get("WatermarkId").repository()?,
         fallback_filler_id: row.try_get("FallbackFillerId").repository()?,
         fallback_filler: None,
+        streaming_engine: decode_enum_column("channel streaming_engine", row, "StreamingEngine")?,
         streaming_mode: decode_enum_column("channel streaming_mode", row, "StreamingMode")?,
         playout_ids: Vec::new(),
         artwork_ids: Vec::new(),

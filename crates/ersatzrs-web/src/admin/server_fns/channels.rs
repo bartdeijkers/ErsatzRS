@@ -178,6 +178,9 @@ pub struct ChannelForm {
     pub playout_mode: i32,
     pub mirror_source_channel_id: i64,
     pub playout_offset_hours: i32,
+    /// DB integer value: 0=native, 1=ErsatzTV Next.
+    #[serde(default)]
+    pub streaming_engine: i32,
     /// DB integer value: 1=TS, 2=HLSDirect, 4=HLSSegmenter, 5=TSHybrid.
     pub streaming_mode: i32,
     pub watermark_id: i64,
@@ -260,6 +263,7 @@ impl ChannelForm {
                 .playout_offset
                 .map(|duration| i32::try_from(duration.num_hours()).unwrap_or(0))
                 .unwrap_or_default(),
+            streaming_engine: form.streaming_engine,
             streaming_mode: form.streaming_mode,
             watermark_id: form.watermark_id.unwrap_or_default(),
             is_enabled: form.is_enabled,
@@ -316,6 +320,7 @@ impl ChannelForm {
                     self.playout_offset_hours,
                 )))
             },
+            streaming_engine: self.streaming_engine,
             streaming_mode: self.streaming_mode,
             watermark_id: optional_id(self.watermark_id),
             fallback_filler_id: optional_id(self.fallback_filler_id),
