@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-22): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
   — feat: next engine rotation (#3034).
-- Ledger: **169 commits**, **155 pending**. The original plan covered 152 through
+- Ledger: **169 commits**, **154 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -15,7 +15,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **14**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **15**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -43,8 +43,11 @@ This supersedes the separate-CI requirement for these two windows only.
 The maintainer also authorizes pushing to remote `main` after completion of
 each milestone from UCU-03 through UCU-09 inclusive (UCU-05 explicitly confirmed).
 This is milestone-boundary push authorization, not permission to push each
-intermediate row. Required local acceptance and exact-SHA CI gates remain
-unchanged; a push is not CI proof.
+intermediate row. The subsequent explicit goal also authorizes running and
+finishing green exact-SHA CI at every boundary from UCU-03 onward. Complete the
+local window gates, push its candidate to remote main, verify terminal green CI,
+and only then claim the milestone complete. Release tagging/publication remains
+a separate action; a push alone is not CI proof.
 
 Before selecting or processing row 1, AMM-N-03 must be accepted and ucu-00
 closed against its recorded criteria. A documentation checkpoint does not
@@ -96,9 +99,10 @@ satisfy that prerequisite or authorize a later implementation commit.
    during this task, no push, CI dispatch or release tagging.
 9. At a milestone boundary, run its acceptance gates with the CI cadence
    amendment above: UCU-01/UCU-02 close locally; the first CI follows UCU-03
-   smoke and is authorized. For subsequent windows, required exact-SHA
-   CI remains a blocker until separately authorized and green; do not dispatch
-   it or mark Complete under this task. Record evidence and a progress session.
+   smoke. Push and exact-SHA CI are authorized for UCU-03 through UCU-09.
+   After local window acceptance, push the candidate, run/monitor CI and resolve
+   failures until that exact candidate is green before marking Complete. Record
+   evidence and a progress session; never claim skipped or queued CI as proof.
 10. Report upstream SHA/subject, verdict and rationale, changed files, evidence,
     old/new pin, row count, next commit and remaining blocker.
 
@@ -132,7 +136,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 12 | `ddc8ef7f` | fix: add playout button should open drop down menu (#2853) | Covered | playout-list-detail | `test(web): verify upstream menu activator coverage` | ucu-02; native playout toggle and direct show Add To/Quick/Deep Scan handlers already work. Four Chromium/Firefox regressions prove dropdown visibility, keyboard toggle, dialog activation and scan parameters. No Rust change. See ucu-02 evidence and media-browsers parity. |
 | 13 | `2ed432f9` | feat: enable ersatztv next streaming engine (#2854) | Adapt (ADR 0095) | upstream-baseline-catch-up | `feat(infra): complete initial Next engine integration` | ucu-02; supervised local-video HLS, preview, track selection, atomic publication and Continue refresh verified. Provider/graphics rows and window/platform acceptance remain open. See ucu-02 evidence. |
 | 14 | `4ee97d5b` | fix: fix next playout building (#2855) | Covered | upstream-baseline-catch-up | `test(web): verify Next channel update propagation` | ucu-02; existing mirror-offset projection, post-save publication notifications and executable-relative runtime discovery cover all three upstream corrections. See ucu-02 review and focused tests. |
-| 15 | `f7853e80` | bundle ersatztv-channel binary with macos app (#2856) | | | | ucu-02; provisional: Upstream tooling candidate. |
+| 15 | `f7853e80` | bundle ersatztv-channel binary with macos app (#2856) | Covered | upstream-baseline-catch-up | `docs(release): reconcile Next macOS bundling` | ucu-02; both macOS RID mappings and executable-adjacent archive staging already exist; six offline tests and actual relocation/archive snippets pass. Active macOS release/runtime acceptance remains explicit. See ucu-02 evidence. |
 | 16 | `5cef7775` | fix duplicate windows zips on develop release | | | | ucu-02; provisional: Upstream tooling candidate. |
 | 17 | `6ea0a296` | fix: consistently apply playout offset when generating xmltv (#2863) | | | | ucu-02; provisional: Port candidate. |
 | 18 | `f2706f32` | feat: support playout json on windows (#2864) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |

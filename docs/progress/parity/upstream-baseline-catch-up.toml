@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 169 commits: fourteen reconciled and 155 pending,
+The refreshed ledger registers 169 commits: fifteen reconciled and 154 pending,
 tracked by ucu-00 through ucu-09. UCU-01 is Complete after all local gates:
 HDHomeRun repository-link correction and channel-only Next packaging are ported,
 with checksum/license/provenance, six-RID artifact and Docker startup evidence.
@@ -39,7 +39,9 @@ The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment. Row 14 is Covered: existing mirror
 offsets, post-save notifications and executable-relative discovery match the
 upstream corrections; the channel-save regression covers normal and preview
-consumers without rebuilding persisted schedules.
+consumers without rebuilding persisted schedules. Row 15 is Covered by existing
+macOS RID mapping and executable-adjacent archive staging; packaging fixtures
+pass, while active macOS release/native-runtime proof remains open.
 UCU-01 and UCU-02 own their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows

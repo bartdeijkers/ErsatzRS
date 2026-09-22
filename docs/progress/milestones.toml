@@ -6506,6 +6506,37 @@ Web all-target Clippy passes after changing the test observer's fixed channel
 number return to a static string reference; the initial run reported only that
 literal-lifetime lint. No production code changed during this correction.
 
+2026-09-23 row 15 review (f7853e80, #2856): Covered. The full upstream diff is
+14 added lines in artifacts.yml only; no tests, runtime or changelog changes.
+It downloads the Next macos-x64/macos-arm64 artifact, extracts the channel binary
+into the macOS app's Contents/MacOS directory, sets execute permission and cleans
+its download directories before the existing signing step.
+Native source map: release.yml's Stage archive invokes stage-next.py for each
+RID and moves only ersatztv-channel beside ersatzrs-web before creating the
+archive. stage-next.py already maps osx-x64/osx-arm64 to macos-x64/macos-arm64,
+verifies artifact size/SHA-256, requires the exact binary, sets mode 0755 and
+retains LICENSE/origin.json. The executable-relative lookup reviewed in row 14
+uses that sibling location. ErsatzRS ships portable archives rather than the
+upstream .app; this row adds no new archive architecture or signing contract.
+
+All six existing offline staging regressions pass, including both macOS RIDs.
+The actual Bash relocation/archive fragment extracted from release.yml passes
+for both macOS RIDs with synthetic artifacts: the tar member has execute bits,
+sits beside the host, retains next/LICENSE and next/origin.json, and excludes
+unused Next executables. This proves packaging layout only, not Mach-O execution,
+code signing or a published macOS release. The active matrix intentionally omits
+macOS for the current release line (docs/how-to/publish-release.md); that existing
+restriction is not reclassified as native-platform acceptance. Full Next platform
+proof remains open in the owning debt. No production/workflow edits are required;
+prior runtime, browser and Clippy evidence is unchanged. Fresh fetch confirms the
+169-row target ee038ba4 and exact ledger SHA/subject agreement. Land row 15 with
+the pin, then align upstream checkout: 15 reconciled / 154 pending; next row 16.
+
+The maintainer's clarified goal authorizes milestone-boundary push and green
+exact-SHA CI for UCU-03 through UCU-09. Run local gates first, push the candidate,
+resolve CI failures and verify its terminal success before milestone completion.
+This supersedes further CI-permission requests for these windows, not their gates.
+
 """
 
 [[milestone]]
@@ -6549,8 +6580,9 @@ deferrals are included. Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
-TSDuck passes if the pipeline changed. Require green exact-SHA CI through
-separate authorization; never launch CI as part of a one-commit task.
+TSDuck passes if the pipeline changed. After local acceptance, push to remote
+main and require terminal green exact-SHA CI under the maintainer authorization
+for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
@@ -6573,8 +6605,9 @@ deferrals are included. Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
-TSDuck passes if the pipeline changed. Require green exact-SHA CI through
-separate authorization; never launch CI as part of a one-commit task.
+TSDuck passes if the pipeline changed. After local acceptance, push to remote
+main and require terminal green exact-SHA CI under the maintainer authorization
+for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
@@ -6597,8 +6630,9 @@ deferrals are included. Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
-TSDuck passes if the pipeline changed. Require green exact-SHA CI through
-separate authorization; never launch CI as part of a one-commit task.
+TSDuck passes if the pipeline changed. After local acceptance, push to remote
+main and require terminal green exact-SHA CI under the maintainer authorization
+for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
@@ -6621,8 +6655,9 @@ deferrals are included. Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
-TSDuck passes if the pipeline changed. Require green exact-SHA CI through
-separate authorization; never launch CI as part of a one-commit task.
+TSDuck passes if the pipeline changed. After local acceptance, push to remote
+main and require terminal green exact-SHA CI under the maintainer authorization
+for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
@@ -6645,8 +6680,9 @@ deferrals are included. Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
-TSDuck passes if the pipeline changed. Require green exact-SHA CI through
-separate authorization; never launch CI as part of a one-commit task.
+TSDuck passes if the pipeline changed. After local acceptance, push to remote
+main and require terminal green exact-SHA CI under the maintainer authorization
+for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
@@ -6669,8 +6705,9 @@ deferrals are included. Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
-TSDuck passes if the pipeline changed. Require green exact-SHA CI through
-separate authorization; never launch CI as part of a one-commit task.
+TSDuck passes if the pipeline changed. After local acceptance, push to remote
+main and require terminal green exact-SHA CI under the maintainer authorization
+for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 Every row through the latest fetched upstream tip is justified (162 at the
 2026-09-19 bootstrap).
