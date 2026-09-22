@@ -61,6 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22: UCU-01 row 9 (74a21abd) is Covered: it removes only the
+invalid upstream workflow line excluded during row 8. Continue at row 10
+(a74896df), then require the full UCU-01 window gates and authorized exact-SHA CI.
+
 2026-09-22: UCU-01 row 8 (30c361db) ports channel-only Next packaging
 beside the server executable. Six-RID fixtures, archive relocation and Docker
 packaging/startup checks pass. Continue at row 9 (74a21abd); Next playback

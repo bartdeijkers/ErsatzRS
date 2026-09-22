@@ -1,6 +1,6 @@
 <!--
 generated: 2026-09-22
-parity_baseline_commit: 30c361db49c8f6c6f1b55f24fb24770ea9c0b31d
+parity_baseline_commit: 74a21abdba5e300ed3ebe4fdf4106d455556e68a
 generator: reviewed catch-up pin advancement
 rules: docs/automation/gap-prompt-rules.md
 -->
@@ -20,8 +20,8 @@ front-matter value is a generated checkpoint, not permission to reset a newer pi
 ### Workflow
 
 Follow AGENTS.md and `plans/upstream-catch-up.md`. Fully reconcile exactly the
-first pending ledger row without stopgaps; the current candidate is 74a21abd,
-`fix workflow`. This is an explicitly authorized
+first pending ledger row without stopgaps; the current candidate is a74896df,
+`prep for release v26.4.0 [no ci]`. This is an explicitly authorized
 post-pin catch-up task, not an ordinary pinned-baseline parity gap.
 
 ### Before editing

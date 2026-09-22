@@ -5917,6 +5917,28 @@ checks and exact-SHA CI remain open. Landing subject:
 build(release): bundle only the Next channel executable.
 Pin/ledger advance together to 30c361db, then upstream checkout and agreement
 verification. Next pending row: 74a21abd, fix workflow.
+
+2026-09-22 row 9: 74a21abdba5e300ed3ebe4fdf4106d455556e68a,
+fix workflow. Before advancing, pin/row/upstream HEAD agree at 30c361db;
+AMM-N-03 and UCU-00 remain Complete. Fetch retains target 55885508 and all
+168 ledger SHA/subjects match the upstream log.
+Source map: artifacts.yml deletes only the final unindented 'ease upload' line.
+Full diff and adjacent Windows publication step reviewed; exact parent/current
+line comparison proves the remaining file is identical. No tests, changelog,
+permissions, product behavior or other workflow change occurs in this row.
+Native mapping: row 8 explicitly rejected this malformed line while porting
+channel-only packaging. No native workflow contains it. The row-8 actionlint
+syntax/expression evidence remains valid because workflow code is unchanged.
+Verdict Covered, owner upstream-baseline-catch-up. Direct Codex review confirms
+that the repair is already present by omission of the upstream defect, with no
+serious actionable native finding. No ADR exemption or future supersession is
+used. No product edit or new hosted-workflow execution is needed.
+Documentation only; affected-checks selects progress validation, progress check
+and git diff --check pass. Landing subject:
+docs(porting): reconcile upstream workflow syntax repair.
+Pin and ledger advance together to 74a21abd, then upstream checkout and
+agreement verification. Next pending row a74896df closes this release window;
+full UCU-01 gates and separately authorized exact-SHA CI remain required.
 """
 
 [[milestone]]
