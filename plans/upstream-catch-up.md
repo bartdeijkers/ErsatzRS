@@ -33,6 +33,12 @@ review agents are required. Earlier review attempts remain historical evidence.
 On 2026-09-22 the maintainer authorized the prepared first local commit and
 subsequent individually reviewed local UCU steps. This satisfies step 8 local
 commit authorization; push, CI dispatch and release tagging remain separate.
+The maintainer amended the CI cadence on 2026-09-22: skip individual CI runs
+for UCU-01 and UCU-02. Their local gates and ordered row reviews still apply;
+continue to the next window once those are complete. Run the first consolidated
+exact-SHA CI after UCU-03 smoke; that CI checkpoint is explicitly authorized.
+This supersedes the separate-CI requirement for these two windows only.
+
 Before selecting or processing row 1, AMM-N-03 must be accepted and ucu-00
 closed against its recorded criteria. A documentation checkpoint does not
 satisfy that prerequisite or authorize a later implementation commit.
@@ -81,7 +87,9 @@ satisfy that prerequisite or authorize a later implementation commit.
    resolve it with `git log --grep` when reading the ledger.
    Then `git -C "$ERSATZTV_SRC" checkout <sha>`. Stop after one row; no batching
    during this task, no push, CI dispatch or release tagging.
-9. At a milestone boundary, run its full acceptance gates. Required exact-SHA
+9. At a milestone boundary, run its acceptance gates with the CI cadence
+   amendment above: UCU-01/UCU-02 close locally; the first CI follows UCU-03
+   smoke and is authorized. For subsequent windows, required exact-SHA
    CI remains a blocker until separately authorized and green; do not dispatch
    it or mark Complete under this task. Record evidence and a progress session.
 10. Report upstream SHA/subject, verdict and rationale, changed files, evidence,

@@ -21,7 +21,8 @@ front-matter value is a generated checkpoint, not permission to reset a newer pi
 
 Follow AGENTS.md and `plans/upstream-catch-up.md`. Complete UCU-01 acceptance through `a74896df` before processing the first
 pending row (`ea4d3b65`, UCU-02). Run the recorded full-window gates; exact-SHA
-CI requires separate authorization. Only after UCU-01 is Complete may the
+CI is deferred to the authorized checkpoint after UCU-03 smoke.
+Only after UCU-01 is locally Complete may the
 next one-row post-pin catch-up task begin.
 
 ### Before editing

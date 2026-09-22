@@ -35,7 +35,9 @@ release section when tagging a release.
   teletext. Keep the current parity pin unchanged during
   bootstrap. Revise ADR 0095 after rejection of its native-only proposal;
   accept Next as an optional second engine alongside the native pipeline.
-  Engine integration and playback acceptance remain open.
+  Engine integration and playback acceptance remain open. Defer the first
+  consolidated upstream catch-up CI checkpoint until after UCU-03 smoke,
+  retaining local acceptance gates for UCU-01 and UCU-02.
   Complete UCU-00 bootstrap acceptance after AMM-N-03, then reconcile the
   upstream Legacy rename (ErsatzTV PR #2842) with source evidence and advance
   the parity pin through reviewed steps, including the .NET-only dependency

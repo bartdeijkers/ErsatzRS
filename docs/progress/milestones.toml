@@ -5649,8 +5649,10 @@ deferrals are included. Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
-TSDuck passes if the pipeline changed. Require green exact-SHA CI through
-separate authorization; never launch CI as part of a one-commit task.
+TSDuck passes if the pipeline changed. Per maintainer decision on 2026-09-22,
+CI for this window is deferred to the first consolidated exact-SHA CI after
+UCU-03 smoke. This milestone may close on its required local acceptance
+evidence and ordered ledger review without a separate CI run.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
@@ -5964,6 +5966,29 @@ In progress: workspace Clippy, test-closeout, Leptos build, parity-check, smoke
 and separately authorized exact-SHA CI still require window-close evidence.
 No FFmpeg/pipeline code changed in this window, so conditional TSDuck is not
 triggered. Next pending row ea4d3b65 belongs to UCU-02 and must wait for UCU-01.
+
+2026-09-22 window acceptance in progress on product tree 75451df7:
+CARGO_BUILD_JOBS=8 cargo clippy --workspace --all-targets -- -D warnings passes
+(2m48s). The existing proc-macro-error2 future-incompatibility notice remains a
+warning about a future Rust version, not a current Clippy failure. Pin, row 10
+and upstream HEAD agree at a74896df after landing; worktree was clean at test
+start. The first canonical ./run.sh test-closeout attempt completed with
+2795 passing, 44 failing and 37 skipped tests: inspected failures could not
+bind localhost mock servers inside the sandbox (Operation not permitted).
+This is not acceptance. The same unmodified test-closeout command passes
+with localhost permitted: all 2839 executed tests pass (37 configured skips),
+then Cargo doctests pass; the wrapper exits zero. cargo leptos build in the
+web crate passes, including WASM/JS generation and the SSR server binary.
+The target cache exceeded 40 GiB during these gates; cleanup is applied only
+after the running build completes, per repository policy. parity-check, smoke
+and exact-SHA CI remain open.
+
+2026-09-22 maintainer amendment: defer individual UCU-01 and UCU-02 CI gates
+and continue through UCU-03 once each window's local acceptance is proven.
+The first consolidated exact-SHA CI is explicitly authorized after UCU-03
+smoke; it remains required for UCU-03 closure. Earlier evidence describing
+separate CI as a UCU-01 blocker is superseded by this decision. Local gates,
+per-row review, ordered pin advancement and playback acceptance are unchanged.
 """
 
 [[milestone]]
@@ -5982,8 +6007,10 @@ deferrals are included. Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
-TSDuck passes if the pipeline changed. Require green exact-SHA CI through
-separate authorization; never launch CI as part of a one-commit task.
+TSDuck passes if the pipeline changed. Per maintainer decision on 2026-09-22,
+CI for this window is deferred to the first consolidated exact-SHA CI after
+UCU-03 smoke. This milestone may close on its required local acceptance
+evidence and ordered ledger review without a separate CI run.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
@@ -6006,8 +6033,9 @@ deferrals are included. Preserve
 subtitle and alternate-audio parity. Focused checks and substantive Codex review
 pass per row. At window close, workspace Clippy, ./run.sh test-closeout,
 cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
-TSDuck passes if the pipeline changed. Require green exact-SHA CI through
-separate authorization; never launch CI as part of a one-commit task.
+TSDuck passes if the pipeline changed. After the UCU-03 smoke gate, run the
+first consolidated exact-SHA CI for UCU-01 through UCU-03. The maintainer
+authorized this CI checkpoint on 2026-09-22; it must be green before closeout.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """

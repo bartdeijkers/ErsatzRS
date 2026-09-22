@@ -61,6 +61,10 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22 maintainer amendment: defer UCU-01/UCU-02 CI to the first
+consolidated, explicitly authorized exact-SHA CI after UCU-03 smoke. Continue
+through UCU-02/UCU-03 after each preceding window meets its local gates.
+
 2026-09-22: UCU-01 row 10 (a74896df) is N/A for upstream changelog
 publication. All ten window rows are reconciled; full-window local checks and
 separately authorized exact-SHA CI remain required before UCU-02 can start.
