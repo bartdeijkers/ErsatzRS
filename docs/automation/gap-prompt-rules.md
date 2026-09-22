@@ -1,8 +1,8 @@
 # Gap goal-prompt rules
 
-This is the **contract** for the three goal-prompts written into
-[`docs/top-three-gaps-to-fill-prompts.md`](../top-three-gaps-to-fill-prompts.md)
-by the [daily progress routine](daily-progress-routine.md). A goal-prompt is a
+This is the **contract** for the three goal-prompts reported in the output of
+the [daily progress routine](daily-progress-routine.md). Do not persist a
+generated prompt file. A goal-prompt is a
 self-contained instruction that a fresh agent can paste and run to close exactly
 one **chore** end-to-end, where a chore is one of:
 
@@ -14,8 +14,8 @@ one **chore** end-to-end, where a chore is one of:
   an open `phase.toml` `next_steps` / `known_todo` item.
 
 The three prompts always describe the **top three most important chores the
-specs say still need doing**, ranked by the selection rules below. The file is
-empty of actionable prompts **only** when every one of those spec sources is
+specs say still need doing**, ranked by the selection rules below. The report contains
+no actionable prompts **only** when every one of those spec sources is
 exhausted — not merely when `cargo xtask progress gaps` is clear (it goes clear
 long before the specs are fully implemented, because it only inspects
 whole-feature parity status). [`prompt.md`](../../prompt.md) at the repo root is

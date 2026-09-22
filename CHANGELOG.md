@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Report daily gap goal-prompts in routine output instead of maintaining a
+  generated prompt file; use reconciliation commits to track the change window.
+
 - Raise the local `target/` `cargo clean` threshold from 40 GiB to 60 GiB in
   the build policy and in the `./run.sh` and `cargo xtask` size warnings
   (still overridable with `ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB`).
@@ -43,6 +46,8 @@ release section when tagging a release.
   channel previews with browser-compatible H.264/AAC and independent capacity
   and cleanup; forward playout rebuilds to preview-only sessions as well. Provider and
   graphics projection, complete HTTP playback and platform acceptance remain open.
+  Publish continued schedules to active Next channels and mirrors while preserving
+  native playback continuity (upstream PR #2854).
   Add a separate Next engine check inside CI, with runtime provenance, decoded
   playback tests and HTTP/preview smoke diagnostics.
   Remove the obsolete MySQL migration-directory build watch to prevent

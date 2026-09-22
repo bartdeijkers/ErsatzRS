@@ -6436,6 +6436,38 @@ remain assigned to their later ordered rows (20 and 26/27), with no completion o
 permanent exclusion claimed here. Window/browser/platform gates remain explicit.
 Pin/ledger/upstream checkout remain ddc8ef7f; this is a reviewed local checkpoint.
 
+2026-09-22 row 13 final review and landing: Adapt (ADR 0095). The remaining
+Continue finding is corrected: after successful schedule persistence, dependent
+Next source/mirror channels receive publication notifications, forwarded through
+the existing registry to preview-only sessions. Native Continue still reads
+appended database rows without a playback restart; Refresh/Reset notification
+semantics remain unchanged. The production-build regression actually extends
+the schedule twice, covers native-source/Next-mirror and Next-source/native-mirror
+combinations, excludes unrelated Next channels, and checks that existing future
+item IDs, media and timestamps remain unchanged. All 17 maintenance integration
+tests pass; infra all-target Clippy with -D warnings and formatting pass.
+
+Renewed Linux playback proof after the correction: Next smoke returns normal
+and preview HTTP 200 segments of 644840 and 654052 bytes, validates TS packet
+alignment/sync, rejects MPEG-TS with 404 and removes both outputs after idle.
+Native HLS lifecycle smoke returns a 5192748-byte segment, removes its output,
+restarts via MPEG-TS with an 8192-byte body and removes output again. Both commands
+exit 0. Reuse dd3e9b2c's unchanged 40-test real-engine selection, decoded alternate
+audio/subtitle and silence proof, runtime provenance and route/token regressions.
+The source audit maps all row-13 boundaries to the checkpoints above; the accepted
+adaptation replaces Unix-only symlink publication and upstream process handling
+with portable atomic publication and bounded managed supervision. No unresolved
+serious finding remains for this initial local-video integration. This does not
+accept provider/watermark capabilities (later ordered rows 20 and 26/27), full
+browser/platform playback or the UCU-02 window. Those gates and optional-engine
+debt remain open. No CI run is claimed or dispatched.
+
+A fresh upstream fetch confirms the 169-row target ee038ba4; every SHA/subject
+matches the generated reverse log. Land row 13 and the pin together, then set
+upstream HEAD to 2ed432f9: 13 reconciled / 156 pending. Next is row 14 (4ee97d5b).
+The maintainer removed the generated top-three gap prompt file; automation now
+reports prompts in its output and cannot regenerate that file on pin advancement.
+
 """
 
 [[milestone]]
@@ -6592,7 +6624,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through 55885508 (latest fetched tip) in order,
+Process every ledger row in this release window through ee038ba4 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve
@@ -6612,4 +6644,7 @@ and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """
 Not started. All window rows remain pending; no implementation or gate evidence claimed.
+2026-09-22 refresh appends row 169 (ee038ba4, Next engine rotation) after verifying
+that the existing 168-row ledger is an exact prefix and 55885508 is an ancestor.
+This refresh changes the target only, not the processed pin.
 """

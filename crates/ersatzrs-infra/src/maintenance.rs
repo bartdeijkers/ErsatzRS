@@ -15,7 +15,9 @@ use ersatzrs_core::scheduling::{
     PlayoutBuildRequest, SchedulingError, SchedulingReferenceData, SchedulingRequest,
     SchedulingResult,
 };
-use ersatzrs_domain::{ChannelPlayoutMode, EntityId, PlayoutBuildStatus, PlayoutScheduleKind};
+use ersatzrs_domain::{
+    ChannelPlayoutMode, EntityId, PlayoutBuildStatus, PlayoutScheduleKind, StreamingEngine,
+};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Row};
@@ -617,9 +619,9 @@ async fn build_playout(
     })?;
     log_build_warnings(playout_id, &result);
     let channel_info = load_playout_channel_info(pool, playout.channel_id).await?;
-    let should_notify_segmenter = mode != PlayoutBuildMode::Continue
-        && (scheduling_result_has_persisted_changes(&result)
-            || channel_info.playout_mode == ChannelPlayoutMode::OnDemand);
+    let should_notify_segmenter = scheduling_result_has_persisted_changes(&result)
+        || (mode != PlayoutBuildMode::Continue
+            && channel_info.playout_mode == ChannelPlayoutMode::OnDemand);
     repository
         .apply_build_result(&result, &playout, max_playout_offset)
         .await?;
@@ -639,14 +641,16 @@ async fn build_playout(
             "embedded subtitle extraction failed after playout build"
         );
     }
+    // Native Continue reads appended rows directly and must not restart playback.
+    // Next owns a published snapshot, including when only a mirror uses Next.
     if should_notify_segmenter {
-        if let Some(hls_sessions) = hls_sessions {
-            for channel_number in
-                load_playout_dependent_channel_numbers(pool, playout.channel_id).await?
-            {
-                hls_sessions.playout_updated(&channel_number).await;
-            }
-        }
+        notify_playout_channels(
+            pool,
+            playout.channel_id,
+            mode == PlayoutBuildMode::Continue,
+            hls_sessions,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -784,18 +788,38 @@ async fn load_max_mirror_playout_offset(
     Ok(maximum)
 }
 
+async fn notify_playout_channels(
+    pool: &Pool<Db>,
+    source_channel_id: EntityId,
+    next_only: bool,
+    hls_sessions: Option<&dyn HlsSessionRegistry>,
+) -> Result<()> {
+    if let Some(registry) = hls_sessions {
+        for number in
+            load_playout_dependent_channel_numbers(pool, source_channel_id, next_only).await?
+        {
+            registry.playout_updated(&number).await;
+        }
+    }
+    Ok(())
+}
+
 async fn load_playout_dependent_channel_numbers(
     pool: &Pool<Db>,
     source_channel_id: EntityId,
+    next_only: bool,
 ) -> Result<Vec<String>> {
     Ok(sqlx::query_scalar::<_, Option<String>>(
         r#"SELECT "Number" FROM "Channel"
-           WHERE "Id" = ?
-              OR ("PlayoutSource" = 1 AND "MirrorSourceChannelId" = ?)
+           WHERE ("Id" = ?
+              OR ("PlayoutSource" = 1 AND "MirrorSourceChannelId" = ?))
+             AND (? = 0 OR "StreamingEngine" = ?)
            ORDER BY "SortNumber", "Id""#,
     )
     .bind(source_channel_id)
     .bind(source_channel_id)
+    .bind(next_only)
+    .bind(StreamingEngine::Next as i32)
     .fetch_all(pool)
     .await?
     .into_iter()

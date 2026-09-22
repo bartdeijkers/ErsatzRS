@@ -7,7 +7,7 @@ use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry};
 use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_core::maintenance::{ScheduledLibraryScanRequester, ScheduledScanRequestOutcome};
-use ersatzrs_core::repositories::ProgramScheduleRepository;
+use ersatzrs_core::repositories::{PlayoutRepository, ProgramScheduleRepository};
 use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
 use ersatzrs_domain::{
     ChannelSubtitleMode, CollectionType, PlaybackOrder, PlayoutMode, ProgramScheduleItem,
@@ -441,6 +441,90 @@ async fn refresh_and_continue_builds_preserve_playout_seed() {
         assert_eq!(
             seed, 12345,
             "{mode:?} must not change the playout seed, only Reset should"
+        );
+    }
+}
+
+#[tokio::test]
+async fn continue_notifies_only_dependent_next_channels_after_extending_persisted_items() {
+    let pool = common::test_db().await;
+    let repos = make_repositories(pool.clone());
+    for id in 1..=3 {
+        common::seed_profile_and_channel(&repos, id).await;
+    }
+    seed_refresh_rebuild_fixture(&pool, &repos).await;
+    pool.execute(r#"UPDATE "Channel" SET "PlayoutSource"=1, "MirrorSourceChannelId"=1, "StreamingEngine"=1 WHERE "Id"=2"#).await.unwrap();
+    pool.execute(r#"UPDATE "Channel" SET "StreamingEngine"=1 WHERE "Id"=3"#)
+        .await
+        .unwrap();
+    let now = Utc.with_ymd_and_hms(2026, 4, 15, 10, 0, 0).unwrap();
+    let locker = EntityLocker::new();
+    run_requested_playout_build(
+        &pool,
+        &locker,
+        PlayoutBuildRequest {
+            playout_id: 88,
+            mode: PlayoutBuildMode::Reset,
+        },
+        now,
+        None,
+    )
+    .await
+    .unwrap();
+    let registry = FakeHlsRegistry::default();
+    for (day, expected) in [(1, "2"), (2, "1")] {
+        if day == 2 {
+            pool.execute(r#"UPDATE "Channel" SET "StreamingEngine"=CASE WHEN "Id"=1 THEN 1 ELSE 0 END WHERE "Id" IN (1,2)"#).await.unwrap();
+        }
+        let continuation = now + Duration::days(day);
+        let previous = repos
+            .playout
+            .items_in_range(88, continuation, continuation + Duration::days(1))
+            .await
+            .unwrap();
+        assert!(!previous.is_empty());
+        let old_finish = previous.iter().map(|item| item.finish).max().unwrap();
+        registry.playout_updates.lock().unwrap().clear();
+        assert!(run_requested_playout_build(
+            &pool,
+            &locker,
+            PlayoutBuildRequest {
+                playout_id: 88,
+                mode: PlayoutBuildMode::Continue,
+            },
+            continuation,
+            Some(&registry)
+        )
+        .await
+        .unwrap());
+        assert_eq!(
+            *registry.playout_updates.lock().unwrap(),
+            vec![expected.to_owned()]
+        );
+        let preserved = repos
+            .playout
+            .items_in_range(88, continuation, old_finish)
+            .await
+            .unwrap();
+        assert_eq!(
+            previous
+                .iter()
+                .map(|item| (item.id, item.start, item.finish, item.media_item_id))
+                .collect::<Vec<_>>(),
+            preserved
+                .iter()
+                .map(|item| (item.id, item.start, item.finish, item.media_item_id))
+                .collect::<Vec<_>>(),
+            "Continue notifications must not rewrite already scheduled future items"
+        );
+        let extended = repos
+            .playout
+            .items_in_range(88, old_finish, continuation + Duration::days(2))
+            .await
+            .unwrap();
+        assert!(
+            extended.iter().any(|item| item.finish > old_finish),
+            "Continue must actually extend the persisted horizon"
         );
     }
 }

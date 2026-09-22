@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `ddc8ef7f02f0e7e80ba6aa73517e915f1aea0b31` |
-| **Commit subject** | `fix: add playout button should open drop down menu (#2853)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/ddc8ef7f02f0e7e80ba6aa73517e915f1aea0b31 |
+| **Pinned commit** | `2ed432f9b5379b2dc6ec5bdb6a7f775c2c50464a` |
+| **Commit subject** | `feat: enable ersatztv next streaming engine (#2854)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/2ed432f9b5379b2dc6ec5bdb6a7f775c2c50464a |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -48,9 +48,7 @@ Bumping the baseline is an explicit, reviewed action — never automatic:
 
 1. Edit the **Pinned commit** / **Commit subject** / **Commit URL** rows above to the new SHA.
 2. Re-run the routine; it will re-evaluate gaps against the new snapshot.
-3. Regenerate `docs/top-three-gaps-to-fill-prompts.md`; its
-   `parity_baseline_commit` front-matter caches this SHA.
-4. Record the bump in `docs/progress/sessions.ndjson`.
+3. Record the bump in `docs/progress/sessions.ndjson`.
 
 The Pin table is the only authoritative record of the current pin. Do not copy
 that value into rules, prompts, plans or parity records; reference the table
@@ -61,8 +59,8 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `558855083c7602b6f50ed63675ff61d1d325f98d` (fetched 2026-09-22),
-currently **168 commits** beyond the initial pin. Per the maintainer's
+The latest fetched target is `ee038ba460a237e277c2ed2fbb413bfac13795f8` (fetched 2026-09-22),
+currently **169 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original
 `495e3799` cutoff no longer limits scope. The latest fetched tip is the run's

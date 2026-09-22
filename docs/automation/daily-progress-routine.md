@@ -2,7 +2,7 @@
 
 This is the prompt run by the scheduled remote agent ("cloud loop") once per day
 against `bartdeijkers/ErsatzRS` `main`. It reconciles `docs/progress/` with what
-actually merged since the last run and regenerates the three gap goal-prompts.
+actually merged since the last run and reports the three gap goal-prompts in its output.
 Edit this file to change the routine's behavior; the schedule points at this
 contract.
 
@@ -12,10 +12,9 @@ contract.
   active plans, and open phase TODOs (see
   [gap-prompt-rules.md](gap-prompt-rules.md)). `cargo xtask progress gaps` is one
   input, not the only one; it goes clear long before the specs are fully built,
-  so an empty `gaps` query must **not** produce an empty prompt file.
-- **State:** the last processed commit is stored in the front-matter of
-  [`docs/top-three-gaps-to-fill-prompts.md`](../top-three-gaps-to-fill-prompts.md)
-  (`last_processed_commit`). That is the "since last check" marker.
+  so an empty `gaps` query must **not** produce an empty gap report.
+- **State:** the latest daily reconciliation commit is the "since last check"
+  marker. Generated goal-prompts are reported in the routine output only.
 - **Parity baseline:** ErsatzTV parity-porting gaps are measured **only** against
   the pinned ErsatzTV commit in [`parity-baseline.md`](parity-baseline.md).
   Upstream ErsatzTV work after that commit is out of scope until the pin is
@@ -38,7 +37,7 @@ You are maintaining ErsatzRS porting progress. Work only in this repo's docs;
 do **not** change Rust/source code. Follow `AGENTS.md`.
 
 > **Hard guardrail — no-op when nothing changed.** If `main` has **no new
-> commits** since `last_processed_commit`, make **zero** edits, write **nothing**,
+> commits** since the last daily reconciliation commit, make **zero** edits, write **nothing**,
 > create **no** commit, report "no changes since `<baseline>`", and stop. The
 > routine must never produce an empty/no-op commit or rewrite the gap prompts
 > when the change window is empty.
@@ -47,10 +46,10 @@ do **not** change Rust/source code. Follow `AGENTS.md`.
 
 1. Ensure you are on `main` and up to date (`git fetch origin && git checkout
    main && git pull --ff-only`).
-2. Read `last_processed_commit` from the front-matter of
-   `docs/top-three-gaps-to-fill-prompts.md`. If the file or field is missing,
-   use the commit from 7 days ago (`git rev-list -1 --before='7 days ago' main`)
-   as the baseline.
+2. Find the latest reconciliation commit with
+   `git log -1 --format=%H --grep='^docs(status): daily reconcile' main`.
+   If none exists, use the commit from 7 days ago
+   (`git rev-list -1 --before='7 days ago' main`) as the baseline.
 3. Compute the change set: `git log --no-merges --stat <baseline>..HEAD`. If
    there are **no** new commits, make no edits, report "no changes since
    `<baseline>`", and stop without committing.
@@ -114,10 +113,11 @@ Be conservative: when a commit is ambiguous, leave status unchanged and note the
 uncertainty in the feature `summary` rather than guessing. Never invent a slug,
 path, or feature.
 
-### 3. Regenerate the three gap goal-prompts
+### 3. Report the three gap goal-prompts
 
-Rewrite `docs/top-three-gaps-to-fill-prompts.md` following
-`docs/automation/gap-prompt-rules.md` exactly:
+Prepare goal-prompts for the final routine output following
+`docs/automation/gap-prompt-rules.md` exactly. Do not create a generated prompt
+file:
 
 1. Build the candidate set by sweeping **every** spec source the rules file
    lists — do not stop when one comes back empty:
@@ -134,7 +134,7 @@ Rewrite `docs/top-three-gaps-to-fill-prompts.md` following
      `plans/INDEX.md`; small plans and deferred tooling live in progress TOMLs.
    - Open `phase.toml` `next_steps` items and `[[known_todo]]` notes.
    If the union of all of these is empty, the specs are fully implemented; only
-   then may the file carry fewer than three prompts. A clear `progress gaps`
+   then may the report carry fewer than three prompts. A clear `progress gaps`
    alone never justifies an empty file.
 2. Rank and pick the top three per the selection rules in the rules file.
    Apply the completed-scope rule first: a prior prompt whose feature is now
@@ -152,15 +152,16 @@ Rewrite `docs/top-three-gaps-to-fill-prompts.md` following
    pointer → before editing → implement → visual verification for UI →
    verification gates → reporting). Drop the visual sections for pure
    backend/pipeline gaps.
-6. Update the front-matter: set `generated` to today's date and
-   `last_processed_commit` to `HEAD` (`git rev-parse HEAD`).
+6. Include the evaluated `HEAD` (`git rev-parse HEAD`) in the report.
 
 ### 4. Validate and commit
 
 1. `cargo xtask progress check` — must pass. Fix any validation error you
    introduced before committing.
-2. Stage only `docs/` changes. Commit directly to `main`:
-   `docs(status): daily reconcile + refresh gap prompts (<baseline>..<head>)`.
+2. If reconciliation produced no documentation changes, report the selected
+   prompts without creating a commit. Otherwise stage only `docs/` changes
+   and commit directly to `main`:
+   `docs(status): daily reconcile (<baseline>..<head>)`.
    The scope must come from the `scope-enum` in `commitlint.config.cjs`
    (`progress` and `automation` are **not** valid scopes).
    End the commit message with the standard `Co-Authored-By` trailer.
@@ -168,7 +169,7 @@ Rewrite `docs/top-three-gaps-to-fill-prompts.md` following
    Amend the message if it does not.
 4. Push to `main`.
 5. Report: the change window, which parity files changed and how, the three
-   gaps selected (with the ranking reason), and the new `last_processed_commit`.
+   goal-prompts selected (with the ranking reason), and the evaluated commit.
 
 If `cargo xtask progress check` cannot be made to pass from docs-only edits,
 do **not** push — report the failure instead.

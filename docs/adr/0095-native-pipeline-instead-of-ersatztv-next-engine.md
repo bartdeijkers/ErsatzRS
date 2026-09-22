@@ -14,7 +14,8 @@ Partial — release and Docker packaging stage the upstream artifacts with
 checksum, license and provenance (UCU-01 row 4). UCU-02 row 11 adds persisted
 per-channel engine selection with retained native defaults and HLS Segmenter
 normalization for Next, verified through migration, repository and browser
-tests. Runtime supervision and Next playback acceptance remain open.
+tests. Initial local-video runtime supervision and served HLS have Linux proof
+(UCU-02 row 13); full Next playback and platform acceptance remain open.
 
 The UCU-02 row 13 infrastructure checkpoint adds executable discovery, typed
 JSON exchange and atomic complete-schedule publication. Profile conversion and
@@ -129,7 +130,7 @@ an audio input, pinned silence uses generated silent audio with a finite probe
 hint, following Next's own synthetic-input contract; it does not restore source
 audio. Sidecar and extracted subtitle paths use the existing native resolver,
 and item in/out points remain on the original media timeline. Prepared provider
-intervals, graphics/watermarks and schedule refresh still need integration.
+intervals and graphics/watermarks still need integration.
 
 Schedule loading reuses the canonical playout repository and shared scheduler
 locks, retaining one logical row per item and choosing its pinned version or the
@@ -154,7 +155,9 @@ whole engine session; native per-programme reclamation cannot pause this engine.
 Next previews reuse the native browser-compatible profile override without
 persisting it. Their output folder, registry and capacity key are independent
 from normal playback. Both sessions share the channel publisher; rebuild
-notifications reach previews even when normal playback is absent.
+notifications reach previews even when normal playback is absent. Continue
+builds notify dependent Next channels and mirrors after persistence; native
+sessions retain their existing continuation behavior without restart.
 HTTP master playlists force the Next HLS path and preserve existing token
 propagation. MPEG-TS requests are rejected, matching the upstream engine split.
 The health engine checks executable availability and profile compatibility only

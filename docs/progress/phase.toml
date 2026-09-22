@@ -81,11 +81,13 @@ refusal. Runtime/profile health checks are present. Next previews use H.264/AAC
 without changing the stored profile, with independent capacity and cleanup.
 Linux Next/native HTTP lifecycle smoke now passes, including complete TS segments,
 preview and idle cleanup. The existing CI has a separate Next engine job; its
-40-test selection passes locally, but no CI run is claimed. Next: publish Continue
-build additions to active Next consumers without changing native continuity.
-Authenticated/browser and platform acceptance remain open. Provider/graphics
-capabilities belong to later ordered rows; row 13 is not accepted yet.
-The upstream pin remains ddc8ef7f. The first consolidated
+40-test selection passes locally, but no CI run is claimed. Continue now notifies
+dependent Next channels after persisted schedule extension, preserving native
+continuity. Row 13 is accepted as Adapt (ADR 0095), with focused maintenance
+tests, Clippy and renewed Next/native HTTP lifecycle smoke. Next: review row 14
+(4ee97d5b), the upstream Next playout-building correction. Authenticated/browser
+and platform acceptance remain open; provider/graphics capabilities belong to
+later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 
 2026-09-22 maintainer amendment: defer UCU-01/UCU-02 CI to the first

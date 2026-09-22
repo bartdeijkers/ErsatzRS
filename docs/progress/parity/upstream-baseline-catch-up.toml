@@ -1,10 +1,10 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..55885508 (latest fetched target; refreshed each run)'
+etv_source = '$ERSATZTV_SRC: 0d301df5..ee038ba4 (latest fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 168 commits: twelve reconciled and 156 pending,
+The refreshed ledger registers 169 commits: thirteen reconciled and 156 pending,
 tracked by ucu-00 through ucu-09. Row 1 is Covered; row 2 ports the HDHomeRun repository-link correction.
 Row 3 is N/A for .NET-only dependency maintenance. Row 4 ports Next artifact
 bundling with checksum/license/provenance and Docker startup proof. Row 5 is
@@ -20,7 +20,7 @@ UCU-02 is In progress: row 11 ports persisted engine selection, retained native
 defaults, Next mode normalization and the localized SSR editor. Migration,
 repository/application and Chromium/Firefox tests pass, including no-JS forms.
 Row 12 is Covered: native menu/action bindings already work, verified with
-four focused Chromium/Firefox regressions. Row 13 is in progress: wire types,
+four focused Chromium/Firefox regressions. Row 13 is Adapt (ADR 0095): wire types,
 executable discovery, atomic publication, profile mapping and managed-process
 startup/stop have focused tests. Real Linux Next HLS proves the selected alternate
 audio and burned external subtitle. Database-backed item selection also proves
@@ -36,13 +36,14 @@ connected. Next previews use the browser-compatible profile override with separa
 capacity/output cleanup and shared rebuild publication. Real simultaneous normal
 AC3 and preview AAC output retains selected audio/subtitles and the stored profile.
 Linux Next/native HTTP lifecycle smoke and the dedicated CI job selection (40
-tests, run locally) pass. Continue-build publication still needs correction;
+tests, run locally) pass. Continue publishes appended schedules to dependent Next
+channels and previews while preserving native continuity;
 authenticated browser and platform proof remain open. Runtime/profile health
 checks cover enabled Next channels. Provider
 and graphics sources are explicitly refused until their projection is implemented.
 The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment.
-UCU-01 owns their evidence;
+UCU-01 and UCU-02 own their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows
 each run. The 2026-09-22 fetch adds six commits after the verified bootstrap prefix;
@@ -70,4 +71,4 @@ description = 'Implement Next as an optional second engine alongside the native 
 discovered  = '2026-09-22'
 resolved    = false
 adr         = '0095'
-evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication, authenticated browser and platform proof remain open. Provider/graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
+evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Provider/graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
