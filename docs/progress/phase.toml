@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22: UCU-01 row 3 (5d779635) is reviewed as N/A for .NET dependency
+maintenance. The milestone owns the exact-diff evidence. Next is row 4
+(47885758), Next artifact bundling under Accepted ADR 0095. Continue only
+after the row-3 local landing and pin/ledger/upstream HEAD agreement check.
+
 2026-09-22: UCU-01 row 2 (848db7ea) corrects HDHomeRun ManufacturerURL to the
 ErsatzRS repository. Four focused snapshots, scoped web Clippy and formatting
 pass; the milestone owns detailed evidence. Continue at row 3 (5d779635) after

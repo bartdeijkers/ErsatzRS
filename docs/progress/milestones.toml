@@ -5729,6 +5729,31 @@ claimed for this metadata-only row. Full-window gates remain open.
 Authorized landing subject: fix(web): correct HDHomeRun manufacturer repository link.
 Pin and ledger advance together to 848db7ea; move upstream HEAD after landing
 and verify all three agree. Next pending row: 5d779635 (#2849).
+
+2026-09-22 row 3: 5d77963575e23330e405fb5206eb3316563a59fc,
+update last dependencies (#2849). Refreshed upstream without moving HEAD;
+the target remains 55885508 and all 168 ledger SHA/subjects still match.
+Before editing, pin, last landed row and upstream HEAD agree at 848db7ea.
+Source map: Core/ErsatzTV.Core.csproj upgrades YamlDotNet 16.3.0 to 17.0.1;
+Infrastructure/ErsatzTV.Infrastructure.csproj upgrades Refit, Refit.Newtonsoft.Json
+and Refit.Xml 9.0.2 to 10.1.6; ErsatzTV/ErsatzTV.csproj upgrades
+Refit.HttpClientFactory to 10.1.6. Full diff and surrounding project files
+reviewed. XML comparison confirms these five Version attributes are the only
+changes across all three files; no source, tests, CHANGELOG, schemas or runtime
+configuration changes are included. Native core/infra/web Cargo manifests use
+serde_yaml, reqwest and quick-xml, not these .NET packages. This is not a claim
+that the libraries have identical semantics; no corresponding native dependency
+upgrade or behavioral correction is specified by this upstream row.
+Verdict: N/A (upstream tooling), owner upstream-baseline-catch-up. Direct Codex
+review found no mixed behavioral hunk or actionable serious omission. ADR 0095
+is not used as an exemption. No Rust, dependencies, browser, playback or health
+code changes; affected-checks selects progress validation without a product
+rebuild. cargo xtask progress check and git diff --check pass.
+Landing subject: docs(porting): reconcile upstream dependency maintenance.
+Pin and ledger advance together to 5d779635, followed by upstream checkout and
+agreement verification. Next pending row is 47885758, bundle ersatztv next
+artifacts (#2850); it requires review under the optional-second-engine decision.
+UCU-01 remains In progress with full-window gates and exact-SHA CI still open.
 """
 
 [[milestone]]

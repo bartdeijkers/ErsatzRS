@@ -33,7 +33,8 @@ release section when tagging a release.
   Engine integration and playback acceptance remain open.
   Complete UCU-00 bootstrap acceptance after AMM-N-03, then reconcile the
   upstream Legacy rename (ErsatzTV PR #2842) with source evidence and advance
-  the parity pin one reviewed step.
+  the parity pin through reviewed steps, including the .NET-only dependency
+  maintenance in ErsatzTV PR #2849.
   Use substantive Codex review for catch-up; retain AMM-N-03 acceptance as the
   prerequisite for the first upstream step.
 
