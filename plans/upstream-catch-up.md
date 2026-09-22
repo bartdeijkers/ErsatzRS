@@ -141,6 +141,9 @@ silence track. Wire-model renames consolidate shared and per-track sources.
   opening an item and the Plex handler can select a new reachable connection.
   The checkpoint resolves connection values at publication instead. Complete
   that behavior and its acceptance before marking this row reconciled.
+  `next_engine/connections.rs` now provides identity-verified, bounded Plex
+  selection and transactional activation, with cache invalidation and focused
+  tests. The media-open integration still needs to call it outside build locks.
 - Side effects and evidence: keep complete atomic schedule publication,
   mirror timing, exact stream pins, redacted errors, session ownership and
   cancellation. Test overlapping paths across servers, selected file/version

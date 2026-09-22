@@ -6768,6 +6768,48 @@ and provider-reader visibility adjustments. Progress validation, formatting,
 diff checks and substantive source/test review pass. This is an authorized
 local engineering checkpoint, not row-20 or UCU-02 completion.
 
+Row 20 connection-selector checkpoint: read GetPlexConnectionParametersHandler,
+PlexBaseConnectionHandler, PlexServerApiClient.Ping and IPlexServerApi at the
+pending upstream revision. Ping GETs the configured server root and accepts
+only a MediaContainer with the configured machine identifier, not any HTTP 200.
+The existing upstream fallback persists a selected connection but returns its
+unchanged None result; native selection must actually return the verified
+connection so the current media-open request can recover.
+
+next_engine/connections.rs provides the bounded selector for the forthcoming
+media-open adapter. It prefers a verified active connection, then probes the
+remaining candidates with concurrency four and five-second request timeouts.
+A caller deadline bounds gate acquisition, database work, probes and activation;
+cancelling the request drops pending probes rather than detaching work. Identity
+responses are limited to 64 KiB; redirects and malformed/wrong-server XML fail.
+Diagnostics contain only static stage labels. A per-source discovery gate and
+30-second success cache coalesce concurrent opens. Every call reloads identity,
+connection rows and scoped credentials before reusing that cache, so changes
+invalidate it immediately. Activation uses one SQLite transaction, fenced by
+source ID, connection ID, URI and machine identifier; an edited/deleted probe
+target is rejected. Failed discovery leaves the prior active selection intact.
+
+Seven focused connections tests pass (1.112 seconds) through ./run.sh test -p
+ersatzrs-infra --lib next_engine::connections::. They prove shared successful
+probes, wrong-server failover, credential/address invalidation, malformed and
+oversized identity refusal, expired deadlines and changed-target fencing,
+redirect refusal, recovery with no active connection, and recovery after a
+bounded slow-response timeout. The first attempt could not bind localhost in
+the sandbox; the same tests pass with sockets permitted. Test credentials and
+media/server identities are synthetic placeholders only.
+
+This component is not yet called by production playback: publication still
+uses the previous direct HTTP projection. Next action remains the authenticated
+media-open integration, using current connection resolution and this selector
+outside schedule/build locks, followed by endpoint and decoded playback proof.
+Do not infer live failover from isolated selector tests or move the upstream pin.
+Infra all-target Clippy passes with -D warnings (40.47 seconds). Direct Codex
+review confirms that no probe can activate a different source/URI/identity and
+that timeout/cancellation releases the source gate. Runtime smoke is not rerun
+for this unconnected component; the earlier d69d04fa playback evidence remains
+valid, and new smoke is required after media-open integration.
+Row 20 remains pending, UCU-02 In progress, with 19 reconciled / 150 pending.
+
 """
 
 [[milestone]]

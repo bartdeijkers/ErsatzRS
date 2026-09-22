@@ -93,7 +93,8 @@ atomic Next JSON publication on Windows/NTFS, including sharing-denial recovery.
 Row 19 is Covered by existing immediate Next-to-Segmenter editor normalization.
 Row 20 (bb493670) now has scoped local paths and authenticated HTTP sources
 for Plex/Jellyfin/Emby, with decoded synthetic-server playback proof. Next:
-reconcile late connection resolution and Plex failover before accepting the row.
+connect late media-open resolution to the tested bounded Plex selector, then
+verify endpoint behavior and decoded failover before accepting the row.
 Authenticated/browser and platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

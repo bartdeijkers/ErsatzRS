@@ -210,7 +210,7 @@ fn http_source(uri: &Url, header: String) -> Result<Source> {
 // The administration contract also supports one legacy global credential.
 // Never apply that fallback to one of several configured servers. In particular,
 // a global Jellyfin Authorization value must not override a source-specific key.
-async fn scoped_credential(
+pub(super) async fn scoped_credential(
     pool: &DbPool,
     kind: RemoteMediaSourceKind,
     keys: &[String],
@@ -268,7 +268,7 @@ async fn provider_item_id(pool: &DbPool, id: i64, kind: RemoteMediaSourceKind) -
     }
 }
 
-fn server_url(address: &str) -> Result<Url> {
+pub(super) fn server_url(address: &str) -> Result<Url> {
     let url = Url::parse(address).map_err(|_| unavailable("invalid media-server address"))?;
     if !matches!(url.scheme(), "http" | "https")
         || url.host_str().is_none()

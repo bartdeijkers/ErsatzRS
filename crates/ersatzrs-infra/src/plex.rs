@@ -3269,7 +3269,7 @@ pub async fn sync_collections_for_media_source(
     Ok(total)
 }
 
-async fn load_plex_token(pool: &DbPool, client_identifier: &str) -> Result<String> {
+pub(crate) async fn load_plex_token(pool: &DbPool, client_identifier: &str) -> Result<String> {
     for key in &[
         format!("{PLEX_SERVER_AUTH_TOKEN_PREFIX}{client_identifier}"),
         PLEX_CURRENT_SERVER_AUTH_TOKEN_KEY.to_owned(),
