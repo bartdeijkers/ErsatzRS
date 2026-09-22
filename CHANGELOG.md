@@ -26,9 +26,14 @@ release section when tagging a release.
   provider, preserving settings and enabled state. Complete AMM-N-03 with the
   accepted Windows v1.0.37-beta archive and identical verified public download.
 - Track upstream ErsatzTV catch-up through a ledger refreshed to the latest
-  upstream commit each run (currently 162 commits) and milestone gates before
+  upstream commit each run (162 commits at bootstrap) and milestone gates before
   teletext. Keep the current parity pin unchanged during
-  bootstrap and propose native-pipeline handling of ErsatzTV Next in ADR 0095.
+  bootstrap. Revise ADR 0095 after rejection of its native-only proposal;
+  accept Next as an optional second engine alongside the native pipeline.
+  Engine integration and playback acceptance remain open.
+  Complete UCU-00 bootstrap acceptance after AMM-N-03, then reconcile the
+  upstream Legacy rename (ErsatzTV PR #2842) with source evidence and advance
+  the parity pin one reviewed step.
   Use substantive Codex review for catch-up; retain AMM-N-03 acceptance as the
   prerequisite for the first upstream step.
 

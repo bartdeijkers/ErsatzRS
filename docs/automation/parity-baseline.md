@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `0d301df5e8512fdfccf3a611188d27ab1690ee31` |
-| **Commit subject** | `remove external dependencies (bugsnag, trakt) (#2840)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0d301df5e8512fdfccf3a611188d27ab1690ee31 |
+| **Pinned commit** | `1e5c0b1218cbf72963ef1ea747dc52f71f8aceb0` |
+| **Commit subject** | `rename to ersatztv legacy (#2842)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/1e5c0b1218cbf72963ef1ea747dc52f71f8aceb0 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -30,10 +30,13 @@ routine to select post-pin work or advance the pin.
    feature because upstream moved on.
 2. **Reading source:** when reading ErsatzTV under `$ERSATZTV_SRC/`, the routine
    must first ensure that checkout is at the pinned commit
-   (`git -C "$ERSATZTV_SRC" rev-parse HEAD` equals the pin). Outside catch-up
-   mode, if it is not, check it out (`git -C "$ERSATZTV_SRC" fetch && git -C "$ERSATZTV_SRC" checkout
-   0d301df5e8512fdfccf3a611188d27ab1690ee31`) before evaluating gaps. If the
-   checkout cannot be pinned, report that and **do not** emit parity changes
+   (`git -C "$ERSATZTV_SRC" rev-parse HEAD` equals the **Pinned commit** row in
+   the table above). Outside catch-up mode, if it is not, check it out
+   (`git -C "$ERSATZTV_SRC" fetch && git -C "$ERSATZTV_SRC" checkout <Pinned
+   commit>`) before evaluating gaps. Always read the SHA from that table, never
+   from a copy elsewhere: catch-up advances the pin one row at a time, so any
+   duplicate goes stale and would silently pin the tree to an older snapshot. If
+   the checkout cannot be pinned, report that and **do not** emit parity changes
    from a mismatched tree.
 3. **Goal prompts** must instruct the implementing agent to read ErsatzTV source
    at this commit, and must not introduce ParityDebt sourced from post-baseline
@@ -45,14 +48,21 @@ Bumping the baseline is an explicit, reviewed action — never automatic:
 
 1. Edit the **Pinned commit** / **Commit subject** / **Commit URL** rows above to the new SHA.
 2. Re-run the routine; it will re-evaluate gaps against the new snapshot.
-3. Record the bump in `docs/progress/sessions.ndjson`.
+3. Regenerate `docs/top-three-gaps-to-fill-prompts.md`; its
+   `parity_baseline_commit` front-matter caches this SHA.
+4. Record the bump in `docs/progress/sessions.ndjson`.
+
+The Pin table is the only authoritative record of the current pin. Do not copy
+that value into rules, prompts, plans or parity records; reference the table
+instead. The catch-up ledger's fixed `Initial pin` is a different, historical
+anchor for the ledger range and stays as written.
 
 The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `4e951c1724d7f42324462a0ae70db3589b599938` (fetched 2026-09-20),
-currently **162 commits** beyond the initial pin. Per the maintainer's
+The latest fetched target is `558855083c7602b6f50ed63675ff61d1d325f98d` (fetched 2026-09-22),
+currently **168 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original
 `495e3799` cutoff no longer limits scope. The latest fetched tip is the run's
@@ -69,7 +79,7 @@ routine or a bulk baseline bump. Land the filled row and updated pin/subject/URL
 together only with maintainer commit authorization, then move the upstream
 checkout to that SHA. Stop after one upstream commit in each task run;
 bootstrap leaves the pin intact. Milestone acceptance and evidence live in
-`docs/progress/milestones.toml`; ADR 0095 remains Proposed until accepted.
+`docs/progress/milestones.toml`; ADR 0095 accepts Next as an optional second engine; implementation remains open.
 
 The active catch-up procedure uses direct substantive Codex review under the
 maintainer's 2026-09-20 decision; Claude review is not a current gate. AMM-N-03

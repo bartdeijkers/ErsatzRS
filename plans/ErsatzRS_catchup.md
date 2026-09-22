@@ -3,8 +3,12 @@
 > Historical seed plan. The [live ledger](upstream-catch-up.md) and structured
 > milestones govern execution. The maintainer's 2026-09-19 amendment replaces
 > the fixed `495e3799` cutoff with the latest fetched upstream tip on every run
-> (currently 162 commits). Next-engine ADR references to 0094 below refer to
-> newly allocated Proposed ADR 0095; ADR 0094 owns automatic publication.
+> (162 commits at the 2026-09-19 bootstrap; the live count is in the ledger and
+> the pin document). Next-engine ADR references to 0094 below refer to
+> ADR 0095; ADR 0094 owns automatic publication. The maintainer rejected the
+> native-only proposal and accepted Next as an optional second engine on
+> 2026-09-22. Next-specific exclusion hypotheses below are withdrawn; use the
+> live ledger and accepted ADR for execution.
 > Each task processes at most one upstream commit, including N/A rows.
 > The 2026-09-20 decision requires direct substantive Codex review only;
 > historical review instructions below do not govern the active procedure.

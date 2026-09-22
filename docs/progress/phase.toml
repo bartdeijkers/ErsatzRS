@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'AMM-N-03 complete; verify UCU-00 acceptance before any upstream commit'
+current_focus = 'UCU-01: continue ordered upstream reconciliation with optional Next integration'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,6 +61,28 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22: Row 1 (1e5c0b12) is reviewed as Covered for authorized local
+landing with the pin. UCU-01 owns its evidence. Continue with row 2 (848db7ea)
+after verifying pin/ledger/upstream HEAD agreement. The refreshed ledger owns
+the live pending count; UCU window acceptance and exact-source CI remain open.
+
+2026-09-22: The maintainer accepts Next as an optional second engine under
+revised ADR 0095 and authorizes individually reviewed local UCU commits.
+The rejected native-only exclusions no longer apply. Next implementation and
+playback acceptance remain open; push, CI and releases remain separate gates.
+The pending-decision and local-commit blockers recorded below are historical.
+
+2026-09-22: The maintainer rejected ADR 0095's native-only proposal and asked
+for revision. The ADR records the unresolved engine alternatives; obtain the
+replacement direction before engine-dependent adaptations or exclusions.
+This does not authorize local commits, push, CI or changes to accepted architecture.
+
+2026-09-22: UCU-00 is Complete after the final bootstrap audit; its milestone
+owns the refreshed ledger and verification evidence. Start UCU-01 with row 1,
+retaining per-row review and landing authorization. ADR 0095 remains Proposed;
+obtain its disposition before relying on Next-specific exclusions. No upstream
+row or pin has been advanced. Earlier UCU-00 prerequisite notes below are history.
+
 2026-09-22: AMM-N-01B, N-02 and N-03 are Complete. The maintainer accepts
 W29's current selection controls in ADR 0091; its frozen reference is unchanged.
 The owning milestones contain the final clause audit, Linux/native Windows
@@ -74,8 +96,9 @@ The completed design/refinement/lifecycle plans are pruned into their owners.
 Remaining W31, provider/schema and AMM-P-01 debts retain their own acceptance.
 No upstream commit is processed and no pin or upstream HEAD is changed.
 
-2026-09-20: reviewed bootstrap; fetched upstream tip remains 4e951c17
-(162 pending commits). Refresh the target and append new rows each run.
+2026-09-20: reviewed bootstrap; the fetched upstream tip was 4e951c17 with 162
+pending commits on that date. The ledger and the pin document carry the live
+target and count; refresh them and append new rows each run.
 The live ledger is plans/upstream-catch-up.md; no upstream row is processed.
 The maintainer removed Claude from the active catch-up workflow; substantive
 Codex review replaces cross-review. Historical failed reviews are not blockers.

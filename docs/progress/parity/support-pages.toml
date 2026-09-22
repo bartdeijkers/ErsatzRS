@@ -4,6 +4,10 @@ rs_target  = '`crates/ersatzrs-web/src/admin/pages/system/`, `crates/ersatzrs-we
 status     = 'In progress'
 adr        = ['0013', '0089']
 summary    = '''
+Upstream catch-up row 1 (1e5c0b12, PR #2842) is Covered: the removed upstream
+release-notes renderer and GitHub client are already absent from the native
+home/health pages. UCU-01 owns the source comparison; no product code changed.
+
 Ported: `/system/health` renders an ErsatzTV-style two-column health table from
 the live health service, filters `NotApplicable` rows, refreshes after scanner
 state changes, and feeds the Support nav warning/error badge from persisted

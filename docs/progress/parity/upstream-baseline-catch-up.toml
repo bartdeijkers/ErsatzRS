@@ -1,24 +1,35 @@
 feature    = 'Upstream ErsatzTV baseline catch-up'
-etv_source = '$ERSATZTV_SRC: 0d301df5..4e951c17 (latest fetched target; refreshed each run)'
+etv_source = '$ERSATZTV_SRC: 0d301df5..55885508 (latest fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-Bootstrap registers 162 pending commits and ucu-00 through ucu-09. The pin
-remains 0d301df5; no upstream row has been processed. The live ledger is
+The refreshed ledger registers 168 commits: one reconciled and 167 pending,
+tracked by ucu-00 through ucu-09. Row 1 is Covered with evidence in ucu-01;
+docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows
-each run. The 2026-09-20 fetch confirms the same tip; substantive Codex review
+each run. The 2026-09-22 fetch adds six commits after the verified bootstrap prefix;
+substantive Codex review
 replaces the former Claude cross-review gate by maintainer decision. The
-bootstrap checkpoint does not complete ucu-00 or AMM-N-03.
+bootstrap is accepted: ucu-00 and its AMM-N-03 prerequisite are Complete.
 Milestones own acceptance and evidence; behavioral
 debt stays in each owning feature. AMM-N-03 remains a prerequisite and teletext
-p9a-01 now also depends on ucu-09. ADR 0095 is Proposed, not an accepted exemption.
+p9a-01 now also depends on ucu-09. ADR 0095 is Accepted for Next as an optional second engine, alongside the
+native pipeline. Its implementation is not started; no Next-specific exemption applies.
 """
 
 [[debt]]
 id          = 'ucu-native-pipeline-decision'
-description = 'Obtain maintainer acceptance of Proposed ADR 0095 before using it to exclude Next-engine plumbing; reconcile native behavior per ledger row.'
+description = 'Decide the streaming engine strategy for upstream Next integration.'
 discovered  = '2026-09-19'
+resolved    = true
+adr         = '0095'
+evidence    = '2026-09-22: maintainer rejected native-only exclusions and selected Next as an optional second engine. ADR 0095 records that accepted decision separately from its unimplemented state.'
+
+[[debt]]
+id          = 'ucu-optional-next-engine-integration'
+description = 'Implement Next as an optional second engine alongside the native pipeline: persisted selection, package/runtime integration, supervised process and configuration exchange, health/troubleshooting, and verified playback with subtitle/audio handling and recovery on the supported platforms.'
+discovered  = '2026-09-22'
 resolved    = false
 adr         = '0095'
-evidence    = 'Bootstrap only; no native behavior or Next-specific exclusion has been accepted or verified. See ucu-00 and ucu-09 milestone evidence.'
+evidence    = 'ADR 0095 is accepted by maintainer direction; implementation and runtime proof remain open. Reconcile the Next integration rows in UCU-01 through UCU-09; a working native path does not close Next acceptance.'

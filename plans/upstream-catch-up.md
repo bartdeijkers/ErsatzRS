@@ -3,29 +3,36 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-20): `4e951c1724d7f42324462a0ae70db3589b599938`
-  — fix: mpeg-ts script reliability (#3026).
-- Current backlog: **162 commits**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-22): `558855083c7602b6f50ed63675ff61d1d325f98d`
+  — prep for release v26.10.0 [no ci].
+- Ledger: **168 commits**, **167 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
-  on 2026-09-19, so the ten newer commits are also pending in this ledger.
+  on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
+  refresh adds six more commits, retaining the original ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: none. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **1**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
+  The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
+  mirrors the target and backlog; a mismatch there is also a disagreement.
 - [Milestones](../docs/progress/milestones.toml) own acceptance and evidence.
   AMM-N-03 remains a prerequisite; setup does not waive native acceptance.
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
-  is Proposed. It cannot justify an exclusion until accepted.
+  is Accepted for Next as an optional second engine alongside the native
+  pipeline. The rejected native-only proposal cannot justify exclusions.
 
 ## One-commit procedure
 
 The maintainer's 2026-09-20 decision makes this a Codex-only workflow:
 Codex performs the substantive review directly; no Claude or replacement
 review agents are required. Earlier review attempts remain historical evidence.
+On 2026-09-22 the maintainer authorized the prepared first local commit and
+subsequent individually reviewed local UCU steps. This satisfies step 8 local
+commit authorization; push, CI dispatch and release tagging remain separate.
 Before selecting or processing row 1, AMM-N-03 must be accepted and ucu-00
 closed against its recorded criteria. A documentation checkpoint does not
 satisfy that prerequisite or authorize a later implementation commit.
@@ -36,8 +43,11 @@ satisfy that prerequisite or authorize a later implementation commit.
    is an ancestor of the fetched tip and the existing ledger remains an exact
    prefix of the generated log; stop on divergence or fetch failure. Append
    every new commit with empty verdict/owner/commit fields, refresh the target
-   and backlog count here and in the pin document, and update the open ucu-09
-   tail milestone. If that milestone is already Complete, reopen it with the
+   and backlog count in every record that states them — this plan, the pin
+   document's Catch-up mode section, and the catch-up parity record's
+   `etv_source` and summary — and update the open ucu-09 tail milestone. Other
+   documents describe the bootstrap as of a stated date and must not repeat the
+   live target or count. If that milestone is already Complete, reopen it with the
    new scope while preserving earlier evidence; do not claim current catch-up
    completion from older acceptance. Select exactly the first pending row. Read its stat, full diff, tests,
    CHANGELOG hunk and surrounding files with `git show <sha>:<path>`; leave
@@ -80,6 +90,9 @@ satisfy that prerequisite or authorize a later implementation commit.
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
+The maintainer selected Next as an optional second engine on 2026-09-22.
+Next-specific exclusions from the rejected native-only proposal are withdrawn;
+review integration as required behavior under Accepted ADR 0095.
 Its Next-engine references to 0094 mean the newly allocated **0095** here;
 0094 already owns automatic add-on publication. Notes are hypotheses only.
 Unlisted rows retain the plan's tooling hypothesis, or FFmpeg/tooling hypothesis
@@ -90,7 +103,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 
 | # | upstream sha | subject (PR) | verdict | owning parity slug | ErsatzRS commit | notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `1e5c0b12` | rename to ersatztv legacy (#2842) | | | | ucu-01; provisional: Upstream tooling candidate. |
+| 1 | `1e5c0b12` | rename to ersatztv legacy (#2842) | Covered | support-pages | `docs(porting): reconcile upstream legacy rename and accept optional Next` | ucu-01; release-notes removal already present; upstream-only branding/tooling needs no Rust edit. See ucu-01 evidence. |
 | 2 | `848db7ea` | even more dependency updates (#2848) | | | | ucu-01; provisional: Upstream tooling candidate. |
 | 3 | `5d779635` | update last dependencies (#2849) | | | | ucu-01; provisional: Upstream tooling candidate. |
 | 4 | `47885758` | bundle ersatztv next artifacts (#2850) | | | | ucu-01; provisional: Upstream tooling candidate. |
@@ -100,15 +113,15 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 8 | `30c361db` | only bundle the ersatztv-channel binary (#2851) | | | | ucu-01; provisional: Upstream tooling candidate. |
 | 9 | `74a21abd` | fix workflow | | | | ucu-01; provisional: Upstream tooling candidate. |
 | 10 | `a74896df` | prep for release v26.4.0 [no ci] | | | | ucu-01; provisional: Upstream tooling candidate. |
-| 11 | `ea4d3b65` | add channel streaming engine setting (#2852) | | | | ucu-02; provisional: N/A candidate under Proposed ADR 0095. |
+| 11 | `ea4d3b65` | add channel streaming engine setting (#2852) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
 | 12 | `ddc8ef7f` | fix: add playout button should open drop down menu (#2853) | | | | ucu-02; provisional: Port candidate. |
-| 13 | `2ed432f9` | feat: enable ersatztv next streaming engine (#2854) | | | | ucu-02; provisional: N/A candidate under Proposed ADR 0095. |
-| 14 | `4ee97d5b` | fix: fix next playout building (#2855) | | | | ucu-02; provisional: N/A candidate under Proposed ADR 0095. |
+| 13 | `2ed432f9` | feat: enable ersatztv next streaming engine (#2854) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
+| 14 | `4ee97d5b` | fix: fix next playout building (#2855) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
 | 15 | `f7853e80` | bundle ersatztv-channel binary with macos app (#2856) | | | | ucu-02; provisional: Upstream tooling candidate. |
 | 16 | `5cef7775` | fix duplicate windows zips on develop release | | | | ucu-02; provisional: Upstream tooling candidate. |
 | 17 | `6ea0a296` | fix: consistently apply playout offset when generating xmltv (#2863) | | | | ucu-02; provisional: Port candidate. |
-| 18 | `f2706f32` | feat: support playout json on windows (#2864) | | | | ucu-02; provisional: N/A candidate under Proposed ADR 0095. |
-| 19 | `9882b008` | tweak streaming engine editor | | | | ucu-02; provisional: N/A candidate under Proposed ADR 0095. |
+| 18 | `f2706f32` | feat: support playout json on windows (#2864) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
+| 19 | `9882b008` | tweak streaming engine editor | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
 | 20 | `bb493670` | feat: support media server items in next streaming engine  (#2865) | | | | ucu-02; provisional: Next behavior triage. |
 | 21 | `e6496bbc` | feat: select audio streams for next engine during playout build (#2866) | | | | ucu-02; provisional: Next behavior triage. |
 | 22 | `7e38297d` | fix: schedule all required fallback filler in classic schedules (#2867) | | | | ucu-02; provisional: Port candidate. |
@@ -119,7 +132,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 27 | `91b029e4` | feat: overlay single intermittent watermarks using next engine (#2879) | | | | ucu-02; provisional: Next behavior triage. |
 | 28 | `7869f165` | feat: use configured scaling behavior with next engine (#2880) | | | | ucu-02; provisional: Next behavior triage. |
 | 29 | `b1ce607c` | feat: convert subtitles from media servers (#2882) | | | | ucu-02; provisional: Next behavior triage. |
-| 30 | `d8955134` | feat: use amf and rkmpp hw accel with next engine (#2883) | | | | ucu-02; provisional: N/A candidate under Proposed ADR 0095. |
+| 30 | `d8955134` | feat: use amf and rkmpp hw accel with next engine (#2883) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
 | 31 | `290f991b` | prep for release v26.5.0 [no ci] | | | | ucu-02; provisional: Upstream tooling candidate. |
 | 32 | `a1036430` | fix: clean up orphan actor and artwork records (#2885) | | | | ucu-03; provisional: Port candidate. |
 | 33 | `54779e07` | fix: pin nvencsharp lib to 2.0.0 for linux compatibility (#2887) | | | | ucu-03; provisional: Upstream tooling candidate. |
@@ -132,7 +145,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 40 | `2c02561f` | chore: update dependencies (#2900) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 41 | `cc9880c2` | feat: always save error reports with next engine (#2907) | | | | ucu-04; provisional: Next behavior triage. |
 | 42 | `822c7547` | pin imagesharp dependency (#2909) | | | | ucu-04; provisional: Upstream tooling candidate. |
-| 43 | `9c5d86a1` | feat: show next version in ui (#2910) | | | | ucu-04; provisional: N/A candidate under Proposed ADR 0095. |
+| 43 | `9c5d86a1` | feat: show next version in ui (#2910) | | | | ucu-04; provisional: Next integration candidate under Accepted ADR 0095. |
 | 44 | `577983af` | feat: support explicitly scheduled images using next engine (#2911) | | | | ucu-04; provisional: Next behavior triage. |
 | 45 | `b1c7702a` | fix: properly sync in and out points with next engine (#2912) | | | | ucu-04; provisional: Next behavior triage. |
 | 46 | `99a1ecee` | chore: update dependencies (#2915) | | | | ucu-04; provisional: Upstream tooling candidate. |
@@ -182,12 +195,12 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 90 | `35b5a259` | prep for release v26.7.0 [no ci] | | | | ucu-05; provisional: Upstream tooling candidate. |
 | 91 | `5ab81525` | fix: mpeg-ts playback with multi-byte characters (#2971) | | | | ucu-06; provisional: Port candidate. |
 | 92 | `f737de89` | fix: jellyfin external subtitles (#2972) | | | | ucu-06; provisional: Port candidate. |
-| 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | | | | ucu-06; provisional: N/A candidate under Proposed ADR 0095. |
-| 94 | `9088ae1a` | feat: more improvements to next troubleshooting (#2974) | | | | ucu-06; provisional: N/A candidate under Proposed ADR 0095. |
-| 95 | `7b43e2f7` | chore: update next channel config model (#2975) | | | | ucu-06; provisional: N/A candidate under Proposed ADR 0095. |
+| 93 | `ad9848cc` | feat: troubleshoot next engine playback (#2973) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
+| 94 | `9088ae1a` | feat: more improvements to next troubleshooting (#2974) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
+| 95 | `7b43e2f7` | chore: update next channel config model (#2975) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
 | 96 | `3b53b69e` | chore: update dependencies (#2976) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 97 | `aae2529f` | chore: update dependencies (#2977) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
-| 98 | `7c96203b` | chore: update playout model to get new next version (#2978) | | | | ucu-06; provisional: N/A candidate under Proposed ADR 0095. |
+| 98 | `7c96203b` | chore: update playout model to get new next version (#2978) | | | | ucu-06; provisional: Next integration candidate under Accepted ADR 0095. |
 | 99 | `9f83c8d2` | fix: new ffmpeg for windows vulkan/cuda interop (#2979) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 100 | `24eab260` | ci: remove dependabot [no ci] | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
 | 101 | `11789e8d` | chore: update dependencies (#2980) | | | | ucu-06; provisional: FFmpeg/tooling candidate. |
@@ -252,3 +265,9 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 160 | `b403012f` | fix: movie custom order ui (#3024) | | | | ucu-09; untriaged addition from latest upstream refresh. |
 | 161 | `810c1dbd` | fix: font cache thread safety (#3025) | | | | ucu-09; untriaged addition from latest upstream refresh. |
 | 162 | `4e951c17` | fix: mpeg-ts script reliability (#3026) | | | | ucu-09; untriaged addition from latest upstream refresh. |
+| 163 | `db5a81e4` | fix: scripted schedule file validation (#3027) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
+| 164 | `3f4255be` | fix: many ui bug fixes (#3028) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
+| 165 | `3054e5d0` | fix: more bug fixes (#3029) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
+| 166 | `3d31bfdd` | fix: remote stream yaml extension (#3030) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
+| 167 | `5eb9102c` | fix: local library path validation (#3031) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
+| 168 | `55885508` | prep for release v26.10.0 [no ci] | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |

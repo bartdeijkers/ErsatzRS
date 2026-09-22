@@ -1,131 +1,141 @@
 <!--
-generated: 2026-08-07
-last_processed_commit: 2ab2d2045a6f82fb59faaf1d1e923ea927bf8a1e
-parity_baseline_commit: 0d301df5e8512fdfccf3a611188d27ab1690ee31
-generator: manual roadmap refresh after Phase 8-10 resequencing
+generated: 2026-09-22
+parity_baseline_commit: 1e5c0b1218cbf72963ef1ea747dc52f71f8aceb0
+generator: reviewed catch-up pin advancement
 rules: docs/automation/gap-prompt-rules.md
 -->
 
 # Top three chores to do - goal prompts
 
-These prompts follow the live Phase 8 focus and runnable milestone order. Phase
-9 teletext work is intentionally dependency-gated behind the required Phase 8
-milestones. Phase 10 video-jukebox work remains behind Phase 9 closeout and its
-own ADR gate, so neither displaces runnable Phase 8 work here.
+Selection reviewed current phase focus, runnable milestones, all open parity
+debts, ADR implementation states and the live plan index. Upstream catch-up
+ranks first by maintainer focus; existing add-on publication acceptance and
+confirmed provider availability debt remain next. Teletext waits for UCU-09.
+These prompts do not expand an active UCU task into independent add-on work.
+Read the authoritative pin from `docs/automation/parity-baseline.md`; the
+front-matter value is a generated checkpoint, not permission to reset a newer pin.
 
----
+## 1. Build the next ErsatzRS spec chore: one upstream catch-up row (slug `upstream-baseline-catch-up`)
 
-## 1. Implement explicit SDR and HDR10 output (slug `hdr-dolby-vision-metadata`)
+### Workflow
 
-Implement runnable Phase 8A milestone **p8a-01** and ADR 0064's input/output
-contract. Follow AGENTS.md and
-`cargo xtask progress milestones --id p8a-01 --full` for its acceptance.
-The outcome is a truthful persisted profile choice between BT.709 SDR and
-BT.2020/PQ HDR10, not a profile-name or bit-depth inference.
+Follow AGENTS.md and `plans/upstream-catch-up.md`. Fully reconcile exactly the
+first pending ledger row without stopgaps; the current candidate is 848db7ea,
+`even more dependency updates (#2848)`. This is an explicitly authorized
+post-pin catch-up task, not an ordinary pinned-baseline parity gap.
 
-Before editing:
+### Before editing
 
-1. Read ADRs 0064, 0017, 0014, the milestone's full acceptance text, and the
-   open debts in
-   [`hdr-dolby-vision-metadata.toml`](progress/parity/hdr-dolby-vision-metadata.toml).
-2. Trace profile persistence and validation across domain, SQLite,
-   application services, the localized profile editor, and FFmpeg argv
-   generation. Map scanner side-data persistence and selected-stream flow.
-3. Pin redistributable SDR, HDR10, and HLG fixtures and define decoded-frame and
-   ffprobe side-data assertions before changing filters.
+Verify pin, last landed ledger row and upstream HEAD agreement. Fetch upstream
+and verify/extend the ledger prefix as the plan requires. Read the complete
+selected upstream diff and surrounding source at its SHA; map affected behavior
+to native code/tests. ADR 0095 accepts Next as an optional second engine and
+cannot justify the rejected native-only exclusions.
 
-Implement the complete slice:
+### Implement the slice
 
-- Add the typed output-dynamic-range field, migration, repository mappings,
-  localized editor choice, defaults, seeds, and invalid-combination checks.
-- Preserve existing rows as SDR; seed fresh ADR 0017 HDR profiles as HDR10.
-- Implement the SDR/HDR10 source-output matrix, including explicit reference
-  white for SDR-to-HDR and correct post-transform metadata emission/stripping.
-- Persist source mastering/content-light metadata and carry it with stream
-  selection; add invalid-profile and unsupported-output health findings.
-- Add SQLite round trips, validation tests, reviewed argv snapshots,
-  decoded-image comparisons, side-data assertions, and MPEG-TS/HLS transition
-  proof. Do not claim Dolby Vision support in this milestone.
+Use `skills/parity-slice.md` for applicable behavior. Choose one evidence-backed
+verdict, implement every required part of that row, and preserve subtitle/audio
+behavior. Record any missing behavior as visible owning-feature debt. Use the
+existing per-row review and local landing procedure; stop after that row.
 
-Close with focused crate tests, localization/hydration proof, smoke and TSDuck
-  for playback-sensitive changes, Clippy, test closeout,
-`cargo xtask progress check`, and `git diff --check`. Update the milestone,
-parity debt, changelog, prompt ranking, and session log. Do not commit or push
-unless explicitly requested.
+### Verification gates
 
----
+Run `cargo xtask affected-checks`, the relevant focused `./run.sh test` and scoped
+Clippy checks, and `cargo xtask progress check`. Documentation-only rows need
+no invented runtime test. Playback and UI changes require their plan-defined
+smoke/browser evidence, including source/visual mapping for any UI port.
+Full-window gates and separately authorized exact-SHA CI remain mandatory at
+the milestone boundary; a single landed row does not complete UCU-01.
 
-## 2. Harden Vulkan/libplacebo selection and fallback (slug `ffmpeg-9-performance-and-support`)
+### Reporting
 
-Implement runnable Phase 8B milestone **p8b-01** under ADR 0014. The goal is to
-select the existing NVENC HDR Vulkan/libplacebo bridge only when its complete
-operation works, then learn and surface runtime denial without making Vulkan a
-mandatory platform capability or a persisted encoder kind.
+Report the source map, upstream SHA/subject, verdict, changed files, verification,
+remaining debt, old/new pin and next pending row. Do not infer push, CI or release
+authorization from local commit permission.
 
-Before editing:
+## 2. Build the next ErsatzRS spec chore: close AMM-P-01 acceptance (slug `addon-metadata-management`)
 
-1. Read ADRs 0014 and 0064, the milestone acceptance text, and
-   [`ffmpeg-9-performance-and-support.toml`](progress/parity/ffmpeg-9-performance-and-support.toml).
-2. Trace capability discovery, cache identity/invalidation, learned hardware
-   denial, NVENC HDR graph construction, retry boundaries, health reporting,
-   and troubleshooting serialization.
-3. Record the exact functional probe graph and failure signatures for Vulkan
-   device creation, libplacebo, hardware mapping, CUDA interop, required CUDA
-   filters, and NVENC initialization.
+### Workflow
 
-Implement the complete slice:
+Follow AGENTS.md, ADR 0094, `plans/automatic-addon-publication.md` and the full
+AMM-P-01 milestone. Finish automatic-publication acceptance without stopgaps,
+preserving locally playable media and operator state.
 
-- Introduce an operation-scoped capability keyed by FFmpeg binary, selected
-  device/driver identity, and graph operation; prove it with a small real graph
-  during capability refresh.
-- Classify the known initialization/interoperability failures and retry exactly
-  once through the next proven graph while preserving hardware encode where
-  possible.
-- Persist the learned denial, reuse the existing refresh invalidation lifecycle,
-  and expose actionable health/troubleshooting evidence without leaking paths.
-- Cover classifier, serialization, cache invalidation, primary/fallback argv,
-  and the real HDR/downscale/overlay surface shape. Absence of Vulkan must remain
-  a normal capability result on every supported target.
+### Before editing
 
-Close with focused tests, a compatible-GPU runtime gate where available,
-playback smoke/TSDuck proof, both Clippy configurations, test closeout,
-`cargo xtask progress check`, and `git diff --check`. Update parity, milestone,
-health, changelog, prompts, and the session log. Do not add first-class Vulkan
-encoding and do not commit or push unless explicitly requested.
+Query `cargo xtask progress milestones --id amm-p-01 --full`. Compare each open
+clause with current source, exact candidate and reusable native Windows evidence.
+Build a source map of publication, verification receipts and subtitle preparation;
+identify which previously observed failures still lack proof. Do not treat
+AMM-N-03 acceptance as automatic closure of this separate milestone.
 
----
+### Implement the slice
 
-## 3. Add safe FFmpeg 9 long-filtergraph file transport (slug `ffmpeg-9-performance-and-support`)
+Correct only demonstrated remaining failures. Preserve automatic publication,
+metadata, overrides, replacements and local playback. Keep unproven acceptance
+visible in the owning milestone and parity debt. Follow TEST.md and create a
+Visual Source Map if a correction changes the admin workspace.
 
-Implement runnable Phase 8C milestone **p8c-01** and ADR 0003's portable
-long-command contract. Replace oversized inline complex-filter arguments with
-FFmpeg 9's `-/filter_complex <path>` file-option form while preserving the CLI
-spawn architecture and sanitized diagnostics.
+### Visual verification
 
-Before editing:
+For changed browser behavior, build a matched bundle with `./run.sh serve`, use
+the existing workspace reference at the same viewport, and verify controls,
+layout, native forms and hydration with the appropriate Playwright scenarios.
 
-1. Read ADR 0003, the milestone acceptance text, BUILD.md, testing guidance,
-   and the long-filtergraph debt in
-   [`ffmpeg-9-performance-and-support.toml`](progress/parity/ffmpeg-9-performance-and-support.toml).
-2. Map every complex-filter construction and spawn/cancellation path. Choose one
-   documented cross-platform threshold based on the complete command shape.
-3. Define private temporary-file ownership, encoding, permissions where
-   applicable, child-exit/cancellation cleanup, and safe diagnostics for all six
-   native target shapes.
+### Verification gates
 
-Implement the complete slice:
+Use `cargo xtask affected-checks` and focused `./run.sh test` during corrections.
+Complete the unchanged AMM-P-01 closeout, playback and browser gates where valid
+evidence is missing; preserve the required maintainer Windows acceptance report.
+Run `cargo xtask progress check`; do not repeat valid evidence without cause.
 
-- Keep short graphs inline and move oversized graphs to one private per-spawn
-  file referenced with structured argv; never shell-join the command.
-- Guarantee deterministic cleanup after success, non-zero exit, spawn failure,
-  cancellation, and dropped process supervision.
-- Add snapshots and focused runtime tests for inline and forced-file paths,
-  spaces and non-ASCII paths, cleanup failures, cancellation, and error output.
-- Verify that logs expose the selected transport and useful sanitized context
-  without dumping private media paths or full filter contents.
+### Reporting
 
-Close with focused pipeline tests and snapshot review, relevant cross-platform
-checks, both Clippy configurations, test closeout, `cargo xtask progress check`,
-and `git diff --check`. Update parity, milestone, changelog, prompt ranking, and
-the session log. Do not revive removed `-filter_complex_script`; do not commit
-or push unless explicitly requested.
+Report the clause audit, exact artifact/source evidence, changed files and
+remaining blockers. Keep build, CI, package and native acceptance claims separate.
+
+## 3. Build the next ErsatzRS spec chore: correct cookie-enabled availability (slug `addon-metadata-management`)
+
+### Workflow
+
+Follow AGENTS.md and ADR 0094. Close only the open
+`addon-ytdlp-needs-auth-despite-cookies` debt without stopgaps. This is an
+ErsatzRS add-on contract defect, not an upstream pinned-baseline feature port.
+
+### Before editing
+
+Read the debt and inspect the official add-ons repository's current import and
+enrichment availability mapping. Build a source map through provider results,
+publication and the UI. Diagnose why successful cookie-enabled extraction with
+playable formats can still map `needs_auth` to unavailable while Test access
+reports accessible. Do not expose cookies, account details or private media.
+
+### Implement the slice
+
+Correct the provider mapping while retaining genuine authentication failures,
+removed items and non-playable outcomes. Add focused synthetic regression cases
+for successful extraction versus those failures. Preserve host provider neutrality.
+Update the owning parity evidence and changelog; do not close the debt from a
+mapper-only assertion if its required operator behavior remains unproven.
+
+### Visual verification
+
+Verify consistent access and availability in the existing admin workspace using
+a matched bundle and disposable fixtures. If UI code changes, follow TEST.md,
+create a Visual Source Map and compare same-viewport screenshots with the
+canonical workspace design after `./run.sh serve`.
+
+### Verification gates
+
+Use the add-ons repository's documented focused test contract; run affected
+host tests through `./run.sh test` when host code changes. Use the relevant
+Playwright scenario for operator-visible consistency and
+`cargo xtask progress check` for the owning record. Retain missing native
+provider proof explicitly rather than weakening acceptance.
+
+### Reporting
+
+Report source mapping, causal diagnosis, corrected behavior, tests, changed
+files and remaining debt. Repository publication and releases require their own
+authorization and evidence.

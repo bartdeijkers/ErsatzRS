@@ -5564,7 +5564,7 @@ Windows proof of the reuse build is pending.
 id         = 'ucu-00'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Set up latest-upstream catch-up tracking'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['amm-n-03']
@@ -5613,13 +5613,31 @@ acceptance and remaining native/release proof in that milestone). ADR 0095
 remains Proposed with Not implemented status and unresolved decision debt.
 No product build, browser check, full test gate, upstream step, push, CI or tag
 is part of this documentation checkpoint; no milestone acceptance is claimed.
+
+2026-09-22 final bootstrap acceptance: AMM-N-03 is Complete in its owning
+milestone. Refreshed origin/main without moving the upstream checkout; the
+previous target is an ancestor and all 162 existing ledger SHA/subjects form
+an exact prefix. Appended six pending rows through
+558855083c7602b6f50ed63675ff61d1d325f98d. All 168 unique full-SHA resolutions,
+subjects and ordering match git log; verdict/owner/landing fields are empty.
+Target/count mirrors, release-window boundaries, relative links, chained UCU
+dependencies and the preserved teletext dependencies pass direct Codex review.
+Reviewed the pre-existing documentation corrections: derive the pin from its
+single authoritative table, refresh every live target mirror, retain historical
+counts as dated facts, and require a final maintainer disposition of ADR 0095.
+These corrections prevent stale-baseline selection and inconsistent catch-up
+completion claims. No unresolved serious bootstrap review findings remain.
+cargo xtask progress check and git diff --check pass. Pin, initial ledger
+position and upstream HEAD remain 0d301df5; no upstream row is landed.
+UCU-00 is Complete. ADR 0095 remains Proposed and cannot justify exclusions;
+its decision and per-row/milestone execution gates remain required.
 """
 
 [[milestone]]
 id         = 'ucu-01'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through a74896df'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-00']
@@ -5636,7 +5654,42 @@ separate authorization; never launch CI as part of a one-commit task.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
-Not started. All window rows remain pending; no implementation or gate evidence claimed.
+2026-09-22 row 1 reviewed for authorized local landing: 1e5c0b1218cbf72963ef1ea747dc52f71f8aceb0,
+rename to ersatztv legacy (#2842). Reviewed the full 30-file diff, resulting
+Index.razor, startup/configuration context and all dependency/test-project
+changes. No upstream CHANGELOG hunk or test-body changes exist in this row.
+Source map: Pages/Index.razor, Shared/MarkdownView and Infrastructure/GitHub
+remove the fetched release-notes card/client; Pages/_Host.cshtml,
+Locals/Shared/MainLayout.resx and Startup.cs rename product/version strings;
+workflows and scripts/macOS rename upstream artifacts; csproj files update
+.NET dependencies. There are no validators, persistence queries or schema
+changes. FileSystemLayout.cs is byte-identical to the parent; the complete
+CopyMacOsConfigFolderIfNeeded method is unchanged, verified by source comparison.
+Rust mapping: admin/home.rs and admin/pages/system/health.rs already contain
+no release-notes renderer or GitHub release-note request. Existing
+support-pages.spec.ts covers the health route and controls, but was not rerun
+and is not claimed as new browser evidence. ersatzrs-infra/file_system_layout.rs
+retains the ErsatzRS configuration namespace. Upstream .NET dependency,
+Legacy branding, container and macOS artifact names do not transfer to the
+separately branded Cargo product. No applicable runtime correction remains.
+Row verdict: Covered, owning parity support-pages. The meaningful
+release-notes removal is already represented by the Rust source; the remaining
+upstream-specific tooling/branding changes require no product edit. ADR 0095
+is not used. Direct Codex review rejected the provisional tooling-only reading
+because it would conceal the mixed UI behavior; source mapping above resolves
+that omission. No actionable serious row-review findings remain.
+The diff is documentation-only; affected-checks selects progress check without
+Rust compilation. progress check and git diff --check pass. No new runtime,
+browser or full-window acceptance is claimed. The maintainer authorizes this and
+subsequent individually reviewed local UCU commits. Ledger row and pin advance
+together to 1e5c0b12 in the local commit identified by unique subject
+docs(porting): reconcile upstream legacy rename and accept optional Next.
+Move upstream HEAD to that row immediately after landing and verify agreement.
+UCU-01 window acceptance and exact-SHA CI remain open. Next pending row is
+848db7ea, even more dependency updates (#2848).
+The maintainer also selects Next as an optional second engine in revised,
+Accepted ADR 0095. Its implementation debt remains open; the rejected
+native-only proposal is not used for any verdict.
 """
 
 [[milestone]]
@@ -5816,7 +5869,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through 4e951c17 (latest fetched tip) in order,
+Process every ledger row in this release window through 55885508 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve
@@ -5826,9 +5879,12 @@ cargo leptos build, cargo xtask parity-check and cargo xtask smoke pass;
 TSDuck passes if the pipeline changed. Require green exact-SHA CI through
 separate authorization; never launch CI as part of a one-commit task.
 Pin, last processed ledger row and upstream HEAD agree.
-Every row through the latest fetched upstream tip is justified (currently 162).
+Every row through the latest fetched upstream tip is justified (162 at the
+2026-09-19 bootstrap).
 Refresh upstream before claiming completion; new rows reopen this tail while
-preserving earlier evidence. ADR 0095 is Accepted with accurate Implementation,
+preserving earlier evidence. ADR 0095 has a final maintainer disposition with
+accurate Implementation — Accepted, or rejected/withdrawn with every row that
+cited it given a verdict that does not rely on it —
 and progress gaps contains no unrecorded post-pin debt before teletext proceeds.
 """
 evidence = """

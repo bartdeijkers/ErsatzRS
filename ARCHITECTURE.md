@@ -107,6 +107,15 @@ preserve behavior by default, and document deliberate deviations through ADRs.
   private Ed25519 signing key never belongs to this workspace or the runtime
   database.
 
+## Planned optional streaming engine
+
+[ADR 0095](docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
+accepts ErsatzTV Next as an optional second streaming engine alongside the
+native FFmpeg pipeline. This external engine boundary is not implemented yet.
+The native runtime and graphics contracts above remain in force; Next process,
+configuration, packaging and playback integration are tracked in the
+[catch-up parity record](docs/progress/parity/upstream-baseline-catch-up.toml).
+
 ## Runtime views
 
 The current [System Context and Container views](docs/explanation/runtime-architecture.md)
