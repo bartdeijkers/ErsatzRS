@@ -70,8 +70,11 @@ Complete and its owning parity debt is resolved. Work continues on UCU-02.
 MPEG-TS/HLS smoke. UCU-02 row 11 (ea4d3b65) is Port: persisted native/Next
 selection, HLS Segmenter normalization and localized SSR forms are verified.
 UCU-02 row 12 (ddc8ef7f) is Covered: existing playout/show action bindings
-pass four focused browser regressions. Next: row 13 (2ed432f9), actual Next
-streaming engine integration. The first consolidated
+pass four focused browser regressions. Row 13 (2ed432f9) has an infrastructure
+checkpoint for wire contracts, runtime discovery and atomic playout publication,
+with focused tests and actual Next parser proof. Next: connect profile/playout
+mapping, serialized refresh and supervised sessions, then prove served playback.
+The upstream pin remains ddc8ef7f. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 
 2026-09-22 maintainer amendment: defer UCU-01/UCU-02 CI to the first

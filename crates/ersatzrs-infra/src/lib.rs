@@ -64,6 +64,7 @@ pub mod metadata;
 pub(crate) mod metadata_query;
 pub(crate) mod minijinja_compat;
 pub mod music_video_credits;
+pub mod next_engine;
 pub mod playback;
 pub mod plex;
 pub mod published_interval_source;

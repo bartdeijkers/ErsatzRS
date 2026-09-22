@@ -6161,6 +6161,64 @@ No actionable review finding remains. Pin advances ea4d3b65 -> ddc8ef7f with
 row 12; 12 reconciled / 156 pending. Next: 2ed432f9. The temporary server is
 stopped; UCU-02 window gates and Next runtime integration remain open.
 
+2026-09-22 row 13 source map in progress (2ed432f9; pin remains ddc8ef7f):
+Upstream adds configuration/playout DTOs, StartFFmpegNextSessionHandler,
+NextSessionWorker, SyncNextPlayoutHandler and a build-completion dispatch.
+IPTV chooses the configured engine, refuses Next MPEG-TS and returns an
+engine-specific HLS variant URI with the access token. Native and Next session
+reuse carry the variant playlist rather than rebuilding a legacy-only URI.
+Next receives channel config on stdin via `run --output-folder ... --number ... -`,
+signals .ready, reads .heartbeat and publishes live.m3u8. The original exporter
+uses local-video items, daily JSON and versioned symlinks; it skips Windows and
+uses Unix rename FFI. Those implementation limitations do not waive ErsatzRS
+platform or safe-process requirements. Next source is read via
+ERSATZTV_NEXT_SRC at 946aa52: schema 0.0.5 accepts older compatible versions;
+its loader accepts compact ISO and legacy Unix timestamp filename windows and reloads the JSON when
+selecting the current item. Audio/video/subtitle tracks have explicit indices.
+Native map: infra next_engine owns wire DTOs, profile mapping, publication and
+the external-process adapter; core HlsSessionHandle/Registry retain lifecycle
+ownership; web transport/iptv composes engine selection and authenticated HLS
+delivery; existing scheduling completion must publish changed playout state.
+Use existing serde, tempfile and process-wrap capabilities. Preserve native
+behavior and track choices; no fallback may conceal a failed Next selection.
+Required row evidence includes JSON/config mapping, atomic publication, bounded
+startup/cancellation, missing/failed runtime health, actual Next-served HLS and
+native smoke. No integration or row acceptance is claimed at this source-map
+checkpoint; Windows and other platform runtime proof must stay explicit.
+
+Row 13 infrastructure checkpoint (not row acceptance): next_engine now owns
+typed config/playout JSON, explicit audio/video/subtitle indices and source seek
+options, executable discovery with override precedence and no missing-override
+fallback, and atomic complete-schedule publication. The latter uses one stable
+compact-ISO filename and same-directory tempfile replacement; failed writes,
+invalid schedules and failed replacement preserve the previous generation.
+Empty publication withdraws old items; concurrent readers see complete JSON.
+The publication caller must still serialize database reads and publication.
+Focused next_engine tests pass (11/11). The original five wire/discovery tests
+also passed before publication was added; infra typecheck passed. Source review
+of tempfile 3.27.0 confirms its Windows replacement implementation, but no
+native Windows execution is claimed.
+The maintainer-built Next release executable starts with version 0.1.0 and its
+source checkout is clean at 946aa528c3a44e1079c702901b32d4d817ca1a12. A standalone
+probe linked to its actual release libraries accepts the publisher filename
+bounds and rejects the temporary filename. A second probe feeds the repository
+wire fixtures through the actual Next config/playout deserializers, preserving
+explicit audio/subtitle indices and all three tone-map filter settings. Corrected
+the historical tonemap_algorithm property to normalization.video.filters:
+946aa52 silently ignores the old property. This proves parser compatibility,
+not actual playback, deployed process identity or host integration.
+Checkpoint review covered replacement failure/cleanup, empty withdrawal,
+filename/item boundary agreement, complete-generation reads, explicit override
+failure and credential-safe errors. Adjusted the concurrency regression to
+assert after both threads leave their barriers, so failures cannot hang the
+test. All six publication tests pass again; the earlier wire/discovery results
+remain applicable. Infra all-target Clippy, formatting, architecture lint,
+progress validation and diff checks pass. This is a reviewed local engineering
+checkpoint only; the full-window gates are not claimed or repeated here.
+Remaining: profile and persisted-playout mapping, serialized refresh wiring,
+supervised process/session lifecycle, health, authenticated HLS delivery and
+real Next/native playback proof. No upstream row, pin or checkout advances.
+
 """
 
 [[milestone]]

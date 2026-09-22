@@ -16,6 +16,10 @@ per-channel engine selection with retained native defaults and HLS Segmenter
 normalization for Next, verified through migration, repository and browser
 tests. Runtime supervision and Next playback acceptance remain open.
 
+The UCU-02 row 13 infrastructure checkpoint adds executable discovery, typed
+JSON exchange and atomic complete-schedule publication. These helpers are not
+yet connected to live channel startup or scheduling completion.
+
 ## Context
 
 The upstream catch-up backlog introduces ErsatzTV Next, a separately
@@ -69,6 +73,23 @@ packaging and FFmpeg compatibility before claiming those contracts supported.
 Any necessary change to an existing runtime requirement beyond this optional
 engine boundary needs an explicit recorded decision; an unavailable artifact
 or unsupported platform is an open gap, not an implicit platform exemption.
+
+### Playout publication implementation
+
+Use one stable JSON filename covering years 1 through 9999 in a channel-owned
+directory. Replace the complete file through a same-directory `tempfile`
+publication, retaining the previous complete file on failure. The Next loader
+reopens the matching file on each item selection; individual item timestamps
+remain authoritative for coverage. Empty schedules explicitly withdraw old
+items. Temporary filenames cannot match the loader's filename parser.
+
+This implements the complete-generation visibility intended by upstream
+`SyncNextPlayoutHandler` without its Unix symlink rename or Windows early return.
+It does not create another scheduling authority: SQLite remains authoritative,
+and the integration must regenerate this derived file after restart. The caller
+must serialize schedule reads and publication to prevent stale generations
+from overwriting newer ones. Runtime wiring and native Windows verification
+remain open; portable implementation alone is not platform acceptance.
 
 ## Consequences
 

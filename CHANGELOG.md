@@ -20,7 +20,9 @@ release section when tagging a release.
   unused Next executables while retaining checksum, license and provenance.
   Add persisted per-channel engine selection (upstream PR #2852); existing channels retain the
   native engine and Next selections use HLS Segmenter. Support the upstream
-  `ETV_NEXT_FOLDER` override. Next playback integration remains pending.
+  `ETV_NEXT_FOLDER` override. Prepare executable discovery, JSON exchange and
+  atomic playout publication that retains the previous schedule on failure.
+  Live Next playback integration remains pending.
 
 - Retain form-action selection counts and Select all under Edit multiple items
   > Items to change as an explicitly accepted design choice; Save-button and row

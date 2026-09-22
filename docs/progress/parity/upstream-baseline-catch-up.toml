@@ -20,7 +20,10 @@ UCU-02 is In progress: row 11 ports persisted engine selection, retained native
 defaults, Next mode normalization and the localized SSR editor. Migration,
 repository/application and Chromium/Firefox tests pass, including no-JS forms.
 Row 12 is Covered: native menu/action bindings already work, verified with
-four focused Chromium/Firefox regressions. Row 13 is next. The first consolidated CI is authorized after
+four focused Chromium/Firefox regressions. Row 13 is in progress: wire types,
+executable discovery and atomic publication have focused test and actual Next
+parser proof; live process/session and scheduling integration remain open.
+The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment.
 UCU-01 owns their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
