@@ -5432,7 +5432,7 @@ represented as passing in this slice.
 id = 'amm-p-01'
 phase = 'AMM-P — automatic add-on publication and complete metadata'
 title = 'Automatically publish complete add-on metadata while retaining local media'
-status = 'In progress'
+status = 'Complete'
 feature = 'addon-metadata-management'
 plan = 'plans/automatic-addon-publication.md'
 depends_on = []
@@ -5556,8 +5556,12 @@ subtitle checks (byte-identical input and outcome across three revisions). The
 maintainer approved reuse recorded in ADR 0091's 2026-09-18 addendum: automatic
 admission adopts an identical earlier outcome as the new revision's receipt
 until a manual refresh. A focused regression covers adoption, explicit manual
-admission and the manual-refresh recheck; infra all-target Clippy passes. Native
-Windows proof of the reuse build is pending.
+admission and the manual-refresh recheck; infra all-target Clippy passes. Native Windows acceptance passed on 2026-09-22: the
+maintainer installed the published Windows-only v1.0.37-beta archive and
+reports automatic publication, complete metadata, retained local media and the
+subtitle-check reuse all working. That report closes the Windows acceptance
+this milestone kept open, so AMM-P-01 is Complete. Six-platform build
+compatibility and the excluded add-on permission changes are unchanged.
 '''
 
 [[milestone]]

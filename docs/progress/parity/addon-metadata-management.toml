@@ -950,10 +950,11 @@ evidence    = "2026-09-14: final Chromium/Firefox closeout proves Saved/Unsaved 
 [[debt]]
 id = 'automatic-publication-metadata'
 discovered = '2026-09-16'
-resolved = false
+resolved = true
+resolution = 'Resolved 2026-09-22: AMM-P-01 is Complete. The maintainer accepted automatic publication, complete metadata, retained local media and subtitle-check reuse on the published Windows-only v1.0.37-beta archive.'
 adr = '0094'
 description = 'AMM-P-01 replaces review gates with automatic publication, preserves source-removed local media, completes metadata transfer and repairs episode ContentRating. Acceptance and evidence are owned by AMM-P-01.'
-evidence = 'Automatic publication and metadata transfer are implemented. Windows v1.0.34-beta dogfood exposed optional thumbnail HTTP 404 rolling back publication. The correction passes Linux closeout, runtime smoke and exact-source CI 35118917930. AMM-P-01 records the independently verified Windows-only v1.0.35-beta archive; native Windows publication acceptance remains open.'
+evidence = 'Automatic publication and metadata transfer are implemented. Windows v1.0.34-beta dogfood exposed optional thumbnail HTTP 404 rolling back publication. The correction passes Linux closeout, runtime smoke and exact-source CI 35118917930. AMM-P-01 records the independently verified Windows-only v1.0.35-beta archive. Native Windows acceptance passed on the published v1.0.37-beta archive on 2026-09-22.'
 
 [[debt]]
 id          = 'addon-access-next-attempt-after-completion'

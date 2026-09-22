@@ -855,3 +855,4 @@
 {"date":"2026-07-20","agent":"Codex","summary":"Matched channel-save behavior to ErsatzTV and made manual playout rebuild requests reliably queued with visible activity."}
 {"date":"2026-08-26","agent":"Codex","summary":"Added repository-scoped admin UX design and audit skills plus a WCAG-aware, Tunarr-inspired UI reference and evidence-backed component catalog."}
 {"date": "2026-09-13", "agent": "Claude", "summary": "Applied the maintainer-approved parity debt cleanup: resolved two add-on debts, pruned the retired Beeld & Geluid default-source-hosts debt, and merged three debts into amm-n-03, p8c-04 and the NFO closeout plan."}
+{"date": "2026-09-22", "agent": "Claude", "summary": "Recorded the maintainer's native Windows acceptance of AMM-P-01 on v1.0.37-beta: milestone Complete, owning automatic-publication parity debt resolved, phase next steps updated."}
