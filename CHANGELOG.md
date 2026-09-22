@@ -39,7 +39,9 @@ release section when tagging a release.
   Connect Next local-video HLS startup to the shared session registry and
   transcode limit, retaining capacity through process/output cleanup. Preserve
   playlist tokens and reject MPEG-TS requests for Next channels. Report missing
-  Next executables and unsupported profiles through health checks. Provider and
+  Next executables and unsupported profiles through health checks. Use Next for
+  channel previews with browser-compatible H.264/AAC and independent capacity
+  and cleanup; forward playout rebuilds to preview-only sessions as well. Provider and
   graphics projection, complete HTTP playback and platform acceptance remain open.
 
 - Retain form-action selection counts and Select all under Edit multiple items

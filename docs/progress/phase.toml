@@ -78,8 +78,10 @@ notifications. Real Linux decoding proves alternate audio/subtitles and exact
 silence/subtitles-off, capacity admission, duplicate-start reuse and cleanup.
 The HTTP handler regression verifies HLS dispatch, token propagation and MPEG-TS
 refusal. Runtime/profile health checks are present. Full served-HTTP/native smoke,
-provider/graphics projection, engine-aware previews and platform acceptance
-remain open; row 13 is not accepted yet.
+provider/graphics projection and platform acceptance remain open. Next previews
+now use H.264/AAC without changing the stored profile, with independent capacity
+and cleanup; real simultaneous AC3/AAC output and preview rebuild forwarding
+are verified. Full HTTP/browser acceptance remains open; row 13 is not accepted yet.
 The upstream pin remains ddc8ef7f. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 

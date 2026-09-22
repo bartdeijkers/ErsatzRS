@@ -151,6 +151,10 @@ Playlist reads are bounded and use Next's `live.m3u8`. The shared host now owns 
 reservation/removal, transcode admission, output-folder cleanup and publication.
 A Next reservation uses the native HLS capacity identity and lasts for the
 whole engine session; native per-programme reclamation cannot pause this engine.
+Next previews reuse the native browser-compatible profile override without
+persisting it. Their output folder, registry and capacity key are independent
+from normal playback. Both sessions share the channel publisher; rebuild
+notifications reach previews even when normal playback is absent.
 HTTP master playlists force the Next HLS path and preserve existing token
 propagation. MPEG-TS requests are rejected, matching the upstream engine split.
 The health engine checks executable availability and profile compatibility only

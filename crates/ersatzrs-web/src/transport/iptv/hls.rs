@@ -142,6 +142,7 @@ pub(crate) async fn ensure_segmenter_worker_running_before(
                 Arc::clone(&state.hls_sessions),
                 ersatzrs_infra::next_engine::host::NextStart {
                     channel_id,
+                    preview: false,
                     number: channel_number.to_owned(),
                     executable,
                     output: hls_working_dir(channel_number),
@@ -392,6 +393,40 @@ async fn ensure_preview_worker_running(
         return;
     }
 
+    let Ok(timeout) =
+        tokio::time::timeout_at(deadline.into(), load_segmenter_startup_timeout(state)).await
+    else {
+        return;
+    };
+    let idle_timeout = Some(timeout);
+    if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+        let executable = match ersatzrs_infra::next_engine::host::channel_binary() {
+            Ok(executable) => executable,
+            Err(error) => {
+                tracing::warn!(channel_id = channel.id, kind = ?error.kind(), "Next executable unavailable");
+                return;
+            }
+        };
+        let _task = state
+            .next_engine
+            .start(
+                Arc::clone(&state.preview_hls_sessions),
+                ersatzrs_infra::next_engine::host::NextStart {
+                    channel_id: channel.id,
+                    preview: true,
+                    number: channel.number.clone(),
+                    executable,
+                    output: preview_hls_working_dir(&channel.number),
+                    ffmpeg: ersatzrs_ffmpeg::ffmpeg_path().into(),
+                    ffprobe: ersatzrs_ffmpeg::ffprobe_path().into(),
+                    replacements: path_replacements,
+                    idle_timeout,
+                    deadline: deadline.into(),
+                },
+            )
+            .await;
+        return;
+    }
     let worker = HlsSessionWorker::new_with_options(
         channel.number.clone(),
         channel.id,
@@ -400,12 +435,6 @@ async fn ensure_preview_worker_running(
         path_replacements,
         Arc::clone(&state.ffmpeg_runtime),
     );
-    let Ok(timeout) =
-        tokio::time::timeout_at(deadline.into(), load_segmenter_startup_timeout(state)).await
-    else {
-        return;
-    };
-    let idle_timeout = Some(timeout);
     let Ok(minimum_segments) =
         tokio::time::timeout_at(deadline.into(), load_initial_segment_count(state)).await
     else {

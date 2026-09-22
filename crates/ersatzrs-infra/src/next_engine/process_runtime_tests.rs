@@ -155,7 +155,13 @@ async fn prepare_schedule(
     (pool, locker)
 }
 
-async fn assert_audio_and_subtitle(ffmpeg: &Path, ffprobe: &Path, segment: &Path, muted: bool) {
+async fn assert_audio_and_subtitle(
+    ffmpeg: &Path,
+    ffprobe: &Path,
+    segment: &Path,
+    muted: bool,
+    codec: &str,
+) {
     let mut probe = Command::new(ffprobe);
     probe
         .args(["-v", "error", "-show_streams", "-of", "json"])
@@ -165,7 +171,7 @@ async fn assert_audio_and_subtitle(ffmpeg: &Path, ffprobe: &Path, segment: &Path
     assert!(streams.iter().any(|stream| stream["codec_name"] == "h264"));
     assert!(streams
         .iter()
-        .any(|stream| stream["codec_name"] == "aac" && stream["sample_rate"] == "48000"));
+        .any(|stream| stream["codec_name"] == codec && stream["sample_rate"] == "48000"));
     let mut audio = Command::new(ffmpeg);
     audio
         .args(["-v", "error", "-nostdin", "-i"])
@@ -273,6 +279,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
         let host = std::sync::Arc::new(host::NextHost::new(pool, locker, playout.clone()));
         let request = host::NextStart {
             channel_id: 1,
+            preview: false,
             number: "1".into(),
             executable: binary.clone(),
             output: output.clone(),
@@ -284,6 +291,40 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
         };
         assert_next_session(&host, request, muted).await;
     }
+    let mut ac3_profile = profile.profile;
+    ac3_profile.audio_format = FFmpegProfileAudioFormat::Ac3;
+    let (pool, locker) = prepare_schedule(&clip, false, &ac3_profile).await;
+    sqlx::query(r#"UPDATE "ConfigElement" SET "Value"='2' WHERE "Key"=?"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let host = std::sync::Arc::new(host::NextHost::new(pool.clone(), locker, playout));
+    assert_preview_sessions(
+        &host,
+        host::NextStart {
+            channel_id: 1,
+            preview: false,
+            number: "1".into(),
+            executable: binary,
+            output,
+            ffmpeg,
+            ffprobe,
+            replacements: Vec::new(),
+            idle_timeout: None,
+            deadline: Instant::now() + Duration::from_secs(30),
+        },
+    )
+    .await;
+    assert_eq!(
+        crate::playback::load_channel_playback_profile(&pool, 1)
+            .await
+            .unwrap()
+            .unwrap()
+            .profile
+            .audio_format,
+        FFmpegProfileAudioFormat::Ac3
+    );
 }
 
 async fn assert_next_session(
@@ -345,6 +386,7 @@ async fn assert_next_session(
         &request.ffprobe,
         &request.output.join(segment),
         muted,
+        "aac",
     )
     .await;
     assert!(registry.stop_channel("1").await);
@@ -353,4 +395,74 @@ async fn assert_next_session(
     assert!(!request.output.exists());
     assert!(registry.try_get("1").await.is_none());
     assert!(handle.trim_playlist().await.is_none());
+}
+
+async fn assert_preview_sessions(host: &std::sync::Arc<host::NextHost>, request: host::NextStart) {
+    use crate::hls::InMemoryHlsSessionRegistry;
+    use crate::transcode_capacity::active_transcode_snapshot;
+    let previews = std::sync::Arc::new(InMemoryHlsSessionRegistry::new());
+    let normal = std::sync::Arc::new(InMemoryHlsSessionRegistry::with_playout_updates_to(
+        previews.clone(),
+    ));
+    let normal_task = host.start(normal.clone(), request.clone()).await.unwrap();
+    let mut preview_request = request.clone();
+    preview_request.preview = true;
+    preview_request.output = request.output.with_file_name("preview-output");
+    let preview_task = host
+        .start(previews.clone(), preview_request.clone())
+        .await
+        .unwrap();
+    for (registry, config, codec) in [
+        (&normal, &request, "ac3"),
+        (&previews, &preview_request, "aac"),
+    ] {
+        let handle = registry.try_get("1").await.unwrap();
+        timeout(Duration::from_secs(30), async {
+            loop {
+                match handle.startup_readiness() {
+                    HlsStartupReadiness::Ready => break,
+                    HlsStartupReadiness::Failed => {
+                        panic!("Next simultaneous session startup failed")
+                    }
+                    _ => tokio::time::sleep(Duration::from_millis(10)).await,
+                }
+            }
+        })
+        .await
+        .unwrap();
+        let playlist = handle.trim_playlist().await.unwrap();
+        let segment = playlist
+            .lines()
+            .find(|line| {
+                !line.starts_with('#')
+                    && Path::new(line)
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
+            })
+            .unwrap();
+        assert_audio_and_subtitle(
+            &config.ffmpeg,
+            &config.ffprobe,
+            &config.output.join(segment),
+            false,
+            codec,
+        )
+        .await;
+    }
+    assert_eq!(active_transcode_snapshot(2).active, 2);
+    assert!(previews.stop_channel("1").await);
+    preview_task.await.unwrap();
+    assert_eq!(active_transcode_snapshot(2).active, 1);
+    assert!(!preview_request.output.exists());
+    assert!(normal
+        .try_get("1")
+        .await
+        .unwrap()
+        .trim_playlist()
+        .await
+        .is_some());
+    assert!(normal.stop_channel("1").await);
+    normal_task.await.unwrap();
+    assert_eq!(active_transcode_snapshot(2).active, 0);
+    assert!(!request.output.exists());
 }

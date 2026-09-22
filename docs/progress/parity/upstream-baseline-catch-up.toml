@@ -32,7 +32,10 @@ Host startup/rebuild now shares publisher ownership and retries busy source lock
 complete endpoint and platform playback acceptance remain open. The Next HLS session adapter now owns startup/readiness, heartbeat, idle
 expiry, concurrent refresh notification and shutdown. Local-video HTTP dispatch,
 shared capacity, registry/output cleanup and rebuild notification wiring are now
-connected. Runtime/profile health checks cover enabled Next channels. Provider
+connected. Next previews use the browser-compatible profile override with separate
+capacity/output cleanup and shared rebuild publication. Real simultaneous normal
+AC3 and preview AAC output retains selected audio/subtitles and the stored profile.
+Full HTTP/browser proof remains open. Runtime/profile health checks cover enabled Next channels. Provider
 and graphics sources are explicitly refused until their projection is implemented.
 The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment.
@@ -64,4 +67,4 @@ description = 'Implement Next as an optional second engine alongside the native 
 discovered  = '2026-09-22'
 resolved    = false
 adr         = '0095'
-evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Provider/graphics projection, engine-aware previews, full authenticated HTTP/native smoke and platform acceptance remain open. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
+evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof; full HTTP/browser proof remains open. Provider/graphics projection, full authenticated HTTP/native smoke and platform acceptance remain open. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'

@@ -6383,6 +6383,22 @@ native smoke, provider/graphics parity, engine-aware previews and platform
 acceptance remain open.
 Row 13 is still pending; pin/ledger remain ddc8ef7f and CI is not dispatched.
 
+Row 13 preview checkpoint: the preview route now starts the selected Next engine
+with the existing native browser-compatible profile override. Normal and preview
+sessions retain separate registries, output directories and transcode capacity
+keys while sharing serialized channel publication. The main registry forwards
+rebuild notifications to previews even without a normal session; lookup and stop
+remain isolated. Seven registry regressions pass. The expanded real-engine test
+passes in 3.115 seconds using the unchanged recorded Next release binary: after
+the existing selected-track and silent-pin phases, simultaneous normal AC3 and
+preview AAC sessions both decode the selected Dutch audio and visible subtitles.
+Stopping preview leaves normal playback ready and holding one slot; final stop
+removes both outputs and releases all capacity. The stored AC3 profile is unchanged.
+This is engine/host boundary evidence, not full authenticated HTTP or browser
+acceptance. Provider/graphics, served HTTP/native smoke and platform gates remain
+open. Infra/web all-target Clippy passes after correcting only the test helper's
+case-sensitive extension comparison. Ledger/pin unchanged.
+
 """
 
 [[milestone]]

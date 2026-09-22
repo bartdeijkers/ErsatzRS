@@ -129,9 +129,11 @@ impl AppState {
         playout_locker: ersatzrs_core::locking::EntityLocker,
     ) -> Self {
         let repositories = Arc::new(make_repositories(pool.clone()));
-        let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(InMemoryHlsSessionRegistry::new());
         let preview_hls_sessions: Arc<dyn HlsSessionRegistry> =
             Arc::new(InMemoryHlsSessionRegistry::new());
+        let hls_sessions: Arc<dyn HlsSessionRegistry> = Arc::new(
+            InMemoryHlsSessionRegistry::with_playout_updates_to(preview_hls_sessions.clone()),
+        );
         let ffmpeg_runtime = Arc::new(RwLock::new(ffmpeg_runtime));
         let tuner_count = Arc::new(AtomicI32::new(tuner_count));
         let (startup_errors, startup_warnings) = system_startup.health_issue_counts();

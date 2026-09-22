@@ -83,9 +83,15 @@ impl ActiveTranscodeSlot {
     /// shares native HLS identity/capacity but cannot be reclaimed per programme.
     #[must_use]
     pub fn new_next_hls(channel_number: &str) -> Self {
+        Self::new_next_hls_with_capacity_key(channel_number, channel_number)
+    }
+
+    /// Give a Next preview independent admission while retaining its channel identity.
+    #[must_use]
+    pub fn new_next_hls_with_capacity_key(channel_number: &str, capacity_key: &str) -> Self {
         Self {
             slot_id: next_active_transcode_slot_id(),
-            key: format!("hls:{channel_number}"),
+            key: format!("hls:{capacity_key}"),
             channel_number: channel_number.to_owned(),
             kind: ActiveTranscodeKind::HlsRealtime,
             last_access_ms: Arc::new(AtomicI64::new(Utc::now().timestamp_millis())),

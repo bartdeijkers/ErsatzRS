@@ -12,6 +12,7 @@ use tokio::sync::RwLock;
 #[derive(Default)]
 pub struct InMemoryHlsSessionRegistry {
     inner: RwLock<HashMap<String, Arc<dyn HlsSessionHandle>>>,
+    playout_updates_to: Option<Arc<dyn HlsSessionRegistry>>,
 }
 
 impl InMemoryHlsSessionRegistry {
@@ -19,10 +20,32 @@ impl InMemoryHlsSessionRegistry {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Forward rebuild notifications to an independently owned preview registry.
+    /// Session lookup, admission and cancellation remain isolated.
+    #[must_use]
+    pub fn with_playout_updates_to(previews: Arc<dyn HlsSessionRegistry>) -> Self {
+        Self {
+            playout_updates_to: Some(previews),
+            ..Self::default()
+        }
+    }
 }
 
 #[async_trait]
 impl HlsSessionRegistry for InMemoryHlsSessionRegistry {
+    async fn playout_updated(&self, channel_number: &str) -> bool {
+        let mut notified = false;
+        if let Some(handle) = self.try_get(channel_number).await {
+            handle.playout_updated();
+            notified = true;
+        }
+        if let Some(previews) = &self.playout_updates_to {
+            notified |= previews.playout_updated(channel_number).await;
+        }
+        notified
+    }
+
     async fn try_get(&self, channel_number: &str) -> Option<Arc<dyn HlsSessionHandle>> {
         let guard = self.inner.read().await;
         guard.get(channel_number).cloned()
@@ -99,6 +122,26 @@ mod tests {
         fn playout_updated(&self) {
             self.playout_updated.fetch_add(1, Ordering::SeqCst);
         }
+    }
+
+    #[tokio::test]
+    async fn rebuild_reaches_preview_without_a_normal_session_and_keeps_lifetimes_separate() {
+        let previews = Arc::new(InMemoryHlsSessionRegistry::new());
+        let normal = InMemoryHlsSessionRegistry::with_playout_updates_to(previews.clone());
+        let preview = FakeHandle::new("42");
+        previews.insert(preview.clone()).await;
+        assert!(normal.playout_updated("42").await);
+        assert_eq!(preview.playout_updated.load(Ordering::SeqCst), 1);
+        assert!(!normal.stop_channel("42").await);
+        assert!(normal.active_channels().await.is_empty());
+        let live = FakeHandle::new("42");
+        normal.insert(live.clone()).await;
+        assert!(normal.playout_updated("42").await);
+        assert_eq!(live.playout_updated.load(Ordering::SeqCst), 1);
+        assert_eq!(preview.playout_updated.load(Ordering::SeqCst), 2);
+        assert!(normal.stop_channel("42").await);
+        assert_eq!(preview.cancelled.load(Ordering::SeqCst), 0);
+        assert!(!normal.playout_updated("absent").await);
     }
 
     #[tokio::test]

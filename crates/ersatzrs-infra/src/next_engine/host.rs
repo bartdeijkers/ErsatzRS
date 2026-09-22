@@ -40,6 +40,7 @@ pub struct NextHost {
 #[derive(Clone)]
 pub struct NextStart {
     pub channel_id: i64,
+    pub preview: bool,
     pub number: String,
     pub executable: PathBuf,
     pub output: PathBuf,
@@ -101,6 +102,14 @@ impl NextHost {
                     .await
                     .map_err(|_| ProcessError::Preparation("profile read"))?
                     .ok_or(ProcessError::Preparation("profile unavailable"))?;
+                let profile = if request.preview {
+                    crate::hls_worker::apply_playback_profile_override(
+                        profile,
+                        crate::hls_worker::HlsPlaybackProfileOverride::BrowserCompatible,
+                    )
+                } else {
+                    profile
+                };
                 let playout_folder = host.root.join(request.channel_id.to_string());
                 let config = config::channel_config(
                     &profile,
@@ -119,7 +128,14 @@ impl NextHost {
                         .unwrap_or(DEFAULT_ACTIVE_TRANSCODE_LIMIT);
                     if let Some(held) = try_reserve_active_transcode(
                         limit,
-                        ActiveTranscodeSlot::new_next_hls(&request.number),
+                        ActiveTranscodeSlot::new_next_hls_with_capacity_key(
+                            &request.number,
+                            &if request.preview {
+                                format!("preview:{}", request.number)
+                            } else {
+                                request.number.clone()
+                            },
+                        ),
                     ) {
                         reservation = Some(held);
                         session.set_admission(HlsAdmissionStatus::Transcoding);

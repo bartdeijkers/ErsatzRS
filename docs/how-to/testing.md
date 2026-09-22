@@ -86,7 +86,11 @@ first occupies its only shared transcode slot and proves no process/output
 starts; releasing the slot admits Next. A duplicate request reuses the session.
 Each process is touched and stopped through the shared registry; process/output
 cleanup releases capacity and removes the handle. Its playlist is unavailable
-after stop. Separate session regressions use portable child fixtures and a test clock
+after stop. A simultaneous normal/preview phase uses a stored AC3 profile:
+normal output remains AC3, preview output is AAC, both retain selected audio and
+subtitles, and stopping preview releases only its own capacity/output. The stored
+profile remains unchanged. A registry regression covers rebuild notifications
+without a normal session. Separate session regressions use portable child fixtures and a test clock
 for idle expiry, startup deadlines, refresh responsiveness and terminal states.
 It uses no personal library or production database.
 This is engine-boundary proof; it does not replace web endpoint, authentication,
