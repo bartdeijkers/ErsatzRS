@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 169 commits: sixteen reconciled and 153 pending,
+The refreshed ledger registers 169 commits: seventeen reconciled and 152 pending,
 tracked by ucu-00 through ucu-09. UCU-01 is Complete after all local gates:
 HDHomeRun repository-link correction and channel-only Next packaging are ported,
 with checksum/license/provenance, six-RID artifact and Docker startup evidence.
@@ -13,8 +13,7 @@ the ledger; UCU-01 owns their individual verdicts and evidence.
 UCU-02 is In progress: row 11 ports persisted engine selection, retained native
 defaults, Next mode normalization and the localized SSR editor. Migration,
 repository/application and Chromium/Firefox tests pass, including no-JS forms.
-Row 12 is Covered: native menu/action bindings already work, verified with
-four focused Chromium/Firefox regressions. Row 13 is Adapt (ADR 0095): wire types,
+Row 12 menu bindings are Covered by browser regressions. Row 13 is Adapt (ADR 0095): wire types,
 executable discovery, atomic publication, profile mapping and managed-process
 startup/stop have focused tests. Real Linux Next HLS proves the selected alternate
 audio and burned external subtitle. Database-backed item selection also proves
@@ -43,12 +42,12 @@ consumers without rebuilding persisted schedules. Row 15 is Covered by existing
 macOS RID mapping and executable-adjacent archive staging; packaging fixtures
 pass, while active macOS release/native-runtime proof remains open. Row 16 is
 Covered: explicit upload shells already prevent the upstream Windows shell bug.
+Row 17 fixes negative mirror offsets in channel upsert and verifies consistent
+XMLTV actual/guide-window projection without changing source items.
 UCU-01 and UCU-02 own their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows
-each run. The 2026-09-22 fetch adds six commits after the verified bootstrap prefix;
-substantive Codex review
-replaces the former Claude cross-review gate by maintainer decision. The
+each run. Substantive Codex review replaces Claude review by maintainer decision. The
 bootstrap is accepted: ucu-00 and its AMM-N-03 prerequisite are Complete.
 Milestones own acceptance and evidence; behavioral
 debt stays in each owning feature. AMM-N-03 remains a prerequisite and teletext

@@ -88,6 +88,9 @@ release section when tagging a release.
 
 ### Fixed
 
+- Preserve negative mirror playout offsets through channel repository upsert,
+  keeping XMLTV actual and guide-window times consistent (upstream PR #2863).
+
 - Render channel add/edit forms in order so they remain usable with JavaScript
   disabled, including engine selection and server-side mode normalization.
 

@@ -5,8 +5,7 @@ use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository, Pl
 use ersatzrs_infra::{repositories::make_repositories, xmltv::load_xmltv_programmes};
 use sqlx::Executor;
 
-#[tokio::test]
-async fn xmltv_projects_source_programming_onto_delayed_mirror_number() {
+async fn fixture() -> ersatzrs_infra::db::DbPool {
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
     repos
@@ -40,6 +39,13 @@ async fn xmltv_projects_source_programming_onto_delayed_mirror_number() {
     )
     .await
     .unwrap();
+    pool
+}
+
+#[tokio::test]
+async fn xmltv_projects_source_programming_onto_delayed_mirror_number() {
+    let pool = fixture().await;
+    let repos = make_repositories(pool.clone());
     let now = common::fixed_time();
     let mut item = common::playout_item(30, 20, 1);
     item.start = now - Duration::hours(1) - Duration::minutes(10);
@@ -75,4 +81,71 @@ async fn xmltv_projects_source_programming_onto_delayed_mirror_number() {
         mirror_programme.stop - source_programme.stop,
         Duration::hours(1)
     );
+}
+
+#[tokio::test]
+async fn xmltv_mirror_offsets_actual_and_guide_windows_once_without_mutating_source() {
+    let pool = fixture().await;
+    let repos = make_repositories(pool.clone());
+    let now = common::fixed_time();
+    let mut item = common::playout_item(30, 20, 1);
+    item.start = now;
+    item.finish = now + Duration::minutes(20);
+    item.guide_start = Some(now - Duration::minutes(5));
+    item.guide_finish = Some(now + Duration::minutes(30));
+    repos.playout.upsert_item(&item).await.unwrap();
+    let original = repos
+        .playout
+        .items_in_range(20, now, item.finish)
+        .await
+        .unwrap();
+    for hours in [-2, 1] {
+        let mut mirror = repos.channel.get_with_profile(11).await.unwrap();
+        mirror.playout_offset = Some(Duration::hours(hours));
+        repos.channel.upsert(&mirror).await.unwrap();
+        for (behavior, expected_start, expected_stop) in [
+            ("UseActualTimes", item.start, item.finish),
+            (
+                "SplitTimeEvenly",
+                item.guide_start.unwrap(),
+                item.guide_finish.unwrap(),
+            ),
+        ] {
+            sqlx::query(r#"REPLACE INTO "ConfigElement" ("Key", "Value") VALUES (?, ?)"#)
+                .bind(ersatzrs_domain::CONFIG_KEY_XMLTV_BLOCK_BEHAVIOR)
+                .bind(behavior)
+                .execute(&pool)
+                .await
+                .unwrap();
+            // Repeated reads must not apply the mirror offset cumulatively.
+            for _ in 0..2 {
+                let programmes = load_xmltv_programmes(
+                    &pool,
+                    now - Duration::hours(3),
+                    now + Duration::hours(3),
+                )
+                .await
+                .unwrap();
+                assert_eq!(programmes.len(), 2);
+                for (number, offset) in [("3", Duration::zero()), ("9", Duration::hours(hours))] {
+                    let programme = programmes
+                        .iter()
+                        .find(|p| p.channel_number == number)
+                        .unwrap();
+                    assert_eq!(programme.start, expected_start + offset);
+                    assert_eq!(programme.stop, expected_stop + offset);
+                }
+            }
+        }
+    }
+    let persisted = repos
+        .playout
+        .items_in_range(20, now, item.finish)
+        .await
+        .unwrap();
+    assert_eq!(persisted.len(), original.len());
+    assert_eq!(persisted[0].start, original[0].start);
+    assert_eq!(persisted[0].finish, original[0].finish);
+    assert_eq!(persisted[0].guide_start, original[0].guide_start);
+    assert_eq!(persisted[0].guide_finish, original[0].guide_finish);
 }

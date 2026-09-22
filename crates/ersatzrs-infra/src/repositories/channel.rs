@@ -19,8 +19,7 @@ use crate::music_video_credits::list_music_video_credit_template_names;
 
 use super::common::{
     decode_bool_column, decode_datetime, decode_enum_column, decode_message, encode_datetime,
-    encode_duration, encode_enum, encode_signed_duration, load_ids, not_found,
-    try_decode_signed_duration_text,
+    encode_enum, encode_signed_duration, load_ids, not_found, try_decode_signed_duration_text,
 };
 
 #[derive(Clone)]
@@ -133,7 +132,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .bind(encode_enum(channel.playout_source))
             .bind(encode_enum(channel.playout_mode))
             .bind(channel.mirror_source_channel_id)
-            .bind(channel.playout_offset.map(encode_duration))
+            .bind(channel.playout_offset.map(encode_signed_duration))
             .bind(encode_enum(channel.transcode_mode))
             .bind(encode_enum(channel.idle_behavior))
             .bind(channel.is_enabled)

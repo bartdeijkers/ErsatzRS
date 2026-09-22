@@ -4,6 +4,7 @@ rs_target  = '`crates/ersatzrs-core/src/xmltv.rs`, `crates/ersatzrs-infra/src/xm
 status     = 'Ported'
 adr        = ['0058']
 summary    = '''
+UCU-02 row 17 fixes signed mirror offset persistence; see its evidence.
 Ported: `/iptv/xmltv.xml` renders `<channel>`/`<programme>` elements through
 seven customizable `minijinja` templates (movie/episode/musicVideo/song/
 otherVideo/remoteStream/channel), matching ErsatzTV's per-kind field set —

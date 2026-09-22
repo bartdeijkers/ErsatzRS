@@ -87,8 +87,9 @@ continuity. Row 13 is accepted as Adapt (ADR 0095), with focused maintenance
 tests, Clippy and renewed Next/native HTTP lifecycle smoke. Row 14 (4ee97d5b)
 is Covered by existing mirror projection, channel-save notifications and runtime
 discovery. Row 15 is Covered by existing macOS Next artifact staging; row 16 by
-explicit release-upload shells. Next: row 17 (6ea0a296), consistent XMLTV playout
-offsets. Authenticated/browser
+explicit release-upload shells. Row 17 preserves negative mirror offsets on
+channel upsert and verifies XMLTV actual/guide-window projection. Next: row 18
+(f2706f32), Windows Next playout JSON support. Authenticated/browser
 and platform acceptance remain open; provider/graphics capabilities belong to
 later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

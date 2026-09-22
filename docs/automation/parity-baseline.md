@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `5cef7775ea944b793ca35118ef5d1ffc5a4c8d28` |
-| **Commit subject** | `fix duplicate windows zips on develop release` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5cef7775ea944b793ca35118ef5d1ffc5a4c8d28 |
+| **Pinned commit** | `6ea0a29638946b35c27948f26afd77dcb49dabae` |
+| **Commit subject** | `fix: consistently apply playout offset when generating xmltv (#2863)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/6ea0a29638946b35c27948f26afd77dcb49dabae |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

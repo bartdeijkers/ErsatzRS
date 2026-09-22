@@ -74,3 +74,10 @@ description = 'Creating a channel at `/channels/add` shows `ErsatzTV` as the def
 discovered  = '2026-07-01'
 evidence    = 'Resolved 2026-07-02: `ChannelEditorForm::new_defaults` in `crates/ersatzrs-core/src/repositories/channel.rs` and `ChannelForm::new_defaults` in `crates/ersatzrs-web/src/admin/server_fns/channels.rs` default `Group` to `ErsatzRS`. Focused regression `channel_editor_new_channel_defaults_to_ersatzrs_group` proves `get_editor_state(None)` defaults and save persistence. Browser proof in `tests/e2e/channels-add-default-group.spec.ts`: `/channels/add` pre-fills `Group` with `ErsatzRS` in desktop and mobile viewports (Chromium and Firefox), saving a new channel persists `ErsatzRS`, and editing an existing channel keeps its saved group.'
 resolved    = true
+
+[[debt]]
+id          = 'channel-upsert-clamps-negative-mirror-offset'
+description = 'The direct channel upsert path encoded negative mirror offsets as zero, unlike editor save.'
+discovered  = '2026-09-23'
+resolved    = true
+evidence    = 'UCU-02 row 17 reproduces a -2-hour XMLTV mirror incorrectly using unshifted source times. Upsert now uses the existing signed encoder, matching editor save. Positive/negative actual and guide-window regressions and 17 channel repository tests pass; see UCU-02 evidence.'

@@ -6562,6 +6562,36 @@ Pin/ledger land together at 5cef7775, followed by upstream checkout alignment:
 16 reconciled / 153 pending. Next row 17 (6ea0a296) corrects XMLTV playout offsets.
 UCU-02 remains In progress; no push, CI dispatch or release was performed.
 
+2026-09-23 row 17 source review (6ea0a296, #2863): upstream moves offset
+application ahead of schedule-kind dispatch in RefreshChannelDataHandler and
+includes GuideStart/GuideFinish as well as Start/Finish; it removes the later
+branch-specific mutations and adds a changelog entry. No upstream tests change.
+Native XMLTV already joins each mirror to source-channel PlayoutItems, shifts
+all four timestamps once, filters on target time and then applies actual-time
+or split-guide-window projection. It has no schedule-kind-specific offset path;
+external schedules use the same persisted-item projection.
+
+The added migrated-database regression exposed a real persistence defect:
+ChannelRepository::upsert encoded PlayoutOffset with encode_duration, which clamps
+negative values to zero. A -2-hour mirror consequently emitted 10:00 instead of
+08:00. The editor-save path already used encode_signed_duration. Use that same
+existing encoder in upsert, preserving signed values before guide/playback
+projection. No schema, UI, scheduler-state or architecture change is required.
+Verdict: Port, retaining the already-correct XMLTV projection and correcting its
+repository input contract. No audio/subtitle fields or health capabilities change.
+
+Both XMLTV mirror tests now pass, covering positive and negative offsets,
+actual versus distinct guide windows, repeated reads without cumulative shifts
+and unchanged persisted source timestamps. All 17 channel repository tests pass;
+infra all-target Clippy passes with -D warnings. Existing null-guide/positive
+mirror behavior remains covered. The fresh fetch still matches all 169 ledger
+SHA/subjects at target ee038ba4. Native HTTP lifecycle smoke passes on the
+corrected build: HLS playlist/segment (5186920 bytes), idle cleanup, MPEG-TS
+wrapper restart (8192 bytes) and final idle cleanup. The source diff contains
+only the encoder binding and its regression fixture; no FFmpeg output changes.
+Pin and ledger land together at 6ea0a296, followed by upstream checkout alignment:
+17 reconciled / 152 pending. Next: row 18 (f2706f32). UCU-02 remains In progress.
+
 """
 
 [[milestone]]
