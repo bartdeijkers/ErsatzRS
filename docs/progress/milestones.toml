@@ -5789,6 +5789,35 @@ is claimed by these packaging checks. Full UCU-01 acceptance remains open.
 Landing subject: build(release): bundle optional Next engine artifacts.
 Pin and ledger advance together to 47885758; checkout upstream after landing
 and verify agreement. Next pending row: 1b292b5f, try to fix github token.
+
+2026-09-22 row 5: 1b292b5fd042a056cea125e41da465a259f2b356,
+try to fix github token. Pin, last landed row and upstream HEAD agree at
+47885758 before advancing. Fetch retains target 55885508; all 168 ledger
+SHA/subjects match the upstream log. AMM-N-03 and UCU-00 remain Complete.
+Source map: upstream artifacts.yml changes two GH_TOKEN references for Linux
+and Windows Next downloads, docker.yml changes one for Next downloads, and
+ci.yml/release.yml each change the gh_token argument passed to the reusable
+artifacts workflow. The full diff is five expression substitutions across four
+workflow files. Comparing parent/current content after normalizing the two
+old token expressions proves no other changes; unchanged publish-step secret
+references remain in artifacts.yml. No source, tests, changelog, permissions,
+schemas or playback changes are included. No secret values were read.
+Native mapping: release.yml already binds GH_TOKEN to github.token for both
+beta staging and release upload. stage-next.py's public HTTP download path
+uses no authorization header or token environment variable; release and Docker
+staging call that same helper. Row 4 owns its six-RID public-download and Docker
+startup evidence; no changed input requires repeating those downloads here.
+Verdict N/A (upstream tooling), owner upstream-baseline-catch-up. There is no
+reusable upstream gh_token input to correct in the native workflows. Direct
+Codex review confirms the entire row is tooling-only and finds no actionable
+serious native omission. ADR 0095 is not used as an exemption, and no claim
+of successful hosted CI authentication is inferred from source inspection.
+Documentation only: affected-checks selects progress validation; progress check
+and git diff --check pass. No Rust build, browser, playback or hosted CI run.
+Landing subject: docs(porting): reconcile upstream workflow token references.
+Pin and ledger advance together to 1b292b5f, followed by upstream checkout and
+agreement verification. Next pending row: f69761cb, more gh token tweaks.
+UCU-01 remains In progress; full-window gates and exact-SHA CI remain open.
 """
 
 [[milestone]]

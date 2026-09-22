@@ -1,6 +1,6 @@
 <!--
 generated: 2026-09-22
-parity_baseline_commit: 47885758ec36f7fda134009232baa6dd734138ab
+parity_baseline_commit: 1b292b5fd042a056cea125e41da465a259f2b356
 generator: reviewed catch-up pin advancement
 rules: docs/automation/gap-prompt-rules.md
 -->
@@ -20,8 +20,8 @@ front-matter value is a generated checkpoint, not permission to reset a newer pi
 ### Workflow
 
 Follow AGENTS.md and `plans/upstream-catch-up.md`. Fully reconcile exactly the
-first pending ledger row without stopgaps; the current candidate is 1b292b5f,
-`try to fix github token`. This is an explicitly authorized
+first pending ledger row without stopgaps; the current candidate is f69761cb,
+`more gh token tweaks`. This is an explicitly authorized
 post-pin catch-up task, not an ordinary pinned-baseline parity gap.
 
 ### Before editing
