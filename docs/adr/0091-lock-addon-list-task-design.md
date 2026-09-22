@@ -7,26 +7,15 @@ its strict adaptation under AMM-N-01B.
 
 ## Implementation
 
-Partial — reopened on 2026-09-12 for contradictory preparation readiness,
-hidden preparation failures and misleading post-create failure navigation.
-Those A02/A03/A05 defects and the subsequently authorized A06-A10 guidance,
-validation-label and accessibility corrections are now verified locally.
-The focused joint walkthrough also fixes stale import landing, bulk inclusion
-and recovered-failure feedback. Narrow filter readability is verified on the
-current Linux and Windows candidates (2026-09-21). Detail-progress naming is
-verified in both browsers on host 8eede3f8. Retained-versus-saved bulk feedback
-retains its owning follow-up record;
-full responsive/accessibility closeout is not inferred from the focused pass.
-The accepted design remains unchanged; the owning parity debts track repair.
-Previously, live publication readiness was restored under AMM-N-01B
-without reloading or replacing unsaved inputs. Production task routes, native draft retention,
-transactional saves and immutable artwork retain their functional evidence. The
-2026-09-10 item-form correction restores the locked editing/tools hierarchy,
-explicit numbering, concise option guidance and restrained disclosure boundaries.
-Milestone `amm-n-01b` owns current validation; N-02/N-03 remain separate and open.
-The accepted design and its frozen reference are unchanged.
+Partial — AMM-N-01B is accepted on 2026-09-22 under the explicit amendments
+below. The separately owned W31 preparation-readmission explanation remains
+open; completing N-01B does not mark every ADR-linked follow-up implemented.
+AMM-N-01B owns the clause audit, native/hydrated persistence and responsive
+acceptance, including corrections A02/A03/A05, A06-A10 and W28-W30. The
+frozen 139-file reference remains unchanged. Integrated playback, native
+Windows recovery and release acceptance are owned separately by AMM-N-03.
 Maintainer-authorized refinement (2026-09-18, phase 1 of
-`plans/addon-list-workspace-ux-refinements.md`): on Items the publication
+the workspace refinement acceptance recorded under AMM-N-01B): on Items the publication
 summary sits inside the heading beside the title, finished preparation and
 successful publication history appear only on Activity & recovery, and the
 Save button is the visible draft indicator (the status text remains for
@@ -115,6 +104,21 @@ No product behavior change is requested. Source inspection confirms that Apply
 uses the existing save intent; explicit post-proposal edit verification belongs
 to AMM-N-01B. The decision alone does not complete that milestone or AMM-N-03.
 
+## Addendum: Retain the current selection controls (2026-09-22)
+
+The maintainer explicitly accepts the current selection controls to close W29.
+The selected-item counter updates after a native form action; it does not update
+immediately when a checkbox changes. Select all remains inside Edit multiple
+items > Items to change. The accepted Save-button dirty indicator and row
+markers distinguish retained edits from saved data; overview/filter counts
+continue to describe saved state. Selection remains separate from publication
+inclusion, and Save retains its existing atomic revision checks.
+
+This is a scoped amendment to Decision 6, recorded without changing the frozen
+reference or its manifest. No product change, new selection framework or sticky
+action bar is requested. AMM-N-01B records the existing native/hydrated evidence
+and this explicit design acceptance; the decision does not waive other gates.
+
 ## Addendum: Playback save conflicts (2026-09-13)
 
 The accepted dogfood correction narrows the conflict fence only for the
@@ -177,7 +181,6 @@ persistence, hydration, localization or runtime parity.
 
 ## References
 
-- [AMM-N-01B execution plan](../../plans/amm-n-01b-addon-list-design-adaptation.md)
 - [Canonical acceptance and evidence](../progress/milestones.toml)
 - [Owning parity record](../progress/parity/addon-metadata-management.toml)
 - [Add-on lifecycle contract](0085-broaden-addon-list-lifecycle-and-provider-options.md)

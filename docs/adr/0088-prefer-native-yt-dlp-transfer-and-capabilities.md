@@ -87,7 +87,7 @@ video in scheduled MPEG-TS and HLS. Synthetic section accuracy is not that gate.
 ## References
 
 - [ADR 0087](0087-stream-sponsorblock-intervals-without-playback-underruns.md)
-- [AMM delivery plan](../../plans/addon-list-lifecycle-broadening.md)
+- [AMM delivery acceptance and evidence](../progress/milestones.toml)
 - [yt-dlp downloader implementation](https://github.com/yt-dlp/yt-dlp/blob/2026.08.19/yt_dlp/downloader/external.py)
 - [FFprobe documentation](https://ffmpeg.org/ffprobe.html)
 - [FFmpeg NUT demuxer](https://ffmpeg.org/doxygen/trunk/nutdec_8c_source.html)

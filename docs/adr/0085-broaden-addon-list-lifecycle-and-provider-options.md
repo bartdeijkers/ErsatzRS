@@ -513,6 +513,6 @@ sortable Name/Id table headers use keyboard-operable controls plus `aria-sort`.
 - [ADR 0075: Review add-on metadata before library publication](0075-review-addon-metadata-before-publication.md)
 - [ADR 0079: Discover add-on lists before deferring item details](0079-make-addon-list-imports-resumable.md)
 - [Add-on-list publication recovery](../progress/milestones.toml)
-- [Add-on-list lifecycle broadening](../../plans/addon-list-lifecycle-broadening.md)
+- [Add-on-list lifecycle acceptance and evidence](../progress/milestones.toml)
 - [yt-dlp command-line options](https://github.com/yt-dlp/yt-dlp#usage-and-options)
 - [yt-dlp installation and update methods](https://github.com/yt-dlp/yt-dlp/wiki/Installation)

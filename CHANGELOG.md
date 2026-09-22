@@ -15,13 +15,16 @@ release section when tagging a release.
 
 ### Changed
 
+- Retain form-action selection counts and Select all under Edit multiple items
+  > Items to change as an explicitly accepted design choice; Save-button and row
+  markers distinguish retained changes from saved data.
 - Accept editable numbering reviews: Apply saves the current Items task,
   including edits made after the proposal; Cancel restores the pre-proposal draft.
 - Align Windows beta acceptance with ADR 0066's installed add-on entrypoints;
   retain midpoint seeking, output, failure diagnostics and package identity gates.
 - Verify the yt-dlp 0.11.4 Windows batch-error correction in the installed
-  provider, preserving settings and enabled state. Host beta archive and
-  publication acceptance remain separate.
+  provider, preserving settings and enabled state. Complete AMM-N-03 with the
+  accepted Windows v1.0.37-beta archive and identical verified public download.
 - Track upstream ErsatzTV catch-up through a ledger refreshed to the latest
   upstream commit each run (currently 162 commits) and milestone gates before
   teletext. Keep the current parity pin unchanged during
@@ -33,6 +36,13 @@ release section when tagging a release.
   progress TOMLs, and reusable design artifacts under documentation. Milestones
   may omit a standalone plan; supplied plan links are still validated. The
   generated Clippy ledger now lives under `docs/reference/`.
+
+## [1.0.37-beta] - 2026-09-22
+
+Windows-only beta accepted under AMM-N-03: the published archive is byte-for-byte
+identical to the tested draft. Linux and Windows acceptance, native recovery,
+SponsorBlock and primary/fallback subtitle evidence are recorded in the milestone.
+Version 1.0.36-beta failed its isolation gate and was not published.
 
 ### Added
 
@@ -58,8 +68,8 @@ release section when tagging a release.
   detection now has its own first season and ignores the manual numbering
   Count, and media kind changes no longer use that Count either. A numbering
   preview is reviewed inside the tools with "Apply numbering changes", which
-  saves (and therefore publishes) exactly the values listed, and "Cancel
-  preview", which restores your earlier unsaved edits.
+  saves the current Items task, including later row edits, for automatic
+  publication, and "Cancel preview", which restores your earlier unsaved edits.
 - The add-on list Items page shows the applied filter and search as chips with
   one "Clear filters" button, and the pager gains First page, Last page and a
   "Page X of Y" position. With JavaScript, picking a filter category or page
@@ -3119,7 +3129,8 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.37-beta...HEAD
+[1.0.37-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...v1.0.37-beta
 [1.0.35-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.34-beta...v1.0.35-beta
 [1.0.34-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.33-beta...v1.0.34-beta
 [1.0.33-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.32-beta...v1.0.33-beta

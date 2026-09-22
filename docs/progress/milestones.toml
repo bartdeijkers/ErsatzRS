@@ -3929,9 +3929,8 @@ the next action is an N-02 implementation plan for maintainer review.
 id         = 'amm-n-01b'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
 title      = 'Replace Add-on List editing with the locked task design'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/amm-n-01b-addon-list-design-adaptation.md'
 depends_on = ['amm-n-01']
 acceptance = '''
 Adapt the ADR 0091 locked artifact and its accepted amendments to real /media/addon-lists routes:
@@ -3945,7 +3944,10 @@ retain restrained disclosures, visible routine settings, vertically stacked
 bar and 10/25/50/100/All paging. Under the 2026-09-21 amendment, numbering review
 keeps rows editable and Apply saves the current Items task, including later row
 edits; Cancel restores the pre-proposal draft without saving. The frozen artifact
-remains unchanged. No synthetic data/results or Python runtime ship.
+remains unchanged. Under the 2026-09-22 amendment, selection counts update
+after a native form action and Select all remains under Edit multiple items >
+Items to change; Save-button and row markers show retained changes.
+No synthetic data/results or Python runtime ship.
 
 Native forms and hydrated actions share real application commands. Preserve
 unsaved values and selection through validation, paging/filtering, task/item/
@@ -3975,6 +3977,33 @@ playback and release gates remain unchanged; prototype reports cannot replace
 production acceptance.
 '''
 evidence = '''
+2026-09-22 final clause audit: Complete under ADR 0091's accepted amendments.
+The maintainer explicitly retains form-action selection counts and Select all
+under Edit multiple items > Items to change. W29 closes as a design decision,
+with existing Save-button and row dirty markers; no product change is made.
+The frozen 139-file reference is unchanged. Current evidence below maps:
+- Native task commands, ETag/revision fences, atomic rollback/replay, immutable
+  artwork and chapters: September 21 workspace closeout (2839 passes and
+  successful doctests), including the named repository regressions below.
+- All six destinations, drafts/selection, scopes/Undo, inheritance, source,
+  impact/revision restore, recovery and full details: 138 matched Linux UI cases
+  plus 132 distinct native Windows cases, with original failures and their
+  successful focused corrections retained. Phase 4 filtering/paging/Save and
+  publication-island checks pass; the earlier testing-only note is superseded.
+- Seven widths, both themes, 200% zoom, long cultures, keyboard/focus, principal
+  target geometry, contrast and reflow: current Windows visual cases below;
+  source/capability mapping remains in the unchanged design reference.
+- Editable numbering Apply/Cancel and W30 accessible progress: focused exact
+  3a16e73a archive cases, with Chromium/Firefox native/hydrated coverage.
+- Localization, affected Clippy, architecture/hydration lint, final web parity,
+  playback smoke and applicable TSDuck: September 21 closeout and exact-candidate
+  CI 35665026133; N-03 owns integrated runtime and publication acceptance.
+Codex reviewed the source/evidence correspondence and explicit amendments;
+no remaining actionable finding in this acceptance scope. W31 explanation,
+schema evolution and separately owned provider defects remain visible follow-ups,
+not passed checks. This closes the design adaptation and workspace refinement
+plans after preserving their acceptance and evidence here.
+
 2026-09-22 acceptance evidence cross-check (not closeout):
 Some September 9 raw report paths below are no longer present locally. Current
 repository/migration proof instead uses the retained September 21 successful
@@ -4322,7 +4351,7 @@ hydration flag. The note records 94/94 related Chromium/Firefox cases and clean
 Items/Activity console output on a disposable database copy. A separately
 observed mismatched SSR/WASM build was not product evidence. Keep bundles matched.
 The maintainer states phase 4 is entering testing; retain remaining acceptance
-in plans/addon-list-workspace-ux-refinements.md and do not mark it complete.
+in the then-active workspace refinement plan; the final audit above now closes it.
 
 Prototype review history (not production acceptance): the retained synthetic
 artifact reports cover local-action cancellation without lost edits, bounded
@@ -4343,9 +4372,8 @@ own the baseline; historical Apply/checkbox screenshots are not current designs.
 id         = 'amm-n-02'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
 title      = 'Warn when yt-dlp could not update and is behind the latest release'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-n-01b']
 acceptance = '''
 Only add a warning through the official yt-dlp add-on health check when the
@@ -4365,6 +4393,23 @@ quarantine, extra replacement-validation probes, manual update controls, expande
 and new retry/Retry-After infrastructure are withdrawn, not deferred to N-03.
 '''
 evidence = '''
+2026-09-22 dependency and integrated revalidation: Complete.
+N-01B is accepted. The warning-only acceptance below remains unchanged. Current
+0.11.4 provider contract suites pass on Linux and Windows; native maintenance
+browser cases and exact v1.0.37-beta hydrated/no-JS checks pass. N-03 owns the
+package/deployed identity and current integrated evidence. No actual operator
+-U run or withdrawn rollback administration is claimed.
+Source map transferred from the completed lifecycle plan: provider
+libexec/tool-update.ts keeps bounded native-channel release evidence in the
+existing add-on data directory; addon.check.v1 exposes the warning. Host
+addon_tool_maintenance.rs refreshes readiness after update completion, and
+AddonPlatformHealthCheck projects persisted status/code and optional validated
+LastCheckToolUpdateJson. ERSATZRS_ADDON_CHECK_CONTEXT_VERSION=1 negotiates this
+optional context; legacy three-field checks remain compatible. The existing
+/settings/addons/:id AddonDetailPage/AddonDetailIsland and Health localize the
+same warning in hydrated and SSR/no-JS output, without a new endpoint/control.
+Browser owner: tests/e2e/addon-tool-maintenance.spec.ts.
+
 Completed 2026-09-11 under the maintainer's warning-only ADR 0085 amendment.
 Any confirmed newer native-channel release is stale, not the proposed 90-day
 cutoff. The maintainer explicitly confirmed program and installed/latest versions.
@@ -4394,9 +4439,8 @@ push was run. N-03 owns integrated acceptance.
 id         = 'amm-n-03'
 phase      = 'AMM-N — yt-dlp maintenance and integrated closeout'
 title      = 'Close the broadened lifecycle on Linux x64 and Windows x64'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'addon-metadata-management'
-plan       = 'plans/addon-list-lifecycle-broadening.md'
 depends_on = ['amm-j-04', 'amm-k-04', 'amm-l-05', 'amm-m-03', 'amm-n-01b', 'amm-n-02']
 acceptance = '''
 Host and official-package contract suites, focused Rust/migration/health tests,
@@ -4423,6 +4467,51 @@ Existing command-level regression coverage remains. yt-dlp, native recovery
 and the other Windows release gates remain required.
 '''
 evidence = '''
+2026-09-22 release delivery: Complete.
+The maintainer explicitly authorizes public release publication after the
+approval review requested clarification. The existing v1.0.37-beta draft is
+published without rebuilding, retagging or uploading an asset. Immediately
+before publication, a fresh independent download matches the accepted SHA-256;
+the source tag, all seven CI jobs and terminal Windows release workflow are
+rechecked, with no active release rerun. The independent public download also
+matches e94d42bcda500c8fc0728fd6c76342139fe88201aad3c5cf2ea3efe8aa9cf5b3
+(69,138,151 bytes). The release is public and remains a prerelease with one
+win-x64 ZIP; asset identity and modification time are unchanged.
+Immutable source: 3a16e73a1c96daded23ca93f15720471fcb6e5ad.
+Release: https://github.com/bartdeijkers/ErsatzRS/releases/tag/v1.0.37-beta
+CI: https://github.com/bartdeijkers/ErsatzRS/actions/runs/35665026133
+Windows: https://github.com/bartdeijkers/ErsatzRS/actions/runs/35668471452
+Evidence: test-results/n03-20260921-host/beta-prepublication-verification.json
+and beta-public-verification.json. Later documentation commits are not new
+product candidates. The live host is still 980b0bce with verified provider
+0.11.4; acceptance used the independently extracted 3a16e73a archive and does
+not imply a live host deployment. The completed lifecycle plan is pruned;
+N-02's transferred source map and this record own its unique acceptance detail.
+UCU-00 and separate provider/product debts retain their own acceptance; no
+upstream row, pin or source HEAD is changed by this closeout.
+
+2026-09-22 final integrated acceptance audit: all product/package clauses pass.
+Dependencies J-04, K-04, L-05, M-03, N-01B and N-02 are Complete. W29 is now
+explicitly accepted by the maintainer in ADR 0091; no product change follows.
+Linux closeout, current official-provider suites, localization/hydration/Clippy,
+138 Linux and 132 distinct Windows UI cases cover the host, migration, health,
+lifecycle/source/reconcile/history, disk warnings and publication safeguards.
+The native scan/Publish/disconnect/restart/UI-recovery scenario finishes at one
+exact revision without stranded work or manual repair. Native profile/NTFS and
+preparation-host-death probes pass. Real SponsorBlock source correlation and
+primary/fallback human-caption captures complement smoke and transport proof;
+the ten-second target remains distinct from the satisfied twenty-second maximum.
+Source reuse from 980b0bce to 3a16e73a is explicitly audited below. Exact tagged
+archive launcher, isolation, bundle, focused UI and eight-capture playback checks
+pass independently; the deployed provider matches the native entrypoint proof.
+Codex reviewed the unchanged runtime/persistence boundaries, candidate identity,
+failed-attempt corrections and every acceptance clause. No actionable finding
+remains in this milestone. Separate W31/schema/provider debts remain open;
+ARM/macOS, retired Beeld & Geluid, manual anamorphic and conditional HLS Direct
+checks retain their recorded exclusions/skips and are not claimed passed.
+Only public promotion of the accepted ZIP and independent published-asset
+verification remain before the final release delivery claim.
+
 2026-09-22 v1.0.37-beta draft archive and focused native UI accepted:
 Windows workflow 35668471452 completes successfully on
 3a16e73a1c96daded23ca93f15720471fcb6e5ad, including startup registration and

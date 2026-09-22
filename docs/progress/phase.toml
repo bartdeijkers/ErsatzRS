@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU bootstrap reviewed; complete AMM-N-03 native acceptance before the first upstream step'
+current_focus = 'AMM-N-03 complete; verify UCU-00 acceptance before any upstream commit'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -61,45 +61,27 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-2026-09-21 Windows host checkpoint: source 980b0bce is built, packaged and
-deployed with the maintainer's explicit start authorization. Independent archive
-checks, the native bundle gate, packaged-launcher identity, HTTP readiness,
-migration 202609180900 and five read-only hydrated UI routes pass. Program and
-consistent database backups are retained; original Windows source work is
-restored and the new host remains running. Native scheduled-scan/publication/
-NTFS fault/disconnect/restart/UI recovery passes with one exact final revision
-and zero browser errors. All eight native primary/fallback subtitle/cut playback
-combinations pass, with strict decoding and 152 TSDuck checks. AMM-N-03 stays
-open: real-provider native TS/HLS playback, independent source correlation,
-strict decoding and 38 transport checks also pass. A public manual-caption
-source now passes publication and four rendered primary/fallback TS/HLS captures,
-four strict decodes and 76 transport checks. The matched Linux build/bundle and
-all 138 selected UI cases pass; native preparation host-death recovery also
-passes. Linux smoke and the 64-check TSDuck calibration gate pass; conditional
-HLS Direct remains skipped. Final web parity passes using the completed Rust
-closeout. Four native browser cases verify post-proposal edits and Cancel
-under the accepted 2026-09-21 ADR 0091 amendment. Push, CI and tags for
-AMM-N-03 are now explicitly authorized; complete prerequisite gates first.
-Linux closeout
-passes all 2839 selected nextest cases and the doctest phase, with 37 existing
-skips. The full local 0.11.4 provider suite passes 109 Linux and 64 native Windows
-cases, with existing platform/withdrawn-service skips retained. All four native
-maintenance-warning browser cases pass. Current native workspace acceptance
-combines 118 valid broad-run passes with 16 focused passes, covering 132 distinct
-cases after two test-only corrections. AMM-N-01B's editable numbering-review
-decision and focused post-proposal edit verification are complete. Profile guidance passes in native
-Chromium and no-JS Firefox with disposable state; the deployed provider package
-remains 0.11.3. Earlier playback captures retain their older-build limits. CI and publication
-remain separate from this authorized local runtime checkpoint.
+2026-09-22: AMM-N-01B, N-02 and N-03 are Complete. The maintainer accepts
+W29's current selection controls in ADR 0091; its frozen reference is unchanged.
+The owning milestones contain the final clause audit, Linux/native Windows
+contract, browser, restart/profile and real-channel playback evidence. Exact
+candidate 3a16e73a passes CI 35665026133 and Windows workflow 35668471452.
+The accepted v1.0.37-beta ZIP is now public after explicit maintainer permission;
+independent downloads before and after publication have the same SHA-256.
+The live Windows host remains 980b0bce, with verified provider 0.11.4; the
+separately accepted packaged candidate is not claimed deployed there.
+The completed design/refinement/lifecycle plans are pruned into their owners.
+Remaining W31, provider/schema and AMM-P-01 debts retain their own acceptance.
+No upstream commit is processed and no pin or upstream HEAD is changed.
 
 2026-09-20: reviewed bootstrap; fetched upstream tip remains 4e951c17
 (162 pending commits). Refresh the target and append new rows each run.
 The live ledger is plans/upstream-catch-up.md; no upstream row is processed.
 The maintainer removed Claude from the active catch-up workflow; substantive
 Codex review replaces cross-review. Historical failed reviews are not blockers.
-UCU-00 remains In progress while its AMM-N-03 prerequisite is open.
-Complete AMM-N-03 before per-commit execution, obtain acceptance of Proposed
-ADR 0095 before relying on its exclusions, then process ucu-01 through ucu-09
+UCU-00 remains In progress and needs its own acceptance check now that
+AMM-N-03 is complete. Obtain acceptance of Proposed ADR 0095 before relying
+on its exclusions, then process ucu-01 through ucu-09
 in order. Teletext p9a-01 waits for ucu-09 as well as its existing dependencies.
 Earlier release/CI authorizations below are historical. The 2026-09-21
 maintainer instruction now explicitly authorizes push, CI and tags to complete
@@ -288,7 +270,7 @@ milestone amm-n-01 owns run links, corrective evidence and the non-blocking
 add-on upload-action deprecation notice. No release was published.
 On 2026-09-09 the maintainer resumed design work, locked the reviewed artifact
 and inserted AMM-N-01B before N-02. ADR 0091 and the checksum-pinned artifact
-own the design; plans/amm-n-01b-addon-list-design-adaptation.md owns execution.
+own the design; milestone amm-n-01b owns execution and acceptance.
 At that checkpoint, N-01B was locally complete, including live publication readiness restored on
 2026-09-11 without losing unsaved input, and the 2026-09-10 authorized item-form
 correction: separate edit/tools regions, concise option guidance, explicit native

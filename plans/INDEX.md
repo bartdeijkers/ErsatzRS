@@ -14,9 +14,6 @@ acceptance from implementation notes or from the presence of a release.
 ## Current corrective and acceptance work
 
 - [Automatic add-on publication](automatic-addon-publication.md) — AMM-P-01.
-- [Remaining lifecycle acceptance](addon-list-lifecycle-broadening.md) — N-02/N-03.
-- [Locked-design production acceptance](amm-n-01b-addon-list-design-adaptation.md) — N-01B.
-- [Workspace refinement testing](addon-list-workspace-ux-refinements.md) — phase 4 testing and unresolved review behavior.
 - [Windows candidate hardening](windows-beta-release-hardening.md) — remaining package and release acceptance.
 
 ## Future feature and engineering detail

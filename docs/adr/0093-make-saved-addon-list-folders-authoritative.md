@@ -92,5 +92,5 @@ incomplete files must be reported without replacing valid saved content.
 - [ADR 0065](0065-managed-remote-stream-playlists.md)
 - [ADR 0075](0075-review-addon-metadata-before-publication.md)
 - [ADR 0085](0085-broaden-addon-list-lifecycle-and-provider-options.md)
-- [Current delivery plan](../../plans/addon-list-lifecycle-broadening.md)
+- [Delivery acceptance and evidence](../progress/milestones.toml)
 - [Structured milestones](../progress/milestones.toml)

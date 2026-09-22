@@ -2,7 +2,7 @@
 
 Accepted by the maintainer on 2026-09-09. Production adaptation is governed by
 [ADR 0091](../../../../adr/0091-lock-addon-list-task-design.md) and the
-[AMM-N-01B plan](../../../../../plans/amm-n-01b-addon-list-design-adaptation.md).
+[AMM-N-01B acceptance and evidence](../../../../progress/milestones.toml).
 
 ## Reference authority
 

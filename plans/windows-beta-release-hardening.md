@@ -13,6 +13,12 @@ archive contract belongs to
 [`release-bundle.md`](../docs/reference/release-bundle.md). Keep facts in those
 owners and use this document only for future work and acceptance sequencing.
 
+The v1.0.37-beta mandatory acceptance is Complete on 2026-09-22; milestone
+`amm-n-03` owns exact-source CI, native/package acceptance and independent
+public-archive evidence. Retain this plan for its separate non-blocking action
+pinning, signing/policy and dependency-hygiene work below. Its acceptance
+procedure remains the contract for a subsequent beta, not an open N-03 gate.
+
 ## Goal
 
 Produce and validate the exact Windows candidate archive before publication,
