@@ -90,7 +90,8 @@ discovery. Row 15 is Covered by existing macOS Next artifact staging; row 16 by
 explicit release-upload shells. Row 17 preserves negative mirror offsets on
 channel upsert and verifies XMLTV actual/guide-window projection. Row 18 proves
 atomic Next JSON publication on Windows/NTFS, including sharing-denial recovery.
-Next: row 19 (9882b008), the streaming-engine editor adjustment. Authenticated/browser
+Row 19 is Covered by existing immediate Next-to-Segmenter editor normalization.
+Next: row 20 (bb493670), media-server sources in Next. Authenticated/browser
 and platform acceptance remain open; provider/graphics capabilities belong to
 later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

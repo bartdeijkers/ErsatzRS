@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 169 commits: eighteen reconciled and 151 pending,
+The refreshed ledger registers 169 commits: nineteen reconciled and 150 pending,
 tracked by ucu-00 through ucu-09. UCU-01 is Complete after all local gates:
 HDHomeRun repository-link correction and channel-only Next packaging are ported,
 with checksum/license/provenance, six-RID artifact and Docker startup evidence.
@@ -23,10 +23,8 @@ complete endpoint and platform playback acceptance remain open. The Next HLS ses
 expiry, concurrent refresh notification and shutdown. Local-video HTTP dispatch,
 shared capacity, registry/output cleanup and rebuild notification wiring are now
 connected. Next previews use the browser-compatible profile override with separate
-capacity/output cleanup and shared rebuild publication. Real simultaneous normal
-AC3 and preview AAC output retains selected audio/subtitles and the stored profile.
-Linux Next/native HTTP lifecycle smoke and the dedicated CI job selection (40
-tests, run locally) pass. Continue publishes appended schedules to dependent Next
+capacity/output cleanup and shared rebuild publication. Normal AC3 and preview AAC retain selected tracks and the stored profile.
+Linux HTTP lifecycle smoke and 40 dedicated Next CI tests pass locally. Continue publishes appended schedules to dependent Next
 channels and previews while preserving native continuity;
 authenticated browser and platform proof remain open. Runtime/profile health
 checks cover enabled Next channels. Provider
@@ -42,7 +40,8 @@ Covered: explicit upload shells already prevent the upstream Windows shell bug.
 Row 17 fixes negative mirror offsets in channel upsert and verifies consistent
 XMLTV actual/guide-window projection without changing source items. Row 18
 verifies atomic Next JSON publication on native Windows/NTFS (seven tests);
-full Windows Next playback remains open.
+full Windows Next playback remains open. Row 19 editor mode normalization is
+Covered by unchanged row-11 browser evidence.
 UCU-01 and UCU-02 own their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows

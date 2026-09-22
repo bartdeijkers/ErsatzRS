@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `f2706f32087d75f47f6dcf076d5ddc2d22ddcc84` |
-| **Commit subject** | `feat: support playout json on windows (#2864)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f2706f32087d75f47f6dcf076d5ddc2d22ddcc84 |
+| **Pinned commit** | `9882b008022bb78da8f312bacf094e4577678540` |
+| **Commit subject** | `tweak streaming engine editor` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9882b008022bb78da8f312bacf094e4577678540 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -6644,6 +6644,32 @@ Unix test; qualifying the type at its existing Unix-only use site removes the
 Windows unused import without excluding a test or changing its behavior.
 Linux infra all-target Clippy also passes after this correction.
 
+2026-09-23 row 19 (9882b008): Covered. The full upstream diff replaces only
+ChannelEditViewModel.StreamingEngine's auto-property with a setter that assigns
+HttpLiveStreamingSegmenter whenever Next is selected. The surrounding
+ChannelEditor.razor already limits Next to that one mode; the setter ensures
+its bound selection changes immediately. No layout, localization, persistence,
+playback, tests or changelog changes occur in this commit.
+
+Native source map: channels/editor.rs initializes Next mode to 4 and its existing
+streaming_engine_dependency_script sets mode.value to 4 on every engine change,
+disables/hides other modes and dispatches the change event. Returning to native
+re-enables those modes without silently selecting a different one. Repository
+normalize_editor_form independently forces mode 4 for Next when JavaScript is
+unavailable. All of this already landed in ad2eba7d (UCU-02 row 11).
+
+Reuse the unchanged row-11 source/tests and its 4/4 Chromium/Firefox results
+(14.2 seconds, JavaScript enabled/disabled). The test explicitly asserts mode 4
+and disabled MPEG-TS immediately after selecting Next, before submitting, then
+checks persisted 1|4, reopen, and return to native 0|5. Source diff against
+ad2eba7d for editor.rs and channel-streaming-engine.spec.ts is empty; reviewing
+the current repository normalizer confirms the same save fallback. No new
+browser run or runtime acceptance is claimed for this documentation-only row.
+No actionable defect or new deviation remains. Fresh fetch and exact comparison
+confirm the same 169-row target. Land row/pin at 9882b008 and align upstream HEAD:
+19 reconciled / 150 pending. Next: row 20 (bb493670), media-server inputs for Next.
+UCU-02 stays In progress; no push or CI before the authorized UCU-03 boundary.
+
 """
 
 [[milestone]]
