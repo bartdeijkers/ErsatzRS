@@ -614,16 +614,19 @@ See the disk-space note in
 Release archive staging requires Python 3.12 and public HTTPS access to the
 [ErsatzTV Next develop release](https://github.com/ErsatzTV/next/releases/tag/develop).
 `scripts/release/stage-next.py --rid <rid> --output <stage>/next` stages the
-three upstream executables, their MIT license and `origin.json` beside the
-ErsatzRS executable. It requires the release API's SHA-256 digest and records
+`ersatztv-channel` executable, its MIT license and `origin.json`. Archive
+packaging then moves the executable (with `.exe` on Windows) to the package
+root beside ErsatzRS, retaining only license/provenance in `next/`.
+It requires the release API's SHA-256 digest and records
 the selected asset, revision and license hash. Missing artifacts, invalid
 checksums or missing licenses fail packaging; no GitHub credential is needed.
 All six supported RIDs are mapped, including the currently unpublished macOS
 archive targets. Run `python3 scripts/release/test-stage-next.py` for offline
 archive, provenance and failure-path regressions.
 
-Docker builds use a separate build-host Python stage and copy only `next/`
-into `/usr/local/bin/next`; Python is not added to the runtime image. Bake
+Docker builds use a separate build-host Python stage and copy the channel
+executable into `/usr/local/bin`, retaining license/provenance under
+`/usr/local/bin/next`; Python is not added to the runtime image. Bake
 passes `VERSION` as `NEXT_RELEASE_REFRESH` to refresh the mutable develop
 release on each product release. For repeated manual builds of the same
 version, use `--no-cache-filter next-artifacts` with buildx, or change

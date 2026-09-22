@@ -116,6 +116,7 @@ jobs:
           }
           python scripts/release/stage-next.py --rid win-x64 --output "$stage/next"
           if ($LASTEXITCODE -ne 0) { throw 'Next runtime staging failed' }
+          Move-Item "$stage/next/ersatztv-channel.exe" "$stage/ersatztv-channel.exe"
           Compress-Archive -Path $stage -DestinationPath $archive
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $archive))
@@ -404,6 +405,9 @@ jobs:
             exit 1
           fi
           python scripts/release/stage-next.py --rid "$RID" --output "$stage/next"
+          next_binary="ersatztv-channel"
+          if [ "$RID" = "win-x64" ]; then next_binary="${next_binary}.exe"; fi
+          mv "$stage/next/$next_binary" "$stage/$next_binary"
           if [ "$ARCHIVE" = "zip" ]; then
             7z a -tzip "${stage}.zip" "$stage" >/dev/null
             if [ "$RID" = "win-x64" ] && ! 7z l -slt "${stage}.zip" | tr "\\\\" "/" | grep -Fx "Path = ${stage}/ErsatzRS.exe" >/dev/null; then

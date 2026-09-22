@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22: UCU-01 row 8 (30c361db) ports channel-only Next packaging
+beside the server executable. Six-RID fixtures, archive relocation and Docker
+packaging/startup checks pass. Continue at row 9 (74a21abd); Next playback
+and full-window acceptance remain open.
+
 2026-09-22: UCU-01 row 7 (b76d8f8e) is Covered: nine token-reference
 substitutions only; native uploads already use the job token. Continue at
 row 8 (30c361db), narrowing bundled Next executables; window gates remain open.

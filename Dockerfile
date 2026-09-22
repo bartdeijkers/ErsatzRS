@@ -128,7 +128,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the ersatzrs-web server binary
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck
-COPY --from=next-artifacts /next /usr/local/bin/next
+COPY --from=next-artifacts /next/ersatztv-channel /usr/local/bin/ersatztv-channel
+COPY --from=next-artifacts /next/LICENSE /next/origin.json /usr/local/bin/next/
 # cargo-leptos already copies the assets-dir (public/) contents into the top
 # level of target/site alongside pkg/, so target/site is the single merged
 # admin-UI directory; ship only that, not a separate public/ copy.

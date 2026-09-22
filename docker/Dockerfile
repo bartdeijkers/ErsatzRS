@@ -152,7 +152,8 @@ RUN set -eux; \
 FROM runtime-base AS runtime-release
 COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=rust-build /build/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
-COPY --from=next-artifacts /next /usr/local/bin/next
+COPY --from=next-artifacts /next/ersatztv-channel /usr/local/bin/ersatztv-channel
+COPY --from=next-artifacts /next/LICENSE /next/origin.json /usr/local/bin/next/
 # release-web-assets/site is already the single merged admin-UI directory
 # (pkg/ plus the assets-dir/public contents cargo-leptos copies alongside
 # it); no separate public/ copy is needed.
@@ -170,7 +171,8 @@ ENTRYPOINT [ "ersatzrs-web" ]
 FROM runtime-base AS runtime
 COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=rust-build /build/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
-COPY --from=next-artifacts /next /usr/local/bin/next
+COPY --from=next-artifacts /next/ersatztv-channel /usr/local/bin/ersatztv-channel
+COPY --from=next-artifacts /next/LICENSE /next/origin.json /usr/local/bin/next/
 # /build/target/site is already the single merged admin-UI directory (pkg/
 # plus the assets-dir/public contents cargo-leptos copies alongside it); no
 # separate public/ copy is needed.

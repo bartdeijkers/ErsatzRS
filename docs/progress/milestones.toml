@@ -5880,6 +5880,43 @@ Landing subject: docs(porting): reconcile upstream job-token alignment.
 Pin and ledger advance together to b76d8f8e, followed by upstream checkout and
 agreement verification. Next pending row: 30c361db, only bundle the
 ersatztv-channel binary (#2851). UCU-01 window acceptance remains open.
+
+2026-09-22 row 8: 30c361db49c8f6c6f1b55f24fb24770ea9c0b31d,
+only bundle the ersatztv-channel binary (#2851). Pin/row/upstream HEAD agree
+at b76d8f8e before advancing; prerequisite milestones remain Complete. Fetch
+retains 55885508; all 168 ledger SHA/subjects match the ordered upstream log.
+Full five-file diff reviewed. Source map: artifacts.yml extracts only the
+channel binary into the package root for Linux and Windows; docker.yml does
+the same in the Docker context; three Dockerfiles replace next/ copying with
+the single channel executable beside the host. No runtime, schema, tests or
+changelog changes occur. The artifacts.yml diff also introduces a stray
+unindented 'ease upload' line, an invalid workflow fragment; it is not part of
+the intended packaging behavior and is not copied into ErsatzRS.
+Native mapping: stage-next.py now selects only ersatztv-channel. The release
+workflow moves it beside the server (including .exe on Windows); all three
+Dockerfiles copy it into /usr/local/bin. License and origin.json remain under
+next/ so narrowing binaries does not discard attribution or provenance.
+Verdict Port, owner upstream-baseline-catch-up. Direct Codex review caught both
+the root-location change and the malformed upstream line. Regression fixtures
+now include all three upstream executables independently of the implementation
+constant, and assert only the channel binary is staged for all six RIDs. This
+prevents a tautological test from concealing accidental rebundling. No serious
+actionable review finding remains. Native playback/health/UI remain unchanged;
+ADR 0095's runtime integration and acceptance debt stays open.
+Evidence: six offline regressions pass, including six-RID exact inventory and
+failure paths. The actual Bash workflow relocation snippet passes on all six
+RID fixtures. actionlint syntax/expression validation passes with existing
+runner labels configured and shellcheck/pyflakes disabled. A disposable Debian
+bookworm packaging probe uses the production Docker Next stage and COPY lines:
+real public artifact 946aa52 is checksum-verified, only the channel executable
+is copied beside the server location, license/provenance exist, unused binaries
+are absent, and --version reports 0.1.0-946aa52. This is not a full product image,
+Windows PowerShell execution, ARM/macOS execution or playback acceptance claim.
+progress check and git diff --check pass; no Rust code changed. Full-window
+checks and exact-SHA CI remain open. Landing subject:
+build(release): bundle only the Next channel executable.
+Pin/ledger advance together to 30c361db, then upstream checkout and agreement
+verification. Next pending row: 74a21abd, fix workflow.
 """
 
 [[milestone]]

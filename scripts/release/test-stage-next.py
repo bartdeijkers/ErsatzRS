@@ -19,7 +19,7 @@ spec.loader.exec_module(module)
 def fixture(rid, missing=False, link=False):
     root = f"ersatztv-next-v0.1.0-abcdef1-{module.PLATFORMS[rid]}"
     buffer = io.BytesIO()
-    names = list(module.BINARIES)
+    names = ["ersatztv", "ersatztv-channel", "ersatztv-playout-generator"]
     if missing:
         names.remove("ersatztv-channel")
     if rid == "win-x64":
@@ -74,7 +74,7 @@ class StageNextTests(unittest.TestCase):
                 output = self.stage(folder, rid)
                 suffix = ".exe" if rid == "win-x64" else ""
                 self.assertEqual({p.name for p in output.iterdir()},
-                                 {n + suffix for n in module.BINARIES} | {"LICENSE", "origin.json"})
+                                 {"ersatztv-channel" + suffix, "LICENSE", "origin.json"})
                 self.assertEqual(json.loads((output / "origin.json").read_text())["rid"], rid)
                 self.assertFalse((folder / "outside").exists())
                 self.assertTrue((output / ("ersatztv-channel" + suffix)).stat().st_mode & 0o100)

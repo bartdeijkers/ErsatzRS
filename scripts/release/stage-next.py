@@ -19,7 +19,7 @@ PLATFORMS = {
     "linux-arm": "linux-arm", "win-x64": "windows-x64",
     "osx-x64": "macos-x64", "osx-arm64": "macos-arm64",
 }
-BINARIES = ("ersatztv", "ersatztv-channel", "ersatztv-playout-generator")
+BINARIES = ("ersatztv-channel",)
 MAX_ARCHIVE = 128 * 1024 * 1024
 
 

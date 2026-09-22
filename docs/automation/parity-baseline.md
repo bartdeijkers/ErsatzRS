@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `b76d8f8e54b8b7d3dd4787cdc79460dd708d2a53` |
-| **Commit subject** | `more token alignment` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b76d8f8e54b8b7d3dd4787cdc79460dd708d2a53 |
+| **Pinned commit** | `30c361db49c8f6c6f1b55f24fb24770ea9c0b31d` |
+| **Commit subject** | `only bundle the ersatztv-channel binary (#2851)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/30c361db49c8f6c6f1b55f24fb24770ea9c0b31d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
