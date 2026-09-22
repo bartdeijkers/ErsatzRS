@@ -24,7 +24,7 @@ Use the platform wrapper printed by `affected-checks`:
 Do not alternate native, all-targets, WASM, and release graphs after every
 edit. Do not run direct `cargo test`. Do not clean a warm target merely
 because a build is slow; use `cargo xtask target-size` and the documented
-40-GiB policy.
+60-GiB policy.
 
 ## Escalate deliberately
 

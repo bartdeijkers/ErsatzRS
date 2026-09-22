@@ -4,7 +4,7 @@ use std::{
     process::Command,
 };
 
-const DEFAULT_THRESHOLD_GIB: u64 = 40;
+const DEFAULT_THRESHOLD_GIB: u64 = 60;
 const GIB: u64 = 1024 * 1024 * 1024;
 
 pub fn warn_if_oversized() {

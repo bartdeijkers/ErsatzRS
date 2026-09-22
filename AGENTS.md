@@ -210,13 +210,13 @@ cargo insta review
 # Keep target/ pruned to avoid slow cold rebuilds. ROUTINE maintenance is
 # cargo-sweep, which prunes only stale artifacts and preserves the warm cache:
 #   cargo install cargo-sweep && cargo sweep --time 30
-# Run `cargo clean` once `target/` grows beyond 40 GiB; an oversized target/
+# Run `cargo clean` once `target/` grows beyond 60 GiB; an oversized target/
 # (100+ GB) is what makes cold builds feel like "10+ min";
 # a healthy target/ rebuilds cold in ~2.5 min. Swapping the linker does NOT
-# help (mold trialed, no gain — see BUILD.md). Between 40 GiB cleanups, use
+# help (mold trialed, no gain — see BUILD.md). Between 60 GiB cleanups, use
 # `cargo sweep` for routine stale-artifact pruning. `./run.sh dev|build|serve`
 # and `cargo xtask parity-check` check target/ size before expensive work.
-cargo sweep --time 30   # routine; `cargo clean` when target/ exceeds 40 GiB
+cargo sweep --time 30   # routine; `cargo clean` when target/ exceeds 60 GiB
 ```
 
 Non-Rust checks available now:

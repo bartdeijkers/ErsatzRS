@@ -69,7 +69,7 @@ resolve_target_dir() {
 check_target_size() {
   local target_dir
   target_dir="$(resolve_target_dir)"
-  local threshold_gib="${ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB:-40}"
+  local threshold_gib="${ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB:-60}"
   if [[ ! -d "$target_dir" ]] || ! command -v du >/dev/null 2>&1; then
     return
   fi

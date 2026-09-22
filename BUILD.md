@@ -96,7 +96,7 @@ For the longer commands (clippy, test, deny, snapshot review), see the
 
 `./run.sh dev`, `./run.sh build`, `./run.sh serve`, and
 `cargo xtask parity-check` check `target/` size before starting expensive
-build/test work and warn when it exceeds the 40 GiB `cargo clean` threshold.
+build/test work and warn when it exceeds the 60 GiB `cargo clean` threshold.
 When running broad cargo commands directly, check first with
 `cargo xtask target-size`.
 
@@ -376,7 +376,7 @@ Trade-offs:
   tables only; dependencies retain their normal dev line tables.
 - `target/` will be larger than before — the per-package optimisation level
   generates more codegen artifacts. Run `cargo clean` when `target/` grows
-  beyond 40 GiB; between cleanups, use
+  beyond 60 GiB; between cleanups, use
   `cargo install cargo-sweep && cargo sweep --time 30` to prune stale
   artifacts while preserving the warm cache.
 
@@ -605,7 +605,7 @@ oversized `target/`** (observed at 102–136 GB), not a linker problem — on a
 healthy ext4 `target/` the cold cost is ~2.5 min and warm rebuilds are seconds.
 Keep `target/` pruned: run `cargo sweep --time 30` routinely (prunes only
 artifacts older than 30 days, preserves the warm cache) and reserve the heavy
-`cargo clean` for when `target/` exceeds 40 GiB or when reclaiming all space.
+`cargo clean` for when `target/` exceeds 60 GiB or when reclaiming all space.
 See the disk-space note in
 [CLAUDE.md](CLAUDE.md).
 

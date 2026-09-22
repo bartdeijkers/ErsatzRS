@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Raise the local `target/` `cargo clean` threshold from 40 GiB to 60 GiB in
+  the build policy and in the `./run.sh` and `cargo xtask` size warnings
+  (still overridable with `ERSATZRS_TARGET_CLEAN_THRESHOLD_GIB`).
 - Bundle the optional ErsatzTV Next channel executable beside the server in
   release archives and Docker images (upstream PRs #2850, #2851), excluding
   unused Next executables while retaining checksum, license and provenance.
