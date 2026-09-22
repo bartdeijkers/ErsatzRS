@@ -608,3 +608,27 @@ artifacts older than 30 days, preserves the warm cache) and reserve the heavy
 `cargo clean` for when `target/` exceeds 40 GiB or when reclaiming all space.
 See the disk-space note in
 [CLAUDE.md](CLAUDE.md).
+
+## Optional Next engine artifacts
+
+Release archive staging requires Python 3.12 and public HTTPS access to the
+[ErsatzTV Next develop release](https://github.com/ErsatzTV/next/releases/tag/develop).
+`scripts/release/stage-next.py --rid <rid> --output <stage>/next` stages the
+three upstream executables, their MIT license and `origin.json` beside the
+ErsatzRS executable. It requires the release API's SHA-256 digest and records
+the selected asset, revision and license hash. Missing artifacts, invalid
+checksums or missing licenses fail packaging; no GitHub credential is needed.
+All six supported RIDs are mapped, including the currently unpublished macOS
+archive targets. Run `python3 scripts/release/test-stage-next.py` for offline
+archive, provenance and failure-path regressions.
+
+Docker builds use a separate build-host Python stage and copy only `next/`
+into `/usr/local/bin/next`; Python is not added to the runtime image. Bake
+passes `VERSION` as `NEXT_RELEASE_REFRESH` to refresh the mutable develop
+release on each product release. For repeated manual builds of the same
+version, use `--no-cache-filter next-artifacts` with buildx, or change
+`--build-arg NEXT_RELEASE_REFRESH=<build-id>`.
+
+This is packaging support only. Native playback remains unchanged; engine
+selection, process supervision and Next playback acceptance remain open under
+[ADR 0095](docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md).

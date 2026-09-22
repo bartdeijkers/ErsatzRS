@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `5d77963575e23330e405fb5206eb3316563a59fc` |
-| **Commit subject** | `update last dependencies (#2849)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5d77963575e23330e405fb5206eb3316563a59fc |
+| **Pinned commit** | `47885758ec36f7fda134009232baa6dd734138ab` |
+| **Commit subject** | `bundle ersatztv next artifacts (#2850)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/47885758ec36f7fda134009232baa6dd734138ab |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

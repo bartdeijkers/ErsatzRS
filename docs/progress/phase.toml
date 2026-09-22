@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22: UCU-01 row 4 (47885758) ports optional Next artifact staging.
+Six-RID artifact checks, offline regressions and Linux Docker startup pass.
+The milestone owns evidence and limits; continue at row 5 (1b292b5f).
+Next playback integration and full-window acceptance remain open.
+
 2026-09-22: UCU-01 row 3 (5d779635) is reviewed as N/A for .NET dependency
 maintenance. The milestone owns the exact-diff evidence. Next is row 4
 (47885758), Next artifact bundling under Accepted ADR 0095. Continue only

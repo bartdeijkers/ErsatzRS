@@ -4,9 +4,10 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 168 commits: three reconciled and 165 pending,
+The refreshed ledger registers 168 commits: four reconciled and 164 pending,
 tracked by ucu-00 through ucu-09. Row 1 is Covered; row 2 ports the HDHomeRun repository-link correction.
-Row 3 is N/A for .NET-only dependency maintenance. UCU-01 owns their evidence;
+Row 3 is N/A for .NET-only dependency maintenance. Row 4 ports Next artifact
+bundling with checksum/license/provenance and Docker startup proof. UCU-01 owns their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows
 each run. The 2026-09-22 fetch adds six commits after the verified bootstrap prefix;
@@ -16,7 +17,8 @@ bootstrap is accepted: ucu-00 and its AMM-N-03 prerequisite are Complete.
 Milestones own acceptance and evidence; behavioral
 debt stays in each owning feature. AMM-N-03 remains a prerequisite and teletext
 p9a-01 now also depends on ucu-09. ADR 0095 is Accepted for Next as an optional second engine, alongside the
-native pipeline. Its implementation is not started; no Next-specific exemption applies.
+native pipeline. Packaging is implemented; engine selection, supervision and playback remain
+open. No Next-specific exemption applies.
 """
 
 [[debt]]

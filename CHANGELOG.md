@@ -15,6 +15,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Bundle optional ErsatzTV Next artifacts in release archives and Docker images
+  (upstream PR #2850), with checksum verification, license and provenance.
+  Engine selection and Next playback integration remain pending.
+
 - Retain form-action selection counts and Select all under Edit multiple items
   > Items to change as an explicitly accepted design choice; Save-button and row
   markers distinguish retained changes from saved data.

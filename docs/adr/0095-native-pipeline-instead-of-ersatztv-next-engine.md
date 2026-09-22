@@ -10,7 +10,9 @@ its original native-only wording is superseded by this decision.
 
 ## Implementation
 
-Not implemented
+Partial — release and Docker packaging stage the upstream artifacts with
+checksum, license and provenance (UCU-01 row 4). Engine selection, runtime
+supervision and playback acceptance remain open.
 
 ## Context
 

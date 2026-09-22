@@ -13,6 +13,9 @@ group "default" {
 target "ersatzrs" {
   context = "."
   dockerfile = "Dockerfile"
+  args = {
+    NEXT_RELEASE_REFRESH = VERSION
+  }
   platforms = [
     "linux/amd64",
     "linux/arm64",

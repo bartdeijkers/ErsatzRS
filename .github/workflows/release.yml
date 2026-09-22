@@ -67,6 +67,11 @@ jobs:
           ERSATZRS_WEB_BIN: ${{ github.workspace }}/target/x86_64-pc-windows-msvc/release/ersatzrs-web.exe
           ERSATZRS_SITE_ROOT: ${{ github.workspace }}/target/site
         run: scripts/release/verify-web-bundle.sh
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Verify Next staging (offline)
+        run: python scripts/release/test-stage-next.py
       - name: Stage archive
         shell: pwsh
         run: |
@@ -109,6 +114,8 @@ jobs:
           if ($launcher.Length -eq 0) {
             throw 'Windows release archive must contain a non-empty ErsatzRS.exe startup launcher'
           }
+          python scripts/release/stage-next.py --rid win-x64 --output "$stage/next"
+          if ($LASTEXITCODE -ne 0) { throw 'Next runtime staging failed' }
           Compress-Archive -Path $stage -DestinationPath $archive
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $archive))
@@ -357,6 +364,11 @@ jobs:
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
       # -------------------------------------------------------------------------
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Verify Next staging (offline)
+        run: python scripts/release/test-stage-next.py
       - name: Stage archive
         shell: bash
         env:
@@ -391,6 +403,7 @@ jobs:
             echo "Windows release archive must contain a non-empty ErsatzRS.exe startup launcher" >&2
             exit 1
           fi
+          python scripts/release/stage-next.py --rid "$RID" --output "$stage/next"
           if [ "$ARCHIVE" = "zip" ]; then
             7z a -tzip "${stage}.zip" "$stage" >/dev/null
             if [ "$RID" = "win-x64" ] && ! 7z l -slt "${stage}.zip" | tr "\\\\" "/" | grep -Fx "Path = ${stage}/ErsatzRS.exe" >/dev/null; then

@@ -6,6 +6,17 @@ ARG CARGO_LEPTOS_VERSION=0.3.6
 ARG STYLANCE_CLI_VERSION=0.8.2
 ARG WASM_BINDGEN_CLI_VERSION=0.2.122
 
+# Stage the optional Next runtime on the build host for the target platform.
+# Keep Python and download tooling out of the runtime image.
+FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS next-artifacts
+ARG TARGETARCH
+ARG TARGETVARIANT
+# Change per release to refresh the mutable upstream develop artifact.
+ARG NEXT_RELEASE_REFRESH=dev
+COPY scripts/release/stage-next.py /stage-next.py
+RUN test -n "$NEXT_RELEASE_REFRESH" && python /stage-next.py --docker-arch "$TARGETARCH" \
+    --docker-variant "$TARGETVARIANT" --output /next
+
 FROM --platform=$BUILDPLATFORM rust:${RUST_VERSION}-${DEBIAN_VERSION} AS web-build
 ARG CARGO_LEPTOS_VERSION
 ARG STYLANCE_CLI_VERSION
@@ -141,6 +152,7 @@ RUN set -eux; \
 FROM runtime-base AS runtime-release
 COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=rust-build /build/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
+COPY --from=next-artifacts /next /usr/local/bin/next
 # release-web-assets/site is already the single merged admin-UI directory
 # (pkg/ plus the assets-dir/public contents cargo-leptos copies alongside
 # it); no separate public/ copy is needed.
@@ -158,6 +170,7 @@ ENTRYPOINT [ "ersatzrs-web" ]
 FROM runtime-base AS runtime
 COPY --from=rust-build /build/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=rust-build /build/target/release/ersatzrs-scanner /usr/local/bin/ersatzrs-scanner
+COPY --from=next-artifacts /next /usr/local/bin/next
 # /build/target/site is already the single merged admin-UI directory (pkg/
 # plus the assets-dir/public contents cargo-leptos copies alongside it); no
 # separate public/ copy is needed.

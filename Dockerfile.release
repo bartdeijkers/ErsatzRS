@@ -3,6 +3,17 @@
 # Release image builder. Unlike the general Dockerfile, this consumes the
 # release workflow's prebuilt Leptos web-assets artifact so multi-arch image
 # builds do not compile cargo-leptos under QEMU.
+# Stage the optional Next runtime on the build host for the target platform.
+# Keep Python and download tooling out of the runtime image.
+FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS next-artifacts
+ARG TARGETARCH
+ARG TARGETVARIANT
+# Change per release to refresh the mutable upstream develop artifact.
+ARG NEXT_RELEASE_REFRESH=dev
+COPY scripts/release/stage-next.py /stage-next.py
+RUN test -n "$NEXT_RELEASE_REFRESH" && python /stage-next.py --docker-arch "$TARGETARCH" \
+    --docker-variant "$TARGETVARIANT" --output /next
+
 FROM rust:1.97.1-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -110,6 +121,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck
+COPY --from=next-artifacts /next /usr/local/bin/next
 # release-web-assets/site is already the single merged admin-UI directory
 # (pkg/ plus the assets-dir/public contents cargo-leptos copies alongside
 # it); ship only that, not a separate public/ copy.

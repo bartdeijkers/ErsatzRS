@@ -111,7 +111,8 @@ preserve behavior by default, and document deliberate deviations through ADRs.
 
 [ADR 0095](docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
 accepts ErsatzTV Next as an optional second streaming engine alongside the
-native FFmpeg pipeline. This external engine boundary is not implemented yet.
+native FFmpeg pipeline. Release and Docker packaging stage Next artifacts;
+the external runtime boundary is not implemented yet.
 The native runtime and graphics contracts above remain in force; Next process,
 configuration, packaging and playback integration are tracked in the
 [catch-up parity record](docs/progress/parity/upstream-baseline-catch-up.toml).

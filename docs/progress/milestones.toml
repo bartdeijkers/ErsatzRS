@@ -5754,6 +5754,41 @@ Pin and ledger advance together to 5d779635, followed by upstream checkout and
 agreement verification. Next pending row is 47885758, bundle ersatztv next
 artifacts (#2850); it requires review under the optional-second-engine decision.
 UCU-01 remains In progress with full-window gates and exact-SHA CI still open.
+
+2026-09-22 row 4: 47885758ec36f7fda134009232baa6dd734138ab,
+bundle ersatztv next artifacts (#2850). Before advancing, pin, last landed
+row and upstream HEAD agree at 5d779635; all 168 ledger SHA/subjects match
+the unchanged fetched target 55885508. Full five-file diff reviewed: upstream
+artifacts.yml and docker.yml download public Next develop archives; three
+Dockerfiles copy the artifacts beside the host. No tests, changelog, validators,
+schema, playback or selection changes occur in this row. This packaging gap
+exists in ErsatzRS and is in scope under Accepted ADR 0095.
+Source map: .github/workflows/release.yml stages Next into archive next/;
+Dockerfile, Dockerfile.release and docker/Dockerfile stage target artifacts on
+the build host and copy next/ beside the native executable. stage-next.py maps
+all six RIDs, verifies API SHA-256 and size, reads only exact expected binary
+members, and stages license/provenance atomically. Existing macOS publication
+exclusion remains unchanged; no FFmpeg binary is added. All three upstream
+executables are included, matching this row; the later narrowing row is pending.
+Verdict Port; owner upstream-baseline-catch-up. Direct Codex review corrected
+a mutable-download Docker cache issue: Bake passes VERSION as the refresh
+argument, with an explicit manual refresh documented in BUILD.md. No remaining
+serious actionable row findings. No runtime selection, health or playback code
+changes; native channels continue unchanged and Next integration debt stays open.
+Evidence: six offline Python regressions pass (six-RID inventory/provenance,
+checksum, missing/linked binaries, ambiguous/unverified origin, license failure,
+existing destination). Real public develop artifacts at revision 946aa52 pass
+SHA-256 and inventory/license staging for all six RIDs. The linux-x64 binary
+reports 0.1.0-946aa52 locally and inside the successfully built Docker
+next-artifacts stage (Docker Desktop 29.7.2); rebuilt after the cache correction.
+Workflow actionlint passes with the two existing self-hosted labels configured;
+shellcheck/pyflakes are disabled for this syntax/expression check. Python syntax,
+progress validation and whitespace checks pass. No Rust, browser, complete
+product image, ARM/macOS/Windows execution, release publication or exact-SHA CI
+is claimed by these packaging checks. Full UCU-01 acceptance remains open.
+Landing subject: build(release): bundle optional Next engine artifacts.
+Pin and ledger advance together to 47885758; checkout upstream after landing
+and verify agreement. Next pending row: 1b292b5f, try to fix github token.
 """
 
 [[milestone]]

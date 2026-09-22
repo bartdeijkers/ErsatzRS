@@ -1,5 +1,16 @@
 # syntax=docker/dockerfile:1.7
 
+# Stage the optional Next runtime on the build host for the target platform.
+# Keep Python and download tooling out of the runtime image.
+FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS next-artifacts
+ARG TARGETARCH
+ARG TARGETVARIANT
+# Change per release to refresh the mutable upstream develop artifact.
+ARG NEXT_RELEASE_REFRESH=dev
+COPY scripts/release/stage-next.py /stage-next.py
+RUN test -n "$NEXT_RELEASE_REFRESH" && python /stage-next.py --docker-arch "$TARGETARCH" \
+    --docker-variant "$TARGETVARIANT" --output /next
+
 # ─── Stage 1: builder ────────────────────────────────────────────────────────
 # Match the exact Rust toolchain required by the workspace, CI, and releases.
 FROM rust:1.97.1-slim-bookworm AS builder
@@ -117,6 +128,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the ersatzrs-web server binary
 COPY --from=builder /workspace/target/release/ersatzrs-web /usr/local/bin/ersatzrs-web
 COPY --from=builder /workspace/target/release/ersatzrs-healthcheck /usr/local/bin/ersatzrs-healthcheck
+COPY --from=next-artifacts /next /usr/local/bin/next
 # cargo-leptos already copies the assets-dir (public/) contents into the top
 # level of target/site alongside pkg/, so target/site is the single merged
 # admin-UI directory; ship only that, not a separate public/ copy.
