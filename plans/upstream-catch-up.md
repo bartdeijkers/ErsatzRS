@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-22): `558855083c7602b6f50ed63675ff61d1d325f98d`
   — prep for release v26.10.0 [no ci].
-- Ledger: **168 commits**, **167 pending**. The original plan covered 152 through
+- Ledger: **168 commits**, **166 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits, retaining the original ledger as an exact prefix.
@@ -14,7 +14,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **1**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **2**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -104,7 +104,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | # | upstream sha | subject (PR) | verdict | owning parity slug | ErsatzRS commit | notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `1e5c0b12` | rename to ersatztv legacy (#2842) | Covered | support-pages | `docs(porting): reconcile upstream legacy rename and accept optional Next` | ucu-01; release-notes removal already present; upstream-only branding/tooling needs no Rust edit. See ucu-01 evidence. |
-| 2 | `848db7ea` | even more dependency updates (#2848) | | | | ucu-01; provisional: Upstream tooling candidate. |
+| 2 | `848db7ea` | even more dependency updates (#2848) | Port | hdhomerun-http-endpoints | `fix(web): correct HDHomeRun manufacturer repository link` | ucu-01; correct native manufacturer repository URL; remaining changes are .NET API/dependency and upstream branding maintenance. See ucu-01 evidence. |
 | 3 | `5d779635` | update last dependencies (#2849) | | | | ucu-01; provisional: Upstream tooling candidate. |
 | 4 | `47885758` | bundle ersatztv next artifacts (#2850) | | | | ucu-01; provisional: Upstream tooling candidate. |
 | 5 | `1b292b5f` | try to fix github token | | | | ucu-01; provisional: Upstream tooling candidate. |

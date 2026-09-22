@@ -5690,6 +5690,45 @@ UCU-01 window acceptance and exact-SHA CI remain open. Next pending row is
 The maintainer also selects Next as an optional second engine in revised,
 Accepted ADR 0095. Its implementation debt remains open; the rejected
 native-only proposal is not used for any verdict.
+
+2026-09-22 row 2 source review: 848db7eaf60d4badc1bb23c101e87107935689c8,
+even more dependency updates (#2848). All 28 changed files inspected. The
+upstream diff updates MudBlazor/Heron.MudCalendar, Scriban.Signed and coverlet;
+editor calls retain awaited validation while using ValidateAsync, troubleshooting
+uses SetTextAsync and IReadOnlyCollection, and three view models use the updated
+collection interface. No validation rule, persistence operation, playback command,
+CHANGELOG hunk or test body changes. ADR 0002's Leptos implementation and the
+minijinja implementations under ADRs 0058/0076 do not consume those .NET APIs.
+Source map: ErsatzTV.Core/Hdhr/Discover.cs changes ManufacturerURL to the
+upstream Legacy repository; Shared/MainLayout.razor makes the same upstream
+branding-link correction. ErsatzRS transport/hdhr/http.rs already uses native
+branding but advertises a repository under the wrong organization, contrary to
+workspace.package.repository in Cargo.toml. Correct that public discovery value
+to the existing ErsatzRS repository; preserve every other serialized field.
+The native admin layout has no upstream GitHub link to migrate. There are no
+new native routes, validators, queries, migrations, UI geometry or runtime
+capability changes. The existing discover_json_shape_is_stable snapshot owns
+the regression, alongside the three other HDHomeRun HTTP shape snapshots.
+Verdict: Port, owning parity hdhomerun-http-endpoints. The mixed dependency
+commit cannot be skipped wholesale as upstream tooling: its public discovery
+link has an applicable native defect. No Next-specific exemption is used.
+The existing discovery snapshot first failed solely on ManufacturerURL; the
+other three HDHomeRun HTTP snapshots passed. The sole new snapshot value was
+reviewed against workspace.package.repository and accepted manually because
+cargo-insta is unavailable in this environment (no tool installation).
+./run.sh test -p ersatzrs-web transport::hdhr::http::tests then passes all four
+tests (664 unrelated cases filtered out). cargo fmt --all -- --check and
+git diff --check pass. cargo clippy -p ersatzrs-web --all-targets -- -D warnings
+passes. The existing proc-macro-error2 future-compatibility notice is already
+tracked under addon-platform and is not a new warning introduced by this row.
+Direct Codex review confirms only the repository URL changes in product code
+and the serialized snapshot; field casing, UUID, tuner count and stream routes
+remain unchanged. No actionable serious review finding remains. No playback,
+hydration or native platform behavior changes, so no browser/playback gate is
+claimed for this metadata-only row. Full-window gates remain open.
+Authorized landing subject: fix(web): correct HDHomeRun manufacturer repository link.
+Pin and ledger advance together to 848db7ea; move upstream HEAD after landing
+and verify all three agree. Next pending row: 5d779635 (#2849).
 """
 
 [[milestone]]

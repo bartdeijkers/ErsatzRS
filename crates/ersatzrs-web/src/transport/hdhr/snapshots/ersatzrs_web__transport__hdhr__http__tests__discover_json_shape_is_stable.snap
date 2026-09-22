@@ -10,7 +10,7 @@ expression: json
   "FriendlyName": "ErsatzRS",
   "LineupURL": "http://example.test:8080/lineup.json",
   "Manufacturer": "ErsatzRS",
-  "ManufacturerURL": "https://github.com/ErsatzTV/ErsatzRS",
+  "ManufacturerURL": "https://github.com/bartdeijkers/ErsatzRS",
   "ModelNumber": "HDTC-2US",
   "TunerCount": 2
 }

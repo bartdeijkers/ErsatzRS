@@ -42,6 +42,11 @@ release section when tagging a release.
   may omit a standalone plan; supplied plan links are still validated. The
   generated Clippy ledger now lives under `docs/reference/`.
 
+### Fixed
+
+- Correct the HDHomeRun discovery manufacturer link to the ErsatzRS repository,
+  following the repository-link correction in ErsatzTV PR #2848.
+
 ## [1.0.37-beta] - 2026-09-22
 
 Windows-only beta accepted under AMM-N-03: the published archive is byte-for-byte

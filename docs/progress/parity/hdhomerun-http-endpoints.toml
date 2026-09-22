@@ -1,8 +1,12 @@
 feature    = 'HDHomeRun HTTP endpoints'
-etv_source = '`$ERSATZTV_SRC/hdhr.md`'
+etv_source = '`$ERSATZTV_SRC/hdhr.md`, `$ERSATZTV_SRC/ErsatzTV.Core/Hdhr/Discover.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/hdhr/http.rs`'
 status     = 'Ported'
 adr        = []
 summary    = '''
 Ported: `/discover.json`, `/device.xml`, `/lineup_status.json`, and `/lineup.json` expose the HDHomeRun HTTP shape with verbatim C# field names (DeviceID/LineupURL/GuideNumber/...). Device UUID seeded into `ConfigElement` under `HDHR.DeviceUuid`; tuner count read from `HDHR.TunerCount`.
+UCU-01 row 2 ports upstream PR #2848's repository-link correction using the
+ErsatzRS repository declared in Cargo.toml. ManufacturerURL is corrected while
+the remaining discovery and lineup/device shapes are preserved. The four
+HDHomeRun HTTP snapshots pass; UCU-01 owns the review and verification evidence.
 '''

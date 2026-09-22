@@ -37,7 +37,7 @@ impl Discover {
             FriendlyName: "ErsatzRS".to_string(),
             LineupURL: format!("{scheme}://{host}/lineup.json"),
             Manufacturer: "ErsatzRS".to_string(),
-            ManufacturerURL: "https://github.com/ErsatzTV/ErsatzRS".to_string(),
+            ManufacturerURL: "https://github.com/bartdeijkers/ErsatzRS".to_string(),
             ModelNumber: "HDTC-2US".to_string(),
             TunerCount: tuner_count,
         }

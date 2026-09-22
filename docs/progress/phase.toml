@@ -61,6 +61,11 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
+2026-09-22: UCU-01 row 2 (848db7ea) corrects HDHomeRun ManufacturerURL to the
+ErsatzRS repository. Four focused snapshots, scoped web Clippy and formatting
+pass; the milestone owns detailed evidence. Continue at row 3 (5d779635) after
+the authorized row-2 landing and pin/ledger/upstream HEAD agreement check.
+
 2026-09-22: Row 1 (1e5c0b12) is reviewed as Covered for authorized local
 landing with the pin. UCU-01 owns its evidence. Continue with row 2 (848db7ea)
 after verifying pin/ledger/upstream HEAD agreement. The refreshed ledger owns

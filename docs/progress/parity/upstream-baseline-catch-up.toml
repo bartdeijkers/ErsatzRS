@@ -4,8 +4,9 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 168 commits: one reconciled and 167 pending,
-tracked by ucu-00 through ucu-09. Row 1 is Covered with evidence in ucu-01;
+The refreshed ledger registers 168 commits: two reconciled and 166 pending,
+tracked by ucu-00 through ucu-09. Row 1 is Covered; row 2 ports the HDHomeRun repository-link correction.
+UCU-01 owns their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is
 plans/upstream-catch-up.md; refresh the upstream target and append new rows
 each run. The 2026-09-22 fetch adds six commits after the verified bootstrap prefix;
