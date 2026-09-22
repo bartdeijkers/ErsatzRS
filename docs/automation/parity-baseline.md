@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `f7853e80e124754cd7599b3078c25a200c092486` |
-| **Commit subject** | `bundle ersatztv-channel binary with macos app (#2856)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/f7853e80e124754cd7599b3078c25a200c092486 |
+| **Pinned commit** | `5cef7775ea944b793ca35118ef5d1ffc5a4c8d28` |
+| **Commit subject** | `fix duplicate windows zips on develop release` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/5cef7775ea944b793ca35118ef5d1ffc5a4c8d28 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
