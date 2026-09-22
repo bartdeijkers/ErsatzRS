@@ -43,6 +43,10 @@ release section when tagging a release.
   channel previews with browser-compatible H.264/AAC and independent capacity
   and cleanup; forward playout rebuilds to preview-only sessions as well. Provider and
   graphics projection, complete HTTP playback and platform acceptance remain open.
+  Add a separate Next engine check inside CI, with runtime provenance, decoded
+  playback tests and HTTP/preview smoke diagnostics.
+  Remove the obsolete MySQL migration-directory build watch to prevent
+  unnecessary recompilation on successive builds.
 
 - Retain form-action selection counts and Select all under Edit multiple items
   > Items to change as an explicitly accepted design choice; Save-button and row

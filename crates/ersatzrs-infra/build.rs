@@ -5,9 +5,8 @@
 // compiled `Migrator` silently keeps the previous migration set, so the new
 // migration never runs and the database looks unchanged after a restart.
 //
-// Both migrator roots from `db.rs` are listed explicitly rather than relying on
-// a recursive scan of the parent directory.
+// Track the SQLite migrator root used by `db.rs`. Do not register removed
+// directories: a missing watched path makes Cargo rerun this build every time.
 fn main() {
     println!("cargo:rerun-if-changed=../../migrations");
-    println!("cargo:rerun-if-changed=../../migrations/mysql");
 }

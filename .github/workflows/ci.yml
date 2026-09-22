@@ -199,12 +199,12 @@ jobs:
           if ! command -v cargo-nextest >/dev/null 2>&1; then
             cargo install cargo-nextest --version 0.9.140 --locked
           fi
-      # Same target selection as the previous `cargo test --workspace --lib --bins
-      # --tests`: unit, binary and integration tests, no doctests. The `ci`
+      # Unit, binary and integration tests, no doctests. Next component tests
+      # run in the dedicated Next engine job below. The `ci`
       # profile adds a JUnit report so per-test durations land in an artifact;
       # .config/nextest.toml reports anything slower than 60s in the summary.
       - name: Test
-        run: cargo nextest run --profile ci --workspace --lib --bins --tests
+        run: cargo nextest run --profile ci --workspace --lib --bins --tests -E 'not test(next_engine::)'
       # nextest resolves its store directory from the workspace root, not from
       # CARGO_TARGET_DIR, so the report lands in <workspace>/target/nextest even
       # though build artifacts go to the persistent target-dir. Look in both and
@@ -279,7 +279,7 @@ jobs:
           fi
       - name: Test remaining workspace
         if: matrix.shard == 'workspace-minus-web'
-        run: cargo nextest run --profile ci --workspace --exclude ersatzrs-web --lib --bins --tests
+        run: cargo nextest run --profile ci --workspace --exclude ersatzrs-web --lib --bins --tests -E 'not test(next_engine::)'
       - name: Test web library
         if: matrix.shard == 'web-lib'
         run: cargo nextest run --profile ci -p ersatzrs-web --lib
@@ -295,6 +295,77 @@ jobs:
       - name: Validate architecture boundaries and debt ratchets
         if: matrix.shard == 'workspace-minus-web'
         run: cargo xtask architecture-lint
+
+  next_engine:
+    name: Next engine
+    runs-on: ${{ fromJSON(inputs.runner == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","Linux","X64"]') }}
+    needs: fmt
+    timeout-minutes: 45
+    env:
+      ERSATZRS_SMOKE_PORT: "18411"
+      CARGO_BUILD_JOBS: "8"
+      ERSATZRS_FFMPEG_RELEASE_TAG: v2.0.0
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - name: Reset persistent target-dir (manual escape hatch)
+        if: ${{ inputs.reset_target_dir == true }}
+        run: rm -rf "$CARGO_TARGET_DIR"
+      - uses: Swatinem/rust-cache@v2
+        if: ${{ inputs.runner == 'github-hosted' }}
+        with:
+          cache-bin: "true"
+      - name: Prepare isolated runtime and diagnostics
+        run: |
+          mkdir -p ci-artifacts/next-engine
+          runtime_tmp="$RUNNER_TEMP/next-engine-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -p "$runtime_tmp"
+          echo "TMPDIR=$runtime_tmp" >> "$GITHUB_ENV"
+          git rev-parse HEAD > ci-artifacts/next-engine/ersatzrs-sha.txt
+          rm -f target/nextest/ci/junit.xml "$CARGO_TARGET_DIR/nextest/ci/junit.xml"
+      - name: Install test tools
+        run: |
+          if ! command -v stylance >/dev/null 2>&1 || [ "$(stylance --version)" != "stylance-cli 0.8.2" ]; then
+            cargo install stylance-cli --version 0.8.2 --locked
+          fi
+          if ! command -v cargo-nextest >/dev/null 2>&1; then
+            cargo install cargo-nextest --version 0.9.140 --locked
+          fi
+      - name: Stage Next and validated FFmpeg runtime
+        run: |
+          python scripts/release/stage-next.py --rid linux-x64 --output "$TMPDIR/next" | tee ci-artifacts/next-engine/next-runtime.log
+          cp "$TMPDIR/next/origin.json" ci-artifacts/next-engine/next-origin.json
+          sha256sum "$TMPDIR/next/ersatztv-channel" > ci-artifacts/next-engine/next-sha256.txt
+          echo "ETV_NEXT_FOLDER=$TMPDIR/next" >> "$GITHUB_ENV"
+          echo "ERSATZRS_NEXT_TEST_BIN=$TMPDIR/next/ersatztv-channel" >> "$GITHUB_ENV"
+          cargo run --locked -p ersatzrs-ffmpeg --example provision_runtime -- "$TMPDIR/ffmpeg" "$GITHUB_ENV" | tee ci-artifacts/next-engine/ffmpeg-runtime.log
+      - name: Next components and real-engine decoding
+        run: |
+          ./run.sh test -p ersatzrs-infra --lib --profile ci --run-ignored all -E 'test(next_engine::) and not test(fixture_child)' 2>&1 | tee ci-artifacts/next-engine/tests.log
+      - name: Next HTTP playback and preview
+        run: cargo xtask smoke --next --hls-lifecycle --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke.log
+      - name: Collect Next diagnostics
+        if: always()
+        run: |
+          python - <<'PYCODE'
+          import os, pathlib, shutil
+          destination = pathlib.Path('ci-artifacts/next-engine')
+          destination.mkdir(parents=True, exist_ok=True)
+          for root in (pathlib.Path('target/nextest'), pathlib.Path(os.environ['CARGO_TARGET_DIR']) / 'nextest'):
+              report = root / 'ci/junit.xml'
+              if report.is_file():
+                  shutil.copyfile(report, destination / 'junit.xml')
+          for index, log in enumerate(pathlib.Path(os.environ.get('TMPDIR', os.environ['RUNNER_TEMP'])).glob('ersatzrs-smoke-*/ersatzrs-web-smoke.log')):
+              shutil.copyfile(log, destination / f'host-{index}.log')
+          PYCODE
+      - name: Upload Next diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: next-engine-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-artifacts/next-engine/
+          if-no-files-found: warn
+          retention-days: 14
 
   hydration:
     name: Playwright E2E (${{ matrix.project }})

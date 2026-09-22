@@ -122,7 +122,8 @@ omits test-profile debug info, and uses LLVM's `lld` linker so cold all-features
 linking stays within the hosted job lifetime. Hosted runs cache their pinned
 Cargo tools; self-hosted runs leave the maintainer's existing tool binaries
 untouched. The full test selection remains intact, and self-hosted CI retains
-the single canonical workspace Test job. This path remains an explicit
+one ordinary workspace Test job, with Next tests in their dedicated job below.
+This path remains an explicit
 fallback rather than the default.
 
 Two self-hosted runners share one physical machine. Each runner runs its jobs
@@ -144,6 +145,24 @@ persistent `target/` first: either dispatch the workflow with the
 the runner. This is unrelated to the local interactive dev target-dir and its
 stale-binary trap below — this mechanism only sets `CARGO_TARGET_DIR` inside
 the GitHub Actions job environment and never touches `.cargo/config.toml`.
+
+### Next engine CI check
+
+The existing CI workflow reports **Next engine** as a separate job alongside
+Test and the Chromium/Firefox Playwright jobs. It uses the selected runner pool
+and the same tested ErsatzRS commit. The ordinary Test jobs exclude
+`next_engine::`; the Next job runs those component tests and the opt-in real-engine
+decoding test together. The ignored subprocess fixture remains helper-only.
+Local `test-closeout` still runs the complete ordinary workspace selection.
+
+The job stages the published Next channel binary with the release staging
+script, retains its origin/digest metadata, and provisions FFmpeg through the
+production runtime manager (`provision_runtime` example, pinned release tag).
+It then runs Next HTTP and preview smoke, including MPEG-TS refusal and idle
+cleanup. Port 18411 and a job-specific temporary directory isolate it from
+Playwright and the live server. Test output, JUnit timings, host logs, runtime
+identity and the ErsatzRS SHA are uploaded as `next-engine-<run>-<attempt>`.
+A Linux job is not acceptance for the other supported platforms.
 
 ## Release-candidate CI gate
 

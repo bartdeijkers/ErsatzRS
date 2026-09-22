@@ -59,6 +59,29 @@ audio/video PIDs are part of the change:
 scripts/e2e/tsduck-playback-gate.sh gate
 ```
 
+### Check Next HTTP playback
+
+Set `ETV_NEXT_FOLDER` to the directory containing `ersatztv-channel` (include
+`target/release` when using a locally built Next checkout). Provide the FFmpeg 9
+and ffprobe paths through the normal `FFMPEG_PATH` and `FFPROBE_PATH` overrides.
+The CI job provisions these using the production runtime manager before testing.
+Then run:
+
+```bash
+cargo xtask smoke --next --keep-temp
+```
+
+This uses a temporary database and generated local media. It checks Next HLS
+playlists and a served segment, MPEG-TS refusal, the separate browser-preview
+playlist/segment, and idle removal of both session folders. `--next` implies the
+lifecycle check and cannot be combined with `--skip-hls`. The default native smoke
+remains `cargo xtask smoke`. `ERSATZRS_SMOKE_PORT` selects an unused loopback port
+(default 8409); an occupied port fails without touching the existing server.
+Use a dedicated `TMPDIR` on Unix when running beside another playback test.
+These checks exercise transport, not admin hydration or cross-platform playback.
+The CI workflow has a dedicated **Next engine** job for this gate and the decoded
+track-selection tests below.
+
 ### Check the optional Next process boundary
 
 Set `ERSATZRS_NEXT_TEST_BIN` to the Next channel executable,

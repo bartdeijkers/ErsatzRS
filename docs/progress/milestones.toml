@@ -6399,6 +6399,43 @@ acceptance. Provider/graphics, served HTTP/native smoke and platform gates remai
 open. Infra/web all-target Clippy passes after correcting only the test helper's
 case-sensitive extension comparison. Ledger/pin unchanged.
 
+Row 13 HTTP/CI checkpoint: maintainer requests a separate Next engine job inside
+the existing CI workflow, like the Chromium/Firefox jobs (not a separate workflow).
+The job owns the 39 ordinary next_engine component tests plus the real-engine
+opt-in regression; the ignored subprocess fixture remains helper-only. Both
+ordinary CI Test paths exclude this module so the selection is not duplicated.
+The exact CI selection passes locally: 40/40 tests in 3.370 seconds. The job stages
+Next with archive/binary digest and origin metadata, provisions FFmpeg through
+the existing production runtime manager, and uploads JUnit, SHA and runtime/host
+logs. Actionlint passes. No CI is dispatched; first consolidated CI is still
+authorized only after UCU-03 smoke.
+
+The new `cargo xtask smoke --next` uses disposable explicit database/state/cache
+paths, an isolated loopback port, local-video H.264/AAC fixture and the actual
+host. Linux proof passes using the previously recorded Next binary digest and
+FFmpeg 9: normal and preview playlists return HTTP 200, complete fetched TS
+segments have valid 188-byte packet alignment/sync, MPEG-TS requests return 404,
+and normal/preview output folders disappear after idle. The normal native
+`cargo xtask smoke --hls-lifecycle` also passes: HLS playlist/segment, idle cleanup,
+MPEG-TS wrapper restart with body and second idle cleanup. This is HTTP transport
+and lifecycle proof; authenticated browser playback and other platforms are not
+claimed. The FFmpeg provisioning example passes against the local FFmpeg 9
+runtime; scoped xtask/FFmpeg all-target Clippy and formatting pass.
+
+Repeated smoke builds exposed an obsolete build-script watch on the absent
+migrations/mysql directory. Removing only that watch retains the SQLite migration
+watch. A second identical web build performs no recompilation and finishes in
+0.26 seconds (the preceding unchanged build had unnecessarily rebuilt infra and
+its consumers in 38.98 seconds). No compiler configuration or acceptance changed.
+
+Remaining row-13 review finding: maintenance suppresses Continue notifications,
+while upstream dispatches SyncNextPlayout after build completion. Native sessions
+read live DB state, but active Next sessions need publication of appended items;
+correct and verify this before row acceptance. Provider and watermark capabilities
+remain assigned to their later ordered rows (20 and 26/27), with no completion or
+permanent exclusion claimed here. Window/browser/platform gates remain explicit.
+Pin/ledger/upstream checkout remain ddc8ef7f; this is a reviewed local checkpoint.
+
 """
 
 [[milestone]]

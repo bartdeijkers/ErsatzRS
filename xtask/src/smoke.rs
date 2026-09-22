@@ -18,7 +18,15 @@ use std::{
 use anyhow::{anyhow, bail, Context, Result};
 use rusqlite::{params, Connection};
 
-const LISTEN_ADDR: &str = "127.0.0.1:8409";
+fn listen_addr() -> Result<String> {
+    #[allow(clippy::disallowed_methods)]
+    let port = env::var("ERSATZRS_SMOKE_PORT").unwrap_or_else(|_| "8409".to_owned());
+    let port: u16 = port.parse().context("invalid ERSATZRS_SMOKE_PORT")?;
+    if port == 0 {
+        bail!("ERSATZRS_SMOKE_PORT must not be zero");
+    }
+    Ok(format!("127.0.0.1:{port}"))
+}
 const DEFAULT_TIMEOUT_SECONDS: u64 = 90;
 const DEFAULT_CHANNEL: &str = "1";
 const DEFAULT_SMOKE_MEDIA_SECONDS: i64 = 24;
@@ -39,6 +47,7 @@ const FAILURE_SIGNATURES: &[&str] = &[
     "CUDA_ERROR_INVALID_VALUE",
     "no active playout item",
     "channel has no playback ffmpeg profile",
+    "Next session failed",
 ];
 
 pub fn run(args: Vec<String>) -> ExitCode {
@@ -80,11 +89,23 @@ fn run_inner(opts: Opts) -> Result<()> {
         &media_path,
         segmenter_timeout_seconds,
         media_seconds,
+        opts.next,
     )?;
 
     let deadline = Deadline::from_now(opts.timeout);
     for channel in &opts.channels {
-        if opts.check_ts && !opts.check_hls_lifecycle {
+        if opts.next && opts.check_ts {
+            let path = format!("/iptv/channel/{channel}.ts?mode=ts");
+            let response = http_get_until_body(&path, 0, deadline.remaining()?)?;
+            if response.status != 404 {
+                bail!(
+                    "Next MPEG-TS request must return 404, got {}",
+                    response.status
+                );
+            }
+            println!("smoke evidence: Next MPEG-TS request -> HTTP 404");
+        }
+        if !opts.next && opts.check_ts && !opts.check_hls_lifecycle {
             let path = format!("/iptv/channel/{channel}.ts?mode=ts");
             let response = http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
                 .with_context(|| format!("probing MPEG-TS endpoint {path}"))?;
@@ -98,7 +119,7 @@ fn run_inner(opts: Opts) -> Result<()> {
 
         if opts.check_hls {
             let variant_path = format!("/iptv/channel/{channel}.m3u8?mode=segmenter");
-            let variant = http_get_until_body(&variant_path, 1, deadline.remaining()?)
+            let variant = http_get_until_body(&variant_path, usize::MAX, deadline.remaining()?)
                 .with_context(|| format!("probing HLS variant endpoint {variant_path}"))?;
             variant.ensure_success_with_body(&variant_path)?;
             if !String::from_utf8_lossy(&variant.body).contains("#EXTM3U") {
@@ -110,7 +131,7 @@ fn run_inner(opts: Opts) -> Result<()> {
             );
 
             let session_path = format!("/iptv/session/{channel}/hls.m3u8");
-            let session = http_get_until_body(&session_path, 1, deadline.remaining()?)
+            let session = http_get_until_body(&session_path, usize::MAX, deadline.remaining()?)
                 .with_context(|| format!("probing HLS session endpoint {session_path}"))?;
             session.ensure_success_with_body(&session_path)?;
             let session_body = String::from_utf8_lossy(&session.body);
@@ -121,9 +142,22 @@ fn run_inner(opts: Opts) -> Result<()> {
                 "smoke evidence: {session_path} -> HTTP {} playlist with initial segments",
                 session.status
             );
-            if opts.check_hls_lifecycle {
-                fetch_first_hls_segment(channel, &session_body, deadline.remaining()?)?;
+            if opts.check_hls_lifecycle || opts.next {
+                fetch_first_hls_segment(channel, &session_body, deadline.remaining()?, opts.next)?;
             }
+        }
+    }
+
+    if opts.next {
+        for channel in &opts.channels {
+            let playlist = env::temp_dir()
+                .join("ersatzrs-hls")
+                .join(channel)
+                .join("live.m3u8");
+            if !playlist.is_file() {
+                bail!("Next did not produce its engine-specific live.m3u8");
+            }
+            probe_preview(channel, deadline.remaining()?)?;
         }
     }
 
@@ -134,10 +168,19 @@ fn run_inner(opts: Opts) -> Result<()> {
                     channel,
                     Duration::from_secs(segmenter_timeout_seconds + HLS_IDLE_GRACE_SECONDS),
                     "HLS segmenter",
+                    false,
                 )?;
             }
 
-            if opts.check_ts {
+            if opts.next {
+                wait_for_hls_working_dir_removed(
+                    channel,
+                    Duration::from_secs(segmenter_timeout_seconds + HLS_IDLE_GRACE_SECONDS),
+                    "Next preview",
+                    true,
+                )?;
+            }
+            if opts.check_ts && !opts.next {
                 let path = format!("/iptv/channel/{channel}.ts?mode=ts");
                 let response =
                     http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
@@ -154,6 +197,7 @@ fn run_inner(opts: Opts) -> Result<()> {
                     channel,
                     Duration::from_secs(segmenter_timeout_seconds + HLS_IDLE_GRACE_SECONDS),
                     "MPEG-TS wrapper",
+                    false,
                 )?;
             }
         }
@@ -174,6 +218,7 @@ struct Opts {
     check_ts: bool,
     check_hls: bool,
     check_hls_lifecycle: bool,
+    next: bool,
 }
 
 impl Opts {
@@ -185,6 +230,7 @@ impl Opts {
         let mut check_ts = true;
         let mut check_hls = true;
         let mut check_hls_lifecycle = false;
+        let mut next = false;
 
         let mut i = 0;
         while i < args.len() {
@@ -219,6 +265,7 @@ impl Opts {
                     media_path = Some(PathBuf::from(value));
                 }
                 "--keep-temp" => keep_temp = true,
+                "--next" => next = true,
                 "--hls-lifecycle" => check_hls_lifecycle = true,
                 "--skip-ts" => check_ts = false,
                 "--skip-hls" => check_hls = false,
@@ -230,6 +277,12 @@ impl Opts {
 
         if channels.is_empty() {
             channels.push(DEFAULT_CHANNEL.to_owned());
+        }
+        if next {
+            check_hls_lifecycle = true;
+        }
+        if next && !check_hls {
+            bail!("--next requires HLS checks");
         }
         if !check_ts && !check_hls {
             bail!("at least one of MPEG-TS or HLS smoke checks must run");
@@ -243,6 +296,7 @@ impl Opts {
             check_ts,
             check_hls,
             check_hls_lifecycle,
+            next,
         })
     }
 
@@ -255,7 +309,7 @@ impl Opts {
     }
 
     const fn media_seconds(&self) -> i64 {
-        if self.check_hls_lifecycle {
+        if self.check_hls_lifecycle || self.next {
             LIFECYCLE_SMOKE_MEDIA_SECONDS
         } else {
             DEFAULT_SMOKE_MEDIA_SECONDS
@@ -306,11 +360,14 @@ impl ServerProcess {
         let mut command = Command::new(&binary);
         command
             .env("DATABASE_URL", database_url)
-            .env("HOME", home)
+            .env("ErsatzRS_DATABASE__URL", database_url)
+            .env("ERSATZRS_DATABASE__URL", database_url)
+            .env("ERSATZRS_APP_STATE_DIR", home.join(".ersatzrs"))
+            .env("ERSATZRS_APP_DATA_DIR", home.join("data"))
             // Keep the local gate off external interfaces. Besides matching
             // every probe below, this avoids a Windows Firewall consent
             // dialog for the ephemeral debug executable.
-            .env("LEPTOS_SITE_ADDR", LISTEN_ADDR)
+            .env("LEPTOS_SITE_ADDR", listen_addr()?)
             .env("RUST_LOG", smoke_rust_log())
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(stderr));
@@ -397,9 +454,10 @@ fn parse_config_target_dir(text: &str) -> Option<String> {
 }
 
 fn ensure_port_free() -> Result<()> {
-    let addr: SocketAddr = LISTEN_ADDR.parse()?;
+    let listen_addr = listen_addr()?;
+    let addr: SocketAddr = listen_addr.parse()?;
     if TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
-        bail!("{LISTEN_ADDR} is already in use; stop the existing server before running smoke");
+        bail!("{listen_addr} is already in use; stop the existing server before running smoke");
     }
     Ok(())
 }
@@ -535,6 +593,7 @@ fn seed_streaming_fixture(
     media_path: &Path,
     segmenter_timeout_seconds: u64,
     media_seconds: i64,
+    next: bool,
 ) -> Result<()> {
     let conn =
         Connection::open(db_path).with_context(|| format!("opening {}", db_path.display()))?;
@@ -566,6 +625,26 @@ fn seed_streaming_fixture(
     });
     match result {
         Ok(()) => {
+            if next {
+                conn.execute(
+                    r#"UPDATE "Channel" SET "StreamingEngine"=1 WHERE "Id"=?"#,
+                    [channel_id],
+                )?;
+                // Keep this generated fixture small and use explicit supported codecs.
+                conn.execute(
+                    r#"UPDATE "FFmpegProfile" SET "VideoFormat"=1, "AudioFormat"=1,
+                    "AudioChannels"=2, "VideoBitrate"=1000, "VideoBufferSize"=2000,
+                    "HardwareAcceleration"=0, "BitDepth"=0, "ThreadCount"=2
+                    WHERE "Id"=(SELECT "FFmpegProfileId" FROM "Channel" WHERE "Id"=?)"#,
+                    [channel_id],
+                )?;
+                conn.execute(
+                    r#"UPDATE "Resolution" SET "Width"=320, "Height"=180
+                    WHERE "Id"=(SELECT "ResolutionId" FROM "FFmpegProfile" WHERE "Id"=
+                    (SELECT "FFmpegProfileId" FROM "Channel" WHERE "Id"=?))"#,
+                    [channel_id],
+                )?;
+            }
             conn.execute_batch("COMMIT")?;
             Ok(())
         }
@@ -635,6 +714,7 @@ fn seed_streaming_fixture_inner(input: SeedFixture<'_>) -> Result<()> {
            VALUES (1, 'Smoke Movies', 1, 1)"#,
         [],
     )?;
+    conn.execute(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#, [])?;
     conn.execute(
         r#"INSERT INTO "LibraryPath" ("Id", "Path", "LibraryId", "LastScan")
            VALUES (1, ?, 1, ?)"#,
@@ -709,21 +789,72 @@ fn seed_streaming_fixture_inner(input: SeedFixture<'_>) -> Result<()> {
     Ok(())
 }
 
-fn fetch_first_hls_segment(channel: &str, playlist: &str, timeout: Duration) -> Result<()> {
+fn probe_preview(channel: &str, timeout: Duration) -> Result<()> {
+    let deadline = Deadline::from_now(timeout);
+    for name in ["master.m3u8", "hls.m3u8"] {
+        let path = format!("/iptv/preview/{channel}/{name}");
+        let response = http_get_until_body(&path, usize::MAX, deadline.remaining()?)?;
+        response.ensure_success_with_body(&path)?;
+        let body = String::from_utf8_lossy(&response.body);
+        if !body.contains("#EXTM3U") {
+            bail!("Next preview did not return an HLS playlist");
+        }
+        if name == "hls.m3u8" {
+            let segment = body
+                .lines()
+                .find(|line| !line.is_empty() && !line.starts_with('#'))
+                .ok_or_else(|| anyhow!("Next preview has no segment"))?;
+            let path = if segment.starts_with('/') {
+                segment.to_owned()
+            } else {
+                format!("/iptv/preview/{channel}/{segment}")
+            };
+            let response = http_get_until_body(&path, usize::MAX, deadline.remaining()?)?;
+            response.ensure_success_with_body(&path)?;
+            ensure_mpeg_ts_segment(&response.body)?;
+            println!(
+                "smoke evidence: Next preview segment -> HTTP {} with {} bytes",
+                response.status,
+                response.body.len()
+            );
+        }
+    }
+    Ok(())
+}
+
+fn fetch_first_hls_segment(
+    channel: &str,
+    playlist: &str,
+    timeout: Duration,
+    next: bool,
+) -> Result<()> {
     let uri = playlist
         .lines()
         .map(str::trim)
         .find(|line| !line.is_empty() && !line.starts_with('#'))
         .ok_or_else(|| anyhow!("/iptv/session/{channel}/hls.m3u8: no segment URI found"))?;
     let path = hls_segment_uri_to_path(channel, uri)?;
-    let response = http_get_until_body(&path, 1, timeout)
+    let response = http_get_until_body(&path, usize::MAX, timeout)
         .with_context(|| format!("probing HLS segment endpoint {path}"))?;
     response.ensure_success_with_body(&path)?;
+    if next {
+        ensure_mpeg_ts_segment(&response.body)?;
+    }
     println!(
         "smoke evidence: {path} -> HTTP {} segment with {} body bytes",
         response.status,
         response.body.len()
     );
+    Ok(())
+}
+
+fn ensure_mpeg_ts_segment(body: &[u8]) -> Result<()> {
+    if body.is_empty()
+        || !body.len().is_multiple_of(188)
+        || body.chunks_exact(188).any(|packet| packet[0] != 0x47)
+    {
+        bail!("Next HTTP segment is not a complete MPEG-TS packet sequence");
+    }
     Ok(())
 }
 
@@ -743,10 +874,21 @@ fn hls_segment_uri_to_path(channel: &str, uri: &str) -> Result<String> {
     Ok(format!("/iptv/session/{channel}/{uri}"))
 }
 
-fn wait_for_hls_working_dir_removed(channel: &str, timeout: Duration, label: &str) -> Result<()> {
-    let path = env::temp_dir().join("ersatzrs-hls").join(channel);
+fn wait_for_hls_working_dir_removed(
+    channel: &str,
+    timeout: Duration,
+    label: &str,
+    preview: bool,
+) -> Result<()> {
+    let path = env::temp_dir()
+        .join(if preview {
+            "ersatzrs-hls-preview"
+        } else {
+            "ersatzrs-hls"
+        })
+        .join(channel);
     let deadline = Deadline::from_now(timeout);
-    let mut saw_session_dir = path.exists();
+    let mut saw_session_dir = preview || path.exists();
     loop {
         if path.exists() {
             saw_session_dir = true;
@@ -797,13 +939,14 @@ fn http_get_until_body(
     min_body_bytes: usize,
     timeout: Duration,
 ) -> Result<HttpResponse> {
-    let addr: SocketAddr = LISTEN_ADDR.parse()?;
+    let listen_addr = listen_addr()?;
+    let addr: SocketAddr = listen_addr.parse()?;
     let mut stream = TcpStream::connect_timeout(&addr, timeout)?;
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
     write!(
         stream,
-        "GET {path} HTTP/1.1\r\nHost: {LISTEN_ADDR}\r\nConnection: close\r\n\r\n"
+        "GET {path} HTTP/1.1\r\nHost: {listen_addr}\r\nConnection: close\r\n\r\n"
     )?;
     stream.flush()?;
 
@@ -951,6 +1094,7 @@ fn print_help() {
     eprintln!("    cargo xtask smoke [FLAGS] [--channel N]...");
     eprintln!();
     eprintln!("FLAGS:");
+    eprintln!("    --next            Probe the installed Next engine, preview and MPEG-TS refusal");
     eprintln!("    --channel N       Channel number to probe (default: 1)");
     eprintln!("    --timeout S       Overall startup/probe timeout seconds (default: 90)");
     eprintln!("    --media PATH      Use an existing media file instead of generating one");
