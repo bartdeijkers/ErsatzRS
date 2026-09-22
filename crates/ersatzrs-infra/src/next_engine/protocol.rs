@@ -197,7 +197,26 @@ pub enum Source {
     },
     Lavfi {
         params: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        probe_hint: Option<AudioOnlyProbeHint>,
     },
+}
+
+/// Finite metadata for generated silence; Next must not probe an infinite lavfi input.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AudioOnlyProbeHint {
+    pub video: [(); 0],
+    pub audio: Vec<AudioProbeHint>,
+    pub subtitle: [(); 0],
+    pub format_name: String,
+    pub duration_ms: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AudioProbeHint {
+    pub stream_index: u32,
+    pub codec: String,
+    pub channels: u32,
 }
 
 #[cfg(test)]

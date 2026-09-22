@@ -23,7 +23,9 @@ Row 12 is Covered: native menu/action bindings already work, verified with
 four focused Chromium/Firefox regressions. Row 13 is in progress: wire types,
 executable discovery, atomic publication, profile mapping and managed-process
 startup/stop have focused tests. Real Linux Next HLS proves the selected alternate
-audio and burned external subtitle. Host session, endpoint/health and persisted
+audio and burned external subtitle. Database-backed item selection also proves
+preference precedence, exact pins and decoded silence/subtitles-off. Complete
+schedule/source/graphics projection, host session, endpoint/health and persisted
 scheduling integration remain open.
 The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment.

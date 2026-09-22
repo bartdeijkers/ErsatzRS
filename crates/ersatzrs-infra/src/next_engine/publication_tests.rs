@@ -14,6 +14,7 @@ fn schedule(id: &str) -> Playout {
             finish: Utc.with_ymd_and_hms(2026, 9, 22, 12, 1, 0).unwrap(),
             source: Some(Source::Lavfi {
                 params: "testsrc=size=320x180:rate=25".to_owned(),
+                probe_hint: None,
             }),
             tracks: None,
         }],

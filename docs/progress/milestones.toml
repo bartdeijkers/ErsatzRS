@@ -6260,6 +6260,31 @@ idle/shutdown ownership, health/troubleshooting and authenticated endpoint wirin
 then integrated Next and native playback gates. Pin/ledger/upstream checkout stay
 at ddc8ef7f; row 13 is still pending acceptance.
 
+Row 13 stream-selection checkpoint: project_item reuses native persisted
+audio/video metadata, global/item/channel language precedence, custom selector
+dispatch, exact pin validation, subtitle selection and subtitle path resolution.
+Timing/track projection applies item in/out points on the original source
+timeline. Explicit per-track sources with no general source prevent absent
+tracks from inheriting source content. Next's required audio input is supplied
+with generated silence plus a finite audio probe hint for a silent pin or an
+audio-less source. Stale versions or indexes fail without preference fallback.
+Four full-schema database regressions cover preference precedence, external
+and extracted paths, seek preservation, explicit silence/subtitles-off and
+stale version/video/audio/subtitle pins; 24 focused next_engine tests pass.
+The real Linux Next regression now uses these database selectors, first decoding
+880-Hz Dutch audio and visible subtitle glyphs, then restarting with a silent,
+subtitles-off pin and confirming decoded silence and zero glyph pixels. Both
+processes stop cleanly. The expanded real test passes against the same recorded
+Next/FFmpeg executables. This is not whole-schedule or live-host acceptance.
+Checkpoint review covers preference/pin precedence, absent-track inheritance,
+subtitle cache/relative path handling, sidecar stream-index rebasing and seek
+units. Infra all-target Clippy passes after making the subtitle helper borrow
+its input; formatting, architecture lint, progress and diff checks pass.
+Remaining: read/project complete channel schedules and resolved provider inputs,
+serialize publication with rebuilds, attach graphics/watermarks, integrate
+session admission/idle/shutdown/health and authenticated endpoints, then run the
+window playback gates. Ledger and pin remain unchanged.
+
 """
 
 [[milestone]]

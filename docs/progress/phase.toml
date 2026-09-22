@@ -74,8 +74,10 @@ pass four focused browser regressions. Row 13 (2ed432f9) has an infrastructure
 checkpoint for wire contracts, runtime discovery and atomic playout publication,
 with focused tests and actual Next parser proof. Profile conversion and bounded
 managed-process startup/stop now pass focused tests; a real Linux Next run proves
-generated HLS, selected alternate audio and burned external subtitles. Next:
-connect persisted-playout mapping, serialized refresh, session lifecycle/health
+generated HLS, selected alternate audio and burned external subtitles. Item track
+projection now uses native database selectors; real decoding also verifies exact
+silence/subtitles-off. Next: complete schedule/source/graphics projection and
+connect serialized refresh, session lifecycle/health
 and authenticated endpoints, then prove integrated playback.
 The upstream pin remains ddc8ef7f. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

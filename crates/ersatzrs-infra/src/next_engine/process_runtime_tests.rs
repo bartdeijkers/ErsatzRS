@@ -2,13 +2,12 @@
 //! `ERSATZRS_NEXT_TEST_BIN`, `ERSATZRS_NEXT_TEST_FFMPEG`, `ERSATZRS_NEXT_TEST_FFPROBE`.
 
 use super::*;
-use chrono::Utc;
 use ersatzrs_domain::{
     FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
 };
 use tokio::io::AsyncReadExt;
 
-use crate::next_engine::{config, protocol, publication};
+use crate::next_engine::{config, protocol, publication, selection};
 use crate::playback::PlaybackProfile;
 
 #[allow(clippy::disallowed_methods)] // Explicit opt-in test runtime locations, never production configuration.
@@ -88,43 +87,55 @@ async fn generate_clip(ffmpeg: &Path, clip: &Path) {
     tool(command).await;
 }
 
-fn publish(folder: &Path, clip: &Path, subtitle: &Path) {
-    let source = |path: &Path| protocol::Source::Local {
-        path: path.to_str().unwrap().to_owned(),
-        in_point_ms: None,
-        out_point_ms: None,
+async fn publish(folder: &Path, clip: &Path, muted: bool) {
+    use ersatzrs_domain::{Channel, ChannelSubtitleMode, PinnedStreamSelection};
+    let pool = selection::tests::fixture_pool().await;
+    let mut item = selection::tests::item();
+    item.in_point = chrono::Duration::zero();
+    item.out_point = chrono::Duration::seconds(60);
+    if muted {
+        item.pinned_stream_selection = Some(PinnedStreamSelection {
+            media_version_id: 100,
+            video_stream_index: 0,
+            audio_stream_index: None,
+            subtitle_stream_index: None,
+        });
+    }
+    let channel = Channel {
+        preferred_audio_language_code: Some("nld".to_owned()),
+        preferred_subtitle_language_code: Some("nld".to_owned()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
     };
-    let start = Utc::now() - chrono::Duration::seconds(2);
+    let projected = selection::project_item(
+        &pool,
+        &channel,
+        &item,
+        100,
+        protocol::Source::Local {
+            path: clip.to_str().unwrap().to_owned(),
+            in_point_ms: None,
+            out_point_ms: None,
+        },
+        &Resolution {
+            width: 320,
+            height: 180,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
     publication::publish_playout(
         folder,
         &protocol::Playout {
             version: protocol::PLAYOUT_VERSION.to_owned(),
-            items: vec![protocol::PlayoutItem {
-                id: "synthetic-next-proof".to_owned(),
-                start,
-                finish: start + chrono::Duration::seconds(60),
-                source: Some(source(clip)),
-                tracks: Some(protocol::Tracks {
-                    video: Some(protocol::Track {
-                        source: None,
-                        stream_index: Some(0),
-                    }),
-                    audio: Some(protocol::Track {
-                        source: None,
-                        stream_index: Some(2),
-                    }),
-                    subtitle: Some(protocol::Track {
-                        source: Some(source(subtitle)),
-                        stream_index: Some(0),
-                    }),
-                }),
-            }],
+            items: vec![projected],
         },
     )
     .unwrap();
 }
 
-async fn assert_audio_and_subtitle(ffmpeg: &Path, ffprobe: &Path, segment: &Path) {
+async fn assert_audio_and_subtitle(ffmpeg: &Path, ffprobe: &Path, segment: &Path, muted: bool) {
     let mut probe = Command::new(ffprobe);
     probe
         .args(["-v", "error", "-show_streams", "-of", "json"])
@@ -157,10 +168,17 @@ async fn assert_audio_and_subtitle(ffmpeg: &Path, ffprobe: &Path, segment: &Path
         .count();
     let frequency = f64::from(u32::try_from(crossings).unwrap()) * 8000.0
         / f64::from(u32::try_from(samples.len()).unwrap());
-    assert!(
-        (820.0..940.0).contains(&frequency),
-        "expected selected 880 Hz alternate audio, found {frequency}"
-    );
+    if muted {
+        assert!(
+            samples.iter().all(|sample| sample.unsigned_abs() <= 10),
+            "pinned silence must not restore a source audio track"
+        );
+    } else {
+        assert!(
+            (820.0..940.0).contains(&frequency),
+            "expected selected 880 Hz alternate audio, found {frequency}"
+        );
+    }
     let mut video = Command::new(ffmpeg);
     video
         .args(["-v", "error", "-nostdin", "-i"])
@@ -184,10 +202,17 @@ async fn assert_audio_and_subtitle(ffmpeg: &Path, ffprobe: &Path, segment: &Path
         .chunks_exact(3)
         .filter(|p| p.iter().all(|c| *c > 180))
         .count();
-    assert!(
-        white > 20,
-        "subtitle must produce white glyphs over the otherwise solid blue fixture"
-    );
+    if muted {
+        assert_eq!(
+            white, 0,
+            "explicit subtitles-off must leave the blue fixture free of glyphs"
+        );
+    } else {
+        assert!(
+            white > 20,
+            "subtitle must produce white glyphs over the otherwise solid blue fixture"
+        );
+    }
 }
 
 #[tokio::test]
@@ -207,7 +232,6 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
         "1\n00:00:00,000 --> 00:01:00,000\nNext subtitle proof\n",
     )
     .unwrap();
-    publish(&playout, &clip, &subtitle);
     let profile = PlaybackProfile {
         profile: FFmpegProfile {
             video_format: FFmpegProfileVideoFormat::H264,
@@ -225,27 +249,30 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
         },
     };
     let config = config::channel_config(&profile, &playout, &ffmpeg, &ffprobe).unwrap();
-    let mut process = NextProcess::start(
-        &binary,
-        "1",
-        &output,
-        &config,
-        Instant::now() + Duration::from_secs(30),
-    )
-    .await
-    .unwrap();
-    process.touch().await.unwrap();
-    let playlist = std::fs::read_to_string(output.join("live.m3u8")).unwrap();
-    assert!(playlist.starts_with("#EXTM3U"));
-    let segment = playlist
-        .lines()
-        .find(|line| {
-            !line.starts_with('#')
-                && Path::new(line)
-                    .extension()
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
-        })
-        .expect("Next must publish an MPEG-TS segment");
-    assert_audio_and_subtitle(&ffmpeg, &ffprobe, &output.join(segment)).await;
-    process.stop().await.unwrap();
+    for muted in [false, true] {
+        publish(&playout, &clip, muted).await;
+        let mut process = NextProcess::start(
+            &binary,
+            "1",
+            &output,
+            &config,
+            Instant::now() + Duration::from_secs(30),
+        )
+        .await
+        .unwrap();
+        process.touch().await.unwrap();
+        let playlist = std::fs::read_to_string(output.join("live.m3u8")).unwrap();
+        assert!(playlist.starts_with("#EXTM3U"));
+        let segment = playlist
+            .lines()
+            .find(|line| {
+                !line.starts_with('#')
+                    && Path::new(line)
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
+            })
+            .expect("Next must publish an MPEG-TS segment");
+        assert_audio_and_subtitle(&ffmpeg, &ffprobe, &output.join(segment), muted).await;
+        process.stop().await.unwrap();
+    }
 }

@@ -74,8 +74,11 @@ On Windows, include the `.exe` filename.
 The test creates disposable blue video with 440-Hz and 880-Hz audio tracks and
 an external subtitle. It publishes the playout through the real adapter, starts
 Next with profile-derived configuration, waits for readiness, decodes a generated
-HLS segment, checks the selected 880-Hz audio and visible subtitle glyphs, then
-stops the managed process. It uses no personal library or application database.
+HLS segment and checks the selected 880-Hz audio and visible subtitle glyphs.
+Track choices now come from the native selectors against an isolated migrated
+database. A second startup uses an exact silent/subtitles-off pin and verifies
+decoded silence and the absence of glyphs. Both managed processes are stopped.
+It uses no personal library or production database.
 This is engine-boundary proof; it does not replace web endpoint, authentication,
 scheduling, native smoke or platform acceptance gates.
 

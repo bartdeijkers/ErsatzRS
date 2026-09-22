@@ -21,6 +21,9 @@ JSON exchange and atomic complete-schedule publication. Profile conversion and
 a managed process adapter add bounded startup/readiness, heartbeat and cleanup.
 These helpers are not yet connected to live channel startup or scheduling
 completion; host session, health and authenticated delivery acceptance remain open.
+Item track projection reuses native database selectors and subtitle-path
+resolution, with decoded Linux proof for alternate audio/subtitles and explicit
+silence/subtitles-off. Complete schedule/source/graphics projection remains open.
 
 ## Context
 
@@ -112,6 +115,15 @@ whole-tree cleanup on startup failure or normal stop. Raw child stdout/stderr
 are discarded because they can contain private source URLs; adapter errors
 contain static operation labels, error kinds and exit codes. The host session
 must own admission, idle policy, shutdown and heartbeat scheduling.
+
+Track projection uses explicit video/audio/subtitle sources and omits the
+general item source, so an absent track cannot inherit it. Exact pins are
+validated against the resolved version and stream metadata. Since Next requires
+an audio input, pinned silence uses generated silent audio with a finite probe
+hint, following Next's own synthetic-input contract; it does not restore source
+audio. Sidecar and extracted subtitle paths use the existing native resolver,
+and item in/out points remain on the original media timeline. Prepared provider
+intervals, graphics/watermarks and schedule refresh still need integration.
 
 ## Consequences
 
