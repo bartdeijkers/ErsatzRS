@@ -5,6 +5,7 @@
 //! these types do not replace the native `FFmpeg` pipeline or scheduler.
 
 pub mod config;
+pub mod coordinator;
 pub mod process;
 pub mod protocol;
 pub mod publication;

@@ -76,7 +76,10 @@ an external subtitle. It publishes the playout through the real adapter, starts
 Next with profile-derived configuration, waits for readiness, decodes a generated
 HLS segment and checks the selected 880-Hz audio and visible subtitle glyphs.
 Schedule items and media-file bindings are read from an isolated migrated
-database under scheduler locks; track choices then use the native selectors. A second startup uses an exact silent/subtitles-off pin and verifies
+database under scheduler locks; the per-channel publisher reloads channel
+preferences, runs native track selection and atomically publishes on its blocking
+worker. Separate coordinator regressions cover queued reads, retained old
+publications, empty schedules and cancellation before/during filesystem work. A second startup uses an exact silent/subtitles-off pin and verifies
 decoded silence and the absence of glyphs. Both managed processes are stopped.
 It uses no personal library or production database.
 This is engine-boundary proof; it does not replace web endpoint, authentication,

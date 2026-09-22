@@ -24,7 +24,9 @@ completion; host session, health and authenticated delivery acceptance remain op
 Item track projection reuses native database selectors and subtitle-path
 resolution, with decoded Linux proof for alternate audio/subtitles and explicit
 silence/subtitles-off. Locked schedule reads preserve mirror offsets and bind
-one media file per item. Provider/graphics projection and host integration remain open.
+one media file per item. Per-channel publication now serializes reads and writes,
+including cancellation during filesystem work. Provider/graphics projection and
+host integration remain open.
 
 ## Context
 
@@ -130,8 +132,11 @@ Schedule loading reuses the canonical playout repository and shared scheduler
 locks, retaining one logical row per item and choosing its pinned version or the
 first version/file by ID. Mirror offsets apply to query, playback and guide times.
 Busy reads retain the previous publication; empty successful reads can withdraw
-it. Missing media fails the complete read. The caller must retain these locks
-through publication and separately serialize publishers per channel. These are
+it. Missing media fails the complete read. The per-channel publisher retains these locks
+through publication and serializes channel reads, projection and replacement.
+Its blocking filesystem worker owns both locks until completion, even if the
+awaiting refresh is cancelled. The host must share one publisher per channel
+across startup and rebuild triggers, retaining its stable channel-ID folder. These are
 scheduler build locks, not a transaction snapshot across metadata or admin edits.
 Remote bindings still require provider resolution before publication.
 

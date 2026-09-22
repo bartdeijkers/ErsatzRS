@@ -26,7 +26,9 @@ startup/stop have focused tests. Real Linux Next HLS proves the selected alterna
 audio and burned external subtitle. Database-backed item selection also proves
 preference precedence, exact pins and decoded silence/subtitles-off. Locked
 schedule reads preserve mirror offsets and one media binding per item; real
-Next decoding now starts from persisted schedules. Provider/graphics projection,
+Next decoding now starts from persisted schedules. Per-channel publication
+serializes reads and replacement, including cancellation of the awaiting task.
+Host startup/rebuild ownership of publishers remains open. Provider/graphics projection,
 host session, endpoint/health and persisted
 scheduling integration remain open.
 The first consolidated CI is authorized after

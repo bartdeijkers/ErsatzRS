@@ -7,7 +7,7 @@ use ersatzrs_domain::{
 };
 use tokio::io::AsyncReadExt;
 
-use crate::next_engine::{config, protocol, publication, schedule, selection};
+use crate::next_engine::{config, coordinator, protocol, schedule, selection};
 use crate::playback::PlaybackProfile;
 
 #[allow(clippy::disallowed_methods)] // Explicit opt-in test runtime locations, never production configuration.
@@ -88,7 +88,7 @@ async fn generate_clip(ffmpeg: &Path, clip: &Path) {
 }
 
 async fn publish(folder: &Path, clip: &Path, muted: bool) {
-    use ersatzrs_core::repositories::PlayoutRepository;
+    use ersatzrs_core::repositories::{ChannelRepository, PlayoutRepository};
     use ersatzrs_domain::{ChannelSubtitleMode, PinnedStreamSelection};
     let (pool, locker, mut channel, _) = schedule::tests::fixture().await;
     sqlx::query(r#"UPDATE "MediaFile" SET "Path" = ? WHERE "Id" = 1"#)
@@ -121,39 +121,39 @@ async fn publish(folder: &Path, clip: &Path, muted: bool) {
         .upsert_item(&item)
         .await
         .unwrap();
-    let scheduled = schedule::read_locked(&pool, &locker, &channel, item.start, item.finish)
+    crate::repositories::make_repositories(pool.clone())
+        .channel
+        .upsert(&channel)
         .await
-        .unwrap()
         .unwrap();
-    assert_eq!(scheduled.items.len(), 1);
-    let media = &scheduled.items[0];
-    assert!(media.remote_stream_id.is_none());
-    let projected = selection::project_item(
-        &pool,
-        &channel,
-        &media.item,
-        media.media_version_id,
-        protocol::Source::Local {
-            path: media.path.clone(),
-            in_point_ms: None,
-            out_point_ms: None,
-        },
-        &Resolution {
-            width: 320,
-            height: 180,
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-    publication::publish_playout(
-        folder,
-        &protocol::Playout {
-            version: protocol::PLAYOUT_VERSION.to_owned(),
-            items: vec![projected],
-        },
-    )
-    .unwrap();
+    let publisher = coordinator::ChannelPublisher::new(pool.clone(), locker, folder, channel.id);
+    let outcome = publisher
+        .refresh(item.start, item.finish, |channel, media| async move {
+            assert_eq!(media.len(), 1);
+            let media = &media[0];
+            assert!(media.remote_stream_id.is_none());
+            let projected = selection::project_item(
+                &pool,
+                &channel,
+                &media.item,
+                media.media_version_id,
+                protocol::Source::Local {
+                    path: media.path.clone(),
+                    in_point_ms: None,
+                    out_point_ms: None,
+                },
+                &Resolution {
+                    width: 320,
+                    height: 180,
+                    ..Default::default()
+                },
+            )
+            .await?;
+            Ok(vec![projected])
+        })
+        .await
+        .unwrap();
+    assert_eq!(outcome, coordinator::RefreshOutcome::Published { items: 1 });
 }
 
 async fn assert_audio_and_subtitle(ffmpeg: &Path, ffprobe: &Path, segment: &Path, muted: bool) {
@@ -269,7 +269,7 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
             ..Default::default()
         },
     };
-    let config = config::channel_config(&profile, &playout, &ffmpeg, &ffprobe).unwrap();
+    let config = config::channel_config(&profile, &playout.join("1"), &ffmpeg, &ffprobe).unwrap();
     for muted in [false, true] {
         publish(&playout, &clip, muted).await;
         let mut process = NextProcess::start(

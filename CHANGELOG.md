@@ -29,6 +29,8 @@ release section when tagging a release.
   preference precedence, exact pins, source seek points and explicit silence.
   Read persisted schedules with mirror offsets and deterministic media-file
   binding while retaining scheduler locks through projection/publication.
+  Serialize refreshes per channel and retain write ownership through cancellation
+  so a newer schedule cannot be overwritten by an abandoned publication.
   Live Next playback integration remains pending.
 
 - Retain form-action selection counts and Select all under Edit multiple items

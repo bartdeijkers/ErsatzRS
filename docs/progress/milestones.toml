@@ -6303,6 +6303,27 @@ Remaining: provider/graphics projection, per-channel publication coordination,
 rebuild triggers and host session/health/authenticated endpoints, then window
 playback acceptance. Row 13 remains pending; ledger and pin are unchanged.
 
+Row 13 publication-coordination checkpoint: one cloneable publisher per channel
+loads current settings and the persisted schedule after admission, projects all
+items, then publishes on a blocking filesystem worker. Scheduler locks and
+channel admission move into that worker, so cancelling its awaiter cannot let a
+newer refresh overtake an older pending replacement. Projection failures and
+busy reads retain the previous file; empty successful reads withdraw it.
+Four migrated-database regressions pass: busy/failure/empty handling, queued
+refreshes observing updated channel settings, cancellation during projection,
+and cancellation while a controlled blocking writer still owns its locks.
+The real Linux Next test now traverses this publisher and reloads persisted
+channel preferences; selected 880-Hz audio and subtitle glyphs, then explicit
+silence/subtitles-off, pass in 1.955 seconds against the recorded release binary.
+Review covers lock lifetime on success/error/abort, read-after-admission ordering,
+redacted failures, stable channel-ID folders and unchanged atomic-file semantics.
+Infra all-target Clippy passes after borrowing the constructor path; formatting,
+architecture lint, progress validation and diff checks pass.
+Host ownership must keep one shared publisher per channel across startup and
+rebuild triggers. Provider process lifetimes/retained intervals, graphics,
+session/health and authenticated endpoints remain open. No additional upstream
+row is processed; pin/ledger remain at ddc8ef7f and CI remains after UCU-03 smoke.
+
 """
 
 [[milestone]]

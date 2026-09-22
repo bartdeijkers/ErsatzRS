@@ -78,8 +78,9 @@ generated HLS, selected alternate audio and burned external subtitles. Item trac
 projection now uses native database selectors; real decoding also verifies exact
 silence/subtitles-off. Locked persisted schedule reads now preserve mirror offsets
 and bind one source per item, with real Next decoding proof. Next: complete
-provider/graphics projection and
-connect serialized refresh, session lifecycle/health
+provider/graphics projection. The per-channel publisher now serializes reads and
+replacement, retaining locks through cancelled filesystem work. Connect rebuild
+triggers, session lifecycle/health
 and authenticated endpoints, then prove integrated playback.
 The upstream pin remains ddc8ef7f. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
