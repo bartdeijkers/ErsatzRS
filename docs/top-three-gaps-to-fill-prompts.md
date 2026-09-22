@@ -1,6 +1,6 @@
 <!--
 generated: 2026-09-22
-parity_baseline_commit: f69761cb3123113c0cc5c67f2b3a79c4bd9bcda9
+parity_baseline_commit: b76d8f8e54b8b7d3dd4787cdc79460dd708d2a53
 generator: reviewed catch-up pin advancement
 rules: docs/automation/gap-prompt-rules.md
 -->
@@ -20,8 +20,8 @@ front-matter value is a generated checkpoint, not permission to reset a newer pi
 ### Workflow
 
 Follow AGENTS.md and `plans/upstream-catch-up.md`. Fully reconcile exactly the
-first pending ledger row without stopgaps; the current candidate is b76d8f8e,
-`more token alignment`. This is an explicitly authorized
+first pending ledger row without stopgaps; the current candidate is 30c361db,
+`only bundle the ersatztv-channel binary (#2851)`. This is an explicitly authorized
 post-pin catch-up task, not an ordinary pinned-baseline parity gap.
 
 ### Before editing

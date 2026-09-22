@@ -5852,6 +5852,34 @@ Landing subject: docs(porting): reconcile upstream CLI artifact publication.
 Pin and ledger advance together to f69761cb, followed by upstream checkout and
 agreement verification. Next pending row: b76d8f8e, more token alignment.
 Full UCU-01 acceptance and exact-SHA CI remain open.
+
+2026-09-22 row 7: b76d8f8e54b8b7d3dd4787cdc79460dd708d2a53,
+more token alignment. Pin, last landed row and upstream HEAD agree at f69761cb
+before advancing; AMM-N-03 and UCU-00 remain Complete. Fetch retains target
+55885508 and all 168 ledger SHA/subjects match its ordered log.
+Full diff and surrounding download/delete/upload steps reviewed. Source map:
+artifacts.yml replaces eight GH_TOKEN references (three cleanup steps, three
+uploads and two Next downloads); docker.yml replaces the Next-download token.
+Each changes secrets.gh_token to github.token. Exact parent/current comparison
+after that single substitution confirms no other changes in either file.
+No tests, changelog, workflow permissions, schemas or product code changes.
+Native mapping: release.yml already binds GH_TOKEN to github.token for beta
+draft staging and normal release upload. Public Next downloads in stage-next.py
+use only a User-Agent header, with no token forwarding; the row-4 real artifact
+checks cover that unchanged path. The upstream-only develop asset cleanup is
+absent from the native version-tag workflow, as reviewed in row 6.
+Verdict Covered, owner upstream-baseline-catch-up. Applicable native upload
+bindings already match; no runtime or packaging edit is needed. Direct Codex
+review found no additional behavioral hunk or actionable serious native gap.
+ADR 0095 is not used as an exemption. No credentials were read, and source
+coverage is not a claim of new hosted authentication or release acceptance.
+Documentation only; affected-checks selects progress validation. progress check
+and git diff --check pass; no Rust/browser/playback/hosted CI checks are needed
+for unchanged product and workflow code.
+Landing subject: docs(porting): reconcile upstream job-token alignment.
+Pin and ledger advance together to b76d8f8e, followed by upstream checkout and
+agreement verification. Next pending row: 30c361db, only bundle the
+ersatztv-channel binary (#2851). UCU-01 window acceptance remains open.
 """
 
 [[milestone]]
