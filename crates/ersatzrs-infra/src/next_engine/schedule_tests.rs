@@ -83,7 +83,7 @@ async fn multiple_files_and_versions_do_not_duplicate_scheduled_items() {
     assert!(read
         .items
         .iter()
-        .all(|m| m.media_version_id == 100 && m.path == "media/first.mkv"));
+        .all(|m| m.media_version_id == 100 && m.media_file_id == 1 && m.path == "media/first.mkv"));
     assert!(PlayoutLockGuard::try_acquire(&locker, 1).is_none());
     drop(read);
     let repo = SqlitePlayoutRepository(pool.clone());
@@ -111,7 +111,42 @@ async fn multiple_files_and_versions_do_not_duplicate_scheduled_items() {
     .unwrap();
     assert_eq!(read.items.len(), 1);
     assert_eq!(read.items[0].media_version_id, 101);
+    assert_eq!(read.items[0].media_file_id, 3);
     assert_eq!(read.items[0].path, "media/alternate.mkv");
+}
+
+#[tokio::test]
+async fn identical_paths_preserve_the_selected_file_identity() {
+    let (pool, locker, channel, start) = fixture().await;
+    // Provider file keys can differ even when their stored paths are identical.
+    sqlx::query(r#"UPDATE "MediaFile" SET "Path" = 'media/shared.mkv'"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for expected_id in [1, 2] {
+        let read = read_locked(
+            &pool,
+            &locker,
+            &channel,
+            start,
+            start + Duration::minutes(2),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(read.items.len(), 2);
+        assert!(read.items.iter().all(|media| {
+            media.media_file_id == expected_id
+                && media.media_version_id == 100
+                && media.path == "media/shared.mkv"
+        }));
+        drop(read);
+        sqlx::query(r#"DELETE FROM "MediaFile" WHERE "Id" = ?"#)
+            .bind(expected_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
 }
 
 #[tokio::test]

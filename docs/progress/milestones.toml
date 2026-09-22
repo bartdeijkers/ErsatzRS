@@ -6670,6 +6670,44 @@ confirm the same 169-row target. Land row/pin at 9882b008 and align upstream HEA
 19 reconciled / 150 pending. Next: row 20 (bb493670), media-server inputs for Next.
 UCU-02 stays In progress; no push or CI before the authorized UCU-03 boundary.
 
+2026-09-23 row 20 preparation (bb493670, #2865): full two-file upstream diff
+reviewed. No upstream tests/changelog change. Source map is recorded in
+plans/upstream-catch-up.md. The exporter now admits media-server libraries,
+prefers existing provider-replaced local files, then uses internal Plex,
+Jellyfin or Emby media routes. It also adds silence for absent source audio.
+Native Next host still rejects these libraries, so the row is not Covered.
+
+The native schedule binding now retains MediaFile.Id in the same ordered SQL
+row as version/path. This is needed for Plex's file-specific remote key and
+prevents a later resolver from ambiguously looking up a file by a repeated
+path. The existing multiple-file/version test now verifies both normal and
+pinned file IDs; a new equal-path test verifies deterministic identity and
+selection of the remaining file after deletion. All six schedule tests pass
+through ./run.sh test -p ersatzrs-infra --lib next_engine::schedule::.
+
+All five selection tests pass through the same wrapper with
+next_engine::selection::. The new HTTP regression verifies the complete URI,
+headers, user agent, reconnect, timeout and seek options on video, selected
+alternate audio and embedded subtitles; removing all audio metadata preserves
+video/subtitle transport and inserts finite silence. This guards against the
+upstream no-audio branch losing the HTTP URI when copying only type/path.
+These are projection tests, not decoded media-server playback evidence.
+
+Review identified two integration constraints: native web path replacements
+are collected across all sources and cannot provide source isolation; native
+web has no matching media-server redirect routes to reuse. Resolve the item's
+own source and selected file, inspect provider connection/authentication
+contracts, then connect HTTP fallback and verify all three providers with
+synthetic fixtures and real Next decoding. Remote Stream/add-on lifetimes and
+later graphics integration are outside this row. No acceptance is weakened.
+Direct Codex review confirms unchanged row cardinality, ordering, version-pin
+filtering and lock ownership. Infra all-target Clippy with -D warnings passes
+(17.50 seconds), as do progress check and diff --check. No wire generation or
+playback dispatch changes in this checkpoint; runtime smoke remains due for
+the integrated provider slice.
+This preparatory checkpoint leaves row 20, pin and upstream HEAD unchanged at
+9882b008: 19 reconciled / 150 pending. UCU-02 remains In progress.
+
 """
 
 [[milestone]]

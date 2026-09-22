@@ -16,6 +16,8 @@ use crate::repositories::{SqlitePlayoutRepository, SqlxResultExt as _};
 pub struct ScheduledMedia {
     pub item: PlayoutItem,
     pub media_version_id: i64,
+    /// Exact file selected with the version; provider keys belong to this file.
+    pub media_file_id: i64,
     pub path: String,
     pub remote_stream_id: Option<i64>,
 }
@@ -109,7 +111,7 @@ async fn playout_ids(pool: &DbPool, channel_id: i64) -> Result<Vec<i64>> {
 }
 
 const MEDIA_QUERY: &str = r#"
-    SELECT mv."Id" AS "VersionId", mf."Path", mv."RemoteStreamId"
+    SELECT mv."Id" AS "VersionId", mf."Id" AS "FileId", mf."Path", mv."RemoteStreamId"
     FROM "MediaVersion" mv
     JOIN "MediaFile" mf ON mf."MediaVersionId" = mv."Id"
     WHERE (mv."MovieId" = ? OR mv."EpisodeId" = ? OR mv."MusicVideoId" = ?
@@ -142,6 +144,7 @@ async fn bind_media(pool: &DbPool, item: PlayoutItem) -> Result<ScheduledMedia> 
         item,
         path,
         media_version_id: row.try_get("VersionId").repository()?,
+        media_file_id: row.try_get("FileId").repository()?,
         remote_stream_id: row.try_get("RemoteStreamId").repository()?,
     })
 }

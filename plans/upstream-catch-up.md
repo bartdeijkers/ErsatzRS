@@ -106,6 +106,46 @@ satisfy that prerequisite or authorize a later implementation commit.
 10. Report upstream SHA/subject, verdict and rationale, changed files, evidence,
     old/new pin, row count, next commit and remaining blocker.
 
+## Row 20 source map: media-server inputs
+
+Upstream `bb493670` changes `Application/Playouts/Commands/SyncNextPlayoutHandler.cs`
+and `Core/Next/Playout.cs`; it has no UI, migration, test or changelog changes.
+The handler exports media-server items, prefers an existing local file after
+provider-specific path replacement, otherwise uses internal HTTP routes for
+Plex files and Jellyfin/Emby movies or episodes. Missing audio produces a lavfi
+silence track. Wire-model renames consolidate shared and per-track sources.
+
+- Upstream services: `Core/Extensions/MediaItemExtensions.cs::GetLocalPath` and
+  `Core/{Plex,Jellyfin,Emby}/*PathReplacementService.cs` select replacements for
+  the item's library/source. `Controllers/InternalController.cs` resolves the
+  internal media URLs through provider connection queries and redirects to the
+  server. Plex uses the selected media file's key, not its filesystem path.
+- ErsatzRS persistence: `next_engine/schedule.rs` selects one ordered version
+  and file, respecting exact version pins. Retain the selected file ID with its
+  version/path so HTTP resolution cannot select a different Plex file by path.
+  `repositories/media_source.rs` already exposes per-source replacements and
+  connection records. Provider item/file tables retain remote identities.
+- ErsatzRS transport: `next_engine/protocol.rs::Source::Http` already models
+  URI, headers, timeout, reconnect and seek options. `selection.rs` preserves
+  complete sources for selected tracks and inserts finite silence without
+  reconstructing the video source. The upstream no-audio branch copies only
+  source type/path; do not lose the HTTP URI when applying that behavior.
+- Integration gap: `next_engine/host.rs::refresh` rejects non-local libraries.
+  The native web `stream.rs::load_path_replacements` collects replacements from
+  all servers, so it cannot provide source isolation for this projection.
+  Existing native playback does not provide the upstream internal redirect
+  routes. Review provider connection/authentication and HTTP delivery before
+  wiring this path; do not assume a reusable native HTTP resolver exists.
+- Side effects and evidence: keep complete atomic schedule publication,
+  mirror timing, exact stream pins, redacted errors, session ownership and
+  cancellation. Test overlapping paths across servers, selected file/version
+  identity, local preference, HTTP fallback for all three providers, missing
+  audio, seek and retained subtitle/audio sources, then decoded Next playback.
+  Remote Stream/add-on lifetimes and later graphics rows are separate scope.
+- Intentional deviations: the optional engine and atomic publication remain
+  governed by ADR 0095. This preparatory map does not accept a new deviation or
+  close row 20. UCU-02 owns current evidence and outstanding acceptance.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).

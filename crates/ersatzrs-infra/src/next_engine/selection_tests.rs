@@ -156,6 +156,65 @@ async fn pinned_silence_and_subtitles_off_never_restore_preferred_tracks() {
 }
 
 #[tokio::test]
+async fn http_sources_retain_transport_options_when_audio_is_missing() {
+    let pool = fixture_pool().await;
+    let channel = Channel {
+        preferred_audio_language_code: Some("nld".to_owned()),
+        preferred_subtitle_language_code: Some("jpn".to_owned()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
+    };
+    let source = wire::Source::Http {
+        uri: "https://media.example.test/video.mkv".to_owned(),
+        headers: vec!["X-Fixture: synthetic".to_owned()],
+        user_agent: Some("ErsatzRS-fixture".to_owned()),
+        reconnect: Some(true),
+        reconnect_delay_max: Some(2),
+        timeout_us: Some(5_000_000),
+        in_point_ms: None,
+        out_point_ms: None,
+    };
+    let mut expected = serde_json::to_value(&source).unwrap();
+    expected["in_point_ms"] = 1000.into();
+    expected["out_point_ms"] = 61_000.into();
+    for has_audio in [true, false] {
+        if !has_audio {
+            sqlx::query(r#"DELETE FROM "MediaStream" WHERE "MediaStreamKind" = 2"#)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+        let projected = project_item(
+            &pool,
+            &channel,
+            &item(),
+            100,
+            source.clone(),
+            &Resolution {
+                width: 320,
+                height: 180,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let value = serde_json::to_value(projected).unwrap();
+        assert!(value.get("source").is_none());
+        assert_eq!(value["tracks"]["video"]["source"], expected);
+        assert_eq!(value["tracks"]["subtitle"]["source"], expected);
+        assert_eq!(value["tracks"]["subtitle"]["stream_index"], 3);
+        if has_audio {
+            assert_eq!(value["tracks"]["audio"]["source"], expected);
+            assert_eq!(value["tracks"]["audio"]["stream_index"], 2);
+        } else {
+            let audio = &value["tracks"]["audio"]["source"];
+            assert_eq!(audio["source_type"], "lavfi");
+            assert_eq!(audio["probe_hint"]["duration_ms"], 60_000);
+        }
+    }
+}
+
+#[tokio::test]
 async fn stale_pins_fail_without_selecting_another_version_or_stream() {
     let pool = fixture_pool().await;
     let mut item = item();
