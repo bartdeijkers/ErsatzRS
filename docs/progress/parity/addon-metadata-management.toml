@@ -54,8 +54,8 @@ and aligned MPEG-TS/transcoded HLS captions in both delivery modes.
 M-03 is complete; N-01 is pushed with green CI (see milestone):
 permission-reviewed yt-dlp -U, playback-first deferral and offline crash recovery.
 Milestones own walkthrough, UI and N-02 evidence. AMM-N-03 remains open.
-Windows 980b0bce passes package, profile, restart, caption and real-provider
-playback checks (2026-09-21). Local 0.11.4 fixes batch errors; live 0.11.3 remains.
+Windows 980b0bce passes package/profile/restart/caption/playback checks.
+Live provider 0.11.4 preserves settings and enabled state; the batch-error debt closes.
 Provider contracts pass on both platforms; 2839 Rust cases and doctests pass.
 132 native workspace and 138 matched Linux UI cases pass.
 Linux smoke/TSDuck and web parity pass. Editable numbering review is accepted
@@ -66,7 +66,7 @@ under ADR 0091; later edits pass four UI cases. Release acceptance remains.
 id          = 'windows-ytdlp-batch-import-error-record'
 description = 'The installed yt-dlp 0.11.3 Windows package loses the structured import error record on an unmappable v2 item: cmd.exe cannot find the fail batch label with the shipped LF line endings.'
 discovered  = '2026-09-20'
-resolved    = false
+resolved    = true
 adr         = '0085'
 evidence    = '''
 AMM-N-03 timeboxed native acceptance runs the existing provider v2 staged-archive
@@ -93,6 +93,7 @@ live update are not yet claimed;
 the deployed 0.11.3 package is
 unchanged, so its observed error-reporting defect remains present.
 '''
+resolution = 'Resolved 2026-09-22: the live Windows installation is updated through the supported admin UI to 0.11.4 from CI 35651550770. All 20 installed provider files match both the downloaded CI archive and the separately verified native midpoint/concise-error entrypoint proof. The prior settings and enabled state are preserved, Check reports ready and healthz returns 200. A consistent database and provider backup precedes the update; no host restart or database repair occurs. Milestone amm-n-03 owns live-provider-verification.json and the earlier packaged v2/error-record regression evidence. Host beta archive and publication acceptance remain separate.'
 
 [[debt]]
 id          = 'addon-preparation-readmission-context'

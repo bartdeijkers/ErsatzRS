@@ -3975,6 +3975,40 @@ playback and release gates remain unchanged; prototype reports cannot replace
 production acceptance.
 '''
 evidence = '''
+2026-09-22 acceptance evidence cross-check (not closeout):
+Some September 9 raw report paths below are no longer present locally. Current
+repository/migration proof instead uses the retained September 21 successful
+test-closeout.log, whose SHA-256 matches test-closeout-result.json. It explicitly
+passes editor_task_write_failure_rolls_back_earlier_rows_and_settings (injected
+second-row failure), editor_task_save_is_one_revision_and_rejects_replay,
+transactional metadata ETag/replacement checks, retained-row conflicts and
+chapter/admission atomicity. The 138-case Linux browser report is present with
+zero failures/skips/flakiness and covers task saves, draft/artwork retention,
+stale edits, chapter restore, source/provider flows and responsive geometry.
+The metadata-editor reviews/edits/uploads case also exercises revision comparison,
+stale-restore refusal and reset impact; its title alone is not the coverage map.
+Current route/hydration records retain all six native workspace destinations.
+Source reuse is bounded by candidate-3a16e73a-source-reuse-audit.json; the only
+product change since that closeout is the separately verified progress name.
+The retained native-workspaceacceptance-report.json explicitly passes task-only
+Save, every page size/off-page selection/Undo, heading rename with Save-button
+dirty state, retained row markers/new-tab navigation, active-filter clearing,
+First/Last paging and top-of-item Save in both browsers and interaction modes.
+Its five failures remain recorded; the native-workspacefocused-report.json
+separately passes all 16 targeted disk-warning, access/option and chapter cases.
+Do not describe the original broad run as wholly successful.
+The 1440px light Items capture is compared with the locked ux-fixes reference:
+task hierarchy, filters, bulk disclosure, one Save/Discard bar and row columns
+remain; heading publication status, title editing and pagination follow the
+accepted September amendments. The 390px dark Playback capture retains stacked
+delivery/access/disk sections. Its fixture has no access-option schema, so that
+image cannot prove populated cookie/SponsorBlock geometry; the separate option
+cases own behavior evidence. Real shell, fixture contents and localized labels
+are permitted differences. Reference files are unchanged. This bounded visual
+comparison does not close W29 or substitute for the full clause audit.
+Evidence remains under test-results/n03-20260921-host, including both reports
+and native-workspaceacceptance-results; no new browser execution is claimed.
+
 2026-09-21 detail-progress accessibility audit:
 W30 remains reproducible in source: the existing import/detail progress element
 has values and nearby phase text but no accessible name. The scoped correction
@@ -4389,6 +4423,80 @@ Existing command-level regression coverage remains. yt-dlp, native recovery
 and the other Windows release gates remain required.
 '''
 evidence = '''
+2026-09-22 v1.0.37-beta draft archive and focused native UI accepted:
+Windows workflow 35668471452 completes successfully on
+3a16e73a1c96daded23ca93f15720471fcb6e5ad, including startup registration and
+the corrected isolated web-bundle gate. The independently downloaded draft ZIP
+is 69,138,151 bytes, SHA-256
+e94d42bcda500c8fc0728fd6c76342139fe88201aad3c5cf2ea3efe8aa9cf5b3,
+matching the GitHub asset digest. Fresh native extraction verifies ZIP integrity,
+all extracted bytes, four x64 PE executables, required web/assets/licenses and
+excluded runtime tools/private state. Packaged server SHA-256 is
+091f6f6a254fc6178099ec0e5471bcac9dd07c00e81b939f25c83184358e840a.
+The independently executed bundle gate resolves its JS and WASM successfully.
+The packaged launcher starts that exact server against its disposable database;
+bootstrap isolation and migration 202609180900 are verified. Both add-on manager
+and list overview return 200 and hydrate without page/console errors. The owned
+launcher tree is then stopped. All ten focused native Chromium/Firefox cases
+pass with one worker and zero retries: accessible detail progress, editable
+numbering Apply/Cancel including later edits, and tool-maintenance health in
+hydrated/no-JS modes where defined. Their isolated host also stops.
+Evidence: test-results/n03-20260921-host/beta-35668471452-result.json,
+beta-package.json, beta-bundle-verification.*, beta-runtime-initial.json,
+beta-launcher-ui.json, beta-cleanup.json and beta-focused-ui*.
+The exact-archive native playback test then passes in 450.3 seconds, covering
+Stream/Download ahead x primary/fallback human captions x direct TS/segmenter
+HLS after the live provider update. All eight captures pass strict FFmpeg 9
+audio/video decoding with zero error bytes. TSDuck passes 152 checks with zero
+failures; VBR PCR jitter retains the gate's existing informational policy.
+Decoded samples at seconds 5 and 35 show MANUAL BEFORE on red and MANUAL AFTER
+on blue. The eight image pairs have two distinct hashes, both visually inspected;
+the automated frame proof excludes the removed green interval. This is sampled
+synthetic cut/caption evidence, not a new real-provider or frame-exact timing claim.
+The playback host stops. The original live Windows launcher/server remain healthy
+with their unchanged executable, provider 0.11.4, no build process and no bundle
+test listener. Additional evidence: beta-playback*, beta-playback-tsduck.log,
+beta-playback-visual-review.json and final-check.json in the same directory.
+A second independent draft download has the identical accepted archive digest;
+beta-draft-redownload-verification.json records the asset identity and unchanged
+draft/prerelease state. The release remains unpublished. The outstanding W29
+selection-feedback design clarification does not become accepted by these checks;
+public publication and independent published-asset verification remain required.
+
+2026-09-22 deployed provider identity accepted:
+The active Windows host's supported repository-package import and Update flow
+installs official yt-dlp 0.11.4 from the downloaded CI 35651550770 archive
+(SHA-256 c3439d11eb58ffea35f20339ff7dc069e98110f5d93b47e53242cd12a2c53627).
+All 20 installed provider files match the CI archive and the native midpoint/
+concise-error entrypoint proof byte for byte. The existing setting values and
+enabled state are preserved. Check reports ready and healthz returns 200;
+the hydrated detail page has no page errors. A consistent SQLite backup with
+quick_check=ok and provider-directory backup precede the supported update.
+There is no host restart, direct database repair or provider release claim.
+The script's post-install Enable wait times out because Update already retains
+the enabled state; read-only DB and UI verification confirm the actual result.
+No second installation or unnecessary Disable/Enable cycle is performed.
+Evidence: test-results/n03-20260921-host/live-provider-backup.json,
+live-provider-update-ui.json, live-provider-ui-preflight.json and
+live-provider-verification.json. The installed batch-error debt is resolved;
+the host draft archive, subsequent packaged playback and publication remain open.
+
+2026-09-22 corrected candidate CI passes; new beta draft build started:
+Release-gate correction 3a16e73a1c96daded23ca93f15720471fcb6e5ad is pushed and
+has terminal successful CI 35665026133. All seven required jobs pass. Downloaded
+reports record 232 Chromium passes/four existing skips and 209 Firefox passes/
+27 existing skips, with zero unexpected or flaky results. Local HEAD, tracking
+main and live remote main agree before the new annotated v1.0.37-beta tag is
+created. Windows-only draft workflow 35668471452 starts on that exact SHA.
+No archive acceptance or publication is inferred. Evidence:
+test-results/n03-20260921-host/host-ci-35665026133-result.json,
+ci-35665026133-chromium and ci-35665026133-firefox; CI URL:
+https://github.com/bartdeijkers/ErsatzRS/actions/runs/35665026133.
+The candidate-3a16e73a-source-reuse-audit.json compares the prior native host:
+only the already verified accessible progress name changes product source;
+release-gate tooling is separately corrected and tested. New archive identity,
+launcher/bundle checks, deployed-provider identity and publication remain open.
+
 2026-09-22 beta v1.0.36-beta gate failure (not accepted):
 Windows workflow 35656000317 builds all binaries and passes startup registration,
 but fails the bundle gate before archiving. Its default port 8409 answers from

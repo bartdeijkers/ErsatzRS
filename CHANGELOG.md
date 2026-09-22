@@ -19,9 +19,9 @@ release section when tagging a release.
   including edits made after the proposal; Cancel restores the pre-proposal draft.
 - Align Windows beta acceptance with ADR 0066's installed add-on entrypoints;
   retain midpoint seeking, output, failure diagnostics and package identity gates.
-- Record native archive proof for the local yt-dlp 0.11.4 correction to Windows
-  batch error reporting. The installed 0.11.3 package remains affected; earlier
-  profile and playback checks do not replace acceptance of the current candidate.
+- Verify the yt-dlp 0.11.4 Windows batch-error correction in the installed
+  provider, preserving settings and enabled state. Host beta archive and
+  publication acceptance remain separate.
 - Track upstream ErsatzTV catch-up through a ledger refreshed to the latest
   upstream commit each run (currently 162 commits) and milestone gates before
   teletext. Keep the current parity pin unchanged during
