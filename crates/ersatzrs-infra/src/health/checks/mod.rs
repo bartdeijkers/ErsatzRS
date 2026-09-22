@@ -77,3 +77,6 @@ pub(super) use unavailable::UnavailableHealthCheck;
 pub(super) use vaapi_device::VaapiDeviceHealthCheck;
 pub(super) use vaapi_driver::VaapiDriverHealthCheck;
 pub(super) use zero_duration::ZeroDurationHealthCheck;
+
+mod next_runtime;
+pub(super) use next_runtime::NextRuntimeHealthCheck;

@@ -10,7 +10,7 @@ use std::{
     future::Future,
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering},
         Mutex,
     },
     time::Duration,
@@ -23,6 +23,7 @@ pub struct NextSession {
     deadline: Instant,
     last_access: Mutex<Instant>,
     state: AtomicU8,
+    admission: AtomicI32,
     started: AtomicBool,
     cancel: Notify,
     refresh: Notify,
@@ -48,6 +49,9 @@ pub enum SessionError {
 }
 
 impl NextSession {
+    pub(crate) fn set_admission(&self, status: HlsAdmissionStatus) {
+        self.admission.store(status.as_i32(), Ordering::Release);
+    }
     /// Reserve this handle in the host registry before running its startup.
     /// The host retains capacity admission and removes the handle after `run`
     /// completes, including failures. The output directory must be exclusive.
@@ -59,6 +63,7 @@ impl NextSession {
             deadline,
             last_access: Mutex::new(Instant::now()),
             state: AtomicU8::new(0),
+            admission: AtomicI32::new(0),
             started: AtomicBool::new(false),
             cancel: Notify::new(),
             refresh: Notify::new(),
@@ -189,7 +194,7 @@ impl HlsSessionHandle for NextSession {
         if self.state.load(Ordering::Acquire) == 1 {
             HlsAdmissionStatus::Transcoding
         } else {
-            HlsAdmissionStatus::Waiting
+            HlsAdmissionStatus::from_i32(self.admission.load(Ordering::Acquire))
         }
     }
     async fn trim_playlist(&self) -> Option<String> {

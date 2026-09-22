@@ -28,11 +28,12 @@ preference precedence, exact pins and decoded silence/subtitles-off. Locked
 schedule reads preserve mirror offsets and one media binding per item; real
 Next decoding now starts from persisted schedules. Per-channel publication
 serializes reads and replacement, including cancellation of the awaiting task.
-Host startup/rebuild ownership of publishers remains open. Provider/graphics projection,
-web-host dispatch, endpoint/health and persisted scheduling integration remain
-open. The Next HLS session adapter now owns startup/readiness, heartbeat, idle
-expiry, concurrent refresh notification and shutdown; host registry/capacity and
-rebuild wiring remain unconnected.
+Host startup/rebuild now shares publisher ownership and retries busy source locks. Provider/graphics projection,
+complete endpoint and platform playback acceptance remain open. The Next HLS session adapter now owns startup/readiness, heartbeat, idle
+expiry, concurrent refresh notification and shutdown. Local-video HTTP dispatch,
+shared capacity, registry/output cleanup and rebuild notification wiring are now
+connected. Runtime/profile health checks cover enabled Next channels. Provider
+and graphics sources are explicitly refused until their projection is implemented.
 The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment.
 UCU-01 owns their evidence;
@@ -45,8 +46,8 @@ bootstrap is accepted: ucu-00 and its AMM-N-03 prerequisite are Complete.
 Milestones own acceptance and evidence; behavioral
 debt stays in each owning feature. AMM-N-03 remains a prerequisite and teletext
 p9a-01 now also depends on ucu-09. ADR 0095 is Accepted for Next as an optional second engine, alongside the
-native pipeline. Packaging and persisted engine selection are implemented; supervision,
-Next runtime health and playback remain open. No Next-specific exemption applies.
+native pipeline. Packaging, persisted engine selection and local-video host supervision are
+implemented; complete Next playback and platform acceptance remain open. No Next-specific exemption applies.
 """
 
 [[debt]]
@@ -63,4 +64,4 @@ description = 'Implement Next as an optional second engine alongside the native 
 discovered  = '2026-09-22'
 resolved    = false
 adr         = '0095'
-evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 has isolated Linux HLS/audio/subtitle proof, but host session/endpoint/health and persisted-playout integration remain open. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
+evidence    = 'ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Provider/graphics projection, engine-aware previews, full authenticated HTTP/native smoke and platform acceptance remain open. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'

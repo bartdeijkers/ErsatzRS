@@ -79,6 +79,20 @@ pub struct ActiveTranscodeSlot {
 }
 
 impl ActiveTranscodeSlot {
+    /// Next owns its encoding process tree for the session lifetime. Its slot
+    /// shares native HLS identity/capacity but cannot be reclaimed per programme.
+    #[must_use]
+    pub fn new_next_hls(channel_number: &str) -> Self {
+        Self {
+            slot_id: next_active_transcode_slot_id(),
+            key: format!("hls:{channel_number}"),
+            channel_number: channel_number.to_owned(),
+            kind: ActiveTranscodeKind::HlsRealtime,
+            last_access_ms: Arc::new(AtomicI64::new(Utc::now().timestamp_millis())),
+            reclaim: None,
+        }
+    }
+
     #[must_use]
     pub fn new_hls(
         channel_number: &str,

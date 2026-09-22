@@ -2,13 +2,13 @@
 //! `ERSATZRS_NEXT_TEST_BIN`, `ERSATZRS_NEXT_TEST_FFMPEG`, `ERSATZRS_NEXT_TEST_FFPROBE`.
 
 use super::*;
-use ersatzrs_core::hls::{HlsSessionHandle, HlsSessionRegistry, HlsStartupReadiness};
+use ersatzrs_core::hls::{HlsAdmissionStatus, HlsSessionRegistry, HlsStartupReadiness};
 use ersatzrs_domain::{
     FFmpegProfile, FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, Resolution,
 };
 use tokio::io::AsyncReadExt;
 
-use crate::next_engine::{config, coordinator, protocol, schedule, selection, session};
+use crate::next_engine::{host, schedule, selection};
 use crate::playback::PlaybackProfile;
 
 #[allow(clippy::disallowed_methods)] // Explicit opt-in test runtime locations, never production configuration.
@@ -88,10 +88,35 @@ async fn generate_clip(ffmpeg: &Path, clip: &Path) {
     tool(command).await;
 }
 
-async fn publish(folder: &Path, clip: &Path, muted: bool) {
-    use ersatzrs_core::repositories::{ChannelRepository, PlayoutRepository};
+async fn prepare_schedule(
+    clip: &Path,
+    muted: bool,
+    profile: &FFmpegProfile,
+) -> (crate::db::DbPool, ersatzrs_core::locking::EntityLocker) {
+    use ersatzrs_core::repositories::{
+        ChannelRepository, FfmpegProfileRepository, PlayoutRepository,
+    };
     use ersatzrs_domain::{ChannelSubtitleMode, PinnedStreamSelection};
     let (pool, locker, mut channel, _) = schedule::tests::fixture().await;
+    sqlx::query(r#"INSERT INTO "LocalLibrary" ("Id") VALUES (1)"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(r#"INSERT INTO "ConfigElement" ("Key", "Value") VALUES (?, '1')"#)
+        .bind(ersatzrs_domain::CONFIG_KEY_FFMPEG_ACTIVE_TRANSCODE_LIMIT)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let mut stored_profile = profile.clone();
+    stored_profile.id = 1;
+    stored_profile.resolution_id = 1;
+    crate::repositories::make_repositories(pool.clone())
+        .ffmpeg_profile
+        .upsert(&stored_profile)
+        .await
+        .unwrap();
+    channel.streaming_engine = ersatzrs_domain::StreamingEngine::Next;
+
     sqlx::query(r#"UPDATE "MediaFile" SET "Path" = ? WHERE "Id" = 1"#)
         .bind(clip.to_str().unwrap())
         .execute(&pool)
@@ -127,34 +152,7 @@ async fn publish(folder: &Path, clip: &Path, muted: bool) {
         .upsert(&channel)
         .await
         .unwrap();
-    let publisher = coordinator::ChannelPublisher::new(pool.clone(), locker, folder, channel.id);
-    let outcome = publisher
-        .refresh(item.start, item.finish, |channel, media| async move {
-            assert_eq!(media.len(), 1);
-            let media = &media[0];
-            assert!(media.remote_stream_id.is_none());
-            let projected = selection::project_item(
-                &pool,
-                &channel,
-                &media.item,
-                media.media_version_id,
-                protocol::Source::Local {
-                    path: media.path.clone(),
-                    in_point_ms: None,
-                    out_point_ms: None,
-                },
-                &Resolution {
-                    width: 320,
-                    height: 180,
-                    ..Default::default()
-                },
-            )
-            .await?;
-            Ok(vec![projected])
-        })
-        .await
-        .unwrap();
-    assert_eq!(outcome, coordinator::RefreshOutcome::Published { items: 1 });
+    (pool, locker)
 }
 
 async fn assert_audio_and_subtitle(ffmpeg: &Path, ffprobe: &Path, segment: &Path, muted: bool) {
@@ -270,45 +268,50 @@ async fn real_next_hls_preserves_selected_audio_and_burns_external_subtitles() {
             ..Default::default()
         },
     };
-    let config = config::channel_config(&profile, &playout.join("1"), &ffmpeg, &ffprobe).unwrap();
     for muted in [false, true] {
-        publish(&playout, &clip, muted).await;
-        assert_next_session(&binary, &config, &output, &ffmpeg, &ffprobe, muted).await;
+        let (pool, locker) = prepare_schedule(&clip, muted, &profile.profile).await;
+        let host = std::sync::Arc::new(host::NextHost::new(pool, locker, playout.clone()));
+        let request = host::NextStart {
+            channel_id: 1,
+            number: "1".into(),
+            executable: binary.clone(),
+            output: output.clone(),
+            ffmpeg: ffmpeg.clone(),
+            ffprobe: ffprobe.clone(),
+            replacements: Vec::new(),
+            idle_timeout: None,
+            deadline: Instant::now() + Duration::from_secs(30),
+        };
+        assert_next_session(&host, request, muted).await;
     }
 }
 
 async fn assert_next_session(
-    binary: &Path,
-    config: &ChannelConfig,
-    output: &Path,
-    ffmpeg: &Path,
-    ffprobe: &Path,
+    host: &std::sync::Arc<host::NextHost>,
+    request: host::NextStart,
     muted: bool,
 ) {
+    use crate::transcode_capacity::{
+        active_transcode_snapshot, try_reserve_active_transcode, ActiveTranscodeSlot,
+    };
     let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
-    let deadline = Instant::now() + Duration::from_secs(30);
-    let handle = std::sync::Arc::new(session::NextSession::new(
-        "1".into(),
-        output.to_owned(),
-        deadline,
-    ));
-    assert!(registry.try_insert(handle.clone()).await);
-    let running = handle.clone();
-    let running_registry = registry.clone();
-    let executable = binary.to_owned();
-    let running_output = output.to_owned();
-    let running_config = config.clone();
-    let task = tokio::spawn(async move {
-        let outcome = running
-            .run(
-                NextProcess::start(&executable, "1", &running_output, &running_config, deadline),
-                None,
-                || async { Ok(()) },
-            )
-            .await;
-        running_registry.remove("1").await;
-        outcome
-    });
+    let blocker =
+        try_reserve_active_transcode(1, ActiveTranscodeSlot::new_next_hls("other")).unwrap();
+    let task = host.start(registry.clone(), request.clone()).await.unwrap();
+    let handle = registry.try_get("1").await.unwrap();
+    timeout(Duration::from_secs(30), async {
+        while handle.admission_status() != HlsAdmissionStatus::AtCapacity {
+            assert!(!task.is_finished(), "Next preflight failed");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        !request.output.exists(),
+        "capacity must be acquired before process startup"
+    );
+    drop(blocker);
     timeout(Duration::from_secs(30), async {
         loop {
             match handle.startup_readiness() {
@@ -332,12 +335,22 @@ async fn assert_next_session(
                     .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
         })
         .expect("Next must publish an MPEG-TS segment");
-    assert_audio_and_subtitle(ffmpeg, ffprobe, &output.join(segment), muted).await;
+    assert_eq!(active_transcode_snapshot(1).active, 1);
+    assert!(host
+        .start(registry.clone(), request.clone())
+        .await
+        .is_none());
+    assert_audio_and_subtitle(
+        &request.ffmpeg,
+        &request.ffprobe,
+        &request.output.join(segment),
+        muted,
+    )
+    .await;
     assert!(registry.stop_channel("1").await);
-    assert_eq!(
-        task.await.unwrap().unwrap(),
-        session::SessionExit::Cancelled
-    );
+    task.await.unwrap();
+    assert_eq!(active_transcode_snapshot(1).active, 0);
+    assert!(!request.output.exists());
     assert!(registry.try_get("1").await.is_none());
     assert!(handle.trim_playlist().await.is_none());
 }

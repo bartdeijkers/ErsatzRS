@@ -6350,6 +6350,39 @@ publication, provider/graphics projection, health and HTTP authentication still
 require integration. This is session-boundary proof, not served-web acceptance.
 Row 13, pin and ledger remain unchanged; first CI remains after UCU-03 smoke.
 
+Row 13 host-dispatch checkpoint: AppState owns a shared NextHost and stable
+per-channel publishers. HLS startup selects the persisted engine, reserves the
+existing registry before spawning, and holds shared transcode capacity until
+process/output cleanup. Duplicate starts reuse the handle. Rebuild notifications
+reuse the publisher and retry busy source locks, including the notification
+before the builder releases its lock. Native per-programme reclamation cannot
+pause Next, so its slot lasts for the session. HLS master dispatch forces Next's
+HLS transport; MPEG-TS/direct transport requests are rejected as upstream does.
+Source map: StartFFmpegNextSessionHandler/NextSessionWorker and SyncNextPlayout
+map to next_engine/host.rs, host/state.rs and transport/iptv/{hls,stream}.rs.
+The production host reads persisted profiles and local-library schedules, applies
+platform-correct native path replacements, and preserves native track choices.
+Provider sources and resolved graphics/watermarks are refused explicitly until
+projection exists; these are remaining requirements, not accepted exclusions.
+The new Next Runtime Availability health check applies only to enabled Next
+channels and detects unavailable executables or unsupported/missing profiles.
+All 96 focused health regressions pass. Real Linux Next now runs through the
+production host rather than a hand-built config/session harness: the test fills
+the only shared capacity slot, verifies no process output, releases capacity,
+checks duplicate admission, decodes alternate audio/subtitles and a silent pin,
+then stops through the registry and proves output and reservation cleanup.
+Both real-engine phases pass in 2.187 seconds. The HTTP handler regression passes:
+Next forces HLS despite mode=ts, preserves tokens in master and variant playlists,
+and rejects MPEG-TS/direct transport. The initial scoped Clippy run found a large
+session future; it is now boxed. Cargo clean ran after all active compilation
+stopped because target exceeded 40 GiB (45.8 GiB removed); prior runtime/test
+results remain valid. Infra/web all-target Clippy passes after boxing the session
+future and using let-else for channel lookup. The Next executable digest still
+matches the recorded release binary. Full served-HTTP/
+native smoke, provider/graphics parity, engine-aware previews and platform
+acceptance remain open.
+Row 13 is still pending; pin/ledger remain ddc8ef7f and CI is not dispatched.
+
 """
 
 [[milestone]]

@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod coordinator;
+pub mod host;
 pub mod process;
 pub mod protocol;
 pub mod publication;

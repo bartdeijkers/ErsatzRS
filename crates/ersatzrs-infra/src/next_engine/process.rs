@@ -19,6 +19,8 @@ const CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 /// Process diagnostics exclude raw engine output, configuration and private paths.
 #[derive(Debug, thiserror::Error)]
 pub enum ProcessError {
+    #[error("Next startup preparation failed: {0}")]
+    Preparation(&'static str),
     #[error("Next configuration cannot be serialized within the size limit")]
     Configuration,
     #[error("Next startup deadline expired")]

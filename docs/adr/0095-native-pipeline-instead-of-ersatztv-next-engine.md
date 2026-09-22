@@ -19,15 +19,17 @@ tests. Runtime supervision and Next playback acceptance remain open.
 The UCU-02 row 13 infrastructure checkpoint adds executable discovery, typed
 JSON exchange and atomic complete-schedule publication. Profile conversion and
 a managed process adapter add bounded startup/readiness, heartbeat and cleanup.
-These helpers are not yet connected to live channel startup or scheduling
-completion; host session, health and authenticated delivery acceptance remain open.
+The host now connects local-video HLS startup, shared capacity and session
+registration/cleanup. Rebuild notifications refresh through the same publisher;
+busy source locks are retried until publication or session cancellation.
+Full authenticated HTTP delivery and platform acceptance remain open.
 Item track projection reuses native database selectors and subtitle-path
 resolution, with decoded Linux proof for alternate audio/subtitles and explicit
 silence/subtitles-off. Locked schedule reads preserve mirror offsets and bind
 one media file per item. Per-channel publication now serializes reads and writes,
 including cancellation during filesystem work. A Next HLS session adapter now
 handles readiness, heartbeat, idle expiry, refresh notification and shutdown.
-Provider/graphics projection and web-host dispatch remain open.
+Provider/graphics projection and full playback acceptance remain open.
 
 ## Context
 
@@ -145,10 +147,18 @@ The session adapter implements the existing HLS handle: requests renew demand,
 stop wakes supervision, and rebuild notifications coalesce while publication is
 in flight. Heartbeat and cancellation remain responsive during refresh work.
 Startup has one deadline; terminal paths hide the playlist, including task abort.
-Playlist reads are bounded and use Next's `live.m3u8`. The host still owns registry
-reservation/removal, shared transcode admission, output-folder cleanup and
-startup/rebuild publication wiring. The adapter alone does not enable HTTP Next
-playback or provide health acceptance.
+Playlist reads are bounded and use Next's `live.m3u8`. The shared host now owns registry
+reservation/removal, transcode admission, output-folder cleanup and publication.
+A Next reservation uses the native HLS capacity identity and lasts for the
+whole engine session; native per-programme reclamation cannot pause this engine.
+HTTP master playlists force the Next HLS path and preserve existing token
+propagation. MPEG-TS requests are rejected, matching the upstream engine split.
+The health engine checks executable availability and profile compatibility only
+when an enabled channel selects Next. These checks are not playback acceptance.
+Local-library sources reuse native path replacement and track selectors. Current
+provider sources and resolved graphics/watermarks fail projection explicitly
+until their integration is complete; they never silently lose tracks or graphics.
+These remain open parity requirements, not accepted permanent exclusions.
 
 ## Consequences
 

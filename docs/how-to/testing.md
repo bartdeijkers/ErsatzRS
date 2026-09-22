@@ -81,9 +81,11 @@ preferences, runs native track selection and atomically publishes on its blockin
 worker. Separate coordinator regressions cover queued reads, retained old
 publications, empty schedules and cancellation before/during filesystem work.
 A second startup uses an exact silent/subtitles-off pin and verifies
-decoded silence and the absence of glyphs. Each process is supervised through
-the Next HLS handle, registered before startup, touched and stopped through the
-shared registry, then removed after process cleanup. Its playlist is unavailable
+decoded silence and the absence of glyphs. The production Next host reads the persisted profile and schedule. The test
+first occupies its only shared transcode slot and proves no process/output
+starts; releasing the slot admits Next. A duplicate request reuses the session.
+Each process is touched and stopped through the shared registry; process/output
+cleanup releases capacity and removes the handle. Its playlist is unavailable
 after stop. Separate session regressions use portable child fixtures and a test clock
 for idle expiry, startup deadlines, refresh responsiveness and terminal states.
 It uses no personal library or production database.

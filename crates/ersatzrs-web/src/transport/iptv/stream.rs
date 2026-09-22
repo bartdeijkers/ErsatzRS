@@ -139,6 +139,10 @@ pub async fn serve_transport_stream(
         }
     };
 
+    if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
     match resolve_transport_stream_mode(query.mode.as_deref(), channel.streaming_mode) {
         TransportStreamMode::RedirectToHls => {
             let access_token = AccessToken::new(query.access_token.clone());
@@ -272,6 +276,10 @@ async fn serve_channel_stream_with_channel(
     effective_streaming_mode: StreamingMode,
     deadline: tokio::time::Instant,
 ) -> Response {
+    if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
     serve_channel_stream_admitted(
         state,
         channel,

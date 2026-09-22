@@ -25,8 +25,8 @@ use checks::{
     FFmpegReportsHealthCheck, FFmpegRuntimeAcquisitionHealthCheck, FFmpegVersionHealthCheck,
     FileNotFoundHealthCheck, HardwareAccelerationHealthCheck, HardwareGraphHealthCheck,
     HlsDeliveryHealthCheck, LocalTelevisionIdentityHealthCheck, MigrationChecksumHealthCheck,
-    MirrorChannelHealthCheck, MovieMetadataHealthCheck, OutputDynamicRangeHealthCheck,
-    PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
+    MirrorChannelHealthCheck, MovieMetadataHealthCheck, NextRuntimeHealthCheck,
+    OutputDynamicRangeHealthCheck, PinnedStreamSelectionHealthCheck, PlaybackDataAccessHealthCheck,
     ProviderConnectivityHealthCheck, RemoteStreamAddonReadinessHealthCheck,
     RemoteStreamHealthCheck, RemoteStreamPlaylistHealthCheck, RemoteStreamScheduleHealthCheck,
     ScanRefreshStateHealthCheck, SearchProjectionHealthCheck, SourceOrientationHealthCheck,
@@ -55,7 +55,7 @@ const HW_ACCEL_RKMPP: i32 = 7;
 const VAAPI_DRIVER_AUTO: i32 = 0;
 
 #[cfg(test)]
-const REGISTERED_HEALTH_CHECK_TITLES: [&str; 40] = [
+const REGISTERED_HEALTH_CHECK_TITLES: [&str; 41] = [
     "ErsatzTV Downgrade",
     "Database Migration",
     "Database Migration Checksum",
@@ -66,6 +66,7 @@ const REGISTERED_HEALTH_CHECK_TITLES: [&str; 40] = [
     "FFmpeg Capabilities",
     "FFmpeg Reports",
     "Dynamic Text Graphics",
+    "Next Runtime Availability",
     "Hardware Acceleration",
     "Hardware Graph Capability",
     "HLS Live Delivery",
@@ -233,6 +234,7 @@ fn registered_health_checks(
         Box::new(FFmpegCapabilitiesHealthCheck::new(ffmpeg_runtime.clone())),
         Box::new(FFmpegReportsHealthCheck::new(pool.clone())),
         Box::new(DynamicTextGraphicsHealthCheck::new(pool.clone())),
+        Box::new(NextRuntimeHealthCheck::new(pool.clone())),
         Box::new(HardwareAccelerationHealthCheck::new(
             pool.clone(),
             ffmpeg_runtime.clone(),

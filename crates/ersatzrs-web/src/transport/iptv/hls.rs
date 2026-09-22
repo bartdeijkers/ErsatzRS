@@ -120,6 +120,41 @@ pub(crate) async fn ensure_segmenter_worker_running_before(
     else {
         return;
     };
+    let Ok(channel) = startup_read(
+        deadline,
+        state.repositories.channel.get_with_profile(channel_id),
+    )
+    .await
+    else {
+        return;
+    };
+    if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+        let executable = match ersatzrs_infra::next_engine::host::channel_binary() {
+            Ok(executable) => executable,
+            Err(error) => {
+                tracing::warn!(channel_id, kind = ?error.kind(), "Next executable unavailable");
+                return;
+            }
+        };
+        let _task = state
+            .next_engine
+            .start(
+                Arc::clone(&state.hls_sessions),
+                ersatzrs_infra::next_engine::host::NextStart {
+                    channel_id,
+                    number: channel_number.to_owned(),
+                    executable,
+                    output: hls_working_dir(channel_number),
+                    ffmpeg: ersatzrs_ffmpeg::ffmpeg_path().into(),
+                    ffprobe: ersatzrs_ffmpeg::ffprobe_path().into(),
+                    replacements: path_replacements,
+                    idle_timeout: segmenter_timeout,
+                    deadline: deadline.into(),
+                },
+            )
+            .await;
+        return;
+    }
     let working_dir = hls_working_dir(channel_number);
     let worker = HlsSessionWorker::new_with_options(
         channel_number.to_string(),
@@ -566,6 +601,19 @@ pub async fn serve_channel_m3u8(
     };
 
     let access_token = AccessToken::new(query.access_token.clone());
+    if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+        return serve_hls_segmenter_playlist(
+            state,
+            channel_number,
+            headers,
+            &channel,
+            &access_token,
+            OutputFormat::Hls,
+            MIN_STABLE_INITIAL_SEGMENT_COUNT,
+            deadline,
+        )
+        .await;
+    }
     let mut mode = query.mode.clone().unwrap_or_default();
     if mode.is_empty() || mode == "mixed" {
         mode = match channel.streaming_mode {
@@ -1410,5 +1458,82 @@ mod tests {
         assert!(propagated.contains("segment-1.ts?access_token=preview-token"));
         assert!(propagated.contains("segment-2.ts?part=1&access_token=preview-token"));
         assert!(!propagated.contains("#EXTM3U?"));
+    }
+    #[tokio::test]
+    async fn next_engine_routes_force_hls_preserve_tokens_and_reject_transport_stream() {
+        use ersatzrs_core::repositories::FfmpegProfileRepository;
+        use ersatzrs_domain::{FFmpegProfile, StreamingEngine};
+        let state = AppState::for_tests(
+            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
+        );
+        sqlx::migrate!("../../migrations")
+            .run(&state.pool)
+            .await
+            .unwrap();
+        sqlx::query(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, 'Synthetic', 320, 180)"#).execute(&state.pool).await.unwrap();
+        state
+            .repositories
+            .ffmpeg_profile
+            .upsert(&FFmpegProfile {
+                id: 1,
+                resolution_id: 1,
+                video_format: FFmpegProfileVideoFormat::H264,
+                audio_format: FFmpegProfileAudioFormat::Aac,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        state
+            .repositories
+            .channel
+            .upsert(&Channel {
+                id: 1,
+                number: "1".into(),
+                name: "Synthetic".into(),
+                ffmpeg_profile_id: 1,
+                streaming_engine: StreamingEngine::Next,
+                streaming_mode: StreamingMode::HttpLiveStreamingSegmenter,
+                is_enabled: true,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let worker = FakeHandle::new("1");
+        worker.set_playlist("#EXTM3U\n#EXTINF:4.0,\nnext-segment.ts\n");
+        *worker.readiness.lock().unwrap() = HlsStartupReadiness::Ready;
+        state.hls_sessions.try_insert(worker.clone()).await;
+        let query = HlsQuery {
+            mode: Some("ts".into()),
+            access_token: Some("synthetic-token".into()),
+        };
+        let master = serve_channel_m3u8(&state, "1", &HeaderMap::new(), &query).await;
+        assert_eq!(master.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(master.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let text = std::str::from_utf8(&body).unwrap();
+        assert!(text.contains("/iptv/session/1/hls.m3u8?access_token=synthetic-token"));
+        let variant =
+            get_session_playlist(State(state.clone()), Path("1".into()), Query(query)).await;
+        assert_eq!(variant.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(variant.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        assert!(std::str::from_utf8(&body)
+            .unwrap()
+            .contains("next-segment.ts?access_token=synthetic-token"));
+        assert_eq!(
+            stream::serve_transport_stream(&state, "1", &HeaderMap::new(), &HlsQuery::default())
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            stream::serve_channel_stream(&state, "1", OutputFormat::MpegTs)
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert!(worker.touched.load(Ordering::SeqCst) >= 2);
     }
 }

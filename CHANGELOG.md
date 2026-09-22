@@ -36,7 +36,11 @@ release section when tagging a release.
   so a newer schedule cannot be overwritten by an abandoned publication.
   Add the Next HLS session adapter with bounded startup, heartbeat, demand-based
   idle expiry, concurrent rebuild notification and managed shutdown.
-  Live web-host Next playback integration remains pending.
+  Connect Next local-video HLS startup to the shared session registry and
+  transcode limit, retaining capacity through process/output cleanup. Preserve
+  playlist tokens and reject MPEG-TS requests for Next channels. Report missing
+  Next executables and unsupported profiles through health checks. Provider and
+  graphics projection, complete HTTP playback and platform acceptance remain open.
 
 - Retain form-action selection counts and Select all under Edit multiple items
   > Items to change as an explicitly accepted design choice; Save-button and row

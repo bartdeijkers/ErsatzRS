@@ -72,6 +72,7 @@ pub struct AppState {
     pub device_uuid: Uuid,
     pub tuner_count: Arc<AtomicI32>,
     pub hls_sessions: Arc<dyn HlsSessionRegistry>,
+    pub next_engine: Arc<ersatzrs_infra::next_engine::host::NextHost>,
     pub preview_hls_sessions: Arc<dyn HlsSessionRegistry>,
     pub hls_direct_indices: Arc<RwLock<HashMap<i64, (String, u64)>>>,
     pub iptv_access_token_verifier: IptvAccessTokenVerifier,
@@ -198,6 +199,11 @@ impl AppState {
                 ersatzrs_core::locking::PlayoutBuildActivity::default(),
             ),
         ));
+        let next_engine = Arc::new(ersatzrs_infra::next_engine::host::NextHost::new(
+            pool.clone(),
+            application.operations().entity_locker(),
+            ersatzrs_infra::file_system_layout::data_folder().join("next-playouts"),
+        ));
         let hls_direct_indices = Arc::new(RwLock::new(HashMap::new()));
         Self {
             application,
@@ -211,6 +217,7 @@ impl AppState {
             hls_sessions,
             preview_hls_sessions,
             hls_direct_indices,
+            next_engine,
             iptv_access_token_verifier,
         }
     }

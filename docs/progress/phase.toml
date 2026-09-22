@@ -70,19 +70,16 @@ Complete and its owning parity debt is resolved. Work continues on UCU-02.
 MPEG-TS/HLS smoke. UCU-02 row 11 (ea4d3b65) is Port: persisted native/Next
 selection, HLS Segmenter normalization and localized SSR forms are verified.
 UCU-02 row 12 (ddc8ef7f) is Covered: existing playout/show action bindings
-pass four focused browser regressions. Row 13 (2ed432f9) has an infrastructure
-checkpoint for wire contracts, runtime discovery and atomic playout publication,
-with focused tests and actual Next parser proof. Profile conversion and bounded
-managed-process startup/stop now pass focused tests; a real Linux Next run proves
-generated HLS, selected alternate audio and burned external subtitles. Item track
-projection now uses native database selectors; real decoding also verifies exact
-silence/subtitles-off. Locked persisted schedule reads now preserve mirror offsets
-and bind one source per item, with real Next decoding proof. Next: complete
-provider/graphics projection. The per-channel publisher now serializes reads and
-replacement, retaining locks through cancelled filesystem work. Connect rebuild
-triggers and authenticated endpoints, then prove integrated playback. The Next
-HLS session adapter now covers startup, heartbeat, idle expiry and stop, with
-registry/capacity ownership and health still awaiting web-host integration.
+pass four focused browser regressions. Row 13 (2ed432f9) now connects Next
+local-video HLS startup to persisted schedules/profiles, native track selectors,
+shared transcode capacity, the session registry and process/output cleanup.
+Publishers serialize reads/replacement and retry busy source locks after rebuild
+notifications. Real Linux decoding proves alternate audio/subtitles and exact
+silence/subtitles-off, capacity admission, duplicate-start reuse and cleanup.
+The HTTP handler regression verifies HLS dispatch, token propagation and MPEG-TS
+refusal. Runtime/profile health checks are present. Full served-HTTP/native smoke,
+provider/graphics projection, engine-aware previews and platform acceptance
+remain open; row 13 is not accepted yet.
 The upstream pin remains ddc8ef7f. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 
