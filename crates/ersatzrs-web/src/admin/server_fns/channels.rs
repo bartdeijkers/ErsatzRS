@@ -827,12 +827,34 @@ mod tests {
         channel_state_with_pool_and_playout_rx(pool)
     }
 
+    #[derive(Default)]
+    struct UpdateObserver(std::sync::atomic::AtomicUsize);
+
+    #[async_trait::async_trait]
+    impl ersatzrs_core::hls::HlsSessionHandle for UpdateObserver {
+        fn channel_number(&self) -> &'static str {
+            "1"
+        }
+        fn touch(&self) {}
+        async fn trim_playlist(&self) -> Option<String> {
+            None
+        }
+        async fn cancel(&self) {}
+        fn playout_updated(&self) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
     #[tokio::test]
-    async fn save_channel_does_not_enqueue_refresh_for_channel_playouts() {
+    async fn save_channel_notifies_next_consumers_without_rebuilding_playouts() {
         use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
         use sqlx::Executor;
 
         let (state, mut playout_build_rx) = migrated_channel_state_with_playout_rx().await;
+        let normal = std::sync::Arc::new(UpdateObserver::default());
+        let preview = std::sync::Arc::new(UpdateObserver::default());
+        state.hls_sessions.insert(normal.clone()).await;
+        state.preview_hls_sessions.insert(preview.clone()).await;
         let repos = ersatzrs_infra::repositories::make_repositories(state.pool.clone());
         repos
             .ffmpeg_profile
@@ -852,6 +874,8 @@ mod tests {
                 number: "1".to_owned(),
                 sort_number: 1.0,
                 name: "Channel 1".to_owned(),
+                streaming_engine: ersatzrs_domain::StreamingEngine::Next,
+                show_in_epg: true,
                 group: Some("ErsatzRS".to_owned()),
                 ffmpeg_profile_id: 1,
                 ..ersatzrs_domain::Channel::default()
@@ -876,9 +900,10 @@ mod tests {
                 group: "ErsatzRS".to_owned(),
                 ffmpeg_profile_id: 1,
                 streaming_mode: 5,
+                streaming_engine: 1,
                 subtitle_mode: 3,
                 is_enabled: true,
-                show_in_epg: true,
+                show_in_epg: false,
                 ..ChannelForm::default()
             },
         )
@@ -887,5 +912,13 @@ mod tests {
 
         assert_eq!(saved_id, 1);
         assert!(playout_build_rx.try_recv().is_err());
+        let saved = repos.channel.get_with_profile(1).await.unwrap();
+        assert!(!saved.show_in_epg);
+        assert_eq!(
+            saved.streaming_engine,
+            ersatzrs_domain::StreamingEngine::Next
+        );
+        assert_eq!(normal.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(preview.0.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 }

@@ -6468,6 +6468,44 @@ upstream HEAD to 2ed432f9: 13 reconciled / 156 pending. Next is row 14 (4ee97d5b
 The maintainer removed the generated top-three gap prompt file; automation now
 reports prompts in its output and cannot regenerate that file on pin advancement.
 
+Row 14 source map (4ee97d5b, #2855): the full upstream diff changes three
+handlers only; it adds no tests or changelog hunk. UpdateChannelHandler requests
+SyncNextPlayout when EPG/source/mirror settings change. SyncNextPlayoutHandler
+reads the mirror source channel and applies its signed offset to item times.
+StartFFmpegNextSessionHandler locates the bundled engine beside the process,
+with a dotnet-host base-directory exception.
+
+Existing Rust coverage: save_channel_with_state persists through the application
+before notifying the normal registry, which forwards to preview consumers.
+The shared publisher reloads current channel settings after admission. Next
+schedule::read_locked resolves the source and adjusts both query bounds and
+item/guide times through ChannelPlayoutContext. Its existing mirror regression
+covers positive and negative offsets. host::channel_binary uses current_exe
+and runtime::resolve_channel_binary; bundle lookup, explicit override precedence,
+missing-override refusal and portable executable suffix have existing tests.
+The dotnet-host exception has no equivalent in a native Rust executable.
+No production change or new architectural deviation is needed for this row.
+Strengthen the existing channel-save test to prove an EPG edit persists and
+notifies both normal and preview consumers without enqueueing a scheduler rebuild.
+This test proves the dispatch boundary; existing session/publisher tests own
+refresh execution and row-13 smoke owns served playback. Browser, native-platform
+and full-window acceptance are not inferred from a fake session observer.
+
+2026-09-23 row 14 verification: the channel-save regression passes (1/1);
+existing runtime/schedule/publisher tests pass (11/11), including positive and
+negative mirror offsets, read-after-admission settings, atomic failure retention
+and cancelled-writer ownership. The full three-file source review finds every
+changed production behavior already covered. No pipeline, profile, UI or runtime
+code changes; reuse row 13's unchanged Next/native smoke and decoded track proof.
+Verdict: Covered. Pin/ledger land together at 4ee97d5b, followed by upstream
+checkout alignment: 14 reconciled / 155 pending. UCU-02 stays In progress;
+next is row 15 (f7853e80). The maintainer authorizes remote-main pushes after
+each completed milestone UCU-03 through UCU-09, explicitly including UCU-05;
+this does not authorize intermediate-row pushes or waive acceptance/CI gates.
+Web all-target Clippy passes after changing the test observer's fixed channel
+number return to a static string reference; the initial run reported only that
+literal-lifetime lint. No production code changed during this correction.
+
 """
 
 [[milestone]]

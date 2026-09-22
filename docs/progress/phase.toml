@@ -84,8 +84,9 @@ preview and idle cleanup. The existing CI has a separate Next engine job; its
 40-test selection passes locally, but no CI run is claimed. Continue now notifies
 dependent Next channels after persisted schedule extension, preserving native
 continuity. Row 13 is accepted as Adapt (ADR 0095), with focused maintenance
-tests, Clippy and renewed Next/native HTTP lifecycle smoke. Next: review row 14
-(4ee97d5b), the upstream Next playout-building correction. Authenticated/browser
+tests, Clippy and renewed Next/native HTTP lifecycle smoke. Row 14 (4ee97d5b)
+is Covered by existing mirror projection, channel-save notifications and runtime
+discovery. Next: row 15 (f7853e80), macOS Next artifact bundling. Authenticated/browser
 and platform acceptance remain open; provider/graphics capabilities belong to
 later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

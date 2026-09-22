@@ -47,7 +47,8 @@ release section when tagging a release.
   and cleanup; forward playout rebuilds to preview-only sessions as well. Provider and
   graphics projection, complete HTTP playback and platform acceptance remain open.
   Publish continued schedules to active Next channels and mirrors while preserving
-  native playback continuity (upstream PR #2854).
+  native playback continuity (upstream PR #2854). Verify existing mirror offsets,
+  channel-update propagation and bundled runtime discovery against upstream PR #2855.
   Add a separate Next engine check inside CI, with runtime provenance, decoded
   playback tests and HTTP/preview smoke diagnostics.
   Remove the obsolete MySQL migration-directory build watch to prevent
