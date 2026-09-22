@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095']
 summary    = """
-The refreshed ledger registers 168 commits: eleven reconciled and 157 pending,
+The refreshed ledger registers 168 commits: twelve reconciled and 156 pending,
 tracked by ucu-00 through ucu-09. Row 1 is Covered; row 2 ports the HDHomeRun repository-link correction.
 Row 3 is N/A for .NET-only dependency maintenance. Row 4 ports Next artifact
 bundling with checksum/license/provenance and Docker startup proof. Row 5 is
@@ -19,7 +19,8 @@ upstream changelog publication. UCU-01 is Complete after all local gates;
 UCU-02 is In progress: row 11 ports persisted engine selection, retained native
 defaults, Next mode normalization and the localized SSR editor. Migration,
 repository/application and Chromium/Firefox tests pass, including no-JS forms.
-Row 12 is next. The first consolidated CI is authorized after
+Row 12 is Covered: native menu/action bindings already work, verified with
+four focused Chromium/Firefox regressions. Row 13 is next. The first consolidated CI is authorized after
 UCU-03 smoke, per the maintainer amendment.
 UCU-01 owns their evidence;
 docs/automation/parity-baseline.md holds the current pin. The live ledger is

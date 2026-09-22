@@ -183,6 +183,36 @@ async function waitForHydration(page: Page): Promise<void> {
 test.describe('playout rebuild feedback', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed a playout');
 
+  test('Add Playout opens and closes the creation menu', async ({ page }) => {
+    await forceEnglish(page);
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/playouts');
+      await waitForHydration(page);
+      const toggle = page.getByRole('button', { name: 'Add Playout', exact: true });
+      const links = [
+        ['Classic Schedule', '/playouts/add'],
+        ['Block Schedule', '/playouts/add/Block'],
+        ['Sequential Schedule', '/playouts/add/Sequential'],
+        ['Scripted Schedule', '/playouts/add/Scripted'],
+        ['JSON (dizqueTV) Schedule', '/playouts/add/ExternalJson'],
+      ];
+      await expect(page.getByRole('link', { name: links[0][0], exact: true })).toBeHidden();
+      await toggle.click();
+      for (const [name, href] of links) {
+        const link = page.getByRole('link', { name, exact: true });
+        await expect(link).toBeVisible();
+        await expect(link).toHaveAttribute('href', href);
+      }
+      await toggle.press('Enter');
+      for (const [name] of links) {
+        await expect(page.getByRole('link', { name, exact: true })).toBeHidden();
+      }
+      await toggle.press('Space');
+      await expect(page.getByRole('link', { name: links[0][0], exact: true })).toBeVisible();
+    }
+  });
+
   test('shows queued feedback in the shared toast surface', async ({ page }, testInfo) => {
     const channelName = seedPlayout(testInfo);
     await forceEnglish(page);

@@ -6130,6 +6130,37 @@ under ADR 0095. Pin advances a74896df -> ea4d3b65 with row 11; ledger has
 no CI has been dispatched, per the authorized UCU-03 checkpoint.
 Final progress and architecture checks pass; hydration lint still has no new
 findings (32 unchanged baseline suppressions).
+
+2026-09-22 row 12 source map (ddc8ef7f; pin remains ea4d3b65 during review):
+Fetched origin/main remains 55885508. Full diff contains only three explicit
+MudMenu activator ToggleAsync bindings and the upstream changelog entry.
+Playouts.razor maps to scheduling/playouts.rs: Add Playout already toggles an
+island signal controlling the five creation links. TelevisionSeasonList.razor
+is the show route (/media/tv/shows/:id), not the season-detail route; it maps
+to media/shows.rs. Its Add To actions already have direct click bindings for
+Collection, Playlist and Schedule. Its remote-provider-only Quick/Deep Scan
+buttons dispatch false/true to scan_show, then the application-owned targeted
+show-scan command. No upstream validator, handler, query or persistence changes.
+Visual map: upstream responsive header/action bars keep their existing menus;
+native playout dropdown and existing direct show-action buttons remain in their
+current shared CSS layouts. No new layout or behavior deviation is introduced.
+Hydration map: PlayoutsIsland and ShowDetailIsland own these bindings. Add a
+focused visible/hidden dropdown regression (existing href-only assertions are
+insufficient), and exercise the existing show dialog/scan bindings on synthetic
+data. This row does not change playback, subtitle/audio selection or health.
+
+Row 12 final review: Covered. Fetched ledger verification confirms all 168
+SHA/subjects, with no new upstream tail. Both focused tests pass in Chromium
+and Firefox (4/4), using a fresh SSR/WASM build and disposable database.
+Playout proof includes 1440px/390px visibility, five exact routes and mouse/
+Enter/Space toggling. Show proof opens/cancels all three dialogs and checks
+show/library/deep_scan values for Quick and Deep requests. It deliberately
+does not claim completion of a real remote scan or Windows acceptance.
+Only tests and evidence change; previous Rust/Clippy evidence remains valid.
+No actionable review finding remains. Pin advances ea4d3b65 -> ddc8ef7f with
+row 12; 12 reconciled / 156 pending. Next: 2ed432f9. The temporary server is
+stopped; UCU-02 window gates and Next runtime integration remain open.
+
 """
 
 [[milestone]]

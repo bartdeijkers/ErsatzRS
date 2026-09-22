@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `ea4d3b651d56a2950624b1b7ee02d3e087ebd917` |
-| **Commit subject** | `add channel streaming engine setting (#2852)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/ea4d3b651d56a2950624b1b7ee02d3e087ebd917 |
+| **Pinned commit** | `ddc8ef7f02f0e7e80ba6aa73517e915f1aea0b31` |
+| **Commit subject** | `fix: add playout button should open drop down menu (#2853)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/ddc8ef7f02f0e7e80ba6aa73517e915f1aea0b31 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

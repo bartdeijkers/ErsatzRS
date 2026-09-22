@@ -69,7 +69,9 @@ Complete and its owning parity debt is resolved. Work continues on UCU-02.
 2026-09-22: UCU-01 Complete after all local acceptance gates, including
 MPEG-TS/HLS smoke. UCU-02 row 11 (ea4d3b65) is Port: persisted native/Next
 selection, HLS Segmenter normalization and localized SSR forms are verified.
-Next: row 12 (ddc8ef7f), the Add Playout dropdown correction. The first consolidated
+UCU-02 row 12 (ddc8ef7f) is Covered: existing playout/show action bindings
+pass four focused browser regressions. Next: row 13 (2ed432f9), actual Next
+streaming engine integration. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 
 2026-09-22 maintainer amendment: defer UCU-01/UCU-02 CI to the first

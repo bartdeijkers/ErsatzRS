@@ -53,6 +53,11 @@ lowest-ID non-empty artwork winner per entity, so legacy duplicate thumbnails
 cannot multiply episodes or destabilize pagination. A 27-episode add-on list
 remains 27 unique links with season counts 13 and 14 across reload in Chromium
 and Firefox.
+
+UCU-02 row 12 is Covered: show Add To dialogs and Quick/Deep Scan dispatch
+already work. Four Chromium/Firefox regressions pass; ucu-02 owns exact
+request and menu evidence. This is browser binding proof, not new Windows
+acceptance or completion of a remote-provider scan.
 '''
 
 [[debt]]

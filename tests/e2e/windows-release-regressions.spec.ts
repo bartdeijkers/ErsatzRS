@@ -185,6 +185,35 @@ async function gotoHydrated(page: Page, route: string): Promise<void> {
 test.describe('Windows release interaction regressions', () => {
   test.skip(!dbPath, 'E2E_DB_PATH or ERSATZRS_DB_PATH is required to seed media rows');
 
+  test('show Add To and Scan actions dispatch directly', async ({ page }, testInfo) => {
+    const seed = seedReleaseRegressionFixture(testInfo);
+    await forceEnglish(page);
+    await gotoHydrated(page, `/media/tv/shows/${seed.showId}`);
+
+    for (const name of ['Add To Collection', 'Add To Playlist', 'Add To Schedule']) {
+      await page.getByRole('button', { name, exact: true }).first().click();
+      const dialog = page.getByRole('dialog', { name, exact: true });
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(dialog).toBeHidden();
+    }
+
+    for (const [name, deep] of [['Quick Scan', 'false'], ['Deep Scan', 'true']]) {
+      const requestPromise = page.waitForRequest(request =>
+        request.method() === 'POST' && request.url().includes('/api/scan_show'),
+      );
+      await page.getByRole('button', { name, exact: true }).click();
+      const request = await requestPromise;
+      const form = new URLSearchParams(request.postData() ?? '');
+      expect(form.get('show_id')).toBe(String(seed.showId));
+      expect(form.get('library_id')).toBe(String(seed.libraryId));
+      expect(form.get('deep_scan')).toBe(deep);
+      // The synthetic provider has no remote server. This proves dispatch,
+      // not completion of a Plex media scan.
+      await request.response();
+    }
+  });
+
   test('show and library scans, logs pager, and season media info stay interactive', async ({
     page,
   }, testInfo) => {

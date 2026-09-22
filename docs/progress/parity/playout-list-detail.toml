@@ -10,4 +10,11 @@ Mirror channels use their source's playout count when `/playouts/add` determines
 eligibility, preventing a valid mirror from receiving unrelated programming.
 Source cleanup retains finished items for the largest positive dependent mirror
 offset before removing them.
+
+UCU-02 row 12 (ddc8ef7f) is Covered: the native Add Playout button already
+toggles its island menu signal. The focused test in
+tests/e2e/playouts-feedback.spec.ts now proves initially hidden links, all five
+visible creation routes after clicking, and Enter/Space close/reopen behavior
+at 1440px and 390px in Chromium and Firefox. This strengthens the previous
+href-only assertion without changing product behavior.
 '''
