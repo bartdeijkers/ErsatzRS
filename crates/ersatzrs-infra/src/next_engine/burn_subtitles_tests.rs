@@ -42,6 +42,7 @@ fn http_input_preserves_transport_options_before_exact_input() {
         uri: "http://127.0.0.1:8409/synthetic".into(),
         headers: vec!["X-Fixture: synthetic".into(), "X-Other: value".into()],
         user_agent: Some("synthetic-agent".into()),
+        keep_alive: None,
         reconnect: Some(true),
         reconnect_delay_max: Some(2),
         timeout_us: Some(500_000),
@@ -136,6 +137,7 @@ async fn real_ffmpeg_extraction_deadline_closes_http_and_never_commits_cache() {
         uri: format!("http://{address}/synthetic-stalled-media"),
         headers: Vec::new(),
         user_agent: None,
+        keep_alive: None,
         reconnect: Some(false),
         reconnect_delay_max: None,
         // Much longer than the caller deadline, so socket timeout cannot provide

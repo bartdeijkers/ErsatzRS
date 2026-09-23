@@ -68,6 +68,8 @@ async fn all_providers_fall_back_to_their_authenticated_http_source() {
         let (pool, media) = fixture(kind).await;
         let value = serde_json::to_value(resolve(&pool, &media, &[]).await.unwrap()).unwrap();
         assert_eq!(value["source_type"], "http");
+        assert_eq!(value["keep_alive"], false);
+        assert_eq!(value["reconnect"], true);
         let (uri, header) = match kind {
             RemoteMediaSourceKind::Plex => (
                 "https://media.example.test/library/parts/11/file.mkv",

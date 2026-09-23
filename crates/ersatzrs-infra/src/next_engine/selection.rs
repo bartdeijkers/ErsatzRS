@@ -326,6 +326,7 @@ fn subtitle_track(
             uri: input.path,
             headers: Vec::new(),
             user_agent: None,
+            keep_alive: Some(false),
             reconnect: None,
             reconnect_delay_max: None,
             timeout_us: None,

@@ -10,9 +10,18 @@ async fn publication_uses_listener_and_capability_without_provider_credentials()
         let published = source::resolve_published(&pool, &media, &[], Some(&relay))
             .await
             .unwrap();
-        let Source::Http { uri, headers, .. } = published else {
+        let Source::Http {
+            uri,
+            headers,
+            keep_alive,
+            reconnect,
+            ..
+        } = published
+        else {
             panic!("expected HTTP");
         };
+        assert_eq!(keep_alive, Some(false));
+        assert_eq!(reconnect, Some(true));
         assert_eq!(uri, "http://127.0.0.1:8409/ffmpeg/next-media/10/100/1");
         let (name, value) = headers[0].split_once(": ").unwrap();
         assert_eq!(name, ACCESS_HEADER);

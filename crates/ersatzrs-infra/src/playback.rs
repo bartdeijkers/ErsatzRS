@@ -1359,7 +1359,8 @@ async fn select_custom_playback_streams_inner(
     }
 
     if engine == SubtitleSelectionEngine::Next {
-        subtitles.retain(next_subtitle_supported);
+        let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
+        subtitles.retain(|subtitle| next_subtitle_supported(subtitle, media_server));
     }
 
     for item in selector.items {
@@ -1721,7 +1722,8 @@ async fn select_playback_subtitle_inner(
     }
 
     if engine == SubtitleSelectionEngine::Next {
-        candidates.retain(next_subtitle_supported);
+        let media_server = is_media_server_subtitle_item(pool, media_item_id).await?;
+        candidates.retain(|subtitle| next_subtitle_supported(subtitle, media_server));
     }
 
     if preferred_languages.is_empty() {
@@ -1771,7 +1773,7 @@ pub async fn select_pinned_playback_subtitle(
 /// Resolve a Next pin without requiring native embedded-text extraction.
 ///
 /// # Errors
-/// Returns an error for stale identities or unsupported external bitmap sources.
+/// Returns an error for stale identities, external bitmap sources or provider captions.
 pub(crate) async fn select_next_pinned_playback_subtitle(
     pool: &DbPool,
     media_item_id: i64,
@@ -1881,17 +1883,40 @@ async fn select_pinned_playback_subtitle_inner(
             ),
         });
     }
-    if engine == SubtitleSelectionEngine::Next && !next_subtitle_supported(&subtitle) {
+    if engine == SubtitleSelectionEngine::Next
+        && !next_subtitle_supported(
+            &subtitle,
+            is_media_server_subtitle_item(pool, media_item_id).await?,
+        )
+    {
         return Err(RepositoryError::Decode {
             kind: "pinned subtitle stream",
-            value: "external bitmap subtitles are unsupported by Next".to_owned(),
+            value: "selected subtitle is unsupported by Next".to_owned(),
         });
     }
     Ok(subtitle)
 }
 
-fn next_subtitle_supported(subtitle: &PlaybackSubtitle) -> bool {
-    !subtitle.is_image() || subtitle.subtitle_kind == subtitle_kind::EMBEDDED
+fn next_subtitle_supported(subtitle: &PlaybackSubtitle, media_server: bool) -> bool {
+    (!subtitle.is_image() || subtitle.subtitle_kind == subtitle_kind::EMBEDDED)
+        && !(media_server && subtitle.codec.as_deref() == Some("eia_608"))
+}
+
+/// Upstream classifies the persisted provider item, not its resolved transport:
+/// path replacement can make a media-server item locally accessible.
+async fn is_media_server_subtitle_item(pool: &DbPool, media_item_id: i64) -> Result<bool> {
+    sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "PlexMovie" WHERE "Id"=?1)
+            OR EXISTS(SELECT 1 FROM "PlexEpisode" WHERE "Id"=?1)
+            OR EXISTS(SELECT 1 FROM "JellyfinMovie" WHERE "Id"=?1)
+            OR EXISTS(SELECT 1 FROM "JellyfinEpisode" WHERE "Id"=?1)
+            OR EXISTS(SELECT 1 FROM "EmbyMovie" WHERE "Id"=?1)
+            OR EXISTS(SELECT 1 FROM "EmbyEpisode" WHERE "Id"=?1)"#,
+    )
+    .bind(media_item_id)
+    .fetch_one(pool)
+    .await
+    .repository()
 }
 
 fn optional_stream_text_matches(expected: Option<&str>, actual: Option<&str>) -> bool {

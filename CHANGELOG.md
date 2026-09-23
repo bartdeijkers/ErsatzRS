@@ -23,6 +23,8 @@ release section when tagging a release.
   Intermittent overlays follow wall-clock cycles with the configured visible
   duration and Next's default one-second fades (upstream PR #2879); invalid
   timing is rejected instead of becoming a permanent overlay.
+  Respect placement inside the source image when output has padding (upstream
+  PR #2882); crop and stretch retain frame-relative geometry.
 
 ### Changed
 
@@ -32,6 +34,10 @@ release section when tagging a release.
   Conversion can read embedded text without native pre-extraction. Burn prepares
   the exact selected embedded track through a bounded, version-validated cache.
   Preview captions stay disabled after stopping playback.
+  Verify selected-language conversion and seek-relative captions through
+  authenticated Plex, Jellyfin and Emby inputs. Exclude provider EIA-608 tracks
+  from Next selection, including locally resolved provider media; explicit pins
+  fail instead of silently selecting another track (upstream PR #2882).
 
 - Report daily gap goal-prompts in routine output instead of maintaining a
   generated prompt file; use reconciliation commits to track the change window.

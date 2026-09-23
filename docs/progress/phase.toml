@@ -116,7 +116,9 @@ Row 27 (91b029e4) is Port: intermittent Next watermarks preserve wall-clock
 cycles, default fades and joined visibility, with subtitle/audio decoding proof.
 Row 28 (7869f165) is Covered: configured pad/stretch/crop output passes decoded
 production-host tests with selected subtitles/audio; mixed dependencies are audited.
-Next: review row 29 (b1ce607c), media-server subtitle conversion. Full-window and
+Row 29 (b1ce607c) is Port: provider Convert, EIA-608 eligibility and source-content
+watermark placement pass 167 focused tests including decoded Next playback.
+Next: review row 30 (d8955134), AMF/RKMPP acceleration. Full-window and
 supported-platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

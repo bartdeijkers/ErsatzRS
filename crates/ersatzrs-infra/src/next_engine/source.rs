@@ -223,6 +223,7 @@ fn http_source(uri: &Url, header: String) -> Result<Source> {
         uri,
         headers: vec![header],
         user_agent: None,
+        keep_alive: Some(false),
         reconnect: Some(true),
         reconnect_delay_max: Some(2),
         timeout_us: Some(10_000_000),

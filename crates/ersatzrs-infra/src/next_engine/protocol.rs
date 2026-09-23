@@ -174,6 +174,8 @@ pub struct Watermark {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_index: Option<u32>,
     pub location: WatermarkLocation,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub within_source_content: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -251,6 +253,8 @@ pub enum Source {
         headers: Vec<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         user_agent: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keep_alive: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]
         reconnect: Option<bool>,
         #[serde(skip_serializing_if = "Option::is_none")]

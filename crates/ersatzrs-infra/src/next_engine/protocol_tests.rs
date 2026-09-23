@@ -36,6 +36,12 @@ fn source_contract_keeps_http_options_and_rejects_unknown_source_kinds() {
     });
     let source: Source = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(source).unwrap(), wire);
+    for keep_alive in [false, true] {
+        let mut explicit = wire.clone();
+        explicit["keep_alive"] = json!(keep_alive);
+        let source: Source = serde_json::from_value(explicit.clone()).unwrap();
+        assert_eq!(serde_json::to_value(source).unwrap(), explicit);
+    }
     assert!(serde_json::from_value::<Source>(json!({
         "source_type": "unknown", "path": "media/episode.mkv"
     }))

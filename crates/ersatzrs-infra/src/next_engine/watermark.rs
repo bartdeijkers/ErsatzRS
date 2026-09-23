@@ -46,6 +46,7 @@ pub(super) fn project(
             out_point_ms: None,
         },
         stream_index: Some(0),
+        within_source_content: watermark.place_within_source_content.then_some(true),
         location: match watermark.location {
             WatermarkLocation::TopLeft => protocol::WatermarkLocation::TopLeft,
             WatermarkLocation::TopMiddle => protocol::WatermarkLocation::TopCenter,

@@ -7457,6 +7457,39 @@ advances pin and ledger together to 7869f16573b9f8d29790a830f2bfc7960847170b.
 Twenty-eight rows are reconciled, 141 remain pending. Row 29 (b1ce607c) is next;
 UCU-02 full-window and supported-platform gates remain open. No push or hosted CI.
 
+
+2026-09-23 row 29 reconciliation (b1ce607c; Port):
+Reviewed the complete two-file upstream diff, including HTTP options and
+source-relative watermark placement alongside media-server subtitle conversion.
+Next selection excludes exact eia_608 for all six persisted Plex/Jellyfin/Emby
+movie/episode types before built-in/custom ranking, independent of local/HTTP
+resolution. Exact unsupported pins fail explicitly; native and local-library
+selection, valid pins and explicit off retain their behavior. SQL fixtures cover
+all six types and both source transports. HTTP wire sources explicitly disable
+keep_alive while preserving reconnect and cloned track options; omitted fields
+remain readable. Existing authenticated relay and redacted path handling apply.
+Watermark projection now carries within_source_content. Every anchor has wire
+coverage; decoded production-host tests distinguish source-edge placement inside
+padding from full-frame placement and prove no change for stretch/crop. Each
+case retains Dutch Burn glyphs and selected 880-Hz audio. The accepted upstream
+RGB-opacity limitation remains separate and unchanged.
+A real NextHost regression converts selected Dutch embedded text over each of
+the three providers' authenticated HTTP media routes. It proves denied missing
+capabilities without provider opens, exact language despite another default,
+seek-relative WebVTT cues, absence of Burn glyphs and selected 880-Hz audio.
+Review corrected the Plex fixture to include its persisted provider-item record;
+all three cases now exercise provider classification as well as transport.
+167 selected Next/playback tests pass in 11.322 seconds with the official
+unmodified Next 946aa528 build and managed FFmpeg 9. Scoped infra all-target
+Clippy passes after a documentation-markup correction. Independent Codex reviews
+cover source parity, wire compatibility, selection and runtime fixture validity.
+No schema, UI, dependency or new health requirement changes. Existing native
+smoke and browser/HTTP subtitle transport evidence remains applicable.
+The authorized local commit `feat(infra): complete Next provider subtitle projection`
+advances pin and ledger together to b1ce607cea7265e09e9d9ed3a925a9a19eef983a.
+Twenty-nine rows are reconciled, 140 remain pending. Row 30 (d8955134) is next;
+UCU-02 full-window and supported-platform gates remain open. No push or hosted CI.
+
 """
 
 [[milestone]]

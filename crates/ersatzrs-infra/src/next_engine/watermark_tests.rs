@@ -187,3 +187,38 @@ fn intermittent_timing_rejects_unintended_permanent_output_and_widens_units() {
             .is_none()
     );
 }
+
+#[test]
+fn source_content_placement_preserves_every_anchor_and_legacy_omission() {
+    for location in [
+        WatermarkLocation::TopLeft,
+        WatermarkLocation::TopMiddle,
+        WatermarkLocation::TopRight,
+        WatermarkLocation::LeftMiddle,
+        WatermarkLocation::MiddleCenter,
+        WatermarkLocation::RightMiddle,
+        WatermarkLocation::BottomLeft,
+        WatermarkLocation::BottomMiddle,
+        WatermarkLocation::BottomRight,
+    ] {
+        for within in [false, true] {
+            let mut selection = selected();
+            selection.watermark.location = location;
+            selection.watermark.place_within_source_content = within;
+            let projected = project(&[selection]).unwrap().unwrap();
+            assert_eq!(projected.within_source_content, within.then_some(true));
+            let wire = serde_json::to_value(projected).unwrap();
+            assert_eq!(
+                wire.get("within_source_content"),
+                within.then_some(&json!(true))
+            );
+            let restored: protocol::Watermark = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(serde_json::to_value(restored).unwrap(), wire);
+        }
+    }
+    let explicit_false = json!({"source":{"source_type":"local","path":"logo.png"},
+        "location":"top_left","within_source_content":false});
+    let restored: protocol::Watermark = serde_json::from_value(explicit_false.clone()).unwrap();
+    assert_eq!(restored.within_source_content, Some(false));
+    assert_eq!(serde_json::to_value(restored).unwrap(), explicit_false);
+}

@@ -203,3 +203,180 @@ async fn real_next_scaling_modes_preserve_geometry_selected_audio_and_subtitles(
         assert!(!output.exists());
     }
 }
+
+async fn assert_source_watermark(ffmpeg: &Path, segment: &Path, expected_y: usize) {
+    let mut decode = Command::new(ffmpeg);
+    decode
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(segment)
+        .args([
+            "-ss",
+            "0.5",
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-pix_fmt",
+            "rgb24",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]);
+    let pixels = tool(decode).await;
+    assert_eq!(pixels.len(), 240 * 180 * 3);
+    let yellow: Vec<_> = pixels
+        .chunks_exact(3)
+        .enumerate()
+        .filter(|(_, p)| p[0] > 170 && p[1] > 170 && p[2] < 60)
+        .map(|(i, _)| (i % 240, i / 240))
+        .collect();
+    assert!(yellow.len() >= 160, "visible solid 20x10 yellow watermark");
+    let left = yellow.iter().map(|p| p.0).min().unwrap();
+    let top = yellow.iter().map(|p| p.1).min().unwrap();
+    let right = yellow.iter().map(|p| p.0).max().unwrap();
+    let bottom = yellow.iter().map(|p| p.1).max().unwrap();
+    assert!(left.abs_diff(110) <= 1, "center anchor x={left}");
+    assert!(
+        top.abs_diff(expected_y) <= 1,
+        "content/output edge y={top}, expected={expected_y}"
+    );
+    assert!((right - left + 1).abs_diff(20) <= 2);
+    assert!((bottom - top + 1).abs_diff(10) <= 2);
+    let white = pixels
+        .chunks_exact(3)
+        .filter(|p| p.iter().all(|c| *c > 180))
+        .count();
+    assert!(
+        white > 20,
+        "source-relative overlay preserves burned Dutch subtitles"
+    );
+}
+
+#[tokio::test]
+#[allow(clippy::too_many_lines)] // One disposable fixture exercises six real output geometries.
+#[ignore = "requires built Next engine and FFmpeg runtime; uses disposable synthetic media"]
+async fn real_next_watermark_source_content_edges_follow_padding_but_not_stretch_or_crop() {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = tempfile::tempdir().unwrap();
+    let clip = generate_scaling_clip(&ffmpeg, root.path()).await;
+    let image = root.path().join("yellow.png");
+    let mut generate = Command::new(&ffmpeg);
+    generate
+        .args([
+            "-v",
+            "error",
+            "-nostdin",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=yellow:s=20x10",
+            "-frames:v",
+            "1",
+            "-threads",
+            "1",
+        ])
+        .arg(&image);
+    tool(generate).await;
+    for mode in [
+        ScalingBehavior::ScaleAndPad,
+        ScalingBehavior::Stretch,
+        ScalingBehavior::Crop,
+    ] {
+        for within in [false, true] {
+            let profile = FFmpegProfile {
+                scaling_behavior: mode,
+                video_format: FFmpegProfileVideoFormat::H264,
+                audio_format: FFmpegProfileAudioFormat::Aac,
+                video_bitrate: 1000,
+                video_buffer_size: 2000,
+                audio_sample_rate: 48,
+                audio_channels: 1,
+                ..Default::default()
+            };
+            let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+            sqlx::query(r#"UPDATE "Resolution" SET "Width"=240, "Height"=180 WHERE "Id"=1"#)
+                .execute(&pool)
+                .await
+                .unwrap();
+            sqlx::query(
+                r#"INSERT INTO "ChannelWatermark" (
+                "Id", "Name", "Mode", "ImageSource", "Location", "Size", "WidthPercent",
+                "HorizontalMarginPercent", "VerticalMarginPercent", "FrequencyMinutes",
+                "DurationSeconds", "Opacity", "PlaceWithinSourceContent", "ZIndex")
+                VALUES (1,'Source edge proof',1,1,4,1,10,0,0,0,0,100,?,0)"#,
+            )
+            .bind(within)
+            .execute(&pool)
+            .await
+            .unwrap();
+            sqlx::query(r#"INSERT INTO "Artwork" ("ArtworkKind", "ChannelId", "Path", "DateAdded", "DateUpdated") VALUES (2,1,?,'2026-09-23','2026-09-23')"#)
+                .bind(image.to_str().unwrap()).execute(&pool).await.unwrap();
+            sqlx::query(r#"UPDATE "Channel" SET "WatermarkId"=1 WHERE "Id"=1"#)
+                .execute(&pool)
+                .await
+                .unwrap();
+            let host = std::sync::Arc::new(host::NextHost::new(
+                pool,
+                locker,
+                root.path().join("playout"),
+            ));
+            let output = root.path().join("output");
+            let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
+            let task = host
+                .start(
+                    registry.clone(),
+                    host::NextStart {
+                        channel_id: 1,
+                        preview: false,
+                        number: "1".into(),
+                        executable: binary.clone(),
+                        output: output.clone(),
+                        ffmpeg: ffmpeg.clone(),
+                        ffprobe: ffprobe.clone(),
+                        replacements: Vec::new(),
+                        idle_timeout: None,
+                        deadline: Instant::now() + Duration::from_secs(30),
+                    },
+                )
+                .await
+                .unwrap();
+            let handle = registry.try_get("1").await.unwrap();
+            timeout(Duration::from_secs(30), async {
+                loop {
+                    match handle.startup_readiness() {
+                        HlsStartupReadiness::Ready => break,
+                        HlsStartupReadiness::Failed => {
+                            panic!("watermark content placement startup failed: {mode:?}/{within}")
+                        }
+                        _ => tokio::time::sleep(Duration::from_millis(10)).await,
+                    }
+                }
+            })
+            .await
+            .unwrap();
+            let playlist = handle.trim_playlist().await.unwrap();
+            let segment = playlist
+                .lines()
+                .find(|line| {
+                    !line.starts_with('#')
+                        && Path::new(line)
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))
+                })
+                .unwrap();
+            let expected_y = if within && mode == ScalingBehavior::ScaleAndPad {
+                22
+            } else {
+                0
+            };
+            assert_source_watermark(&ffmpeg, &output.join(segment), expected_y).await;
+            assert_selected_audio(&ffmpeg, &output.join(segment)).await;
+            assert!(registry.stop_channel("1").await);
+            task.await.unwrap();
+            assert!(!output.exists());
+        }
+    }
+}

@@ -347,3 +347,6 @@ async fn real_next_text_subtitles_burn_convert_seek_and_preserve_audio_and_off()
 
 #[path = "watermark_runtime_tests.rs"]
 mod watermark_runtime_tests;
+
+#[path = "provider_text_runtime_tests.rs"]
+mod provider_text_runtime_tests;

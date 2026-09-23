@@ -81,6 +81,7 @@ impl MediaRelay {
             ),
             headers: vec![format!("{ACCESS_HEADER}: {}", self.capability)],
             user_agent: None,
+            keep_alive: Some(false),
             reconnect: Some(true),
             reconnect_delay_max: Some(2),
             timeout_us: Some(20_000_000),

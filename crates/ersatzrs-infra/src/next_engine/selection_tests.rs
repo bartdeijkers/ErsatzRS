@@ -172,6 +172,7 @@ async fn http_sources_retain_transport_options_when_audio_is_missing() {
         uri: "https://media.example.test/video.mkv".to_owned(),
         headers: vec!["X-Fixture: synthetic".to_owned()],
         user_agent: Some("ErsatzRS-fixture".to_owned()),
+        keep_alive: None,
         reconnect: Some(true),
         reconnect_delay_max: Some(2),
         timeout_us: Some(5_000_000),
@@ -726,6 +727,7 @@ async fn next_embedded_text_keeps_http_transport_and_resolved_version_identity()
         uri: "https://media.example.test/fixture.mkv".into(),
         headers: vec!["X-Fixture: synthetic".into()],
         user_agent: Some("fixture".into()),
+        keep_alive: None,
         reconnect: Some(true),
         reconnect_delay_max: Some(2),
         timeout_us: Some(5_000_000),
@@ -960,3 +962,6 @@ async fn published_audio_override_preserves_silence_and_rejects_stale_or_conflic
         }
     }
 }
+
+#[path = "provider_subtitle_tests.rs"]
+mod provider_subtitle_tests;

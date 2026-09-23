@@ -140,6 +140,7 @@ fn http_source() -> Source {
         uri: "https://media.example.test/synthetic".into(),
         headers: vec![],
         user_agent: None,
+        keep_alive: None,
         reconnect: None,
         reconnect_delay_max: None,
         timeout_us: None,

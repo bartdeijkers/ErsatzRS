@@ -32,6 +32,7 @@ fn item() -> PlayoutItem {
                     uri: "http://127.0.0.1:8409/synthetic".into(),
                     headers: vec!["X-Fixture: synthetic".into()],
                     user_agent: Some("fixture".into()),
+                    keep_alive: None,
                     reconnect: Some(true),
                     reconnect_delay_max: Some(2),
                     timeout_us: Some(500_000),

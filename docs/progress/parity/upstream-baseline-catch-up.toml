@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098']
 summary    = """
-The ledger registers 169 commits: twenty-eight reconciled and 141 pending,
+The ledger registers 169 commits: twenty-nine reconciled and 140 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
 links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
@@ -49,7 +49,8 @@ blank-path repair and absolute partial-extraction indices have SQL regressions.
 Rows 26-27 port permanent and wall-clock intermittent watermarks through shared
 selection. Decoded geometry, fade/hidden intervals, joined timing, audio and
 subtitles pass; Dynamic timing and merged deco fallback have regression coverage.
-Row 28 confirms existing pad/stretch/crop scaling through decoded Next output.
+Row 28 proves pad/stretch/crop scaling. Row 29 proves authenticated provider
+Convert subtitles, excludes provider EIA-608 and places watermarks inside content.
 The official Next RGB opacity bug is explicitly accepted pending upstream correction, with visible unresolved debt.
 Remote Stream/add-on and graphics integration belong to later rows and remain refused
 where unsupported. Full endpoint/platform/window acceptance remains open. ADR 0095 retains the

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `7869f16573b9f8d29790a830f2bfc7960847170b` |
-| **Commit subject** | `feat: use configured scaling behavior with next engine (#2880)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7869f16573b9f8d29790a830f2bfc7960847170b |
+| **Pinned commit** | `b1ce607cea7265e09e9d9ed3a925a9a19eef983a` |
+| **Commit subject** | `feat: convert subtitles from media servers (#2882)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/b1ce607cea7265e09e9d9ed3a925a9a19eef983a |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

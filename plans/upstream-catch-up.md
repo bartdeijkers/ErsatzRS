@@ -426,6 +426,38 @@ NUnit/analyzers remain test-project-only dependencies; Scalar only updates the
 existing docs renderer dependency without changing configuration or API behavior.
 These dependency implementations have no required Rust package substitution.
 
+## Row 29 source map: provider subtitles, HTTP options and source-relative watermarks
+
+Upstream `b1ce607c` changes SyncNextPlayoutHandler and generated Next wire models.
+It admits provider subtitles while excluding eia_608 for the six Plex/Jellyfin/Emby
+movie/episode types, independent of resolved local/HTTP path. It sets provider
+HTTP keep_alive=false/reconnect=true, suppresses projection-time path logging,
+and forwards PlaceWithinSourceContent for watermarks. Review all three behaviors.
+
+Rust already admits provider candidates and projects selected embedded Convert
+tracks from the exact media source/version. Burn uses bounded sidecar preparation.
+Add provider-item eia_608 eligibility before built-in/custom ranking; exact pins
+must fail explicitly rather than change streams. Preserve local-library and native
+selection. Keep provider identity distinct from transport choice, so a locally
+accessible provider file still receives the upstream exclusion.
+
+Add optional keep_alive to the HTTP wire and explicitly disable it on published
+provider relay/direct inputs, retaining reconnect and cloned track options. The
+packaged Next default is already false; old JSON remains readable. Existing
+redacted path handling/authenticated media-open routes remain, without credentials
+in published playouts. Add within_source_content to Watermark and project the
+existing domain setting; false/absent keeps frame-relative placement. Prove source
+edges inside letterboxing and no placement effect for crop/stretch.
+
+Targets: shared Next subtitle eligibility in playback.rs, Next protocol/source/
+media/selection constructors, watermark projection, focused SQL/wire tests and
+real-provider Convert/geometry regressions. Use all three authenticated HTTP
+providers, selected language/audio and seek-relative WebVTT cues. Existing native,
+provider relay and web subtitle transport evidence remains reusable when code is
+unchanged. No schema, UI, translations or new runtime capability is introduced.
+Keep the accepted RGB-opacity limitation separate; no provider/geometry exemption.
+Record substantive review and new evidence in UCU-02 before pin advancement.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
@@ -470,7 +502,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 26 | `e04a834e` | feat: overlay single permanent watermarks using next engine (#2878) | Port | upstream-baseline-catch-up | `feat(infra): project permanent Next watermarks` | ucu-02; nine anchors, size/margins, shared Merge selection, independent watermark timeline and Dynamic Burn. Focused tests and native smoke pass. Official Next RGB opacity defect is explicitly accepted pending upstream correction; no local workaround. See ucu-02 evidence. |
 | 27 | `91b029e4` | feat: overlay single intermittent watermarks using next engine (#2879) | Port | upstream-baseline-catch-up | `feat(infra): project intermittent Next watermarks` | ucu-02; wall-clock periodic timing, widened units, redacted invalid-timing rejection and unchanged Dynamic join timing. 31 focused tests include decoded visible/fade/hidden states with subtitle/audio preservation; scoped Clippy passes. See ucu-02 evidence. |
 | 28 | `7869f165` | feat: use configured scaling behavior with next engine (#2880) | Covered | upstream-baseline-catch-up | `test(infra): verify configured Next scaling output` | ucu-02; existing three-mode configuration confirmed by decoded production-host pad/stretch/crop with subtitle/audio preservation. Seven focused tests and scoped Clippy pass. Mixed dependency updates audited separately; no missing Rust hardware query or ABI bump required. See ucu-02 evidence. |
-| 29 | `b1ce607c` | feat: convert subtitles from media servers (#2882) | | | | ucu-02; provisional: Next behavior triage. |
+| 29 | `b1ce607c` | feat: convert subtitles from media servers (#2882) | Port | upstream-baseline-catch-up | `feat(infra): complete Next provider subtitle projection` | ucu-02; provider EIA-608 eligibility, HTTP options and source-content watermarks. 167 focused tests including decoded authenticated provider Convert and geometry pass; scoped Clippy and substantive review pass. See ucu-02 evidence. |
 | 30 | `d8955134` | feat: use amf and rkmpp hw accel with next engine (#2883) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
 | 31 | `290f991b` | prep for release v26.5.0 [no ci] | | | | ucu-02; provisional: Upstream tooling candidate. |
 | 32 | `a1036430` | fix: clean up orphan actor and artwork records (#2885) | | | | ucu-03; provisional: Port candidate. |
