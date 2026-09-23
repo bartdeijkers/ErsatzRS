@@ -7757,6 +7757,24 @@ checkpoint `docs(porting): reconcile upstream NVENC wrapper pin` moves pin and
 ledger together to 54779e0775785cab99de200273918e5615e9b8ce, then checkout follows.
 Thirty-three rows are reconciled, 136 pending. Row 34 (637e6be8) is next; UCU-03
 window gates and first consolidated exact-SHA CI remain open. No push or CI.
+
+2026-09-23 row 34 reconciliation (637e6be8; N/A upstream tooling):
+Read full stat/diff and surrounding changelog. Only CHANGELOG.md changes: the
+v26.5.1 release heading/date, comparison links and a note describing row 33's
+already reviewed Linux NVIDIA package correction. Actor/artwork and Next-logo
+release notes describe row 32. No new product, dependency, workflow or test
+change exists; ErsatzRS retains its own release history. Substantive review
+requires no Rust change, new ADR or duplicated runtime test for publication text.
+Fresh fetched tip remains ee038ba4 and all 169 ledger SHA/subjects match.
+Before advancement, pin/row 33/upstream checkout agree at 54779e07. The authorized
+checkpoint `docs(porting): reconcile upstream May patch release notes` advances
+ledger and pin together to 637e6be879d03649bedf9811ae5c3b13aac30b0d, then checkout
+follows. Thirty-four rows are reconciled, 135 pending. All UCU-03 rows are
+reviewed; local window gates remain open. Production pipeline code did not
+change in this window, so TSDuck's conditional gate is not newly triggered;
+UCU-02 transport evidence remains explicitly scoped to its captured pipelines.
+Do not start UCU-04 until UCU-03 local acceptance and terminal exact-SHA CI pass.
+No push, hosted CI or release is claimed by this row checkpoint.
 """
 
 [[milestone]]

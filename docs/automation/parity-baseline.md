@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `54779e0775785cab99de200273918e5615e9b8ce` |
-| **Commit subject** | `fix: pin nvencsharp lib to 2.0.0 for linux compatibility (#2887)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/54779e0775785cab99de200273918e5615e9b8ce |
+| **Pinned commit** | `637e6be879d03649bedf9811ae5c3b13aac30b0d` |
+| **Commit subject** | `prep for release v26.5.1 [no ci]` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/637e6be879d03649bedf9811ae5c3b13aac30b0d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
