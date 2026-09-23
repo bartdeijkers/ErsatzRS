@@ -1522,7 +1522,7 @@ async fn normalize_editor_form(
     mut form: ChannelEditorForm,
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
 ) -> Result<ChannelEditorForm> {
-    if form.streaming_engine == 1 {
+    if form.streaming_engine == 1 && !matches!(form.streaming_mode, 4 | 5) {
         form.streaming_mode = 4;
     }
 

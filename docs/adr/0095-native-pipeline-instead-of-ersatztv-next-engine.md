@@ -178,8 +178,13 @@ from normal playback. Both sessions share the channel publisher; rebuild
 notifications reach previews even when normal playback is absent. Continue
 builds notify dependent Next channels and mirrors after persistence; native
 sessions retain their existing continuation behavior without restart.
-HTTP master playlists force the Next HLS path and preserve existing token
-propagation. MPEG-TS requests are rejected, matching the upstream engine split.
+HTTP master playlists preserve existing token propagation. Next Hybrid channels
+use the existing HLS-to-MPEG-TS wrapper; explicit segmenter requests remain HLS
+to avoid redirect loops. Explicit legacy-concat requests remain rejected for
+Next, preserving the selected engine instead of falling back to native playback.
+Accepted ADR 0099 selects the session media playlist for the Next wrapper,
+keeping converted text on HLS and Burn text visible in MPEG-TS. Decoded
+Burn/Convert and lifecycle checks pass; UCU-02 window gates remain open.
 The health engine checks executable availability and profile compatibility only
 when an enabled channel selects Next. These checks are not playback acceptance.
 Local-library sources reuse native path replacement and track selectors. Provider

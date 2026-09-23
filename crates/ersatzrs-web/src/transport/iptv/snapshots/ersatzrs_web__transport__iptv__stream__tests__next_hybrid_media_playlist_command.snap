@@ -1,0 +1,24 @@
+---
+source: crates/ersatzrs-web/src/transport/iptv/stream.rs
+expression: "command.arguments.join(\"\\n\")"
+---
+-nostdin
+-threads
+1
+-hide_banner
+-loglevel
+error
+-nostats
+-fflags
++genpts+discardcorrupt+igndts
+-readrate
+1.0
+-i
+http://localhost:8409/iptv/session/7/hls.m3u8?access_token=synthetic-token
+-map
+0
+-c
+copy
+-f
+mpegts
+pipe:1

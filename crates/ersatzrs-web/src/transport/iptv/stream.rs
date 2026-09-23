@@ -139,11 +139,11 @@ pub async fn serve_transport_stream(
         }
     };
 
-    if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+    let Some(mode) = channel_transport_stream_mode(query.mode.as_deref(), &channel) else {
         return StatusCode::NOT_FOUND.into_response();
-    }
+    };
 
-    match resolve_transport_stream_mode(query.mode.as_deref(), channel.streaming_mode) {
+    match mode {
         TransportStreamMode::RedirectToHls => {
             let access_token = AccessToken::new(query.access_token.clone());
             let target = format!(
@@ -1509,6 +1509,21 @@ enum TransportStreamMode {
     HybridWrapper,
 }
 
+// A legacy concat request must never silently switch a Next channel's engine.
+fn channel_transport_stream_mode(
+    requested_mode: Option<&str>,
+    channel: &Channel,
+) -> Option<TransportStreamMode> {
+    let mode = resolve_transport_stream_mode(requested_mode, channel.streaming_mode);
+    if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next
+        && mode == TransportStreamMode::Legacy
+    {
+        None
+    } else {
+        Some(mode)
+    }
+}
+
 fn resolve_transport_stream_mode(
     requested_mode: Option<&str>,
     channel_streaming_mode: StreamingMode,
@@ -1593,6 +1608,7 @@ async fn serve_segmenter_wrapper_stream(
         &hls::request_scheme(headers),
         &hls::request_host(headers),
         &channel.number,
+        channel.streaming_engine,
         &access_token,
     );
     let metadata = channel_stream_metadata(channel);
@@ -1807,8 +1823,17 @@ fn build_segmenter_wrapper_hls_url(
     scheme: &str,
     host: &str,
     channel_number: &str,
+    engine: ersatzrs_domain::StreamingEngine,
     access_token: &AccessToken,
 ) -> String {
+    // ADR 0099: live WebVTT in a master stalls FFmpeg's MPEG-TS copy wrapper.
+    // Converted text stays on HLS; this already-started session carries video/audio.
+    if engine == ersatzrs_domain::StreamingEngine::Next {
+        return format!(
+            "{scheme}://{host}/iptv/session/{channel_number}/hls.m3u8{}",
+            access_token.query()
+        );
+    }
     format!(
         "{scheme}://{host}/iptv/channel/{channel_number}.m3u8?mode=segmenter{}",
         access_token.query_amp()
@@ -5238,11 +5263,87 @@ mod tests {
     }
 
     #[test]
+    fn next_transport_dispatch_preserves_engine_and_allows_hybrid_wrapper() {
+        let mut channel = Channel {
+            streaming_engine: ersatzrs_domain::StreamingEngine::Next,
+            streaming_mode: StreamingMode::TransportStreamHybrid,
+            ..Default::default()
+        };
+        for requested in [None, Some("mixed"), Some("ts"), Some("hybrid")] {
+            assert_eq!(
+                channel_transport_stream_mode(requested, &channel),
+                Some(TransportStreamMode::HybridWrapper)
+            );
+        }
+        for requested in ["ts-legacy", "mpegts", "mpeg-ts"] {
+            assert_eq!(
+                channel_transport_stream_mode(Some(requested), &channel),
+                None
+            );
+        }
+        channel.streaming_mode = StreamingMode::HttpLiveStreamingSegmenter;
+        assert_eq!(
+            channel_transport_stream_mode(None, &channel),
+            Some(TransportStreamMode::RedirectToHls)
+        );
+        assert_eq!(
+            channel_transport_stream_mode(Some("ts"), &channel),
+            Some(TransportStreamMode::HybridWrapper)
+        );
+        channel.streaming_mode = StreamingMode::TransportStream;
+        assert_eq!(channel_transport_stream_mode(None, &channel), None);
+        channel.streaming_engine = ersatzrs_domain::StreamingEngine::Legacy;
+        assert_eq!(
+            channel_transport_stream_mode(None, &channel),
+            Some(TransportStreamMode::Legacy)
+        );
+    }
+
+    #[test]
     fn segmenter_wrapper_url_preserves_access_token() {
         let token = AccessToken::new(Some("abc123".to_owned()));
         assert_eq!(
-            build_segmenter_wrapper_hls_url("http", "localhost:8409", "7", &token),
+            build_segmenter_wrapper_hls_url(
+                "http",
+                "localhost:8409",
+                "7",
+                ersatzrs_domain::StreamingEngine::Legacy,
+                &token
+            ),
             "http://localhost:8409/iptv/channel/7.m3u8?mode=segmenter&access_token=abc123"
+        );
+    }
+
+    #[test]
+    fn next_segmenter_wrapper_uses_authenticated_media_playlist_without_webvtt() {
+        let token = AccessToken::new(Some("synthetic-token".to_owned()));
+        let url = build_segmenter_wrapper_hls_url(
+            "http",
+            "localhost:8409",
+            "7",
+            ersatzrs_domain::StreamingEngine::Next,
+            &token,
+        );
+        assert_eq!(
+            url,
+            "http://localhost:8409/iptv/session/7/hls.m3u8?access_token=synthetic-token"
+        );
+        assert_eq!(
+            build_segmenter_wrapper_hls_url(
+                "http",
+                "localhost:8409",
+                "7",
+                ersatzrs_domain::StreamingEngine::Next,
+                &AccessToken::default(),
+            ),
+            "http://localhost:8409/iptv/session/7/hls.m3u8"
+        );
+        // Preserve every in-band stream; only the HLS-only WebVTT rendition is absent.
+        let command =
+            build_mpegts_segmenter_wrapper_command(url, &OutputMetadata::default(), false, None);
+        insta::assert_snapshot!(
+            "next_hybrid_media_playlist_command",
+            command.arguments.join("\n")
         );
     }
 

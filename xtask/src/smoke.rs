@@ -15,6 +15,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+#[path = "smoke_next.rs"]
+mod next_proof;
+
 use anyhow::{anyhow, bail, Context, Result};
 use rusqlite::{params, Connection};
 
@@ -67,11 +70,16 @@ fn run_inner(opts: Opts) -> Result<()> {
     let db_path = root.path.join("ErsatzRS-smoke.db");
     let segmenter_timeout_seconds = opts.segmenter_timeout_seconds();
     let media_seconds = opts.media_seconds();
+    let generated_next = opts.next && opts.media_path.is_none();
     let media_path = match opts.media_path {
         Some(path) => path,
         None => {
             let path = root.path.join("smoke-source.mp4");
-            generate_fixture_media(&path, media_seconds)?;
+            if generated_next {
+                next_proof::generate(&path, media_seconds)?;
+            } else {
+                generate_fixture_media(&path, media_seconds)?;
+            }
             path
         }
     };
@@ -90,7 +98,14 @@ fn run_inner(opts: Opts) -> Result<()> {
         segmenter_timeout_seconds,
         media_seconds,
         opts.next,
+        opts.next_convert,
     )?;
+
+    if generated_next {
+        next_proof::seed(&db_path, &media_path)?;
+    } else if opts.next {
+        println!("smoke evidence: custom --media uses endpoint/lifecycle checks; synthetic audio/subtitle assertions are unavailable");
+    }
 
     let deadline = Deadline::from_now(opts.timeout);
     if opts.next {
@@ -104,17 +119,6 @@ fn run_inner(opts: Opts) -> Result<()> {
         println!("smoke evidence: Next media request without capability -> HTTP 401");
     }
     for channel in &opts.channels {
-        if opts.next && opts.check_ts {
-            let path = format!("/iptv/channel/{channel}.ts?mode=ts");
-            let response = http_get_until_body(&path, 0, deadline.remaining()?)?;
-            if response.status != 404 {
-                bail!(
-                    "Next MPEG-TS request must return 404, got {}",
-                    response.status
-                );
-            }
-            println!("smoke evidence: Next MPEG-TS request -> HTTP 404");
-        }
         if !opts.next && opts.check_ts && !opts.check_hls_lifecycle {
             let path = format!("/iptv/channel/{channel}.ts?mode=ts");
             let response = http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
@@ -167,6 +171,9 @@ fn run_inner(opts: Opts) -> Result<()> {
             if !playlist.is_file() {
                 bail!("Next did not produce its engine-specific live.m3u8");
             }
+            if generated_next && opts.check_ts {
+                next_proof::verify(channel, &root.path, deadline, opts.next_convert)?;
+            }
             probe_preview(channel, deadline.remaining()?)?;
         }
     }
@@ -190,7 +197,7 @@ fn run_inner(opts: Opts) -> Result<()> {
                     true,
                 )?;
             }
-            if opts.check_ts && !opts.next {
+            if opts.check_ts {
                 let path = format!("/iptv/channel/{channel}.ts?mode=ts");
                 let response =
                     http_get_until_body(&path, MIN_STREAM_BODY_BYTES, deadline.remaining()?)
@@ -229,6 +236,7 @@ struct Opts {
     check_hls: bool,
     check_hls_lifecycle: bool,
     next: bool,
+    next_convert: bool,
 }
 
 impl Opts {
@@ -241,6 +249,7 @@ impl Opts {
         let mut check_hls = true;
         let mut check_hls_lifecycle = false;
         let mut next = false;
+        let mut next_convert = false;
 
         let mut i = 0;
         while i < args.len() {
@@ -276,6 +285,10 @@ impl Opts {
                 }
                 "--keep-temp" => keep_temp = true,
                 "--next" => next = true,
+                "--next-convert" => {
+                    next = true;
+                    next_convert = true;
+                }
                 "--hls-lifecycle" => check_hls_lifecycle = true,
                 "--skip-ts" => check_ts = false,
                 "--skip-hls" => check_hls = false,
@@ -307,6 +320,7 @@ impl Opts {
             check_hls,
             check_hls_lifecycle,
             next,
+            next_convert,
         })
     }
 
@@ -604,6 +618,7 @@ fn seed_streaming_fixture(
     segmenter_timeout_seconds: u64,
     media_seconds: i64,
     next: bool,
+    next_convert: bool,
 ) -> Result<()> {
     let conn =
         Connection::open(db_path).with_context(|| format!("opening {}", db_path.display()))?;
@@ -637,8 +652,8 @@ fn seed_streaming_fixture(
         Ok(()) => {
             if next {
                 conn.execute(
-                    r#"UPDATE "Channel" SET "StreamingEngine"=1 WHERE "Id"=?"#,
-                    [channel_id],
+                    r#"UPDATE "Channel" SET "StreamingEngine"=1, "StreamingMode"=5, "NextEngineTextSubtitleMode"=? WHERE "Id"=?"#,
+                    params![i64::from(next_convert), channel_id],
                 )?;
                 // Keep this generated fixture small and use explicit supported codecs.
                 conn.execute(
@@ -1104,7 +1119,10 @@ fn print_help() {
     eprintln!("    cargo xtask smoke [FLAGS] [--channel N]...");
     eprintln!();
     eprintln!("FLAGS:");
-    eprintln!("    --next            Probe the installed Next engine, preview and MPEG-TS refusal");
+    eprintln!("    --next            Probe the installed Next engine, preview and MPEG-TS wrapper");
+    eprintln!(
+        "    --next-convert    Use Next Convert subtitles; inspect TS streams and unburned video"
+    );
     eprintln!("    --channel N       Channel number to probe (default: 1)");
     eprintln!("    --timeout S       Overall startup/probe timeout seconds (default: 90)");
     eprintln!("    --media PATH      Use an existing media file instead of generating one");

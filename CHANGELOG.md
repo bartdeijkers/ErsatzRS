@@ -67,7 +67,12 @@ release section when tagging a release.
   idle expiry, concurrent rebuild notification and managed shutdown.
   Connect Next local-video HLS startup to the shared session registry and
   transcode limit, retaining capacity through process/output cleanup. Preserve
-  playlist tokens and reject MPEG-TS requests for Next channels. Report missing
+  playlist tokens and support Next MPEG-TS Hybrid through the existing HLS
+  wrapper (upstream PR #2883). Retain Hybrid or Segmenter when saving a Next
+  channel; explicit native legacy playback stays unavailable for Next.
+  Avoid a stalled MPEG-TS wrapper when Next Convert is selected: converted text
+  stays available through HLS; choose Burn for subtitles in MPEG-TS, as explained
+  in the localized editor (ADR 0099). Report missing
   Next executables and unsupported profiles through health checks. Use Next for
   channel previews with browser-compatible H.264/AAC and independent capacity
   and cleanup; forward playout rebuilds to preview-only sessions as well.

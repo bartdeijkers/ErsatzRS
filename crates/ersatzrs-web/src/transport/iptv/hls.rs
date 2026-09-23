@@ -631,6 +631,15 @@ pub async fn serve_channel_m3u8(
 
     let access_token = AccessToken::new(query.access_token.clone());
     if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
+        if channel.streaming_mode == StreamingMode::TransportStreamHybrid
+            && query
+                .mode
+                .as_deref()
+                .is_none_or(|mode| mode.trim().is_empty() || mode.trim() == "mixed")
+        {
+            let target = format!("/iptv/channel/{channel_number}.ts{}", access_token.query());
+            return axum::response::Redirect::temporary(&target).into_response();
+        }
         return serve_hls_segmenter_playlist(
             state,
             channel_number,
@@ -1523,8 +1532,67 @@ mod tests {
         );
         assert!(playlist.contains("live000001.vtt?access_token=synthetic-token"));
     }
+    async fn assert_next_hybrid_routes(state: &AppState) {
+        sqlx::query(r#"UPDATE "Channel" SET "StreamingMode"=5 WHERE "Id"=1"#)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        for mode in [None, Some("mixed".into())] {
+            let query = HlsQuery {
+                mode,
+                access_token: Some("synthetic-token".into()),
+            };
+            let response = serve_channel_m3u8(state, "1", &HeaderMap::new(), &query).await;
+            assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+            assert_eq!(
+                response.headers()[header::LOCATION],
+                "/iptv/channel/1.ts?access_token=synthetic-token"
+            );
+        }
+        let explicit = HlsQuery {
+            mode: Some("segmenter".into()),
+            access_token: Some("synthetic-token".into()),
+        };
+        assert_eq!(
+            serve_channel_m3u8(state, "1", &HeaderMap::new(), &explicit)
+                .await
+                .status(),
+            StatusCode::OK
+        );
+        let legacy = HlsQuery {
+            mode: Some("ts-legacy".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            stream::serve_transport_stream(state, "1", &HeaderMap::new(), &legacy)
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        sqlx::query(r#"UPDATE "Channel" SET "IsEnabled"=0 WHERE "Id"=1"#)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            stream::serve_transport_stream(state, "1", &HeaderMap::new(), &HlsQuery::default())
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            serve_channel_m3u8(state, "1", &HeaderMap::new(), &explicit)
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        sqlx::query(r#"UPDATE "Channel" SET "IsEnabled"=1 WHERE "Id"=1"#)
+            .execute(&state.pool)
+            .await
+            .unwrap();
+    }
+
     #[tokio::test]
-    async fn next_engine_routes_force_hls_preserve_tokens_and_reject_transport_stream() {
+    async fn next_engine_routes_preserve_hybrid_hls_tokens_and_reject_native_playback() {
         use ersatzrs_core::repositories::FfmpegProfileRepository;
         use ersatzrs_domain::{FFmpegProfile, StreamingEngine};
         let state = AppState::for_tests(
@@ -1590,12 +1658,22 @@ mod tests {
         assert!(std::str::from_utf8(&body)
             .unwrap()
             .contains("next-segment.ts?access_token=synthetic-token"));
+        let redirect = stream::serve_transport_stream(
+            &state,
+            "1",
+            &HeaderMap::new(),
+            &HlsQuery {
+                access_token: Some("synthetic-token".into()),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(redirect.status(), StatusCode::TEMPORARY_REDIRECT);
         assert_eq!(
-            stream::serve_transport_stream(&state, "1", &HeaderMap::new(), &HlsQuery::default())
-                .await
-                .status(),
-            StatusCode::NOT_FOUND
+            redirect.headers()[header::LOCATION],
+            "/iptv/channel/1.m3u8?access_token=synthetic-token"
         );
+        assert_next_hybrid_routes(&state).await;
         assert_eq!(
             stream::serve_channel_stream(&state, "1", OutputFormat::MpegTs)
                 .await

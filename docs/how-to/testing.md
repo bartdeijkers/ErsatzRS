@@ -69,11 +69,18 @@ Then run:
 
 ```bash
 cargo xtask smoke --next --keep-temp
+cargo xtask smoke --next-convert --keep-temp
 ```
 
 This uses a temporary database and generated local media. It checks Next HLS
-playlists and a served segment, MPEG-TS refusal, the separate browser-preview
-playlist/segment, and idle removal of both session folders. `--next` implies the
+playlists and a served segment, MPEG-TS Hybrid wrapper restart, the separate
+browser-preview playlist/segment, and idle removal of both session folders.
+With generated media, it decodes the MPEG-TS wrapper to verify selected Dutch
+audio and burned subtitles. `--next-convert` instead checks unburned video and
+the selected Dutch WebVTT cue through its HLS rendition, and reports actual
+MPEG-TS stream codecs; it does not assert portable WebVTT support in TS clients.
+Custom `--media` inputs retain endpoint/lifecycle checks without synthetic
+audio/subtitle assertions. `--next` implies the
 lifecycle check and cannot be combined with `--skip-hls`. The default native smoke
 remains `cargo xtask smoke`. `ERSATZRS_SMOKE_PORT` selects an unused loopback port
 (default 8409); an occupied port fails without touching the existing server.

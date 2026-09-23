@@ -6038,6 +6038,10 @@ Pin, last processed ledger row and upstream HEAD agree.
 Per explicit maintainer instruction on 2026-09-23, the upstream Next RGB-image
 opacity defect is accepted pending a future upstream fix: keep official engine
 artifacts and do not require a host workaround or translucent RGB runtime proof.
+Accepted ADR 0099 keeps converted text on HLS and uses the authenticated media
+playlist for Next MPEG-TS Hybrid; Burn provides visible subtitles in MPEG-TS.
+The editor must explain that distinction, and both output modes require decoded
+runtime proof with selected audio and preserved HLS subtitles.
 All other watermark, subtitle/audio and window acceptance remains unchanged.
 """
 evidence = """
@@ -7489,6 +7493,96 @@ The authorized local commit `feat(infra): complete Next provider subtitle projec
 advances pin and ledger together to b1ce607cea7265e09e9d9ed3a925a9a19eef983a.
 Twenty-nine rows are reconciled, 140 remain pending. Row 30 (d8955134) is next;
 UCU-02 full-window and supported-platform gates remain open. No push or hosted CI.
+
+
+2026-09-23 row 30 implementation in progress (d8955134; pin unchanged):
+The full eight-file diff also adds Next MPEG-TS Hybrid, beyond AMF/RKMPP in its
+title. Both hardware mappings and wire tests already exist; the shared hardware
+health check includes them and Next profiles. Upstream's documentation renderer
+patch changes no caller/settings behavior. The plan owns the full source map.
+App/infra normalization now preserves Next modes 4 and 5; editor SSR and initial
+script synchronization preserve stored Hybrid, with active engine switches still
+defaulting to Segmenter. Existing localized labels suffice. Three focused app/
+repository tests pass, covering create/update and supported/unsupported choices.
+IPTV dispatch now admits the existing HLS-to-TS wrapper and Hybrid redirects,
+retaining explicit HLS to avoid loops and rejecting accidental native legacy
+fallback. Both focused IPTV routing tests pass in 0.408 seconds after the first
+web test build. Independent Codex reviews find no concrete defects in the UI/
+persistence or dispatch changes. Real runtime/browser verification remains open.
+The Next smoke fixture now checks actual wrapper playback, selected Dutch audio
+and Burn glyphs; a separate Convert run requires unburned blue video and the
+Dutch cue through its HLS WebVTT rendition. Custom-media mode selection was
+corrected during review. Scoped app/infra/web/xtask Clippy, progress validation,
+architecture and hydration lint pass. Runtime smoke has started; browser proof
+and real playback outcomes remain pending. No row verdict or acceptance is yet
+claimed, and baseline/ledger/upstream checkout remain at row 29.
+
+
+Row 30 runtime finding: Burn passes real-host Next smoke, including H.264/AAC
+MPEG-TS, selected Dutch 879-Hz audio, 35 white subtitle pixels, HLS after wrapper
+disconnect, preview, idle removal and wrapper restart. Convert serves HLS media
+but produces a zero-byte MPEG-TS capture and reaches the unchanged deadline.
+An independent FFmpeg 9 reproduction uses identical three TS/VTT segment pairs:
+video-only live playlist succeeds; master plus WebVTT stalls at zero output.
+The exact upstream master without subtitle association also stalls. ENDLIST
+permits completion but emits no subtitle packets. This establishes the live
+WebVTT wrapper interaction rather than a general Next video/audio failure.
+Scoped history review through legacy ee038ba4 and Next 946aa528 finds no fix;
+later playlist/readiness corrections are already present and do not change the
+wrapper. Proposed ADR 0099 defines a concrete media-playlist input correction
+for Next Hybrid while retaining converted text on HLS and explaining Burn for
+MPEG-TS in localized UI. Its decision is pending; no workaround is implemented,
+no row verdict/pin advancement occurs, and the opacity exception is not reused.
+
+
+The maintainer explicitly accepted ADR 0099 and authorized implementation on
+2026-09-23. Next wrappers now target the existing authenticated session media
+playlist, retaining native wrapper URLs and stream copying. Localized editor
+help in all nine cultures explains Convert on HLS and Burn for MPEG-TS. Focused
+URL/command snapshots, real corrected playback and browser evidence are pending;
+this supersedes the pending-decision state above, not its recorded failure.
+
+
+ADR 0099 browser verification passes all four Chromium/Firefox cases with and
+without JavaScript (16.6 seconds), using one matched cargo-leptos SSR/WASM build
+started after the final code/translation edits. Hybrid survives reload and
+metadata-only save; Segmenter and engine switching remain correct. The localized
+help is visible for Next and hidden for native, with 375/1280-pixel layout checks.
+Independent source review confirms readiness precedes URL construction, both
+custom and built-in wrappers receive the corrected input, and tokens/activity,
+capacity and cleanup remain intact. Runtime correction and snapshot verification
+are still pending.
+
+
+Corrected Convert smoke passes on the official unmodified Next engine: H.264/AAC
+MPEG-TS, selected Dutch 881-Hz audio, zero white subtitle pixels and at least
+99-percent blue video, plus a positive Dutch WebVTT cue through the HLS master
+rendition. HLS remains playable after the TS client disconnects. Preview, both
+idle removals, wrapper restart and final cleanup pass within unchanged limits.
+Four focused wrapper/route tests pass in 0.416 seconds, including native URL
+preservation, Next tokens and the reviewed final command snapshot. The standalone
+cargo-insta executable was unavailable; the reviewed single snapshot was accepted
+through the existing Insta test runner, then rerun with normal assertions and no
+pending snapshot. AMF/RKMPP mapping evidence is reused from row 28's unchanged
+hardware_and_vaapi_driver_choices_survive_the_wire_mapping test.
+
+
+2026-09-23 row 30 final reconciliation (d8955134; Adapt under accepted ADR 0099):
+Corrected Burn smoke also passes: selected Dutch 880-Hz audio, 35 white subtitle
+pixels, H.264/AAC TS, HLS after disconnect, preview, idle cleanup and wrapper
+restart. Final scoped xtask/app/infra/web all-target Clippy passes. No timeout,
+retry, assertion or supported-platform acceptance was weakened. The focused
+seven app/repository/wrapper tests, four JS/no-JS browser cases, decoded runtime
+proof and independent substantive reviews cover this row. No new dependency or
+hardware health requirement is introduced; existing AMF/RKMPP mappings apply.
+The dedicated Next CI job now includes both Burn and Convert smoke; no hosted
+run is started before the authorized UCU-03 boundary. ADR 0099 stays Partial and
+its debt remains open for the agreed window gates, distinct from the corrected
+playback defect. The fresh fetch still matches all 169 ledger SHA/subjects.
+The authorized local commit `feat(web): support Next MPEG-TS hybrid playback`
+advances pin and ledger together to d8955134f15b3c66087886abc24274ffb3f1d2bb.
+Thirty rows are reconciled, 139 remain pending. Row 31 (290f991b) is next;
+UCU-02 remains In progress through its full local window gates. No push or CI.
 
 """
 

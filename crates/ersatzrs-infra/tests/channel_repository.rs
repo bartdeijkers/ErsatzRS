@@ -1041,6 +1041,20 @@ async fn channel_streaming_engine_editor_round_trip_normalizes_next_on_create_an
     let pool = common::test_db().await;
     let repos = make_repositories(pool.clone());
     seed_editor_dependencies(&pool, &repos).await;
+    for mode in [4, 1, 2] {
+        let mut candidate = editor_form(&format!("9{mode}"), "Next mode creation");
+        candidate.streaming_engine = 1;
+        candidate.streaming_mode = mode;
+        let saved = repos.channel.save_editor_form(candidate).await.unwrap();
+        assert!(saved.validation_errors.is_empty());
+        let created = repos
+            .channel
+            .get_editor_state(Some(saved.id))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(created.form.streaming_mode, 4);
+    }
     let mut form = editor_form("81", "Engine selection");
     form.streaming_engine = 1;
     form.streaming_mode = 5;
@@ -1056,7 +1070,7 @@ async fn channel_streaming_engine_editor_round_trip_normalizes_next_on_create_an
     );
     assert_eq!(
         loaded.streaming_mode,
-        ersatzrs_domain::StreamingMode::HttpLiveStreamingSegmenter
+        ersatzrs_domain::StreamingMode::TransportStreamHybrid
     );
     let mut form = repos
         .channel
@@ -1066,23 +1080,26 @@ async fn channel_streaming_engine_editor_round_trip_normalizes_next_on_create_an
         .unwrap()
         .form;
     assert_eq!(form.streaming_engine, 1);
-    assert_eq!(form.streaming_mode, 4);
+    assert_eq!(form.streaming_mode, 5);
     assert_eq!(form.preferred_audio_language_code.as_deref(), Some("nl"));
     assert_eq!(form.preferred_subtitle_language_code.as_deref(), Some("en"));
-    form.streaming_mode = 2;
-    let saved = repos.channel.save_editor_form(form).await.unwrap();
-    assert!(saved.validation_errors.is_empty());
-    let mut form = repos
-        .channel
-        .get_editor_state(Some(id))
-        .await
-        .unwrap()
-        .unwrap()
-        .form;
-    assert_eq!(
-        form.streaming_mode, 4,
-        "Next is normalized on update as well"
-    );
+    for mode in [4, 5, 1, 2] {
+        form.streaming_mode = mode;
+        let saved = repos.channel.save_editor_form(form).await.unwrap();
+        assert!(saved.validation_errors.is_empty());
+        form = repos
+            .channel
+            .get_editor_state(Some(id))
+            .await
+            .unwrap()
+            .unwrap()
+            .form;
+        assert_eq!(
+            form.streaming_mode,
+            if matches!(mode, 4 | 5) { mode } else { 4 },
+            "Next must preserve supported modes on update"
+        );
+    }
     form.streaming_engine = 0;
     form.streaming_mode = 5;
     let saved = repos.channel.save_editor_form(form).await.unwrap();

@@ -5521,7 +5521,7 @@ fn normalize_channel_form(
     mut form: ChannelEditorForm,
     state: &ChannelValidationState,
 ) -> ChannelEditorForm {
-    if form.streaming_engine == 1 {
+    if form.streaming_engine == 1 && !matches!(form.streaming_mode, 4 | 5) {
         form.streaming_mode = 4;
     }
     form.name = form.name.trim().to_owned();
@@ -10163,6 +10163,29 @@ mod tests {
     }
 
     #[test]
+    fn channel_next_normalization_preserves_both_supported_modes_and_native_choices() {
+        let state = channel_validation_state();
+        for engine in [0, 1] {
+            for mode in [0, 1, 2, 4, 5, 99] {
+                let form = normalize_channel_form(
+                    ChannelEditorForm {
+                        streaming_engine: engine,
+                        streaming_mode: mode,
+                        ..ChannelEditorForm::default()
+                    },
+                    &state,
+                );
+                let expected = if engine == 1 && !matches!(mode, 4 | 5) {
+                    4
+                } else {
+                    mode
+                };
+                assert_eq!(form.streaming_mode, expected, "engine={engine} mode={mode}");
+            }
+        }
+    }
+
+    #[test]
     fn channel_validation_and_normalization_are_application_owned() {
         let state = channel_validation_state();
         let form = normalize_channel_form(
@@ -10188,7 +10211,7 @@ mod tests {
         assert_eq!(form.name, "Existing");
         assert_eq!(form.group, "Group");
         assert_eq!(form.streaming_engine, 1);
-        assert_eq!(form.streaming_mode, 4);
+        assert_eq!(form.streaming_mode, 5);
         assert_eq!(form.playout_source, 0, "an existing playout wins");
         assert_eq!(form.mirror_source_channel_id, None);
         assert!(validate_channel_form(&form, &state).is_empty());

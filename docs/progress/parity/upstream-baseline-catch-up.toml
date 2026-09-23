@@ -2,13 +2,12 @@ feature    = 'Upstream ErsatzTV baseline catch-up'
 etv_source = '$ERSATZTV_SRC: 0d301df5..ee038ba4 (latest fetched target; refreshed each run)'
 rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
-adr        = ['0095', '0096', '0097', '0098']
+adr        = ['0095', '0096', '0097', '0098', '0099']
 summary    = """
-The ledger registers 169 commits: twenty-nine reconciled and 140 pending,
+The ledger registers 169 commits: thirty reconciled and 139 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
-Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
-links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
-and Docker startup have evidence in that milestone.
+Complete. UCU-01 local gates prove repository links, channel-only packaging,
+provenance, six-RID staging and Docker startup.
 
 UCU-02 is In progress. Rows 11-20 cover persisted optional-engine selection,
 retained native defaults, mode normalization and a localized SSR editor with
@@ -51,6 +50,8 @@ selection. Decoded geometry, fade/hidden intervals, joined timing, audio and
 subtitles pass; Dynamic timing and merged deco fallback have regression coverage.
 Row 28 proves pad/stretch/crop scaling. Row 29 proves authenticated provider
 Convert subtitles, excludes provider EIA-608 and places watermarks inside content.
+Row 30 adds Next Hybrid; accepted ADR 0099 keeps converted text on HLS.
+Decoded Burn/Convert and localized JS/no-JS editor persistence pass.
 The official Next RGB opacity bug is explicitly accepted pending upstream correction, with visible unresolved debt.
 Remote Stream/add-on and graphics integration belong to later rows and remain refused
 where unsupported. Full endpoint/platform/window acceptance remains open. ADR 0095 retains the
@@ -112,3 +113,11 @@ description = 'Official Next applies opacity before adding alpha to RGB watermar
 discovered  = '2026-09-23'
 resolved    = false
 evidence    = 'UCU-02 owns the row 26 checkpoint: 121 of 122 Next/audio tests and all eight selector tests pass; decoded 50-percent RGB watermark opacity fails. Independent FFmpeg bytes prove filter ordering is causal. Current public main and develop artifacts are still 946aa52. On 2026-09-23 the maintainer instructed us to ignore this defect and leave its correction to upstream. Keep the RGB fixture and recorded pixel diagnostic; assert geometry, disabled selection, subtitles and audio without claiming effective opacity parity.'
+
+[[debt]]
+id          = 'row-30-next-hybrid-convert-wrapper'
+description = 'Complete ADR 0099 Next Hybrid acceptance, including the UCU-02 window gates. The media-playlist correction restores MPEG-TS with Convert while retaining text on HLS; localized help explains Burn for MPEG-TS subtitles.'
+discovered  = '2026-09-23'
+resolved    = false
+adr         = '0099'
+evidence    = 'UCU-02 owns the original zero-byte master/WebVTT failure, independent reproduction and maintainer acceptance of ADR 0099. The corrected input passes real Burn and Convert MPEG-TS, selected Dutch audio, positive HLS WebVTT and lifecycle smoke. Four Chromium/Firefox JS/no-JS cases and wrapper command/route regressions pass. The debt remains open only for the agreed UCU-02 window gates.'

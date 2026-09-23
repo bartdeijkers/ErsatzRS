@@ -118,7 +118,10 @@ Row 28 (7869f165) is Covered: configured pad/stretch/crop output passes decoded
 production-host tests with selected subtitles/audio; mixed dependencies are audited.
 Row 29 (b1ce607c) is Port: provider Convert, EIA-608 eligibility and source-content
 watermark placement pass 167 focused tests including decoded Next playback.
-Next: review row 30 (d8955134), AMF/RKMPP acceleration. Full-window and
+Row 30 (d8955134) is Adapt under accepted ADR 0099: Next Hybrid persistence,
+routing, decoded Burn/Convert and localized editor checks pass. Converted text
+remains on HLS; Burn provides MPEG-TS subtitles.
+Next: review row 31 (290f991b), upstream release preparation. Full-window and
 supported-platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

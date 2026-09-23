@@ -342,8 +342,10 @@ jobs:
       - name: Next components and real-engine decoding
         run: |
           ./run.sh test -p ersatzrs-infra --lib --profile ci --run-ignored all -E 'test(next_engine::) and not test(fixture_child)' 2>&1 | tee ci-artifacts/next-engine/tests.log
-      - name: Next HTTP playback and preview
+      - name: Next HTTP playback, burned subtitles and preview
         run: cargo xtask smoke --next --hls-lifecycle --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke.log
+      - name: Next Hybrid playback with converted subtitles
+        run: cargo xtask smoke --next-convert --keep-temp 2>&1 | tee ci-artifacts/next-engine/smoke-convert.log
       - name: Collect Next diagnostics
         if: always()
         run: |

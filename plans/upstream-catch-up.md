@@ -458,6 +458,46 @@ unchanged. No schema, UI, translations or new runtime capability is introduced.
 Keep the accepted RGB-opacity limitation separate; no provider/geometry exemption.
 Record substantive review and new evidence in UCU-02 before pin advancement.
 
+## Row 30 source map: Next acceleration and MPEG-TS hybrid
+
+Upstream `d8955134` maps AMF/RKMPP acceleration and also admits Next channels
+in MPEG-TS Hybrid mode. Read the full eight-file diff rather than limiting scope
+to its title. Existing Rust configuration and wire tests already map both
+accelerators. The shared hardware health check includes both and checks Next
+channels; the Next runtime health check validates the same profile converter.
+The upstream Scalar patch changes the existing documentation renderer package,
+without changing API callers or settings. No Rust dependency change is implied.
+
+CreateChannelHandler/UpdateChannelHandler preserve Hybrid or Segmenter for Next;
+other modes normalize to Segmenter. Rust targets are app channel form normalization
+and infra channel editor persistence. No domain enum or schema change is needed.
+IptvController removes its blanket Next MPEG-TS rejection; trace the existing
+hybrid HLS-to-TS wrapper and its ownership/authentication before changing dispatch.
+Retain disabled-channel checks, selected audio/subtitles, admission and cleanup.
+
+UI source: ChannelEditor.razor's existing MudSelect gains one MPEG-TS option in
+the Next branch; layout, form columns and controls do not change. Rust's existing
+channel editor/select styles and all localized mode labels can be reused. SSR
+must retain saved Hybrid mode and expose only Hybrid/Segmenter for Next. The
+island's initialization must preserve saved values; an actual engine change
+retains upstream's Segmenter default. Both server-function and no-JS form paths
+must preserve supported mode choices. Browser proof covers Chromium/Firefox,
+save/reload, engine switches and unchanged subtitle settings; no shared CSS or
+island DOM restructuring is needed. Runtime proof must exercise actual Next
+MPEG-TS delivery and lifecycle, not infer it from working native Hybrid output.
+No row acceptance or pin advancement until implementation, review and focused
+checks pass. Window-wide gates remain separate.
+
+Runtime review found a live WebVTT master causes the FFmpeg copy wrapper to
+stall at zero MPEG-TS bytes; video-only input and Burn remain playable. Exact
+upstream playlist formatting reproduces the failure, and no later applicable
+fix was found. The maintainer accepted ADR 0099: Next wrappers use the existing
+authenticated session media playlist, while HLS masters retain selectable text.
+Localized editor help explains Burn for MPEG-TS subtitles. Native inputs and
+stream-copy options remain unchanged. Row 30 requires Adapt (ADR 0099), with
+corrected real Burn/Convert, command snapshot and JS/no-JS browser evidence
+before acceptance. Canonical diagnosis and outcomes belong to UCU-02.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
@@ -503,7 +543,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 27 | `91b029e4` | feat: overlay single intermittent watermarks using next engine (#2879) | Port | upstream-baseline-catch-up | `feat(infra): project intermittent Next watermarks` | ucu-02; wall-clock periodic timing, widened units, redacted invalid-timing rejection and unchanged Dynamic join timing. 31 focused tests include decoded visible/fade/hidden states with subtitle/audio preservation; scoped Clippy passes. See ucu-02 evidence. |
 | 28 | `7869f165` | feat: use configured scaling behavior with next engine (#2880) | Covered | upstream-baseline-catch-up | `test(infra): verify configured Next scaling output` | ucu-02; existing three-mode configuration confirmed by decoded production-host pad/stretch/crop with subtitle/audio preservation. Seven focused tests and scoped Clippy pass. Mixed dependency updates audited separately; no missing Rust hardware query or ABI bump required. See ucu-02 evidence. |
 | 29 | `b1ce607c` | feat: convert subtitles from media servers (#2882) | Port | upstream-baseline-catch-up | `feat(infra): complete Next provider subtitle projection` | ucu-02; provider EIA-608 eligibility, HTTP options and source-content watermarks. 167 focused tests including decoded authenticated provider Convert and geometry pass; scoped Clippy and substantive review pass. See ucu-02 evidence. |
-| 30 | `d8955134` | feat: use amf and rkmpp hw accel with next engine (#2883) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |
+| 30 | `d8955134` | feat: use amf and rkmpp hw accel with next engine (#2883) | Adapt (ADR 0099) | upstream-baseline-catch-up | `feat(web): support Next MPEG-TS hybrid playback` | ucu-02; existing AMF/RKMPP mapping retained. Hybrid persistence/routing plus accepted media-playlist wrapper fix preserve audio and HLS Convert text. Seven focused tests, four Chromium/Firefox cases, command snapshot, real Burn/Convert lifecycle smoke and scoped Clippy pass. See ucu-02 evidence; window gates remain open. |
 | 31 | `290f991b` | prep for release v26.5.0 [no ci] | | | | ucu-02; provisional: Upstream tooling candidate. |
 | 32 | `a1036430` | fix: clean up orphan actor and artwork records (#2885) | | | | ucu-03; provisional: Port candidate. |
 | 33 | `54779e07` | fix: pin nvencsharp lib to 2.0.0 for linux compatibility (#2887) | | | | ucu-03; provisional: Upstream tooling candidate. |

@@ -82,11 +82,13 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
     let show_in_epg = RwSignal::new(initial_form.show_in_epg);
     let streaming_engine = RwSignal::new(initial_form.streaming_engine);
     let next_engine_text_subtitle_mode = RwSignal::new(initial_form.next_engine_text_subtitle_mode);
-    let streaming_mode = RwSignal::new(if initial_form.streaming_engine == 1 {
-        4
-    } else {
-        initial_form.streaming_mode
-    });
+    let streaming_mode = RwSignal::new(
+        if initial_form.streaming_engine == 1 && !matches!(initial_form.streaming_mode, 4 | 5) {
+            4
+        } else {
+            initial_form.streaming_mode
+        },
+    );
     let ffmpeg_profile_id = RwSignal::new(initial_form.ffmpeg_profile_id);
     let slug_seconds = RwSignal::new(
         initial_form
@@ -297,7 +299,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                                 (1, tr(TextKey::SubtitleConvertIfPossible).to_owned()),
                             ]),
                             None,
-                            "",
+                            tr(TextKey::NextEngineTextSubtitleModeHelp),
                         )}
                     </div>
                     <div class=style::field>
@@ -310,8 +312,8 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                                 <option
                                     value=mode.to_string()
                                     selected=mode == streaming_mode.get_untracked()
-                                    disabled=streaming_engine.get_untracked() == 1 && mode != 4
-                                    hidden=streaming_engine.get_untracked() == 1 && mode != 4
+                                    disabled=streaming_engine.get_untracked() == 1 && !matches!(mode, 4 | 5)
+                                    hidden=streaming_engine.get_untracked() == 1 && !matches!(mode, 4 | 5)
                                 >
                                     {channel_streaming_mode_label(mode)}
                                 </option>
@@ -767,19 +769,19 @@ fn streaming_engine_dependency_script() -> &'static str {
   const engine = form.querySelector('select[name="streaming_engine"]');
   const mode = form.querySelector('select[name="streaming_mode"]');
   if (!engine || !mode) return;
-  const sync = () => {
+  const sync = (engineChanged = false) => {
     const next = engine.value === "1";
     const subtitles = form.querySelector("[data-next-subtitle-mode]");
     if (subtitles) subtitles.hidden = !next;
     for (const option of mode.options) {
-      option.disabled = next && option.value !== "4";
+      option.disabled = next && !["4", "5"].includes(option.value);
       option.hidden = option.disabled;
     }
-    if (next) mode.value = "4";
+    if (next && (engineChanged || !["4", "5"].includes(mode.value))) mode.value = "4";
     mode.dispatchEvent(new Event("change", { bubbles: true }));
   };
   sync();
-  engine.addEventListener("change", sync);
+  engine.addEventListener("change", () => sync(true));
 })();
 "#
 }
