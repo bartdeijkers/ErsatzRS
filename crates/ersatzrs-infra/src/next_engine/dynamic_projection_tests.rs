@@ -215,4 +215,16 @@ async fn watermark_changes_fence_dynamic_publication_without_discarding_subtitle
         .unwrap();
     assert_ne!(projected.identity.descriptor, changed.descriptor);
     assert_eq!(projected.identity.cache_key, changed.cache_key);
+
+    projected.projection.item.watermark.as_mut().unwrap().timing =
+        Some(super::super::protocol::WatermarkTiming::Periodic {
+            clock: super::super::protocol::PeriodicClock::Wall,
+            frequency_ms: 60_000,
+            hold_ms: 10_000,
+        });
+    let periodic = fingerprint(&pool, media, &projected.projection, &channel)
+        .await
+        .unwrap();
+    assert_ne!(changed.descriptor, periodic.descriptor);
+    assert_eq!(changed.cache_key, periodic.cache_key);
 }

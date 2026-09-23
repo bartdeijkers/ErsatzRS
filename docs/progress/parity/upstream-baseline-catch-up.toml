@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098']
 summary    = """
-The ledger registers 169 commits: twenty-six reconciled and 143 pending,
+The ledger registers 169 commits: twenty-seven reconciled and 142 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
 links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
@@ -49,9 +49,10 @@ pass focused runtime tests, eight Chromium/Firefox cases and native smoke.
 Row 25 (cd298820) is Port: rooted cache reuse is retained; blank saved paths
 now require repair, with SQL/cache-root and partial-extraction index regressions.
 A later upstream correction confirms preserving absolute input stream indices.
-Row 26 (e04a834e) is Port: single permanent watermarks share native selection
-and preserve geometry, disabled state, independent timing, audio and Dynamic Burn.
-Merged deco selection now survives fallback. The official Next RGB opacity bug
+Rows 26-27 port permanent and wall-clock intermittent watermarks through shared
+selection. Decoded geometry, fade/hidden intervals, joined timing, audio and
+subtitles pass; Dynamic timing and merged deco fallback have regression coverage.
+The official Next RGB opacity bug
 is explicitly accepted pending upstream correction, with visible unresolved debt.
 Remote
 Stream/add-on and graphics integration belong to later rows and remain refused

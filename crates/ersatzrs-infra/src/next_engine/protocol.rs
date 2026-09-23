@@ -165,10 +165,12 @@ pub struct PlayoutItem {
     pub watermark: Option<Watermark>,
 }
 
-/// A single permanent image/video overlay on the primary content.
+/// A single image/video overlay, always visible unless periodic timing is set.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Watermark {
     pub source: Source,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing: Option<WatermarkTiming>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_index: Option<u32>,
     pub location: WatermarkLocation,
@@ -180,6 +182,23 @@ pub struct Watermark {
     pub vertical_margin_percent: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub opacity_percent: Option<f64>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "timing_type", rename_all = "snake_case")]
+pub enum WatermarkTiming {
+    Periodic {
+        clock: PeriodicClock,
+        frequency_ms: u64,
+        hold_ms: u64,
+    },
+}
+
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PeriodicClock {
+    Wall,
+    Content,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

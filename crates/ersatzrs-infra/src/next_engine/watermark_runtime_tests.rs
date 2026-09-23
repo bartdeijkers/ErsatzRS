@@ -183,3 +183,6 @@ async fn real_next_watermark_size_position_dynamic_burn_and_disabled() {
         assert!(!output.exists());
     }
 }
+
+#[path = "intermittent_watermark_runtime_tests.rs"]
+mod intermittent_watermark_runtime_tests;

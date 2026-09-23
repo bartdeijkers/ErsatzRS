@@ -111,14 +111,9 @@ fn absent_and_disabled_selections_are_empty_but_unsupported_active_modes_fail() 
     assert!(project(&[disabled.clone()]).unwrap().is_none());
     assert!(project(&[disabled, selected()]).unwrap().is_some());
     assert!(project(&[selected(), selected()]).is_err());
-    for mode in [
-        ChannelWatermarkMode::Intermittent,
-        ChannelWatermarkMode::OpacityExpression,
-    ] {
-        let mut selection = selected();
-        selection.watermark.mode = mode;
-        assert!(project(&[selection]).is_err());
-    }
+    let mut selection = selected();
+    selection.watermark.mode = ChannelWatermarkMode::OpacityExpression;
+    assert!(project(&[selection]).is_err());
 }
 
 #[test]
@@ -134,4 +129,61 @@ fn old_playout_json_omits_watermark_and_http_watermark_wire_remains_supported() 
     assert!(matches!(watermark.source, protocol::Source::Http { .. }));
     assert!(watermark.width_percent.is_none());
     assert!(watermark.opacity_percent.is_none());
+}
+
+#[test]
+fn intermittent_timing_uses_wall_clock_and_preserves_next_defaults() {
+    let mut selection = selected();
+    selection.watermark.mode = ChannelWatermarkMode::Intermittent;
+    selection.watermark.frequency_minutes = 5;
+    selection.watermark.duration_seconds = 30;
+    let projected = project(&[selection]).unwrap().unwrap();
+    let value = serde_json::to_value(projected).unwrap();
+    assert_eq!(
+        value["timing"],
+        json!({
+            "timing_type": "periodic", "clock": "wall",
+            "frequency_ms": 300_000, "hold_ms": 30_000
+        })
+    );
+    let decoded: protocol::Watermark = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), value);
+}
+
+#[test]
+fn intermittent_timing_rejects_unintended_permanent_output_and_widens_units() {
+    for (minutes, seconds) in [(-1, 10), (0, 10), (1, -1), (1, 0), (1, 59), (1, 60)] {
+        let mut selection = selected();
+        selection.watermark.mode = ChannelWatermarkMode::Intermittent;
+        selection.watermark.frequency_minutes = minutes;
+        selection.watermark.duration_seconds = seconds;
+        assert_eq!(
+            project(&[selection]).err().unwrap().to_string(),
+            unavailable().to_string()
+        );
+    }
+    for (minutes, seconds) in [(1, 1), (1, 58), (i32::MAX, i32::MAX)] {
+        let mut selection = selected();
+        selection.watermark.mode = ChannelWatermarkMode::Intermittent;
+        selection.watermark.frequency_minutes = minutes;
+        selection.watermark.duration_seconds = seconds;
+        let value = serde_json::to_value(project(&[selection]).unwrap().unwrap()).unwrap();
+        assert_eq!(
+            value["timing"]["frequency_ms"],
+            u64::try_from(minutes).unwrap() * 60_000
+        );
+        assert_eq!(
+            value["timing"]["hold_ms"],
+            u64::try_from(seconds).unwrap() * 1_000
+        );
+    }
+    let mut permanent = selected();
+    permanent.watermark.frequency_minutes = -1;
+    permanent.watermark.duration_seconds = -1;
+    assert!(
+        serde_json::to_value(project(&[permanent]).unwrap().unwrap())
+            .unwrap()
+            .get("timing")
+            .is_none()
+    );
 }

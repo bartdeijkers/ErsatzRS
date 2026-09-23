@@ -15,11 +15,14 @@ release section when tagging a release.
 
 ### Added
 
-- Display one permanent watermark with the optional Next engine, preserving
-  selected placement, actual or scaled size and margins, and forwarding configured
+- Display one permanent or intermittent watermark with the optional Next engine,
+  preserving selected placement, actual or scaled size and margins, and forwarding configured
   opacity (upstream PR #2878), including demand-time embedded subtitle Burn.
   Next currently renders RGB images without an alpha channel fully opaque;
   this accepted upstream limitation awaits a future Next fix.
+  Intermittent overlays follow wall-clock cycles with the configured visible
+  duration and Next's default one-second fades (upstream PR #2879); invalid
+  timing is rejected instead of becoming a permanent overlay.
 
 ### Changed
 

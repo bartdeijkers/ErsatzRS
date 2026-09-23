@@ -217,4 +217,14 @@ fn joining_programme_does_not_seek_the_independent_watermark() {
         serde_json::to_value(&resolved.tracks).unwrap(),
         serde_json::to_value(&original.tracks).unwrap()
     );
+
+    original.watermark.as_mut().unwrap().timing =
+        Some(super::super::protocol::WatermarkTiming::Periodic {
+            clock: super::super::protocol::PeriodicClock::Wall,
+            frequency_ms: 60_000,
+            hold_ms: 10_000,
+        });
+    let expected = serde_json::to_value(&original.watermark).unwrap();
+    let resolved = resolve_at(&original, original.start + Duration::seconds(15)).unwrap();
+    assert_eq!(serde_json::to_value(&resolved.watermark).unwrap(), expected);
 }

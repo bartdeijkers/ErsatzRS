@@ -112,7 +112,9 @@ Row 26 (e04a834e) is Port: single permanent Next watermark placement/size,
 Dynamic Burn and disabled selection pass decoded playback with retained audio.
 The upstream RGB opacity defect is explicitly accepted pending a future Next fix;
 no local patch or normalization is requested. Shared Merge selection is repaired.
-Next: review row 27 (91b029e4), intermittent Next watermarks. Full-window and
+Row 27 (91b029e4) is Port: intermittent Next watermarks preserve wall-clock
+cycles, default fades and joined visibility, with subtitle/audio decoding proof.
+Next: review row 28 (7869f165), configured Next scaling behavior. Full-window and
 supported-platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

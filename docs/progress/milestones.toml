@@ -7392,6 +7392,38 @@ with the authorized local commit `feat(infra): project permanent Next watermarks
 Twenty-six rows are reconciled, 143 remain pending. Row 27 (91b029e4) is next.
 UCU-02 full-window/platform gates remain open; no push or hosted CI is performed.
 
+
+2026-09-23 row 27 reconciliation (91b029e4; Port):
+Fresh fetch retains ee038ba4; all 169 ledger SHA/subjects match upstream history.
+Read the complete two-file diff and the packaged Next timing/fade implementation.
+Single intermittent watermarks now project periodic Wall timing, widening i32
+minutes/seconds before conversion to u64 milliseconds. Phase, cap and fade remain
+omitted, preserving Next defaults of zero phase, no cap and one-second fades.
+Reject negative values, hold shorter than fade and cycles shorter than both fades
+plus hold with redacted errors: Next otherwise silently emits a permanent overlay.
+Permanent output remains byte-shape compatible and ignores unused timing fields.
+Dynamic joins retain the unchanged clock/timing; timing edits invalidate the
+publication descriptor without discarding the subtitle extraction cache.
+All 31 focused protocol/watermark/Dynamic/native-helper tests pass in 3.662 seconds.
+The real Next regression publishes production-selected media/watermark JSON and
+uses deterministic virtual starts with a programme beginning at the prior minute's
+second 50. Decoded frames at wall seconds 1.5, 11.5 and 20.5 prove fully visible,
+default fade-out and hidden states respectively, distinguishing wall timing from
+programme-relative or restart-on-join cycles. Every case also verifies burned
+subtitle glyphs and the selected Dutch 880-Hz audio. The permanent/Dynamic/disabled
+watermark runtime regression passes again. This proves production projection and
+real-engine joined timing; it does not claim a new web-host clock-acquisition test.
+Scoped infra all-target Clippy passes. Two independent read-only Codex reviews
+find no remaining mapping or runtime-fixture defect. Row-26 native MPEG-TS/HLS
+smoke and shared-selector SQL evidence remain valid: native argv builders,
+selection, routes and channel notification/preview forwarding did not change.
+No schema, dependencies, UI or runtime-health requirements changed. The accepted
+upstream RGB-opacity limitation remains separate; fade/visibility was not waived.
+The authorized local commit `feat(infra): project intermittent Next watermarks`
+advances pin and ledger together to 91b029e429b233b1f2c77e84ee6f100679686a98.
+Twenty-seven rows are reconciled, 142 remain pending. Row 28 (7869f165) is next;
+UCU-02 full-window and supported-platform gates remain open. No push or hosted CI.
+
 """
 
 [[milestone]]

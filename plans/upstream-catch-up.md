@@ -367,6 +367,33 @@ a local patch/normalization layer. Geometry, disabled selection, audio/subtitle
 proof and all other gates remain required. UCU-02 and the upstream-opacity debt
 own the failure evidence and this explicit acceptance exception.
 
+## Row 27 source map: intermittent Next watermarks
+
+Upstream `91b029e4` changes only SyncNextPlayoutHandler and its generated Next
+wire model. Exactly one intermittent watermark joins the existing permanent
+case. Project periodic timing with the wall clock, minutes converted to milliseconds
+and fully visible hold seconds converted to milliseconds. Omit phase offset,
+appearance cap and fade duration; Next defaults these to zero, unbounded and
+one second. Wall cycles use epoch boundaries, independent of item start, source
+seek or Dynamic callback join time. Existing selection and image handling remain.
+
+Rust targets: `next_engine/protocol.rs`, `watermark.rs`, focused projection and
+Dynamic regressions, and decoded real-engine intermittent visibility proof.
+Widen persisted i32 durations before multiplying. Reject negative or invalid
+fade/hold/frequency combinations with redacted errors: current Next otherwise
+returns no fade filters and displays a permanent overlay. Permanent watermarks
+retain their omitted timing field and do not validate unused intermittent fields.
+No schema, editor, translations or native FFmpeg argv builder changes are needed;
+existing runtime/profile health requirements remain. Multiple layers and opacity
+expressions belong to later rows. The explicitly accepted upstream RGB-opacity
+limitation remains; intermittent visibility/fading is not exempted.
+
+Required proof: exact wall-clock JSON/default omissions, large/invalid durations,
+unchanged permanent output, unchanged periodic timing on programme joins and
+publication identity changes, plus decoded visible/off behavior with retained
+subtitle/audio selection. Reuse unchanged row-26 native smoke and selector proof;
+record new runtime evidence and substantive review in UCU-02 before pin advance.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
@@ -409,7 +436,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 24 | `1b5d6af7` | feat: convert text subtitles using next engine (#2869) | Port | upstream-baseline-catch-up | `feat(infra): prepare Next embedded text on demand` | ucu-02; persisted Burn/Convert, bounded version-bound embedded Burn, authenticated WebVTT and preview captions. 133 focused tests, eight Chromium/Firefox cases and native MPEG-TS/HLS smoke pass. See ucu-02 evidence. |
 | 25 | `cd298820` | fix: don't extract embedded subtitles that have already been extracted (#2873) | Port | upstream-baseline-catch-up | `fix(infra): repair blank subtitle cache references` | ucu-02; rooted cache reuse already covered; NULL/blank/whitespace path repair and partial-extraction absolute-index regression verified. Later source confirms the pending-only ordinal bug. See ucu-02 evidence. |
 | 26 | `e04a834e` | feat: overlay single permanent watermarks using next engine (#2878) | Port | upstream-baseline-catch-up | `feat(infra): project permanent Next watermarks` | ucu-02; nine anchors, size/margins, shared Merge selection, independent watermark timeline and Dynamic Burn. Focused tests and native smoke pass. Official Next RGB opacity defect is explicitly accepted pending upstream correction; no local workaround. See ucu-02 evidence. |
-| 27 | `91b029e4` | feat: overlay single intermittent watermarks using next engine (#2879) | | | | ucu-02; provisional: Next behavior triage. |
+| 27 | `91b029e4` | feat: overlay single intermittent watermarks using next engine (#2879) | Port | upstream-baseline-catch-up | `feat(infra): project intermittent Next watermarks` | ucu-02; wall-clock periodic timing, widened units, redacted invalid-timing rejection and unchanged Dynamic join timing. 31 focused tests include decoded visible/fade/hidden states with subtitle/audio preservation; scoped Clippy passes. See ucu-02 evidence. |
 | 28 | `7869f165` | feat: use configured scaling behavior with next engine (#2880) | | | | ucu-02; provisional: Next behavior triage. |
 | 29 | `b1ce607c` | feat: convert subtitles from media servers (#2882) | | | | ucu-02; provisional: Next behavior triage. |
 | 30 | `d8955134` | feat: use amf and rkmpp hw accel with next engine (#2883) | | | | ucu-02; provisional: Next integration candidate under Accepted ADR 0095. |

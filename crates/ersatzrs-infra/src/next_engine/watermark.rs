@@ -1,4 +1,4 @@
-//! Row26's single permanent watermark projection from the shared selector.
+//! Single permanent or intermittent watermark projection from the shared selector.
 
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{ChannelWatermarkMode, WatermarkLocation, WatermarkSize};
@@ -20,7 +20,12 @@ pub(super) fn project(
     let Some(selected) = active.next() else {
         return Ok(None);
     };
-    if active.next().is_some() || selected.watermark.mode != ChannelWatermarkMode::Permanent {
+    if active.next().is_some()
+        || !matches!(
+            selected.watermark.mode,
+            ChannelWatermarkMode::Permanent | ChannelWatermarkMode::Intermittent
+        )
+    {
         return Err(unavailable());
     }
     let watermark = &selected.watermark;
@@ -34,6 +39,7 @@ pub(super) fn project(
         WatermarkSize::ActualSize => None,
     };
     Ok(Some(protocol::Watermark {
+        timing: timing(watermark)?,
         source: protocol::Source::Local {
             path: path.to_owned(),
             in_point_ms: None,
@@ -55,6 +61,28 @@ pub(super) fn project(
         horizontal_margin_percent: Some(percent(watermark.horizontal_margin_percent)?),
         vertical_margin_percent: Some(percent(watermark.vertical_margin_percent)?),
         opacity_percent: Some(percent(f64::from(watermark.opacity))?),
+    }))
+}
+
+fn timing(
+    watermark: &ersatzrs_domain::ChannelWatermark,
+) -> Result<Option<protocol::WatermarkTiming>> {
+    if watermark.mode != ChannelWatermarkMode::Intermittent {
+        return Ok(None);
+    }
+    // Widen before multiplication: persisted i32 minutes/seconds can exceed
+    // i32 milliseconds. Next's omitted fade duration defaults to one second.
+    let frequency_ms =
+        u64::try_from(watermark.frequency_minutes).map_err(|_| unavailable())? * 60_000;
+    let hold_ms = u64::try_from(watermark.duration_seconds).map_err(|_| unavailable())? * 1_000;
+    if hold_ms < 1_000 || hold_ms + 2_000 > frequency_ms {
+        // Next emits no fade filters for invalid timing, making it permanent.
+        return Err(unavailable());
+    }
+    Ok(Some(protocol::WatermarkTiming::Periodic {
+        clock: protocol::PeriodicClock::Wall,
+        frequency_ms,
+        hold_ms,
     }))
 }
 
