@@ -63,7 +63,7 @@ fn config_uses_upstream_lowercase_codecs_and_optional_acceleration() {
             "audio": {
                 "format": "ac3", "bitrate_kbps": 192, "buffer_kbps": 384,
                 "channels": 2, "sample_rate_hz": 48000, "normalize_loudness": true,
-                "loudness": {"integrated_target": -16.0, "range_target": null, "true_peak": null}
+                "loudness": {"integrated_target": -16.0}
             },
             "video": {
                 "format": "hevc", "bit_depth": 10, "width": 1920, "height": 1080,
@@ -74,7 +74,7 @@ fn config_uses_upstream_lowercase_codecs_and_optional_acceleration() {
                     "tonemap": {"tonemap": "linear"},
                     "tonemap_opencl": {"tonemap": "linear"}
                 },
-                "vaapi_device": null, "vaapi_driver": "ihd"
+                "vaapi_driver": "ihd"
             }
         }
     });

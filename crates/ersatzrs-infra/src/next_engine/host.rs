@@ -35,6 +35,7 @@ pub struct NextHost {
     pub(super) pool: DbPool,
     pub(super) locker: EntityLocker,
     root: PathBuf,
+    config_overlays: Option<PathBuf>,
     publishers: Mutex<HashMap<i64, ChannelPublisher>>,
     pub(super) dynamic_contexts: Mutex<HashMap<String, DynamicContext>>,
     pub(super) burn_cache: super::burn_cache::BurnCache,
@@ -92,9 +93,18 @@ impl NextHost {
             locker,
             burn_cache: super::burn_cache::BurnCache::new(root.join("burn-subtitles")),
             root,
+            config_overlays: None,
             dynamic_contexts: Mutex::new(HashMap::new()),
             publishers: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Use operator-managed overlays after the generated profile configuration.
+    /// Tests can omit this setting to remain isolated from user configuration.
+    #[must_use]
+    pub fn with_config_overlays(mut self, folder: PathBuf) -> Self {
+        self.config_overlays = Some(folder);
+        self
     }
 
     async fn configuration(
@@ -193,11 +203,12 @@ impl NextHost {
                     session.set_admission(HlsAdmissionStatus::AtCapacity);
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
-                NextProcess::start(
+                NextProcess::start_with_overlays(
                     &request.executable,
                     &request.number,
                     &request.output,
                     &config,
+                    host.config_overlays.as_deref(),
                     request.deadline,
                 )
                 .await

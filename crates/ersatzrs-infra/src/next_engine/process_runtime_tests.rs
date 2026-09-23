@@ -817,3 +817,180 @@ mod text_subtitle_runtime_tests;
 
 #[path = "scaling_runtime_tests.rs"]
 mod scaling_runtime_tests;
+
+#[tokio::test]
+#[ignore = "requires the real Next executable and FFmpeg 9; see module environment contract"]
+async fn real_next_config_overlays_override_dimensions_and_preserve_selected_tracks() {
+    let binary = runtime_path("ERSATZRS_NEXT_TEST_BIN");
+    let ffmpeg = runtime_path("ERSATZRS_NEXT_TEST_FFMPEG");
+    let ffprobe = runtime_path("ERSATZRS_NEXT_TEST_FFPROBE");
+    let root = tempfile::tempdir().unwrap();
+    let clip = root.path().join("fixture.mkv");
+    generate_clip(&ffmpeg, &clip).await;
+    std::fs::write(
+        root.path().join("fixture.nl.srt"),
+        "1\n00:00:00,000 --> 00:01:00,000\nNext subtitle proof\n",
+    )
+    .unwrap();
+    let overlays = root.path().join("overlay files");
+    std::fs::create_dir(&overlays).unwrap();
+    std::fs::write(
+        overlays.join("default.json"),
+        br#"{"normalization":{"video":{"width":352}}}"#,
+    )
+    .unwrap();
+    let profile = FFmpegProfile {
+        video_format: FFmpegProfileVideoFormat::H264,
+        audio_format: FFmpegProfileAudioFormat::Aac,
+        video_bitrate: 1000,
+        video_buffer_size: 2000,
+        audio_sample_rate: 48,
+        audio_channels: 1,
+        ..Default::default()
+    };
+    let (pool, locker) = prepare_schedule(&clip, false, &profile).await;
+    let host = std::sync::Arc::new(
+        host::NextHost::new(pool, locker, root.path().join("playout"))
+            .with_config_overlays(overlays.clone()),
+    );
+    let request = host::NextStart {
+        channel_id: 1,
+        preview: false,
+        number: "1".into(),
+        executable: binary.clone(),
+        output: root.path().join("output"),
+        ffmpeg: ffmpeg.clone(),
+        ffprobe: ffprobe.clone(),
+        replacements: Vec::new(),
+        idle_timeout: None,
+        deadline: Instant::now() + Duration::from_secs(30),
+    };
+    for expected_width in [352, 384] {
+        if expected_width == 384 {
+            std::fs::write(
+                overlays.join("1.json"),
+                br#"{"normalization":{"video":{"width":384}}}"#,
+            )
+            .unwrap();
+        }
+        let mut request = request.clone();
+        request.deadline = Instant::now() + Duration::from_secs(30);
+        assert_overlay_session(&host, request, expected_width).await;
+    }
+
+    // The engine owns parsing/merging; malformed JSON must fail before readiness
+    // and the adapter must return only after its managed child has been reaped.
+    let invalid_output = root.path().join("invalid-output");
+    let config = super::super::config::channel_config(
+        &PlaybackProfile {
+            profile,
+            resolution: Resolution {
+                width: 320,
+                height: 180,
+                ..Default::default()
+            },
+        },
+        ersatzrs_domain::NextEngineTextSubtitleMode::Burn,
+        &root.path().join("playout/1"),
+        &ffmpeg,
+        &ffprobe,
+    )
+    .unwrap();
+    let mut valid = NextProcess::start_with_overlays(
+        &binary,
+        "1",
+        &invalid_output,
+        &config,
+        Some(&overlays),
+        Instant::now() + Duration::from_secs(30),
+    )
+    .await
+    .unwrap();
+    valid.stop().await.unwrap();
+    std::fs::write(overlays.join("1.json"), b"{ malformed overlay").unwrap();
+    let result = NextProcess::start_with_overlays(
+        &binary,
+        "1",
+        &invalid_output,
+        &config,
+        Some(&overlays),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await;
+    assert!(matches!(result, Err(ProcessError::ExitedBeforeReady(Some(code))) if code != 0));
+    assert!(!invalid_output.join(".ready").exists());
+}
+
+async fn assert_overlay_session(
+    host: &std::sync::Arc<host::NextHost>,
+    request: host::NextStart,
+    expected_width: usize,
+) {
+    let registry = std::sync::Arc::new(crate::hls::InMemoryHlsSessionRegistry::new());
+    let task = host.start(registry.clone(), request.clone()).await.unwrap();
+    let handle = registry.try_get("1").await.unwrap();
+    timeout(Duration::from_secs(30), async {
+        loop {
+            match handle.startup_readiness() {
+                HlsStartupReadiness::Ready => break,
+                HlsStartupReadiness::Failed => panic!("Next overlay session startup failed"),
+                _ => tokio::time::sleep(Duration::from_millis(10)).await,
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let playlist = handle.trim_playlist().await.unwrap();
+    let segment = playlist
+        .lines()
+        .find(|line| {
+            !line.starts_with('#')
+                && Path::new(line)
+                    .extension()
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("ts"))
+        })
+        .expect("Next must publish an MPEG-TS segment");
+    let segment = request.output.join(segment);
+    let mut probe = Command::new(&request.ffprobe);
+    probe
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_streams",
+            "-of",
+            "json",
+        ])
+        .arg(&segment);
+    let info: serde_json::Value = serde_json::from_slice(&tool(probe).await).unwrap();
+    assert_eq!(info["streams"][0]["width"], expected_width);
+    assert_eq!(info["streams"][0]["height"], 180);
+    let mut decode = Command::new(&request.ffmpeg);
+    decode
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(&segment)
+        .args([
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-pix_fmt",
+            "gray",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]);
+    assert_eq!(
+        tool(decode).await.len(),
+        expected_width * 180,
+        "decoded overlay dimensions"
+    );
+    // Height remains 180, so the existing crop still covers the subtitle's
+    // bottom-center glyphs at either width. Reuse the exact audio/glyph gates.
+    assert_audio_and_subtitle(&request.ffmpeg, &request.ffprobe, &segment, false, "aac").await;
+    assert!(registry.stop_channel("1").await);
+    task.await.unwrap();
+    assert!(!request.output.exists());
+    assert!(registry.try_get("1").await.is_none());
+}

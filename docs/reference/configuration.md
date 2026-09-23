@@ -226,3 +226,46 @@ Treat these values as secrets:
 Do not commit them, paste them into issue reports, or include them in
 screenshots. The troubleshooting export redacts recognized secret-bearing
 configuration, but review diagnostics before sharing them.
+
+## Next channel configuration overlays
+
+For channels using the optional Next engine, ErsatzRS passes generated profile
+configuration first, then existing JSON overlay files in this order:
+
+1. `next/channel-config-overlays/default.json` applies to every Next channel.
+2. `next/channel-config-overlays/{channel_number}.json` applies to that channel
+   number, for example `12.1.json`. Preview uses the same channel number.
+
+The directory is under the application data root (`ERSATZRS_APP_DATA_DIR` when
+set, otherwise the platform's local data directory followed by `ErsatzRS`).
+Startup creates the directory without replacing operator files. It is separate
+from disposable session output and generated playouts.
+
+Next merges the files in order, so channel settings override defaults, which
+override the FFmpeg profile. Relative paths in an overlay are resolved by Next
+against that file's directory. Consult the channel configuration schema shipped
+with your Next version for available fields. For example, this default overlay
+sets the software deinterlacer's mode:
+
+```json
+{
+  "normalization": {
+    "video": {
+      "filters": { "bwdif": { "mode": "send_frame" } }
+    }
+  }
+}
+```
+
+Changes take effect when the next engine session starts, including after an idle
+session has stopped. Existing sessions are not restarted by editing a file.
+Malformed configuration causes Next startup to fail; it is not silently ignored.
+Missing files leave profile settings unchanged. Native-engine channels do not
+read these overlays. Subtitle and audio overrides are explicit operator choices;
+omit those fields to preserve the channel's selections.
+
+The Next runtime health check inspects active overlay files for readability and
+JSON-object syntax. Inspection is limited to 1 MiB per file and five seconds in
+total; exceeding those limits reports incomplete validation, not an engine
+configuration limit. Next remains responsible for schema validation and the
+merged configuration at session startup.

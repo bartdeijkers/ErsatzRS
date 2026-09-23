@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-23): `e8b7bb638831548e85a78992ba1b3b0ebf982aea`
   — fix: amd vaapi accel when driver is set to default (#3036).
-- Ledger: **170 commits**, **135 pending**. The original plan covered 152 through
+- Ledger: **170 commits**, **134 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -16,9 +16,9 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **35**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **36**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. Next: UCU-04, continuing with row 36.
+  green CI on pushed candidate `8f722099`. Next: UCU-04, continuing with row 37.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -28,6 +28,32 @@
 - [ADR 0095](../docs/adr/0095-native-pipeline-instead-of-ersatztv-next-engine.md)
   is Accepted for Next as an optional second engine alongside the native
   pipeline. The rejected native-only proposal cannot justify exclusions.
+
+## Row 36 source map: Next channel configuration overlays
+
+Upstream `64296597` (PR #2891) adds operator overlay discovery in
+`NextSessionWorker`, the application-data directory/bootstrap, nullable JSON
+omission, and profile deinterlace/per-filter tonemap mapping. It changes no
+schema, admin editor, validator or upstream tests.
+
+- Outcome: apply generated profile, optional `default.json`, then optional
+  `{channel_number}.json` from `next/channel-config-overlays`, for normal and
+  preview Next sessions. Native-engine channels are unaffected.
+- Mapping: `file_system_layout`, web bootstrap/state, and the infrastructure
+  Next host/process adapter. Preserve the real channel number rather than the
+  preview capacity key. Keep operator files outside cleared output folders.
+- Existing coverage: all six tonemap mappings and deinterlacing are already
+  represented in `next_engine/config.rs` and its focused tests.
+- Merge ownership: pass JSON file arguments directly to Next; it resolves
+  relative paths per file and merges in order. Do not duplicate its schema or
+  merge algorithm. Omit unset generated optional values, matching upstream.
+- Acceptance: argv order/optional files/decimal channels/path safety/deadline
+  tests, actual process stdin/exit cleanup, official Next merge and invalid-JSON
+  proof, decoded playback with selected audio/subtitles, truthful existing
+  runtime health, focused infra/web checks and substantive review.
+- Exclusions: no new admin controls, live file watcher, automatic restart,
+  runtime dependency or graphics-opacity workaround. Window acceptance and
+  exact-SHA CI remain owned by UCU-04; row acceptance is recorded in its evidence.
 
 ## Row 32 source map: orphan metadata maintenance
 
@@ -587,7 +613,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 33 | `54779e07` | fix: pin nvencsharp lib to 2.0.0 for linux compatibility (#2887) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream NVENC wrapper pin` | ucu-03; only the .NET NvEncSharp package version changes. Native platform-guarded NVIDIA loading does not consume this dependency; no Rust or ABI change. See milestone review. |
 | 34 | `637e6be8` | prep for release v26.5.1 [no ci] | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream May patch release notes` | ucu-03; release heading, comparison links and description of the already reviewed NVIDIA wrapper pin. All window rows reconciled; local window gates and first consolidated exact-SHA CI remain open. |
 | 35 | `0fc7ebb0` | fix: use jwt in hls direct playlist (#2889) | Covered | upstream-baseline-catch-up | `docs(porting): verify existing HLS Direct JWT propagation` | ucu-04; existing HlsQuery/AccessToken plumbing covers all seven raw media URLs, stable variant and segment URLs, including blank tokens. Thirteen relevant tests pass in green CI 35880721503 at unchanged source 8f722099; substantive Codex review agrees. NvEncSharp 2.1.1 is upstream-only tooling; no new hardware or JWT-enabled end-to-end playback claim. |
-| 36 | `64296597` | feat: add channel config overlays for next engine (#2891) | | | | ucu-04; provisional: Next behavior triage. |
+| 36 | `64296597` | feat: add channel config overlays for next engine (#2891) | Port | upstream-baseline-catch-up | `feat(infra): apply Next channel configuration overlays` | ucu-04; ordered profile/default/channel overlays, startup directory, null omission and localized bounded health inspection. Existing deinterlace/tonemap mapping retained. 122 Next tests including decoded overlay playback, four health tests, all-culture localization, scoped Clippy, Burn/Convert HTTP smoke and substantive review pass. Window gates remain open. |
 | 37 | `fecce92e` | fix: use configured ffmpeg with all graphics elements (#2892) | | | | ucu-04; provisional: Port candidate. |
 | 38 | `41bf22eb` | chore: dependency updates (#2893) | | | | ucu-04; provisional: Upstream tooling candidate. |
 | 39 | `7c4a5e3a` | feat: support remote streams with next engine (#2899) | | | | ucu-04; provisional: Next behavior triage. |

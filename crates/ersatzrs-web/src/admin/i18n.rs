@@ -1355,6 +1355,9 @@ pub enum TextKey {
     AddonListsCombinedDiskWarningGb,
     AddonListDiskWarningHelp,
     AddonListDiskWarningFailed,
+    NextRuntimeAvailability,
+    NextOverlayInvalid,
+    NextOverlayIncomplete,
     JavascriptAudioSelectionTitle,
     JavascriptAudioSelectionHealthy,
     JavascriptAudioSelectionFailures,
@@ -3335,6 +3338,9 @@ pub const ALL_TEXT_KEYS: &[TextKey] = &[
     TextKey::AddonListsCombinedDiskWarningGb,
     TextKey::AddonListDiskWarningHelp,
     TextKey::AddonListDiskWarningFailed,
+    TextKey::NextRuntimeAvailability,
+    TextKey::NextOverlayInvalid,
+    TextKey::NextOverlayIncomplete,
     TextKey::JavascriptAudioSelectionTitle,
     TextKey::JavascriptAudioSelectionHealthy,
     TextKey::JavascriptAudioSelectionFailures,
@@ -4507,6 +4513,7 @@ pub fn health_check_title_text(language: UiLanguage, title: &str) -> String {
         ARTWORK_CARDINALITY_TITLE => text(language, TextKey::ArtworkCardinality).to_owned(),
         HLS_LIVE_DELIVERY_TITLE => text(language, TextKey::HlsLiveDelivery).to_owned(),
         ADDONS_HEALTH_TITLE => text(language, TextKey::Addons).to_owned(),
+        "Next Runtime Availability" => text(language, TextKey::NextRuntimeAvailability).to_owned(),
         "JavaScript Audio Selection" => {
             text(language, TextKey::JavascriptAudioSelectionTitle).to_owned()
         }
@@ -4688,6 +4695,20 @@ pub fn health_check_message_text(
     } else {
         message
     };
+    if title == "Next Runtime Availability" {
+        let key = match displayed_message {
+            "Next configuration overlay is unavailable or invalid" => {
+                Some(TextKey::NextOverlayInvalid)
+            }
+            "Next configuration overlay validation is incomplete" => {
+                Some(TextKey::NextOverlayIncomplete)
+            }
+            _ => None,
+        };
+        if let Some(key) = key {
+            return text(language, key).to_owned();
+        }
+    }
     if title == "JavaScript Audio Selection" {
         return javascript_audio_health_message(language, displayed_message, brief_message);
     }
@@ -5429,6 +5450,47 @@ mod tests {
                             text(UiLanguage::English, TextKey::AddonToolCleanupHelp)
                         );
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn next_overlay_health_is_localized_for_every_language() {
+        for definition in crate::admin::languages::LANGUAGES {
+            let language = UiLanguage::from_config(definition.code);
+            let title = "Next Runtime Availability";
+            assert_eq!(
+                health_check_title_text(language, title),
+                text(language, TextKey::NextRuntimeAvailability)
+            );
+            for (message, key) in [
+                (
+                    "Next configuration overlay is unavailable or invalid",
+                    TextKey::NextOverlayInvalid,
+                ),
+                (
+                    "Next configuration overlay validation is incomplete",
+                    TextKey::NextOverlayIncomplete,
+                ),
+            ] {
+                assert_eq!(
+                    health_check_message_text(language, title, message, message),
+                    text(language, key)
+                );
+                assert_eq!(
+                    health_check_message_text(language, title, "", message),
+                    text(language, key)
+                );
+            }
+            for key in [
+                TextKey::NextRuntimeAvailability,
+                TextKey::NextOverlayInvalid,
+                TextKey::NextOverlayIncomplete,
+            ] {
+                assert!(!text(language, key).is_empty());
+                if language != UiLanguage::English {
+                    assert_ne!(text(language, key), text(UiLanguage::English, key));
                 }
             }
         }

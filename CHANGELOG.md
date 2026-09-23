@@ -15,6 +15,12 @@ release section when tagging a release.
 
 ### Added
 
+- Apply optional Next channel configuration overlays after the FFmpeg profile:
+  `next/channel-config-overlays/default.json` followed by `{channel_number}.json`
+  under the application data root (upstream PR #2891). Next owns the merge and
+  resolves relative paths from each overlay's directory; changes apply at the
+  next engine session start. Health reports unreadable or malformed active overlays
+  and distinguishes incomplete bounded inspection from engine failure.
 - Display one permanent or intermittent watermark with the optional Next engine,
   preserving selected placement, actual or scaled size and margins, and forwarding configured
   opacity (upstream PR #2878), including demand-time embedded subtitle Burn.

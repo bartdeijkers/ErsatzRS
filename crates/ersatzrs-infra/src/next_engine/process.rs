@@ -49,7 +49,7 @@ impl NextProcess {
     /// The caller must reserve the channel's session and exclusively own the
     /// output directory before calling. Next clears its output directory on
     /// startup; this adapter removes the old ready marker before spawning, so it
-    /// cannot acknowledge an earlier session. Configuration travels only on stdin.
+    /// cannot acknowledge an earlier session. Generated configuration travels on stdin.
     /// Raw child output is discarded: it can contain provider URLs and paths.
     ///
     /// # Errors
@@ -62,13 +62,34 @@ impl NextProcess {
         config: &ChannelConfig,
         deadline: Instant,
     ) -> Result<Self, ProcessError> {
-        let mut command = Command::new(executable);
-        command
-            .arg("run")
-            .arg("--output-folder")
-            .arg(output_folder)
-            .arg(format!("--number={number}"))
-            .arg("-");
+        Self::start_with_overlays(executable, number, output_folder, config, None, deadline).await
+    }
+
+    /// Start with optional Next-owned configuration overlays.
+    ///
+    /// Existing `default.json` and `{number}.json` files follow stdin in that
+    /// order. Next performs the merge, with later files taking precedence.
+    /// Discovery shares the startup deadline; absent files are optional.
+    ///
+    /// # Errors
+    /// Returns a redacted error for unsafe channel filenames, filesystem errors,
+    /// or the same startup and cleanup failures as [`Self::start`].
+    pub async fn start_with_overlays(
+        executable: &Path,
+        number: &str,
+        output_folder: &Path,
+        config: &ChannelConfig,
+        overlay_directory: Option<&Path>,
+        deadline: Instant,
+    ) -> Result<Self, ProcessError> {
+        let command = channel_command(
+            executable,
+            number,
+            output_folder,
+            overlay_directory,
+            deadline,
+        )
+        .await?;
         Self::start_command(command, output_folder, config, deadline).await
     }
 
@@ -168,6 +189,59 @@ impl NextProcess {
     }
 }
 
+async fn channel_command(
+    executable: &Path,
+    number: &str,
+    output_folder: &Path,
+    overlay_directory: Option<&Path>,
+    deadline: Instant,
+) -> Result<Command, ProcessError> {
+    if Instant::now() >= deadline {
+        return Err(ProcessError::StartupTimeout);
+    }
+    let mut command = Command::new(executable);
+    command
+        .arg("run")
+        .arg("--output-folder")
+        .arg(output_folder)
+        .arg(format!("--number={number}"))
+        .arg("-");
+    if let Some(directory) = overlay_directory {
+        // Channel numbers are numeric, optionally with a decimal subchannel.
+        // Validate on every platform, including Windows separators on Unix.
+        if number.is_empty()
+            || !number
+                .split('.')
+                .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+            || number.matches('.').count() > 1
+        {
+            return Err(ProcessError::Preparation("invalid overlay channel number"));
+        }
+        timeout_at(deadline, async {
+            for filename in ["default.json".to_owned(), format!("{number}.json")] {
+                let path = directory.join(filename);
+                match tokio::fs::metadata(&path).await {
+                    Ok(metadata) if metadata.is_file() => {
+                        command.arg(path);
+                    }
+                    Ok(_) => {
+                        return Err(io_error(
+                            "inspect configuration overlay",
+                            &io::Error::from(io::ErrorKind::InvalidData),
+                        ));
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(io_error("inspect configuration overlay", &error)),
+                }
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|_| ProcessError::StartupTimeout)??;
+    }
+    Ok(command)
+}
+
 async fn prepare_output(folder: &Path) -> Result<(), ProcessError> {
     tokio::fs::create_dir_all(folder)
         .await
@@ -224,3 +298,7 @@ pub(super) async fn fixture_process(
     )
     .await
 }
+
+#[cfg(test)]
+#[path = "config_overlay_tests.rs"]
+mod config_overlay_tests;

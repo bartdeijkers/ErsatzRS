@@ -12,6 +12,7 @@ use ersatzrs_core::hls::HlsSessionRegistry;
 use ersatzrs_core::scheduling::PlayoutBuildRequest;
 use ersatzrs_ffmpeg::FfmpegRuntimeReport;
 use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus, DbPool};
+use ersatzrs_infra::file_system_layout;
 use ersatzrs_infra::hls::InMemoryHlsSessionRegistry;
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
 use jsonwebtoken::{DecodingKey, EncodingKey, Validation};
@@ -202,11 +203,14 @@ impl AppState {
                 ersatzrs_core::locking::PlayoutBuildActivity::default(),
             ),
         ));
-        let next_engine = Arc::new(ersatzrs_infra::next_engine::host::NextHost::new(
-            pool.clone(),
-            application.operations().entity_locker(),
-            ersatzrs_infra::file_system_layout::data_folder().join("next-playouts"),
-        ));
+        let next_engine = Arc::new(
+            ersatzrs_infra::next_engine::host::NextHost::new(
+                pool.clone(),
+                application.operations().entity_locker(),
+                file_system_layout::data_folder().join("next-playouts"),
+            )
+            .with_config_overlays(file_system_layout::next_channel_config_overlays_folder()),
+        );
         let hls_direct_indices = Arc::new(RwLock::new(HashMap::new()));
         let (artwork_cleanup, _receiver) =
             super::artwork_cleanup::TokioArtworkCleanupQueue::channel();

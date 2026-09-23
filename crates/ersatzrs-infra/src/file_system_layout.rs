@@ -42,6 +42,14 @@ pub fn data_folder() -> PathBuf {
     app_state_folder().join("data")
 }
 
+/// Operator-managed Next configuration overlays, outside disposable caches.
+#[must_use]
+pub fn next_channel_config_overlays_folder() -> PathBuf {
+    app_data_folder()
+        .join("next")
+        .join("channel-config-overlays")
+}
+
 /// Revision-pinned Remote Stream artifacts, outside disposable cache pruning.
 #[must_use]
 pub fn addon_processed_media_folder() -> PathBuf {

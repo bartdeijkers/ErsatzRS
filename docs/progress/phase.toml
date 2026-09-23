@@ -128,7 +128,9 @@ health pass focused verification. Row 33 (54779e07) is N/A for the upstream
 .NET wrapper pin. Row 34 (637e6be8) is N/A release preparation. UCU-03 local
 window gates pass: workspace Clippy, 3,047 tests plus doctests, matched Leptos
 build, parity-check and native MPEG-TS/HLS smoke. UCU-03 is Complete after
-push and terminal green consolidated CI at 8f722099. UCU-04 row 35 is Covered (existing HLS Direct JWT propagation). Next: row 36;
+push and terminal green consolidated CI at 8f722099. UCU-04 row 35 is Covered
+(existing HLS Direct JWT propagation). Row 36 ports Next configuration overlays
+with focused and HTTP smoke proof. Next: row 37;
 continue ordered reconciliation and require green CI at its window boundary.
 Supported-platform acceptance remains open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated

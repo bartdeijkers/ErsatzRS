@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `0fc7ebb068a924c6d1d570b05d5e0df881796bca` |
-| **Commit subject** | `fix: use jwt in hls direct playlist (#2889)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0fc7ebb068a924c6d1d570b05d5e0df881796bca |
+| **Pinned commit** | `642965971111d86c662c8da0538c20d1f73f7478` |
+| **Commit subject** | `feat: add channel config overlays for next engine (#2891)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/642965971111d86c662c8da0538c20d1f73f7478 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

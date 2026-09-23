@@ -304,7 +304,8 @@ async fn prepare_streaming_resources() {
 /// `directoriesToCreate` list in `Startup.cs`. Readers already treat an absent
 /// folder as empty, so this only makes the drop locations discoverable.
 async fn create_user_content_folders() -> io::Result<()> {
-    tokio::fs::create_dir_all(file_system_layout::channel_stream_selectors_folder()).await
+    tokio::fs::create_dir_all(file_system_layout::channel_stream_selectors_folder()).await?;
+    tokio::fs::create_dir_all(file_system_layout::next_channel_config_overlays_folder()).await
 }
 
 fn configured_listen_addr() -> std::net::SocketAddr {

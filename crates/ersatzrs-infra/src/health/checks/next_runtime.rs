@@ -4,11 +4,19 @@ use super::super::{
 use std::{
     io,
     path::{Path, PathBuf},
+    time::Duration,
 };
+use tokio::io::AsyncReadExt as _;
+
+// Inspection budgets only: exceeding either limit leaves validation incomplete,
+// without imposing a new limit on what the Next engine may load.
+const MAX_OVERLAY_BYTES: u64 = 1024 * 1024;
+const OVERLAY_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) struct NextRuntimeHealthCheck {
     pool: Pool<Db>,
     resolve: fn() -> io::Result<PathBuf>,
+    overlays: PathBuf,
 }
 
 impl NextRuntimeHealthCheck {
@@ -16,6 +24,7 @@ impl NextRuntimeHealthCheck {
         Self {
             pool,
             resolve: crate::next_engine::host::channel_binary,
+            overlays: crate::file_system_layout::next_channel_config_overlays_folder(),
         }
     }
 }
@@ -26,7 +35,7 @@ impl HealthCheck for NextRuntimeHealthCheck {
         "Next Runtime Availability"
     }
     async fn check(&self) -> Result<HealthCheckResult> {
-        let channels: Vec<i64> = sqlx::query_scalar(r#"SELECT "Id" FROM "Channel" WHERE "StreamingEngine"=1 AND "IsEnabled"=1 ORDER BY "Id""#)
+        let channels: Vec<(i64, String)> = sqlx::query_as(r#"SELECT "Id", "Number" FROM "Channel" WHERE "StreamingEngine"=1 AND "IsEnabled"=1 ORDER BY "Id""#)
             .fetch_all(&self.pool).await.map_err(sqlx_error)?;
         if channels.is_empty() {
             return Ok(HealthCheckResult::new(
@@ -42,8 +51,9 @@ impl HealthCheck for NextRuntimeHealthCheck {
                 "Next executable is unavailable").with_link("/channels"));
         }
         let mut invalid = 0;
-        for channel in channels {
-            let profile = crate::playback::load_channel_playback_profile(&self.pool, channel).await;
+        for (channel, _) in &channels {
+            let profile =
+                crate::playback::load_channel_playback_profile(&self.pool, *channel).await;
             let supported = matches!(profile, Ok(Some(ref profile)) if crate::next_engine::config::channel_config(profile, ersatzrs_domain::NextEngineTextSubtitleMode::Burn,
                 Path::new("next-playouts"), Path::new("ffmpeg"), Path::new("ffprobe")).is_ok());
             if !supported {
@@ -55,8 +65,84 @@ impl HealthCheck for NextRuntimeHealthCheck {
                 format!("{invalid} enabled Next channel profile(s) are unavailable or unsupported; review codecs, HDR, resolution and acceleration"),
                 "Next channel profile is unavailable or unsupported").with_link("/channels"));
         }
-        Ok(HealthCheckResult::pass(self.title()))
+        let checked = tokio::time::timeout(
+            OVERLAY_CHECK_TIMEOUT,
+            overlays_available(&self.overlays, &channels),
+        )
+        .await;
+        let (status, message) = match checked {
+            Ok(Ok(())) => return Ok(HealthCheckResult::pass(self.title())),
+            Ok(Err(OverlayCheckError::Invalid)) => (
+                HealthCheckStatus::Fail,
+                "Next configuration overlay is unavailable or invalid",
+            ),
+            Ok(Err(OverlayCheckError::Incomplete)) | Err(_) => (
+                HealthCheckStatus::Warning,
+                "Next configuration overlay validation is incomplete",
+            ),
+        };
+        Ok(HealthCheckResult::new(self.title(), status, message, message).with_link("/channels"))
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum OverlayCheckError {
+    Invalid,
+    Incomplete,
+}
+
+impl From<io::Error> for OverlayCheckError {
+    fn from(_: io::Error) -> Self {
+        Self::Invalid
+    }
+}
+
+// Only basic availability and JSON shape are checked. Next owns merging and
+// effective schema validation; this does not claim that an overlay can run.
+async fn overlays_available(
+    folder: &Path,
+    channels: &[(i64, String)],
+) -> std::result::Result<(), OverlayCheckError> {
+    check_overlay(&folder.join("default.json")).await?;
+    for (_, number) in channels {
+        if number.is_empty()
+            || number.matches('.').count() > 1
+            || !number
+                .split('.')
+                .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        {
+            return Err(OverlayCheckError::Invalid);
+        }
+        check_overlay(&folder.join(format!("{number}.json"))).await?;
+    }
+    Ok(())
+}
+
+async fn check_overlay(path: &Path) -> std::result::Result<(), OverlayCheckError> {
+    let metadata = match tokio::fs::metadata(path).await {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    if !metadata.is_file() {
+        return Err(OverlayCheckError::Invalid);
+    }
+    if metadata.len() > MAX_OVERLAY_BYTES {
+        return Err(OverlayCheckError::Incomplete);
+    }
+    let mut bytes = Vec::new();
+    tokio::fs::File::open(path)
+        .await?
+        .take(MAX_OVERLAY_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .await?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MAX_OVERLAY_BYTES {
+        return Err(OverlayCheckError::Incomplete);
+    }
+    if !serde_json::from_slice::<serde_json::Value>(&bytes).is_ok_and(|value| value.is_object()) {
+        return Err(OverlayCheckError::Invalid);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -65,9 +151,11 @@ mod tests {
     #[tokio::test]
     async fn next_runtime_is_required_only_when_selected_and_profiles_are_checked() {
         let (pool, _, _, _) = crate::next_engine::schedule::tests::fixture().await;
+        let overlays = tempfile::tempdir().unwrap();
         let mut check = NextRuntimeHealthCheck {
             pool: pool.clone(),
             resolve: || Err(io::Error::from(io::ErrorKind::NotFound)),
+            overlays: overlays.path().to_owned(),
         };
         assert_eq!(
             check.check().await.unwrap().status,
@@ -87,5 +175,98 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Pass);
+    }
+
+    #[tokio::test]
+    async fn active_overlays_are_checked_without_inspecting_other_channels() {
+        let folder = tempfile::tempdir().unwrap();
+        let channels = vec![(42, "12.3".to_owned())];
+        overlays_available(&folder.path().join("missing"), &channels)
+            .await
+            .unwrap();
+        std::fs::write(folder.path().join("42.json"), b"not JSON").unwrap();
+        std::fs::write(folder.path().join("99.json"), b"not JSON").unwrap();
+        std::fs::write(
+            folder.path().join("default.json"),
+            br#"{"normalization":{"video":{"width":640}}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            folder.path().join("12.3.json"),
+            br#"{"normalization":{"video":{"width":1280}}}"#,
+        )
+        .unwrap();
+        overlays_available(folder.path(), &channels).await.unwrap();
+        for invalid in [b"not JSON".as_slice(), b"[]", b"null"] {
+            std::fs::write(folder.path().join("12.3.json"), invalid).unwrap();
+            assert!(overlays_available(folder.path(), &channels).await.is_err());
+        }
+        std::fs::remove_file(folder.path().join("12.3.json")).unwrap();
+        std::fs::write(folder.path().join("default.json"), b"not JSON").unwrap();
+        assert!(overlays_available(folder.path(), &channels).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn invalid_overlay_fails_health_without_exposing_contents_or_paths() {
+        let (pool, _, _, _) = crate::next_engine::schedule::tests::fixture().await;
+        sqlx::query(
+            r#"UPDATE "Channel" SET "StreamingEngine"=1, "IsEnabled"=1;
+            UPDATE "FFmpegProfile" SET "VideoFormat"=1, "AudioFormat"=1"#,
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        std::fs::write(
+            folder.path().join("default.json"),
+            b"synthetic-private-content",
+        )
+        .unwrap();
+        let check = NextRuntimeHealthCheck {
+            pool,
+            resolve: || Ok(PathBuf::from("synthetic-engine")),
+            overlays: folder.path().to_owned(),
+        };
+        let result = check.check().await.unwrap();
+        assert_eq!(result.status, HealthCheckStatus::Fail);
+        assert_eq!(
+            result.brief_message,
+            "Next configuration overlay is unavailable or invalid"
+        );
+        assert!(!result.message.contains("synthetic-private-content"));
+        assert!(!result
+            .message
+            .contains(&folder.path().display().to_string()));
+        std::fs::write(folder.path().join("default.json"), b"{}").unwrap();
+        assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Pass);
+        std::fs::File::create(folder.path().join("default.json"))
+            .unwrap()
+            .set_len(MAX_OVERLAY_BYTES + 1)
+            .unwrap();
+        let incomplete = check.check().await.unwrap();
+        assert_eq!(incomplete.status, HealthCheckStatus::Warning);
+        assert_eq!(
+            incomplete.brief_message,
+            "Next configuration overlay validation is incomplete"
+        );
+    }
+
+    #[tokio::test]
+    async fn overlay_inspection_is_bounded_and_rejects_non_files() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("default.json");
+        std::fs::create_dir(&path).unwrap();
+        assert!(check_overlay(&path).await.is_err());
+        std::fs::remove_dir(&path).unwrap();
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(MAX_OVERLAY_BYTES + 1).unwrap();
+        drop(file);
+        assert_eq!(
+            check_overlay(&path).await,
+            Err(OverlayCheckError::Incomplete)
+        );
+        let channels = vec![(1, "../outside".to_owned())];
+        std::fs::remove_file(&path).unwrap();
+        assert!(overlays_available(folder.path(), &channels).await.is_err());
     }
 }

@@ -51,18 +51,26 @@ pub enum SubtitleMode {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Audio {
     pub format: AudioFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bitrate_kbps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub buffer_kbps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub channels: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_rate_hz: Option<u32>,
     pub normalize_loudness: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub loudness: Option<Loudness>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Loudness {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub integrated_target: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub range_target: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub true_peak: Option<f64>,
 }
 
@@ -76,11 +84,16 @@ pub struct Video {
     pub scaling_mode: ScalingMode,
     #[serde(default)]
     pub deinterlace: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bitrate_kbps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub buffer_kbps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub accel: Option<Acceleration>,
     pub filters: VideoFilters,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vaapi_device: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub vaapi_driver: Option<VaapiDriver>,
 }
 

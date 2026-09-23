@@ -50,7 +50,7 @@ fn persisted_profile_maps_units_loudness_resolution_and_video_policy() {
         json!({
             "format": "ac3", "bitrate_kbps": 384, "buffer_kbps": 768,
             "channels": 6, "sample_rate_hz": 48000, "normalize_loudness": true,
-            "loudness": {"integrated_target": -16.0, "range_target": null, "true_peak": null}
+            "loudness": {"integrated_target": -16.0}
         })
     );
     let video = &config["normalization"]["video"];
@@ -181,10 +181,12 @@ fn numeric_boundaries_and_inactive_loudness_follow_native_profile_semantics() {
     let value = json_config(&profile);
     assert_eq!(value["normalization"]["audio"]["format"], "aac");
     assert_eq!(value["normalization"]["video"]["format"], "h264");
-    assert!(value["normalization"]["audio"]["sample_rate_hz"].is_null());
-    assert!(value["normalization"]["audio"]["channels"].is_null());
-    assert!(value["normalization"]["audio"]["loudness"].is_null());
-    assert!(value["normalization"]["video"]["buffer_kbps"].is_null());
+    assert!(value["normalization"]["audio"]
+        .get("sample_rate_hz")
+        .is_none());
+    assert!(value["normalization"]["audio"].get("channels").is_none());
+    assert!(value["normalization"]["audio"].get("loudness").is_none());
+    assert!(value["normalization"]["video"].get("buffer_kbps").is_none());
     profile.profile.normalize_loudness_mode = NormalizeLoudnessMode::LoudNorm;
     for invalid in [f64::NAN, f64::INFINITY, -71.0, -4.0] {
         profile.profile.target_loudness = Some(invalid);

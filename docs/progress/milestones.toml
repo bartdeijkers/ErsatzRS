@@ -7907,8 +7907,39 @@ Cargo manifests/lock are unchanged. Direct substantive Codex review and an
 independent read-only audit found no commit-specific gap. NvEncSharp 2.1.1 is
 upstream-only dependency tooling; ErsatzRS uses its existing native hwprobe.
 No new hardware acceptance or JWT-enabled end-to-end playback claim is made;
-UCU-02's HLS Direct TSDuck limitation remains. There are 35 reconciled rows and
-135 pending. Next is row 36; UCU-04 window gates and exact-SHA CI remain open.
+UCU-02's HLS Direct TSDuck limitation remains. After row 35, 35 rows were reconciled. UCU-04 window gates and exact-SHA CI remain open.
+
+Row 36 (64296597, PR 2891) is Port; pin and ledger advance together.
+The full diff and surrounding worker are reviewed. Existing profile mapping
+already covers deinterlacing and all six per-filter tonemap algorithms.
+The implementation adds app-data overlay bootstrap, host/process forwarding in
+stdin/default/channel order, nullable-field omission, and bounded, redacted
+health inspection with all-nine-culture messages. Next retains merge/schema
+ownership; no engine overlay size limit is introduced by health inspection.
+Official Next f2a981b debug proof verifies ordered deep merge, relative paths
+and malformed-JSON rejection. Its staged Linux x64 binary SHA-256 is
+0a4dbee9303a13c12ac7dfc7a34a3471e041adaf09d30d2ee92de5eff1068672.
+Focused verification passes 122 Next tests, including decoded playback with
+default width 352 then channel width 384, retained selected 880 Hz audio and
+burned subtitles, and malformed-overlay startup failure. Four runtime-health
+tests pass. The initial sandbox run could not bind localhost or write fixture
+state; the successful rerun uses disposable app-data/state roots and socket
+permission. One stale null-field expectation was corrected to the upstream
+omission contract. The all-nine-culture web localization regression passes;
+independent final review reports no blocking findings. Preview overlay identity
+is source-reviewed, not claimed as an additional overlay-specific runtime proof.
+Scoped all-target Clippy passes for infrastructure and web after shortening
+module references in the web constructor to retain its existing line limit.
+HTTP smoke passes for both Burn and Convert using the same official runtime:
+HLS and Hybrid MPEG-TS decode selected Dutch 880 Hz audio; Burn has 35 white
+subtitle pixels, Convert has zero and serves the selected Dutch WebVTT cue.
+Both prove preview, wrapper-disconnect continuity, idle cleanup and restart;
+requests without the scoped media capability return 401. Formatting, diff and
+structured progress checks pass. Logs: ucu04-row36-focused.log,
+ucu04-row36-health.log, ucu04-row36-web.log, ucu04-row36-clippy-final.log,
+ucu04-row36-smoke.log and ucu04-row36-smoke-convert.log. There are 36 reconciled
+rows and 134 pending. Next is row 37. This is local row acceptance, not UCU-04
+window acceptance, six-platform runtime proof or new HLS Direct TSDuck proof.
 """
 
 [[milestone]]
