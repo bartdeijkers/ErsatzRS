@@ -7876,7 +7876,7 @@ not a release or acceptance of later code.
 id         = 'ucu-04'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 0b44ad47'
-status     = 'Not started'
+status     = 'In progress'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-03']
@@ -7894,7 +7894,21 @@ for UCU-03 through UCU-09; never launch CI as part of an intermediate row.
 Pin, last processed ledger row and upstream HEAD agree.
 """
 evidence = """
-Not started. All window rows remain pending; no implementation or gate evidence claimed.
+2026-09-23: prerequisite UCU-03 is Complete with terminal green CI on pushed
+candidate 8f722099. The fresh upstream target is e8b7bb63; all previous 169
+SHA/subject pairs are an exact prefix and new row 170 is appended to UCU-09.
+Row 35 (0fc7ebb0, PR 2889) is Covered after full upstream diff and surrounding
+handler/controller review. Existing HlsQuery and AccessToken plumbing forwards
+JWTs to all seven raw HLS Direct media URLs; stable HLS variants and segments
+also propagate them. Empty/whitespace tokens are omitted. The MP4 playlist
+snapshot, segment propagation regression and eleven access-token tests pass
+in terminal green CI 35880721503 on 8f722099; the relevant Rust sources and
+Cargo manifests/lock are unchanged. Direct substantive Codex review and an
+independent read-only audit found no commit-specific gap. NvEncSharp 2.1.1 is
+upstream-only dependency tooling; ErsatzRS uses its existing native hwprobe.
+No new hardware acceptance or JWT-enabled end-to-end playback claim is made;
+UCU-02's HLS Direct TSDuck limitation remains. There are 35 reconciled rows and
+135 pending. Next is row 36; UCU-04 window gates and exact-SHA CI remain open.
 """
 
 [[milestone]]
@@ -8006,7 +8020,7 @@ feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-08']
 acceptance = """
-Process every ledger row in this release window through ee038ba4 (latest fetched tip) in order,
+Process every ledger row in this release window through e8b7bb63 (latest fetched tip) in order,
 with a justified verdict, Rust code/test evidence and ADR-backed deviations.
 Append newly fetched upstream commits to the ucu-09 tail; no unapproved
 deferrals are included. Preserve

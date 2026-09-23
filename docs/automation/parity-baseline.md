@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `637e6be879d03649bedf9811ae5c3b13aac30b0d` |
-| **Commit subject** | `prep for release v26.5.1 [no ci]` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/637e6be879d03649bedf9811ae5c3b13aac30b0d |
+| **Pinned commit** | `0fc7ebb068a924c6d1d570b05d5e0df881796bca` |
+| **Commit subject** | `fix: use jwt in hls direct playlist (#2889)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/0fc7ebb068a924c6d1d570b05d5e0df881796bca |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -59,8 +59,8 @@ The daily routine must **not** advance this pin on its own.
 
 ## Catch-up mode
 
-The latest fetched target is `ee038ba460a237e277c2ed2fbb413bfac13795f8` (fetched 2026-09-23),
-currently **169 commits** beyond the initial pin. Per the maintainer's
+The latest fetched target is `e8b7bb638831548e85a78992ba1b3b0ebf982aea` (fetched 2026-09-23),
+currently **170 commits** beyond the initial pin. Per the maintainer's
 2026-09-19 amendment, every run fetches upstream `origin/main` and appends new
 commits to the [catch-up ledger](../../plans/upstream-catch-up.md); the original
 `495e3799` cutoff no longer limits scope. The latest fetched tip is the run's

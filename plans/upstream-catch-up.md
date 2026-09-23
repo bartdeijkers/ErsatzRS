@@ -3,21 +3,22 @@
 ## Latest upstream target and state
 
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
-- Latest fetched target (`origin/main`, 2026-09-23): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
-  — feat: next engine rotation (#3034).
-- Ledger: **169 commits**, **135 pending**. The original plan covered 152 through
+- Latest fetched target (`origin/main`, 2026-09-23): `e8b7bb638831548e85a78992ba1b3b0ebf982aea`
+  — fix: amd vaapi accel when driver is set to default (#3036).
+- Ledger: **170 commits**, **135 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
-  Both retain the existing ledger as an exact prefix.
+  A subsequent refresh adds the AMD VAAPI default-driver fix.
+  Each refresh retains the existing ledger as an exact prefix.
 - Refresh the target from upstream at the start of every run and append newly
   observed commits. The target is the latest fetched tip for that run, not a
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **34**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **35**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - UCU-03 is Complete; milestone evidence records local acceptance and terminal
-  green CI on pushed candidate `8f722099`. Next: UCU-04, beginning with row 35.
+  green CI on pushed candidate `8f722099`. Next: UCU-04, continuing with row 36.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -585,7 +586,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 32 | `a1036430` | fix: clean up orphan actor and artwork records (#2885) | Port | upstream-baseline-catch-up | `fix(infra): clean orphaned actor and artwork records` | ucu-03; transactional actor-first cleanup, hourly cadence, bounded manual API and localized health. Existing provider deletion and Next logo selection verified. Focused regressions, all-target Clippy and substantive review pass; window gates remain open. |
 | 33 | `54779e07` | fix: pin nvencsharp lib to 2.0.0 for linux compatibility (#2887) | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream NVENC wrapper pin` | ucu-03; only the .NET NvEncSharp package version changes. Native platform-guarded NVIDIA loading does not consume this dependency; no Rust or ABI change. See milestone review. |
 | 34 | `637e6be8` | prep for release v26.5.1 [no ci] | N/A (upstream tooling) | upstream-baseline-catch-up | `docs(porting): reconcile upstream May patch release notes` | ucu-03; release heading, comparison links and description of the already reviewed NVIDIA wrapper pin. All window rows reconciled; local window gates and first consolidated exact-SHA CI remain open. |
-| 35 | `0fc7ebb0` | fix: use jwt in hls direct playlist (#2889) | | | | ucu-04; provisional: Port candidate. |
+| 35 | `0fc7ebb0` | fix: use jwt in hls direct playlist (#2889) | Covered | upstream-baseline-catch-up | `docs(porting): verify existing HLS Direct JWT propagation` | ucu-04; existing HlsQuery/AccessToken plumbing covers all seven raw media URLs, stable variant and segment URLs, including blank tokens. Thirteen relevant tests pass in green CI 35880721503 at unchanged source 8f722099; substantive Codex review agrees. NvEncSharp 2.1.1 is upstream-only tooling; no new hardware or JWT-enabled end-to-end playback claim. |
 | 36 | `64296597` | feat: add channel config overlays for next engine (#2891) | | | | ucu-04; provisional: Next behavior triage. |
 | 37 | `fecce92e` | fix: use configured ffmpeg with all graphics elements (#2892) | | | | ucu-04; provisional: Port candidate. |
 | 38 | `41bf22eb` | chore: dependency updates (#2893) | | | | ucu-04; provisional: Upstream tooling candidate. |
@@ -720,3 +721,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 167 | `5eb9102c` | fix: local library path validation (#3031) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
 | 168 | `55885508` | prep for release v26.10.0 [no ci] | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
 | 169 | `ee038ba4` | feat: next engine rotation (#3034) | | | | ucu-09; untriaged addition from 2026-09-22 upstream refresh. |
+| 170 | `e8b7bb63` | fix: amd vaapi accel when driver is set to default (#3036) | | | | ucu-09; pending source review. |
