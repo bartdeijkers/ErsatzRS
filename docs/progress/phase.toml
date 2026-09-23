@@ -106,8 +106,9 @@ stale-metadata/default/custom/pin regressions and actual two-track PGS decoding.
 Next HTTP/preview and idle cleanup smoke passes. Row 24 (1b5d6af7) is Port:
 Burn/Convert persistence, bounded version-bound embedded Burn, authenticated
 WebVTT and preview captions pass 133 focused tests, eight Chromium/Firefox
-scenarios and native MPEG-TS/HLS smoke. Next: review row 25 (cd298820), avoiding
-repeat extraction of already extracted embedded subtitles. Full-window and
+scenarios and native MPEG-TS/HLS smoke. Row 25 (cd298820) is Port: rooted cache
+reuse and blank-path repair pass SQL/cache/index regressions and scoped Clippy.
+Next: review row 26 (e04a834e), single permanent Next watermarks. Full-window and
 supported-platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

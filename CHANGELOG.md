@@ -110,6 +110,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Repair empty or whitespace-only embedded-subtitle cache references while
+  reusing completed cached tracks (upstream PR #2873). Partial extraction retains
+  each subtitle's absolute stream index, preserving the selected language.
+
 - Select Next embedded subtitles from the resolved media version before applying
   language, forced/default or custom-selector preferences, so stale metadata
   cannot hide a valid image track (upstream PR #2868).

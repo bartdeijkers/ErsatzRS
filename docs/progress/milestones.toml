@@ -7297,6 +7297,36 @@ CI is performed before the authorized UCU-03 boundary.
 
 
 
+2026-09-23 row 25 reconciliation (cd298820; Port):
+Fresh fetch retains ee038ba4; all 169 ledger SHA/subjects match upstream history.
+Read the complete two-file diff and extraction/scanner context. The source map
+in the catch-up plan records the cache-root fix, missing/blank path contract,
+unchanged extraction settings and absence of UI/schema/runtime requirements.
+Rust already resolves the generated relative output under its subtitle cache,
+so completed cache artifacts are reused. It now also repairs empty/whitespace
+recorded paths, matching upstream IsNullOrWhiteSpace rather than only SQL NULL.
+The candidate loader accepts an explicit cache root for hermetic SQL fixtures;
+production still passes the normal cache directory and only runs FFmpeg when
+candidates remain. Successful extraction persistence is unchanged.
+The same upstream commit computes subtitle ordinals from only pending tracks,
+which misselects an earlier cached or bitmap subtitle. Read-only later-source
+research finds 4ffd775a changes that basis to all embedded tracks. Scanner
+Subtitle.FromMediaStream copies the absolute FFprobe stream.Index, so retain
+Rust's existing absolute mapping and prove a pending index 4 remains `0:4` after
+cached index 2 and excluded bitmap index 3. This preserves correct track identity,
+not a new behavior policy; the later ledger row has not been processed.
+All 46 selected subtitle regressions have passing evidence: 44 pass initially,
+including both new SQL/cache tests, and the two HTTP mock-server tests pass with
+local-listener permission after the sandbox rejected socket binding. Scoped
+infra all-target Clippy, formatting, diff and progress checks pass. Existing
+row-24 decoded playback and native smoke evidence remains valid for unchanged
+FFmpeg argv, seek handling, host routes and engine startup; no UI or pipeline
+output changed in this row. Direct Codex review finds no remaining row blocker.
+The authorized local commit `fix(infra): repair blank subtitle cache references`
+advances pin and ledger together to cd2988205d9baaeb9dda9b292997e05db2083d38.
+Twenty-five rows are reconciled, 144 remain pending. Row 26 (e04a834e) is next;
+UCU-02 full-window and supported-platform gates remain open. No push or CI.
+
 """
 
 [[milestone]]

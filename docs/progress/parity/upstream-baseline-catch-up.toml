@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098']
 summary    = """
-The ledger registers 169 commits: twenty-four reconciled and 145 pending,
+The ledger registers 169 commits: twenty-five reconciled and 144 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
 links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
@@ -46,6 +46,9 @@ Other Next components/runtime regressions and HTTP/preview lifecycle smoke pass.
 Row 24 (1b5d6af7) is Port: Burn/Convert persistence, bounded version-bound
 embedded Burn preparation, authenticated WebVTT transport and preview captions
 pass focused runtime tests, eight Chromium/Firefox cases and native smoke.
+Row 25 (cd298820) is Port: rooted cache reuse is retained; blank saved paths
+now require repair, with SQL/cache-root and partial-extraction index regressions.
+A later upstream correction confirms preserving absolute input stream indices.
 Remote
 Stream/add-on and graphics integration belong to later rows and remain refused
 where unsupported. Complete Next endpoint/browser/platform and full-window

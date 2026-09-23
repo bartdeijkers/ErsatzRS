@@ -1332,13 +1332,12 @@ async fn extract_embedded_media_item_subtitles(
     Ok(())
 }
 
-/// Extract this media item's embedded text subtitles. Ports `ExtractSubtitles`.
-async fn extract_subtitles(
+/// Load extraction candidates against the cache root, independent of process cwd.
+async fn subtitles_to_extract(
     pool: &Pool<Db>,
     media_item_id: i64,
-    input_path: &str,
-    ffmpeg_path: &str,
-) -> Result<()> {
+    cache: &Path,
+) -> Result<Vec<SubtitleToExtract>> {
     // All embedded subtitles for this media item. Image codecs and "already
     // extracted" rows are filtered in-memory below, mirroring the `.Filter(...)`
     // chain in ErsatzTV's `ExtractSubtitles`.
@@ -1382,10 +1381,12 @@ async fn extract_subtitles(
         else {
             continue;
         };
-        let full = subtitle_cache_folder().join(&relative_output);
+        let full = cache.join(&relative_output);
         // Re-extract when not extracted, no path recorded, or the cache file is
         // missing (mirror the `FileDoesntExist` filter in ExtractSubtitles).
-        let needs = is_extracted == 0 || path.is_none() || !full.exists();
+        let needs = is_extracted == 0
+            || path.as_deref().is_none_or(|path| path.trim().is_empty())
+            || !full.exists();
         if !needs {
             continue;
         }
@@ -1396,6 +1397,18 @@ async fn extract_subtitles(
             relative_output,
         });
     }
+
+    Ok(to_extract)
+}
+
+/// Extract this media item's embedded text subtitles. Ports `ExtractSubtitles`.
+async fn extract_subtitles(
+    pool: &Pool<Db>,
+    media_item_id: i64,
+    input_path: &str,
+    ffmpeg_path: &str,
+) -> Result<()> {
+    let to_extract = subtitles_to_extract(pool, media_item_id, &subtitle_cache_folder()).await?;
 
     if to_extract.is_empty() {
         return Ok(());
@@ -2373,3 +2386,7 @@ Dialogue: 0,0:00:46.00,0:00:42.00,Default,,0,0,0,,{\\move(10,20,30,40)}Straddles
             .is_empty());
     }
 }
+
+#[cfg(test)]
+#[path = "subtitles_extraction_tests.rs"]
+mod extraction_tests;

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `1b5d6af777aaed11829901ccab6b1e671fd25442` |
-| **Commit subject** | `feat: convert text subtitles using next engine (#2869)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/1b5d6af777aaed11829901ccab6b1e671fd25442 |
+| **Pinned commit** | `cd2988205d9baaeb9dda9b292997e05db2083d38` |
+| **Commit subject** | `fix: don't extract embedded subtitles that have already been extracted (#2873)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/cd2988205d9baaeb9dda9b292997e05db2083d38 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules

@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-23): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
   — feat: next engine rotation (#3034).
-- Ledger: **169 commits**, **145 pending**. The original plan covered 152 through
+- Ledger: **169 commits**, **144 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -15,7 +15,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **24**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **25**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -301,6 +301,28 @@ language overrides can change within one linear channel. Link the rendition via
 upstream's fixed English label and unattached group cannot provide correct
 multilingual preview behavior. Existing subtitle selection remains authoritative.
 
+## Row 25 source map: reuse extracted embedded subtitles
+
+Upstream `cd298820` changes only the extraction handler and changelog. Its
+cache-presence check must resolve the generated relative subtitle path under
+`SubtitleCacheFolder`, rather than the process working directory. Missing or
+blank recorded paths still require repair. Rust `subtitles.rs::extract_subtitles`
+already checks the rooted generated cache path, but only treats NULL recorded
+paths as absent; complete the empty/whitespace case and prove candidate filtering
+against a disposable cache and SQL fixture. Existing native extraction settings,
+metadata ownership, image exclusions and post-success persistence remain intact.
+There are no UI, schema, translation, or new health/runtime requirements.
+
+The same commit changes absolute stream mapping to a subtitle ordinal computed
+from only pending extraction candidates. That can select the wrong language when
+an earlier embedded subtitle is cached or bitmap. Read-only later-source research
+finds `4ffd775a` corrects the ordinal basis to all embedded streams. Rust scanner
+metadata already carries absolute FFprobe indices, so preserve `0:<stream_index>`
+and test partial extraction directly. This preserves selected-track correctness;
+it does not process or supersede the later ledger row. Timing-only log changes
+have no selection or persistence contract. Focused candidate/argv regressions and
+scoped lint are required; unchanged decoded runtime evidence remains reusable.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
@@ -341,7 +363,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 22 | `7e38297d` | fix: schedule all required fallback filler in classic schedules (#2867) | Adapt (ADR 0098) | classic-scheduling | `fix(scheduling): complete Classic chapter filler reconciliation` | ucu-02; complete clipped fallback, chapter/version identity, Continue/Refresh safety, accepted ADR 0097 no-match preservation and ADR 0098 deterministic expressions. Focused tests and decoded Unicode playback pass; full platform acceptance remains open. See ucu-02 evidence. |
 | 23 | `57f7dfa5` | feat: select embedded image subtitle streams for next engine during playout build (#2868) | Port | upstream-baseline-catch-up | `fix(infra): scope Next subtitle selection to resolved versions` | ucu-02; embedded image selection validates resolved-version candidates before default/custom ranking. Generated PGS proves preferred bitmap, subtitles-off and retained audio; other Next regressions and HTTP/preview smoke pass. See ucu-02 evidence. |
 | 24 | `1b5d6af7` | feat: convert text subtitles using next engine (#2869) | Port | upstream-baseline-catch-up | `feat(infra): prepare Next embedded text on demand` | ucu-02; persisted Burn/Convert, bounded version-bound embedded Burn, authenticated WebVTT and preview captions. 133 focused tests, eight Chromium/Firefox cases and native MPEG-TS/HLS smoke pass. See ucu-02 evidence. |
-| 25 | `cd298820` | fix: don't extract embedded subtitles that have already been extracted (#2873) | | | | ucu-02; provisional: Port candidate. |
+| 25 | `cd298820` | fix: don't extract embedded subtitles that have already been extracted (#2873) | Port | upstream-baseline-catch-up | `fix(infra): repair blank subtitle cache references` | ucu-02; rooted cache reuse already covered; NULL/blank/whitespace path repair and partial-extraction absolute-index regression verified. Later source confirms the pending-only ordinal bug. See ucu-02 evidence. |
 | 26 | `e04a834e` | feat: overlay single permanent watermarks using next engine (#2878) | | | | ucu-02; provisional: Next behavior triage. |
 | 27 | `91b029e4` | feat: overlay single intermittent watermarks using next engine (#2879) | | | | ucu-02; provisional: Next behavior triage. |
 | 28 | `7869f165` | feat: use configured scaling behavior with next engine (#2880) | | | | ucu-02; provisional: Next behavior triage. |
