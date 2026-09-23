@@ -6,10 +6,10 @@ use ersatzrs_domain::{Channel, ChannelStreamSelectorMode, PlayoutItem, Resolutio
 use crate::db::DbPool;
 use crate::ffmpeg_config::{playback_language_preferences, PlaybackLanguagePreferences};
 use crate::playback::{
-    load_source_audio_streams, load_source_video_stream_by_index, select_channel_playback_subtitle,
-    select_custom_playback_streams, select_pinned_playback_subtitle,
-    select_playback_audio_stream_index, subtitle_input_for_stream, CustomStreamSelection,
-    PlaybackSubtitle,
+    load_source_audio_streams, load_source_video_stream_by_index,
+    select_channel_playback_subtitle_for_version, select_custom_playback_streams_for_version,
+    select_pinned_playback_subtitle, select_playback_audio_stream_index, subtitle_input_for_stream,
+    CustomStreamSelection, PlaybackSubtitle,
 };
 use ersatzrs_ffmpeg::{OutputFormat, SourceAudioStream};
 
@@ -55,7 +55,7 @@ pub async fn project_item(
     let preferences = playback_language_preferences(pool).await?;
     let custom =
         if pin.is_none() && channel.stream_selector_mode == ChannelStreamSelectorMode::Custom {
-            select_custom_playback_streams(
+            select_custom_playback_streams_for_version(
                 pool,
                 media_version_id,
                 item.media_item_id,
@@ -311,9 +311,10 @@ async fn selected_subtitle(
             item.preferred_subtitle_language_code.as_deref(),
             channel.preferred_subtitle_language_code.as_deref(),
         );
-        select_channel_playback_subtitle(
+        select_channel_playback_subtitle_for_version(
             pool,
             item.media_item_id,
+            media_version_id,
             &languages,
             item.subtitle_mode.unwrap_or(channel.subtitle_mode),
             StreamingMode::HttpLiveStreamingSegmenter,

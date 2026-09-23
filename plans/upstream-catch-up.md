@@ -5,7 +5,7 @@
 - Initial pin: `0d301df5e8512fdfccf3a611188d27ab1690ee31` (row 0; no upstream commit processed).
 - Latest fetched target (`origin/main`, 2026-09-23): `ee038ba460a237e277c2ed2fbb413bfac13795f8`
   — feat: next engine rotation (#3034).
-- Ledger: **169 commits**, **147 pending**. The original plan covered 152 through
+- Ledger: **169 commits**, **146 pending**. The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
   refresh adds six more commits; a later refresh adds Next engine rotation.
@@ -15,7 +15,7 @@
   permanent cutoff. A bootstrap still processes no upstream commit.
 - Ledger order comes from
   `git -C "$ERSATZTV_SRC" log --reverse --abbrev=8 --format='%h|%s' <initial-pin>..<target>`.
-- Processed rows: **22**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
+- Processed rows: **23**. Empty verdict/owner/ErsatzRS-commit cells mean pending.
 - [Pin](../docs/automation/parity-baseline.md) is authoritative, followed by
   this ledger, followed by upstream checkout HEAD. All must agree before work.
   The [parity record](../docs/progress/parity/upstream-baseline-catch-up.toml)
@@ -206,6 +206,33 @@ implement those contracts; native six-platform acceptance remains explicit debt.
 Final runtime verification also covers the corrected 100-nanosecond source-offset
 persistence. See the owning classic-scheduling debt and UCU-02 evidence.
 
+## Row 23 source map: embedded image subtitles for Next
+
+Upstream `57f7dfa5` (#2868) changes Next playout synchronization, its subtitle
+track DTO, and the shared selector logging flag plus two call-site test updates.
+No UI, validator, migration or changelog changes occur in the upstream diff.
+The handler loads movie/episode/other-video subtitle metadata, limits candidates
+to local embedded image subtitles, applies item/channel language and mode,
+retains custom selector precedence, and fills the subtitle index only when not
+already assigned. Native playback keeps selection logs; Next builds suppress them.
+
+Rust targets are `infra/next_engine/{selection,protocol,schedule}` and the shared
+playback subtitle loaders/selectors. Existing projection already supports an
+embedded image track, exact pins, item/channel/global language precedence and
+explicit subtitles-off, plus external text/provider sources verified in earlier
+rows. Preserve those capabilities; an upstream TODO is not a reason to remove
+working native/Next behavior. No Rust per-choice logging exists to suppress.
+
+Review found an actual source-identity gap: automatic/custom candidates aggregate
+metadata for the entire item without validating embedded candidates against the
+resolved media version. Candidates are now scoped before selection so a stale index or
+conflicting old-version row cannot hide a valid track. The filter reuses pinned-stream
+metadata matching rules and retains extracted/external behavior. This preserves the
+existing selected-version invariant; no new architecture decision is proposed.
+Focused projection regressions and actual generated bitmap-subtitle Next
+playback proof pass, together with other Next consumers and HTTP/preview smoke.
+UCU-02 owns evidence and remaining platform gates.
+
 ## Provisional triage and ledger
 
 Seeds below come from [the original plan](ErsatzRS_catchup.md#provisional-triage-confirmed-per-row-nexttriage--extract-behavior-per-adr-0094).
@@ -244,7 +271,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 20 | `bb493670` | feat: support media server items in next streaming engine  (#2865) | Port | upstream-baseline-catch-up | `feat(infra): resolve Next media at playback time` | ucu-02; provider-scoped paths, exact file binding, current credentials, bounded Plex failover and Range-preserving media opens. Decoded three-provider/failover proof and Next HTTP/preview smoke pass. See ucu-02 evidence. |
 | 21 | `e6496bbc` | feat: select audio streams for next engine during playout build (#2866) | Adapt (ADR 0096) | upstream-baseline-catch-up | `feat(infra): embed bounded JavaScript audio selectors` | ucu-02; shared native/Next callbacks, metadata and YAML/pin precedence; bounded execution and fallback tests, decoded alternate audio, native/Next smoke. Full platform acceptance remains open. See ucu-02 evidence. |
 | 22 | `7e38297d` | fix: schedule all required fallback filler in classic schedules (#2867) | Adapt (ADR 0098) | classic-scheduling | `fix(scheduling): complete Classic chapter filler reconciliation` | ucu-02; complete clipped fallback, chapter/version identity, Continue/Refresh safety, accepted ADR 0097 no-match preservation and ADR 0098 deterministic expressions. Focused tests and decoded Unicode playback pass; full platform acceptance remains open. See ucu-02 evidence. |
-| 23 | `57f7dfa5` | feat: select embedded image subtitle streams for next engine during playout build (#2868) | | | | ucu-02; provisional: Next behavior triage. |
+| 23 | `57f7dfa5` | feat: select embedded image subtitle streams for next engine during playout build (#2868) | Port | upstream-baseline-catch-up | `fix(infra): scope Next subtitle selection to resolved versions` | ucu-02; embedded image selection validates resolved-version candidates before default/custom ranking. Generated PGS proves preferred bitmap, subtitles-off and retained audio; other Next regressions and HTTP/preview smoke pass. See ucu-02 evidence. |
 | 24 | `1b5d6af7` | feat: convert text subtitles using next engine (#2869) | | | | ucu-02; provisional: Next behavior triage. |
 | 25 | `cd298820` | fix: don't extract embedded subtitles that have already been extracted (#2873) | | | | ucu-02; provisional: Port candidate. |
 | 26 | `e04a834e` | feat: overlay single permanent watermarks using next engine (#2878) | | | | ucu-02; provisional: Next behavior triage. |

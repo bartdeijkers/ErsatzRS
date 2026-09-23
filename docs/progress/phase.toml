@@ -101,7 +101,10 @@ clips, chapter/version identity, safe filler continuation and deterministic
 bounded expressions. Focused core/SQL and four-language-environment tests pass.
 Native smoke and decoded production-builder playback confirm Unicode-selected
 breaks and preserved fractional source offsets. Full platform proof remains open.
-Next: row 23 (57f7dfa5), embedded image subtitles for Next.
+Row 23 (57f7dfa5) is Port: resolved-version embedded image selection passes
+stale-metadata/default/custom/pin regressions and actual two-track PGS decoding.
+Next HTTP/preview and idle cleanup smoke passes. Next: row 24 (1b5d6af7),
+text subtitle conversion for Next.
 Authenticated/browser and platform acceptance remain open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.

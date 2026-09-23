@@ -1155,6 +1155,54 @@ pub async fn load_subtitles_for_media_item(
         .collect()
 }
 
+/// Filter embedded metadata against the resolved file before preference ranking.
+/// External/generated subtitles are separate sources and remain available.
+async fn load_subtitles_for_media_version(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+) -> Result<Vec<PlaybackSubtitle>> {
+    let mut candidates = load_subtitles_for_media_item(pool, media_item_id).await?;
+    let rows = sqlx::query(
+        r#"SELECT "Index", "Title", "Language", "Codec", "Default", "Forced"
+        FROM "MediaStream" WHERE "MediaVersionId" = ? AND "MediaStreamKind" = 3"#,
+    )
+    .bind(media_version_id)
+    .fetch_all(pool)
+    .await
+    .repository()?;
+    let streams = rows
+        .iter()
+        .map(|row| {
+            Ok((
+                row.try_get::<i32, _>("Index").repository()?,
+                row.try_get::<Option<String>, _>("Title").repository()?,
+                row.try_get::<Option<String>, _>("Language").repository()?,
+                row.try_get::<Option<String>, _>("Codec").repository()?,
+                row.try_get::<i64, _>("Default").repository()? != 0,
+                row.try_get::<i64, _>("Forced").repository()? != 0,
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    candidates.retain(|subtitle| {
+        subtitle.subtitle_kind != subtitle_kind::EMBEDDED
+            || streams
+                .iter()
+                .any(|(index, title, language, codec, default, forced)| {
+                    subtitle.stream_index == *index
+                        && subtitle.default == *default
+                        && subtitle.forced == *forced
+                        && optional_stream_text_matches(title.as_deref(), subtitle.title.as_deref())
+                        && optional_stream_text_matches(
+                            language.as_deref(),
+                            subtitle.language.as_deref(),
+                        )
+                        && optional_stream_text_matches(codec.as_deref(), subtitle.codec.as_deref())
+                })
+    });
+    Ok(candidates)
+}
+
 /// Load the persisted audio streams for a media version.
 ///
 /// ErsatzTV's custom channel stream selector evaluates these `MediaStream`
@@ -1213,6 +1261,52 @@ pub async fn select_custom_playback_streams(
     content_start_time: DateTime<Utc>,
     streaming_mode: StreamingMode,
 ) -> Result<Option<CustomStreamSelection>> {
+    select_custom_playback_streams_inner(
+        pool,
+        media_version_id,
+        media_item_id,
+        channel,
+        content_start_time,
+        streaming_mode,
+        false,
+    )
+    .await
+}
+
+/// Select custom tracks while excluding embedded subtitles from other versions.
+///
+/// # Errors
+/// Returns selector, database and subtitle metadata errors.
+pub async fn select_custom_playback_streams_for_version(
+    pool: &DbPool,
+    media_version_id: i64,
+    media_item_id: i64,
+    channel: &Channel,
+    content_start_time: DateTime<Utc>,
+    streaming_mode: StreamingMode,
+) -> Result<Option<CustomStreamSelection>> {
+    select_custom_playback_streams_inner(
+        pool,
+        media_version_id,
+        media_item_id,
+        channel,
+        content_start_time,
+        streaming_mode,
+        true,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn select_custom_playback_streams_inner(
+    pool: &DbPool,
+    media_version_id: i64,
+    media_item_id: i64,
+    channel: &Channel,
+    content_start_time: DateTime<Utc>,
+    streaming_mode: StreamingMode,
+    scope_subtitles: bool,
+) -> Result<Option<CustomStreamSelection>> {
     let Some(selector) = channel
         .stream_selector
         .as_deref()
@@ -1243,7 +1337,11 @@ pub async fn select_custom_playback_streams(
         })?;
 
     let audio_streams = load_audio_streams_for_media_version(pool, media_version_id).await?;
-    let mut subtitles = load_subtitles_for_media_item(pool, media_item_id).await?;
+    let mut subtitles = if scope_subtitles {
+        load_subtitles_for_media_version(pool, media_item_id, media_version_id).await?
+    } else {
+        load_subtitles_for_media_item(pool, media_item_id).await?
+    };
     if streaming_mode != StreamingMode::HttpLiveStreamingDirect {
         subtitles.retain(|subtitle| {
             if subtitle.subtitle_kind != subtitle_kind::EMBEDDED || subtitle.is_image() {
@@ -1558,11 +1656,34 @@ pub async fn select_playback_subtitle(
     subtitle_mode: ChannelSubtitleMode,
     streaming_mode: StreamingMode,
 ) -> Result<Option<PlaybackSubtitle>> {
+    select_playback_subtitle_inner(
+        pool,
+        media_item_id,
+        None,
+        preferred_languages,
+        subtitle_mode,
+        streaming_mode,
+    )
+    .await
+}
+
+async fn select_playback_subtitle_inner(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: Option<i64>,
+    preferred_languages: &[String],
+    subtitle_mode: ChannelSubtitleMode,
+    streaming_mode: StreamingMode,
+) -> Result<Option<PlaybackSubtitle>> {
     if subtitle_mode == ChannelSubtitleMode::None {
         return Ok(None);
     }
 
-    let mut candidates = load_subtitles_for_media_item(pool, media_item_id).await?;
+    let mut candidates = if let Some(version) = media_version_id {
+        load_subtitles_for_media_version(pool, media_item_id, version).await?
+    } else {
+        load_subtitles_for_media_item(pool, media_item_id).await?
+    };
     if !use_embedded_subtitles(pool).await? {
         candidates.retain(|subtitle| subtitle.subtitle_kind != subtitle_kind::EMBEDDED);
     }
@@ -1760,6 +1881,45 @@ pub async fn select_channel_playback_subtitle(
     select_playback_subtitle(
         pool,
         media_item_id,
+        preferred_languages,
+        subtitle_mode,
+        streaming_mode,
+    )
+    .await
+}
+
+/// Select channel subtitles against the exact resolved version before ranking.
+/// Generated credits and external subtitle sources preserve their existing behavior.
+///
+/// # Errors
+/// Returns database or generated-subtitle file errors.
+#[allow(clippy::too_many_arguments)]
+pub async fn select_channel_playback_subtitle_for_version(
+    pool: &DbPool,
+    media_item_id: i64,
+    media_version_id: i64,
+    preferred_languages: &[String],
+    subtitle_mode: ChannelSubtitleMode,
+    streaming_mode: StreamingMode,
+    channel: &Channel,
+    resolution: &Resolution,
+    stream_seek_seconds: i64,
+) -> Result<Option<PlaybackSubtitle>> {
+    if let Some(subtitle) = generate_music_video_credits_subtitle(
+        pool,
+        media_item_id,
+        channel,
+        resolution,
+        stream_seek_seconds,
+    )
+    .await?
+    {
+        return Ok(Some(subtitle));
+    }
+    select_playback_subtitle_inner(
+        pool,
+        media_item_id,
+        Some(media_version_id),
         preferred_languages,
         subtitle_mode,
         streaming_mode,

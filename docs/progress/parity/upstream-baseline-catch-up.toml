@@ -4,7 +4,7 @@ rs_target  = 'plans/upstream-catch-up.md; docs/automation/parity-baseline.md'
 status     = 'In progress'
 adr        = ['0095', '0096', '0097', '0098']
 summary    = """
-The ledger registers 169 commits: twenty-two reconciled and 147 pending,
+The ledger registers 169 commits: twenty-three reconciled and 146 pending,
 tracked by ucu-00 through ucu-09. The bootstrap and AMM-N-03 prerequisite are
 Complete. UCU-01 is Complete under the authorized local-gate cadence: repository
 links, channel-only Next artifacts, checksum/license/provenance, six-RID staging
@@ -38,7 +38,12 @@ deterministic bounded expressions and subsecond source-offset storage pass
 focused tests and decoded production-builder playback. All-six-platform
 expression acceptance remains open in Classic scheduling debt; ADR 0098 is Partial.
 
-Next action is ordered row 23 (57f7dfa5), embedded image subtitles for Next. Remote
+Row 23 is Port: embedded image candidates are checked against the resolved
+version before default/custom ranking. Generated two-track PGS playback proves
+preferred Dutch selection, explicit subtitles-off and retained alternate audio.
+Other Next components/runtime regressions and HTTP/preview lifecycle smoke pass.
+
+Next action is ordered row 24 (1b5d6af7), text subtitle conversion for Next. Remote
 Stream/add-on and graphics integration belong to later rows and remain refused
 where unsupported. Complete Next endpoint/browser/platform and full-window
 acceptance are not inferred from focused proof. ADR 0095 retains Next as an
@@ -79,4 +84,12 @@ id          = 'row-22-classic-fallback-padding'
 description = 'Row 22 reconciles complete clipped fallback, chapter-aware padding, version/filler identity and accepted deterministic chapter expressions. Full six-platform expression acceptance remains separately tracked in Classic scheduling debt under ADR 0098.'
 discovered  = '2026-09-23'
 evidence    = 'Resolved by the reviewed row 22 Adapt implementation and UCU-02 focused core/SQL, culture-process, dependency, Clippy, native smoke and decoded production-builder playback evidence. Full platform acceptance is not inferred from these Linux results.'
+resolved    = true
+
+
+[[debt]]
+id          = 'row-23-next-image-subtitle-version-selection'
+description = 'Row 23 embedded image selection constrains automatic/custom embedded candidates to the resolved version before ranking so stale metadata cannot hide valid tracks; external/generated sources and exact pins retain their behavior.'
+discovered  = '2026-09-23'
+evidence    = 'Resolved by version-scoped projection regressions, generated two-track PGS decoding with subtitles-off and retained Dutch audio, 39 focused native/selection tests, 65 other Next regressions, scoped all-target Clippy and real-host Next HLS/preview/idle cleanup smoke. See UCU-02 for exact evidence and remaining full-window/platform obligations.'
 resolved    = true

@@ -103,6 +103,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Select Next embedded subtitles from the resolved media version before applying
+  language, forced/default or custom-selector preferences, so stale metadata
+  cannot hide a valid image track (upstream PR #2868).
+
 - Fill Classic fallback gaps and post-roll padding with complete clips, trimming only the
   final clip instead of stretching one item. Preserve subsecond source positions
   when saving clips, so a short final fallback cannot collapse to zero length.

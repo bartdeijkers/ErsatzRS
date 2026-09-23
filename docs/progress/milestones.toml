@@ -7144,6 +7144,54 @@ follows the authorized commit. Next is 57f7dfa5. ADR 0098 remains Partial for
 all-six-platform application proof; no platform requirement is waived. Full-window
 gates remain open and the first hosted CI/push remains after UCU-03 smoke.
 
+2026-09-23 row 23 source review (57f7dfa5; not reconciled):
+Pin, last processed row and upstream checkout agree at 7e38297d. Fresh upstream
+fetch remains ee038ba4 and all 169 ledger SHA/subjects match source history.
+Read all seven changed files: Next metadata hydration and item/channel subtitle
+preferences, custom/default selection, subtitle wire field and optional selector
+logging. Two upstream test edits only pass the added logging argument. No UI,
+schema or changelog change. Native projection already handles embedded PGS,
+pins, off, source transport/seek and broader existing external/provider support.
+Automatic/custom selection nevertheless admits stale embedded metadata from
+other media versions before ranking. Version-scoped candidate filtering now runs before automatic/custom ranking,
+using the resolved MediaStream index, default/forced flags and known title,
+language and codec fields. Existing native APIs retain their behavior; external
+and generated subtitle sources remain candidates. The extracted-English test
+fixture now contains its real corresponding MediaStream row.
+Thirty-nine focused selection/native subtitle regressions pass. Six initially
+could not write their fixture files in the sandbox; setting both temporary
+state and cache roots resolves those environmental failures unchanged.
+A new generated PGS fixture provides default English/left and preferred
+Dutch/right markers. The actual Next host produces only the Dutch marker and
+880-Hz Dutch audio, then no marker with an explicit subtitles-off/audio-on pin.
+The two-mode decoded runtime test passes (2.452 seconds) after allowing Next
+its required loopback proxy; the sandbox attempt failed at session startup.
+No test assertion, deadline or retry policy was weakened. The other 65 Next
+component/runtime regressions pass (7.222 seconds), including external subtitles,
+three-provider media opens and JavaScript-selected audio. The separate bitmap
+test is not repeated. Scoped infra/web all-target Clippy passes with warnings
+denied after correcting two test-only style findings (55.92 seconds). Runtime
+identity: Next reports 0.1.0, SHA-256
+0b500c71e9714d7db8d7192ef0a3516d6af5c6378626132719f73e9e98020362;
+the supplied source checkout is 946aa528c3a44e1079c702901b32d4d817ca1a12.
+Final real-host Next smoke passes after rebuilding the host: unauthenticated
+media-open HTTP 401, MPEG-TS refusal HTTP 404, HLS variant/session HTTP 200,
+a served 644464-byte segment and 650480-byte preview segment. Both normal and
+preview session folders disappear after idle expiry. Formatting and diff checks
+pass. No UI/schema/runtime-requirement change or new health registration is
+introduced; this corrects candidate selection using existing persisted metadata.
+
+Final direct Codex review: Port. Existing projection covered much of the upstream
+addition, but the resolved-version defect required a concrete correction before
+image selection could be accepted. Review covers pre-ranking filtering, custom
+and exact-pin precedence, external/generated subtitle retention, quiet selection,
+wire-source seeks and test cleanup. No remaining local row defect is identified.
+Pin and ledger advance from 7e38297d to 57f7dfa5 together: 23 reconciled and
+146 pending. Upstream checkout follows the authorized local commit. Next row:
+1b5d6af7. Full-window/browser/platform obligations remain open; no hosted CI or
+push occurs before the authorized UCU-03 smoke boundary.
+
+
 
 
 """

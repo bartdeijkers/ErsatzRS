@@ -94,7 +94,20 @@ On Windows, include the `.exe` filename.
 ./run.sh test -p ersatzrs-infra next_engine::process::runtime_tests::real_next_hls_preserves_selected_audio_and_burns_external_subtitles --run-ignored ignored-only
 ```
 
-The test creates disposable blue video with 440-Hz and 880-Hz audio tracks and
+Embedded bitmap selection has a separate synthetic PGS regression:
+
+```bash
+./run.sh test -p ersatzrs-infra real_next_hls_burns_preferred_embedded_bitmap_and_respects_subtitles_off --run-ignored ignored-only
+```
+
+It generates two embedded image tracks: default English draws a left-hand marker,
+preferred Dutch draws a right-hand marker. Decoded HLS must show only the selected
+marker; an explicit subtitles-off pin must show neither while retaining Dutch
+audio. No downloaded subtitle media is needed. The dedicated Next CI job includes
+this test through its existing `next_engine::` filter. Next starts a loopback
+proxy even for local media, so these runtime tests require local socket access.
+
+The external-subtitle test creates disposable blue video with 440-Hz and 880-Hz audio tracks and
 an external subtitle. It publishes the playout through the real adapter, starts
 Next with profile-derived configuration, waits for readiness, decodes a generated
 HLS segment and checks the selected 880-Hz audio and visible subtitle glyphs.

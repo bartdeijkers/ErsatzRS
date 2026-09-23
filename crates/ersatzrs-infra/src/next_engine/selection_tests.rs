@@ -24,7 +24,8 @@ pub(crate) async fn fixture_pool() -> DbPool {
             (1, 0, 'h264', 1, NULL, 0, NULL, 1, 0, 100),
             (2, 1, 'aac', 2, 'eng', 2, 'English', 1, 0, 100),
             (3, 2, 'aac', 2, 'nld', 2, 'Dutch', 0, 0, 100),
-            (4, 3, 'hdmv_pgs_subtitle', 3, 'jpn', 0, 'Japanese', 0, 0, 100)"#,
+            (4, 3, 'hdmv_pgs_subtitle', 3, 'jpn', 0, 'Japanese', 0, 0, 100),
+            (5, 4, 'subrip', 3, 'eng', 0, 'English', 1, 0, 100)"#,
         r#"INSERT INTO "Subtitle" ("Id", "MovieMetadataId", "SubtitleKind", "Title", "StreamIndex", "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted", "Path", "DateAdded", "DateUpdated") VALUES
             (1, 20, 0, 'English', 4, 'subrip', 1, 0, 0, 'eng', 1, 'synthetic/english.srt', '2026-09-22 00:00:00', '2026-09-22 00:00:00'),
             (2, 20, 1, 'Dutch', 9, 'subrip', 1, 0, 0, 'nld', 0, 'fixture.nl.srt', '2026-09-22 00:00:00', '2026-09-22 00:00:00'),
@@ -449,4 +450,130 @@ async fn assert_direct_audio_policy(pool: &DbPool, channel: &Channel) {
             "raw HLS Direct must retain all audio until an effective preference selects one track"
         );
     }
+}
+
+async fn add_stale_image_subtitle_candidates(pool: &DbPool) {
+    // A second metadata record/version advertises indices absent from or
+    // semantically different in the resolved file. Neither may outrank index 3.
+    for sql in [
+        r#"UPDATE "MediaStream" SET "Index" = 8 WHERE "MediaVersionId" = 100 AND "Index" = 2"#,
+        r#"INSERT INTO "MovieMetadata" ("Id", "MovieId", "Title", "MetadataKind", "DateAdded", "DateUpdated")
+            VALUES (21, 10, 'Other metadata', 0, '2026-09-22', '2026-09-22')"#,
+        r#"INSERT INTO "MediaVersion" ("Id", "MovieId", "DateAdded", "DateUpdated", "Duration", "Height", "Width", "VideoScanKind")
+            VALUES (101, 10, '2026-09-22', '2026-09-22', '00:01:00', 180, 320, 0)"#,
+        r#"INSERT INTO "MediaStream" ("Index", "Codec", "MediaStreamKind", "Language", "Channels", "Title", "Default", "Forced", "MediaVersionId")
+            VALUES (0, 'hdmv_pgs_subtitle', 3, 'jpn', 0, 'Stale image', 1, 1, 101),
+                   (2, 'hdmv_pgs_subtitle', 3, 'eng', 0, 'English image', 0, 0, 100)"#,
+        r#"INSERT INTO "Subtitle" ("MovieMetadataId", "SubtitleKind", "Title", "StreamIndex", "Codec", "Default", "Forced", "SDH", "Language", "IsExtracted", "DateAdded", "DateUpdated")
+            VALUES (21, 0, 'Stale image', 0, 'hdmv_pgs_subtitle', 1, 1, 0, 'jpn', 0, '2026-09-22', '2026-09-22'),
+                   (21, 0, 'Wrong language/version', 2, 'hdmv_pgs_subtitle', 0, 0, 0, 'jpn', 0, '2026-09-22', '2026-09-22')"#,
+    ] {
+        sqlx::query(sql).execute(pool).await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn automatic_image_subtitles_rank_only_matching_resolved_version_candidates() {
+    let pool = fixture_pool().await;
+    add_stale_image_subtitle_candidates(&pool).await;
+    let mut channel = Channel {
+        preferred_subtitle_language_code: Some("jpn".into()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
+    };
+    let projected = project(&pool, &channel, &item()).await.unwrap();
+    assert_eq!(
+        projected.tracks.unwrap().subtitle.unwrap().stream_index,
+        Some(3)
+    );
+    channel.subtitle_mode = ChannelSubtitleMode::Forced;
+    let projected = project(&pool, &channel, &item()).await.unwrap();
+    assert!(
+        projected.tracks.unwrap().subtitle.is_none(),
+        "the other version's forced subtitle must not be selected"
+    );
+    channel.subtitle_mode = ChannelSubtitleMode::Default;
+    sqlx::query(r#"DELETE FROM "MediaStream" WHERE "MediaVersionId" = 100 AND "Index" = 3"#)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let projected = project(&pool, &channel, &item()).await.unwrap();
+    assert!(
+        projected.tracks.unwrap().subtitle.is_none(),
+        "unavailable embedded subtitles must not be projected"
+    );
+}
+
+#[tokio::test]
+async fn custom_image_subtitle_selection_scopes_candidates_and_preserves_pins_and_off() {
+    use std::io::Write as _;
+    let pool = fixture_pool().await;
+    add_stale_image_subtitle_candidates(&pool).await;
+    let folder = crate::file_system_layout::channel_stream_selectors_folder();
+    std::fs::create_dir_all(&folder).unwrap();
+    let mut selector = tempfile::Builder::new()
+        .prefix("ucu23-")
+        .suffix(".yml")
+        .tempfile_in(folder)
+        .unwrap();
+    selector
+        .write_all(b"items:\n  - audio_language: [eng]\n    subtitle_language: [jpn]\n")
+        .unwrap();
+    selector.flush().unwrap();
+    let mut channel = Channel {
+        stream_selector_mode: ChannelStreamSelectorMode::Custom,
+        stream_selector: Some(
+            selector
+                .path()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .into(),
+        ),
+        preferred_subtitle_language_code: Some("eng".into()),
+        subtitle_mode: ChannelSubtitleMode::Default,
+        ..Default::default()
+    };
+    let projected = project(&pool, &channel, &item()).await.unwrap();
+    assert_eq!(
+        projected.tracks.unwrap().subtitle.unwrap().stream_index,
+        Some(3)
+    );
+    let mut pinned = item();
+    pinned.pinned_stream_selection = Some(PinnedStreamSelection {
+        media_version_id: 100,
+        video_stream_index: 0,
+        audio_stream_index: Some(1),
+        subtitle_stream_index: None,
+    });
+    assert!(project(&pool, &channel, &pinned)
+        .await
+        .unwrap()
+        .tracks
+        .unwrap()
+        .subtitle
+        .is_none());
+    selector.as_file_mut().set_len(0).unwrap();
+    std::io::Seek::rewind(selector.as_file_mut()).unwrap();
+    selector
+        .write_all(b"items:\n  - audio_language: [eng]\n    disable_subtitles: true\n")
+        .unwrap();
+    selector.flush().unwrap();
+    assert!(project(&pool, &channel, &item())
+        .await
+        .unwrap()
+        .tracks
+        .unwrap()
+        .subtitle
+        .is_none());
+    // Missing custom selector still falls back to automatic preferences.
+    channel.stream_selector = None;
+    assert!(project(&pool, &channel, &item())
+        .await
+        .unwrap()
+        .tracks
+        .unwrap()
+        .subtitle
+        .is_some());
 }

@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `7e38297d6ed240f784d388696e687f781e550a71` |
-| **Commit subject** | `fix: schedule all required fallback filler in classic schedules (#2867)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/7e38297d6ed240f784d388696e687f781e550a71 |
+| **Pinned commit** | `57f7dfa5a469fd539a12e3c55abbb2063eee2400` |
+| **Commit subject** | `feat: select embedded image subtitle streams for next engine during playout build (#2868)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/57f7dfa5a469fd539a12e3c55abbb2063eee2400 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
