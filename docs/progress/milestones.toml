@@ -6018,7 +6018,7 @@ UCU-03 smoke. Next: UCU-02 row 11 (ea4d3b65), channel engine selection.
 id         = 'ucu-02'
 phase      = 'UCU — Upstream ErsatzTV catch-up'
 title      = 'Reconcile upstream through 290f991b'
-status     = 'In progress'
+status     = 'Complete'
 feature    = 'upstream-baseline-catch-up'
 plan       = 'plans/upstream-catch-up.md'
 depends_on = ['ucu-01']
@@ -7598,6 +7598,47 @@ checkout follows. Thirty-one rows are reconciled and 138 remain pending.
 Corrected stale plan-header counts against the actual contiguous ledger.
 UCU-02 remains In progress pending its mandatory full-window local gates;
 no UCU-03 row is processed and no hosted CI or push is claimed.
+
+2026-09-23 UCU-02 window verification at 212c7656:
+Workspace all-target Clippy passes (ucu02-window-clippy.log). The initial full
+nextest run passed 3023/3029 tests; six managed-FFmpeg runtime tests failed
+because the gate command supplied explicit FFMPEG_PATH/FFPROBE_PATH overrides,
+selecting Override rather than each fixture's Managed runtime. No product or
+test assertion was changed. Re-running ./run.sh test-closeout with all supported
+FFmpeg/ffprobe override variables unset passes all 3029 tests (49 standard
+skips), followed by successful workspace doctests (ucu02-window-tests-clean-env.log).
+The official Next executable and FFmpeg 9 libraries remain available; tests
+resolve tools through PATH without overriding managed-runtime fixture policy.
+The matched Leptos SSR/WASM build passes (ucu02-window-leptos.log).
+The complete parity-check passes progress, formatting, architecture, hydration,
+673 web tests (six standard skips) and all-target web Clippy
+(ucu02-window-parity.log). Native smoke and TSDuck remain pending; this is not
+yet window acceptance. ADR 0095's earlier HTTP-delivery sentence is clarified as
+historical row-13 state, consistent with its later verified row-20 evidence.
+
+2026-09-23 final local window acceptance at 212c7656:
+Native smoke passes with FFmpeg 9, temporary state/database and real endpoints:
+MPEG-TS HTTP 200 with 8192 bytes, segmenter master and session media playlists
+HTTP 200 with initial segments (ucu02-window-smoke.log). TSDuck then passes
+64 checks with zero failures (ucu02-window-tsduck.log): legacy MPEG-TS, Hybrid
+and HLS segmenter have no continuity/PTS/DTS/PCR leaps; audio pip cadence
+passes with 20 ms maximum deviation. Server log is free of known failures.
+HLS Direct produces no segments for this fixture and is explicitly unproven
+by this gate; its existing optional branch is not reported as passed. These
+results do not expand the Direct contract or waive any future platform proof.
+The row-30 official-Next Burn/Convert decoded and lifecycle smoke, authenticated
+URL tests, snapshot and Chromium/Firefox JS/no-JS evidence remain valid on this
+unchanged product tree. Together with workspace Clippy, full test-closeout,
+matched Leptos build and complete parity-check above, all local window gates
+pass. Each of rows 1-31 resolves to one unique reviewed local commit. Pin,
+last accepted row and upstream checkout agree at 290f991b; 138 rows remain.
+ADR 0099 is Implemented and its wrapper debt is resolved. ADR 0095, ADR 0096
+and ADR 0098 retain their separate later integration/six-platform obligations;
+the accepted official-Next RGB-opacity limitation remains visible and unresolved.
+UCU-02 is Complete under the maintainer's local-only CI cadence amendment.
+No push, hosted CI or release occurred. UCU-03 starts with row 32 (a1036430).
+The maintainer deferred the over-60-GiB cargo clean until TSDuck completed;
+cache cleanup follows that gate and does not invalidate the recorded evidence.
 
 """
 

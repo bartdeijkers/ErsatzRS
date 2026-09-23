@@ -23,7 +23,9 @@ a managed process adapter add bounded startup/readiness, heartbeat and cleanup.
 The host now connects local-video HLS startup, shared capacity and session
 registration/cleanup. Rebuild notifications refresh through the same publisher;
 busy source locks are retried until publication or session cancellation.
-Full authenticated HTTP delivery and platform acceptance remain open.
+At that row-13 checkpoint, authenticated HTTP delivery and platform acceptance
+remained open; the later row-20 delivery proof is recorded below. Full platform
+acceptance remains open.
 Item track projection reuses native database selectors and subtitle-path
 resolution, with decoded Linux proof for alternate audio/subtitles and explicit
 silence/subtitles-off. Locked schedule reads preserve mirror offsets and bind

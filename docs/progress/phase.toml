@@ -2,7 +2,7 @@
 # fine-grained execution state lives in milestones.toml.
 
 current_phase = 'Phase 9A — Teletext contract and ingest'
-current_focus = 'UCU-02: reconcile optional Next engine selection and integration'
+current_focus = 'UCU-03: reconcile orphan metadata cleanup and May patch release'
 
 summary = '''
 Phases 0–8 and the original AMM-A through AMM-G delivery are complete. Add-on
@@ -122,8 +122,8 @@ Row 30 (d8955134) is Adapt under accepted ADR 0099: Next Hybrid persistence,
 routing, decoded Burn/Convert and localized editor checks pass. Converted text
 remains on HLS; Burn provides MPEG-TS subtitles.
 Row 31 (290f991b) is N/A for upstream release-note publication. All 31 rows
-are reconciled. Next: run the UCU-02 local window gates. Full-window and
-supported-platform acceptance remain open; Remote Stream/add-on
+are reconciled. UCU-02 local window gates pass and the milestone is Complete.
+Next: review UCU-03 row 32 (a1036430). Supported-platform acceptance remains open; Remote Stream/add-on
 and graphics capabilities belong to later ordered rows. The first consolidated
 CI remains authorized after UCU-03 smoke; no early CI is required.
 

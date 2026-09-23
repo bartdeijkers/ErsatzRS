@@ -6,8 +6,9 @@ Accepted 2026-09-23
 
 ## Implementation
 
-Partial — the media-playlist wrapper, localized help and focused/runtime/browser
-proof are complete. UCU-02 window gates remain open in the linked parity debt.
+Implemented — the media-playlist wrapper, localized help and focused/runtime/browser
+proof pass, together with the completed UCU-02 local window gates. The owning
+milestone records coverage and the separate program/platform obligations.
 
 ## Context
 
