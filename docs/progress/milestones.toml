@@ -7937,9 +7937,26 @@ Both prove preview, wrapper-disconnect continuity, idle cleanup and restart;
 requests without the scoped media capability return 401. Formatting, diff and
 structured progress checks pass. Logs: ucu04-row36-focused.log,
 ucu04-row36-health.log, ucu04-row36-web.log, ucu04-row36-clippy-final.log,
-ucu04-row36-smoke.log and ucu04-row36-smoke-convert.log. There are 36 reconciled
-rows and 134 pending. Next is row 37. This is local row acceptance, not UCU-04
+ucu04-row36-smoke.log and ucu04-row36-smoke-convert.log. There are 37 reconciled
+rows and 133 pending. Next is row 38. This is local row acceptance, not UCU-04
 window acceptance, six-platform runtime proof or new HLS Direct TSDuck proof.
+
+Row 37 (fecce92e, PR 2892) is Covered after full diff and surrounding graphics
+engine/motion/subtitle initialization review. ADR 0005 already renders motion
+as a native video input and subtitle graphics as generated ASS/lavfi inputs in
+the shared pipeline. Neither starts an independent bare FFmpeg process. The
+command uses the resolved executable populated at startup/settings changes;
+motion duration probing likewise uses the resolved FFprobe path. No Rust change.
+Relevant sources are unchanged from green CI 35880721503 at 8f722099, which
+passes locator DB/environment precedence and motion/subtitle pipeline snapshots.
+Additional current proof: scheduled_yaml_graphics_composite_all_rendered_kinds_in_final_video
+passes with explicit FFmpeg 9 paths while failing ffmpeg/ffprobe executables
+are prepended to PATH. The test was not skipped; all four expected decoded RGB
+pixels passed and neither PATH sentinel was invoked (ucu04-row37-graphics.log).
+Independent substantive Codex review finds no patch-specific defect. This does
+not claim Next motion/subtitle graphics projection: its explicit refusal and
+ADR 0095 debt remain. Upstream tip remains e8b7bb63; pin/ledger/checkout advance
+one row together. Window acceptance and exact-SHA CI remain open.
 """
 
 [[milestone]]

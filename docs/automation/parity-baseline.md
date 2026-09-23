@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `642965971111d86c662c8da0538c20d1f73f7478` |
-| **Commit subject** | `feat: add channel config overlays for next engine (#2891)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/642965971111d86c662c8da0538c20d1f73f7478 |
+| **Pinned commit** | `fecce92e97523ab092f3019354bcc5797081dfe9` |
+| **Commit subject** | `fix: use configured ffmpeg with all graphics elements (#2892)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/fecce92e97523ab092f3019354bcc5797081dfe9 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
